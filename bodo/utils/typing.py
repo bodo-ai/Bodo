@@ -1850,6 +1850,18 @@ def get_common_scalar_dtype(
     ):
         return (bodo.timedelta64ns, False)
 
+    # Datetime+timezone-aware and timestamp+timezone-aware can be converted to be the same
+    # if they both have the same timezone value.
+    if all(
+        isinstance(t, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+        or (isinstance(t, bodo.PandasTimestampType) and t.tz is not None)
+        for t in scalar_types
+    ):
+        timezones = [t.tz for t in scalar_types]
+        for tz in timezones:
+            if tz != timezones[0]:
+                return (None, False)
+        return (bodo.PandasTimestampType(timezones[0]), False)
     # If all are Numeric types and one is Decimal128Type, then:
     # - We attempt to combine lossless-ly and reduce to closest non-Decimal type
     # - If too large, we default to closes Decimal128 type expecting lossy conversion

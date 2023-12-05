@@ -1036,6 +1036,32 @@ def test_concat_ws_binary(memory_leak_check):
             ),
             id="naive_col-date_scalar",
         ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        pd.Timestamp("2018-4-14", tz="US/Pacific"),
+                        pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                        None,
+                        None,
+                        None,
+                        pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                    ]
+                ),
+                pd.Timestamp("2020-01-01", tz="US/Pacific"),
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp("2018-4-14", tz="US/Pacific"),
+                    pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
+                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
+                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
+                    pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                ]
+            ),
+            id="pd_datetime_tz_col-ts_tz_col",
+        ),
     ],
 )
 def test_coalesce_date_timestamp(args, answer, memory_leak_check):
