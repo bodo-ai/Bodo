@@ -443,34 +443,34 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
     "query",
     [
         pytest.param(
-            "SELECT A, GETDATE() from table1",
+            "SELECT A, DATEFN from table1",
             id="no_case-just_getdate",
         ),
         pytest.param(
-            "SELECT A, GETDATE() - interval '6' months from table1",
+            "SELECT A, DATEFN - interval '6' months from table1",
             id="no_case-minus_interval-month",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "SELECT A, GETDATE() + interval '5' weeks from table1",
+            "SELECT A, DATEFN + interval '5' weeks from table1",
             id="no_case-plus_interval-week",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "SELECT A, GETDATE() - interval '8 weeks' from table1",
+            "SELECT A, DATEFN - interval '8 weeks' from table1",
             id="no_case-minus_interval-week-sf-syntax",
         ),
         pytest.param(
-            "SELECT A, GETDATE() - interval '8' weeks from table1",
+            "SELECT A, DATEFN - interval '8' weeks from table1",
             id="no_case-minus_interval-week",
         ),
         pytest.param(
-            "SELECT A, GETDATE() + interval '5' days from table1",
+            "SELECT A, DATEFN + interval '5' days from table1",
             id="no_case-plus_interval-day",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
+            "SELECT A, CASE WHEN EXTRACT(MONTH from DATEFN) = A then 'y' ELSE 'n' END from table1",
             id="case",
             marks=pytest.mark.slow,
         ),
@@ -478,7 +478,16 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
 )
 def test_getdate(query, spark_info, memory_leak_check):
     """Tests the snowflake GETDATE() function"""
-    spark_query = query.replace("GETDATE()", "CURRENT_DATE()")
+
+    # Snowflake's GETDATE is equivalent to spark's CURRENT_TIMESTAMP (when
+    # spark's timezone is set to UTC), not CURRENT_DATE. However, comparing the
+    # current timestamp isn't useful, because there will be some delay between
+    # the BodoSQL run and the spark run. To get around this, we need to use
+    # `TO_DATE` to truncate first.
+    # Ideally we should be able to mock out the clock source and test GETDATE
+    # in isolation.
+    spark_query = query.replace("DATEFN", "CURRENT_DATE()")
+    query = query.replace("DATEFN", "TO_DATE(GETDATE())")
     ctx = {
         "table1": pd.DataFrame(
             {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
@@ -509,8 +518,8 @@ def test_getdate_dist_len(spark_info, memory_leak_check):
         )
     }
 
-    query = "select distinct A, getdate() as B from table1"
-    spark_query = query.replace("getdate", "current_date")
+    query = "select distinct A, to_date(getdate()) as B from table1"
+    spark_query = query.replace("to_date(getdate())", "current_date()")
 
     check_query(
         query,
@@ -2467,11 +2476,16 @@ def test_mysql_dateadd(
           another column of dt_fn_dataframe (positive_integers)
     """
 
+    # spark converts all inputs to DATE with DATE_SUB. This is incorrect
+    # behavior, but for the sake of this test, we add a TO_DATE call on the
+    # input so that it matches. We have tests of DATEADD preserving the right
+    # type (test_snowflake_dateadd), which should compile to the same kernel as
+    # DATE_SUB.
     if case:
-        query = f"SELECT CASE WHEN positive_integers < 100 THEN {dateadd_fn}({dt_val}, {amt_val}) ELSE NULL END from table1"
+        query = f"SELECT CASE WHEN positive_integers < 100 THEN TO_DATE({dateadd_fn}({dt_val}, {amt_val})) ELSE NULL END from table1"
         spark_query = f"SELECT CASE WHEN positive_integers < 100 THEN DATE_ADD({dt_val}, {amt_val}) ELSE NULL END from table1"
     else:
-        query = f"SELECT {dateadd_fn}({dt_val}, {amt_val}) from table1"
+        query = f"SELECT TO_DATE({dateadd_fn}({dt_val}, {amt_val})) from table1"
         spark_query = f"SELECT DATE_ADD({dt_val}, {amt_val}) from table1"
 
     # spark requires certain arguments of adddate to not
@@ -2821,7 +2835,13 @@ def test_subdate_cols_int_arg1(
     memory_leak_check,
 ):
     "tests that date_sub/subdate works when the second argument is an integer, on column values"
-    query = f"SELECT {subdate_equiv_fns}({timestamp_date_string_cols}, positive_integers) from table1"
+
+    # spark converts all inputs to DATE with DATE_SUB. This is incorrect
+    # behavior, but for the sake of this test, we add a TO_DATE call on the
+    # input so that it matches. We have tests of DATEADD preserving the right
+    # type (test_snowflake_dateadd), which should compile to the same kernel as
+    # DATE_SUB.
+    query = f"SELECT {subdate_equiv_fns}(TO_DATE({timestamp_date_string_cols}), positive_integers) from table1"
     spark_query = (
         f"SELECT DATE_SUB({timestamp_date_string_cols}, positive_integers) from table1"
     )

@@ -37,8 +37,8 @@ def test_from_days_cols(spark_info, basic_df, memory_leak_check):
 def test_from_days_scalar(spark_info, basic_df, memory_leak_check):
     """tests from_days function on scalar values"""
 
-    query = f"SELECT CASE WHEN FROM_DAYS(B + {dayDeltaUnixY0}) = TIMESTAMP '1970-1-1' then TIMESTAMP '1970-1-2' ELSE FROM_DAYS(B + {dayDeltaUnixY0}) END from table1"
-    spark_query = "SELECT CASE WHEN DATE_FROM_UNIX_DATE(B) = TIMESTAMP '1970-1-1' then TIMESTAMP '1970-1-2' ELSE DATE_FROM_UNIX_DATE(B) END from table1"
+    query = f"SELECT CASE WHEN FROM_DAYS(B + {dayDeltaUnixY0}) = DATE '1970-1-1' then DATE '1970-1-2' ELSE FROM_DAYS(B + {dayDeltaUnixY0}) END from table1"
+    spark_query = "SELECT CASE WHEN DATE_FROM_UNIX_DATE(B) = DATE '1970-1-1' then DATE '1970-1-2' ELSE DATE_FROM_UNIX_DATE(B) END from table1"
 
     check_query(
         query,
@@ -191,7 +191,8 @@ def test_from_unixtime_cols(spark_info, basic_df, memory_leak_check):
     """tests from_unixtime function on column values"""
 
     seconds_in_day = 86400
-    query = f"SELECT from_unixtime(A * {seconds_in_day}), from_unixtime(B * {seconds_in_day}), from_unixtime(C * {seconds_in_day}) from table1"
+    # We need to wrap from_unixtime with TO_DATE since spark doesn't support the timestamp version
+    query = f"SELECT TO_DATE(from_unixtime(A * {seconds_in_day})), TO_DATE(from_unixtime(B * {seconds_in_day})), TO_DATE(from_unixtime(C * {seconds_in_day})) from table1"
     spark_query = "SELECT DATE_FROM_UNIX_DATE(A), DATE_FROM_UNIX_DATE(B), DATE_FROM_UNIX_DATE(C) from table1"
 
     check_query(
