@@ -1316,7 +1316,7 @@ def test_row_number(test, memory_leak_check):
         pytest.param(
             True,
             ("A",),
-            pd.Series(
+            pd.array(
                 [
                     {"A": 0, "B": 10, "C": ""},
                     {"A": 1, "B": 20, "C": "A"},
@@ -1328,18 +1328,28 @@ def test_row_number(test, memory_leak_check):
                     {"A": None, "B": 80, "C": "ABC"},
                     {"A": 4, "B": None, "C": "A"},
                     {"A": 5, "B": 320, "C": None},
-                ]
-            ).values,
-            pd.Series(
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.int32()),
+                            pa.field("C", pa.string()),
+                        ]
+                    )
+                ),
+            ),
+            pd.array(
                 [{"A": 0}, {"A": 1}, {"A": 2}] * 10
-                + [None, {"A": None}, {"A": 4}, {"A": 5}]
-            ).values,
+                + [None, {"A": None}, {"A": 4}, {"A": 5}],
+                dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
+            ),
             id="struct-keep_literal_string",
         ),
         pytest.param(
             True,
             ("A",),
-            pd.Series(
+            pd.array(
                 [
                     {"A": 0, "B": 1, "C": 2},
                     {"B": 3, "C": 4},
@@ -1356,9 +1366,10 @@ def test_row_number(test, memory_leak_check):
                     {"A": 16, "B": None},
                     {"B": 42},
                     {"A": 42},
-                ]
-            ).values,
-            pd.Series(
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            pd.array(
                 [
                     {"A": 0},
                     {},
@@ -1375,8 +1386,9 @@ def test_row_number(test, memory_leak_check):
                     {"A": 16},
                     {},
                     {"A": 42},
-                ]
-            ).values,
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
             id="map-keep_literal_string",
         ),
         pytest.param(
