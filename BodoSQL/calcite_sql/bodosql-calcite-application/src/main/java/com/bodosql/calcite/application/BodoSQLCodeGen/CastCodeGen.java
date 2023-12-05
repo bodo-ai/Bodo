@@ -38,7 +38,7 @@ public class CastCodeGen {
       List<Pair<String, Expr>> streamingNamedArgs) {
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
-    String fnName;
+    final String fnName;
     // Create the args. Some function paths may have multiple args.
     List<Expr> args = new ArrayList<>();
     args.add(arg);

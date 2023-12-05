@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.List;
 
 /**
@@ -19,8 +20,7 @@ public class DateAddCodeGen {
   public static Expr generateSnowflakeDateAddCode(List<Expr> operands, String unit) {
     // input check for time unit is moved to standardizeTimeUnit() function,
     // which is called in PandasCodeGenVisitor.java
-    String fnName = "bodo.libs.bodosql_array_kernels.add_interval_" + unit + "s";
-    return new Expr.Call(fnName, operands);
+    return ExprKt.BodoSQLKernel("add_interval_" + unit + "s", operands, List.of());
   }
 
   /**
@@ -39,13 +39,13 @@ public class DateAddCodeGen {
   public static Expr generateMySQLDateAddCode(
       Expr arg0, Expr arg1, boolean adding_delta, String fnName) {
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
-      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
+      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
     }
 
     if (adding_delta) {
-      return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval", arg0, arg1);
+      return ExprKt.BodoSQLKernel("add_interval", List.of(arg0, arg1), List.of());
     } else {
-      return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval_days", arg1, arg0);
+      return ExprKt.BodoSQLKernel("add_interval_days", List.of(arg1, arg0), List.of());
     }
   }
 }

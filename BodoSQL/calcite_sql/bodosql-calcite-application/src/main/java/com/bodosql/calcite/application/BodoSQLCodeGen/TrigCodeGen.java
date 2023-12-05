@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +19,7 @@ public class TrigCodeGen {
 
   static {
     for (String fn : fnList) {
-      equivalentFnMap.put(fn.toUpperCase(), "bodo.libs.bodosql_array_kernels." + fn);
+      equivalentFnMap.put(fn.toUpperCase(), fn);
     }
   }
 
@@ -31,7 +32,7 @@ public class TrigCodeGen {
    */
   public static Expr getTrigFnCode(String fnName, List<Expr> args) {
     if (equivalentFnMap.containsKey(fnName)) {
-      return new Expr.Call(equivalentFnMap.get(fnName), args);
+      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
