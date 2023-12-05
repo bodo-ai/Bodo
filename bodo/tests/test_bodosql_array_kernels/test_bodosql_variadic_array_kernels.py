@@ -1923,7 +1923,6 @@ def test_object_filter_keys(
                 ),
             ),
             id="1-struct_array_vector",
-            marks=pytest.mark.skip(reason="[BSE-2078] TODO: fix segfault"),
         ),
         pytest.param(
             (
@@ -2810,9 +2809,6 @@ def test_object_construct_optional(
                 ]
             ),
             id="timestamp_ltz-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1777] TODO: fix array_construct when inputs are tz-aware timestamps, specifically when mixing vectors with scalars"
-            ),
         ),
         pytest.param(
             (
@@ -2942,7 +2938,6 @@ def test_object_construct_optional(
                 dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.large_string()))),
             ),
             id="nested_string-2",
-            marks=pytest.mark.skip(reason="[BSE-2123] TODO: fix segfault on 2 ranks"),
         ),
         pytest.param(
             (
