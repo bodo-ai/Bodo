@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.utils.Utils
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.BodoSQLKernel
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.Op
@@ -137,12 +138,15 @@ internal class Group(
         // TODO(jsternberg): Unsafe index access, but this has been checked before invoking this function.
         val input = emitGeneratedWindowDataframe(ctx, partitionKeys, orderKeys, fields)
         return Pair(
-            Expr.Call(
-                "bodo.libs.bodosql_array_kernels.row_number",
-                input,
-                orderKeys.fieldList(),
-                orderKeys.ascendingList(),
-                orderKeys.nullPositionList(),
+            BodoSQLKernel(
+                "row_number",
+                listOf(
+                    input,
+                    orderKeys.fieldList(),
+                    orderKeys.ascendingList(),
+                    orderKeys.nullPositionList(),
+                ),
+                listOf(),
             ),
             // Currently, the row_number kernel will emit a DataFrame with a single column
             // containing the row numbers.
