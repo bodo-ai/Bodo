@@ -53,11 +53,11 @@ public class NumericCodeGen {
   static {
     for (String fn : fnList) {
       if (fn.equals("POW")) {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.power");
+        equivalentFnMap.put(fn, "power");
       } else if (fn.equals("TRUNCATE")) {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.trunc");
+        equivalentFnMap.put(fn, "trunc");
       } else {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+        equivalentFnMap.put(fn, fn.toLowerCase());
       }
     }
   }
@@ -91,7 +91,7 @@ public class NumericCodeGen {
   public static Expr getNumericFnCode(String fnName, List<Expr> args) {
 
     if (equivalentFnMap.containsKey(fnName)) {
-      return new Expr.Call(equivalentFnMap.get(fnName), args);
+      return BodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
@@ -188,7 +188,7 @@ public class NumericCodeGen {
     } else {
       arg = input;
     }
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.random_seedless", arg);
+    return BodoSQLKernel("random_seedless", List.of(arg), List.of());
   }
 
   /**

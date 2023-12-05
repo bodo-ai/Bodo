@@ -18,9 +18,8 @@ public class JsonCodeGen {
 
   static {
     jsonFnMap = new HashMap<>();
-    jsonFnMap.put(
-        "JSON_EXTRACT_PATH_TEXT", "bodo.libs.bodosql_array_kernels.json_extract_path_text");
-    jsonFnMap.put("OBJECT_KEYS", "bodo.libs.bodosql_array_kernels.object_keys");
+    jsonFnMap.put("JSON_EXTRACT_PATH_TEXT", "json_extract_path_text");
+    jsonFnMap.put("OBJECT_KEYS", "object_keys");
   }
 
   /**
@@ -79,7 +78,7 @@ public class JsonCodeGen {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
 
-    return new Expr.Call(jsonFnMap.get(fnName), operands);
+    return ExprKt.BodoSQLKernel(jsonFnMap.get(fnName), operands, List.of());
   }
 
   /**
@@ -95,6 +94,6 @@ public class JsonCodeGen {
     kotlin.Pair isScalarArg =
         new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(arrayScalar));
     List<Pair<String, Expr>> namedArgs = List.of(isScalarArg);
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.arr_get", operands, namedArgs);
+    return ExprKt.BodoSQLKernel("arr_get", operands, namedArgs);
   }
 }

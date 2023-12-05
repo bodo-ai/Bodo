@@ -7,7 +7,6 @@ import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
-import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlOperator
@@ -394,7 +393,8 @@ class BodoRexSimplify(
         }
         // Break down the coalesce call.
         val makeComparison = {
-                coalesceArg: RexNode, literal: RexLiteral -> rexBuilder.makeCall(retType, op, if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) })
+                coalesceArg: RexNode, literal: RexLiteral ->
+            rexBuilder.makeCall(retType, op, if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) })
         }
         // Decompose COMP((COL, LIT2), LIT1) into OR(COMP(COL, LIT1), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
         val columnComparison = makeComparison(coalesceCall.operands[0], lit)
@@ -417,7 +417,7 @@ class BodoRexSimplify(
             val secondArg = node.operands[1]
             // Note: Comparison operators shouldn't have more than two args,
             // but double check to ensure a future change doesn't chain equalities.
-            val isValidCoalesceFunction = {r: RexNode -> r is RexCall && r.operator.name == SqlStdOperatorTable.COALESCE.name && r.operands.size == 2 && r.operands[1] is RexLiteral }
+            val isValidCoalesceFunction = { r: RexNode -> r is RexCall && r.operator.name == SqlStdOperatorTable.COALESCE.name && r.operands.size == 2 && r.operands[1] is RexLiteral }
             return node.operands.size == 2 && (firstArg is RexLiteral && isValidCoalesceFunction(secondArg)) || (secondArg is RexLiteral && isValidCoalesceFunction(firstArg))
         } else {
             false

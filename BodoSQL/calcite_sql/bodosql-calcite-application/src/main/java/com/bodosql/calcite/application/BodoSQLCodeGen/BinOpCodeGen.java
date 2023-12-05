@@ -4,6 +4,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.gene
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import com.bodosql.calcite.ir.Module.Builder;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
@@ -93,19 +94,17 @@ public class BinOpCodeGen {
           // add/minus a date interval to a date object should return a date object
           Expr arg1 = args.get(1);
           if (binOpKind.equals(SqlKind.MINUS))
-            arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", args.get(1));
-          return new Expr.Call(
-              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", args.get(0), arg1);
+            arg1 = ExprKt.BodoSQLKernel("negate", List.of(args.get(1)), List.of());
+          return ExprKt.BodoSQLKernel(
+              "add_date_interval_to_date", List.of(args.get(0), arg1), List.of());
         }
         return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg1Interval);
       } else if (isArg1Datetime) { // inverval + timestamp/date
         assert binOpKind.equals(SqlKind.PLUS); // interval - timestamp/date is an invalid syntax
         if (arg1TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg0TypeName)) {
           // add/minus a date interval to a date object should return a date object
-          return new Expr.Call(
-              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date",
-              args.get(1),
-              args.get(0));
+          return ExprKt.BodoSQLKernel(
+              "add_date_interval_to_date", List.of(args.get(1), args.get(0)), List.of());
         }
         return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg0Interval);
       } else if ((isArg0Interval || isArg1Interval) && binOpKind.equals(SqlKind.TIMES)) {
@@ -139,57 +138,57 @@ public class BinOpCodeGen {
     boolean requiresScalarInfo = false;
     switch (binOpKind) {
       case EQUALS:
-        fn = "bodo.libs.bodosql_array_kernels.equal";
+        fn = "equal";
         supportsStreamingArgs = true;
         break;
       case IS_NOT_DISTINCT_FROM:
       case NULL_EQUALS:
-        fn = "bodo.libs.bodosql_array_kernels.equal_null";
+        fn = "equal_null";
         requiresScalarInfo = true;
         supportsStreamingArgs = true;
         break;
       case IS_DISTINCT_FROM:
-        fn = "bodo.libs.bodosql_array_kernels.not_equal_null";
+        fn = "not_equal_null";
         requiresScalarInfo = true;
         supportsStreamingArgs = true;
         break;
       case NOT_EQUALS:
-        fn = "bodo.libs.bodosql_array_kernels.not_equal";
+        fn = "not_equal";
         supportsStreamingArgs = true;
         break;
       case LESS_THAN:
-        fn = "bodo.libs.bodosql_array_kernels.less_than";
+        fn = "less_than";
         supportsStreamingArgs = true;
         break;
       case GREATER_THAN:
-        fn = "bodo.libs.bodosql_array_kernels.greater_than";
+        fn = "greater_than";
         supportsStreamingArgs = true;
         break;
       case LESS_THAN_OR_EQUAL:
-        fn = "bodo.libs.bodosql_array_kernels.less_than_or_equal";
+        fn = "less_than_or_equal";
         supportsStreamingArgs = true;
         break;
       case GREATER_THAN_OR_EQUAL:
-        fn = "bodo.libs.bodosql_array_kernels.greater_than_or_equal";
+        fn = "greater_than_or_equal";
         supportsStreamingArgs = true;
         break;
       case PLUS:
-        fn = "bodo.libs.bodosql_array_kernels.add_numeric";
+        fn = "add_numeric";
         break;
       case MINUS:
-        fn = "bodo.libs.bodosql_array_kernels.subtract_numeric";
+        fn = "subtract_numeric";
         break;
       case TIMES:
-        fn = "bodo.libs.bodosql_array_kernels.multiply_numeric";
+        fn = "multiply_numeric";
         break;
       case DIVIDE:
-        fn = "bodo.libs.bodosql_array_kernels.divide_numeric";
+        fn = "divide_numeric";
         break;
       case AND:
-        fn = "bodo.libs.bodosql_array_kernels.booland";
+        fn = "booland";
         break;
       case OR:
-        fn = "bodo.libs.bodosql_array_kernels.boolor";
+        fn = "boolor";
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -209,7 +208,7 @@ public class BinOpCodeGen {
             new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(i))));
       }
       if (supportsStreamingArgs) kwargs.addAll(streamingNamedArgs);
-      Expr callExpr = new Expr.Call(fn, List.of(prevVar, args.get(i)), kwargs);
+      Expr callExpr = ExprKt.BodoSQLKernel(fn, List.of(prevVar, args.get(i)), kwargs);
       // Generate a new variable
       outputVar = builder.getSymbolTable().genGenericTempVar();
       Op.Assign assign = new Assign(outputVar, callExpr);
@@ -233,11 +232,11 @@ public class BinOpCodeGen {
     Expr arg1 = args.get(1);
     if (binOp.equals(SqlKind.MINUS)) {
       // Negate the input for Minus
-      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
+      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.interval_add_interval", arg0, arg1);
+    return ExprKt.BodoSQLKernel("interval_add_interval", List.of(arg0, arg1), List.of());
   }
 
   /**
@@ -266,11 +265,11 @@ public class BinOpCodeGen {
     if (binOp.equals(SqlKind.MINUS)) {
       assert isArg0TZAware;
       // Negate the input for Minus
-      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
+      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.tz_aware_interval_add", arg0, arg1);
+    return ExprKt.BodoSQLKernel("tz_aware_interval_add", List.of(arg0, arg1), List.of());
   }
 
   /**
@@ -283,7 +282,7 @@ public class BinOpCodeGen {
     assert args.size() == 2;
     final Expr arg0 = args.get(0);
     final Expr arg1 = args.get(1);
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.diff_day", arg1, arg0);
+    return ExprKt.BodoSQLKernel("diff_day", List.of(arg1, arg0), List.of());
   }
 
   /**
@@ -341,6 +340,6 @@ public class BinOpCodeGen {
       arg0 = args.get(1);
       arg1 = args.get(0);
     }
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.interval_multiply", arg0, arg1);
+    return ExprKt.BodoSQLKernel("interval_multiply", List.of(arg0, arg1), List.of());
   }
 }

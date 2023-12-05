@@ -1,6 +1,8 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+import java.util.List;
 
 public class SinceEpochFnCodeGen {
 
@@ -11,8 +13,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToDaysCode(Expr arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.to_days(" + arg1Info.emit() + ")";
-    return new Expr.Raw(outputExpr);
+    return ExprKt.BodoSQLKernel("to_days", List.of(arg1Info), List.of());
   }
 
   /**
@@ -22,8 +23,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToSecondsCode(Expr arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.to_seconds(" + arg1Info.emit() + ")";
-    return new Expr.Raw(outputExpr);
+    return ExprKt.BodoSQLKernel("to_seconds", List.of(arg1Info), List.of());
   }
 
   /**
@@ -33,8 +33,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateFromDaysCode(Expr arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.from_days(" + arg1Info.emit() + ")";
-    return new Expr.Raw(outputExpr);
+    return ExprKt.BodoSQLKernel("from_days", List.of(arg1Info), List.of());
   }
 
   /**
@@ -44,9 +43,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateFromUnixTimeCode(Expr arg1Info) {
-    String outputExpression =
-        String.format("bodo.libs.bodosql_array_kernels.second_timestamp(%s)", arg1Info.emit());
-    return new Expr.Raw(outputExpression);
+    return ExprKt.BodoSQLKernel("second_timestamp", List.of(arg1Info), List.of());
   }
 
   /**

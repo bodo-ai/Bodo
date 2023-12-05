@@ -34,11 +34,11 @@ public class DatetimeFnCodeGen {
   static {
     for (String fn : fnList) {
       if (fn.equals("YEAROFWEEK")) {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.get_year");
+        equivalentFnMap.put(fn, "get_year");
       } else if (fn.equals("MONTH_NAME")) {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.monthname");
+        equivalentFnMap.put(fn, "monthname");
       } else {
-        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+        equivalentFnMap.put(fn, fn.toLowerCase());
       }
     }
   }
@@ -50,13 +50,10 @@ public class DatetimeFnCodeGen {
    * @param arg1Expr The string expression of arg1
    * @return The Expr corresponding to the function call
    */
-  public static Expr getSingleArgDatetimeFnInfo(String fnName, String arg1Expr) {
-    StringBuilder expr_code = new StringBuilder();
-
+  public static Expr getSingleArgDatetimeFnInfo(String fnName, Expr arg1) {
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
-      return new Expr.Raw(expr_code.toString());
+      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -71,19 +68,10 @@ public class DatetimeFnCodeGen {
    * @param arg2Expr The string expression of arg2
    * @return The Expr corresponding to the function call
    */
-  public static Expr getDoubleArgDatetimeFnInfo(String fnName, String arg1Expr, String arg2Expr) {
-    StringBuilder expr_code = new StringBuilder();
-
-    // If the functions has a broadcasted array kernel, always use it
+  public static Expr getDoubleArgDatetimeFnInfo(String fnName, Expr arg1, Expr arg2) {
+    // If the functions have a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      expr_code
-          .append(equivalentFnMap.get(fnName))
-          .append("(")
-          .append(arg1Expr)
-          .append(",")
-          .append(arg2Expr)
-          .append(")");
-      return new Expr.Raw(expr_code.toString());
+      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1, arg2), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -98,13 +86,7 @@ public class DatetimeFnCodeGen {
    * @return The Expr corresponding to the function call
    */
   public static Expr generateMakeDateInfo(Expr arg1Info, Expr arg2Info) {
-    String outputExpr =
-        "bodo.libs.bodosql_array_kernels.makedate("
-            + arg1Info.emit()
-            + ", "
-            + arg2Info.emit()
-            + ")";
-    return new Expr.Raw(outputExpr);
+    return ExprKt.BodoSQLKernel("makedate", List.of(arg1Info, arg2Info), List.of());
   }
 
   /**
@@ -146,7 +128,7 @@ public class DatetimeFnCodeGen {
         List.of(
             new Pair<>("format_str", Expr.None.INSTANCE),
             new Pair<>("_try", Expr.BooleanLiteral.True.INSTANCE));
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.to_time", List.of(nowCall), namedArgs);
+    return ExprKt.BodoSQLKernel("to_time", List.of(nowCall), namedArgs);
   }
 
   /**
@@ -191,10 +173,8 @@ public class DatetimeFnCodeGen {
    *     the result.
    */
   public static Expr generateDateTruncCode(String unit, Expr arg2Info) {
-    String codeGen =
-        String.format(
-            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)", unit, arg2Info.emit());
-    return new Expr.Raw(codeGen);
+    return ExprKt.BodoSQLKernel(
+        "date_trunc", List.of(new Expr.StringLiteral(unit), arg2Info), List.of());
   }
 
   /**
@@ -207,15 +187,9 @@ public class DatetimeFnCodeGen {
    */
   public static Expr generateDateFormatCode(Expr arg1Info, Expr arg2Info) {
     assert isStringLiteral(arg2Info.emit());
-    String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.emit());
-    String outputExpression =
-        "bodo.libs.bodosql_array_kernels.date_format("
-            + arg1Info.emit()
-            + ", "
-            + pythonFormatString
-            + ")";
+    Expr pythonFormatString = new Expr.Raw(convertMySQLFormatStringToPython(arg2Info.emit()));
 
-    return new Expr.Raw(outputExpression);
+    return ExprKt.BodoSQLKernel("date_format", List.of(arg1Info, pythonFormatString), List.of());
   }
 
   /**
@@ -271,12 +245,12 @@ public class DatetimeFnCodeGen {
     // performs yearNum * 100 + week num
     // TODO: Add proper null checking on scalars by converting * and +
     // to an array kernel
-    String outputExpr =
-        String.format(
-            "bodo.libs.bodosql_array_kernels.add_numeric(bodo.libs.bodosql_array_kernels.multiply_numeric(bodo.libs.bodosql_array_kernels.get_year(%s),"
-                + " 100), bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
-            arg0Expr, arg0Expr);
-    return new Expr.Raw(outputExpr);
+    Expr getYear = ExprKt.BodoSQLKernel("get_year", List.of(arg0Info), List.of());
+    Expr getYearTimes100 =
+        ExprKt.BodoSQLKernel(
+            "multiply_numeric", List.of(getYear, new Expr.IntegerLiteral(100)), List.of());
+    Expr weekNum = ExprKt.BodoSQLKernel("get_weekofyear", List.of(arg0Info), List.of());
+    return ExprKt.BodoSQLKernel("add_numeric", List.of(getYearTimes100, weekNum), List.of());
   }
 
   /**
@@ -307,9 +281,8 @@ public class DatetimeFnCodeGen {
    * @param unit The time unit for calculating the last day.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static Expr generateLastDayCode(String arg0, String unit) {
-    String outputExpression = "bodo.libs.bodosql_array_kernels.last_day_" + unit + "(" + arg0 + ")";
-    return new Expr.Raw(outputExpression);
+  public static Expr generateLastDayCode(Expr arg0, String unit) {
+    return ExprKt.BodoSQLKernel("last_day_" + unit, List.of(arg0), List.of());
   }
 
   public static Expr generateTimeSliceFnCode(List<Expr> operandsInfo, Integer weekStart) {

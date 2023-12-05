@@ -128,7 +128,6 @@ public class AggCodeGen {
       Variable inVar, List<String> inputColumnNames, AggregateCall aggregateCall) {
     assert aggregateCall.getAggregation().getKind() == SqlKind.LISTAGG
         : "Internal error in genNonGroupedListaggCall: input aggregation is not listagg";
-    String fn_name = "bodo.libs.bodosql_listagg.bodosql_listagg";
 
     List<Expr.StringLiteral> orderbyList = new ArrayList<>();
     List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
@@ -170,6 +169,7 @@ public class AggCodeGen {
             new Expr.Tuple(nullDirList),
             sepExpr);
 
+    String fn_name = "bodo.libs.bodosql_listagg.bodosql_listagg";
     return new Expr.Call(fn_name, argsList);
   }
 

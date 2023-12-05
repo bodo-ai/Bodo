@@ -1,18 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+import java.util.List;
 
 public class DateDiffCodeGen {
   public static Expr generateDateDiffFnInfo(String unit, Expr arg1Info, Expr arg2Info) {
-    StringBuilder diffExpr = new StringBuilder();
-    diffExpr
-        .append("bodo.libs.bodosql_array_kernels.diff_")
-        .append(unit)
-        .append("(")
-        .append(arg1Info.emit())
-        .append(", ")
-        .append(arg2Info.emit())
-        .append(")");
-    return new Expr.Raw(diffExpr.toString());
+    return ExprKt.BodoSQLKernel("diff_" + unit, List.of(arg1Info, arg2Info), List.of());
   }
 }

@@ -26,43 +26,40 @@ public class StringFnCodeGen {
 
   static {
     equivalentFnMapBroadcast = new HashMap<>();
-    equivalentFnMapBroadcast.put("CHAR_LENGTH", "bodo.libs.bodosql_array_kernels.length");
-    equivalentFnMapBroadcast.put("LENGTH", "bodo.libs.bodosql_array_kernels.length");
-    equivalentFnMapBroadcast.put("LEN", "bodo.libs.bodosql_array_kernels.length");
-    equivalentFnMapBroadcast.put("CHARACTER_LENGTH", "bodo.libs.bodosql_array_kernels.length");
-    equivalentFnMapBroadcast.put("LCASE", "bodo.libs.bodosql_array_kernels.lower");
-    equivalentFnMapBroadcast.put("LOWER", "bodo.libs.bodosql_array_kernels.lower");
-    equivalentFnMapBroadcast.put("UCASE", "bodo.libs.bodosql_array_kernels.upper");
-    equivalentFnMapBroadcast.put("UPPER", "bodo.libs.bodosql_array_kernels.upper");
-    equivalentFnMapBroadcast.put("CONTAINS", "bodo.libs.bodosql_array_kernels.contains");
-    equivalentFnMapBroadcast.put("LPAD", "bodo.libs.bodosql_array_kernels.lpad");
-    equivalentFnMapBroadcast.put("RPAD", "bodo.libs.bodosql_array_kernels.rpad");
-    equivalentFnMapBroadcast.put("LEFT", "bodo.libs.bodosql_array_kernels.left");
-    equivalentFnMapBroadcast.put("RIGHT", "bodo.libs.bodosql_array_kernels.right");
-    equivalentFnMapBroadcast.put("ORD", "bodo.libs.bodosql_array_kernels.ord_ascii");
-    equivalentFnMapBroadcast.put("ASCII", "bodo.libs.bodosql_array_kernels.ord_ascii");
-    equivalentFnMapBroadcast.put("CHAR", "bodo.libs.bodosql_array_kernels.char");
-    equivalentFnMapBroadcast.put("CHR", "bodo.libs.bodosql_array_kernels.char");
-    equivalentFnMapBroadcast.put("FORMAT", "bodo.libs.bodosql_array_kernels.format");
-    equivalentFnMapBroadcast.put("REPEAT", "bodo.libs.bodosql_array_kernels.repeat");
-    equivalentFnMapBroadcast.put("REVERSE", "bodo.libs.bodosql_array_kernels.reverse");
-    equivalentFnMapBroadcast.put("REPLACE", "bodo.libs.bodosql_array_kernels.replace");
-    equivalentFnMapBroadcast.put(
-        "RTRIMMED_LENGTH", "bodo.libs.bodosql_array_kernels.rtrimmed_length");
-    equivalentFnMapBroadcast.put(
-        "JAROWINKLER_SIMILARITY", "bodo.libs.bodosql_array_kernels.jarowinkler_similarity");
-    equivalentFnMapBroadcast.put("SPACE", "bodo.libs.bodosql_array_kernels.space");
-    equivalentFnMapBroadcast.put("STRCMP", "bodo.libs.bodosql_array_kernels.strcmp");
-    equivalentFnMapBroadcast.put("INSTR", "bodo.libs.bodosql_array_kernels.instr");
-    equivalentFnMapBroadcast.put("MID", "bodo.libs.bodosql_array_kernels.substring");
-    equivalentFnMapBroadcast.put(
-        "SUBSTRING_INDEX", "bodo.libs.bodosql_array_kernels.substring_index");
-    equivalentFnMapBroadcast.put("TRANSLATE3", "bodo.libs.bodosql_array_kernels.translate");
-    equivalentFnMapBroadcast.put("SPLIT_PART", "bodo.libs.bodosql_array_kernels.split_part");
-    equivalentFnMapBroadcast.put("STARTSWITH", "bodo.libs.bodosql_array_kernels.startswith");
-    equivalentFnMapBroadcast.put("ENDSWITH", "bodo.libs.bodosql_array_kernels.endswith");
-    equivalentFnMapBroadcast.put("INSERT", "bodo.libs.bodosql_array_kernels.insert");
-    equivalentFnMapBroadcast.put("SPLIT", "bodo.libs.bodosql_array_kernels.split");
+    equivalentFnMapBroadcast.put("CHAR_LENGTH", "length");
+    equivalentFnMapBroadcast.put("LENGTH", "length");
+    equivalentFnMapBroadcast.put("LEN", "length");
+    equivalentFnMapBroadcast.put("CHARACTER_LENGTH", "length");
+    equivalentFnMapBroadcast.put("LCASE", "lower");
+    equivalentFnMapBroadcast.put("LOWER", "lower");
+    equivalentFnMapBroadcast.put("UCASE", "upper");
+    equivalentFnMapBroadcast.put("UPPER", "upper");
+    equivalentFnMapBroadcast.put("CONTAINS", "contains");
+    equivalentFnMapBroadcast.put("LPAD", "lpad");
+    equivalentFnMapBroadcast.put("RPAD", "rpad");
+    equivalentFnMapBroadcast.put("LEFT", "left");
+    equivalentFnMapBroadcast.put("RIGHT", "right");
+    equivalentFnMapBroadcast.put("ORD", "ord_ascii");
+    equivalentFnMapBroadcast.put("ASCII", "ord_ascii");
+    equivalentFnMapBroadcast.put("CHAR", "char");
+    equivalentFnMapBroadcast.put("CHR", "char");
+    equivalentFnMapBroadcast.put("FORMAT", "format");
+    equivalentFnMapBroadcast.put("REPEAT", "repeat");
+    equivalentFnMapBroadcast.put("REVERSE", "reverse");
+    equivalentFnMapBroadcast.put("REPLACE", "replace");
+    equivalentFnMapBroadcast.put("RTRIMMED_LENGTH", "rtrimmed_length");
+    equivalentFnMapBroadcast.put("JAROWINKLER_SIMILARITY", "jarowinkler_similarity");
+    equivalentFnMapBroadcast.put("SPACE", "space");
+    equivalentFnMapBroadcast.put("STRCMP", "strcmp");
+    equivalentFnMapBroadcast.put("INSTR", "instr");
+    equivalentFnMapBroadcast.put("MID", "substring");
+    equivalentFnMapBroadcast.put("SUBSTRING_INDEX", "substring_index");
+    equivalentFnMapBroadcast.put("TRANSLATE3", "translate");
+    equivalentFnMapBroadcast.put("SPLIT_PART", "split_part");
+    equivalentFnMapBroadcast.put("STARTSWITH", "startswith");
+    equivalentFnMapBroadcast.put("ENDSWITH", "endswith");
+    equivalentFnMapBroadcast.put("INSERT", "insert");
+    equivalentFnMapBroadcast.put("SPLIT", "split");
   }
 
   /**
@@ -75,7 +72,7 @@ public class StringFnCodeGen {
    */
   public static Expr getStringFnCode(String fnName, List<Expr> args) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      return new Expr.Call(equivalentFnMapBroadcast.get(fnName), args);
+      return ExprKt.BodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
@@ -94,7 +91,7 @@ public class StringFnCodeGen {
   public static Expr getOptimizedStringFnCode(
       String fnName, List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      return new Expr.Call(equivalentFnMapBroadcast.get(fnName), args, streamingNamedArgs);
+      return ExprKt.BodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, streamingNamedArgs);
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
@@ -174,10 +171,7 @@ public class StringFnCodeGen {
       return operandsInfo.get(0);
     }
     Expr.Tuple tupleArg = new Tuple(operandsInfo);
-    return new Expr.Call(
-        "bodo.libs.bodosql_array_kernels.concat_ws",
-        List.of(tupleArg, separator),
-        streamingNamedArgs);
+    return ExprKt.BodoSQLKernel("concat_ws", List.of(tupleArg, separator), streamingNamedArgs);
   }
 
   /**

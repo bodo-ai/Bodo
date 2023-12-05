@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,22 +18,22 @@ public class CondOpCodeGen {
 
   static {
     equivalentFnMap = new HashMap<>();
-    equivalentFnMap.put("REGR_VALX", "bodo.libs.bodosql_array_kernels.regr_valx");
-    equivalentFnMap.put("REGR_VALY", "bodo.libs.bodosql_array_kernels.regr_valy");
-    equivalentFnMap.put("BOOLAND", "bodo.libs.bodosql_array_kernels.booland");
-    equivalentFnMap.put("BOOLOR", "bodo.libs.bodosql_array_kernels.boolor");
-    equivalentFnMap.put("BOOLXOR", "bodo.libs.bodosql_array_kernels.boolxor");
-    equivalentFnMap.put("BOOLNOT", "bodo.libs.bodosql_array_kernels.boolnot");
-    equivalentFnMap.put("EQUAL_NULL", "bodo.libs.bodosql_array_kernels.equal_null");
-    equivalentFnMap.put("IF", "bodo.libs.bodosql_array_kernels.cond");
-    equivalentFnMap.put("IFF", "bodo.libs.bodosql_array_kernels.cond");
-    equivalentFnMap.put("DECODE", "bodo.libs.bodosql_array_kernels.decode");
-    equivalentFnMap.put("HASH", "bodo.libs.bodosql_array_kernels.sql_hash");
-    equivalentFnMap.put("COALESCE", "bodo.libs.bodosql_array_kernels.coalesce");
-    equivalentFnMap.put("NVL", "bodo.libs.bodosql_array_kernels.coalesce");
-    equivalentFnMap.put("NVL2", "bodo.libs.bodosql_array_kernels.nvl2");
-    equivalentFnMap.put("IFNULL", "bodo.libs.bodosql_array_kernels.coalesce");
-    equivalentFnMap.put("ZEROIFNULL", "bodo.libs.bodosql_array_kernels.coalesce");
+    equivalentFnMap.put("REGR_VALX", "regr_valx");
+    equivalentFnMap.put("REGR_VALY", "regr_valy");
+    equivalentFnMap.put("BOOLAND", "booland");
+    equivalentFnMap.put("BOOLOR", "boolor");
+    equivalentFnMap.put("BOOLXOR", "boolxor");
+    equivalentFnMap.put("BOOLNOT", "boolnot");
+    equivalentFnMap.put("EQUAL_NULL", "equal_null");
+    equivalentFnMap.put("IF", "cond");
+    equivalentFnMap.put("IFF", "cond");
+    equivalentFnMap.put("DECODE", "decode");
+    equivalentFnMap.put("HASH", "sql_hash");
+    equivalentFnMap.put("COALESCE", "coalesce");
+    equivalentFnMap.put("NVL", "coalesce");
+    equivalentFnMap.put("NVL2", "nvl2");
+    equivalentFnMap.put("IFNULL", "coalesce");
+    equivalentFnMap.put("ZEROIFNULL", "coalesce");
   }
 
   /**
@@ -52,7 +53,7 @@ public class CondOpCodeGen {
       // If we made it here, something has gone very wrong
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-    return new Expr.Call(kernelName, codeExprs);
+    return ExprKt.BodoSQLKernel(kernelName, codeExprs, List.of());
   }
 
   /**
@@ -84,7 +85,7 @@ public class CondOpCodeGen {
     kwargs.add(new Pair<String, Expr>("is_scalar_a", new Expr.BooleanLiteral(argScalars.get(0))));
     kwargs.add(new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(1))));
     kwargs.addAll(streamingNamedArgs);
-    return new Expr.Call(kernelName, codeExprs, kwargs);
+    return ExprKt.BodoSQLKernel(kernelName, codeExprs, kwargs);
   }
 
   /**
@@ -101,7 +102,7 @@ public class CondOpCodeGen {
       // If we made it here, something has gone very wrong
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-    return new Expr.Call(kernelName, new Expr.Tuple(codeExprs));
+    return ExprKt.BodoSQLKernel(kernelName, List.of(new Expr.Tuple(codeExprs)), List.of());
   }
 
   /**
@@ -126,6 +127,6 @@ public class CondOpCodeGen {
     if (fnName == "ZEROIFNULL") {
       codeExprs.add(new Expr.Raw("0"));
     }
-    return new Expr.Call(kernelName, List.of(new Expr.Tuple(codeExprs)), streamingNamedArgs);
+    return ExprKt.BodoSQLKernel(kernelName, List.of(new Expr.Tuple(codeExprs)), streamingNamedArgs);
   }
 }
