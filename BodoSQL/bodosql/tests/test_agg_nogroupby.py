@@ -5,6 +5,7 @@ Test correctness of SQL aggregation operations without groupby on BodoSQL
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -1058,5 +1059,92 @@ def test_bit_agg(col, expected, memory_leak_check):
         check_dtype=False,
         check_names=False,
         expected_output=expected_df,
+        is_out_distributed=False,
+    )
+
+
+def test_all_null(memory_leak_check):
+    """
+    Tests that no-groupby aggregations work correctly when the
+    data is all-null on the remaining functions.
+
+    Todo items:
+    [BSE-2183] ensure numeric no-groupby aggregations return null on all-null data
+    [BSE-2184] fix listagg segfault in no-groupby on all-null data
+    """
+    selects = [
+        # [BSE-2183]
+        # "SUM(I) as SU",
+        # "MIN(I) as MI",
+        # "MAX(I) as MA",
+        # "VARIANCE(I) as V",
+        # "VARIANCE_POP(I) as VP",
+        # "STDDEV(I) as S",
+        # "STDDEV_POP(I) as SP",
+        # "SKEW(I) as SK",
+        # "KURTOSIS(I) as KU",
+        # "MEDIAN(I) as ME",
+        # "APPROX_PERCENTILE(I, 0.5) as AP",
+        # "ANY_VALUE(I) as AV",
+        "COUNT(*) as CS",
+        "COUNT(B) as C",
+        "COUNT_IF(B) as CI",
+        "BOOLOR_AGG(B) as BO",
+        "BOOLAND_AGG(B) as BA",
+        "BOOLXOR_AGG(B) as BX",
+        "BITOR_AGG(I) as BIO",
+        "BITAND_AGG(I) as BIA",
+        "BITXOR_AGG(I) as BIX",
+        # [BSE-2184]
+        # "LISTAGG(I::varchar, ',') as LA",
+        "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY I) as PC",
+        "PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY I) as PD",
+    ]
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    df = pd.DataFrame(
+        {
+            "I": pd.array([None] * 10, dtype=pd.Int32Dtype()),
+            "B": pd.array([None] * 10, dtype=pd.BooleanDtype()),
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            # [BSE-2183]
+            # "SU": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "MI": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "MA": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "V": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "VP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "S": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "SP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "SK": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "KU": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "ME": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "AP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "AV": pd.Series([None], dtype=pd.Int32Dtype()),
+            "CS": pd.Series([10], dtype=pd.Int32Dtype()),
+            "C": pd.Series([0], dtype=pd.Int32Dtype()),
+            "CI": pd.Series([0], dtype=pd.Int32Dtype()),
+            "BO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BX": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIX": pd.Series([None], dtype=pd.Int32Dtype()),
+            # [BSE-2184]
+            # "LA": pd.Series([""]),
+            "PC": pd.Series([None], dtype=pd.Int32Dtype()),
+            "PD": pd.Series([None], dtype=pd.Int32Dtype()),
+        }
+    )
+
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=expected,
+        check_dtype=False,
+        sort_output=False,
         is_out_distributed=False,
     )

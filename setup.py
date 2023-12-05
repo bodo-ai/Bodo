@@ -399,6 +399,7 @@ if is_testing:
             "bodo/tests/test_schema.cpp",
             "bodo/tests/test_pinnable.cpp",
             "bodo/tests/test_dict_builder.cpp",
+            "bodo/tests/test_groupby_and_window.cpp",
             "bodo/tests/test_memory_budget.cpp",
             "bodo/tests/test_table_builder.cpp",
             "bodo/tests/test_table_generator.cpp",

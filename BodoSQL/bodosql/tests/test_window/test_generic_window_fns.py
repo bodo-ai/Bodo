@@ -381,3 +381,105 @@ def test_any_value(all_window_df, all_window_col_names, spark_info):
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
     )
+
+
+@pytest.mark.slow
+def test_all_null():
+    """
+    Tests that window functions using groupby.apply work correctly when the
+    data is all-null.
+    """
+    selects = [
+        "idx",
+        "ROW_NUMBER() OVER (PARTITION BY P ORDER BY O) AS RN",
+        "RANK() OVER (PARTITION BY P ORDER BY O) AS R",
+        "DENSE_RANK() OVER (PARTITION BY P ORDER BY O) AS DR",
+        "PERCENT_RANK() OVER (PARTITION BY P ORDER BY O) AS PR",
+        "CUME_DIST() OVER (PARTITION BY P ORDER BY O) AS CD",
+        "NTILE(2) OVER (PARTITION BY P ORDER BY O) AS NT",
+        "FIRST_VALUE(O) OVER (PARTITION BY P ORDER BY O) AS FV",
+        "LAST_VALUE(O) OVER (PARTITION BY P ORDER BY O) AS LV",
+        "NTH_VALUE(O, 1) OVER (PARTITION BY P ORDER BY O) AS NV",
+        "RATIO_TO_REPORT(O) OVER (PARTITION BY P ORDER BY O) AS RTR",
+        "AVG(O) OVER (PARTITION BY P ORDER BY O) AS A",
+        "VARIANCE(O) OVER (PARTITION BY P ORDER BY O) AS V",
+        "VARIANCE_POP(O) OVER (PARTITION BY P ORDER BY O) AS VP",
+        "STDDEV(O) OVER (PARTITION BY P ORDER BY O) AS S",
+        "STDDEV_POP(O) OVER (PARTITION BY P ORDER BY O) AS SP",
+        "SKEW(O) OVER (PARTITION BY P ORDER BY O) AS SK",
+        "KURTOSIS(O) OVER (PARTITION BY P ORDER BY O) AS KU",
+        "COUNT(*) OVER (PARTITION BY P ORDER BY O) AS CS",
+        "COUNT(O) OVER (PARTITION BY P ORDER BY O) AS C",
+        "COUNT_IF(B) OVER (PARTITION BY P ORDER BY O) AS CI",
+        "BOOLOR_AGG(B) OVER (PARTITION BY P ORDER BY O) AS BO",
+        "BOOLAND_AGG(B) OVER (PARTITION BY P ORDER BY O) AS BA",
+        "BOOLXOR_AGG(B) OVER (PARTITION BY P ORDER BY O) AS BX",
+        "BITOR_AGG(O) OVER (PARTITION BY P ORDER BY O) AS BIO",
+        "BITAND_AGG(O) OVER (PARTITION BY P ORDER BY O) AS BIA",
+        "BITXOR_AGG(O) OVER (PARTITION BY P ORDER BY O) AS BIX",
+        "MEDIAN(O) OVER (PARTITION BY P ORDER BY O) AS ME",
+        "MODE(O) OVER (PARTITION BY P ORDER BY O) AS MO",
+        "MIN(O) OVER (PARTITION BY P ORDER BY O) AS MI",
+        "MAX(O) OVER (PARTITION BY P ORDER BY O) AS MA",
+        "SUM(O) OVER (PARTITION BY P ORDER BY O) AS SU",
+        "LEAD(O) OVER (PARTITION BY P ORDER BY O) AS LL1",
+        "LAG(O, 2) OVER (PARTITION BY P ORDER BY O) AS LL2",
+        "LEAD(O, 3, -1) OVER (PARTITION BY P ORDER BY O) AS LL3",
+    ]
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    df = pd.DataFrame(
+        {
+            "idx": list(range(10)),
+            "P": [0] * 10,
+            "O": pd.array([None] * 10, dtype=pd.Int32Dtype()),
+            "B": pd.array([None] * 10, dtype=pd.BooleanDtype()),
+        }
+    )
+    answer = pd.DataFrame(
+        {
+            "idx": list(range(10)),
+            "RN": list(range(1, 11)),
+            "R": [1] * 10,
+            "DR": [1] * 10,
+            "PR": [0] * 10,
+            "CD": [1] * 10,
+            "NT": [1] * 5 + [2] * 5,
+            "FV": [None] * 10,
+            "LV": [None] * 10,
+            "NV": [None] * 10,
+            "RTR": [None] * 10,
+            "A": [None] * 10,
+            "V": [None] * 10,
+            "VP": [None] * 10,
+            "S": [None] * 10,
+            "SP": [None] * 10,
+            "SK": [None] * 10,
+            "KU": [None] * 10,
+            "CS": list(range(1, 11)),
+            "C": [0] * 10,
+            "CI": [0] * 10,
+            "BO": [None] * 10,
+            "BA": [None] * 10,
+            "BX": [None] * 10,
+            "BIO": [None] * 10,
+            "BIA": [None] * 10,
+            "BIX": [None] * 10,
+            "ME": [None] * 10,
+            "MO": [None] * 10,
+            "MI": [None] * 10,
+            "MA": [None] * 10,
+            "SU": [None] * 10,
+            "LL1": [None] * 10,
+            "LL2": [None] * 10,
+            "LL3": [None] * 7 + [-1] * 3,
+        }
+    )
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=answer,
+        sort_output=True,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )

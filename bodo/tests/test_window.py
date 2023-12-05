@@ -297,6 +297,26 @@ def permute_df_and_answer(df, answer):
         ),
         pytest.param(
             (
+                # Testing rank with a partition key so that some of the partitions
+                # are all-null.
+                ["D"],
+                (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
+                ("P",),
+                (True,),
+                ("last",),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": list(range(1, 13)) + [1] * 3,
+                        "AGG_OUTPUT_1": list(range(1, 13)) + [1] * 3,
+                        "AGG_OUTPUT_2": [i / 11 for i in range(12)] + [0] * 3,
+                        "AGG_OUTPUT_3": [(i + 1) / 12 for i in range(12)] + [1] * 3,
+                    }
+                ),
+            ),
+            id="rank_fns-all_null_group",
+        ),
+        pytest.param(
+            (
                 ["D"],
                 (
                     # Note: row_number is included so that there is a mix of window functions that do & don't
@@ -784,6 +804,41 @@ def permute_df_and_answer(df, answer):
             (
                 ["D"],
                 (
+                    ("mean", "P", "None", "None"),
+                    ("var", "P", "None", "None"),
+                    ("var_pop", "P", "None", "None"),
+                    ("std", "P", "None", "None"),
+                    ("std_pop", "P", "None", "None"),
+                ),
+                ("P",),
+                (True,),
+                ("last",),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": pd.Series(
+                            [74.000] * 12 + [None] * 3, dtype=None
+                        ),
+                        "AGG_OUTPUT_1": pd.Series(
+                            [2901.800000] * 12 + [None] * 3, dtype=None
+                        ),
+                        "AGG_OUTPUT_2": pd.Series(
+                            [2638.000000] * 12 + [None] * 3, dtype=None
+                        ),
+                        "AGG_OUTPUT_3": pd.Series(
+                            [53.868358059] * 12 + [None] * 3, dtype=None
+                        ),
+                        "AGG_OUTPUT_4": pd.Series(
+                            [51.361464154] * 12 + [None] * 3, dtype=None
+                        ),
+                    }
+                ),
+            ),
+            id="moment_family-all_null",
+        ),
+        pytest.param(
+            (
+                ["D"],
+                (
                     # ANY_VALUE on a nullable integer array
                     ("any_value", "B"),
                     # ANY_VALUE on a non-nullable array of booleans
@@ -1041,6 +1096,34 @@ def permute_df_and_answer(df, answer):
                 reason="[BSE-903] TODO: support nth_value in groupby.window"
             ),
         ),
+        pytest.param(
+            (
+                ["D"],
+                (("ratio_to_report", "P"),),
+                (),
+                (),
+                (),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": [
+                            0.011057,
+                            0.019656,
+                            0.030713,
+                            0.044226,
+                            0.060197,
+                            0.078624,
+                            0.099509,
+                            0.122850,
+                            0.148649,
+                            0.176904,
+                            0.207617,
+                        ]
+                        + [None] * 4,
+                    }
+                ),
+            ),
+            id="ratio_to_report",
+        ),
     ],
 )
 def window_args(request):
@@ -1088,4 +1171,5 @@ def test_window(test_window_df, window_args, memory_leak_check):
         reset_index=True,
         check_names=False,
         check_dtype=False,
+        atol=1e-6,
     )

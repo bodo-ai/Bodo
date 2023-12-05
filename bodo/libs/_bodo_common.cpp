@@ -171,6 +171,8 @@ static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
         return "_BOOL";
     if (dtype == Bodo_CTypes::DECIMAL)
         return "DECIMAL";
+    if (dtype == Bodo_CTypes::INT128)
+        return "INT128";
     if (dtype == Bodo_CTypes::DATE)
         return "DATE";
     if (dtype == Bodo_CTypes::DATETIME)
