@@ -130,6 +130,11 @@ struct BufferPoolOptions {
     /// enforce_max_limit_during_allocation is false.
     bool debug_mode = false;
 
+    /// @brief Track various statistics about the buffer pool.
+    /// Primarily used to enable timers for various operations
+    /// for benchmarking purposes.
+    bool tracing_mode = false;
+
     /// @brief Number of bytes free-d through malloc after which
     /// we call malloc_trim.
     /// NOTE: This is only applicable on Linux since malloc_trim
@@ -580,11 +585,7 @@ class BufferPool final : public IBufferPool {
     /// @brief Cleanup any external resources
     /// Needs to be outside of the destructor to allow
     /// for exception propagation to work
-    void Cleanup() {
-        for (auto& manager : this->storage_managers_) {
-            manager->Cleanup();
-        }
-    }
+    void Cleanup();
 
     // XXX Add Reserve/Release functions, or re-use planned
     // functions RegisterOffPoolUsage and DeregisterOffPoolUsage

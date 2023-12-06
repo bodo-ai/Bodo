@@ -1,6 +1,9 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
+#include <chrono>
+#include <span>
+
 #include <arrow/result.h>
 
 // TODO Tell the compiler that the branch is unlikely.
@@ -18,6 +21,8 @@
             return stat.WithMessage(err_msg);                               \
         }                                                                   \
     }
+
+using milli_double = std::chrono::duration<double, std::milli>;
 
 namespace bodo {
 
@@ -40,7 +45,51 @@ struct StorageOptions {
     /// @brief Type of StorageManager to use
     StorageType type = StorageType::Local;
 
+    /// @brief Enable Tracing Mode
+    bool tracing_mode = false;
+
     static std::shared_ptr<StorageOptions> Defaults(uint8_t tier);
+};
+
+// --------------------------- Storage Metrics --------------------------- //
+/// @brief Struct to track Storage Manager statistics
+/// from the point of creation
+struct StorageManagerStats {
+    /// @brief Current # of bytes spilled to storage
+    uint64_t curr_spilled_bytes = 0;
+
+    /// @brief Current # of blocks spilled in storage
+    uint64_t curr_num_blocks_spilled = 0;
+
+    /// @brief Total # of blocks ever spilled from storage
+    uint64_t total_num_blocks_spilled = 0;
+
+    /// @brief Total # of blocks ever read from storage
+    uint64_t total_num_blocks_read = 0;
+
+    /// @brief Total # of blocks ever deleted from storage
+    uint64_t total_num_blocks_del = 0;
+
+    /// @brief Total # of bytes spilled to storage
+    uint64_t total_spilled_bytes = 0;
+
+    /// @brief Total # of bytes read from storage
+    uint64_t total_read_bytes = 0;
+
+    /// @brief Total # of bytes deleted from storage
+    uint64_t total_bytes_del = 0;
+
+    /// @brief Max # of bytes spilled to storage
+    uint64_t max_spilled_bytes = 0;
+
+    /// @brief Total time spent writing to storage
+    milli_double total_write_time{};
+
+    /// @brief Total time spent reading from storage
+    milli_double total_read_time{};
+
+    /// @brief Total time spent deleting from storage
+    milli_double total_delete_time{};
 };
 
 // --------------------------- Storage Manager --------------------------- //
@@ -74,7 +123,7 @@ class StorageManager {
      */
     bool CanSpillTo(uint64_t amount) const {
         return options->usable_size < 0 ||
-               (curr_spilled_bytes + amount) <=
+               (stats_.curr_spilled_bytes + amount) <=
                    static_cast<uint64_t>(options->usable_size);
     }
 
@@ -85,7 +134,7 @@ class StorageManager {
      * @param diff The number of bytes added or removed from this
      * storage location.
      */
-    void UpdateSpilledBytes(int64_t diff) { this->curr_spilled_bytes += diff; }
+    void UpdateSpilledBytes(int64_t diff);
 
     /// @brief Get the next available block id for this storage location
     uint64_t GetNewBlockID() { return this->block_id_counter++; }
@@ -138,11 +187,14 @@ class StorageManager {
     /// an error on fail
     virtual void Cleanup() = 0;
 
-   protected:
     /// @brief Name of the manager
     /// What to refer to in logs
     std::string storage_name;
 
+    /// @brief All current Storage Manager statistics
+    StorageManagerStats stats_;
+
+   protected:
     /// @brief Rank and process-unique identifier for
     /// spilling. Can be used for location handling
     std::string uuid;
@@ -153,13 +205,16 @@ class StorageManager {
    private:
     /// @brief Increment every time we write a block to disk
     uint64_t block_id_counter = 0;
-
-    /// @brief Current # of bytes spilled to storage
-    uint64_t curr_spilled_bytes = 0;
 };
 
 /// @brief Factory Function to Create StorageManager based on StorageOptions
 std::unique_ptr<StorageManager> MakeStorageManager(
     const std::shared_ptr<StorageOptions>& options);
+
+/// @brief Print Storage Manager Statistics for All Managers
+/// in an easy-to-read table format
+void PrintStorageManagerStats(FILE* os,
+                              const std::span<std::string_view> m_names,
+                              const std::span<const StorageManagerStats> stats);
 
 };  // namespace bodo

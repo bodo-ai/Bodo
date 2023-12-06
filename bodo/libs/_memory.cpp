@@ -515,6 +515,16 @@ static std::tuple<int, int> dist_get_ranks_on_node() {
 BufferPoolOptions BufferPoolOptions::Defaults() {
     BufferPoolOptions options;
 
+    if (const char* debug_mode_env_ =
+            std::getenv("BODO_BUFFER_POOL_DEBUG_MODE")) {
+        options.debug_mode = !std::strcmp(debug_mode_env_, "1");
+    }
+
+    if (const char* tracing_mode_env_ =
+            std::getenv("BODO_BUFFER_POOL_TRACING_MODE")) {
+        options.tracing_mode = !std::strcmp(tracing_mode_env_, "1");
+    }
+
     // Disable Storage Manager Parsing
     // Useful for debugging purposes
     const char* disable_spilling_env_ =
@@ -524,6 +534,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         for (uint8_t i = 1; i <= MAX_NUM_STORAGE_MANAGERS; i++) {
             auto storage_option = StorageOptions::Defaults(i);
             if (storage_option != nullptr) {
+                storage_option->tracing_mode = options.tracing_mode;
                 options.storage_options.push_back(storage_option);
             } else {
                 break;
@@ -629,11 +640,6 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             std::getenv("BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT")) {
         options.enforce_max_limit_during_allocation =
             !std::strcmp(enforce_max_limit_env_, "1");
-    }
-
-    if (const char* debug_mode_env_ =
-            std::getenv("BODO_BUFFER_POOL_DEBUG_MODE")) {
-        options.debug_mode = !std::strcmp(debug_mode_env_, "1");
     }
 
     if (const char* malloc_free_trim_threshold_env_ =
@@ -1546,6 +1552,26 @@ uint64_t BufferPool::GetSmallestSizeClassSize() const {
         return this->size_class_bytes_[0];
     }
     return 0;
+}
+
+void BufferPool::Cleanup() {
+    for (auto& manager : this->storage_managers_) {
+        manager->Cleanup();
+    }
+
+    if (this->options_.tracing_mode && this->storage_managers_.size() > 0) {
+        std::vector<std::string_view> manager_names;
+        for (auto& manager : this->storage_managers_) {
+            manager_names.push_back(manager->storage_name);
+        }
+
+        std::vector<StorageManagerStats> stats;
+        for (auto& manager : this->storage_managers_) {
+            stats.push_back(manager->stats_);
+        }
+
+        PrintStorageManagerStats(stderr, manager_names, stats);
+    }
 }
 
 /// Helper Functions for using BufferPool in Arrow

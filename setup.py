@@ -224,7 +224,13 @@ if is_win:
     # hdf5-parallel Windows build uses CMake which needs this flag
     ext_metadata["define_macros"].append(("H5_BUILT_AS_DYNAMIC_LIB", None))
 
-ext_metadata["libraries"] += mpi_libs + ["hdf5", "arrow", "arrow_python", "parquet"]
+ext_metadata["libraries"] += mpi_libs + [
+    "hdf5",
+    "arrow",
+    "arrow_python",
+    "parquet",
+    "fmt",
+]
 
 # TODO Windows build fails because ssl.lib not found. Disabling licensing
 # check on windows for now
@@ -521,7 +527,7 @@ ext_memory = Extension(
         ("BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED", "1"),
     ],
     library_dirs=lid + pa_compile_args["library_dirs"],
-    libraries=["arrow", "arrow_python"] + mpi_libs,
+    libraries=["arrow", "arrow_python", "fmt"] + mpi_libs,
     # Cannot compile with -Werror yet because memory.cpp
     # generated multiple unused variable warnings
     extra_compile_args=eca + ["-Wno-unused-variable"],
