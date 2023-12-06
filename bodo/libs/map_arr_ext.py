@@ -324,6 +324,18 @@ def map_arr_getitem(arr, ind):
     )  # pragma: no cover
 
 
+def contains_map_array(arr):
+    """Returns True if the array contains any maps or is a map"""
+    if isinstance(arr, bodo.MapArrayType):
+        return True
+    elif isinstance(arr, bodo.ArrayItemArrayType):
+        return contains_map_array(arr.dtype)
+    elif isinstance(arr, bodo.StructArrayType):
+        return any(contains_map_array(t) for t in arr.data)
+    else:
+        return False
+
+
 class MapScalarType(types.Type):
     """Data type for map elements taken as scalars from map arrays. A regular
     dictionary doesn't work in the general case since values can have nulls and a
