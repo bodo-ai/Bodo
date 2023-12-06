@@ -1,7 +1,7 @@
 ---
     - name: HDFS | Download hadoop
       unarchive:
-        src: http://mirrors.sonic.net/apache/hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz
+        src: https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz
         dest: /opt
         remote_src: yes
       tags:
