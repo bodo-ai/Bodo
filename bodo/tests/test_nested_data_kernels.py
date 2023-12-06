@@ -312,8 +312,9 @@ def test_array_except(
     )
 
 
-@pytest.mark.parametrize("flag1", [True, False])
 @pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.slow
 def test_option_array_except(flag0, flag1, memory_leak_check):
     def impl(arr, to_remove, flag0, flag1):
         arg0 = None if flag0 else arr
@@ -659,8 +660,9 @@ def test_array_intersection(
     )
 
 
-@pytest.mark.parametrize("flag1", [True, False])
 @pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.slow
 def test_option_array_intersection(flag0, flag1, memory_leak_check):
     def impl(arr, to_remove, flag0, flag1):
         arg0 = None if flag0 else arr
@@ -914,8 +916,9 @@ def test_array_cat(
     )
 
 
-@pytest.mark.parametrize("flag1", [True, False])
 @pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.slow
 def test_option_array_cat(flag0, flag1, memory_leak_check):
     def impl(arr, to_remove, flag0, flag1):
         arg0 = None if flag0 else arr
@@ -2897,19 +2900,69 @@ def test_array_contains(
     )
 
 
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
 @pytest.mark.slow
-def test_option_array_contains(memory_leak_check):
+def test_option_array_contains(flag0, flag1, memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
         return bodo.libs.bodosql_array_kernels.array_contains(arg0, arg1, True, True)
 
     A, B = 1, [0, 1, 4, 9]
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            check_func(
-                impl, (A, B, flag0, flag1), py_output=1 if flag0 and flag1 else None
-            )
+    check_func(impl, (A, B, flag0, flag1), py_output=1 if flag0 and flag1 else None)
+
+
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.slow
+def test_option_arrays_overlap(flag0, flag1, memory_leak_check):
+    def impl(array_0, array_1, flag0, flag1):
+        arg0 = None if flag0 else array_0
+        arg1 = None if flag1 else array_1
+        return bodo.libs.bodosql_array_kernels.arrays_overlap(
+            arg0, arg1, is_scalar_0=True, is_scalar_1=True
+        )
+
+    array_0 = pd.array([1, 2, None], pd.Int32Dtype())
+    array_1 = pd.array([None, 3], pd.Int32Dtype())
+    expected = None if flag0 or flag1 else True
+
+    check_func(
+        impl,
+        (array_0, array_1, flag0, flag1),
+        py_output=expected,
+        check_dtype=False,
+        distributed=False,
+        is_out_distributed=False,
+        dist_test=False,
+    )
+
+
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.slow
+def test_option_array_position(flag0, flag1, memory_leak_check):
+    def impl(elem, container, flag0, flag1):
+        arg0 = None if flag0 else elem
+        arg1 = None if flag1 else container
+        return bodo.libs.bodosql_array_kernels.array_position(
+            arg0, arg1, is_scalar_0=True, is_scalar_1=True
+        )
+
+    elem = 1
+    container = pd.array([1, 2, None], pd.Int32Dtype())
+    expected = None if flag1 else (2 if flag0 else 0)
+
+    check_func(
+        impl,
+        (elem, container, flag0, flag1),
+        py_output=expected,
+        check_dtype=False,
+        distributed=False,
+        is_out_distributed=False,
+        dist_test=False,
+    )
 
 
 @pytest.mark.parametrize("flag", [True, False])
@@ -2929,26 +2982,24 @@ def test_option_array_size(flag, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
 @pytest.mark.slow
-def test_option_array_remove(memory_leak_check):
+def test_option_array_remove(flag0, flag1, memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
         return bodo.libs.bodosql_array_kernels.array_remove(arg0, arg1, True, True)
 
     A, B = pd.array([0, 1, 4, 9], pd.Int32Dtype()), 0
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            check_func(
-                impl,
-                (A, B, flag0, flag1),
-                py_output=pd.array([1, 4, 9], pd.Int32Dtype())
-                if flag0 and flag1
-                else None,
-                distributed=False,
-                is_out_distributed=False,
-                dist_test=False,
-            )
+    check_func(
+        impl,
+        (A, B, flag0, flag1),
+        py_output=pd.array([1, 4, 9], pd.Int32Dtype()) if flag0 and flag1 else None,
+        distributed=False,
+        is_out_distributed=False,
+        dist_test=False,
+    )
 
 
 @pytest.mark.parametrize(

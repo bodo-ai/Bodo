@@ -801,10 +801,13 @@ def test_option_decode(flags, memory_leak_check):
         )
 
 
-def test_option_concat_ws(memory_leak_check):
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.parametrize("flag2", [True, False])
+@pytest.mark.slow
+def test_option_concat_ws(flag0, flag1, flag2, memory_leak_check):
     """
-    Test calling concat_ws with optional values in tuple and an optional
-    separator.
+    Test calling concat_ws with optional values in tuple and an optional separator.
     """
 
     def impl(arr1, A, B, arr2, sep, flag0, flag1, flag2):
@@ -830,21 +833,18 @@ def test_option_concat_ws(memory_leak_check):
     A = "flag"
     B = "window"
     sep = "-"
-    for flag2 in [True, False]:
-        for flag1 in [True, False]:
-            for flag0 in [True, False]:
-                args = (arr1, A, B, arr2, sep, flag0, flag1, flag2)
-                arg0 = arr1
-                arg1 = A if flag0 else None
-                arg2 = B if flag1 else None
-                arg3 = arr2
-                arg4 = sep if flag2 else None
-                concat_ws_answer = vectorized_sol(
-                    (arg0, arg1, arg2, arg3, arg4),
-                    concat_ws_scalar_fn,
-                    pd.StringDtype(),
-                )
-                check_func(impl, args, py_output=concat_ws_answer, check_dtype=False)
+    args = (arr1, A, B, arr2, sep, flag0, flag1, flag2)
+    arg0 = arr1
+    arg1 = A if flag0 else None
+    arg2 = B if flag1 else None
+    arg3 = arr2
+    arg4 = sep if flag2 else None
+    concat_ws_answer = vectorized_sol(
+        (arg0, arg1, arg2, arg3, arg4),
+        concat_ws_scalar_fn,
+        pd.StringDtype(),
+    )
+    check_func(impl, args, py_output=concat_ws_answer, check_dtype=False)
 
 
 def test_concat_ws_fusion(memory_leak_check):
