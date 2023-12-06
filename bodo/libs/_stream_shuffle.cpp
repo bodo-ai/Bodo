@@ -1,10 +1,14 @@
 #include "_stream_shuffle.h"
-#include <mpi.h>
+
 #include <iostream>
 #include <numeric>
+
+#include <mpi.h>
+
 #include "_array_hash.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
+#include "_utils.h"
 
 static int64_t get_shuffle_threshold() {
     // Get shuffle threshold from an env var if provided.

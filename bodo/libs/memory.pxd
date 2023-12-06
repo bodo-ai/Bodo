@@ -37,7 +37,8 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         int64_t usable_size
         c_string location
         CStorageType type
-        
+        c_bool tracing_mode
+
         CStorageOptions()
         
         @staticmethod
@@ -53,6 +54,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_bool spill_on_unpin
         c_bool move_on_unpin
         c_bool debug_mode
+        c_bool tracing_mode
         int64_t malloc_free_trim_threshold
 
         CBufferPoolOptions()
