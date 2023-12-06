@@ -460,8 +460,15 @@ def overload_to_array_util(arr, is_scalar, dict_encoding_state, func_id):
     )
 
 
-@numba.generated_jit(nopython=True)
-def arrays_overlap(array_0, array_1, is_scalar_0=False, is_scalar_1=False):
+def arrays_overlap(
+    array_0, array_1, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(arrays_overlap, no_unliteral=True)
+def overload_arrays_overlap(array_0, array_1, is_scalar_0=False, is_scalar_1=False):
     """
     Handles cases where ARRAYS_OVERLAP receives optional arguments and
     forwards to the appropriate version of the real implementation
@@ -484,8 +491,13 @@ def arrays_overlap(array_0, array_1, is_scalar_0=False, is_scalar_1=False):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
+def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(arrays_overlap_util, no_unliteral=True)
+def overload_arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     """
     A dedicated kernel for the SQL function ARRAYS_OVERLAP which takes in two
     arrays (or columns of arrays) and returns whether they have overlap
@@ -529,8 +541,15 @@ def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     )
 
 
-@numba.generated_jit(nopython=True)
-def array_position(elem, container, is_scalar_0=False, is_scalar_1=False):
+def array_position(
+    elem, container, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_position, no_unliteral=True)
+def overload_array_position(elem, container, is_scalar_0=False, is_scalar_1=False):
     """
     Handles cases where ARRAY_POSITION receives optional arguments and
     forwards to the appropriate version of the real implementation
@@ -551,8 +570,15 @@ def array_position(elem, container, is_scalar_0=False, is_scalar_1=False):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def array_position_util(elem, container, elem_is_scalar, container_is_scalar):
+def array_position_util(
+    elem, container, elem_is_scalar, container_is_scalar
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_position_util, no_unliteral=True)
+def overload_array_position_util(elem, container, elem_is_scalar, container_is_scalar):
     """
     A dedicated kernel for the SQL function ARRAY_POSITION which takes in an
     element and an array (or column of arrays) and returns the zero-indexed
