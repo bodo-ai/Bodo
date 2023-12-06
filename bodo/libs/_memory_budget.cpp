@@ -5,6 +5,8 @@
 
 #include "mpi.h"
 
+#include "./_utils.h"
+
 // Max iterations of the step 1 of the compute satisfiable budgets algorithms.
 #define SATISFIABLE_BUDGET_CALC_MAX_ITERS 100000
 
@@ -32,36 +34,6 @@ std::string GetOperatorType_as_string(OperatorType const& op_type) {
         return "ACCUMULATE_TABLE";
     throw std::runtime_error(
         "GetOperatorType_as_string: Uncovered Operator Type!");
-}
-
-std::string BytesToHumanReadableString(size_t bytes) {
-    auto kibibytes = bytes / 1024;
-    auto mebibyte = kibibytes / 1024;
-    kibibytes -= mebibyte * 1024;
-    auto gibibyte = mebibyte / 1024;
-    mebibyte -= gibibyte * 1024;
-    auto tebibyte = gibibyte / 1024;
-    gibibyte -= tebibyte * 1024;
-    auto pebibyte = tebibyte / 1024;
-    tebibyte -= pebibyte * 1024;
-    if (pebibyte > 0) {
-        return std::to_string(pebibyte) + "." +
-               std::to_string((tebibyte * 100) / 1024) + "PiB";
-    }
-    if (tebibyte > 0) {
-        return std::to_string(tebibyte) + "." +
-               std::to_string((gibibyte * 100) / 1024) + "TiB";
-    } else if (gibibyte > 0) {
-        return std::to_string(gibibyte) + "." +
-               std::to_string((mebibyte * 100) / 1024) + "GiB";
-    } else if (mebibyte > 0) {
-        return std::to_string(mebibyte) + "." +
-               std::to_string((kibibytes * 100) / 1024) + "MiB";
-    } else if (kibibytes > 0) {
-        return std::to_string(kibibytes) + "KiB";
-    } else {
-        return std::to_string(bytes) + (bytes == 1 ? " byte" : " bytes");
-    }
 }
 
 void OperatorComptroller::Initialize() {

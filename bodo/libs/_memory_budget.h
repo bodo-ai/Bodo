@@ -300,16 +300,3 @@ class OperatorComptroller {
         }
     }
 };
-
-/**
- * @brief Get human readable string version for a given number of bytes.
- *
- * Shamelessly copied from DuckDB
- * (https://github.com/duckdb/duckdb/blob/6545a55cfe4a09af251826d4dd72980c424d9215/src/common/string_util.cpp#L157).
- * Modified it to use GiB, MiB, etc. instead of GB, MB, etc. since that's our
- * usual convention for calculations.
- *
- * @param bytes
- * @return std::string
- */
-std::string BytesToHumanReadableString(const size_t bytes);

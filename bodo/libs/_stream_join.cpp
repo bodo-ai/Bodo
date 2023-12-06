@@ -1,8 +1,10 @@
 #include "_stream_join.h"
+
 #include "_distributed.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
+#include "_utils.h"
 
 // When estimating the required size of the OperatorBufferPool, we add some
 // headroom to be conservative. These macros define the bounds of this headroom.

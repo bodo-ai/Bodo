@@ -307,7 +307,7 @@ cdef class StorageOptions(_Weakrefable):
         # Underlying C++ object for storing the information.
         shared_ptr[CStorageOptions] options
 
-    def __init__(self, location, storage_type=None, usable_size=None):
+    def __init__(self, location, storage_type=None, usable_size=None, tracing_mode=None):
         """
         Constructor for StorageOptions.
         If the attributes are not provided, they default
@@ -319,6 +319,8 @@ cdef class StorageOptions(_Weakrefable):
             deref(self.options).usable_size = usable_size
         if storage_type is not None:
             deref(self.options).type = storage_type
+        if tracing_mode is not None:
+            deref(self.options).tracing_mode = tracing_mode
 
     cdef void cinit(self, shared_ptr[CStorageOptions] options):
         self.options = options
@@ -361,6 +363,7 @@ cdef class BufferPoolOptions(_Weakrefable):
                  spill_on_unpin=None,
                  move_on_unpin=None,
                  debug_mode=None,
+                 tracing_mode=None,
                  malloc_free_trim_threshold=None):
         """
         Constructor for BufferPoolOptions.
@@ -385,6 +388,8 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.move_on_unpin = move_on_unpin
         if debug_mode is not None:
             self.options.debug_mode = debug_mode
+        if tracing_mode is not None:
+            self.options.tracing_mode = tracing_mode
         if malloc_free_trim_threshold is not None:
             self.options.malloc_free_trim_threshold = malloc_free_trim_threshold
 
@@ -438,7 +443,11 @@ cdef class BufferPoolOptions(_Weakrefable):
     @property
     def debug_mode(self):
         return self.options.debug_mode
-    
+
+    @property
+    def tracing_mode(self):
+        return self.options.tracing_mode
+
     @property
     def malloc_free_trim_threshold(self):
         return self.options.malloc_free_trim_threshold
