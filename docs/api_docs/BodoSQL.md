@@ -3098,6 +3098,11 @@ Bodo currently supports the following functions that operate on columns of array
         type. BodoSQL currently requires 1+ arguments, and requires all arguments
         to be easily reconciled into a common type.
 
+#### ARRAY_CONSTRUCT_COMPACT
+-   `#!sql ARRAY_CONSTRUCT_COMPACT(A, B, C, ...)`
+
+    Equivalent to  `#!sql ARRAY_COMPACT(ARRAY_CONSTRUCT(A, B, C, ...))`
+
 
 #### ARRAY_EXCEPT
 -   `#!sql ARRAY_EXCEPT(A, B)`
@@ -3137,8 +3142,8 @@ Bodo currently supports the following functions that operate on columns of array
     in common (including `NULL`).
 
 
-#### ARRAYS_POSITION
--   `#!sql ARRAYS_OVERLAP(elem, arr)`
+#### ARRAY_POSITION
+-   `#!sql ARRAY_POSITION(elem, arr)`
 
     Returns the index of the first occurrence of `elem` in `arr` (using zero indexing), or
     `NULL` if there are no occurrences. The input `elem` can be `NULL`, in which case the funciton
@@ -3923,11 +3928,9 @@ Bodo currently supports the following functions that produce tables:
     - `#!sql MODE` (optional): a string literal that can be either `'OBJECT'`, `'ARRAY'` or `'BOTH'`, indicating what type of flattening rule should be done. BodoSQL currently only supports when this argument is omitted or is `'BOTH'` (which is the default).
 
     !!! note
-        Snowflake supports the input being an array, JSON,
-        or variant, and also allows several different input arguments
-        to further control the behavior [(see here for more details)](https://docs.snowflake.com/en/sql-reference/functions/flatten). 
-        BodoSQL has more limited type support; it can handle
-        arrays and JSON with values of the same type.
+        BodoSQL supports the input argument being an array, json or variant 
+        so long as the values are of the same type (with limited support for 
+        JSON when the values are also JSON).
 
 
     Below is an example of a query using the `#!sql FLATTEN` function with the
