@@ -5,9 +5,12 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 public class CatalogSchema extends BodoSqlSchema {
@@ -55,8 +58,8 @@ public class CatalogSchema extends BodoSqlSchema {
    */
   @Override
   public Set<String> getTableNames() {
-    if (!catalog.schemaDepthMayContainsTables(getSchemaDepth())) {
-      return new HashSet<>();
+    if (!catalog.schemaDepthMayContainTables(getSchemaDepth())) {
+      return Set.of();
     }
     if (tableNames == null) {
       tableNames = this.catalog.getTableNames(getFullPath());
@@ -74,7 +77,7 @@ public class CatalogSchema extends BodoSqlSchema {
    */
   @Override
   public CatalogTable getTable(String name) {
-    if (!catalog.schemaDepthMayContainsTables(getSchemaDepth())) {
+    if (!catalog.schemaDepthMayContainTables(getSchemaDepth())) {
       return null;
     }
     if (this.tableMap.containsKey(name)) {
@@ -100,7 +103,7 @@ public class CatalogSchema extends BodoSqlSchema {
   @Override
   public Set<String> getSubSchemaNames() {
     if (!catalog.schemaDepthMayContainSubSchemas(getSchemaDepth())) {
-      return new HashSet<>();
+      return Set.of();
     }
     if (subSchemaNames == null) {
       subSchemaNames = this.catalog.getSchemaNames(this.getFullPath());
@@ -132,6 +135,39 @@ public class CatalogSchema extends BodoSqlSchema {
       this.subSchemaMap.put(schemaName, schema);
     }
     return schema;
+  }
+
+  /**
+   * Returns all functions defined in this schema with a given name. This is likely used for a
+   * stored procedure syntax but is not implemented for BodoSQL.
+   *
+   * @param funcName Name of functions with a given name.
+   * @return Collection of all functions with that name.
+   */
+  @Override
+  public Collection<Function> getFunctions(String funcName) {
+    if (!catalog.schemaDepthMayContainFunctions(getSchemaDepth())) {
+      return List.of();
+    }
+    // TODO: Replace with a working implementation
+    Collection<Function> functionCollection = new HashSet<>();
+    return functionCollection;
+  }
+
+  /**
+   * Returns the name of all functions defined in this schema. This is likely used for a stored
+   * procedure syntax but is not implemented for BodoSQL.
+   *
+   * @return Set of all function names in this schema.
+   */
+  @Override
+  public Set<String> getFunctionNames() {
+    if (!catalog.schemaDepthMayContainFunctions(getSchemaDepth())) {
+      return Set.of();
+    }
+    // TODO: Replace with a working implementation
+    Set<String> functionSet = new HashSet<>();
+    return functionSet;
   }
 
   /**

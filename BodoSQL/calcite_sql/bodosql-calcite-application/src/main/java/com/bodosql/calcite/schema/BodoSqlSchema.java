@@ -6,7 +6,7 @@ package com.bodosql.calcite.schema;
 
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.rel.type.RelProtoDataType;
@@ -85,8 +85,7 @@ public abstract class BodoSqlSchema implements Schema {
    */
   @Override
   public Collection<Function> getFunctions(String funcName) {
-    Collection<Function> functionCollection = new HashSet<>();
-    return functionCollection;
+    return List.of();
   }
 
   /**
@@ -97,8 +96,7 @@ public abstract class BodoSqlSchema implements Schema {
    */
   @Override
   public Set<String> getFunctionNames() {
-    Set<String> functionSet = new HashSet<>();
-    return functionSet;
+    return Set.of();
   }
 
   /**
@@ -121,8 +119,7 @@ public abstract class BodoSqlSchema implements Schema {
    */
   @Override
   public Set<String> getSubSchemaNames() {
-    Set<String> hs = new HashSet<>();
-    return hs;
+    return Set.of();
   }
 
   /**
@@ -132,8 +129,7 @@ public abstract class BodoSqlSchema implements Schema {
    */
   @Override
   public Set<String> getTypeNames() {
-    Set<String> hs = new HashSet<>();
-    return hs;
+    return Set.of();
   }
 
   /**
