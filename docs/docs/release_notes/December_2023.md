@@ -27,3 +27,36 @@ Bodo 2023.12 Release (Date: 12/01/2023) {#December_2023}
 
 
 - Upgrade to Calcite 1.35
+
+
+## 2023.12.1 New Features and Improvements
+
+
+### New Features:
+
+
+- Added support for the functions `IS_ARRAY`, `IS_OBJECT` and `OBJECT_PICK`.
+- Added support for `TO_ARRAY` for struct and map elements.
+- Added support for nulls in map array values.
+- Support for parsing array literals. Note: just like `ARRAY_CONSTRUCT`, only homogeneous arrays are supported at this time.
+- Support for nested array scalars.
+- View inlining now supports all valid Snowflake CREATE VIEW syntax for the view definition.
+
+
+
+### Performance Improvements:
+
+
+- Process join data communicated across ranks in batches to reduce peak memory consumption and improve cache locality for better performance.
+
+
+### Bug Fixes:
+
+
+- Fix truncation when writing TIMESTAMP_NTZ columns to Snowflake.
+
+
+### Dependency Updates:
+
+
+- Upgrade to Calcite 1.36
