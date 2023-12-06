@@ -1,0 +1,79 @@
+# Copyright (C) 2023 Bodo Inc. All rights reserved.
+import pandas as pd
+import pytest
+
+import bodo
+from bodo.tests.utils import (
+    DistTestPipeline,
+    SeqTestPipeline,
+    _get_dist_arg,
+    _test_equal,
+    _test_equal_guard,
+    check_func,
+    count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    gen_random_string_binary_array,
+    get_start_end,
+    reduce_sum,
+)
+
+"""
+Test for common array utilities that should be shared
+across all arrays.
+"""
+
+
+@pytest.mark.parametrize(
+    "lst, arr_type",
+    [
+        ([1, 2, 3, 5] * 3, bodo.IntegerArrayType(bodo.int32)),
+        ([1.1, 1.2, 3.1, 4.5] * 3, bodo.FloatingArrayType(bodo.float64)),
+        (["a", "b", "a", "b", "c"] * 3, bodo.string_array_type),
+        (["a", "b", "a", "b", "c"] * 3, bodo.dict_str_arr_type),
+    ],
+)
+def test_list_to_array(lst, arr_type, memory_leak_check):
+    def impl(lst):
+        return bodo.utils.conversion.list_to_array(lst, arr_type)
+
+    py_output = pd.array(lst)
+    check_func(impl, (lst,), py_output=py_output, check_dtype=False)
+
+
+def test_int_list_with_null_to_array(memory_leak_check):
+    """
+    A separate test for null because None can only be provided in literal lists.
+    """
+    lst = [1, 2, 3, None, 5, 1]
+    arr_type = bodo.IntegerArrayType(bodo.int32)
+
+    def impl():
+        return bodo.utils.conversion.list_to_array([1, 2, 3, None, 5, 1], arr_type)
+
+    py_output = pd.array(lst)
+    check_func(impl, (), py_output=py_output, check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "arr_type",
+    [
+        bodo.string_array_type,
+        bodo.dict_str_arr_type,
+    ],
+)
+def test_str_list_with_null_to_array(arr_type, memory_leak_check):
+    """
+    A separate test for null because None can only be provided in literal lists.
+    """
+    lst = ["a", "b", None, "b", "c", "c"]
+
+    def impl():
+        return bodo.utils.conversion.list_to_array(
+            ["a", "b", None, "b", "c", "c"], arr_type
+        )
+
+    py_output = pd.array(lst)
+    check_func(impl, (), py_output=py_output, check_dtype=False)

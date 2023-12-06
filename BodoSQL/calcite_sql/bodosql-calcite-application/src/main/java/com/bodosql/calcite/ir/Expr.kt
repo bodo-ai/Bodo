@@ -227,7 +227,7 @@ abstract class Expr {
         constructor(vararg args: Expr) : this(args.toList())
 
         override fun emit(): String = if (args.size == 1) {
-            // Special handling for length 1 so they aren't treated like
+            // Special handling for length 1, so they aren't treated like
             // parenthesis.
             "(${args[0].emit()},)"
         } else {

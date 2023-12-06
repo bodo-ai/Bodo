@@ -2605,6 +2605,7 @@ class SeriesPass:
         if func_mod == "bodo.utils.conversion" and func_name not in (
             "flatten_array",
             "make_replicated_array",
+            "list_to_array",
         ):
             # TODO: use overload IR inlining when available
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
