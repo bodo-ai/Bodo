@@ -3731,8 +3731,7 @@ def gen_pandas_parquet_metadata(
             (
                 bodo.ArrayItemArrayType,
                 bodo.StructArrayType,
-                # TODO BSE-1317
-                # bodo.MapArrayType,
+                bodo.MapArrayType,
             ),
         ):
             # TODO: provide meaningful pandas_type when possible.
@@ -4656,9 +4655,13 @@ def to_sql_overload(
     # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
     # and clean up created internal stage.
     func_text += (
+        # This is because it seems like globals aren't passed into objmode
+        "        df_data_ = df_data\n"
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
-        f"                cursor, stage_name, location, {sf_schema},\n"
+        # Creating the dict here instead of passing it in as a globall is necessary because when boxing
+        # dicts we check if they contain type references in the value and throw an error, we need typerefs here
+        f"                cursor, stage_name, location, {sf_schema}, dict(zip(df.columns, df_data_)),\n"
         "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
@@ -4716,7 +4719,6 @@ def to_sql_overload(
     func_text += "        if err_msg != 'all_ok':\n"
     func_text += "            print('err_msg=', err_msg)\n"
     func_text += "            raise ValueError('error in to_sql() operation')\n"
-
     loc_vars = {}
     glbls = globals().copy()
     glbls.update(
@@ -4741,6 +4743,7 @@ def to_sql_overload(
             "tracing": tracing,
             "unicode_to_utf8": unicode_to_utf8,
             "warnings": warnings,
+            "df_data": df.data,
         }
     )
     glbls.update(extra_globals)
