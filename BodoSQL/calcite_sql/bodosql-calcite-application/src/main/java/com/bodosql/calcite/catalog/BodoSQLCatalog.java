@@ -223,7 +223,7 @@ public interface BodoSQLCatalog {
    * @param depth The number of parent schemas that would need to be visited to reach the root.
    * @return Can a schema at that depth contain tables.
    */
-  boolean schemaDepthMayContainsTables(int depth);
+  boolean schemaDepthMayContainTables(int depth);
 
   /**
    * Returns if a schema with the given depth is allowed to contain subSchemas.
@@ -232,4 +232,12 @@ public interface BodoSQLCatalog {
    * @return Can a schema at that depth contain subSchemas.
    */
   boolean schemaDepthMayContainSubSchemas(int depth);
+
+  /**
+   * Returns if a schema with the given depth is allowed to contain functions.
+   *
+   * @param depth The number of parent schemas that would need to be visited to reach the root.
+   * @return Can a schema at that depth contain functions.
+   */
+  boolean schemaDepthMayContainFunctions(int depth);
 }
