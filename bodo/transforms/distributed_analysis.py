@@ -932,6 +932,11 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("create_empty_table", "bodo.hiframes.table"):
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
+            return
+
         if fdef == ("table_concat", "bodo.utils.table_utils"):
             table = args[0].name
             out_dist = Distribution.OneD_Var
@@ -2270,6 +2275,16 @@ class DistributedAnalysis:
         if fdef == ("make_replicated_array", "bodo.utils.conversion"):
             # output must be replicated
             self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
+        if fdef == ("list_to_array", "bodo.utils.conversion"):
+            # Initialize output to distirbuted.
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            if array_dists[lhs] == Distribution.OneD_Var:
+                raise BodoError(
+                    "Output of list_to_array must have a OneD distribution", rhs.loc
+                )
             return
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):

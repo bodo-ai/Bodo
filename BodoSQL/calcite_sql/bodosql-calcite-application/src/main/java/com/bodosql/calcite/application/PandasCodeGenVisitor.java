@@ -66,6 +66,7 @@ import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
+import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -593,23 +594,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node RelNode to be visited
    */
   private void visitLogicalValues(PandasValues node) {
-    BuildContext ctx = new BuildContext(node);
-    List<String> exprCodes = new ArrayList<>();
-    if (node.getTuples().size() != 0) {
-      for (RexLiteral colLiteral : node.getTuples().get(0)) {
+    List<List<Expr>> exprCodes = new ArrayList<>();
+    for (ImmutableList<RexLiteral> row : node.getTuples()) {
+      List<Expr> rowLiterals = new ArrayList<>();
+      for (RexLiteral colLiteral : row) {
         // We cannot be within a case statement since LogicalValues is a RelNode and
         // cannot be inside a case statement (which is a RexNode)
         Expr literalExpr = this.visitLiteralScan(colLiteral, false);
-        exprCodes.add(literalExpr.emit());
+        rowLiterals.add(literalExpr);
       }
+      exprCodes.add(rowLiterals);
     }
     singleBatchTimer(
         node,
         () -> {
           Expr logicalValuesExpr = generateLogicalValuesCode(exprCodes, node.getRowType(), this);
-          Variable outVar = this.genDfVar();
+          Variable outVar = this.genTableVar();
           this.generatedCode.add(new Op.Assign(outVar, logicalValuesExpr));
-          tableGenStack.push(ctx.convertDfToTable(outVar, node));
+          tableGenStack.push(new BodoEngineTable(outVar.emit(), node));
         });
   }
 

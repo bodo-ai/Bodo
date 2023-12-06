@@ -11,7 +11,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import cgutils, ir, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.ir_utils import guard
 from numba.core.typing.templates import (
@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     unwrap_typeref,
 )
 from bodo.utils.utils import (
+    alloc_type,
     is_whole_slice,
     numba_to_c_array_types,
     numba_to_c_types,
@@ -133,6 +134,18 @@ class Table:
     def __repr__(self) -> str:
         return f"Table({repr(self.arrays)})"
 
+    def __getitem__(self, val):
+        if not isinstance(val, slice):
+            raise TypeError("Table getitem only supported for slices")
+        # Just slice each array
+        return Table(
+            [arr if arr is None else arr[val] for arr in self.arrays], dist=self.dist
+        )
+
+    @property
+    def shape(self) -> Tuple[int, int]:
+        return (len(self.arrays[0] if len(self.arrays) > 0 else 0), len(self.arrays))
+
     def to_pandas(self, index=None):
         """convert table to a DataFrame (with column names just a range of numbers)"""
         n_cols = len(self.arrays)
@@ -142,10 +155,10 @@ class Table:
 
 
 class TableType(types.ArrayCompatible):
-    """Bodo Table type that stores column arrays for dataframes.
+    """Bodo Table type that stores column arrays for DataFrames.
     Arrays of the same type are stored in the same "block" (kind of similar to Pandas).
     This allows for loop generation for columns of same type instead of generating code
-    for each column (important for dataframes with many columns).
+    for each column (important for DataFrames with many columns).
     """
 
     def __init__(
@@ -1064,11 +1077,7 @@ def lower_constant_table(context, builder, table_type, pyval):
 
 
 def get_init_table_output_type(table_type, to_str_if_dict_t):
-    out_table_type = (
-        table_type.instance_type
-        if isinstance(table_type, types.TypeRef)
-        else table_type
-    )
+    out_table_type = unwrap_typeref(table_type)
     assert isinstance(out_table_type, TableType), "table type or typeref expected"
     assert is_overload_constant_bool(
         to_str_if_dict_t
@@ -2084,6 +2093,82 @@ def _to_arr_if_series(t):
     return t.data if isinstance(t, SeriesType) else t
 
 
+def create_empty_table(table_type):
+    pass
+
+
+def gen_create_empty_table_impl(table_type):
+    """Implement of create_empty_table(), which create a table with the
+    required table type and all columns with length 0.
+
+    Note: This doesn't support dictionary encoded arrays. If you call this
+    function make sure you convert any dictionary array types to regular
+    string arrays.
+
+    Args:
+        table_type (TableType): The type of the output table.
+    Returns:
+        TableType: An allocated table with length 0.
+    """
+    out_table_type = unwrap_typeref(table_type)
+    glbls = {
+        "alloc_list_like": alloc_list_like,
+        "alloc_type": alloc_type,
+        "init_table": init_table,
+        "set_table_len": set_table_len,
+        "set_table_block": set_table_block,
+    }
+    func_text = "def impl_create_empty_table(table_type):\n"
+    func_text += "  table = init_table(table_type, False)\n"
+    func_text += "  table = set_table_len(table, 0)\n"
+    for typ, blk in out_table_type.type_to_blk.items():
+        glbls[f"arr_typ_{blk}"] = typ
+        glbls[f"arr_list_typ_{blk}"] = types.List(typ)
+        n_arrs = len(out_table_type.block_to_arr_ind[blk])
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_typ_{blk}, {n_arrs}, False)\n"
+        # assign arrays that come from input table.
+        func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
+        func_text += (
+            f"    out_arr_list_{blk}[i] = alloc_type(0, arr_typ_{blk}, (-1,))\n"
+        )
+        func_text += f"  table = set_table_block(table, out_arr_list_{blk}, {blk})\n"
+
+    func_text += f"  return table\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl_create_empty_table"]
+
+
+@infer_global(create_empty_table)
+class CreateEmptyTableInfer(AbstractTemplate):
+    """Typer for create_empty_table"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(create_empty_table)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        out_table_type = unwrap_typeref(folded_args[0])
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+@lower_builtin(create_empty_table, types.Any)
+def lower_create_empty_table(context, builder, sig, args):
+    """lower create_empty_table() using gen_create_empty_table_impl() above"""
+    impl = gen_create_empty_table_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def create_empty_table_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for create_empty_table(). Output table has
+    length 0.
+    """
+    return ArrayAnalysis.AnalyzeResult(shape=(ir.Const(0, loc), None), pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_create_empty_table = (
+    create_empty_table_equiv
+)
+
+
 def logical_table_to_table(
     in_table_t,
     extra_arrs_t,
@@ -2467,14 +2552,18 @@ def logical_table_to_table_equiv(self, scope, equiv_set, loc, args, kws):
     extra_arrs_var = args[1]
 
     if equiv_set.has_shape(table_var):
-        return ArrayAnalysis.AnalyzeResult(
-            shape=(equiv_set.get_shape(table_var)[0], None), pre=[]
-        )
+        # Table can be an empty tuple, which sometimes has an empty tuple and is
+        # not correct.
+        equivs = equiv_set.get_shape(table_var)
+        if equivs:
+            return ArrayAnalysis.AnalyzeResult(shape=(equivs[0], None), pre=[])
 
     if equiv_set.has_shape(extra_arrs_var):
-        return ArrayAnalysis.AnalyzeResult(
-            shape=(equiv_set.get_shape(extra_arrs_var)[0], None), pre=[]
-        )
+        # Extra arrays can be an empty tuple, which may have an empty
+        # tuple and is not correct.
+        equivs = equiv_set.get_shape(extra_arrs_var)
+        if equivs:
+            return ArrayAnalysis.AnalyzeResult(shape=(equivs[0], None), pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_logical_table_to_table = (
