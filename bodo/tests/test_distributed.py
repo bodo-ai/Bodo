@@ -2954,3 +2954,41 @@ def test_dist_flag_info_propagation(memory_leak_check):
         return inner_fn(argument_df)
 
     check_func(outer_fn, (df,))
+
+
+def test_dist_scalar_struct_to_arr(memory_leak_check):
+    """Make sure coerce_scalar_to_array for struct array works for distributed output"""
+
+    global_1 = bodo.StructArrayType(
+        (bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)),
+        ("A", "B"),
+    )
+
+    def impl(n):
+        a = bodo.libs.struct_arr_ext.init_struct((1, 2), ("A", "B"))
+        return pd.Series(bodo.utils.conversion.coerce_scalar_to_array(a, n, global_1))
+
+    n = 10
+    out = pd.Series(
+        [{"A": 1, "B": 2}] * n,
+        dtype=pd.ArrowDtype(
+            pa.struct([pa.field("A", pa.int64()), pa.field("B", pa.int32())])
+        ),
+    )
+    check_func(impl, (n,), py_output=out)
+
+
+def test_dist_scalar_map_to_arr(memory_leak_check):
+    """Make sure coerce_scalar_to_array for map array works for distributed output"""
+
+    global_1 = bodo.MapArrayType(
+        bodo.IntegerArrayType(bodo.int64), bodo.bodo.IntegerArrayType(bodo.int32)
+    )
+
+    def impl(a, n):
+        return pd.Series(bodo.utils.conversion.coerce_scalar_to_array(a, n, global_1))
+
+    a = {1: 3}
+    n = 10
+    out = pd.Series([a] * n, dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int32())))
+    check_func(impl, (a, n), py_output=out)
