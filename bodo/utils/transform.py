@@ -346,6 +346,7 @@ no_side_effect_call_tuples = {
     ("logical_table_to_table", "table", "hiframes", bodo),
     ("set_table_data", "table", "hiframes", bodo),
     ("set_table_null", "table", "hiframes", bodo),
+    ("create_empty_table", "table", "hiframes", bodo),
     # Series.str/string
     ("startswith",),
     ("endswith",),
@@ -398,7 +399,6 @@ def remove_hiframes(rhs, lives, call_list):
     if call_tuple == (bodo.hiframes.pd_index_ext.init_range_index,):
         return True
 
-    # TODO: probably not reachable here since always inlined?
     if len(call_list) == 4 and call_list[1:] == [
         "conversion",
         "utils",

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import overload
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.time_ext import cast_time_to_int
@@ -2067,3 +2068,68 @@ def overload_struct_if_heter_dict(values, names):
     exec(func_text, {}, loc_vars)
     impl = loc_vars["f"]
     return impl
+
+
+def list_to_array(lst, arr_type, parallel=False):
+    pass
+
+
+@overload(list_to_array)
+def overload_list_to_array(lst, arr_type, parallel=False):
+    """Converts the contents of the provided list to an array with the given
+    type. This function is capable of converting a list to either a replicated
+    or 1D distributed result, depending on the output of distributed analysis. Since
+    lists are always replicated, via the parallel flag and then statically calculating
+    our chunk.
+
+    This kernel cannot output 1DVar results because there is not enough information to
+    determine size equivalence between this and another array. Please do not attempt to use
+    this kernel in this setting (although there is a check in distributed analysis).
+
+    Args:
+        lst (types.List): The list to convert to an array. It may have optional types
+            if it is used in context that creates list literals (e.g. Values in SQL).
+        arr_type (types.TypeRef[types.ArrayType]): The desired output array type.
+        parallel (types.boolean): Is the result 1D or replicated. This is set automatically
+            by the compiler.
+    Returns:
+        An array containing a subset of the replicate list's elements. This array may
+        be replicated or distributed.
+    """
+    func_text = "def impl(lst, arr_type, parallel=False):\n"
+    func_text += "  global_len = len(lst)\n"
+    func_text += "  if parallel:\n"
+    func_text += "    n_pes = bodo.get_size()\n"
+    func_text += "    rank = bodo.get_rank()\n"
+    func_text += (
+        "    start = bodo.libs.distributed_api.get_start(global_len, n_pes, rank)\n"
+    )
+    func_text += "    copy_len = bodo.libs.distributed_api.get_node_portion(global_len, n_pes, rank)\n"
+    func_text += "  else:\n"
+    func_text += "    start, copy_len = 0, global_len\n"
+    glbls = {"bodo": bodo}
+    if arr_type == bodo.dict_str_arr_type:
+        # For dictionary encoded arrays create a naive array containing duplicates.
+        glbls["data_arr_type"] = bodo.string_array_type
+        glbls["indices_arr_type"] = bodo.libs.dict_arr_ext.dict_indices_arr_type
+        func_text += "  data_arr = bodo.utils.conversion.list_to_dict_array(lst, data_arr_type)\n"
+        func_text += "  indices_arr = bodo.utils.utils.alloc_type(copy_len, indices_arr_type, (-1,))\n"
+    else:
+        func_text += (
+            "  out_arr = bodo.utils.utils.alloc_type(copy_len, arr_type, (-1,))\n"
+        )
+    func_text += "  for i in range(start, start + copy_len):\n"
+    if arr_type == bodo.dict_str_arr_type:
+        func_text += "    indices_arr[i - start] = i\n"
+        # Ensure nulls are consistent. This extra pass is fine because we assume lists are small (e.g.
+        # used by VALUES in SQL).
+        func_text += "  for j in range(copy_len):\n"
+        func_text += "    if bodo.libs.array_kernels.isna(data_arr, j):\n"
+        func_text += "      bodo.libs.array_kernels.setna(indices_arr, j):\n"
+        func_text += "  out_arr = bodo.libs.dict_arr_ext.init_dict_arr(data_arr, indices_arr, True, False, None)\n"
+    else:
+        func_text += "    out_arr[i - start] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(lst[i])\n"
+    func_text += "  return out_arr\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]

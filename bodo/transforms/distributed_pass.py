@@ -1527,6 +1527,14 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Distributed handling of list_to_array requires handling similar to a distributed allocation.
+        if fdef == (
+            "list_to_array",
+            "bodo.utils.conversion",
+        ) and self._is_1D_arr(lhs):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
         # array_to_repeated_array_item_array() is similar to an allocation and its size
         # argument needs handled similarly
         if fdef in (
