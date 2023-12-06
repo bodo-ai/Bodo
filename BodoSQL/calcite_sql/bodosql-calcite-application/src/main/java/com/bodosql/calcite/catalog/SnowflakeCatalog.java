@@ -1098,7 +1098,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   @Override
-  public boolean schemaDepthMayContainsTables(int depth) {
+  public boolean schemaDepthMayContainTables(int depth) {
     // Snowflake is always DATABASE.SCHEMA.TABLE, so the
     // schema must be two hops from the root.
     return depth == 2;
@@ -1109,6 +1109,13 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     // Snowflake is always DATABASE.SCHEMA.TABLE, so the
     // schema must be less than two hops from the root.
     return depth < 2;
+  }
+
+  @Override
+  public boolean schemaDepthMayContainFunctions(int depth) {
+    // Snowflake is always DATABASE.SCHEMA.FUNCTION, so the
+    // schema must be two hops from the root.
+    return depth == 2;
   }
 
   /**
