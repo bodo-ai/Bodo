@@ -11,6 +11,13 @@ from numba.extending import register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import (
+    get_overload_const_bool,
+    get_overload_const_str,
+    is_overload_constant_bool,
+    is_overload_constant_str,
+    raise_bodo_error,
+)
 
 
 @numba.generated_jit(nopython=True)
@@ -45,7 +52,6 @@ def parse_single_json_map(s):
         current_value = ""
         escaped = False
         for char in s:
-
             # START
             if state == 1:
                 if char.isspace():
@@ -373,7 +379,6 @@ def process_json_path(path: str) -> List[Tuple[bool, str]]:  # pragma: no cover
 
         # Handling sections of the path in the form [index] or ["field_name"]
         if path[i] == "[":
-
             # Various boolean flags used to keep track of the characters inside
             # of the brackets:
             # - found_string: if True, then the component is of the form ["field_name"]
@@ -397,7 +402,6 @@ def process_json_path(path: str) -> List[Tuple[bool, str]]:  # pragma: no cover
 
             # Scan through the remaining characters after the left bracket
             for j in range(i + 1, len(path)):
-
                 # Handle cases where a string is being processed
                 if in_str:
                     if escaped:
@@ -494,7 +498,6 @@ def process_json_path(path: str) -> List[Tuple[bool, str]]:  # pragma: no cover
             # encountered first, then halt the entire process
             found_ending = False
             for j in range(i + 1, len(path)):
-
                 # If the current character is a dot, then everything from i
                 # up to this point is the field name. If this is the end of
                 # the string, or the next character is a bracket, then it is
@@ -558,7 +561,6 @@ def parse_and_extract_json_string(
     # Repeat the procedure until we reach the end
     # while True:
     for indexing, current_path in path_parts:
-
         # Various indices used to keep track of the distinct entities
         # in the string as they are being parsed, as well as the total
         # number of entries found, a stack of unclosed brackets, the opening
@@ -761,3 +763,218 @@ def parse_and_extract_json_string(
         raise ValueError(f"JSON extraction: malformed string cannot be parsed")
 
     return data
+
+
+def object_insert(
+    data, new_field_name, new_field_value, update, is_scalar=False
+):  # pragma: no cover
+    pass
+
+
+@overload(object_insert, no_unliteral=True)
+def overload_object_insert(
+    data, new_field_name, new_field_value, update, is_scalar=False
+):  # pragma: no cover
+    args = [data, new_field_name, new_field_value, update, is_scalar]
+    for i in range(len(args)):
+        if i == 2:
+            # ignore new_field_value
+            continue
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.object_insert",
+                ["data", "new_field_name", "new_field_value", "update", "is_scalar"],
+                i,
+                default_map={"is_scalar": False},
+            )
+
+    def impl(
+        data, new_field_name, new_field_value, update, is_scalar=False
+    ):  # pragma: no cover
+        return bodo.libs.bodosql_json_array_kernels.object_insert_util(
+            data, new_field_name, new_field_value, update, is_scalar
+        )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def object_insert_util(data, new_field_name, new_field_value, update, is_scalar):
+    json_type = data
+    if bodo.hiframes.pd_series_ext.is_series_type(json_type):
+        json_type = json_type.data
+
+    struct_mode = False
+    map_mode = False
+    none_mode = False
+    if json_type == bodo.none:  # pragma: no cover
+        none_mode = True
+    elif isinstance(
+        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+    ):
+        struct_mode = True
+    elif isinstance(json_type, bodo.MapArrayType):
+        map_mode = True
+    else:  # pragma: no cover
+        raise_bodo_error(f"object_insert: unsupported type for json data '{json_type}'")
+
+    arg_names = ["data", "new_field_name", "new_field_value", "update", "is_scalar"]
+    arg_types = [data, new_field_name, new_field_value, update, is_scalar]
+    propagate_null = [True, True, False, True, False]
+    extra_globals = {}
+    scalar_text = ""
+
+    if none_mode:  # pragma: no cover
+        out_dtype = bodo.none
+    elif struct_mode:
+        if bodo.hiframes.pd_series_ext.is_series_type(new_field_value):
+            new_field_value = new_field_value.data
+
+        if new_field_name == bodo.none:  # pragma: no cover
+            new_field_name_str = ""
+        else:
+            if not is_overload_constant_str(new_field_name):  # pragma: no cover
+                # TODO improve error msg
+                raise_bodo_error(
+                    "object_insert unsupported on struct arrays with non-constant keys"
+                )
+            new_field_name_str = get_overload_const_str(new_field_name)
+
+        if not is_overload_constant_bool(update):  # pragma: no cover
+            raise_bodo_error(
+                "object_insert unsupported on struct arrays with non-constant update flag"
+            )
+        update_bool = get_overload_const_bool(update)
+
+        data = []
+        nulls = []
+        names = []
+        dtypes = []
+        n_fields = len(json_type.data)
+        for i in range(n_fields):
+            name = json_type.names[i]
+            if name == new_field_name_str:  # pragma: no cover
+                if update_bool:
+                    continue
+                else:
+                    raise_bodo_error(
+                        f"object_insert encountered duplicate field key '{name}'"
+                    )
+            null_check = f"bodo.libs.struct_arr_ext.is_field_value_null(arg0, '{name}')"
+            names.append(name)
+            nulls.append(null_check)
+            data.append(f"None if {null_check} else arg0['{name}']")
+            field_dtype = json_type.data[i]
+            if not bodo.utils.utils.is_array_typ(json_type, False):  # pragma: no cover
+                field_dtype = bodo.utils.typing.dtype_to_array_type(field_dtype)
+            dtypes.append(field_dtype)
+
+        names.append(new_field_name_str)
+        if new_field_value == bodo.none:  # pragma: no cover
+            new_field_value = bodo.optional(bodo.int64)
+            nulls.append("True")
+            data.append(f"None")
+        else:
+            nulls.append("(arg2 is None)")
+            data.append(f"None if {nulls[-1]} else arg2")
+
+        new_field_dtype = (
+            new_field_value
+            if not get_overload_const_bool(is_scalar)
+            else bodo.utils.typing.dtype_to_array_type(new_field_value)
+        )
+        dtypes.append(new_field_dtype)
+
+        extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
+        scalar_text += f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
+        scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)},), null_vector, names)"
+        out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
+    else:
+        if map_mode:
+            key_type = json_type.key_arr_type
+            val_type = json_type.value_arr_type
+            val_dtype = val_type.dtype
+        else:  # pragma: no cover
+            key_type = json_type.key_type
+            val_type = json_type.value_type
+            val_dtype = val_type
+
+        new_field_dtype = (
+            new_field_value
+            if not bodo.utils.utils.is_array_typ(new_field_value, False)
+            and not bodo.hiframes.pd_series_ext.is_series_type(new_field_value)
+            else new_field_value.dtype
+        )
+        if new_field_dtype == bodo.none:  # pragma: no cover
+            new_field_dtype = val_dtype
+
+        types_to_unify = [val_dtype, new_field_dtype]
+        common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(types_to_unify)
+        if common_dtype == None:  # pragma: no cover
+            raise_bodo_error("Incompatible value type for object_insert")
+        common_dtype = bodo.utils.typing.dtype_to_array_type(common_dtype)
+        if any(
+            bodo.utils.typing.is_nullable(typ) for typ in [val_type, new_field_value]
+        ):
+            common_dtype = bodo.utils.typing.to_nullable_type(common_dtype)
+
+        out_dtype = bodo.MapArrayType(key_type, common_dtype)
+
+        extra_globals["struct_typ_tuple"] = (key_type, common_dtype)
+        extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
+            ("key", "value")
+        )
+
+        scalar_text += "keys = list(arg0)\n"
+        # Only throw a duplicate field key exception if the update flag is not set
+        scalar_text += "n_keys = len(keys) + 1\n"
+        scalar_text += "if arg1 in keys:\n"
+        scalar_text += "  if not arg3:\n"
+        scalar_text += "    raise bodo.utils.typing.BodoError('object_insert encountered duplicate field key ' + arg1)\n"
+        scalar_text += "  n_keys -= 1\n"
+        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keys, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+
+        scalar_text += "idx = 0\n"
+        scalar_text += "for key in keys:\n"
+        # We know that this will only happen if update (arg3) is false. Otherwise it would have been caught above.
+        scalar_text += "  if key == arg1:\n"
+        scalar_text += "    continue\n"
+        scalar_text += "  value = arg0[key]\n"
+        scalar_text += (
+            "  in_offsets = bodo.libs.array_item_arr_ext.get_offsets(data._data)\n"
+        )
+        scalar_text += (
+            "  in_struct_arr = bodo.libs.array_item_arr_ext.get_data(data._data)\n"
+        )
+        scalar_text += "  start_offset = in_offsets[np.int64(i)]\n"
+        scalar_text += "  curr_struct = in_struct_arr[start_offset + idx]\n"
+        scalar_text += "  val_is_null = bodo.libs.struct_arr_ext.is_field_value_null(curr_struct, 'value')\n"
+        scalar_text += "  struct_arr[idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls((key, value), (False, val_is_null), map_struct_names)\n"
+        scalar_text += "  idx += 1\n"
+
+        if bodo.utils.utils.is_array_typ(new_field_value, True):
+            scalar_text += (
+                "val_is_null = bodo.libs.array_kernels.isna(new_field_value, i)\n"
+            )
+        else:  # pragma: no cover
+            scalar_text += "val_is_null = new_field_value is None\n"
+        scalar_text += "struct_arr[n_keys - 1] = bodo.libs.struct_arr_ext.init_struct_with_nulls((arg1, arg2), (False, val_is_null), map_struct_names)\n"
+
+        scalar_text += "res[i] = struct_arr"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+        are_arrays=[
+            (
+                bodo.utils.utils.is_array_typ(typ)
+                if i != 2
+                else not get_overload_const_bool(is_scalar)
+            )
+            for i, typ in enumerate(arg_types)
+        ],
+    )

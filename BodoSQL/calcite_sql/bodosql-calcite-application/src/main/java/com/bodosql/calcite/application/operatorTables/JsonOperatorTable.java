@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+
 import java.util.Arrays;
 import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
@@ -94,6 +96,14 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OBJECT_DELETE_TYPE_CHECKER,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlBasicFunction OBJECT_INSERT =
+      SqlBasicFunction.create(
+          "OBJECT_INSERT",
+          ReturnTypes.ARG0,
+          argumentRange(
+              3, SqlTypeFamily.MAP, SqlTypeFamily.STRING, SqlTypeFamily.ANY, SqlTypeFamily.BOOLEAN),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction OBJECT_KEYS =
       SqlBasicFunction.create(
           "OBJECT_KEYS",
@@ -128,6 +138,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           GET_PATH,
           OBJECT_DELETE,
           OBJECT_PICK,
+          OBJECT_INSERT,
           JSON_EXTRACT_PATH_TEXT,
           OBJECT_KEYS,
           OBJECT_CONSTRUCT_KEEP_NULL,
