@@ -1426,6 +1426,23 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
+  public static Expr visitObjectInsert(List<Expr> codeExprs, List<Boolean> argScalars) {
+    // args: object, key, value[, update]
+
+    // Convert codeExprs to a mutable type
+    List<Expr> args = new ArrayList<>(codeExprs);
+    // If update argument is missing, then default to false
+    if (codeExprs.size() != 4) {
+      args.add(new Expr.BooleanLiteral(false));
+    }
+
+    // Indicate whether the value is a scalar to distinguish between array types and vector.
+    ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
+    kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(2))));
+
+    return ExprKt.BodoSQLKernel("object_insert", args, kwargs);
+  }
+
   protected Expr visitNestedArrayFunc(
       String fnName, List<Expr> operands, List<Boolean> argScalars) {
     return visitNestedArrayFunc(fnName, operands, argScalars, List.of());
@@ -1886,6 +1903,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return visitObjectDelete(operands);
           case "OBJECT_PICK":
             return visitObjectPick(operands);
+          case "OBJECT_INSERT":
+            return visitObjectInsert(operands, argScalars);
           case "IS_ARRAY":
           case "IS_OBJECT":
             return visitVariantFunc(fnName, operands);
