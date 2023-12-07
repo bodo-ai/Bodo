@@ -353,11 +353,19 @@ class JoinPartition {
      * @param row_ind Index of the row to add.
      * @param join_hash Join hash for the record.
      * @param append_row Whether to append the row.
+     * @param in_table_start_offset Starting offset into the 'in_table'. e.g. if
+     * 'append_rows' is [t, f, t, f, t] and 'in_table_start_offset' is 4, then
+     * we will append rows 4, 6 & 8 from the input table. Note that this offset
+     * only applies to the table and not to the join hashes.
+     * @param table_nrows Number of rows to process from 'in_table' (starting
+     * from 'in_table_start_offset'). If it's set to -1, we process all rows
+     * starting from 'in_table_start_offset'.
      */
     void AppendInactiveProbeBatch(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
-        const std::vector<bool>& append_rows);
+        const std::vector<bool>& append_rows,
+        const int64_t in_table_start_offset = 0, int64_t table_nrows = -1);
 
     /**
      * @brief Process the records in the probe table buffer
@@ -767,13 +775,22 @@ class HashJoinState : public JoinState {
      * @param row_ind Index of the row to append.
      * @param join_hash Join hash for the record.
      * @param partitioning_hash Partitioning hash for the record.
-     * @param append_row Whether to append the row
+     * @param append_rows Whether to append the row
+     * @param in_table_start_offset Starting offset into the 'in_table'. e.g. if
+     * 'append_rows' is [t, f, t, f, t] and 'in_table_start_offset' is 4, then
+     * we will append rows 4, 6 & 8 from the input table. Note that this offset
+     * only applies to the table and not to the join hashes or the partitioning
+     * hashes.
+     * @param table_nrows Number of rows to process from 'in_table' (starting
+     * from 'in_table_start_offset'). If it's set to -1, we process all rows
+     * starting from 'in_table_start_offset'.
      */
     void AppendProbeBatchToInactivePartition(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
-        const std::vector<bool>& append_rows);
+        const std::vector<bool>& append_rows,
+        const int64_t in_table_start_offset = 0, int64_t table_nrows = -1);
 
     /**
      * @brief Finalize Probe step for all the inactive partitions.
