@@ -45,6 +45,13 @@ class BodoMetadataRestrictionScan {
         private val columnsAllowedToRequest: MutableSet<String> = mutableSetOf()
 
         /**
+         * Resets the set of columns that are allowed to be requested, for testing purposes.
+         */
+        fun resetRestrictionScan() {
+            columnsAllowedToRequest.clear()
+        }
+
+        /**
          * Pre-scan the query plan to determine which columns of which tables will need their
          * metadata scanned in order to estimate the row counts of joins. This includes columns
          * used for equi-joins, and also grouping keys when the output of the aggregation node

@@ -22,6 +22,7 @@ import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
@@ -250,6 +251,10 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                 // Cast is to Date. In the future we may want to make this more restrictive
                 // if we ever allow casting a type to DATE that Snowflake doesn't.
                 if (call.getType().sqlTypeName == SqlTypeName.DATE) {
+                    return true
+                }
+                // Cast is to a numeric type
+                if (SqlTypeFamily.NUMERIC.contains(call.getType())) {
                     return true
                 }
             }
