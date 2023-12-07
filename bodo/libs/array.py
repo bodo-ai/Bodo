@@ -295,14 +295,18 @@ def array_to_info_codegen(context, builder, sig, args):
                     context, builder, array_info_type(field_type), (inner_arr,)
                 )
             )
+        # NOTE: passing type to pack_array() is necessary in case value list is empty
         inner_arr_infos_ptr = cgutils.alloca_once_value(
-            builder, cgutils.pack_array(builder, inner_arr_infos)
+            builder,
+            cgutils.pack_array(
+                builder, inner_arr_infos, context.get_data_type(array_info_type)
+            ),
         )
-
         # get field names
         field_names = cgutils.pack_array(
             builder,
             [context.insert_const_string(builder.module, a) for a in arr_type.names],
+            context.get_data_type(types.voidptr),
         )
         field_names_ptr = cgutils.alloca_once_value(builder, field_names)
 
@@ -313,6 +317,7 @@ def array_to_info_codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -326,6 +331,7 @@ def array_to_info_codegen(context, builder, sig, args):
             fn_tp,
             [
                 context.get_constant(types.int64, len(arr_type.data)),
+                payload.n_structs,
                 builder.bitcast(inner_arr_infos_ptr, lir.IntType(8).as_pointer()),
                 builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
                 null_bitmap.meminfo,
@@ -825,6 +831,7 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info, raise_py_er
         lir.IntType(8).as_pointer().as_pointer(),
         [
             lir.IntType(8).as_pointer(),  # info
+            lir.IntType(64).as_pointer(),
             context.get_value_type(null_bitmap_arr_type).as_pointer(),
         ],
     )
@@ -835,6 +842,7 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info, raise_py_er
         fn_tp,
         [
             in_info,
+            payload._get_ptr_by_name("n_structs"),
             payload._get_ptr_by_name("null_bitmap"),
         ],
     )

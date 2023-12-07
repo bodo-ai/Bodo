@@ -1329,7 +1329,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 recv_counts,
             )
             return bodo.libs.struct_arr_ext.init_struct_arr(
-                out_data_arrs, out_null_bitmap, names
+                n_total, out_data_arrs, out_null_bitmap, names
             )
 
         return impl_struct_arr

@@ -3,6 +3,8 @@
 """
 
 import numpy as np
+import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -35,6 +37,8 @@ from bodo.tests.utils import check_func
                 {"X": 5, "Y": 9},
             ]
         ),
+        # Struct array with no fields
+        pd.array([{}, {}, {}], pd.ArrowDtype(pa.struct([]))),
         pytest.param(
             np.array(
                 [
@@ -141,6 +145,10 @@ def test_getitem_slice(struct_arr_value, memory_leak_check):
 
 @pytest.mark.smoke
 def test_rec_getitem(struct_arr_value, memory_leak_check):
+    # Ignore the no field test input
+    if len(bodo.typeof(struct_arr_value).data) == 0:
+        return
+
     def test_impl(A, i):
         return A[i]["Y"]
 

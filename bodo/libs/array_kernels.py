@@ -1676,7 +1676,7 @@ def concat_overload(arr_list):
         )
         func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)\n"
         func_text += "            curr_bit += 1\n"
-        func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(\n"
+        func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(n_all, \n"
         data_val = ", ".join(
             [
                 f"bodo.libs.array_kernels.concat(concat_list{i})"

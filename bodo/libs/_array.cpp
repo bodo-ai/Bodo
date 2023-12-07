@@ -24,14 +24,16 @@
 #include "_join.h"
 #include "_shuffle.h"
 
-array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
-                                 char** field_names, NRT_MemInfo* null_bitmap) {
+array_info* struct_array_to_info(int64_t n_fields, int64_t n_items,
+                                 array_info** inner_arrays, char** field_names,
+                                 NRT_MemInfo* null_bitmap) {
     std::vector<std::shared_ptr<array_info>> inner_arrs_vec(
         inner_arrays, inner_arrays + n_fields);
     std::vector<std::string> field_names_vec(field_names,
                                              field_names + n_fields);
-    // get length from an inner array
-    int64_t n_items = 0;
+    // Get length from an inner array in case n_items is set wrong since this
+    // field is new and there could be gaps somewhere. See
+    // https://github.com/Bodo-inc/Bodo/pull/6891
     if (inner_arrs_vec.size() > 0) {
         n_items = inner_arrs_vec[0]->length;
     }
@@ -265,7 +267,7 @@ array_info* info_to_array_item_array(array_info* info, int64_t* length,
     return info->child_arrays[0].get();
 }
 
-void info_to_struct_array(array_info* info,
+void info_to_struct_array(array_info* info, int64_t* n_items,
                           numpy_arr_payload* null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRUCT) {
         PyErr_SetString(
@@ -274,6 +276,7 @@ void info_to_struct_array(array_info* info,
             "requires struct array input.");
         return;
     }
+    *n_items = info->length;
 
     // create Numpy array for null_bitmap buffer as expected by
     // Python data model

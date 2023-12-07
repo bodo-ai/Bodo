@@ -1634,7 +1634,6 @@ def test_row_number(test, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.struct([])),
             ),
             id="struct-drop_all",
-            marks=pytest.mark.skip(reason="[BSE-2160] TODO: support empty structs"),
         ),
         pytest.param(
             True,
@@ -1648,7 +1647,6 @@ def test_row_number(test, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.struct([])),
             ),
             id="struct-keep_none",
-            marks=pytest.mark.skip(reason="[BSE-2160] TODO: support empty structs"),
         ),
     ],
 )
@@ -1664,7 +1662,7 @@ def test_object_filter_keys(
             arg_text.append(f"arg{i+1}")
     func_text = f"def impl({raw_arg_text}):\n"
     func_text += f"   res = bodo.libs.bodosql_array_kernels.object_filter_keys(({keep_mode}, {', '.join(arg_text)},))\n"
-    if any(isinstance(arg, pd.Series) for arg in keys_to_filter + (json_data,)):
+    if any(isinstance(arg, pd.Series) for arg in keys_to_filter + (json_data, answer)):
         func_text += "   res = pd.Series(res)\n"
     func_text += "   return res\n"
     loc_vars = {}
