@@ -100,7 +100,7 @@ public class RelationalAlgebraGenerator {
   public static boolean hideCredentials = false;
 
   /** Should we try inline views? */
-  public static boolean tryInlineViews = false;
+  public static boolean tryInlineViews = true;
 
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
