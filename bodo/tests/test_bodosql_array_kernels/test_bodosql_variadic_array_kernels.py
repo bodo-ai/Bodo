@@ -2316,7 +2316,7 @@ def test_object_construct_keep_null(values, keys, scalars, answer, memory_leak_c
                     {
                         "parents": {"male": 1, "female": 1},
                         "siblings": {"male": 1},
-                        "children": {"male": 1},
+                        "children": {"female": 1},
                     },
                     {"siblings": {"male": 1, "female": 3}, "children": {}},
                     {"children": {"male": 1, "female": 1}},
@@ -2328,9 +2328,6 @@ def test_object_construct_keep_null(values, keys, scalars, answer, memory_leak_c
                 ),
             ),
             id="3-map-vector_vector_vector",
-            marks=pytest.mark.skip(
-                reason="[BSE-2148] TODO: fix runtime error with map arrays in object_construct"
-            ),
         ),
         pytest.param(
             (
