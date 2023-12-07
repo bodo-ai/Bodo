@@ -28,6 +28,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - boost-cpp =1.82
+    - fmt =10
     - hdf5 >=1.14,<1.15.0a0=*mpi_mpich_* # [not win]
     - h5py
     - mpich *=h* # [not win]
