@@ -1195,11 +1195,15 @@ struct ChunkedTableBuilder {
     /**
      * @brief Append a batch of data to the buffer
      *
-     * @param in_table input table with the new rows
-     * @param append_rows bit vector indicating which rows to append
+     * @param in_table Input table with the new rows.
+     * @param append_rows Bit-vector indicating which rows to append.
+     * @param in_table_start_offset Starting offset into the 'in_table'. e.g. if
+     * 'append_rows' is [t, f, t, f, t] and 'in_table_start_offset' is 4, then
+     * we will append rows 4, 6 & 8 from the input table.
      */
     void AppendBatch(const std::shared_ptr<table_info>& in_table,
-                     const std::vector<bool>& append_rows);
+                     const std::vector<bool>& append_rows,
+                     const int64_t in_table_start_offset = 0);
 
     void AppendBatch(const std::shared_ptr<table_info>& in_table);
 
