@@ -233,7 +233,10 @@ def map_arr_setitem(arr, ind, val):
 
             def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
                 struct_arr = bodo.libs.struct_arr_ext.init_struct_arr(
-                    (val._keys, val._values), val._null_bitmask, ("key", "value")
+                    len(val._keys),
+                    (val._keys, val._values),
+                    val._null_bitmask,
+                    ("key", "value"),
                 )
                 arr._data[ind] = struct_arr
 
