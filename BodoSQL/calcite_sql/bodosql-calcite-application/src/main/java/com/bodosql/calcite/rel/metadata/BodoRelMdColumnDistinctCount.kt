@@ -92,16 +92,28 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      */
     private fun inferCastDistinctiveness(rel: Project, rex: RexNode, mq: RelMetadataQuery, targetType: SqlTypeName): Double? {
         // For certain types, the output always matches the input's distinctiveness
-        if (targetType == SqlTypeName.TIMESTAMP) {
-            return inferRexDistinctness(rel, rex, mq)
+        return when (targetType) {
+            SqlTypeName.TIMESTAMP,
+            SqlTypeName.TINYINT,
+            SqlTypeName.SMALLINT,
+            SqlTypeName.INTEGER,
+            SqlTypeName.BIGINT,
+            SqlTypeName.DECIMAL,
+            SqlTypeName.FLOAT,
+            SqlTypeName.REAL,
+            SqlTypeName.DOUBLE,
+            ->
+                inferRexDistinctness(rel, rex, mq)
+            else -> null
         }
-        return null
     }
 
     /**
      * Infer the distinctiveness for concat. Currently, we only support the case where
      * all literals are being appended to at most 1 column containing compute. We do not attempt to
      * make any estimations as to how concatenating multiple columns impacts uniqueness.
+     *
+     * [BSE-2213] Investigate adding distinctness propagation for more BodoSQL functions.
      *
      * @param rel The original projection containing this rex node
      * @param operands The arguments being passed to the concat function.
