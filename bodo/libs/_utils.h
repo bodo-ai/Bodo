@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <optional>
 #include <string>
 #include <tuple>
 
@@ -25,3 +27,6 @@ std::tuple<int, int> dist_get_ranks_on_node();
  * @return std::string
  */
 std::string BytesToHumanReadableString(const size_t bytes);
+
+/// @brief Helper Function to Get the Current Time if `get` argument is true
+std::optional<std::chrono::steady_clock::time_point> start_now(bool get);

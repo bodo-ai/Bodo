@@ -29,11 +29,6 @@
 
 using namespace std::chrono;
 
-constexpr inline std::optional<steady_clock::time_point> start_now(bool get) {
-    return get ? std::optional<steady_clock::time_point>(steady_clock::now())
-               : std::nullopt;
-}
-
 namespace bodo {
 
 void StorageManager::UpdateSpilledBytes(int64_t diff) {
