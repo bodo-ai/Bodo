@@ -1,8 +1,11 @@
 #include "_memory.h"
 
 #include <cmath>
+#include <cstring>
 #include <iostream>
+#include <numeric>
 #include <optional>
+#include <string>
 
 #ifdef __linux__
 // Needed for 'malloc_trim'
@@ -10,6 +13,13 @@
 #endif
 #include <mpi.h>
 #include <sys/mman.h>
+
+#include <fmt/args.h>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
+#include <fmt/format.h>
+
+#include "_utils.h"
 
 #define MAX_NUM_STORAGE_MANAGERS 4
 
@@ -20,6 +30,8 @@
         CHECK_ARROW_MEM_RET(res.status(), msg); \
         lhs = std::move(res).ValueOrDie();      \
     }
+
+using namespace std::chrono;
 
 namespace bodo {
 
@@ -78,7 +90,8 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
 SizeClass::SizeClass(
     uint8_t idx,
     const std::span<std::unique_ptr<StorageManager>> storage_managers,
-    size_t capacity, size_t block_size, bool spill_on_unpin, bool move_on_unpin)
+    size_t capacity, size_t block_size, bool spill_on_unpin, bool move_on_unpin,
+    bool tracing_mode)
     : idx_(idx),
       capacity_(capacity),
       block_size_(block_size),
@@ -94,7 +107,8 @@ SizeClass::SizeClass(
       // Initialize vector of swips
       swips_(capacity, nullptr),
       spill_on_unpin_(spill_on_unpin),
-      move_on_unpin_(move_on_unpin) {
+      move_on_unpin_(move_on_unpin),
+      tracing_mode_(tracing_mode) {
     // Allocate the address range using mmap.
     // Create a private (i.e. only visible to this process) anonymous (i.e. not
     // backed by a physical file) mapping.
@@ -191,6 +205,8 @@ uint64_t SizeClass::getFrameIndex(uint8_t* ptr) const {
 }
 
 void SizeClass::adviseAwayFrame(uint64_t idx) {
+    auto start = start_now(this->tracing_mode_);
+
     // Ref: https://man7.org/linux/man-pages/man2/madvise.2.html
     int madvise_out =
         ::madvise(this->getFrameAddress(idx), this->block_size_, MADV_DONTNEED);
@@ -200,9 +216,17 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
                 "SizeClass::adviseAwayFrame: madvise returned errno: ") +
             std::strerror(errno));
     }
+
+    this->stats_.total_advise_away_calls++;
+    if (this->tracing_mode_) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_advise_away_time += dur;
+    }
 }
 
-int64_t SizeClass::findUnmappedFrame() const noexcept {
+int64_t SizeClass::findUnmappedFrame() noexcept {
+    auto start = start_now(this->tracing_mode_);
+
     for (size_t i = 0; i < this->bitmask_nbytes_; i++) {
         if (this->mapped_bitmask_[i] != static_cast<uint8_t>(0xff)) {
             // There's a free bit in this byte.
@@ -212,11 +236,20 @@ int64_t SizeClass::findUnmappedFrame() const noexcept {
             for (size_t j = 0; j < 8; j++) {
                 if (!::arrow::bit_util::GetBit(&this->mapped_bitmask_[i], j) &&
                     (frame_idx < this->capacity_)) {
+                    if (this->tracing_mode_) {
+                        milli_double dur = steady_clock::now() - start.value();
+                        this->stats_.total_find_unmapped_time += dur;
+                    }
                     return frame_idx;
                 }
                 frame_idx++;
             }
         }
+    }
+
+    if (this->tracing_mode_) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_find_unmapped_time += dur;
     }
     // Return -1 if not found.
     return -1;
@@ -424,6 +457,7 @@ arrow::Status SizeClass::EvictFrame(uint64_t idx) {
             "SizeClass::EvictFrame: Frame is not unpinned!");
     }
 
+    auto start = start_now(tracing_mode_);
     auto ptr = this->getFrameAddress(idx);
     int64_t size = static_cast<int64_t>(this->getBlockSize());
 
@@ -452,12 +486,19 @@ arrow::Status SizeClass::EvictFrame(uint64_t idx) {
     this->markFrameAsUnmapped(idx);
     // Advise away the frame
     this->adviseAwayFrame(idx);
+
+    this->stats_.total_blocks_spilled++;
+    if (this->tracing_mode_) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_spilling_time += dur;
+    }
     return arrow::Status::OK();
 }
 
 arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
                                          uint64_t block_idx,
                                          uint8_t manager_idx) {
+    auto start = start_now(this->tracing_mode_);
     int64_t size = static_cast<int64_t>(this->getBlockSize());
 
     auto ptr = this->getFrameAddress(frame_idx);
@@ -474,44 +515,15 @@ arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
     *swip = ptr;
     this->swips_[frame_idx] = swip;
 
+    this->stats_.total_blocks_readback++;
+    if (this->tracing_mode_) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_readback_time += dur;
+    }
     return arrow::Status::OK();
 }
 
 //// StorageOptions and BufferPoolOptions
-
-/**
- * @brief Get the number of ranks on this node and the
- * current rank's position.
- *
- * We do this by creating sub-communicators based
- * on shared-memory. This is a collective operation
- * and therefore all ranks must call it.
- */
-static std::tuple<int, int> dist_get_ranks_on_node() {
-    int is_initialized;
-    MPI_Initialized(&is_initialized);
-    if (!is_initialized) {
-        MPI_Init(NULL, NULL);
-    }
-
-    int npes_node;
-    int rank_on_node;
-    MPI_Comm shmcomm;
-
-    // Split comm into comms that has same shared memory.
-    // This is a collective operation and all ranks must call it.
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
-                        &shmcomm);
-    // Get number of ranks on this sub-communicator (i.e. node).
-    // By definition, all ranks on the same node will get the same
-    // output.
-    MPI_Comm_size(shmcomm, &npes_node);
-    MPI_Comm_rank(shmcomm, &rank_on_node);
-
-    MPI_Comm_free(&shmcomm);
-    return std::make_tuple(npes_node, rank_on_node);
-}
-
 BufferPoolOptions BufferPoolOptions::Defaults() {
     BufferPoolOptions options;
 
@@ -740,7 +752,7 @@ void BufferPool::Initialize() {
         this->size_classes_.emplace_back(std::make_unique<SizeClass>(
             i, std::span(this->storage_managers_), num_blocks,
             size_class_bytes_i, this->options_.spill_on_unpin,
-            this->options_.move_on_unpin));
+            this->options_.move_on_unpin, this->options_.tracing_mode));
         this->size_class_bytes_.emplace_back(size_class_bytes_i);
         size_class_bytes_i *= 2;
     }
@@ -1129,7 +1141,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     // Add debug markers.
     // See notes here about why these memory markers are useful:
     // https://stackoverflow.com/questions/370195/when-and-why-will-a-compiler-initialise-memory-to-0xcd-0xdd-etc-on-malloc-fre
-    // Only fill up a couple cachelines to minimize overhead.
+    // Only fill up a couple cache lines to minimize overhead.
     memset(*out, 0xCB, std::min(size, (int64_t)256));
 
     return ::arrow::Status::OK();
@@ -1557,6 +1569,57 @@ uint64_t BufferPool::GetSmallestSizeClassSize() const {
 void BufferPool::Cleanup() {
     for (auto& manager : this->storage_managers_) {
         manager->Cleanup();
+    }
+
+    if (this->options_.tracing_mode) {
+        const char* COL_NAMES[8] = {
+            "Size Class",       "Blocks Spilled",     "Time Spilling",
+            "Blocks Read Back", "Time Reading Back",  "Num Advise Away",
+            "Time Advise Away", "Time Find Unmapped",
+
+        };
+        std::vector<size_t> col_widths(8);
+        std::transform(std::begin(COL_NAMES), std::end(COL_NAMES),
+                       col_widths.begin(), strlen);
+
+        fmt::dynamic_format_arg_store<fmt::format_context> store;
+        store.push_back("");
+        for (const auto& x : col_widths)
+            store.push_back(x);
+
+        fmt::println(stderr, "{0:─^{1}}", " Size Class Metrics ",
+                     col_widths.size() * 3 +
+                         std::reduce(col_widths.begin(), col_widths.end()));
+        fmt::vprint(stderr,
+                    "{0:─^{1}}─┬─{0:─^{2}}─┬─{0:─^{3}}─┬─{0:─^{4}}─┬─{0:─^{5}}"
+                    "─┬─{0:─^{6}}─┬─{0:─^{7}}─┬─{0:─^{8}}─\n",
+                    store);
+        fmt::println(stderr, "{} ", fmt::join(COL_NAMES, " │ "));
+        fmt::vprint(stderr,
+                    "{0:─^{1}}─┼─{0:─^{2}}─┼─{0:─^{3}}─┼─{0:─^{4}}─┼─{0:─^{5}}"
+                    "─┼─{0:─^{6}}─┼─{0:─^{7}}─┼─{0:─^{8}}─\n",
+                    store);
+
+        for (const auto& s : size_classes_) {
+            fmt::println(
+                stderr,
+                "{0:<{1}} │ {2:>{3}} │ {4:>{5}} │ {6:>{7}} │ {8:>{9}} "
+                "│ {10:>{11}} │ {12:>{13}} │ {14:>{15}} ",
+                BytesToHumanReadableString(s->getBlockSize()),
+                strlen(COL_NAMES[0]), s->stats_.total_blocks_spilled,
+                strlen(COL_NAMES[1]), s->stats_.total_spilling_time,
+                strlen(COL_NAMES[2]), s->stats_.total_blocks_readback,
+                strlen(COL_NAMES[3]), s->stats_.total_readback_time,
+                strlen(COL_NAMES[4]), s->stats_.total_advise_away_calls,
+                strlen(COL_NAMES[5]), s->stats_.total_advise_away_time,
+                strlen(COL_NAMES[6]), s->stats_.total_find_unmapped_time,
+                strlen(COL_NAMES[7]));
+        }
+        fmt::vprint(stderr,
+                    "{0:─^{1}}─┴─{0:─^{2}}─┴─{0:─^{3}}─┴─{0:─^{4}}─┴─{0:─^{5}}"
+                    "─┴─{0:─^{6}}─┴─{0:─^{7}}─┴─{0:─^{8}}─\n",
+                    store);
+        fmt::println(stderr, "");
     }
 
     if (this->options_.tracing_mode && this->storage_managers_.size() > 0) {

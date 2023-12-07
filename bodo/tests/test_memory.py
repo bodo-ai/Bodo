@@ -3381,57 +3381,62 @@ def test_print_spilling_metrics(capfd, tmp_path: Path, tmp_s3_path: str):
     pool.cleanup()
     _, err = capfd.readouterr()
     errlines: list[str] = err.split("\n")
+    errlines = [" ".join(e.split()) for e in errlines]
 
-    curr_spilled_bytes: str = next(l for l in errlines if "Current Spilled Bytes" in l)
-    assert (
-        curr_spilled_bytes
-        == "Current Spilled Bytes  │                 4.0MiB │             0 bytes "
+    # Spilling metrics per SizeClass
+    size_class_spill_count: str = next(l for l in errlines if "4.0MiB" in l)
+    assert bool(
+        re.match(
+            r"4\.0MiB │ 4 │ [0-9.ms]+ │ 2 │ [0-9.ms]+ │ 5 │ [0-9.ms]+ │ [0-9.ms]+",
+            size_class_spill_count,
+        )
     )
+    for class_name in [
+        "8KiB",
+        "16KiB",
+        "32KiB",
+        "64KiB",
+        "128KiB",
+        "256KiB",
+        "512KiB",
+        "1.0MiB",
+        "2.0MiB",
+    ]:
+        size_class_spill_count: str = next(
+            l for l in errlines if l.startswith(class_name)
+        )
+        size_class_spill_count = size_class_spill_count[(len(class_name) + 3) :]
+        assert bool(
+            re.match(
+                r"0 │ [0-9.ms]+ │ 0 │ [0-9.ms]+ │ 0 │ [0-9.ms]+ │ [0-9.ms]+",
+                size_class_spill_count,
+            )
+        )
+
+    # Spilling metrics per StorageManager
+    curr_spilled_bytes: str = next(l for l in errlines if "Current Spilled Bytes" in l)
+    assert curr_spilled_bytes == "Current Spilled Bytes │ 4.0MiB │ 0 bytes"
     curr_blocks_spilled: str = next(
         l for l in errlines if "Current Blocks Spilled" in l
     )
-    assert (
-        curr_blocks_spilled
-        == "Current Blocks Spilled │                      1 │                   0 "
-    )
+    assert curr_blocks_spilled == "Current Blocks Spilled │ 1 │ 0"
 
     total_blocks_spilled: str = next(l for l in errlines if "Total Blocks Spilled" in l)
-    assert (
-        total_blocks_spilled
-        == "Total Blocks Spilled   │                      2 │                   2 "
-    )
+    assert total_blocks_spilled == "Total Blocks Spilled │ 2 │ 2"
     total_blocks_read: str = next(l for l in errlines if "Total Blocks Read" in l)
-    assert (
-        total_blocks_read
-        == "Total Blocks Read      │                      0 │                   2 "
-    )
+    assert total_blocks_read == "Total Blocks Read │ 0 │ 2"
     total_blocks_deleted: str = next(l for l in errlines if "Total Blocks Deleted" in l)
-    assert (
-        total_blocks_deleted
-        == "Total Blocks Deleted   │                      1 │                   2 "
-    )
+    assert total_blocks_deleted == "Total Blocks Deleted │ 1 │ 2"
 
     total_bytes_spilled: str = next(l for l in errlines if "Total Bytes Spilled" in l)
-    assert (
-        total_bytes_spilled
-        == "Total Bytes Spilled    │                 8.0MiB │              8.0MiB "
-    )
+    assert total_bytes_spilled == "Total Bytes Spilled │ 8.0MiB │ 8.0MiB"
     total_bytes_read: str = next(l for l in errlines if "Total Bytes Read" in l)
-    assert (
-        total_bytes_read
-        == "Total Bytes Read       │                0 bytes │              8.0MiB "
-    )
+    assert total_bytes_read == "Total Bytes Read │ 0 bytes │ 8.0MiB"
     total_bytes_deleted: str = next(l for l in errlines if "Total Bytes Deleted" in l)
-    assert (
-        total_bytes_deleted
-        == "Total Bytes Deleted    │                 4.0MiB │              8.0MiB "
-    )
+    assert total_bytes_deleted == "Total Bytes Deleted │ 4.0MiB │ 8.0MiB"
 
     max_spilled_bytes: str = next(l for l in errlines if "Max Spilled Bytes" in l)
-    assert (
-        max_spilled_bytes
-        == "Max Spilled Bytes      │                 4.0MiB │              8.0MiB "
-    )
+    assert max_spilled_bytes == "Max Spilled Bytes │ 4.0MiB │ 8.0MiB"
 
 
 ## OperatorBufferPool tests
