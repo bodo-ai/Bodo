@@ -21,7 +21,7 @@ requirements:
     - python
     - setuptools
     - numba 0.57.1
-    # Compatable with Numba requirements.
+    # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.23,<1.25
     - cython <3.0
@@ -29,6 +29,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - boost-cpp =1.82
+    - fmt =10
     - libcurl <=8.4
     - hdf5 >=1.14,<1.15.0a0=*mpi_mpich_* # [not win]
     - h5py
