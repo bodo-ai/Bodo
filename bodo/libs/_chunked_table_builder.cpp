@@ -564,16 +564,18 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
 
 void ChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::vector<bool>& append_rows) {
+    const std::vector<bool>& append_rows, const int64_t in_table_start_offset) {
     // Convert bool vector into indices vector
     size_t num_append_rows =
         std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
     std::vector<int64_t> idxs;
     idxs.reserve(num_append_rows);
 
+    // Convert the bit-vector to a vector of indices. Offset the
+    // entries by in_table_start_offset.
     for (size_t i_row = 0; i_row < append_rows.size(); i_row++) {
         if (append_rows[i_row]) {
-            idxs.emplace_back(i_row);
+            idxs.emplace_back(in_table_start_offset + i_row);
         }
     }
 

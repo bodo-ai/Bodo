@@ -4052,7 +4052,6 @@ def test_shuffle_batching(memory_leak_check):
             "D": [1, 2, 3, 4, 5, 6] * 10000,
         }
     )
-    prev_batch_size = bodo.bodosql_streaming_batch_size
     build_keys_inds = bodo.utils.typing.MetaType((0,))
     probe_keys_inds = bodo.utils.typing.MetaType((0,))
     kept_cols = bodo.utils.typing.MetaType((0, 1))

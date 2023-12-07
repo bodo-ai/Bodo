@@ -538,15 +538,25 @@ void JoinPartition::InitProbeInputBuffer() {
 void JoinPartition::AppendInactiveProbeBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
-    const std::vector<bool>& append_rows) {
+    const std::vector<bool>& append_rows, const int64_t in_table_start_offset,
+    int64_t table_nrows) {
+    assert(in_table_start_offset >= 0);
     auto probe_table_buffer_join_hashes_(
         bodo::pin(this->probe_table_buffer_join_hashes));
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+    if (table_nrows == -1) {
+        // Convert default of -1 to all rows in the table (starting from
+        // 'in_table_start_offset').
+        table_nrows = in_table->nrows() - in_table_start_offset;
+    }
+    assert(table_nrows >= 0);
+    assert(append_rows.size() == table_nrows);
+    for (size_t i_row = 0; i_row < static_cast<size_t>(table_nrows); i_row++) {
         if (append_rows[i_row]) {
             probe_table_buffer_join_hashes_->push_back(join_hashes[i_row]);
         }
     }
-    this->probe_table_buffer_chunked->AppendBatch(in_table, append_rows);
+    this->probe_table_buffer_chunked->AppendBatch(in_table, append_rows,
+                                                  in_table_start_offset);
 }
 
 /**
@@ -1573,14 +1583,24 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
-    const std::vector<bool>& append_rows) {
+    const std::vector<bool>& append_rows, const int64_t in_table_start_offset,
+    int64_t table_nrows) {
+    assert(in_table_start_offset >= 0);
     std::vector<std::vector<bool>> append_rows_by_partition;
     append_rows_by_partition.resize(this->partitions.size());
+    if (table_nrows == -1) {
+        // Convert default of -1 to all rows in the table (starting from
+        // 'in_table_start_offset').
+        table_nrows = in_table->nrows() - in_table_start_offset;
+    }
+    assert(table_nrows >= 0);
+    assert(append_rows.size() == table_nrows);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        append_rows_by_partition[i_part] = std::vector<bool>(in_table->nrows());
+        append_rows_by_partition[i_part] =
+            std::vector<bool>(table_nrows, false);
     }
 
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+    for (size_t i_row = 0; i_row < static_cast<size_t>(table_nrows); i_row++) {
         if (append_rows[i_row]) {
             bool found_partition = false;
 
@@ -1605,7 +1625,8 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
     }
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->AppendInactiveProbeBatch(
-            in_table, join_hashes, append_rows_by_partition[i_part]);
+            in_table, join_hashes, append_rows_by_partition[i_part],
+            in_table_start_offset, table_nrows);
     }
 }
 
@@ -2229,14 +2250,20 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             active_partition->probe_table = new_data;
+            // NOTE: partition hashes need to be consistent across ranks
+            // so need to use dictionary hashes
+            std::shared_ptr<
+                bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+                new_data_dict_hashes = join_state->GetDictionaryHashesForKeys();
             for (size_t batch_start_row = 0;
                  batch_start_row < new_data->nrows();
                  batch_start_row += STREAMING_BATCH_SIZE) {
+                size_t nrows = std::min<size_t>(
+                    STREAMING_BATCH_SIZE, new_data->nrows() - batch_start_row);
                 // probe hash table with new data
                 std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
                     new_data, join_state->n_keys, SEED_HASH_JOIN,
-                    shuffle_possible, false, nullptr, batch_start_row,
-                    STREAMING_BATCH_SIZE);
+                    shuffle_possible, false, nullptr, batch_start_row, nrows);
                 active_partition->probe_table_hashes = batch_hashes_join.get();
                 // Since we only have the hashes for this batch we need an
                 // offset to the row when indexing into the hashtable
@@ -2260,17 +2287,9 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                              probe_null_bitmaps) =
                         get_gen_cond_data_ptrs(active_partition->probe_table);
                 }
-                size_t nrows = std::min<size_t>(
-                    STREAMING_BATCH_SIZE, new_data->nrows() - batch_start_row);
                 join_state->num_processed_probe_table_rows += nrows;
 
                 if (join_state->partitions.size() > 1) {
-                    // NOTE: partition hashes need to be consistent across ranks
-                    // so need to use dictionary hashes
-                    std::shared_ptr<
-                        bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
-                        new_data_dict_hashes =
-                            join_state->GetDictionaryHashesForKeys();
                     // NOTE: Partition hashes need to be consistent across
                     // ranks, so need to use dictionary hashes. Since we are
                     // using dictionary hashes, we don't need dictionaries to be
@@ -2282,18 +2301,19 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                                         SEED_HASH_PARTITION, shuffle_possible,
                                         /*global_dict_needed*/ false,
                                         new_data_dict_hashes, batch_start_row,
-                                        STREAMING_BATCH_SIZE);
-                    append_to_probe_inactive_partition.resize(
-                        STREAMING_BATCH_SIZE, false);
-                    for (size_t i_row = batch_start_row;
-                         i_row < batch_start_row + nrows; i_row++) {
+                                        nrows);
+                    // Initialize bit-vector to false.
+                    append_to_probe_inactive_partition.resize(nrows, false);
+                    for (size_t i_row = 0; i_row < nrows; i_row++) {
                         if (active_partition->is_in_partition(
                                 batch_hashes_partition[i_row])) {
                             handle_probe_input_for_partition<
                                 build_table_outer, probe_table_outer,
                                 non_equi_condition>(
                                 join_state->cond_func, active_partition.get(),
-                                i_row, build_idxs, probe_idxs,
+                                // Add offset to get the actual row index in the
+                                // full table:
+                                i_row + batch_start_row, build_idxs, probe_idxs,
                                 build_table_info_ptrs, probe_table_info_ptrs,
                                 build_col_ptrs, probe_col_ptrs,
                                 build_null_bitmaps, probe_null_bitmaps);
@@ -2303,16 +2323,21 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     }
                     join_state->AppendProbeBatchToInactivePartition(
                         new_data, batch_hashes_join, batch_hashes_partition,
-                        append_to_probe_inactive_partition);
+                        append_to_probe_inactive_partition,
+                        /*in_table_start_offset*/ batch_start_row,
+                        /*table_nrows*/ nrows);
+                    // Reset the bit-vector. This is important for correctness.
+                    append_to_probe_inactive_partition.clear();
                 } else {
                     // Fast path for the single partition case:
-                    for (size_t i_row = batch_start_row;
-                         i_row < batch_start_row + nrows; i_row++) {
+                    for (size_t i_row = 0; i_row < nrows; i_row++) {
                         handle_probe_input_for_partition<build_table_outer,
                                                          probe_table_outer,
                                                          non_equi_condition>(
                             join_state->cond_func, active_partition.get(),
-                            i_row, build_idxs, probe_idxs,
+                            // Add offset to get the actual row index in the
+                            // full table:
+                            i_row + batch_start_row, build_idxs, probe_idxs,
                             build_table_info_ptrs, probe_table_info_ptrs,
                             build_col_ptrs, probe_col_ptrs, build_null_bitmaps,
                             probe_null_bitmaps);
