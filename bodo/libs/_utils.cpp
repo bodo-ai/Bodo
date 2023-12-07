@@ -56,3 +56,9 @@ std::string BytesToHumanReadableString(const size_t bytes) {
         return std::to_string(bytes) + (bytes == 1 ? " byte" : " bytes");
     }
 }
+
+std::optional<std::chrono::steady_clock::time_point> start_now(bool get) {
+    return get ? std::optional<std::chrono::steady_clock::time_point>(
+                     std::chrono::steady_clock::now())
+               : std::nullopt;
+}

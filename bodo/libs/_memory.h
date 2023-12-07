@@ -147,6 +147,28 @@ struct BufferPoolOptions {
     static BufferPoolOptions Defaults();
 };
 
+/// @brief Statistics for a SizeClass
+struct SizeClassStats {
+    /// @brief Total Number of Blocks Ever Spilled
+    uint64_t total_blocks_spilled = 0;
+    /// @brief Total Number of Blocks Ever Read Back
+    uint64_t total_blocks_readback = 0;
+    /// @brief Total Number of Times Advise Away is Called
+    uint64_t total_advise_away_calls = 0;
+
+    /// @brief Total Time Spent Spilling Blocks
+    milli_double total_spilling_time{};
+    /// @brief Total Time Spent Reading Back Blocks
+    milli_double total_readback_time{};
+    /// @brief Total Time Spent Finding Unmapped Blocks
+    milli_double total_find_unmapped_time{};
+    /// @brief Total Time Spent on madvise
+    milli_double total_advise_away_time{};
+
+    /// @brief Print Statistics Out to File (or stdout/stderr)
+    void Print(FILE* out = stderr) const;
+};
+
 /// @brief Represents a range of virtual addresses used for allocating
 /// buffer frames of a fixed size. Very similar to Velox's SizeClass
 /// (https://github.com/facebookincubator/velox/blob/8324ac7f1839db009def00e7450f38c2591dd4bb/velox/common/memory/MmapAllocator.h#L141).
@@ -165,11 +187,12 @@ class SizeClass final {
      * @param move_on_unpin Whether the unpin behavior should be to move the
      * frame (or spill if no other frame could be found). See
      * BufferPoolOptions::move_on_unpin for the full description.
+     * @param tracing_mode Whether to trace time spent in various functions.
      */
     SizeClass(uint8_t idx,
               const std::span<std::unique_ptr<StorageManager>> storage_managers,
               size_t capacity, size_t block_size, bool spill_on_unpin,
-              bool move_on_unpin);
+              bool move_on_unpin, bool tracing_mode);
 
     /**
      * @brief Delete the SizeClass and unmap the allocated
@@ -335,7 +358,10 @@ class SizeClass final {
      * @return int64_t Index of the first unmapped frame. -1 if no unmapped
      * frame was found.
      */
-    int64_t findUnmappedFrame() const noexcept;
+    int64_t findUnmappedFrame() noexcept;
+
+    /// @brief Statistics for this SizeClass
+    SizeClassStats stats_;
 
    private:
     /// @brief Size Class Index
@@ -386,6 +412,9 @@ class SizeClass final {
 
     /// @brief See full description in BufferPoolOptions::move_on_unpin.
     const bool move_on_unpin_;
+
+    /// @brief Trace time spent in various functions
+    const bool tracing_mode_;
 
     /// @brief Helper function to mark the frame at
     /// index idx as "mapped", i.e. taken.
