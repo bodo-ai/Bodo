@@ -1,7 +1,9 @@
 import pandas as pd
 import pyarrow as pa
 import pytest
+from numba.core.errors import TypingError
 
+from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 
@@ -887,4 +889,489 @@ def test_object_delete(query, df, answer, memory_leak_check):
         check_names=False,
         # Can't sort semi-structured data outputs in Python
         sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "df, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            {
+                                "id": i,
+                                "tags": [
+                                    "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                                    for j in range(1 + (i**2) % 7)
+                                ],
+                                "attrs": {"A": i, "B": str(i), "C": [i]},
+                            }
+                            for i in range(50)
+                        ]
+                        + [
+                            None,
+                            {
+                                "id": None,
+                                "tags": [],
+                                "attrs": {"A": None, "B": None, "C": []},
+                            },
+                            {
+                                "id": -1,
+                                "tags": None,
+                                "attrs": {"A": None, "B": None, "C": None},
+                            },
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("id", pa.int32()),
+                                    pa.field("tags", pa.large_list(pa.string())),
+                                    pa.field(
+                                        "attrs",
+                                        pa.struct(
+                                            [
+                                                pa.field("A", pa.int32()),
+                                                pa.field("B", pa.string()),
+                                                pa.field(
+                                                    "C", pa.large_list(pa.int32())
+                                                ),
+                                            ]
+                                        ),
+                                    ),
+                                ]
+                            )
+                        ),
+                    )
+                }
+            ),
+            pd.Series(
+                [
+                    {
+                        "id": i,
+                        "tags": [
+                            "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                            for j in range(1 + (i**2) % 7)
+                        ],
+                        "attrs": {"A": i, "B": str(i), "C": [i]},
+                        "newprop": 0,
+                    }
+                    for i in range(50)
+                ]
+                + [
+                    None,
+                    {
+                        "id": None,
+                        "tags": [],
+                        "attrs": {"A": None, "B": None, "C": []},
+                        "newprop": 0,
+                    },
+                    {
+                        "id": -1,
+                        "tags": None,
+                        "attrs": {"A": None, "B": None, "C": None},
+                        "newprop": 0,
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int32()),
+                            pa.field("tags", pa.large_list(pa.string())),
+                            pa.field(
+                                "attrs",
+                                pa.struct(
+                                    [
+                                        pa.field("A", pa.int32()),
+                                        pa.field("B", pa.string()),
+                                        pa.field("C", pa.large_list(pa.int32())),
+                                    ]
+                                ),
+                            ),
+                            pa.field("newprop", pa.int32()),
+                        ]
+                    )
+                ),
+            ),
+            id="struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        (
+                            [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4
+                            + [{"A": 4, "C": 5}] * 4
+                        )
+                        * 5
+                        + [
+                            None,
+                            {"A": 6, "B": 7, "C": None, "D": None},
+                            {},
+                            {"A": 8, "B": 9, "C": None, "D": None},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                }
+            ),
+            pd.Series(
+                (
+                    [[("A", 0), ("B", 1), ("C", 2), ("D", 3), ("newprop", 0)]] * 4
+                    + [[("A", 4), ("C", 5), ("newprop", 0)]] * 4
+                )
+                * 5
+                + [
+                    None,
+                    [("A", 6), ("B", 7), ("C", None), ("D", None), ("newprop", 0)],
+                    [("newprop", 0)],
+                    [("A", 8), ("B", 9), ("C", None), ("D", None), ("newprop", 0)],
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="map",
+        ),
+    ],
+)
+def test_object_insert_constant_key_value(df, answer, memory_leak_check):
+    query = "SELECT OBJECT_INSERT(A, 'newprop', 0) from table1"
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        sort_output=False,
+    )
+
+
+def test_object_insert_conflicting_key_struct(memory_leak_check):
+    query = "SELECT OBJECT_INSERT(A, 'a', 1) from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [{"a": 0, "b": "1", "c": "a"}] * 5,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("a", pa.int32()),
+                            pa.field("b", pa.string()),
+                            pa.field("c", pa.string()),
+                        ]
+                    )
+                ),
+            )
+        }
+    )
+    with pytest.raises(TypingError):
+        check_query(
+            query,
+            {"table1": df},
+            None,
+            expected_output=pd.DataFrame({}),
+            only_jit_1DVar=True,
+            sort_output=False,
+        )
+
+
+def test_object_insert_conflicting_key_map():
+    query = "SELECT OBJECT_INSERT(A, 'd', 1) from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    {"a": 0, "b": 1, "d": 0},
+                    {"a": 0, "b": 1},
+                    {"a": 0, "b": 1},
+                    {"a": 0, "b": 1},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            )
+        }
+    )
+    with pytest.raises(
+        BodoError, match="object_insert encountered duplicate field key"
+    ):
+        check_query(
+            query,
+            {"table1": df},
+            None,
+            expected_output=pd.DataFrame({0: []}),
+            check_dtype=False,
+            run_dist_tests=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "df, key_to_update, value_to_update_expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"b": 0}, {"b": 1}, {"b": 2}],
+                        dtype=pd.ArrowDtype(pa.struct([pa.field("b", pa.int32())])),
+                    ),
+                    "B": ["a", "b", "c"],
+                }
+            ),
+            "a",
+            "B",
+            pd.Series(
+                [{"b": i, "a": c} for i, c in enumerate(["a", "b", "c"])],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("b", pa.int32()), pa.field("a", pa.string())])
+                ),
+            ),
+            id="update_no_conflict_struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"b": 0}, {"b": 1}, {"b": 2}],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                    "B": [10, 11, 12],
+                }
+            ),
+            "a",
+            "B",
+            pd.Series(
+                [{"b": i, "a": 10 + i} for i in range(3)],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="update_no_conflict_map",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": "a"}, {"a": "b"}, {"a": "c"}],
+                        dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.string())])),
+                    ),
+                    "B": ["0", "1", "2"],
+                }
+            ),
+            "a",
+            "B",
+            pd.Series(
+                [{"a": c} for c in ["0", "1", "2"]],
+                dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.string())])),
+            ),
+            id="update_into_same_type_struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": "a"}, {"a": "b"}, {"a": "c"}],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+                    ),
+                    "B": ["0", "1", "2"],
+                }
+            ),
+            "a",
+            "B",
+            pd.Series(
+                [{"a": c} for c in ["0", "1", "2"]],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="update_into_same_type_map",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            {"a": 0, "b": "zero"},
+                            {"a": 1, "b": "one"},
+                            {"a": 2, "b": "two"},
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("a", pa.int32()), pa.field("b", pa.string())]
+                            )
+                        ),
+                    ),
+                    "B": ["first", "second", "third"],
+                }
+            ),
+            "a",
+            "B",
+            pd.Series(
+                [
+                    {"b": "zero", "a": "first"},
+                    {"b": "one", "a": "second"},
+                    {"b": "two", "a": "third"},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("b", pa.string()), pa.field("a", pa.string())])
+                ),
+            ),
+            id="update_into_different_type_struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": i, "b": str(i)} for i in range(10)],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("a", pa.int32()), pa.field("b", pa.string())]
+                            )
+                        ),
+                    )
+                }
+            ),
+            "a",
+            "NULL",
+            pd.Series(
+                [{"a": None, "b": str(i)} for i in range(10)],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("a", pa.int32()), pa.field("b", pa.string())])
+                ),
+            ),
+            id="update_into_const_null_struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": i} for i in range(10)],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                }
+            ),
+            "a",
+            "NULL",
+            pd.Series(
+                [{"a": None} for _ in range(10)],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="update_into_const_null_map",
+        ),
+    ],
+)
+def test_object_insert_update_key(
+    df, key_to_update, value_to_update_expr, answer, memory_leak_check
+):
+    query = f"SELECT OBJECT_INSERT(A, '{key_to_update}', {value_to_update_expr}, true) from table1"
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        use_dict_encoded_strings=False,  # TODO(aneesh): remove this as per BSE-2121
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, df, answer",
+    [
+        pytest.param(
+            "SELECT OBJECT_INSERT(A, 'b', B) FROM table1",
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": i} for i in range(50)] + [None, {"a": None}],
+                        dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
+                    ),
+                    "B": list(range(50)) + [51, None],
+                }
+            ),
+            pd.Series(
+                [{"a": i, "b": i} for i in range(50)] + [None, {"a": None, "b": None}],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("a", pa.int32()), pa.field("b", pa.int32())])
+                ),
+            ),
+            id="struct-constant_key-insert_integer_col",
+        ),
+        pytest.param(
+            "SELECT OBJECT_INSERT(A, 'b', B) FROM table1",
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": i} for i in range(50)] + [None],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                    "B": list(range(50)) + [51],
+                }
+            ),
+            pd.Series(
+                [{"a": i, "b": i} for i in range(50)] + [None],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="map-constant_key-insert_integer_col",
+        ),
+        pytest.param(
+            "SELECT OBJECT_INSERT(A, PROPNAME, B) FROM table1",
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [{"a": i} for i in range(5)],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                    "PROPNAME": [f"V{i}" for i in range(5)],
+                    "B": list(range(5)),
+                }
+            ),
+            pd.Series(
+                [{"a": i, f"V{i}": i} for i in range(5)],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="map-column_key-insert_integer_col",
+        ),
+    ],
+)
+def test_object_insert(query, df, answer, memory_leak_check):
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        sort_output=False,
+    )
+
+
+@pytest.mark.skip(reason="[BSE-1889] Support JSON in CASE statements")
+@pytest.mark.parametrize(
+    "df, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "I": [0, 1, 2],
+                    "D": [{"a": 0}, {"a": 1}, {"a": 2}],
+                    "V": ["one", "two", "three"],
+                    "B": [False, True, False],
+                }
+            ),
+            [{"a": 0, "b": "one"}, {"a": 1, "b": "two"}, {"a": 2, "b": "three"}],
+        ),
+    ],
+)
+def test_object_insert_case(df, answer, memory_leak_check):
+    query = "SELECT CASE WHEN B THEN NULL ELSE OBJECT_INSERT(D, 'b', V) END FROM TABLE1"
+    ctx = {"table1": df}
+    expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
+    expected_output[1][ctx["table1"].B] = None
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
     )

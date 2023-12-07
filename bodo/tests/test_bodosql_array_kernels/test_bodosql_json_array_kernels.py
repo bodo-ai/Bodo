@@ -553,3 +553,183 @@ def test_object_keys(data, answer, vector, memory_leak_check):
             check_dtype=False,
             distributed=False,
         )
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [
+        pytest.param(True, id="vector"),
+        pytest.param(
+            False,
+            id="scalar",
+            marks=pytest.mark.skip(
+                reason="Dictionaries not supported for object_insert"
+            ),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, key, value, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0"},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            "k3",
+            pd.Series(["v3_0", "v3_1", "v3_2"] * 3, dtype=pd.StringDtype()),
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0", "k3": "v3_0"},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2", "k3": "v3_2"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="map-string",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0"},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("k0", pa.string()),
+                            pa.field("k1", pa.string()),
+                            pa.field("k2", pa.string()),
+                        ]
+                    )
+                ),
+            ),
+            "k3",
+            pd.Series(["v3_0", "v3_1", "v3_2"] * 3, dtype=pd.StringDtype()),
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0", "k3": "v3_0"},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2", "k3": "v3_2"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("k0", pa.string()),
+                            pa.field("k1", pa.string()),
+                            pa.field("k2", pa.string()),
+                            pa.field("k3", pa.string()),
+                        ]
+                    )
+                ),
+            ),
+            id="struct-string",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0"},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("k0", pa.string()),
+                            pa.field("k1", pa.string()),
+                            pa.field("k2", pa.string()),
+                        ]
+                    )
+                ),
+            ),
+            "k3",
+            pd.Series(
+                [["v3_0"], ["v3_1"], ["v3_2"]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            pd.Series(
+                [
+                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0", "k3": ["v3_0"]},
+                    None,
+                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2", "k3": ["v3_2"]},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("k0", pa.string()),
+                            pa.field("k1", pa.string()),
+                            pa.field("k2", pa.string()),
+                            pa.field("k3", pa.large_list(pa.string())),
+                        ]
+                    )
+                ),
+            ),
+            id="struct-stringArray",
+        ),
+    ],
+)
+def test_object_insert(data, key, value, answer, vector, memory_leak_check):
+    """test object_insert - more comprehensive tests are done at the BodoSQL level"""
+
+    def impl_vector(data, value):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.object_insert(data, key, value, False)
+        )
+
+    def impl_scalar(data, value):
+        return bodo.libs.bodosql_array_kernels.object_insert(
+            data[0], key, value[0], False
+        )
+
+    if vector:
+        check_func(
+            impl_vector,
+            (data, value),
+            py_output=answer,
+            check_dtype=False,
+            distributed=False,
+            use_dict_encoded_strings=False,
+        )
+    else:
+        check_func(
+            impl_scalar,
+            (data, value),
+            py_output=answer[0],
+            check_dtype=False,
+            distributed=False,
+            use_dict_encoded_strings=False,
+        )
+
+
+def test_option_object_insert(memory_leak_check):
+    def impl(object_, present_obj):
+        object_ = object_[0] if present_obj else None
+        return bodo.libs.bodosql_array_kernels.object_insert(
+            object_, "b", 1, True, is_scalar=True
+        )
+
+    object_ = pd.Series(
+        [{"id": 0}], dtype=pd.ArrowDtype(pa.struct([pa.field("id", pa.int32())]))
+    )
+    answer = {"id": 0, "b": 1}
+    for present_object in [True, False]:
+        check_func(
+            impl,
+            (object_, present_object),
+            py_output=answer if present_object else None,
+            check_dtype=False,
+            dist_test=False,
+            distributed=False,
+            is_out_distributed=False,
+        )
