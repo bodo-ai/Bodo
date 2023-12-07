@@ -936,8 +936,13 @@ def overload_object_filter_keys_util(A):
 
         # 3. Use the information from the remaining keys to re-construct the input struct
         # with the desired subset of fields.
-        scalar_text = f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
-        scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)},), null_vector, names)"
+        if len(nulls) > 0:
+            scalar_text = (
+                f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
+            )
+        else:
+            scalar_text = f"null_vector = np.empty(0, dtype=np.bool_)\n"
+        scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)}{',' if len(data) else ''}), null_vector, names)"
         out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
 
