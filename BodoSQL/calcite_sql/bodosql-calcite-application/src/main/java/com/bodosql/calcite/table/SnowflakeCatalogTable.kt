@@ -286,7 +286,7 @@ open class SnowflakeCatalogTable(
      *
      * @return True if this is a view for which we can load metadata information.
      */
-    private fun isAccessibleView(): Boolean {
+    fun isAccessibleView(): Boolean {
         return tryGetViewMetadata() != null
     }
 
