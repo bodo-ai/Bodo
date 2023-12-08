@@ -3140,7 +3140,8 @@ def test_object_construct_optional(
                         {},
                         {"S": "", "T": "EFGH", "U": "IJ"},
                     ]
-                    * 3
+                    * 3,
+                    dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.large_string())),
                 ),
             ),
             (False,),
@@ -3158,9 +3159,6 @@ def test_object_construct_optional(
                 ),
             ),
             id="map_array-string-1",
-            marks=pytest.mark.skip(
-                reason="[BSE-2114] TODO: fix segfault in parallel test"
-            ),
         ),
         pytest.param(
             (
