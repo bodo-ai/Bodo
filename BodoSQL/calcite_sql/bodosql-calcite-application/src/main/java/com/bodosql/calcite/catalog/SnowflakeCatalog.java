@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -173,7 +174,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         if (conn == null) {
           int sleepMultiplier = 2 << numRetries;
           int sleepTime = min(sleepMultiplier * backoffMilliseconds, maxBackoffMilliseconds);
-          VERBOSE_LEVEL_TWO_LOGGER.info(
+          VERBOSE_LEVEL_THREE_LOGGER.info(
               String.format(
                   "Failed to connect to Snowflake, retrying after %d milleseconds...", sleepTime));
           try {
@@ -337,7 +338,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   @Override
   public Set<String> getTableNames(ImmutableList<String> schemaPath) {
     if (schemaPath.size() != 2) {
-      return new HashSet<>();
+      return Set.of();
     }
     return getTableNamesImpl(schemaPath.get(0), schemaPath.get(1), isConnectionCached());
   }
@@ -368,10 +369,11 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     } catch (SQLException e) {
       String errorMsg =
           String.format(
-              "Unable to get table names for Schema '%s' from Snowflake account. Error message: %s",
-              schemaName, e);
+              "Unable to get table names for Schema '%s'.'%s' from Snowflake account. Error"
+                  + " message: %s",
+              databaseName, schemaName, e);
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getTableNamesImpl(databaseName, schemaName, false);
       } else {
@@ -456,7 +458,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   + " %s",
               tableName, databaseName, schemaName, e);
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getTableImpl(databaseName, schemaName, tableName, false);
       } else {
@@ -616,7 +618,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     } else if (schemaPath.size() == 1) {
       return getSchemaNamesImpl(schemaPath.get(0), isConnectionCached());
     } else {
-      return new HashSet<>();
+      return Set.of();
     }
   }
 
@@ -643,7 +645,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   + " %s",
               e);
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getDatabaseNamesImpl(false);
       } else {
@@ -675,7 +677,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               "Unable to get a list of schema names from the Snowflake account. Error message: %s",
               e);
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getSchemaNamesImpl(databaseName, false);
       } else {
@@ -768,7 +770,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String errorMsg =
           String.format("Unable to load default schema from snowflake. Error message: %s", e);
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getDefaultSchemaImpl(false);
       } else {
@@ -776,6 +778,80 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
     return defaultSchema;
+  }
+
+  /**
+   * Returns a set of all function names with the given schema name.
+   *
+   * @param schemaPath The list of schemas to traverse before finding the function.
+   * @return Set of function names.
+   */
+  public Set<String> getFunctionNames(ImmutableList<String> schemaPath) {
+    if (schemaPath.size() != 2) {
+      return Set.of();
+    }
+    return getFunctionNamesImpl(schemaPath.get(0), schemaPath.get(1), isConnectionCached());
+  }
+
+  /**
+   * Implementation of getFunctionNames that enables retrying if a cached connection fails
+   *
+   * @param databaseName The name of the database to use to load the table.
+   * @param schemaName The name of the schema to use to load the table.
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return
+   */
+  private Set<String> getFunctionNamesImpl(
+      String databaseName, String schemaName, boolean shouldRetry) {
+    try {
+      DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
+      // Passing null for tableNamePattern should match all table names. Although
+      // this is not in the public documentation. Passing null for types ensures we
+      // allow all possible table types, including regular tables and views.
+      ResultSet tableInfo = metaData.getFunctions(databaseName, schemaName, null);
+      HashSet<String> tableNames = new HashSet<>();
+      while (tableInfo.next()) {
+        // Table name is stored in column 3
+        // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getFunctions
+        tableNames.add(tableInfo.getString(3));
+      }
+      return tableNames;
+    } catch (SQLException e) {
+      String errorMsg =
+          String.format(
+              "Unable to get functions names for Schema '%s'.'%s' from Snowflake account. Error"
+                  + " message: %s",
+              databaseName, schemaName, e);
+      if (shouldRetry) {
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
+        closeConnections();
+        return getFunctionNamesImpl(databaseName, schemaName, false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
+    }
+  }
+
+  /**
+   * Returns all functions defined in this catalog with a given name and schema path.
+   *
+   * @param schemaPath The list of schemas to traverse before finding the function.
+   * @param funcName Name of functions with a given name.
+   * @return Collection of all functions with that name.
+   */
+  public Collection<org.apache.calcite.schema.Function> getFunctions(
+      ImmutableList<String> schemaPath, String funcName) {
+    if (schemaPath.size() != 2) {
+      return Set.of();
+    }
+    throw new RuntimeException(
+        String.format(
+            Locale.ROOT,
+            "Unable to resolve function: %s.%s.%s. BodoSQL does not have support for Snowflake"
+                + " UDFs yet",
+            schemaPath.get(0),
+            schemaPath.get(1),
+            funcName));
   }
 
   /**
@@ -977,7 +1053,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // We ignore any exception from closing the connection string as
         // we should no longer need to connect to Snowflake. This could happen
         // for example if the connection already timed out.
-        VERBOSE_LEVEL_TWO_LOGGER.warning(
+        VERBOSE_LEVEL_THREE_LOGGER.warning(
             String.format(
                 "Exception encountered when trying to close the Snowflake connection: %s", e));
       }
@@ -1088,7 +1164,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   + "Snowflake Error Message: %s",
               query, e.getMessage());
       if (shouldRetry) {
-        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         executeExplainQueryImpl(query, false);
       } else {
