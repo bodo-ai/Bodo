@@ -39,6 +39,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         val columnNames = deriveRowType().fieldNames
         return super.explainTerms(pw)
             .item("Columns", columnNames)
+            .itemIf("View", true, catalogTable.isAccessibleView())
     }
 
     override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
