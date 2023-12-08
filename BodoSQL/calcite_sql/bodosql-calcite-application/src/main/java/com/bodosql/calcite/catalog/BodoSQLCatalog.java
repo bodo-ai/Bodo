@@ -6,8 +6,10 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -80,6 +82,23 @@ public interface BodoSQLCatalog {
    * @return List of default Schema for this catalog.
    */
   List<String> getDefaultSchema(int depth);
+
+  /**
+   * Returns a set of all function names with the given schema name.
+   *
+   * @param schemaPath The list of schemas to traverse before finding the function.
+   * @return Set of function names.
+   */
+  Set<String> getFunctionNames(ImmutableList<String> schemaPath);
+
+  /**
+   * Returns all functions defined in this catalog with a given name and schema path.
+   *
+   * @param schemaPath The list of schemas to traverse before finding the function.
+   * @param funcName Name of functions with a given name.
+   * @return Collection of all functions with that name.
+   */
+  Collection<Function> getFunctions(ImmutableList<String> schemaPath, String funcName);
 
   /**
    * Generates the code necessary to produce an append write expression from the given catalog.

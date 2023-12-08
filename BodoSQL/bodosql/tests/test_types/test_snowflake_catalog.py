@@ -2975,3 +2975,26 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
         # Verify that NICK_BASE_TABLE is found in the logger message so the
         # view was inlined.
         check_logger_msg(stream, "NICK_BASE_TABLE")
+
+
+def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs give a message that they aren't supported yet,
+    which should differ from the default "access" issues.
+
+    PLUS_ONE is manually defined inside TEST_DB.PUBLIC.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select PLUS_ONE(1)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.PLUS_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)

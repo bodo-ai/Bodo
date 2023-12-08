@@ -77,8 +77,7 @@ public abstract class BodoSqlSchema implements Schema {
   }
 
   /**
-   * Returns all functions defined in this schema with a given name. This is likely used for a
-   * stored procedure syntax but is not implemented for BodoSQL.
+   * Returns all functions defined in this schema with a given name.
    *
    * @param funcName Name of functions with a given name.
    * @return Collection of all functions with that name.
