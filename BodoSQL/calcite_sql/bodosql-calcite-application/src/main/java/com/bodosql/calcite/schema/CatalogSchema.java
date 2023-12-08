@@ -7,7 +7,6 @@ import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.apache.calcite.schema.Function;
@@ -24,15 +23,19 @@ public class CatalogSchema extends BodoSqlSchema {
    */
   private final BodoSQLCatalog catalog;
 
-  // Set used to cache the table names fetched from catalog
+  // Set used to cache the table names fetched from the catalog
   private Set<String> tableNames = null;
-  // Set used to cache the subSchema names fetched from catalog
+  // Set used to cache the subSchema names fetched from the catalog
   private Set<String> subSchemaNames = null;
+  // Set used to cache the function names fetched from the catalog
+  private Set<String> functionNames = null;
 
   // Hashmap used to cache tables fetched from the catalog
   private final HashMap<String, CatalogTable> tableMap;
   // Hashmap used to cache schemas fetched from the catalog
   private final HashMap<String, CatalogSchema> subSchemaMap;
+  // Hashmap used to cache functions fetched from the catalog
+  private final HashMap<String, Collection<Function>> functionMap;
 
   /**
    * Primary constructor for a CatalogSchema. This stores the relevant attributes and initializes
@@ -45,8 +48,9 @@ public class CatalogSchema extends BodoSqlSchema {
       String name, int depth, ImmutableList<String> schemaPath, BodoSQLCatalog catalog) {
     super(name, depth, schemaPath);
     this.catalog = catalog;
-    this.tableMap = new HashMap<>();
-    this.subSchemaMap = new HashMap<>();
+    this.tableMap = new HashMap();
+    this.subSchemaMap = new HashMap();
+    this.functionMap = new HashMap();
   }
 
   /**
@@ -138,8 +142,7 @@ public class CatalogSchema extends BodoSqlSchema {
   }
 
   /**
-   * Returns all functions defined in this schema with a given name. This is likely used for a
-   * stored procedure syntax but is not implemented for BodoSQL.
+   * Returns all functions defined in this schema with a given name.
    *
    * @param funcName Name of functions with a given name.
    * @return Collection of all functions with that name.
@@ -149,9 +152,17 @@ public class CatalogSchema extends BodoSqlSchema {
     if (!catalog.schemaDepthMayContainFunctions(getSchemaDepth())) {
       return List.of();
     }
-    // TODO: Replace with a working implementation
-    Collection<Function> functionCollection = new HashSet<>();
-    return functionCollection;
+    if (this.functionMap.containsKey(funcName)) {
+      return this.functionMap.get(funcName);
+    }
+    Collection<Function> functions = this.catalog.getFunctions(getFullPath(), funcName);
+    if (functions == null) {
+      throw new RuntimeException(
+          String.format("Function %s not found in Schema %s.", funcName, this.getName()));
+    } else {
+      this.functionMap.put(funcName, functions);
+    }
+    return functions;
   }
 
   /**
@@ -165,9 +176,10 @@ public class CatalogSchema extends BodoSqlSchema {
     if (!catalog.schemaDepthMayContainFunctions(getSchemaDepth())) {
       return Set.of();
     }
-    // TODO: Replace with a working implementation
-    Set<String> functionSet = new HashSet<>();
-    return functionSet;
+    if (functionNames == null) {
+      functionNames = this.catalog.getFunctionNames(this.getFullPath());
+    }
+    return functionNames;
   }
 
   /**
