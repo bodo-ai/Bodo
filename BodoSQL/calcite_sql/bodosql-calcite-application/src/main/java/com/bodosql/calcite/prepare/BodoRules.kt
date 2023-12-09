@@ -14,6 +14,7 @@ import com.bodosql.calcite.application.logicalRules.FilterFlattenTranspose
 import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
+import com.bodosql.calcite.application.logicalRules.FilterSetOpTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.InnerJoinRemoveRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
@@ -95,6 +96,12 @@ object BodoRules {
     @JvmField
     val FILTER_AGGREGATE_TRANSPOSE_RULE: RelOptRule =
         FilterAggregateTransposeRuleNoWindow.Config.DEFAULT
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val FILTER_SETOP_TRANSPOSE_RULE: RelOptRule =
+        FilterSetOpTransposeRuleNoWindow.Config.DEFAULT
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -533,6 +540,7 @@ object BodoRules {
         // Rules for pushing filters
         FILTER_PROJECT_TRANSPOSE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
+        FILTER_SETOP_TRANSPOSE_RULE,
         FILTER_INTO_JOIN_RULE,
         FILTER_JOIN_RULE,
         FILTER_FLATTEN_TRANSPOSE_RULE,
