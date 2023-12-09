@@ -88,10 +88,11 @@ object BodoPrograms {
 
         // Simplification & filter push down step.
         if (optimize) {
-            HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES, BodoRules.CSE_RULES))
+            HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES))
         } else {
             NoopProgram
         },
+
         // We eliminate common subexpressions in filters only after all filters have been pushed down.
         if (optimize) {
             HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))

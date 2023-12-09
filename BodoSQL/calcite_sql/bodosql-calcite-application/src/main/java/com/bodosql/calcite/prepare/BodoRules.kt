@@ -584,6 +584,8 @@ object BodoRules {
      * ideally through metadata.
      */
     val CSE_RULES: List<RelOptRule> = listOf(
+        // NOTE: TRIVIAL_PROJECT_FILTER_TRANSPOSE can't be run with filter pushdown without Volcano.
+        // If we ever want to run CSE_RULES with filter pushdown, this needs to be removed.
         TRIVIAL_PROJECT_FILTER_TRANSPOSE,
         PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
         PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
