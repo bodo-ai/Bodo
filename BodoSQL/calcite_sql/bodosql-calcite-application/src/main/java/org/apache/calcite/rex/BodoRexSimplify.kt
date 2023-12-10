@@ -2,11 +2,20 @@ package org.apache.calcite.rex
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import com.google.common.collect.ImmutableList
+import java.awt.SystemColor.window
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.util.*
+import java.util.regex.Pattern
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
+import org.apache.calcite.rel.RelFieldCollation
+import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlOperator
@@ -14,14 +23,11 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.BasicSqlType
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.util.*
-import java.util.regex.Pattern
 
 /**
  * Bodo's implementation of RexSimplifier
@@ -150,6 +156,37 @@ class BodoRexSimplify(
         }
     }
 
+    /**
+     * Simplify a Numeric cast via the infix cast ::.
+     * Right now we only add functionality where we omit intermediate casts that
+     * are always safe.
+     *
+     * This is motivated by a gap in our Snowflake typing where we can type NUMBER(38,0)
+     * as BIGINT, so when inlining a view we will generate a cast of X::DECIMAL(38,0)::BIGINT
+     * where X has an original type of BIGINT.
+     */
+    private fun simplifyIntegerCast(call: RexCall): RexNode {
+        return if (call.operands[0].kind == SqlKind.CAST || call.operands[0].kind == SqlKind.SAFE_CAST) {
+            val outerCastType = call.type
+            val innerCast = call.operands[0] as RexCall
+            val innerCastType = innerCast.type
+            val innerMostNode = innerCast.operands[0]
+            val innerMostNodeType = innerMostNode.type
+            val allNumeric = SqlTypeFamily.EXACT_NUMERIC.contains(outerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerMostNodeType)
+            val allInteger = outerCastType.scale == 0 && innerCastType.scale == 0 && innerMostNodeType.scale == 0
+            val innerIsUpcast = innerCastType.precision >= innerMostNodeType.precision
+            // We can remove at least 1 cast if it's all integers and there is an upcast for the first cast.
+            if (allNumeric && allInteger && innerIsUpcast) {
+                // Determine if we can return the innermost node or we need a new cast
+                rexBuilder.makeCast(outerCastType, innerMostNode)
+            } else {
+                call
+            }
+        } else {
+            call
+        }
+    }
+
     private fun isDateConversion(e: RexNode): Boolean {
         return e is RexCall && (
             e.operator.name == CastingOperatorTable.TO_DATE.name ||
@@ -268,6 +305,7 @@ class BodoRexSimplify(
      */
     private fun simplifyBodoCast(call: RexCall, unknownAs: RexUnknownAs): RexNode {
         return when (call.getType().sqlTypeName) {
+            SqlTypeName.INTEGER, SqlTypeName.SMALLINT, SqlTypeName.TINYINT, SqlTypeName.BIGINT -> simplifyIntegerCast(call)
             SqlTypeName.DATE -> simplifyDateCast(call)
             SqlTypeName.TIMESTAMP -> simplifyTimestampCast(call)
             SqlTypeName.VARCHAR -> simplifyVarcharCast(call, unknownAs)
@@ -811,6 +849,48 @@ class BodoRexSimplify(
     }
 
     /**
+     * Simplify RexOver by simplifying the values in Operands,
+     * Partition By, and Order By.
+     *
+     * Note, it might be possible to pass unknownAs here, but that requires
+     * an investigation to verify how it should be extended to each component.
+     */
+    private fun simplifyRexOver(e: RexOver): RexNode {
+        val newOperands = e.operands.map { x -> simplify(x) }
+        val operandChange = e.operands.zip(newOperands).any { x -> x.first != x.second }
+        val window = e.window
+        val newPartitionBy = window.partitionKeys.map { x -> simplify(x) }
+        val partitionByChange = window.partitionKeys.zip(newPartitionBy).any { x -> x.first != x.second }
+        val listBuilder = ImmutableList.builder<RexFieldCollation>()
+        for (w in window.orderKeys) {
+            listBuilder.add(RexFieldCollation(simplify(w.key), w.value))
+        }
+        val newOrderByNodes = listBuilder.build()
+        val orderByChange = window.orderKeys.zip(newOrderByNodes).any { x -> x.first.key != x.second.key }
+        // Generate a new node if there is any change.
+        return if (operandChange || partitionByChange || orderByChange) {
+            rexBuilder.makeOver(
+                e.getType(),
+                e.operator as SqlAggFunction,
+                newOperands,
+                newPartitionBy,
+                newOrderByNodes,
+                window.lowerBound,
+                window.upperBound,
+                window.isRows,
+                // Note allowPartial and nullWhenCountZero are set
+                // to avoid requiring case based optimizations.
+                true,
+                false,
+                e.isDistinct,
+                e.ignoreNulls(),
+            )
+        } else {
+            e
+        }
+    }
+
+    /**
      * Implementation of simplifyUnknownAs where we simplify custom Bodo functions
      * and then dispatch to the regular RexSimplifier.
      */
@@ -829,6 +909,7 @@ class BodoRexSimplify(
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
                 isCoalesceComparison(e) -> simplifyCoalesceComparison(e as RexCall)
                 isLength(e) -> simplifyLength(e as RexCall)
+                e is RexOver -> simplifyRexOver(e)
                 else -> e
             }
         }
