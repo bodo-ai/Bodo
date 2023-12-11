@@ -22,7 +22,7 @@ dependencies:
   - fsspec >=2021.09
 
   # HDFS
-  - hdf5 >=1.14,<1.15.0a0=*mpi_mpich_*
+  - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_*
   - h5py
 
   # MPI
