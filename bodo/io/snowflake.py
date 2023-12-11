@@ -39,7 +39,7 @@ if TYPE_CHECKING:  # pragma: no cover
 # How long the schema / typeof probe query should run for in the worst case.
 # This is to guard against increasing compilation time prohibitively in case there are
 # issues with Snowflake, the data, etc.
-SF_READ_SCHEMA_PROBE_TIMEOUT = 10
+SF_READ_SCHEMA_PROBE_TIMEOUT = 20
 
 # Whether to do a probe query to determine whether string columns should be
 # dictionary-encoded. This doesn't effect the _bodo_read_as_dict argument.
@@ -464,7 +464,7 @@ def execute_query(
         if "SQL execution canceled" in str(e):
             return None
         else:
-            raise
+            raise e
 
 
 def escape_col_name(col_name: str) -> str:
@@ -801,6 +801,7 @@ def snowflake_type_str_to_pyarrow_datatype(
     source_colname: str,
     cur_type: str,
     tz: str,
+    can_system_sample: bool,
 ) -> Optional[pa.DataType]:
     """
     Convert a Set of Snowflake Type Strings to a PyArrow type
@@ -817,6 +818,8 @@ def snowflake_type_str_to_pyarrow_datatype(
         cur_type: Currently known type of the column as a string
             Used for error reporting
         tz: System Timezone, for timestamp types
+        can_system_sample: True if the table having its semi-structured types examined
+            can be done with system sampling.
 
     Returns:
         PyArrow DataType if successful, None if unable to determine
@@ -866,11 +869,23 @@ def snowflake_type_str_to_pyarrow_datatype(
         return pa.timestamp("ns", tz=tz)
     elif value_type == "ARRAY":
         return get_list_type_from_metadata(
-            cursor, sql_query, colname, source_colname, cur_type, tz
+            cursor,
+            sql_query,
+            colname,
+            source_colname,
+            cur_type,
+            tz,
+            False,
         )
     elif value_type == "OBJECT":
         return get_map_type_from_metadata(
-            cursor, sql_query, colname, source_colname, cur_type, tz
+            cursor,
+            sql_query,
+            colname,
+            source_colname,
+            cur_type,
+            tz,
+            False,
         )
 
     elif value_type == "VARIANT":
@@ -889,6 +904,7 @@ def get_list_type_from_metadata(
     source_colname: str,
     cur_type: str,
     tz: str,
+    can_system_sample: bool,
 ):
     """
     Determine a precise output type for List Columns from Snowflake
@@ -896,16 +912,55 @@ def get_list_type_from_metadata(
     """
     cur_type = cur_type.format("list[{}]")
     # TODO: Slice array for beginning content
-    flatten_query = f"SELECT out.value as V FROM (SELECT * FROM (\n{sql_query}\n) SAMPLE (1000 ROWS)), LATERAL FLATTEN(input => {cur_colname}) out"
-    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
+    sample_clauses = None
+    if can_system_sample:
+        # If the source is a table, use system sampling to get 0.1% of all blocks which is a
+        # quick way to reduce the total number of rows. Also filters to remove all rows where
+        # the array is empty or null, so subsequent steps are only looking at rows that have
+        # useful information.
 
-    probe_res = execute_query(
-        cursor,
-        probe_query,
-        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        # However, we should only use this method of sampling if the row count is non-trivial
+        # (e.g. above a thousand)
+        rowcount_res = execute_query(
+            cursor,
+            f"SELECT COUNT(*) FROM {sql_query}",
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        )
+        if rowcount_res is not None:
+            rowcount_df = rowcount_res.fetch_pandas_all()
+            if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
+                sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size({cur_colname}) > 0"
+
+    if sample_clauses is None:
+        # If the source is a view, do the same but using a large limit to quickly narrow down
+        # the number of rows to sample from. System sampling is fast but doesn't work on views,
+        # row sampling does work on views but is prohibitively slow, so limit is the only option.
+        sample_clauses = f"WHERE {cur_colname} is not null and array_size({cur_colname}) > 0 LIMIT 1000000"
+
+    # Use row sampling on the narrowed down result that does not contain empty/null arrays to
+    # reduce the number of rows that are exploded to at most 1000
+    narrowed_query = (
+        f"(SELECT {cur_colname} FROM {sql_query} {sample_clauses}) SAMPLE (10000 ROWS)"
     )
 
-    if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
+    # Use flatten on the further reduced result to explode each array into 1 row per element,
+    # then gather all of the distinct types of the inner elements.
+    flatten_query = f"SELECT out.value as V FROM ({narrowed_query}), LATERAL FLATTEN(input => {cur_colname}) out"
+    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
+
+    # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
+    start_time = time.time()
+    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+        probe_res = execute_query(
+            cursor,
+            probe_query,
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        )
+        if probe_res is not None and len(types_df := probe_res.fetch_pandas_all()) > 0:
+            break
+    # If the query failed or did not produce any type strings, indicate failure since
+    # it will not be possible to infer the correct type.
+    if probe_res is None or len(types_df) == 0:
         raise BodoError(
             f"Snowflake Probe Query Failed or Timed out While Typing List Content in Column {source_colname}. "
             f"It is currently statically typed as {cur_type.format('...')} in the Source:\n"
@@ -914,7 +969,14 @@ def get_list_type_from_metadata(
 
     value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
     pa_type = snowflake_type_str_to_pyarrow_datatype(
-        value_types, cursor, flatten_query, "V", source_colname, cur_type, tz
+        value_types,
+        cursor,
+        f"({flatten_query})",
+        "V",
+        source_colname,
+        cur_type,
+        tz,
+        False,  # The source is no longer a table since it is the output of the flatten query
     )
 
     if pa_type is None:
@@ -952,7 +1014,7 @@ def get_struct_type_from_metadata(
             SELECT
                 {cur_colname} AS vals,
                 COUNT(vals) OVER () as src_cnt
-            FROM ({sql_query}) WHERE vals is not NULL LIMIT 1000
+            FROM (SELECT * FROM ({sql_query}) WHERE {cur_colname} is not NULL LIMIT 1000)
         ),
         keys_table AS (
             SELECT distinct t.key::text as keys
@@ -989,7 +1051,7 @@ def get_struct_type_from_metadata(
             cur_type = cur_type.format("...")
             raise BodoError(
                 f"Snowflake Probe found that Column {source_colname}, currently typed as {cur_type}, "
-                f"has a field {key_name} in < 0.5% of non-null rows. This imples {source_colname} has object elements "
+                f"has a field {key_name} in < 0.5% of non-null rows. This implies {source_colname} has object elements "
                 "with heterogenous values, which Bodo does not currently support."
             )
 
@@ -998,11 +1060,12 @@ def get_struct_type_from_metadata(
         pa_type = snowflake_type_str_to_pyarrow_datatype(
             value_types,
             cursor,
-            elem_query,
+            f"({elem_query})",
             "V",
             source_colname,
             cur_type.format(f"... {key_name}: {{}} ..."),
             tz,
+            False,  # The source is no longer a table since it is the output of the flatten query
         )
         if pa_type is None:
             raise BodoError(
@@ -1025,49 +1088,117 @@ def get_map_type_from_metadata(
     source_colname: str,
     cur_type: str,
     tz: str,
+    can_system_sample: bool,
 ):
     """
     Determine a precise output type for Map Columns from Snowflake
     See snowflake_type_str_to_pyarrow_datatype for argument types
     """
+    sample_clauses = None
+    if can_system_sample:
+        # If the source is a table, use system sampling to get 0.1% of all blocks which is a
+        # quick way to reduce the total number of rows. Also filters to remove all rows where
+        # the array is empty or null, so subsequent steps are only looking at rows that have
+        # useful information.
 
-    # TODO: Improve potential performance of query
-    flatten_query = f"""
-        SELECT out.value as V 
-        FROM (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS)),
-        LATERAL FLATTEN(input => {cur_colname}) out
-    """
-    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
+        # However, we should only use this method of sampling if the row count is non-trivial
+        # (e.g. above a thousand)
+        rowcount_res = execute_query(
+            cursor,
+            f"SELECT COUNT(*) FROM {sql_query}",
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        )
+        if rowcount_res is not None:
+            rowcount_df = rowcount_res.fetch_pandas_all()
+            if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
+                sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0"
 
-    probe_res = execute_query(
-        cursor,
-        probe_query,
-        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    if sample_clauses is None:
+        # If the source is a view, do the same but using a large limit to quickly narrow down
+        # the number of rows to sample from. System sampling is fast but doesn't work on views,
+        # row sampling does work on views but is prohibitively slow, so limit is the only option.
+        sample_clauses = f"WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0 LIMIT 1000000"
+
+    # Use row sampling on the narrowed down result that does not contain empty/null objects to
+    # reduce the number of rows that are exploded to at most 1000
+    narrowed_query = (
+        f"(SELECT {cur_colname} FROM {sql_query} {sample_clauses}) SAMPLE (10000 ROWS)"
     )
 
-    if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
+    # Use flatten on the further reduced result to explode each array into 1 row per element,
+    # then gather all of the distinct types of the inner elements.
+    flatten_query = f"SELECT out.value as V  FROM ({narrowed_query}), LATERAL FLATTEN(input => {cur_colname}) out"
+    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
+
+    # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
+    start_time = time.time()
+    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+        probe_res = execute_query(
+            cursor,
+            probe_query,
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        )
+        if probe_res is not None and len(types_df := probe_res.fetch_pandas_all()) > 0:
+            break
+    # If the query failed or did not produce any type strings, indicate failure since
+    # it will not be possible to infer the correct type.
+    if probe_res is None or len(types_df) == 0:
         raise BodoError(
             f"Snowflake Probe Query Failed or Timed out While Determining the Type of Column {cur_colname}.\n"
             f"Currently determined to be {cur_type.format('map[str, ...]')}. Timed-out Query:\n{sql_query}"
         )
 
+    # If we can find a unified value type, we will read the object column as
+    # maps with string keys and values of the unified value type.
     value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
     pa_type = snowflake_type_str_to_pyarrow_datatype(
         value_types,
         cursor,
-        flatten_query,
+        f"({flatten_query})",
         "V",
         source_colname,
         cur_type.format("map[str, {}]"),
         tz,
+        False,  # The source is no longer a table since it is the output of the flatten query
     )
 
+    # If we do not have a unified value type, try again but attempting
+    # to infer the type as a struct column.
     if pa_type is None:
         return get_struct_type_from_metadata(
-            cursor, sql_query, cur_colname, source_colname, cur_type, tz
+            cursor,
+            sql_query,
+            cur_colname,
+            source_colname,
+            cur_type,
+            tz,
         )
 
     return pa.map_(pa.large_string(), pa_type)
+
+
+def can_table_be_system_sampled(cursor: "SnowflakeCursor", table_name: Optional[str]):
+    """
+    Returns True if the table referenced by table_name is actually a table
+    that can be sampled from using system sampling by sending off a system
+    sample query that will not retrieve any real data.
+
+    If nothing goes wrong, then the table is actually a table that can be
+    system sampled, so we return True.
+
+    If something goes wrong, the table cannot be system sampled so we
+    return False.
+    """
+    if table_name is None:
+        return False
+    try:
+        fake_sample_query = f"SELECT * FROM {table_name} SAMPLE SYSTEM(0)"
+        execute_query(
+            cursor, fake_sample_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
+        ).fetch_pandas_all()
+        return True
+    except snowflake.connector.errors.ProgrammingError as e:
+        return False
 
 
 def get_schema_from_metadata(
@@ -1120,16 +1251,32 @@ def get_schema_from_metadata(
         dtype = type_code_to_arrow_type(
             field_meta.type_code, field_meta, tz, is_select_query
         )
-
         # For any UnknownSnowflakeType columns, fetch metadata to get internal
         if isinstance(dtype, UnknownSnowflakeType):
+            can_system_sample = can_table_be_system_sampled(cursor, orig_table)
+            if orig_table is None:
+                src, cur_col = f"({desc_query})", field_meta.name
+            else:
+                src, cur_col = orig_table, f"${orig_table_indices[i]+1}"
             if dtype == UnknownSnowflakeType.LIST:
                 dtype = get_list_type_from_metadata(
-                    cursor, sql_query, field_meta.name, field_meta.name, "{}", tz
+                    cursor,
+                    src,
+                    cur_col,
+                    field_meta.name,
+                    "{}",
+                    tz,
+                    can_system_sample,
                 )
             elif dtype == UnknownSnowflakeType.OBJECT:
                 dtype = get_map_type_from_metadata(
-                    cursor, sql_query, field_meta.name, field_meta.name, "{}", tz
+                    cursor,
+                    src,
+                    cur_col,
+                    field_meta.name,
+                    "{}",
+                    tz,
+                    can_system_sample,
                 )
 
         assert isinstance(

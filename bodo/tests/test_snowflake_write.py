@@ -1145,7 +1145,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         pd.DataFrame(
             {
                 # list list
-                "A": pd.Series(
+                "a": pd.Series(
                     [
                         [1, 2],
                         [3],
@@ -1167,7 +1167,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             pd.DataFrame(
                 {
                     # struct
-                    "A": pd.Series(
+                    "a": pd.Series(
                         [
                             [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
                             [{"A": 3, "B": 4}],
@@ -1198,7 +1198,6 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
                     ),
                 }
             ),
-            marks=pytest.mark.skip("Reading struct arrays unsupported"),
         ),
     ],
     ids=["list_list", "struct"],
@@ -1223,34 +1222,14 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
 
     with ensure_clean_snowflake_table(conn, bodo_tablename) as b_tablename:
         test_write(_get_dist_arg(df), b_tablename, conn, schema)
-        bodo_result = bodo.jit(sf_read)(conn, b_tablename)
-        # Snowflake column names are not case sensitive and read as lower case
-        bodo_result.columns = bodo_result.columns.str.capitalize()
-
-    bodo_result = bodo.gatherv(bodo_result)
-
-    passed = 1
-    if bodo.get_rank() == 0:
-        # Sort output as data read via read_sql doesn't necessarily have to have
-        # the same row ordering
-        bodo_result["SORT_COLUMN"] = bodo_result["A"].apply(lambda x: hash(tuple(x)))
-        df["SORT_COLUMN"] = df["A"].apply(lambda x: hash(tuple(x)))
-
-        bodo_result = bodo_result.sort_values("SORT_COLUMN").reset_index(drop=True)
-        df = df.sort_values("SORT_COLUMN").reset_index(drop=True)
-        try:
-            pd.testing.assert_frame_equal(
-                bodo_result,
-                df,
-                check_dtype=False,
-            )
-        except Exception as e:
-            print("".join(traceback.format_exception(None, e, e.__traceback__)))
-            passed = 0
-
-    n_passed = reduce_sum(passed)
-    n_pes = bodo.get_size()
-    assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part3 failed"
+        check_func(
+            sf_read,
+            (conn, b_tablename),
+            py_output=df,
+            check_dtype=False,
+            check_names=False,
+            convert_columns_to_pandas=True,
+        )
 
 
 def test_snowflake_to_sql_nullarray(memory_leak_check):
