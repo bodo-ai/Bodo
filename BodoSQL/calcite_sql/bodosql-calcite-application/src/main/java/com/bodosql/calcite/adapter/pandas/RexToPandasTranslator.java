@@ -768,7 +768,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     RelDataType outputType = operation.getType();
     assert operation.operands.size() == 1;
     Expr child = operation.getOperands().get(0).accept(this);
-    return generateCastCode(child, inputType, outputType, outputScalar, streamingNamedArgs);
+    return generateCastCode(
+        child, inputType, outputType, outputScalar, streamingNamedArgs, visitor);
   }
 
   protected Expr visitTryCastScan(RexCall operation) {
@@ -936,7 +937,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       RelDataType outputType,
       boolean isScalar,
       List<Pair<String, Expr>> streamingNamedArgs) {
-    return generateCastCode(arg, inputType, outputType, isScalar, streamingNamedArgs);
+    return generateCastCode(arg, inputType, outputType, isScalar, streamingNamedArgs, visitor);
   }
 
   protected Expr visitTrimFunc(String fnName, Expr stringToBeTrimmed, Expr charactersToBeTrimmed) {
