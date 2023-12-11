@@ -1144,6 +1144,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
     [
         pd.DataFrame(
             {
+                "idx": list(range(7)),
                 # list list
                 "a": pd.Series(
                     [
@@ -1166,6 +1167,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
+                    "idx": list(range(7)),
                     # struct
                     "a": pd.Series(
                         [
@@ -1217,7 +1219,7 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
         df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
 
     def sf_read(conn, tablename):
-        ans = pd.read_sql(f"select * from {tablename}", conn)
+        ans = pd.read_sql(f"select * from {tablename} order by idx", conn)
         return ans
 
     with ensure_clean_snowflake_table(conn, bodo_tablename) as b_tablename:
