@@ -1364,7 +1364,7 @@ def test_object_insert(query, df, answer, memory_leak_check):
 def test_object_insert_case(df, answer, memory_leak_check):
     query = "SELECT CASE WHEN B THEN NULL ELSE OBJECT_INSERT(D, 'b', V) END FROM TABLE1"
     ctx = {"table1": df}
-    expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
+    expected_output = pd.DataFrame({0: range(len(df)), 1: answer})
     expected_output[1][ctx["table1"].B] = None
     check_query(
         query,
