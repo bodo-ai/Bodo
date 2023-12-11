@@ -1,6 +1,7 @@
 package org.apache.calcite.sql.validate.implicit
 
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
@@ -46,6 +47,41 @@ internal class VariantCastTable {
             )
         }
 
+        /**
+         * @param prec The precision of the decimal type.
+         * @return An integer type that can represent it.
+         */
+        private fun chooseIntegerType(prec: Int): SqlTypeName =
+            if (prec < 3) { SqlTypeName.TINYINT }
+            else
+                if (prec < 5) { SqlTypeName.SMALLINT }
+            else
+                    if (prec < 10) { SqlTypeName.INTEGER }
+            else { SqlTypeName.BIGINT }
+
+        /**
+         * @param precisions: the precision that each argument should be casted to.
+         *
+         * @return A function that returns the type to implicitly cast each variant
+         * arguments to, where each argument is casted to a decimal type with the
+         * specified precision.
+         *
+         * Note: for the time being it is casted to an integer type based on
+         * the precision. In future, we will switch this to use the correct
+         * decimal type.
+         */
+        private fun anyArgNumberCast(vararg precisions: Int): (RelDataType, RelDataTypeFactory, Int) -> RelDataType =
+            {
+                    inType: RelDataType, factory: RelDataTypeFactory, i: Int ->
+                if (i >= precisions.size) { inType } else {
+                    factory.createTypeWithNullability(
+                        factory.createSqlType(chooseIntegerType(precisions[i])),
+                        inType.isNullable,
+                    )
+                }
+            }
+
+        // TODO: switch to decimal types with precisions
         private val padCasting = {
                 inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
             val typeName = if (idx == 1) {
@@ -63,6 +99,9 @@ internal class VariantCastTable {
          * Generate the new types for the given argument for any function that
          * has some arguments which need to be cast to string and other
          * arguments that need to be cast to the same numeric type (integer, bigInt, etc).
+         *
+         * TODO: change behavior to coerce the numeric arguments to decimal types
+         * with certain precisions.
          *
          * @param inType: The original input type. This is returned if the argument number
          * is beyond the argument limit and is used to determine nullability.
@@ -340,6 +379,26 @@ internal class VariantCastTable {
             StringOperatorTable.REGEXP_SUBSTR to regexpSubstrCast,
             StringOperatorTable.REGEXP_INSTR to regexpInstrCast,
             StringOperatorTable.REGEXP_REPLACE to regexpReplaceCast,
+            NumericOperatorTable.BITAND_AGG to anyArgNumberCast(18),
+            NumericOperatorTable.BITOR_AGG to anyArgNumberCast(18),
+            NumericOperatorTable.BITXOR_AGG to anyArgNumberCast(18),
+            NumericOperatorTable.BITAND to anyArgNumberCast(18, 18),
+            NumericOperatorTable.BITOR to anyArgNumberCast(18, 18),
+            NumericOperatorTable.BITXOR to anyArgNumberCast(18, 18),
+            NumericOperatorTable.BITNOT to anyArgNumberCast(18),
+            NumericOperatorTable.BITSHIFTLEFT to anyArgNumberCast(18, 18),
+            NumericOperatorTable.BITSHIFTRIGHT to anyArgNumberCast(18, 18),
+            NumericOperatorTable.GETBIT to anyArgNumberCast(18, 18),
+            NumericOperatorTable.FACTORIAL to anyArgNumberCast(2),
+            CondOperatorTable.BOOLAND to anyArgNumberCast(18, 18),
+            CondOperatorTable.BOOLOR to anyArgNumberCast(18, 18),
+            CondOperatorTable.BOOLXOR to anyArgNumberCast(18, 18),
+            CondOperatorTable.BOOLNOT to anyArgNumberCast(18),
+            DatetimeOperatorTable.DATE_FROM_PARTS to anyArgNumberCast(9, 9, 9),
+            DatetimeOperatorTable.DATEFROMPARTS to anyArgNumberCast(9, 9, 9),
+            DatetimeOperatorTable.TIME_FROM_PARTS to anyArgNumberCast(9, 9, 9, 18),
+            DatetimeOperatorTable.TIMEFROMPARTS to anyArgNumberCast(9, 9, 9, 18),
+            NumericOperatorTable.MEDIAN to anyArgNumberCast(9),
         ).mapKeys { it.key.name }
     }
 }
