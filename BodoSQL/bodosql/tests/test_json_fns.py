@@ -1071,8 +1071,6 @@ def test_object_insert_conflicting_key_struct(memory_leak_check):
             {"table1": df},
             None,
             expected_output=pd.DataFrame({}),
-            only_jit_1DVar=True,
-            sort_output=False,
         )
 
 
@@ -1099,8 +1097,6 @@ def test_object_insert_conflicting_key_map():
             {"table1": df},
             None,
             expected_output=pd.DataFrame({0: []}),
-            check_dtype=False,
-            run_dist_tests=False,
         )
 
 
