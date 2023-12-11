@@ -2,12 +2,14 @@ package org.apache.calcite.sql.validate.implicit
 
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
@@ -19,6 +21,14 @@ internal class VariantCastTable {
                 inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.BOOLEAN),
+                inType.isNullable,
+            )
+        }
+
+        private val anyArgDateCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+            factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.DATE),
                 inType.isNullable,
             )
         }
@@ -256,6 +266,17 @@ internal class VariantCastTable {
          * TODO: Ensure these lists are exhaustive.
          */
         val variantNameMapping = mapOf(
+            CondOperatorTable.BOOLOR_AGG to anyArgBooleanCast,
+            CondOperatorTable.BOOLAND_AGG to anyArgBooleanCast,
+            CondOperatorTable.BOOLXOR_AGG to anyArgBooleanCast,
+            CondOperatorTable.CONDITIONAL_TRUE_EVENT to anyArgBooleanCast,
+            DatetimeOperatorTable.DAYNAME to anyArgDateCast,
+            DatetimeOperatorTable.MONTHNAME to anyArgDateCast,
+            DatetimeOperatorTable.MONTH_NAME to anyArgDateCast,
+            JsonOperatorTable.OBJECT_AGG to arg0VarcharCast,
+            JsonOperatorTable.JSON_EXTRACT_PATH_TEXT to anyArgVarcharCast,
+            StringOperatorTable.REPEAT to varcharIntegerCast,
+            SqlAggOperatorTable.LISTAGG to arg0VarcharCast,
             SqlStdOperatorTable.AND to anyArgBooleanCast,
             SqlStdOperatorTable.OR to anyArgBooleanCast,
             SqlStdOperatorTable.NOT to anyArgBooleanCast,
