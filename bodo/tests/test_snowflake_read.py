@@ -443,8 +443,8 @@ def test_nested_in_array_metadata_handling(cursor):
             pa.large_list(
                 pa.struct(
                     [
-                        pa.field("name", pa.large_string()),
                         pa.field("stat", pa.bool_()),
+                        pa.field("name", pa.large_string()),
                         pa.field("cnt", pa.int64()),
                     ]
                 )
@@ -550,8 +550,8 @@ def test_nested_in_map_metadata_handling(cursor):
                 pa.large_string(),
                 pa.struct(
                     [
-                        pa.field("name", pa.large_string()),
                         pa.field("stat", pa.bool_()),
+                        pa.field("name", pa.large_string()),
                         pa.field("cnt", pa.int64()),
                     ]
                 ),
@@ -1293,33 +1293,44 @@ def test_read_nested_in_array_col(memory_leak_check):
     check_func(impl, (queryB, conn), py_output=py_output, use_map_arrays=True)
 
 
-@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
 def test_read_nested_struct_in_array_col(memory_leak_check):
-    # Err when comparing in pd.testing.assert_frame_equal
-    # TODO: Wait for Pandas 2. Arrow can compare nested dicts
     def impl(query, conn):
         df = pd.read_sql(query, conn)
         return df
 
     py_output = pd.DataFrame(
         {
-            "c": [
+            "c": pd.array(
                 [
-                    {"name": "dos", "stat": np.nan, "cnt": np.nan},
-                    {"name": "tres", "stat": False, "cnt": -2},
+                    [
+                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "tres", "stat": False, "cnt": -2},
+                    ],
+                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [],
                 ],
-                [{"name": "uno", "stat": False, "cnt": np.nan}],
-                [],
-            ]
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [
+                                pa.field("stat", pa.bool_()),
+                                pa.field("name", pa.string()),
+                                pa.field("cnt", pa.int64()),
+                            ]
+                        )
+                    )
+                ),
+            )
         }
     )
     queryC = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
     conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
-    check_func(impl, (queryC, conn), py_output=py_output)
+    check_func(
+        impl, (queryC, conn), py_output=py_output, convert_columns_to_pandas=True
+    )
 
 
-# TODO: [BSE-2040] Find memory leak and add back memory_leak_check
-def test_read_nested_in_map_col():
+def test_read_nested_in_map_col(memory_leak_check):
     """
     Basic test to read nested semi-structured data in Map Columns
     """
@@ -1371,11 +1382,39 @@ def test_read_nested_in_map_col():
     queryB = "SELECT B FROM NESTED_MAP_TEST ORDER BY A"
     check_func(impl, (queryB, conn), py_output=py_output, use_map_arrays=True)
 
-    # Cant test because outer dicts need to be map, inner need to be struct
-    # TODO: Wait for Pandas 2. Arrow can compare nested dicts
-    # py_output = pd.DataFrame(...)
-    # queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
-    # check_func(impl, (queryC, conn), py_output=py_output)
+    py_output = pd.DataFrame(
+        {
+            "c": pd.Series(
+                [
+                    {},
+                    {
+                        "bodo": None,
+                        "snowflake": {"stat": False, "name": "uno", "cnt": None},
+                    },
+                    {
+                        "hive": {"stat": False, "name": "tres", "cnt": -2},
+                        "teradata": {"stat": None, "name": "dos", "cnt": None},
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(
+                        pa.string(),
+                        pa.struct(
+                            [
+                                pa.field("stat", pa.bool_()),
+                                pa.field("name", pa.string()),
+                                pa.field("cnt", pa.int64()),
+                            ]
+                        ),
+                    )
+                ),
+            ),
+        }
+    )
+    queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
+    check_func(
+        impl, (queryC, conn), py_output=py_output, convert_columns_to_pandas=True
+    )
 
 
 def test_read_nested_in_struct_col(memory_leak_check):
