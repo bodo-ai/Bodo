@@ -572,6 +572,34 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
     )  # pragma: no cover
 
 
+@overload(operator.setitem, no_unliteral=True)
+def numpy_arr_setitem(A, idx, val):
+    """Support setitem of Numpy arrays with nullable float arrays"""
+    if not (
+        isinstance(A, types.Array)
+        and isinstance(A.dtype, types.Float)
+        and isinstance(val, FloatingArrayType)
+    ):
+        return
+
+    def impl_np_setitem_float_arr(A, idx, val):  # pragma: no cover
+        # NOTE: NAs are lost in this operation if present for SQL so upstream operations
+        # should make sure this is safe. For example, BodoSQL may know output is
+        # non-nullable but internal operations may use nullable types by default.
+        # See test_literals.py::test_array_literals_case"[integer_literals]"
+
+        # Make sure data elements of NA values are NaN to pass the NAs to output
+        data = val._data
+        bitmap = val._null_bitmap
+        for i in range(len(val)):
+            if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
+                data[i] = np.nan
+
+        A[idx] = data
+
+    return impl_np_setitem_float_arr
+
+
 @overload(len, no_unliteral=True)
 def overload_float_arr_len(A):  # pragma: no cover
     if isinstance(A, FloatingArrayType):

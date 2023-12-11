@@ -757,6 +757,31 @@ def overload_setitem(A, ind, val):
     )  # pragma: no cover
 
 
+@overload(operator.setitem, no_unliteral=True)
+def numpy_arr_setitem(A, idx, val):
+    """Support setitem of Numpy arrays with nullable datetime arrays"""
+    if not (
+        isinstance(A, types.Array)
+        and (A.dtype == bodo.datetime64ns)
+        and isinstance(val, DatetimeArrayType)
+    ):
+        return
+
+    nat = bodo.datetime64ns("NaT")
+
+    def impl_np_setitem_datetime_arr(A, idx, val):  # pragma: no cover
+        # Make sure data elements of NA values are NaT to pass the NAs to output
+        data = val._data
+        bitmap = val._null_bitmap
+        for i in range(len(val)):
+            if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
+                data[i] = nat
+
+        A[idx] = data
+
+    return impl_np_setitem_datetime_arr
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def unwrap_tz_array(A):
     if isinstance(A, DatetimeArrayType):
