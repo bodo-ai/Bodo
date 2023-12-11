@@ -343,200 +343,228 @@ def json_extract_path_text_util(data, path):
 
 
 @register_jitable
-def process_json_path(path: str) -> List[Tuple[bool, str]]:  # pragma: no cover
+def parse_quoted_string(path: str, i: int) -> Tuple[int, str, str]:  # pragma: no cover:
+    """Parse a string starting at position i
+
+    Note that both single and double quoted strings are suppported.
+
+    Args:
+        path: the path being parsed
+        i: the position to start scanning for a quoted string
+
+    Returns:
+        Tuple[int, str, str]: a tuple containing the position of the parser
+        after parsing an integer and the string that was parsed, and any errors
+        encountered. If the error string has a non-zero length, then the first
+        two fields should not be read.
+    """
+
+    if path[i] != '"' and path[i] != "'":
+        return (-1, "", "Expected quoted string")
+    quote = path[i]
+
+    value = ""
+    i += 1
+    escaping = False
+    closed = False
+    while i < len(path):
+        if escaping:
+            escaping = False
+            value += path[i]
+        else:
+            if path[i] == "\\":
+                escaping = True
+            elif path[i] == quote:
+                closed = True
+            else:
+                value += path[i]
+        i += 1
+        if closed:
+            break
+    if not closed:
+        return (-1, "", "Unterminated quoted string argument")
+    if len(value) == 0:
+        return (-1, "", "Unexpected empty quoted string")
+    return i, value, ""
+
+
+@register_jitable
+def parse_int(path: str, i: int) -> Tuple[int, int, str]:  # pragma: no cover
+    """Parse an integer starting at position i
+    Args:
+        path: the path being parsed
+        i: the position to start scanning for an integer
+
+    Returns:
+        Tuple[int, int, str]: a tuple containing the position of the parser after
+    parsing an integer, the integer that was parsed, and an error message. If the er
+    """
+    value = 0
+    char0 = ord("0")
+    if not path[i].isdigit():
+        return (
+            -1,
+            -1,
+            f"Expected digit, but got '{path[i]}' at position {i} of {path}",
+        )
+    while path[i].isdigit():
+        value *= 10
+        value += ord(path[i]) - char0
+        i += 1
+    return i, value, ""
+
+
+@register_jitable
+def process_json_path(
+    path: str,
+) -> Tuple[List[Tuple[int, str]], str]:  # pragma: no cover
     """Utility for json_extract_path_text_util to take in a path and break it
-       up into each component index/field, and identify which of the two it is.
+       up into each component index/field.
 
     Args:
         path (string): the path being used to parse a JSON string.
 
     Returns:
-        list[tuple[boolean, string]]: the components of a path, each with a boolean
-        that is True if the component is an index, and False if it is a field name.
-
-    Raises:
-        ValueError: if the path is malformed
+        tuple[list[tuple[int, string]], string]: a tuple with the result of the
+        operation and an error message. If the error message is empty, the
+        result will be the components of a path, each with a valid index value
+        if it was an index operation, and a field name if not. If the component
+        was a field name, the integer will always be -1. If the error message
+        is non-empty, then the result should not be read.
 
     For example:
 
     path = '[3].Person["Name"].First'
-    Returns the following list: [(True, "3"), (False, "Person"), (False, "Name"), (False, "FIrst")]
+    Returns the following list: [(3, ""), (-1, "Person"), (-1, "Name"), (-1, "First")]
     """
+
+    path_parts = []
 
     # If this boolean flag is set True at any point, it means that the path is
     # malformed so an exception will be raised
-    invalid_path = False
     if len(path) == 0:
-        invalid_path = True
-
-    path_parts = []
+        return (path_parts, "Expected non-empty path")
 
     # Keep scanning until the end of the path is reached or the invalid flag
     # is set to True
     i = 0
     while i < len(path):
-        if invalid_path:
-            break
-
-        # Handling sections of the path in the form [index] or ["field_name"]
+        if path[i] == ".":
+            return (path_parts, "Unexpected '.' in JSON path argument")
+        str_arg = ""
+        int_arg = -1
         if path[i] == "[":
-            # Various boolean flags used to keep track of the characters inside
-            # of the brackets:
-            # - found_string: if True, then the component is of the form ["field_name"]
-            # - found_number: if True, then the component is of the form [index]
-            # - finished_value: if True, then the component is completed and searching
-            #                   for a right bracket to terminate it
-            # - found_key: if True, then the right bracket has been found
-            # - escaped: should the next character be escaped
-            # - in_str: is a string currently being processed
-            # - string_type: if in_str is True, which quote type started the string
-            # - current_part: accumulator of characters in the current component,
-            #                 exclusing the brackets and quotes (if present)
-            found_string = False
-            found_number = False
-            finished_value = False
-            found_key = False
-            escaped = False
-            in_str = False
-            string_type = ""
-            current_part = ""
+            i += 1
+            if i == len(path):
+                return (
+                    path_parts,
+                    f"Expected index but got END OF STRING at position {i} in JSON path argument",
+                )
+            if path[i] == '"' or path[i] == "'":
+                # Accessing a field via []
+                i, str_arg, err_msg = parse_quoted_string(path, i)
+                if len(err_msg) > 0:
+                    return (path_parts, err_msg)
+            else:
+                # Indexing
+                i, int_arg, err_msg = parse_int(path, i)
+                if len(err_msg) > 0:
+                    return (path_parts, err_msg)
 
-            # Scan through the remaining characters after the left bracket
-            for j in range(i + 1, len(path)):
-                # Handle cases where a string is being processed
-                if in_str:
-                    if escaped:
-                        escaped = False
-                        current_part += path[j]
-                    elif path[j] == "\\":
-                        escaped = True
-                    elif path[j] == string_type:
-                        finished_value = True
-                        in_str = False
-                    else:
-                        current_part += path[j]
-
-                # If not in a string, then ignore whitespace
-                elif path[j].isspace():
-                    if found_number:
-                        finished_value = True
-
-                # Handle the end of the current component by appending
-                # to the final list and moving up the start pointer
-                elif path[j] == "]":
-                    if not found_number and not finished_value:
-                        invalid_path = True
-                        break
-                    found_key = True
-                    if found_string:
-                        path_parts.append((False, current_part))
-                    else:
-                        # Verify that the index is a positive number:
-                        current_part = current_part.strip()
-                        if not current_part.isdigit() or int(current_part) < 0:
-                            invalid_path = True
-                            break
-                        path_parts.append((True, current_part))
-                    # If the next character is a dot, skip it
-                    if j < len(path) - 2 and path[j + 1] == ".":
-                        i = j + 2
-                        break
-                    # Otherwise, move up the start pointer to the next character
-                    else:
-                        i = j + 1
-                        break
-
-                # If the value has been finished and one of the prior cases
-                # was not triggered, then the path is malformed
-                elif finished_value:
-                    invalid_path = True
-                    break
-
-                # If currently scanning a number, add the current character to it
-                # unless it is a whitespace, which would mean the number is finished
-                elif found_number:
-                    if path[j].isspace():
-                        finished_value = True
-                    elif path[j].isdigit():
-                        current_part += path[j]
-                    else:
-                        invalid_path = True
-                        break
-
-                # Handle cases where the left bracket has been found and
-                # the start of the component is still being searched for
-                else:
-                    if path[j] in "'\"":
-                        string_type = path[j]
-                        in_str = True
-                        found_string = True
-                    elif path[j].isdigit():
-                        found_number = True
-                        current_part = path[j]
-                    else:
-                        invalid_path = True
-
-            if not found_key:
-                invalid_path = True
-                break
-
-        # Handling field names that are not enclosed by brackets and quotes
+            if i == len(path):
+                return (
+                    path_parts,
+                    f"Expected ']' but got END OF STRING at position {i} in JSON path argument",
+                )
+            if path[i] != "]":
+                return (
+                    path_parts,
+                    f"Expected ']' but got {path[i]} at position {i} in JSON path argument",
+                )
+            i += 1
         else:
-            # The first character in the field name must be a letter
-            if not path[i].isalpha():
-                invalid_path = True
-                break
-
-            # If the current letter is the last character in the path, then
-            # it is the entire field name
-            current_part = path[i]
-            if i == len(path) - 1:
-                path_parts.append((False, current_part))
-                break
-
-            # Loop through the remaining characters in the path until the end
-            # of the current field name is found. If the end of the string is
-            # encountered first, then halt the entire process
-            found_ending = False
-            for j in range(i + 1, len(path)):
-                # If the current character is a dot, then everything from i
-                # up to this point is the field name. If this is the end of
-                # the string, or the next character is a bracket, then it is
-                # malformed. The next field starts at the next character
-                if path[j] == ".":
-                    if j == len(path) - 1 or not path[j + 1].isalpha():
-                        invalid_path = True
+            if path[i] == '"':
+                # Parsing a quoted field
+                i, str_arg, err_msg = parse_quoted_string(path, i)
+                if len(err_msg) > 0:
+                    return (path_parts, err_msg)
+            else:
+                # Parsing a normal field, consume all characters until '.' or '['
+                start = i
+                while i < len(path):
+                    if path[i] == "[" or path[i] == ".":
                         break
-                    path_parts.append((False, current_part))
-                    i = j + 1
-                    break
+                    i += 1
+                str_arg = path[start:i]
+        path_parts.append((int_arg, str_arg))
 
-                # If the current character is a left bracket, then everything
-                # from i up to this point is the field name. The next field starts
-                # at this character
-                elif path[j] == "[":
-                    path_parts.append((False, current_part))
-                    i = j
-                    break
+        # If this isn't the end of the string, we expect a . or a [
+        if i != len(path):
+            if path[i] != "." and path[i] != "[":
+                return (
+                    path_parts,
+                    f"Expected one of '.', '[' but got {path[i]} at position {i} in JSON path argument",
+                )
+            if path[i] == ".":
+                i += 1
+                if i == len(path) or path[i] == "[":
+                    return (path_parts, "Unexpected '.' in JSON path argument")
 
-                # Otherwise, append the current character to the field name
-                else:
-                    current_part += path[j]
+    return (path_parts, "")
 
-                # If this is the end of the string, then the field name is
-                # complete
-                if j == len(path) - 1:
-                    path_parts.append((False, current_part))
-                    i = j + 1
-                    found_ending = True
 
-            if found_ending:
-                break
+@register_jitable
+def consume_whitespace(data: str, pos: int) -> int:  # pragma: no cover
+    """Return the position of the parser after consuming leading whitespace"""
+    while data[pos].isspace():
+        pos += 1
+    return pos
 
-    if invalid_path:
-        raise ValueError("JSON extraction: Invalid path")
 
-    return path_parts
+@register_jitable
+def consume_expected(data: str, pos: int, expected: str) -> int:  # pragma: no cover
+    """Return the position of the parser after consuming an expected string"""
+    actual = data[pos : pos + len(expected)]
+    if actual != expected:
+        raise ValueError(f"Expected {expected}, but got {actual}")
+    return pos + len(expected)
+
+
+@register_jitable
+def consume_json_value(data: str, pos: int) -> int:  # pragma: no cover
+    """Return the position of the parser after consuming a valid JSON value"""
+    brace_stack = []
+    quoted = False
+    quote = None
+    while pos < len(data):
+        c = data[pos]
+        if quoted:
+            if c == quote:
+                quoted = False
+            elif c == "\\":
+                if (pos + 1) == len(data):
+                    raise ValueError("Expected escaped character but got end of string")
+                pos += 1
+            pos += 1
+            continue
+
+        if len(brace_stack) == 0 and (c == "," or c == "]" or c == "}"):
+            return pos
+
+        if c == '"' or c == "'":
+            quoted = True
+            quote = c
+        elif c == "[" or c == "{":
+            brace_stack.append(c)
+        else:
+            if (c == "]" and brace_stack[-1] == "[") or (
+                c == "}" and brace_stack[-1] == "{"
+            ):
+                brace_stack.pop()
+        pos += 1
+    if len(brace_stack) or quoted:
+        raise ValueError("Malformed JSON input")
+    return pos
 
 
 @register_jitable
@@ -555,214 +583,86 @@ def parse_and_extract_json_string(
     # Pre-process the path to make sure it is valid, and extract a list of
     # tuples indicating which paths are fields vs indices, and the indices
     # themselves.
-    path_parts = process_json_path(path)
+    path_parts, error_msg = process_json_path(path)
+    if len(error_msg) != 0:
+        raise ValueError(error_msg)
 
     invalid_data = False
 
     # Repeat the procedure until we reach the end
     # while True:
-    for indexing, current_path in path_parts:
-        # Various indices used to keep track of the distinct entities
-        # in the string as they are being parsed, as well as the total
-        # number of entries found, a stack of unclosed brackets, the opening
-        # character of an unclosed string, whether the next character
-        # is to be escaped, and whether the next value to be parsed is the
-        # target value.
-        current_key = ""
-        current_value = ""
-        entries_found = 0
-        stack = ["[" if indexing else "{"]
-        string_type = ""
-        escaped = False
+    for target_index, target_key in path_parts:
         new_data = None
-        target_value = indexing and int(current_path) == 0
+        i = consume_whitespace(data, 0)
+        if target_index >= 0:
+            if data[i] != "[":
+                new_data = None
+            else:
+                i += 1
+                # Consume the first `target_index` values
+                for _ in range(target_index):
+                    i = consume_whitespace(data, i)
+                    i = consume_json_value(data, i)
+                    i = consume_whitespace(data, i)
+                    if data[i] == "]":
+                        break
+                    i = consume_expected(data, i, ",")
 
-        # Initialize the state based on whether we are indexing into an array
-        # or looking for a field in an object.
-        state = 0 if indexing else 1
+                if data[i] != "]":
+                    # Get the current value and save it as new_data
+                    i = consume_whitespace(data, i)
+                    value_start = i
+                    i = consume_json_value(data, i)
+                    new_data = data[value_start:i]
+        else:
+            if data[i] != "{":
+                return None
+            i += 1
+            while True:
+                # Get the current key
+                i = consume_whitespace(data, i)
+                i, key, err_msg = parse_quoted_string(data, i)
+                if len(err_msg) > 0:
+                    raise ValueError(err_msg)
 
-        for i in range(len(data)):
-            # 0: look for the start of an array (ignoring whitespace)
-            if state == 0:
-                if data[i].isspace():
-                    continue
-                elif data[i] == "[":
-                    state = 5
-                else:
-                    return None
+                i = consume_whitespace(data, i)
+                i = consume_expected(data, i, ":")
 
-            # 1: look for the start of an object (ignoring whitespace)
-            elif state == 1:
-                if data[i].isspace():
-                    continue
-                elif data[i] == "{":
-                    state = 2
-                else:
-                    return None
+                # Get the current value
+                i = consume_whitespace(data, i)
+                value_start = i
+                i = consume_json_value(data, i)
 
-            # 2: look for the start of a key string (ignoring whitespace)
-            elif state == 2:
-                if data[i].isspace():
-                    continue
-                elif data[i] in "'\"":
-                    string_type = data[i]
-                    state = 3
-                else:
-                    invalid_data = True
+                # If the current key is target_key, then save the current value
+                # as new_data and break
+                if key == target_key:
+                    new_data = data[value_start:i]
                     break
 
-            # 3: look for the end of a key string
-            elif state == 3:
-                if escaped:
-                    current_key += data[i]
-                    escaped = False
-                elif data[i] == "\\":
-                    escaped = True
-                elif data[i] == string_type:
-                    target_value = current_key == current_path
-                    state = 4
-                else:
-                    current_key += data[i]
-
-            # 4: look for a colon (ignoring whitespace)
-            elif state == 4:
-                if data[i].isspace():
-                    continue
-                elif data[i] == ":":
-                    state = 5
-                else:
-                    invalid_data = True
+                i = consume_whitespace(data, i)
+                if data[i] == "}":
+                    i += 1
                     break
-
-            # 5: look for value to be parsed (ignoring whitespace)
-            elif state == 5:
-                if data[i].isspace():
-                    continue
-                elif data[i] in "'\"":
-                    if target_value:
-                        current_value += data[i]
-                    string_type = data[i]
-                    state = 7
-                elif data[i] in "[{":
-                    stack.append(data[i])
-                    if target_value:
-                        current_value += data[i]
-                    state = 6
-                else:
-                    if target_value:
-                        current_value += data[i]
-                    state = 6
-
-            # 6: parse a value
-            elif state == 6:
-                # If a comma is encountered and the top level of data is
-                # being processed, then the current value has terminated
-                if data[i] == "," and len(stack) == 1:
-                    if indexing:
-                        if target_value:
-                            new_data = current_value.strip()
-                            break
-                        state = 5
-                        entries_found += 1
-                        target_value = int(current_path) == entries_found
-                    else:
-                        if target_value:
-                            new_data = current_value.strip()
-                            break
-                        state = 2
-                        current_key = ""
-
-                # If a "]" is encountered and the top level of data is
-                # being processed, then the current value has terminated. It
-                # is the answer if the number of entries already found is the
-                # index that is being sought
-                elif indexing and data[i] == "]" and len(stack) == 1:
-                    if entries_found == int(current_path):
-                        new_data = current_value.strip()
-                        break
-                    return None
-
-                # If a "}" is encountered and the top level of data is
-                # being processed, then the current value has terminated. Its
-                # value is the answer if the key matches the field name sought
-                elif (not indexing) and data[i] == "}" and len(stack) == 1:
-                    if current_key == current_path:
-                        new_data = current_value.strip()
-                        break
-                    return None
-
-                # If a single or double quote is encountered, a string has begun
-                elif data[i] in "'\"":
-                    if target_value:
-                        current_value += data[i]
-                    string_type = data[i]
-                    state = 7
-
-                # If a left bracket (square or curly) is encountered, push them
-                # onto the stack
-                elif data[i] in "[{":
-                    if target_value:
-                        current_value += data[i]
-                    stack.append(data[i])
-
-                # If a right bracket is encountered, make sure it matches the
-                # top value of the stack, then pop the top element of the stack
-                elif data[i] == "]":
-                    if target_value:
-                        current_value += data[i]
-                    if len(stack) == 0 or stack[-1] != "[":
-                        invalid_data = True
-                        break
-                    else:
-                        stack.pop()
-                elif data[i] == "}":
-                    if target_value:
-                        current_value += data[i]
-                    if len(stack) == 0 or stack[-1] != "{":
-                        invalid_data = True
-                        break
-                    else:
-                        stack.pop()
-
-                # Otherwise, append the current character to the value
-                else:
-                    if target_value:
-                        current_value += data[i]
-
-            # 7: parse a substring
-            elif state == 7:
-                if escaped:
-                    if target_value:
-                        current_value += data[i]
-                    escaped = False
-                elif data[i] == "\\":
-                    escaped = True
-                elif data[i] == string_type:
-                    if target_value:
-                        current_value += data[i]
-                    state = 6
-                else:
-                    if target_value:
-                        current_value += data[i]
-
-        if invalid_data:
-            break
+                i = consume_expected(data, i, ",")
 
         if new_data is None:
             return None
-        else:
-            if new_data[0] in "'\"":
-                if len(new_data) < 2 or new_data[-1] != new_data[0]:
-                    invalid_data = True
-                    break
-                else:
-                    new_data = new_data[1:-1]
-
-            data = new_data
+        data = new_data.strip()
 
     if invalid_data:
         raise ValueError(f"JSON extraction: malformed string cannot be parsed")
 
+    # Special case for strings - we parse the string into a SQL string
+    if data[0] == '"' or data[0] == "'":
+        ret_val = ""
+        escaping = False
+        for i in range(1, len(data) - 1):
+            if not escaping and data[i] == "\\":
+                escaping = True
+            else:
+                escaping = False
+                ret_val += data[i]
+        return ret_val
     return data
 
 
