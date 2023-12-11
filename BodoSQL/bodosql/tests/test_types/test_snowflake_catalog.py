@@ -2261,9 +2261,6 @@ def test_read_nested_array_in_array_col(test_db_snowflake_catalog, memory_leak_c
     check_func(impl, (bc, queryA), py_output=py_output)
 
 
-@pytest.mark.skip(
-    "TODO: Enable once operator.setitem over slices of map arrays is supported"
-)
 def test_read_nested_map_in_array_col(test_db_snowflake_catalog, memory_leak_check):
     """
     Basic test to read nested map data in array column
@@ -2276,25 +2273,27 @@ def test_read_nested_map_in_array_col(test_db_snowflake_catalog, memory_leak_che
 
     py_output = pd.DataFrame(
         {
-            "B": [
-                np.nan,
-                [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+            "B": pd.array(
                 [
-                    {
-                        "a": datetime.date(2023, 11, 12),
-                        "b": datetime.date(1980, 1, 5),
-                        "c": np.nan,
-                    },
-                    {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                    np.nan,
+                    [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+                    [
+                        {
+                            "a": datetime.date(2023, 11, 12),
+                            "b": datetime.date(1980, 1, 5),
+                            "c": np.nan,
+                        },
+                        {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                    ],
                 ],
-            ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.date32()))),
+            ),
         }
     )
     queryB = "SELECT B FROM NESTED_ARRAY_TEST ORDER BY idx"
-    check_func(impl, (bc, queryB), py_output=py_output, use_map_arrays=True)
+    check_func(impl, (bc, queryB), py_output=py_output, check_dtype=False)
 
 
-@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
 def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_check):
     """
     Basic test to read nested struct data in array column
@@ -2307,22 +2306,40 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
 
     py_output = pd.DataFrame(
         {
-            "c": [
+            "C": pd.array(
                 [
-                    {"name": "dos", "stat": np.nan, "cnt": np.nan},
-                    {"name": "tres", "stat": False, "cnt": -2},
+                    [None, {"name": "uno", "stat": False, "cnt": np.nan}],
+                    [
+                        {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                        {"name": "tres", "stat": False, "cnt": -2},
+                    ],
+                    [],
                 ],
-                [{"name": "uno", "stat": False, "cnt": np.nan}],
-                [],
-            ]
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [
+                                pa.field("stat", pa.bool_()),
+                                pa.field("name", pa.string()),
+                                pa.field("cnt", pa.int64()),
+                            ]
+                        )
+                    )
+                ),
+            )
         }
     )
-    queryC = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
-    check_func(impl, (bc, queryC), py_output=py_output)
+    query = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
 
 
-# TODO: [BSE-2040] Find memory leak and add back memory_leak_check
-def test_read_nested_array_in_map_col(test_db_snowflake_catalog):
+def test_read_nested_array_in_map_col(test_db_snowflake_catalog, memory_leak_check):
     """
     Basic test to read nested semi-structured data in Map Columns
     """
@@ -2350,9 +2367,6 @@ def test_read_nested_array_in_map_col(test_db_snowflake_catalog):
     check_func(impl, (bc, queryA), py_output=py_output, use_map_arrays=True)
 
 
-@pytest.mark.skip(
-    "TODO: Enable once operator.setitem over slices of map arrays is supported"
-)
 def test_read_nested_map_in_map_col(test_db_snowflake_catalog):
     """
     Basic test to read nested semi-structured data in Map Columns
@@ -2365,25 +2379,29 @@ def test_read_nested_map_in_map_col(test_db_snowflake_catalog):
 
     py_output = pd.DataFrame(
         {
-            "b": [
-                np.nan,
-                {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
-                {
-                    "bodo": {
-                        "a": datetime.date(2023, 11, 12),
-                        "b": datetime.date(1980, 1, 5),
-                        "c": np.nan,
+            "B": pd.array(
+                [
+                    np.nan,
+                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
+                    {
+                        "bodo": {
+                            "a": datetime.date(2023, 11, 12),
+                            "b": datetime.date(1980, 1, 5),
+                            "c": np.nan,
+                        },
+                        "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
                     },
-                    "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
-                },
-            ],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.map_(pa.string(), pa.date32()))
+                ),
+            ),
         }
     )
     queryB = "SELECT B FROM NESTED_MAP_TEST ORDER BY idx"
-    check_func(impl, (bc, queryB), py_output=py_output, use_map_arrays=True)
+    check_func(impl, (bc, queryB), py_output=py_output, check_dtype=False)
 
 
-@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
 def test_read_nested_struct_in_map_col(test_db_snowflake_catalog):
     """
     Basic test to read nested semi-structured data in Map Columns
@@ -2394,10 +2412,38 @@ def test_read_nested_struct_in_map_col(test_db_snowflake_catalog):
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
 
-    # Cant test because outer dicts need to be map, inner need to be struct
-    # py_output = pd.DataFrame(...)
-    # queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
-    # check_func(impl, (queryC, conn), py_output=py_output)
+    py_output = pd.DataFrame(
+        {
+            "C": pd.array(
+                [
+                    {},
+                    {
+                        "hive": {"stat": False, "name": "tres", "cnt": -2},
+                        "teradata": {"stat": None, "name": "dos", "cnt": None},
+                    },
+                    {
+                        "bodo": None,
+                        "snowflake": {"stat": False, "name": "uno", "cnt": None},
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(
+                        pa.string(),
+                        pa.struct(
+                            [
+                                pa.field("stat", pa.bool_()),
+                                pa.field("name", pa.string()),
+                                pa.field("cnt", pa.int64()),
+                            ]
+                        ),
+                    )
+                ),
+            )
+        }
+    )
+
+    query = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
+    check_func(impl, (bc, query), py_output=py_output, check_dtype=False)
 
 
 def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check):
@@ -2975,6 +3021,166 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
         # Verify that NICK_BASE_TABLE is found in the logger message so the
         # view was inlined.
         check_logger_msg(stream, "NICK_BASE_TABLE")
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            """
+            SELECT lat.key as k, avg(array_size(to_array(lat.value))) as avg_size
+            FROM cd_dvs,
+            LATERAL FLATTEN(json_utbet) lat
+            WHERE year(fta) = 2023 and month(fta) = 1
+            GROUP BY 1
+            ORDER BY avg_size desc
+            LIMIT 5
+            """,
+            pd.DataFrame(
+                {
+                    "k": [
+                        "UNBOXED_WHITEWARE",
+                        "GARGOYLE_PROUNIFORMITY",
+                        "UNFOLDER_KINDREND",
+                        "DUSTHEAP_LOLLARDLIKE",
+                        "BRAMBLEBUSH_ONYMOUS",
+                    ],
+                    "avg_size": [181.0, 156.0, 82.0, 64.125, 45.1],
+                }
+            ),
+            id="map_of_string_list-no_variant-with_filter",
+        ),
+        pytest.param(
+            """
+            SELECT lat.key as k, sum(array_size(to_array(lat.value))) as avg_val
+            FROM etl_ddss,
+            LATERAL FLATTEN(json_boi) lat
+            GROUP BY 1
+            ORDER BY k
+            """,
+            pd.DataFrame(
+                {
+                    "k": ["sbo1", "sbo1wc"],
+                    "avg_val": [1382192, 201333],
+                }
+            ),
+            id="struct_of_array_of_integer-no_variant-no_filter",
+        ),
+        pytest.param(
+            """
+            SELECT lat.value as k, COUNT(*) as c
+            FROM etl_ddss,
+            LATERAL FLATTEN(arr_oses) lat
+            WHERE date_trunc(day, logts) = DATE '2024-7-5'
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT 5
+            """,
+            pd.DataFrame(
+                {
+                    "k": [
+                        "'KVUTZAH_MALEVOLENCY_PROLEPTIC_BLANKETER'",
+                        "'ANACREON_PELTINERVED_PLUMPEST_CHANDELIERS'",
+                        "'CELLARESS_MICROPARASITE_PETROLEUM_SUPERSOCIAL'",
+                        "'COLOURMAN_DULBERT_AUTOGRAPHIST_QUINTUPLING'",
+                        "'EYELAST_SILVERROD_MICROSPHERICAL_CRESOL'",
+                    ],
+                    "c": [41, 32, 28, 21, 17],
+                }
+            ),
+            id="array_of_strings-no_variant-with_filter",
+        ),
+        pytest.param(
+            """
+            SELECT m, COUNT(*) as c
+            FROM (
+            SELECT date_trunc(month, logts) as m, json_boi:sbo1 as ids
+            FROM etl_ddss),
+            LATERAL FLATTEN(ids) lat
+            GROUP BY 1
+            ORDER BY c DESC
+            LIMIT 5
+            """,
+            pd.DataFrame(
+                {
+                    "m": [
+                        datetime.date(2025, 3, 1),
+                        datetime.date(2025, 1, 1),
+                        datetime.date(2025, 10, 1),
+                        datetime.date(2025, 5, 1),
+                        datetime.date(2025, 8, 1),
+                    ],
+                    "c": [40617, 40318, 40097, 39942, 39187],
+                }
+            ),
+            id="json_field_pushdown-no_filter",
+            marks=pytest.mark.skip(reason="[BSE-1807] Support variant read"),
+        ),
+        pytest.param(
+            """
+            SELECT lat.value as country, COUNT(*) as cnt
+            FROM can_bf,
+            LATERAL FLATTEN(object_keys(json_fom)) lat
+            GROUP BY 1
+            ORDER BY cnt desc
+            LIMIT 5
+            """,
+            pd.DataFrame(
+                {
+                    "country": ["USE", "CHE", "HKD", "CAD", "MEX"],
+                    "cnt": [86760, 81504, 76353, 71533, 65933],
+                }
+            ),
+            id="map_of_structs-with_variant-no_filter",
+            marks=pytest.mark.skip(reason="[BSE-1807] Support variant read"),
+        ),
+    ],
+)
+def test_nested_types_sparse_sampling(
+    query, answer, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests reading semi-structured columns from Snowflake to verify that the types are
+    inferred correctly, including cases where the types are difficult to infer due to
+    null/empty rows.
+    - cd_dvs
+        - json_ftbet: object (map[str,str])
+        - json_utbet: object (map[str,list[str]])
+        - json_feaba: object (map[str,int])
+        - json_neba: object (map[str,int])
+    - etl_ddss
+        - json_boi: object (struct[sbo1:list[int], sbo1wc:list[int]])
+        - arr_oses: array (list[str])
+        - arr_carses: array (list[str])
+        - arr_clises: array (list[str])
+        - arr_se: array (list[str])
+    - kin_ivrfv2
+        - arr_embed: array (list[str])
+    - can_brod
+        - json_rnks: object (struct[18 keys each mapping to an integer or a boolean])
+        - json_ffdubt: object (map[str,float])
+    - can_bf
+        - json_fom: variant (map[str,struct[cur:str,val:float]])
+        - json_rm: variant (map[str,struct[cur:str,val:float]])
+
+    Also serves as a more heavy-duty test of semi-structured operations and sampling, since
+    these tables are large and often have many rows that are null/empty, so inferring the
+    semi-structured type can be more difficult.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    check_func(
+        impl,
+        (bc, query),
+        py_output=answer,
+        check_names=False,
+        check_dtype=False,
+        only_1DVar=True,
+    )
 
 
 def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
