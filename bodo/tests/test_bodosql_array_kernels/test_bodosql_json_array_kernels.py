@@ -205,7 +205,6 @@ pytestmark = pytest_slow_unless_codegen
                 ]
             ),
             id="array_malformed",
-            marks=pytest.mark.skip(reason="[BSE-2079] TODO: fix Arrow array error"),
         ),
     ],
 )
