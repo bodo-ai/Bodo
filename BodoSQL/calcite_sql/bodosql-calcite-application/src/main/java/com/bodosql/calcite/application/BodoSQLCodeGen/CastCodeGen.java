@@ -1,16 +1,20 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
 import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.False;
 import com.bodosql.calcite.ir.Expr.None;
 import com.bodosql.calcite.ir.Expr.True;
+import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import kotlin.Pair;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -35,7 +39,8 @@ public class CastCodeGen {
       RelDataType inputType,
       RelDataType outputType,
       boolean outputScalar,
-      List<Pair<String, Expr>> streamingNamedArgs) {
+      List<Pair<String, Expr>> streamingNamedArgs,
+      PandasCodeGenVisitor visitor) {
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
     final String fnName;
@@ -76,6 +81,17 @@ public class CastCodeGen {
         args.add(Expr.None.INSTANCE);
         appendStreamingArgs = true;
         break;
+      case ARRAY:
+        if (outputScalar) {
+          fnName = "bodo.libs.array_item_arr_ext.sql_null_checking_scalar_conv_array";
+          // NOTE: there are limitations with multiple levels of nesting in the type system and
+          // sqlTypeToBodoArrayType
+          Expr outBodoType =
+              sqlTypeToBodoArrayType(Objects.requireNonNull(outputType.getComponentType()), false);
+          Variable outputArrayTypeGlobal = visitor.lowerAsGlobal(outBodoType);
+          args.add(outputArrayTypeGlobal);
+          return new Expr.Call(fnName, args);
+        }
       case TIMESTAMP:
         // If we cast from tz-aware to naive there is special handling. Otherwise, we
         // fall back to the default case.
@@ -87,12 +103,10 @@ public class CastCodeGen {
         if (outputType instanceof VariantSqlType) {
           return arg;
         }
-        StringBuilder asTypeBuilder = new StringBuilder();
         SqlTypeName typeName = outputType.getSqlTypeName();
         String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
         if (outputScalar) {
           fnName = dtype;
-          asTypeBuilder.append(dtype).append("(").append(arg).append(")");
         } else {
           // TODO(njriasan): replace Series.astype/dt with array operation
           fnName = "bodo.hiframes.pd_series_ext.get_series_data";
