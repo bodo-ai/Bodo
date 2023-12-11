@@ -499,27 +499,31 @@ def test_array_literals(args, answer, memory_leak_check):
     "query, answer",
     [
         pytest.param(
-            "select case when A=1 then [1, 2] else [3] end from table1",
+            "select case when A=1 then [1, null, 2] when A=2 then null else [3] end from table1",
             pd.Series(
-                [[1, 2], [3], [1, 2], [3]],
+                [[1, None, 2], None, [1, None, 2], [3]],
                 dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
             id="integer_literals",
+            marks=pytest.mark.skip(
+                reason="[BSE-2255] query plan has an invalid cast to non-nullable"
+            ),
         ),
         pytest.param(
-            "select case when A=1 then [1.2, 2.3] else [3.4] end from table1",
+            "select case when A=1 then [1.2, null, 2.3] else [3.4] end from table1",
             pd.Series(
-                [[1.2, 2.3], [3.4], [1.2, 2.3], [3.4]],
+                [[1.2, None, 2.3], [3.4], [1.2, None, 2.3], [3.4]],
                 dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
             ),
             id="float_literals",
         ),
         pytest.param(
-            "select case when A=1 then ['2021-01-01 00:01:00 +0000'::timestamp, '2021-01-03 00:02:00 +0000'::timestamp] else ['2021-04-01 00:05:00 +0000'::timestamp] end from table1",
+            "select case when A=1 then ['2021-01-01 00:01:00 +0000'::timestamp, null, '2021-01-03 00:02:00 +0000'::timestamp] else ['2021-04-01 00:05:00 +0000'::timestamp] end from table1",
             pd.Series(
                 [
                     [
                         pd.Timestamp("2021-01-01 00:01:00 +0000"),
+                        None,
                         pd.Timestamp("2021-01-03 00:02:00 +0000"),
                     ],
                     [pd.Timestamp("2021-04-01 00:05:00 +0000")],

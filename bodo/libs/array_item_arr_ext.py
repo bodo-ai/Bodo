@@ -50,6 +50,7 @@ from bodo.utils.typing import (
     BodoError,
     is_iterable_type,
     is_list_like_index_type,
+    unwrap_typeref,
 )
 
 # offset index types
@@ -825,3 +826,54 @@ def overload_array_item_arr_copy(A):
         )
 
     return copy_impl
+
+
+def _convert_array_type(arr, new_arr_type):
+    pass
+
+
+@overload(_convert_array_type)
+def overload_convert_array_type(arr, new_arr_type):
+    """Convert array to match target type.
+    Used in BodoSQL typically for nullability conversion.
+    """
+    if arr == unwrap_typeref(new_arr_type):
+        return lambda arr, new_arr_type: arr  # pragma: no cover
+
+    def impl(arr, new_arr_type):  # pragma: no cover
+        new_arr = bodo.utils.utils.alloc_type(len(arr), new_arr_type, (-1,))
+        # Reuse setitem element conversions
+        new_arr[:] = arr
+        return new_arr
+
+    return impl
+
+
+def sql_null_checking_scalar_conv_array(arg0, new_arr_type):  # pragma: no cover
+    pass
+
+
+@overload(sql_null_checking_scalar_conv_array)
+def overload_sql_null_checking_scalar_conv_array(arg0, new_arr_type):
+    """Convert scalar value of nested array to target array type for BodoSQL.
+    See similar scalar conversion functions such as sql_null_checking_scalar_conv_int8.
+    """
+
+    if arg0 == types.none:
+        return lambda arg0, new_arr_type: None  # pragma: no cover
+
+    elif isinstance(arg0, types.Optional):
+
+        def impl(arg0, new_arr_type):  # pragma: no cover
+            if arg0 is None:
+                return None
+            else:
+                arg0 = bodo.utils.indexing.unoptional(arg0)
+                return _convert_array_type(arg0, new_arr_type)
+
+        return impl
+
+    else:
+        return lambda arg0, new_arr_type: _convert_array_type(
+            arg0, new_arr_type
+        )  # pragma: no cover

@@ -22,9 +22,9 @@ public class LiteralCodeGen {
    * Function that return the necessary generated code for Literals.
    *
    * @param node The RexLiteral node.
-   * @param node isSingleRow flag for if table references refer to a single row or the whole table.
-   *     This is used for determining if an expr returns a scalar or a column. Only CASE statements
-   *     set this to True currently.
+   * @param isSingleRow flag for if table references refer to a single row or the whole table. This
+   *     is used for determining if an expr returns a scalar or a column. Only CASE statements set
+   *     this to True currently.
    * @param visitor The PandasCodeGenVisitor class. This is used to lower certain values as globals
    *     (only in the case that isSingleRow is false, we cannot lower globals within case
    *     statements)
@@ -36,45 +36,7 @@ public class LiteralCodeGen {
     // TODO: Add more types here
     switch (node.getTypeName()) {
       case NULL:
-        switch (typeName) {
-          case VARCHAR:
-          case CHAR:
-          case VARBINARY:
-          case BINARY:
-          case BOOLEAN:
-          case TINYINT:
-          case SMALLINT:
-          case INTEGER:
-          case BIGINT:
-          case DATE:
-          case TIMESTAMP:
-          case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-          case TIME:
-            // TODO: Support all remaining interval types.
-          case INTERVAL_DAY_HOUR:
-          case INTERVAL_DAY_MINUTE:
-          case INTERVAL_DAY_SECOND:
-          case INTERVAL_HOUR_MINUTE:
-          case INTERVAL_HOUR_SECOND:
-          case INTERVAL_MINUTE_SECOND:
-          case INTERVAL_HOUR:
-          case INTERVAL_MINUTE:
-          case INTERVAL_SECOND:
-          case INTERVAL_DAY:
-          case INTERVAL_YEAR:
-          case INTERVAL_MONTH:
-          case INTERVAL_YEAR_MONTH:
-          case NULL:
-          case FLOAT:
-          case REAL:
-          case DOUBLE:
-          case DECIMAL:
-            return Expr.None.INSTANCE;
-          default:
-            throw new BodoSQLCodegenException(
-                "Internal Error: Calcite Plan Produced an Unsupported Null Literal Type: "
-                    + typeName);
-        }
+        return Expr.None.INSTANCE;
       case SARG:
         List<Expr> literalList = new ArrayList<>();
 
