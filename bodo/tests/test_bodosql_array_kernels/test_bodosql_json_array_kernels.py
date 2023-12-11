@@ -698,7 +698,6 @@ def test_object_insert(data, key, value, answer, vector, memory_leak_check):
             (data, value),
             py_output=answer,
             check_dtype=False,
-            use_dict_encoded_strings=False,
         )
     else:
         check_func(
@@ -706,7 +705,6 @@ def test_object_insert(data, key, value, answer, vector, memory_leak_check):
             (data, value),
             py_output=answer[0],
             check_dtype=False,
-            use_dict_encoded_strings=False,
         )
 
 
