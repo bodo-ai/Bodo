@@ -610,6 +610,26 @@ def int_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
+@overload(operator.setitem, no_unliteral=True)
+def numpy_arr_setitem(A, idx, val):
+    """Support setitem of Numpy arrays with nullable int arrays"""
+    if not (
+        isinstance(A, types.Array)
+        and isinstance(A.dtype, types.Integer)
+        and isinstance(val, IntegerArrayType)
+    ):
+        return
+
+    def impl_np_setitem_int_arr(A, idx, val):  # pragma: no cover
+        # NOTE: NAs are lost in this operation if present so upstream operations should
+        # make sure this is safe. For example, BodoSQL may know output is non-nullable
+        # but internal operations may use nullable types by default.
+        # See test_literals.py::test_array_literals_case"[integer_literals]"
+        A[idx] = val._data
+
+    return impl_np_setitem_int_arr
+
+
 @overload(len, no_unliteral=True)
 def overload_int_arr_len(A):
     if isinstance(A, IntegerArrayType):

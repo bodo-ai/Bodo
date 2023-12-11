@@ -443,9 +443,6 @@ def test_large_day_literals(bodosql_date_types, memory_leak_check):
         pytest.param(
             "1, 2, 3",
             pd.Series([[1, 2, 3]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))),
-            marks=pytest.mark.skip(
-                reason="[BSE-2203] constructing arrays from literal ints causes a compiler error"
-            ),
             id="integer_literals",
         ),
         pytest.param(
@@ -490,6 +487,57 @@ def test_array_literals(args, answer, memory_leak_check):
     check_query(
         query,
         {"table1": pd.DataFrame({"A": [1] * 5})},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "select case when A=1 then [1, 2] else [3] end from table1",
+            pd.Series(
+                [[1, 2], [3], [1, 2], [3]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            id="integer_literals",
+        ),
+        pytest.param(
+            "select case when A=1 then [1.2, 2.3] else [3.4] end from table1",
+            pd.Series(
+                [[1.2, 2.3], [3.4], [1.2, 2.3], [3.4]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ),
+            id="float_literals",
+        ),
+        pytest.param(
+            "select case when A=1 then ['2021-01-01 00:01:00 +0000'::timestamp, '2021-01-03 00:02:00 +0000'::timestamp] else ['2021-04-01 00:05:00 +0000'::timestamp] end from table1",
+            pd.Series(
+                [
+                    [
+                        pd.Timestamp("2021-01-01 00:01:00 +0000"),
+                        pd.Timestamp("2021-01-03 00:02:00 +0000"),
+                    ],
+                    [pd.Timestamp("2021-04-01 00:05:00 +0000")],
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.timestamp("ns"))),
+            ),
+            id="timestamp_literals",
+        ),
+    ],
+)
+def test_array_literals_case(query, answer, memory_leak_check):
+    """Test array literals in CASE statements that may convert nullable type to
+    non-nullable
+    """
+    check_query(
+        query,
+        {"table1": pd.DataFrame({"A": [1, 2, 1, 4]})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_names=False,
