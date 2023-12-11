@@ -2,19 +2,16 @@ package org.apache.calcite.rex
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
-import java.awt.SystemColor.window
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.*
 import java.util.regex.Pattern
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
-import org.apache.calcite.rel.RelFieldCollation
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
@@ -23,7 +20,6 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.BasicSqlType
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
@@ -434,12 +430,15 @@ class BodoRexSimplify(
                 coalesceArg: RexNode, literal: RexLiteral ->
             rexBuilder.makeCall(retType, op, if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) })
         }
-        // Decompose COMP((COL, LIT2), LIT1) into OR(COMP(COL, LIT1), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
+        // Decompose COMP((COL, LIT2), LIT1) into OR(IS_TRUE(COMP(COL, LIT1)), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
         val columnComparison = makeComparison(coalesceCall.operands[0], lit)
         val columnNullCheck = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, listOf(coalesceCall.operands[0]))
         val literalComparison = makeComparison(coalesceCall.operands[1], lit)
-        val andVal = rexBuilder.makeCall(retType, SqlStdOperatorTable.AND, listOf(columnNullCheck, literalComparison))
-        return rexBuilder.makeCall(retType, SqlStdOperatorTable.OR, listOf(columnComparison, andVal))
+        // AND(IS_NULL(COL), COMP(LIT2, LIT1))
+        val literalComparisonWithNullCheck = rexBuilder.makeCall(retType, SqlStdOperatorTable.AND, listOf(columnNullCheck, literalComparison))
+        // IS_TRUE(COMP(COL, LIT1))
+        val columnComparisonWithNullCheck = rexBuilder.makeCall(retType, SqlStdOperatorTable.IS_TRUE, listOf(columnComparison))
+        return rexBuilder.makeCall(retType, SqlStdOperatorTable.OR, listOf(columnComparisonWithNullCheck, literalComparisonWithNullCheck))
     }
 
     /**
