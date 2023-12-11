@@ -211,6 +211,20 @@ def to_str_arr_if_dict_array(t):
     if isinstance(t, bodo.DataFrameType):
         return t.copy(data=tuple(to_str_arr_if_dict_array(t) for t in t.data))
 
+    if isinstance(t, bodo.ArrayItemArrayType):
+        return bodo.ArrayItemArrayType(to_str_arr_if_dict_array(t.dtype))
+
+    if isinstance(t, bodo.StructArrayType):
+        return bodo.StructArrayType(
+            tuple(to_str_arr_if_dict_array(a) for a in t.data), t.names
+        )
+
+    if isinstance(t, bodo.MapArrayType):
+        return bodo.MapArrayType(
+            to_str_arr_if_dict_array(t.key_arr_type),
+            to_str_arr_if_dict_array(t.value_arr_type),
+        )
+
     return t
 
 

@@ -17,6 +17,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_str,
     raise_bodo_error,
+    to_str_arr_if_dict_array,
 )
 
 
@@ -961,6 +962,10 @@ def object_insert_util(data, new_field_name, new_field_value, update, is_scalar)
         scalar_text += "struct_arr[n_keys - 1] = bodo.libs.struct_arr_ext.init_struct_with_nulls((arg1, arg2), (False, val_is_null), map_struct_names)\n"
 
         scalar_text += "res[i] = struct_arr"
+
+    # Avoid allocating dictionary-encoded output in gen_vectorized since not supported
+    # by the kernel
+    out_dtype = to_str_arr_if_dict_array(out_dtype)
 
     return gen_vectorized(
         arg_names,
