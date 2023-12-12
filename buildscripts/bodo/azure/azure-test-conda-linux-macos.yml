@@ -48,7 +48,7 @@ jobs:
       # Ensure that conda/mamba install/update/remove commands
       # do not try to mutate the environment beyond what's required.
       conda config --add aggressive_update_packages nodefaults
-    displayName: 'Set conda config'
+    displayName: 'Set Conda Config'
 
   - script: |
       source activate base
@@ -66,31 +66,24 @@ jobs:
     displayName: 'Install Numba Dev'
     condition: and(succeeded(), eq('${{ parameters.useNumbaDev }}', 'true'))
 
-  - task: DownloadSecureFile@1
-    name: secret_file
-    inputs:
-      secureFile: 'publish_binary_secrets'
-    displayName: 'Download Secrets File'
+  - download: current
+    artifact: Bodo-CondaPkg-Linux
 
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      sudo chmod a+r $(secret_file.secureFilePath)
-      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
-
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
-      USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
-      TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 
-      cd $(System.DefaultWorkingDirectory)
-      artifactory_channel=`./buildscripts/get_channel.sh`
+      # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ is used to install the package
+      # from the locally built artifact in the previous step.
+      # This works even if we build multiple versions of the package in the same pipeline.
       # --no-update-deps ensures that no dependencies are upgraded.
       # If the conda-lock file is out of date, this would cause this installation
       # to fail. To fix, we usually need to update the lock-file.
-      mamba install -y bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel -c conda-forge --no-update-deps
-    displayName: 'Install Bodo from Artifactory'
+      mamba install -y bodo=$BODO_VERSION -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-update-deps
+    displayName: 'Install Bodo'
 
   - script: |
       set -eo pipefail
@@ -150,12 +143,6 @@ jobs:
     displayName: 'Setup Oracle Database Testing'
     retryCountOnTaskFailure: 5
 
-  - task: DownloadSecureFile@1
-    name: testLicense
-    inputs:
-      secureFile: 'bodo.lic'
-    displayName: 'Download Test License'
-
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
@@ -171,6 +158,12 @@ jobs:
   - publish: $(System.DefaultWorkingDirectory)/env
     artifact: TestEnv $(Agent.JobName)
     continueOnError: true
+
+  - task: DownloadSecureFile@1
+    name: testLicense
+    inputs:
+      secureFile: 'bodo.lic'
+    displayName: 'Download Test License'
 
   - script: |
       set -eo pipefail

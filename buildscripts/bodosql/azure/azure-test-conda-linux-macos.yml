@@ -42,7 +42,7 @@ jobs:
       # Ensure that conda/mamba install/update/remove commands
       # do not try to mutate the environment beyond what's required.
       conda config --add aggressive_update_packages nodefaults
-    displayName: 'Set conda config'
+    displayName: 'Set Conda Config'
 
   - script: |
       source activate base
@@ -51,33 +51,33 @@ jobs:
       pipx run conda-lock install -E azure -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
     displayName: 'Create Mamba Env'
 
-  - task: DownloadSecureFile@1
-    name: secret_file
-    inputs:
-      secureFile: 'publish_binary_secrets'
-    displayName: 'Download Secrets File'
+  - download: current
+    artifact: Bodo-CondaPkg-Linux
+
+  - download: current
+    artifact: BodoSQL-CondaPkg
 
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      sudo chmod a+r $(secret_file.secureFilePath)
-      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
-
+      export BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/bodosql/azure/artifactory_install.sh "false"
+
+      CIN="mamba install -y --no-update-deps"
+      $CIN bodo=$BODO_BODOSQL_VERSION -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge
+      $CIN bodosql=$BODO_BODOSQL_VERSION -c $(Pipeline.Workspace)/BodoSQL-CondaPkg/ -c conda-forge
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-    displayName: 'Install Bodo and BodoSQL from Artifactory'
+    displayName: 'Install Bodo and BodoSQL'
 
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      cd $(System.DefaultWorkingDirectory)
-      cd iceberg
+      cd $(System.DefaultWorkingDirectory)/iceberg
       pip install -v .
     displayName: "Build Iceberg Connector"
 
@@ -108,7 +108,6 @@ jobs:
 
       sudo chmod a+r $(testLicense.secureFilePath)
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
-
       cd $HOME/bodo-inc
       cp `python -c "import bodosql; print(bodosql.__file__[:-11])"`pytest.ini .
       # For caching tests we need to update the location of the decryption file.
