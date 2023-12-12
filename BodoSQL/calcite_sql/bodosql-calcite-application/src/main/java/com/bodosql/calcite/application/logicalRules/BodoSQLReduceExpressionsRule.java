@@ -114,11 +114,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     @Override
     public void onMatch(RelOptRuleCall call) {
       final Filter filter = call.rel(0);
-      if (filter.containsOver()) {
-        // We cannot reduce filter expressions with an over yet.
-        // This may not be necessary but this is a precaution.
-        return;
-      }
       // Bodo Change: Do not reduce filters that contain Case statements.
       if (rexNodeContainsCase(filter.getCondition())) {
         return;
