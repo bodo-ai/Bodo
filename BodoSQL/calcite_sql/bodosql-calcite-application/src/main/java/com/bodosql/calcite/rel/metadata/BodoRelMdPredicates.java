@@ -147,8 +147,11 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       } else {
         Mappings.TargetMapping leftMapping =
             Mappings.createShiftMapping(nSysFields + nFieldsLeft, nSysFields, 0, nFieldsLeft);
+        // Bodo Change: Simplify the lifted predicate.
         leftChildPredicates =
-            leftPredicates.accept(new RexPermuteInputsShuttle(leftMapping, joinRel.getInput(0)));
+            simplify.simplify(
+                leftPredicates.accept(
+                    new RexPermuteInputsShuttle(leftMapping, joinRel.getInput(0))));
 
         allExprs.add(leftChildPredicates);
         for (RexNode r : RelOptUtil.conjunctions(leftChildPredicates)) {
@@ -162,8 +165,11 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         Mappings.TargetMapping rightMapping =
             Mappings.createShiftMapping(
                 nSysFields + nFieldsLeft + nFieldsRight, nSysFields + nFieldsLeft, 0, nFieldsRight);
+        // Bodo Change: Simplify the lifted predicate.
         rightChildPredicates =
-            rightPredicates.accept(new RexPermuteInputsShuttle(rightMapping, joinRel.getInput(1)));
+            simplify.simplify(
+                rightPredicates.accept(
+                    new RexPermuteInputsShuttle(rightMapping, joinRel.getInput(1))));
 
         allExprs.add(rightChildPredicates);
         for (RexNode r : RelOptUtil.conjunctions(rightChildPredicates)) {
@@ -367,7 +373,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
           }
           if (checkTarget(inferringFields, allExprs, tr)
               && checkTarget(inferringFields, allExprs, simplifiedTarget)) {
-            // Bodo Change: Write to an integer mediate target instead.
+            // Bodo Change: Write to an intermediate target instead.
             localInferredPredicates.add(simplifiedTarget);
             allExprs.add(simplifiedTarget);
           }
