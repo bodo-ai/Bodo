@@ -80,3 +80,5 @@ jobs:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
     displayName: 'Publish BodoSQL Binary to Artifactory'
     condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))
+    retryCountOnTaskFailure: 5
+    continueOnError: true
