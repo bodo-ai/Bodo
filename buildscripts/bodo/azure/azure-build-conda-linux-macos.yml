@@ -16,6 +16,9 @@ parameters:
 - name: weeklyTest
   type: boolean
   default: false
+- name: uploadArtifactory
+  type: boolean
+  default: true
 - name: pythonVersion
   type: string
   default: ''
@@ -149,6 +152,7 @@ jobs:
     displayName: Export Environment Spec
 
   - publish: $(System.DefaultWorkingDirectory)/env
+    displayName: 'Publish Environment Spec to Artifacts'
     artifact: CondaBuildEnv-${{ parameters.name }}
     continueOnError: true
 
@@ -202,13 +206,24 @@ jobs:
       fi
 
       conda mambabuild . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG $BUILD_PY_VERSION
+
+      # Copy Build Folder to Working Directory
+      cp -r $HOME/mambaforge/envs/bodo_build/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
     displayName: 'Build Bodo'
+
+  # Publish the Conda build folder as an artifact
+  # Azure Pipelines doesn't have a convenient way to find the home directory
+  # So we copy the build folder to the working directory first
+  - publish: $(System.DefaultWorkingDirectory)/conda-bld/
+    displayName: 'Publish to Pipeline Artifacts'
+    artifact: Bodo-CondaPkg-${{ parameters.name }}
 
   - task: DownloadSecureFile@1
     name: secret_file
     inputs:
       secureFile: 'publish_binary_secrets'
     displayName: 'Download Secrets File'
+    condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))
 
   - script: |
       set -exo pipefail
@@ -247,4 +262,5 @@ jobs:
 
       # We build non-Linux packages only for releases and weekly runs, see conda-build command
       ./buildscripts/bodo/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
-    displayName: 'Publish Bodo Binary'
+    displayName: 'Publish to Artifactory / Anaconda'
+    condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))

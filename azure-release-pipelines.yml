@@ -24,6 +24,10 @@ parameters:
     displayName: Build Pip Package
     type: boolean
     default: false
+  - name: UPLOAD_ARTIFACTORY
+    displayName: 'Upload Builds to Artifactory (and Anaconda / PyPi for Releases)'
+    type: boolean
+    default: false
   - name: PYTEST_MARKER
     displayName: PyTest Marker
     type: string
@@ -69,6 +73,7 @@ stages:
       vmImage: ubuntu-latest
       platformBuild: false
       weeklyTest: false
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, new(variables['Build.Reason'], 'Manual')) }}
 
 # Additional Conda Packages. Usually disabled for Nightly Runs
 # But useful to have when testing all Conda Builds
@@ -79,10 +84,11 @@ stages:
   jobs:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
-      name: macOS
+      name: macOS_311
       vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.11
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
@@ -90,6 +96,7 @@ stages:
       vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
@@ -97,6 +104,7 @@ stages:
       vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.9
 #  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
 #    parameters:
@@ -109,6 +117,7 @@ stages:
       platformBuild: false
       weeklyTest: false
       buildARM: true
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.11
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
@@ -117,6 +126,7 @@ stages:
       platformBuild: false
       weeklyTest: false
       buildARM: true
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
@@ -125,6 +135,7 @@ stages:
       platformBuild: false
       weeklyTest: false
       buildARM: true
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.9
 
 # Pip Packages. Usually disabled for Nightly Runs
@@ -167,6 +178,7 @@ stages:
       name: BodoSQL_Conda_Build
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.11
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, in(variables['Build.Reason'], 'Schedule', 'ScheduleForced')) }}
   - template: buildscripts/bodosql/azure/azure-build-pip.yml
     parameters:
       name: BodoSQL_Pip_Build
@@ -246,7 +258,7 @@ stages:
           NP: 2
           PYTEST_MARKER: ""
 
-# Maven unit tests
+# Java Unit Tests
 - stage: Test_BodoSQL_Maven
   displayName: 'Test BodoSQL Maven Unit Tests'
   dependsOn: []
