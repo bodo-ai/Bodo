@@ -51,6 +51,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     container_update_method_names,
     get_call_expr_arg,
+    get_const_func_output_type,
     get_const_value_inner,
     replace_func,
     set_call_expr_arg,
@@ -64,10 +65,13 @@ from bodo.utils.typing import (
     BodoWarning,
     ColNamesMetaType,
     check_unsupported_args,
+    dtype_to_array_type,
+    gen_bodosql_case_func,
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_str,
+    handle_bodosql_case_init_code,
     is_const_func_type,
     is_immutable,
     is_list_like_index_type,
@@ -3208,7 +3212,76 @@ class TypingTransforms:
         if fdef == ("table_filter", "bodo.hiframes.table"):
             self._try_apply_filter_pushdown(assign, label)
 
+        # Infer CASE output type if not provided by BodoSQL
+        if (
+            fdef == ("bodosql_case_placeholder", "bodo.utils.typing")
+            and unwrap_typeref(self.typemap[rhs.args[-1].name]) == types.unknown
+        ):
+            return self._run_call_bodosql_case_placeholder(assign, rhs)
+
         return [assign]
+
+    def _run_call_bodosql_case_placeholder(self, assign, rhs):
+        """Infers output type of CASE kernel when not provided by BodoSQL and updates
+        the IR.
+        """
+        import bodosql
+
+        if any(self.typemap[v.name] in unresolved_types for v in rhs.args[:-1]):
+            self.needs_transform = True
+            return [assign]
+
+        init_code = self.typemap[rhs.args[2].name].instance_type.meta
+        body_code = self.typemap[rhs.args[3].name].instance_type.meta
+        arr_variable_name = get_overload_const_str(self.typemap[rhs.args[4].name])
+        indexing_variable_name = get_overload_const_str(self.typemap[rhs.args[5].name])
+
+        # Replace output array setitem with scalar to infer scalar type from output
+        out_setitem = f"{arr_variable_name}[{indexing_variable_name}]"
+        body_code = body_code.replace(out_setitem, arr_variable_name)
+
+        named_params = dict(rhs.kws)
+        named_param_args = ", ".join(named_params.keys())
+
+        var_names, _ = handle_bodosql_case_init_code(init_code)
+
+        # skip_allocation=True since we want output to be scalar to infer its type
+        f, _ = gen_bodosql_case_func(
+            init_code,
+            body_code,
+            named_param_args,
+            var_names,
+            arr_variable_name,
+            indexing_variable_name,
+            None,
+            self.func_ir.func_id.func.__globals__,
+            skip_allocation=True,
+        )
+
+        in_arg_types = [self.typemap[v.name] for v in rhs.args[:2]]
+        out_dtype = get_const_func_output_type(
+            bodo.jit(distributed=False)(f),
+            in_arg_types,
+            {k: self.typemap[v.name] for k, v in named_params.items()},
+            self.typingctx,
+            numba.core.registry.cpu_target.target_context,
+        )
+        output_array_type = dtype_to_array_type(out_dtype, True)
+
+        # Replace last argument with inferred array type
+        new_type_var = ir.Var(
+            assign.target.scope, mk_unique_var("output_array_type"), rhs.loc
+        )
+        new_type_var_assign = ir.Assign(
+            ir.Global("output_array_type", output_array_type, rhs.loc),
+            new_type_var,
+            rhs.loc,
+        )
+        rhs.args[-1] = new_type_var
+        self.typemap.pop(assign.target.name)
+        self.typemap[assign.target.name] = output_array_type
+        self.changed = True
+        return [new_type_var_assign, assign]
 
     def _run_call_pd_datetime_array(self, assign, rhs, func_name, label):
         """Handle calls to pandas.DatetimeArray methods that need transformation"""

@@ -58,6 +58,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     alloc_type,
+    is_array_typ,
     is_whole_slice,
     numba_to_c_array_types,
     numba_to_c_types,
@@ -2500,6 +2501,12 @@ class LogicalTableToTableInfer(AbstractTemplate):
             n_table_cols_t = get_call_expr_arg(
                 "logical_table_to_table", args, kws, 3, "n_table_cols_t"
             )
+            # Make sure inputs are arrays (also catches types.unknown)
+            for t in extra_arrs_t:
+                assert is_array_typ(
+                    t, True
+                ), f"logical_table_to_table: array type expected but got {t}"
+
             in_col_inds = unwrap_typeref(in_col_inds_t).meta
             # handle array-only input data
             if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
