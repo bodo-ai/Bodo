@@ -264,3 +264,5 @@ jobs:
       ./buildscripts/bodo/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
     displayName: 'Publish to Artifactory / Anaconda'
     condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))
+    retryCountOnTaskFailure: 5
+    continueOnError: true
