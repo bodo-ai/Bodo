@@ -49,7 +49,7 @@ variable "azure_location" {
 }
 
 variable "azure_replication_regions" {
-  type    = list(string)
+  type = list(string)
   default = [
     "eastus", "eastus2", "westus", "westus2", "westus3",
     "centralus", "northcentralus", "southcentralus", "westcentralus"
@@ -180,6 +180,23 @@ locals {
   image_name = "bodo_${var.node_role}_${var.image_sha}_${var.bodo_version_short}"
 }
 
+packer {
+  required_plugins {
+    amazon = {
+      source  = "github.com/hashicorp/amazon"
+      version = "~> 1.2"
+    }
+    azure = {
+      source  = "github.com/hashicorp/azure"
+      version = "~> 2.0"
+    }
+    ansible = {
+      source  = "github.com/hashicorp/ansible"
+      version = "~> 1.1"
+    }
+  }
+}
+
 # source blocks are generated from your builders; a source can be referenced in
 # build blocks. A build block runs provisioner and post-processors on a
 # source. Read the documentation for source blocks here:
@@ -204,7 +221,7 @@ source "amazon-ebs" "aws-ebs-build" {
     volume_size           = 50
     volume_type           = "gp3"
   }
-  region   = var.aws_region
+  region = var.aws_region
   run_tags = {
     VantaContainsUserData = false
     VantaDescription      = "Resource provisioned for creating machine images."
@@ -215,10 +232,10 @@ source "amazon-ebs" "aws-ebs-build" {
   skip_create_ami = var.skip_create_image
   # This is a source image on top of that we are building our image
   # Amazon Linux 2 Kernel 5.10 AMI 2.0.20221004
-  source_ami      = "ami-089a545a9ed9893b6"
-  ssh_pty         = true
-  ssh_username    = var.aws_ssh_username
-  tags            = {
+  source_ami   = "ami-089a545a9ed9893b6"
+  ssh_pty      = true
+  ssh_username = var.aws_ssh_username
+  tags = {
     AMISha      = var.image_sha
     BodoVersion = var.build_name
     Role        = var.node_role
@@ -236,17 +253,17 @@ source "azure-arm" "azure-arm-build" {
     VantaNonProd          = true
     VantaOwner            = "ehsan@bodo.ai"
   }
-  client_id                         = var.azure_client_id
-  client_secret                     = var.azure_client_secret
-  communicator                      = "ssh"
-  image_offer                       = "CentOS"
-  image_publisher                   = "OpenLogic"
+  client_id       = var.azure_client_id
+  client_secret   = var.azure_client_secret
+  communicator    = "ssh"
+  image_offer     = "CentOS"
+  image_publisher = "OpenLogic"
 
   # This is a source image on top of that we are building our image
   # Linux (OpenLogic CentOS 7.9 Gen2)
-  image_sku                         = "7_9-gen2"
-  location                          = var.azure_location
-  managed_image_name                = local.image_name
+  image_sku          = "7_9-gen2"
+  location           = var.azure_location
+  managed_image_name = local.image_name
   # This is on the bodo.ai Azure account (not ehsanbodo account)
   managed_image_resource_group_name = "bodo-images-resource-grp"
   os_type                           = "Linux"
@@ -292,7 +309,7 @@ build {
 
   provisioner "ansible-local" {
     clean_staging_directory = true
-    extra_arguments         = [
+    extra_arguments = [
       "--extra-vars \"github_username=${var.github_username} github_token=${var.github_token} conda_username=${var.conda_username} conda_token=${var.conda_token} bodo_version=${var.bodo_version} python_version=${var.python_version} bodosql_version=${var.bodosql_version} bodosql_channel=${var.bodosql_channel} iceberg_connector_version=${var.iceberg_connector_version} iceberg_connector_channel=${var.iceberg_connector_channel} aws_access_key_id=${var.aws_access_key_id} aws_secret_access_key=${var.aws_secret_access_key} slurm_version=${var.slurm_version}\""
     ]
     host_vars     = "../ansible/vars"
@@ -323,7 +340,7 @@ build {
 
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
-    inline          = [
+    inline = [
       "rpm --import https://packages.microsoft.com/keys/microsoft.asc",
       "sh -c 'echo -e \"[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\" > /etc/yum.repos.d/azure-cli.repo'",
       "sudo yum update -y", "sudo yum install -y azure-cli"
