@@ -62,12 +62,11 @@ internal class VariantCastTable {
          * @return An integer type that can represent it.
          */
         private fun chooseIntegerType(prec: Int): SqlTypeName =
-            if (prec < 3) { SqlTypeName.TINYINT }
-            else
-                if (prec < 5) { SqlTypeName.SMALLINT }
-            else
-                    if (prec < 10) { SqlTypeName.INTEGER }
-            else { SqlTypeName.BIGINT }
+            if (prec < 3) { SqlTypeName.TINYINT } else {
+                if (prec < 5) { SqlTypeName.SMALLINT } else {
+                    if (prec < 10) { SqlTypeName.INTEGER } else { SqlTypeName.BIGINT }
+                }
+            }
 
         /**
          * @param precisions: the precision that each argument should be casted to.

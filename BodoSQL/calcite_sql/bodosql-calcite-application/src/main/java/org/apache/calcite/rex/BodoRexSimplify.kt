@@ -6,10 +6,6 @@ import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.util.*
-import java.util.regex.Pattern
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.sql.SqlAggFunction
@@ -24,6 +20,10 @@ import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.util.*
+import java.util.regex.Pattern
 
 /**
  * Bodo's implementation of RexSimplifier
@@ -418,27 +418,42 @@ class BodoRexSimplify(
     private fun simplifyCoalesceComparison(call: RexCall): RexNode {
         val firstArg = call.operands[0]
         val secondArg = call.operands[1]
-        val op = call.op
-        val retType = call.getType()
+        val callOp = call.op
         val (lit, coalesceCall, litFirst) = if (firstArg is RexLiteral) {
             Triple(firstArg, secondArg as RexCall, true)
         } else {
             Triple(secondArg as RexLiteral, firstArg as RexCall, false)
         }
-        // Break down the coalesce call.
-        val makeComparison = {
-                coalesceArg: RexNode, literal: RexLiteral ->
-            rexBuilder.makeCall(retType, op, if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) })
+
+        // Helper that wraps makeCall. Derives the return type and makes the call
+        // We can probably re-deriving the return type in a few locations, but we've had
+        // issues with returning the wrong type previously, so I'm being overly defensive.
+        fun makeCallWrapper(op: SqlOperator, args: List<RexNode>): RexNode {
+            val retType = rexBuilder.deriveReturnType(op, args)
+            return rexBuilder.makeCall(retType, op, args)
         }
+
+        // Helper function that breaks down the coalesce call.
+        // creates a new comparison between the literal, and one of the two operands of the coalesce function,
+        // with the proper ordering.
+        fun makeComparison(coalesceArg: RexNode, literal: RexLiteral): RexNode {
+            val args = if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) }
+            return makeCallWrapper(callOp, args)
+        }
+
         // Decompose COMP((COL, LIT2), LIT1) into OR(IS_TRUE(COMP(COL, LIT1)), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
-        val columnComparison = makeComparison(coalesceCall.operands[0], lit)
-        val columnNullCheck = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, listOf(coalesceCall.operands[0]))
+        val columnComparison: RexNode = makeComparison(coalesceCall.operands[0], lit)
+        val columnNullCheck: RexNode = makeCallWrapper(SqlStdOperatorTable.IS_NULL, listOf(coalesceCall.operands[0]))
         val literalComparison = makeComparison(coalesceCall.operands[1], lit)
         // AND(IS_NULL(COL), COMP(LIT2, LIT1))
-        val literalComparisonWithNullCheck = rexBuilder.makeCall(retType, SqlStdOperatorTable.AND, listOf(columnNullCheck, literalComparison))
+        val literalComparisonWithNullCheck = makeCallWrapper(SqlStdOperatorTable.AND, listOf<RexNode>(columnNullCheck, literalComparison))
         // IS_TRUE(COMP(COL, LIT1))
-        val columnComparisonWithNullCheck = rexBuilder.makeCall(retType, SqlStdOperatorTable.IS_TRUE, listOf(columnComparison))
-        return rexBuilder.makeCall(retType, SqlStdOperatorTable.OR, listOf(columnComparisonWithNullCheck, literalComparisonWithNullCheck))
+        val columnComparisonWithNullCheck = makeCallWrapper(SqlStdOperatorTable.IS_TRUE, listOf(columnComparison))
+
+        // OR(IS_TRUE(COMP(COL, LIT1)), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
+        val outputExpression = makeCallWrapper(SqlStdOperatorTable.OR, listOf(columnComparisonWithNullCheck, literalComparisonWithNullCheck))
+        assert(outputExpression.type.equalsSansFieldNames(call.type))
+        return outputExpression
     }
 
     /**
