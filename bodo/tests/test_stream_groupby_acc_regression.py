@@ -90,12 +90,6 @@ def impl(conn_str):  # Codegen change: add conn_str
     # Codegen change: Add print and overall timer
     print(f"Started executing query...")
     t0 = time.time()
-    bodo.libs.memory_budget.init_operator_comptroller()
-    bodo.libs.memory_budget.register_operator(0, 0, 0, -1)
-    bodo.libs.memory_budget.register_operator(1, 0, 1, -1)
-    bodo.libs.memory_budget.register_operator(2, 1, 1, -1)
-    bodo.libs.memory_budget.register_operator(3, 1, 1, -1)
-    bodo.libs.memory_budget.compute_satisfiable_budgets()
     __bodo_is_last_streaming_output_1 = False
     _iter_1 = 0
     _temp4 = 0.0
@@ -116,7 +110,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp1 = 0.0
     _temp2 = time.time()
     state_2 = bodo.libs.stream_groupby.init_groupby_state(
-        1, global_1, global_4, global_2, global_3
+        -1, global_1, global_4, global_2, global_3
     )
     _temp12 = time.time()
     _temp13 = _temp12 - _temp2

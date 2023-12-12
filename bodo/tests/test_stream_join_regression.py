@@ -139,6 +139,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp2 = time.time()
     # Codegen change: Use global flags for build-outer and probe-outer
     state_3 = bodo.libs.stream_join.init_join_state(
+        -1,
         global_2,
         global_2,
         global_3,
