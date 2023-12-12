@@ -22,6 +22,7 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_cast,
     models,
     overload,
     overload_attribute,
@@ -391,6 +392,19 @@ class StructType(types.Type):
         self.names = names
         super(StructType, self).__init__(name="StructType({}, {})".format(data, names))
 
+    def unify(self, typingctx, other):
+        """Unify struct types with same field names but different data types
+        (e.g. optional vs non-optional type in BodoSQL)
+        """
+        if isinstance(other, StructType) and other.names == self.names:
+            data = []
+            for t1, t2 in zip(self.data, other.data):
+                out_t = t1.unify(typingctx, t2)
+                if out_t is None and (t1 is not None or t2 is not None):
+                    return
+                data.append(out_t)
+            return StructType(tuple(data), self.names)
+
     @property
     def mangling_args(self):
         """
@@ -738,6 +752,42 @@ def set_struct_field_to_null(typingctx, struct_typ, field_ind_typ):
         return context.get_dummy_value()
 
     return types.none(struct_typ, field_ind_typ), codegen
+
+
+@lower_cast(StructType, StructType)
+def cast_struct_type(context, builder, fromty, toty, val):
+    """Support casting struct values where data elements could have different types
+    and need casting.
+    """
+    payload, _ = _get_struct_payload(context, builder, fromty, val)
+
+    # Create data and null values for output struct
+    null_vals = []
+    data_vals = []
+    for i, val_typ in enumerate(fromty.data):
+        # check for not NA
+        null_mask = builder.extract_value(payload.null_bitmap, i)
+        null_vals.append(null_mask)
+        not_na_cond = builder.icmp_unsigned(
+            "==", null_mask, lir.Constant(null_mask.type, 1)
+        )
+        data_val_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant_null(toty.data[i])
+        )
+        with builder.if_then(not_na_cond):
+            data_val = builder.extract_value(payload.data, i)
+            # Cast data element to target type if necessary
+            if val_typ != toty.data[i]:
+                new_data_val = context.cast(builder, data_val, val_typ, toty.data[i])
+            else:
+                new_data_val = data_val
+            builder.store(new_data_val, data_val_ptr)
+        data_vals.append(builder.load(data_val_ptr))
+
+    meminfo = construct_struct(context, builder, toty, data_vals, null_vals)
+    struct = context.make_helper(builder, toty)
+    struct.meminfo = meminfo
+    return struct._getvalue()
 
 
 def _get_struct_field_ind(struct, ind, op):

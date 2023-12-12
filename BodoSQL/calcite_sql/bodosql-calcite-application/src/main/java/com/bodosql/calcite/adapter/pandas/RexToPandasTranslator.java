@@ -81,6 +81,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getTrig
 import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 import static com.bodosql.calcite.application.utils.Utils.expectScalarArgument;
+import static com.bodosql.calcite.application.utils.Utils.hasVariantOrMapType;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
 import com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen;
@@ -571,8 +572,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Generate the call to bodosql_case_placeholder and assign the results
     // to a temporary value that we return as the output.
     Variable tempVar = builder.getSymbolTable().genGenericTempVar();
-    Variable outputArrayTypeGlobal =
-        visitor.lowerAsGlobal(sqlTypeToBodoArrayType(node.getType(), false));
+    Variable outputArrayTypeGlobal;
+    // Bodo needs to infer output type if not known by BodoSQL
+    // NOTE: MAP is not a concrete type since it could be struct or map array in Bodo compiler
+    // (which also need concrete field types)
+    if (hasVariantOrMapType(node.getType())) {
+      outputArrayTypeGlobal = visitor.lowerAsGlobal(new Expr.Raw("numba.core.types.unknown"));
+    } else {
+      outputArrayTypeGlobal = visitor.lowerAsGlobal(sqlTypeToBodoArrayType(node.getType(), false));
+    }
     Expr casePlaceholder =
         new Expr.Call(
             "bodo.utils.typing.bodosql_case_placeholder",

@@ -278,7 +278,6 @@ def test_object_keys(data, use_case, answer, memory_leak_check):
                 ),
             ),
             id="no_nested-no_null-with_case",
-            marks=pytest.mark.skip(reason="[BSE-1889] Support JSON in CASE statements"),
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A, 'map', J) FROM table1",
@@ -1340,7 +1339,6 @@ def test_object_insert(query, df, answer, memory_leak_check):
     )
 
 
-@pytest.mark.skip(reason="[BSE-1889] Support JSON in CASE statements")
 @pytest.mark.parametrize(
     "df, answer",
     [
@@ -1348,20 +1346,30 @@ def test_object_insert(query, df, answer, memory_leak_check):
             pd.DataFrame(
                 {
                     "I": [0, 1, 2],
-                    "D": [{"a": 0}, {"a": 1}, {"a": 2}],
-                    "V": ["one", "two", "three"],
+                    "D": pd.Series(
+                        [{"a": 0}, {"a": 1}, {"a": 2}],
+                        dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int64())])),
+                    ),
+                    "V": pd.array(["one", "two", "three"], dtype="string[pyarrow]"),
                     "B": [False, True, False],
                 }
             ),
-            [{"a": 0, "b": "one"}, {"a": 1, "b": "two"}, {"a": 2, "b": "three"}],
+            pd.Series(
+                [{"a": 0, "b": "one"}, {"a": 1, "b": "two"}, {"a": 2, "b": "three"}],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [pa.field("a", pa.int64()), pa.field("b", pa.large_string())]
+                    )
+                ),
+            ),
         ),
     ],
 )
 def test_object_insert_case(df, answer, memory_leak_check):
     query = "SELECT CASE WHEN B THEN NULL ELSE OBJECT_INSERT(D, 'b', V) END FROM TABLE1"
     ctx = {"table1": df}
-    expected_output = pd.DataFrame({0: range(len(df)), 1: answer})
-    expected_output[1][ctx["table1"].B] = None
+    expected_output = pd.DataFrame({0: answer})
+    expected_output[0][ctx["table1"].B] = None
     check_query(
         query,
         ctx,
@@ -1370,4 +1378,5 @@ def test_object_insert_case(df, answer, memory_leak_check):
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        sort_output=False,
     )
