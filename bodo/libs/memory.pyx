@@ -867,6 +867,41 @@ cdef class OperatorBufferPool(IBufferPool):
         """
         self.c_disable_threshold_enforcement()
 
+    def main_mem_bytes_allocated(self) -> int:
+        """
+        Get number of bytes currently allocated by the
+        OperatorBufferPool in the main mem section.
+        """
+        return deref(self.c_pool).main_mem_bytes_allocated()
+    
+    def scratch_mem_bytes_allocated(self) -> int:
+        """
+        Get number of bytes currently allocated by the
+        OperatorBufferPool in the scratch mem section.
+        """
+        return deref(self.c_pool).scratch_mem_bytes_allocated()
+    
+    def main_mem_bytes_pinned(self) -> int:
+        """
+        Get number of bytes currently pinned by the
+        OperatorBufferPool in the main mem section.
+        """
+        return deref(self.c_pool).main_mem_bytes_pinned()
+    
+    def scratch_mem_bytes_pinned(self) -> int:
+        """
+        Get number of bytes currently pinned by the
+        OperatorBufferPool in the scratch mem section.
+        """
+        return deref(self.c_pool).scratch_mem_bytes_pinned()
+    
+    def main_mem_max_memory(self) -> int:
+        """
+        Get the max-memory usage of the main mem section
+        of the OperatorBufferPool at any point in its lifetime.
+        """
+        return deref(self.c_pool).main_mem_max_memory()
+
     ## NOTE: The functions below are mostly copied over from BufferPool implementation.
     ## Ideally we'd be able to move them to IBufferPool and reuse them in both
     ## BufferPool and OperatorBufferPool, but Cython's support for inheritance
@@ -937,7 +972,7 @@ cdef class OperatorBufferPool(IBufferPool):
 
     def free(self, allocation: BufferPoolAllocation):
         """
-        Free memory allocated through OperatorBuferrPool.
+        Free memory allocated through OperatorBufferPool.
         We use the information from a BufferPoolAllocation
         instance to get the information about the memory region
         and allocated size.
@@ -975,6 +1010,202 @@ cdef class OperatorBufferPool(IBufferPool):
             return False
 
     def __ne__(self, other: OperatorBufferPool) -> bool:
+        """
+        Inverse of __eq__.
+        """
+        return not self.__eq__(other)
+
+    ## Equivalent functions for scratch allocations
+
+    cdef BufferPoolAllocation c_allocate_scratch(self, int size, int alignment):
+        # Create an empty BufferPoolAllocation instance.
+        allocation = BufferPoolAllocation()
+        # Allocate memory through the OperatorBufferPool's AllocateScratch API.
+        # Pass the pointer in the BufferPoolAllocation instance
+        # to be used as the "swip".
+        check_status(deref(self.c_pool).AllocateScratch(size, alignment, &(allocation.ptr)))
+        # Set the allocation size. This is required during
+        # free and reallocate.
+        allocation.size = size
+        allocation.alignment = alignment
+        return allocation
+
+    cdef void c_free_scratch(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).FreeScratch(allocation.ptr, allocation.size, allocation.alignment)
+
+    cdef void c_reallocate_scratch(self, int new_size, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).ReallocateScratch(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
+        allocation.size = new_size
+
+    cdef void c_pin_scratch(self, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).PinScratch(&(allocation.ptr), allocation.size, allocation.alignment))
+
+    cdef void c_unpin_scratch(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).UnpinScratch(allocation.ptr, allocation.size, allocation.alignment)
+
+    def allocate_scratch(self, size, alignment=64) -> BufferPoolAllocation:
+        """
+        Wrapper around c_allocate_scratch. We encode the information
+        from the allocation in a BufferPoolAllocation object.
+        """
+        return self.c_allocate_scratch(size, alignment)
+
+    def free_scratch(self, allocation: BufferPoolAllocation):
+        """
+        Free scratch memory allocated through OperatorBufferPool.
+        We use the information from a BufferPoolAllocation
+        instance to get the information about the memory region
+        and allocated size.
+        """
+        self.c_free_scratch(allocation)
+
+    def reallocate_scratch(self, new_size: int, allocation: BufferPoolAllocation):
+        """
+        Resize a scratch allocation to 'new_size' bytes.
+        The BufferPoolAllocation instance is updated in place.
+        """
+        self.c_reallocate_scratch(new_size, allocation)
+
+    def pin_scratch(self, allocation: BufferPoolAllocation):
+        """
+        Pin a scratch allocation to memory.
+        """
+        self.c_pin_scratch(allocation)
+
+    def unpin_scratch(self, allocation: BufferPoolAllocation):
+        """
+        Unpin a scratch allocation from memory.
+        """
+        self.c_unpin_scratch(allocation)
+
+
+cdef class OperatorScratchPool(IBufferPool):
+    """
+    Python interface to OperatorScratchPool defined in C++.
+    This will be used for unit-testing purposes only at this point.
+    """
+
+    # Each instance will store a shared_ptr to the
+    # C++ instance of the OperatorScratchPool
+    cdef shared_ptr[COperatorScratchPool] c_pool
+
+    def __init__(self, parent_pool: OperatorBufferPool):
+        """
+        Create a new OperatorScratchPool for a given
+        OperatorBufferPool.
+        """
+        self.c_pool = make_shared[COperatorScratchPool](parent_pool.c_pool.get())
+    
+    ## NOTE: The functions below are mostly copied over from BufferPool implementation.
+    ## Ideally we'd be able to move them to IBufferPool and reuse them in both
+    ## BufferPool and OperatorScratchPool, but Cython's support for inheritance
+    ## is not great and there were a lot of conflicts/errors when trying to do
+    ## that.
+
+    def bytes_pinned(self) -> int:
+        """
+        Get the number of scratch bytes currently pinned by the
+        OperatorScratchPool.
+        """
+        return deref(self.c_pool).get_bytes_pinned()
+
+    def bytes_allocated(self) -> int:
+        """
+        Get number of bytes currently allocated by the
+        OperatorScratchPool.
+        """
+        return deref(self.c_pool).get_bytes_allocated()
+
+    def max_memory(self) -> int:
+        """
+        Get the max-memory usage of the OperatorScratchPool
+        at any point in its lifetime.
+        This will always return 0 at this point since we don't
+        track this.
+        """
+        return deref(self.c_pool).get_max_memory()
+
+    @property
+    def backend_name(self) -> str:
+        """
+        Get the memory backend. Returns memory backend
+        of the parent pool.
+        """
+        return frombytes(deref(self.c_pool).get_backend_name())
+
+    cdef BufferPoolAllocation c_allocate(self, int size, int alignment):
+        # Create an empty BufferPoolAllocation instance.
+        allocation = BufferPoolAllocation()
+        # Allocate memory through the OperatorScratchPool.
+        # Pass the pointer in the BufferPoolAllocation instance
+        # to be used as the "swip".
+        check_status(deref(self.c_pool).Allocate(size, alignment, &(allocation.ptr)))
+        # Set the allocation size. This is required during
+        # free and reallocate.
+        allocation.size = size
+        allocation.alignment = alignment
+        return allocation
+
+    cdef void c_free(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
+
+    cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
+        allocation.size = new_size
+
+    cdef void c_pin(self, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).Pin(&(allocation.ptr), allocation.size, allocation.alignment))
+
+    cdef void c_unpin(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).Unpin(allocation.ptr, allocation.size, allocation.alignment)
+
+    def allocate(self, size, alignment=64) -> BufferPoolAllocation:
+        """
+        Wrapper around c_allocate. We encode the information
+        from the allocation in a BufferPoolAllocation object.
+        """
+        return self.c_allocate(size, alignment)
+
+    def free(self, allocation: BufferPoolAllocation):
+        """
+        Free memory allocated through OperatorScratchPool.
+        We use the information from a BufferPoolAllocation
+        instance to get the information about the memory region
+        and allocated size.
+        """
+        self.c_free(allocation)
+
+    def reallocate(self, new_size: int, allocation: BufferPoolAllocation):
+        """
+        Resize an allocation to 'new_size' bytes.
+        The BufferPoolAllocation instance is updated in place.
+        """
+        self.c_reallocate(new_size, allocation)
+
+    def pin(self, allocation: BufferPoolAllocation):
+        """
+        Pin an allocation to memory.
+        """
+        self.c_pin(allocation)
+
+    def unpin(self, allocation: BufferPoolAllocation):
+        """
+        Unpin an allocation from memory.
+        """
+        self.c_unpin(allocation)
+
+    def __eq__(self, other: OperatorScratchPool) -> bool:
+        """
+        Check if two OperatorScratchPool instances are
+        equivalent, i.e. they both point to the same
+        underlying pool in C++.
+        """
+        if isinstance(other, OperatorScratchPool):
+            return self.c_pool.get() == other.c_pool.get()
+        else:
+            return False
+
+    def __ne__(self, other: OperatorScratchPool) -> bool:
         """
         Inverse of __eq__.
         """

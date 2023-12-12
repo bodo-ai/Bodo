@@ -83,10 +83,10 @@ class OperatorBufferPool final : public IBufferPool {
     void SetBudget(uint64_t new_operator_budget);
 
     /**
-     * @brief Allocates a buffer of 'size' bytes. The allocated buffer will be
-     * 'alignment' byte aligned (64 by default).
+     * @brief Allocates a buffer of 'size' bytes (from the main mem portion).
+     * The allocated buffer will be 'alignment' byte aligned (64 by default).
      * This will raise the OperatorPoolThresholdExceededError if
-     * size + currently pinned bytes > memory_error_threshold (assuming
+     * size + currently main mem pinned bytes > memory_error_threshold (assuming
      * threshold enforcement is enabled).
      *
      * @param size Number of bytes to allocate.
@@ -99,7 +99,24 @@ class OperatorBufferPool final : public IBufferPool {
                              uint8_t** out) override;
 
     /**
-     * @brief Free the specified 'buffer'.
+     * @brief Allocates a buffer of 'size' bytes (from the scratch mem portion).
+     * The allocated buffer will be 'alignment' byte aligned (64 by default).
+     * This will raise the OperatorPoolThresholdExceededError if
+     * size + currently pinned bytes > budget (assuming
+     * threshold enforcement is enabled).
+     *
+     * @param size Number of bytes to allocate.
+     * @param alignment Alignment that needs to be guaranteed for the
+     * allocation.
+     * @param[in, out] out Pointer to pointer which should store the address of
+     * the allocated memory.
+     */
+    ::arrow::Status AllocateScratch(int64_t size, int64_t alignment,
+                                    uint8_t** out);
+
+    /**
+     * @brief Free the specified 'buffer'. This assumes that the allocation
+     * came from the main mem portion.
      *
      * @param buffer Pointer to the start of the allocated memory region.
      * @param size Allocated size located at buffer.
@@ -108,11 +125,23 @@ class OperatorBufferPool final : public IBufferPool {
     void Free(uint8_t* buffer, int64_t size, int64_t alignment) override;
 
     /**
-     * @brief Resize an already allocated buffer.
+     * @brief Free the specified 'buffer'. This assumes that the allocation
+     * came from the scratch mem portion.
+     *
+     * @param buffer Pointer to the start of the allocated memory region.
+     * @param size Allocated size located at buffer.
+     * @param alignment The alignment of the allocation. Defaults to 64 bytes.
+     */
+    void FreeScratch(uint8_t* buffer, int64_t size, int64_t alignment);
+
+    /**
+     * @brief Resize an already allocated buffer, assuming the original
+     * was from the main mem portion. The new one will come from the
+     * main mem portion as well.
      *
      * NOTE: If pinning both the new buffer (new_size) and
      * old buffer (old_size) together would take the amount of
-     * pinned bytes over the threshold and threshold enforcement
+     * main mem pinned bytes over the threshold and threshold enforcement
      * is enabled, it will raise the
      * OperatorPoolThresholdExceededError error.
      *
@@ -127,19 +156,69 @@ class OperatorBufferPool final : public IBufferPool {
     ::arrow::Status Reallocate(int64_t old_size, int64_t new_size,
                                int64_t alignment, uint8_t** ptr) override;
 
+    /**
+     * @brief Resize an already allocated buffer, assuming the original
+     * was from the scratch mem portion. The new one will come from the
+     * scratch mem portion as well.
+     *
+     * NOTE: If pinning both the new buffer (new_size) and
+     * old buffer (old_size) together would take the amount of
+     * total pinned bytes over the budget and threshold enforcement
+     * is enabled, it will raise the
+     * OperatorPoolThresholdExceededError error.
+     *
+     * @param old_size Previous allocation size.
+     * @param new_size Number of bytes to allocate.
+     * @param alignment Alignment that needs to be guaranteed for the
+     * allocation.
+     * @param[in, out] ptr Pointer to pointer which stores the address of the
+     * previously allocated memory and should be modified to now store
+     * the address of the new allocated memory region.
+     */
+    ::arrow::Status ReallocateScratch(int64_t old_size, int64_t new_size,
+                                      int64_t alignment, uint8_t** ptr);
+
     /// @brief The number of bytes currently allocated through
     /// this allocator.
     int64_t bytes_allocated() const override;
 
+    /// @brief The number of bytes currently allocated through
+    /// the main mem portion this allocator.
+    int64_t main_mem_bytes_allocated() const;
+
+    /// @brief The number of bytes currently allocated through
+    /// the main scratch portion this allocator.
+    int64_t scratch_mem_bytes_allocated() const;
+
     /// @brief The number of bytes currently pinned.
     uint64_t bytes_pinned() const override;
 
+    /// @brief The number of bytes currently pinned in the
+    /// main mem portion.
+    uint64_t main_mem_bytes_pinned() const;
+
+    /// @brief The number of bytes currently pinned in the
+    /// scratch mem portion.
+    uint64_t scratch_mem_bytes_pinned() const;
+
     int64_t total_bytes_allocated() const override { return 0; }
+
+    int64_t main_mem_total_bytes_allocated() const { return 0; }
+
+    int64_t scratch_mem_total_bytes_allocated() const { return 0; }
 
     int64_t num_allocations() const override { return 0; }
 
+    int64_t main_mem_num_allocations() const { return 0; }
+
+    int64_t scratch_mem_num_allocations() const { return 0; }
+
     /// @brief Get peak memory allocation in this memory pool
     int64_t max_memory() const override;
+
+    /// @brief Get peak memory allocation in the main mem portion
+    /// of this memory pool
+    int64_t main_mem_max_memory() const;
 
     /// @brief The name of the backend used by the parent pool.
     std::string backend_name() const override;
@@ -171,7 +250,8 @@ class OperatorBufferPool final : public IBufferPool {
     double get_error_threshold() const;
 
     /**
-     * @brief Pin an allocation/block to memory.
+     * @brief Pin an allocation/block to memory. This assumes that
+     * the allocation was made in the main mem portion.
      *
      * @param[in, out] ptr Location of swip pointer containing
      *   allocation to pin.
@@ -184,9 +264,24 @@ class OperatorBufferPool final : public IBufferPool {
         int64_t alignment = arrow::kDefaultBufferAlignment) override;
 
     /**
+     * @brief Pin an allocation/block to memory. This assumes that
+     * the allocation was made in the scratch mem portion.
+     *
+     * @param[in, out] ptr Location of swip pointer containing
+     *   allocation to pin.
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
+     * @return ::arrow::Status
+     */
+    ::arrow::Status PinScratch(
+        uint8_t** ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment);
+
+    /**
      * @brief Unpin an allocation/block. This makes the block eligible
      * for eviction when the parent pool needs to free up
-     * space in memory.
+     * space in memory. This assumes that the allocation was made
+     * in the main mem portion.
      *
      * @param[in, out] ptr Swip pointer to allocation to unpin
      * @param size Size of the allocation (original requested size)
@@ -194,6 +289,19 @@ class OperatorBufferPool final : public IBufferPool {
      */
     void Unpin(uint8_t* ptr, int64_t size = -1,
                int64_t alignment = arrow::kDefaultBufferAlignment) override;
+
+    /**
+     * @brief Unpin an allocation/block. This makes the block eligible
+     * for eviction when the parent pool needs to free up
+     * space in memory. This assumes that the allocation was made
+     * in the scratch mem portion.
+     *
+     * @param[in, out] ptr Swip pointer to allocation to unpin
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
+     */
+    void UnpinScratch(uint8_t* ptr, int64_t size = -1,
+                      int64_t alignment = arrow::kDefaultBufferAlignment);
 
     /**
      * @brief Check if threshold enforcement enabled.
@@ -241,8 +349,17 @@ class OperatorBufferPool final : public IBufferPool {
     };
 
    protected:
-    /// @brief Allocation stats
+    /// @brief Allocation stats for "main" allocations
+    /// (i.e. made through Allocate API).
+    ::arrow::internal::MemoryPoolStats main_mem_stats_;
+    /// @brief Allocation stats (combined)
     ::arrow::internal::MemoryPoolStats stats_;
+
+    // NOTE: We don't maintain a similar struct for the scratch
+    // portion since they can be inferred from the other two. The
+    // only stat we don't get is the max memory usage in the scratch
+    // portion. However, that's fine for now since there's no use case
+    // where we need that information.
 
    private:
     /// @brief Parent pool through which all the allocations, etc. will go
@@ -260,9 +377,12 @@ class OperatorBufferPool final : public IBufferPool {
     uint64_t memory_error_threshold_;
     /// @brief Flag for threshold enforcement.
     bool threshold_enforcement_enabled_ = true;
-    /// @brief Number of bytes currently pinned
+    /// @brief Number of bytes currently pinned (main + scratch)
     /// TODO: Integrate into stats_ class at some point?
     std::atomic<uint64_t> bytes_pinned_;
+    /// @brief Number of bytes currently pinned in the main
+    /// mem portion.
+    std::atomic<uint64_t> main_mem_bytes_pinned_;
 
     /**
      * @brief Helper function to try to get additional budget from
@@ -295,6 +415,15 @@ class OperatorBufferPool final : public IBufferPool {
     inline void update_pinned_bytes(int64_t diff);
 
     /**
+     * @brief Atomically update the number of pinned bytes in the
+     * main mem portion of the BufferPool by the diff.
+     *
+     * @param diff The number of bytes to add to the current pinned
+     * byte count.
+     */
+    inline void update_main_mem_pinned_bytes(int64_t diff);
+
+    /**
      * @brief Utility function for throwing the
      * OperatorPoolThresholdExceededError if threshold
      * enforcement is enabled and if
@@ -306,7 +435,103 @@ class OperatorBufferPool final : public IBufferPool {
      *
      * @param size Number of additional bytes to pin/allocate.
      */
+    template <bool is_scratch>
     inline void enforce_threshold(int64_t size);
+
+    /// Templated "inner" functions for Allocate, Free, Reallocate, Pin &
+    /// Unpin. These contain most of the actual implementation. There are two
+    /// main differences in the way that main mem and scratch mem functions
+    /// work:
+    ///  1. They call 'enforce_threshold' with the correct template parameter
+    ///     for 'is_scratch'
+    ///  2. They need to update the right set of statistics.
+    /// The user facing functions just call these with the correct template
+    /// parameter value.
+    /// When 'is_scratch' is true, we make allocations / free from from the
+    /// scratch mem portion of the pool. When it's false, we make allocations /
+    /// free from the main mem portion of the pool.
+
+    template <bool is_scratch>
+    inline ::arrow::Status allocate_inner_(int64_t size, int64_t alignment,
+                                           uint8_t** out);
+
+    template <bool is_scratch>
+    inline void free_inner_(uint8_t* buffer, int64_t size, int64_t alignment);
+
+    template <bool is_scratch>
+    inline ::arrow::Status reallocate_inner_(int64_t old_size, int64_t new_size,
+                                             int64_t alignment, uint8_t** ptr);
+
+    template <bool is_scratch>
+    inline ::arrow::Status pin_inner_(uint8_t** ptr, int64_t size,
+                                      int64_t alignment);
+
+    template <bool is_scratch>
+    inline void unpin_inner_(uint8_t* ptr, int64_t size, int64_t alignment);
+};
+
+/**
+ * @brief This is an indirection layer on top of OperatorBufferPool
+ * that will always allocate from the scratch mem portion of its
+ * parent OperatorBufferPool while following the IBufferPool
+ * interface.
+ * This allows us to use this as a regular pool while allocating
+ * from the scratch mem portion of the OperatorBufferPool.
+ * e.g. We can pass an instance of this to the STLAllocator
+ * for the hash tables in Groupby/Join. The memory of the hash
+ * table would get allocated through the scratch mem portion of
+ * the OperatorBufferPool without changing any other implementation.
+ * The OperatorScratchPool is essentially "stateless", i.e. it doesn't
+ * track its memory usage, etc. It simply calls the relevant
+ * functions in the parent pool.
+ *
+ */
+class OperatorScratchPool final : public IBufferPool {
+   public:
+    explicit OperatorScratchPool(OperatorBufferPool* const parent_pool)
+        : parent_pool_(parent_pool) {}
+
+    ::arrow::Status Allocate(int64_t size, int64_t alignment,
+                             uint8_t** out) override;
+
+    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override;
+
+    ::arrow::Status Reallocate(int64_t old_size, int64_t new_size,
+                               int64_t alignment, uint8_t** ptr) override;
+
+    int64_t bytes_allocated() const override;
+
+    uint64_t bytes_pinned() const override;
+
+    int64_t total_bytes_allocated() const override;
+
+    int64_t num_allocations() const override;
+
+    /// @brief There's currently no use case for this, so we haven't
+    /// implemented it.
+    /// Unlike the other stats, we cannot calculate this based
+    /// on the total stats and main mem stats. We'd need to
+    /// maintain this separately, which would add unnecessary
+    /// overhead.
+    /// @return Always returns 0 at this point.
+    int64_t max_memory() const override { return 0; }
+
+    std::string backend_name() const override;
+
+    ::arrow::Status Pin(
+        uint8_t** ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) override;
+
+    void Unpin(uint8_t* ptr, int64_t size = -1,
+               int64_t alignment = arrow::kDefaultBufferAlignment) override;
+
+    /// @brief Get a pointer to its parent OperatorBufferPool.
+    OperatorBufferPool* get_parent_pool() const;
+
+   private:
+    /// @brief Parent operator pool through which all the allocations, etc. will
+    /// go through.
+    OperatorBufferPool* const parent_pool_;
 };
 
 }  // namespace bodo

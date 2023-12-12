@@ -858,7 +858,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                 return evict_status;
             }
             this->stats_.UpdateAllocatedBytes(
-                -this->size_class_bytes_[evicting_frames_size_class[i]]);
+                -this->size_class_bytes_[evicting_frames_size_class[i]],
+                /*is_free*/ true);
         }
         return true;
     }
@@ -878,7 +879,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                     return evict_status;
                 }
 
-                this->stats_.UpdateAllocatedBytes(-this->size_class_bytes_[i]);
+                this->stats_.UpdateAllocatedBytes(-this->size_class_bytes_[i],
+                                                  /*is_free*/ true);
                 return true;
             }
         }
@@ -894,7 +896,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
             return evict_status;
         }
         this->stats_.UpdateAllocatedBytes(
-            -this->size_class_bytes_[evicting_frames_size_class[i]]);
+            -this->size_class_bytes_[evicting_frames_size_class[i]],
+            /*is_free*/ true);
     }
 
     // Even though we might have reduced memory pressure by spilling some
@@ -1221,7 +1224,7 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
         if (frame_pinned) {
             this->update_pinned_bytes(-size_aligned);
         }
-        this->stats_.UpdateAllocatedBytes(-size_aligned);
+        this->stats_.UpdateAllocatedBytes(-size_aligned, /*is_free*/ true);
     }
 }
 
@@ -1545,7 +1548,7 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
         // in the regular case.
         if (was_spilled) {
             this->stats_.UpdateAllocatedBytes(
-                -this->size_class_bytes_[size_class_idx]);
+                -this->size_class_bytes_[size_class_idx], /*is_free*/ true);
         }
     }
 }
