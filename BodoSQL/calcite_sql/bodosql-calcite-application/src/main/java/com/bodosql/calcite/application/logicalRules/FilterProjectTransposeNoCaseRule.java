@@ -47,7 +47,7 @@ public class FilterProjectTransposeNoCaseRule
       // the results of the windowing invocation.
       //
       // When the filter is on the PARTITION BY expression of the OVER clause
-      // it can be pushed down. For now we don't support this.
+      // it can be pushed down. For now, we don't support this.
       return;
     }
     // convert the filter to one that references the child of the project
