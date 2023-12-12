@@ -73,7 +73,7 @@ stages:
       vmImage: ubuntu-latest
       platformBuild: false
       weeklyTest: false
-      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, new(variables['Build.Reason'], 'Manual')) }}
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
 
 # Additional Conda Packages. Usually disabled for Nightly Runs
 # But useful to have when testing all Conda Builds
