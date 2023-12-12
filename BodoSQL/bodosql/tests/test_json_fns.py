@@ -236,6 +236,110 @@ def test_object_keys(data, use_case, answer, memory_leak_check):
     "query, answer",
     [
         pytest.param(
+            "SELECT OBJECT_KEYS(TO_OBJECT(TO_VARIANT(MA[0]))) as res FROM table1",
+            pd.DataFrame(
+                {
+                    "res": pd.array(
+                        [["A"], None, [], ["B", "C", "D"], ["E", "F"], []],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    )
+                }
+            ),
+            id="map_keys-no_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_KEYS(TO_OBJECT(TO_VARIANT(SA[0]))) as res FROM table1",
+            pd.DataFrame(
+                {
+                    "res": pd.array(
+                        [["x", "y", "coord"], ["x", "y", "coord"], None] * 2,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    )
+                }
+            ),
+            id="struct_keys-no_case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN MA[0] IS NULL THEN OBJECT_KEYS(OBJECT_CONSTRUCT('NA', 0)) ELSE OBJECT_KEYS(TO_OBJECT(TO_VARIANT(MA[0]))) END as res FROM table1",
+            pd.DataFrame(
+                {
+                    "res": pd.array(
+                        [["A"], ["NA"], [], ["B", "C", "D"], ["E", "F"], []],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    )
+                }
+            ),
+            id="map_keys-with_case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN SA[0] IS NULL THEN OBJECT_KEYS(OBJECT_CONSTRUCT('NA', 0)) ELSE OBJECT_KEYS(TO_OBJECT(TO_VARIANT(SA[0]))) END as res FROM table1",
+            pd.DataFrame(
+                {
+                    "res": pd.array(
+                        [["x", "y", "coord"], ["x", "y", "coord"], ["NA"]] * 2,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    )
+                }
+            ),
+            id="struct_keys-with_case",
+        ),
+    ],
+)
+def test_to_object(query, answer, memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "MA": pd.array(
+                [
+                    [{"A": 0}],
+                    [None],
+                    [{}],
+                    [{"B": 1, "C": 2, "D": 3}],
+                    [{"E": 4, "F": 5}],
+                    [{}],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.int32()))),
+            ),
+            "SA": pd.array(
+                [
+                    [{"x": 0, "y": None, "coord": "cartesian"}],
+                    [{"x": 1, "y": 3.14, "coord": "polar"}],
+                    [None],
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [
+                                pa.field("x", pa.int32()),
+                                pa.field("y", pa.int32()),
+                                pa.field("coord", pa.string()),
+                            ]
+                        )
+                    )
+                ),
+            ),
+        }
+    )
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        sort_output=False,
+        convert_columns_to_pandas=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('id', I, 'tag', S) FROM table1",
             pd.Series(
                 [

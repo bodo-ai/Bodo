@@ -1138,3 +1138,49 @@ def overload_array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
             False,
         ],
     )
+
+
+def to_object(data):  # pragma: no cover
+    pass
+
+
+@overload(to_object, inline="always")
+def overload_to_object(data):  # pragma: no cover
+    """
+    A dedicated kernel for the SQL function TO_OBJECT which takes
+    in a value of any type and returns it if it is a valid object,
+    and throws an error otherwise. Because of its simple nature,
+    this kernel can always be inlined, so it does not need to be
+    included in the distributed analysis sets.
+
+    A valid object is one of the following:
+        - Null array
+        - Null scalar
+        - Struct array
+        - Struct scalar
+        - Map array
+        - Map scalar
+        - Optional type where the underlying type is a null/struct/map scalar
+    """
+    if (
+        isinstance(
+            data,
+            (
+                bodo.StructArrayType,
+                bodo.StructType,
+                bodo.MapArrayType,
+                bodo.libs.map_arr_ext.MapScalarType,
+                types.DictType,
+            ),
+        )
+        or (data in (bodo.none, bodo.null_array_type))
+        or (
+            isinstance(data, types.optional)
+            and isinstance(
+                data.type,
+                (bodo.StructType, bodo.libs.map_arr_ext.MapScalarType, types.DictType),
+            )
+        )
+    ):
+        return lambda data: data  # pragma: no cover
+    raise_bodo_error(f"Called TO_OBJECT on non-object data: {data}")
