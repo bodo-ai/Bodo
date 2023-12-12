@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_array_typ
 
 
@@ -3206,3 +3207,108 @@ def test_array_size_scalar(array, answer, memory_leak_check):
     check_func(
         impl, (array,), py_output=answer, distributed=False, is_out_distributed=False
     )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(
+            pd.array(
+                [{"A": [i, None], "B": None} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.large_list(pa.int64())),
+                            pa.field("B", pa.string()),
+                        ]
+                    )
+                ),
+            ),
+            id="struct",
+        ),
+        pytest.param(
+            pd.array(
+                [{"A": i, "B": i + 1, "C": i + 2} for i in range(5)],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="map",
+        ),
+        pytest.param(pd.array([None] * 5, dtype=pd.ArrowDtype(pa.null())), id="null"),
+    ],
+)
+def test_to_object_valid(data, memory_leak_check):
+    def impl_vector(data):
+        return pd.DataFrame({"res": bodo.libs.bodosql_array_kernels.to_object(data)})
+
+    def impl_scalar(data):
+        return pd.DataFrame(
+            {"res": [bodo.libs.bodosql_array_kernels.to_object(data[0])]}
+        )
+
+    def impl_optional(data, flag):
+        arg = None if flag else data[0]
+        return pd.DataFrame({"res": [bodo.libs.bodosql_array_kernels.to_object(arg)]})
+
+    vector_res = pd.DataFrame({"res": data})
+    scalar_res = pd.DataFrame({"res": [data[0]]})
+    null_res = pd.DataFrame({"res": [None]})
+    check_func(
+        impl_vector,
+        (data,),
+        py_output=vector_res,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+    )
+    check_func(
+        impl_scalar,
+        (data,),
+        py_output=scalar_res,
+        only_seq=True,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+    )
+    check_func(
+        impl_optional,
+        (data, False),
+        py_output=scalar_res,
+        only_seq=True,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+    )
+    check_func(
+        impl_optional,
+        (data, True),
+        py_output=null_res,
+        only_seq=True,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(pd.array([1, 2, 3, 4, 5]), id="integer"),
+        pytest.param(pd.array([2.5, 3.0, -16.13, 2.71828, 3.14]), id="float"),
+        pytest.param(pd.array(["A", None, None, None, "E"]), id="string"),
+        pytest.param(
+            pd.array(
+                [[datetime.date(2023, 7, 4), None] for _ in range(5)],
+                dtype=pd.ArrowDtype(pa.large_list(pa.date32())),
+            ),
+            id="array_date",
+        ),
+    ],
+)
+def test_to_object_invalid(data):
+    def impl_vector(data):
+        return bodo.libs.bodosql_array_kernels.to_object(data)
+
+    def impl_scalar(data):
+        return bodo.libs.bodosql_array_kernels.to_object(data[0])
+
+    with pytest.raises(BodoError):
+        check_func(impl_vector, (data,), py_output="dummy_output")
+
+    with pytest.raises(BodoError):
+        check_func(impl_scalar, (data,), py_output="dummy_output", only_seq=True)

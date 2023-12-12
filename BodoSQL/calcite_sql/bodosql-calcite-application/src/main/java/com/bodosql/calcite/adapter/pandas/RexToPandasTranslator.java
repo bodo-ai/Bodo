@@ -1091,7 +1091,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         assert operands.size() == 1;
         return operands.get(0);
       case "TO_OBJECT":
-        throw new BodoSQLCodegenException("TO_OBJECT not yet supported");
+        assert operands.size() == 1;
+        return ExprKt.BodoSQLKernel("to_object", operands, List.of());
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected Cast function: %s", fnName));
     }
