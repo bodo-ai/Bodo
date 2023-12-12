@@ -8,6 +8,9 @@ parameters:
 - name: CONDA_ENV
   type: string
   default: ''
+- name: uploadArtifactory
+  type: boolean
+  default: true
 
 jobs:
 - job: ${{ parameters.name }}
@@ -15,30 +18,53 @@ jobs:
   pool: ScalingVMSet
 
   steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.8'
-      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
-      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
-    displayName: 'Use Python 3.8'
-
   - script: |
       set -exo pipefail
       wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
       chmod +x mambaforge.sh
       bash mambaforge.sh -b
       export PATH=$HOME/mambaforge/bin:$PATH
-      mamba create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION
+
+      mamba create -n $CONDA_ENV -y -c conda-forge python=$PYTHON_VERSION conda-build anaconda-client conda-verify curl 'python-libarchive-c=4.0'
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
     displayName: 'Setup Conda Installation + Dependencies'
+
+  - download: current
+    artifact: Bodo-CondaPkg-Linux
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/mambaforge/bin:$PATH
+      source activate $CONDA_ENV
+      set -x
+
+      # Determine Output Versions
+      export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      export BODO_VERSION=$BODOSQL_VERSION
+
+      # Build Conda Package with Conda-Build
+      # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ points to previously
+      # build Bodo package for Linux
+      conda-build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-test
+
+      # Copy Build Folder to Working Directory
+      cp -r $HOME/mambaforge/envs/$CONDA_ENV/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+    displayName: 'Build Conda Package'
+
+  - publish: $(System.DefaultWorkingDirectory)/conda-bld/
+    displayName: 'Publish Conda Package to Artifacts'
+    artifact: BodoSQL-CondaPkg
 
   - task: DownloadSecureFile@1
     name: secret_file
     inputs:
       secureFile: 'publish_binary_secrets'
     displayName: 'Download Secrets File'
+    condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))
 
   - script: |
       set -eo pipefail
@@ -47,7 +73,10 @@ jobs:
       artifactory_channel=`./buildscripts/bodosql/azure/get_channel.sh`
       echo "artifactory_channel: $artifactory_channel"
       ./buildscripts/bodosql/azure/publish_binary.sh $artifactory_channel
+
+      # Copy Build Folder to Working Directory
+      cp -r $HOME/mambaforge/envs/${{ parameters.CONDA_ENV }}/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-      TARGET_NAME: ${{ parameters.name }}
-    displayName: 'Conda Build and Publish BodoSQL Binary to Artifactory'
+    displayName: 'Publish BodoSQL Binary to Artifactory'
+    condition: and(succeeded(), eq('${{ parameters.uploadArtifactory }}', 'true'))
