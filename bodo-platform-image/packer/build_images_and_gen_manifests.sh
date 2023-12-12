@@ -91,6 +91,9 @@ while read -r LINE; do
     echo "bodo_version: $bodo_version"
     echo "bodo_version_short: $bodo_version_short"
 
+    echo "Packer Init / Download Plugins ..."
+    packer init -upgrade "${TEMPLATE_FILE}"
+
     echo "Packer build image..."
     packer build -force \
       -var "node_role=${NODE_ROLE}" \
