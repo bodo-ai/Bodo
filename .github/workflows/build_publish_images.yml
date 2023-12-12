@@ -300,7 +300,7 @@ jobs:
       - name: Share Images with Testing Platform
         id: share
         env:
-          AUTH_SERVICE_URL: "https://bodo-test.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-testing.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
@@ -342,7 +342,7 @@ jobs:
       - name: Share Images with Dev Platform
         id: share
         env:
-          AUTH_SERVICE_URL: "https://bodo-dev.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-dev.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_DEV_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
@@ -384,7 +384,7 @@ jobs:
       - name: Share Images with Staging Platform
         id: share
         env:
-          AUTH_SERVICE_URL: "https://bodo-staging.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-staging.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_STAGING_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
@@ -426,7 +426,7 @@ jobs:
       - name: Share Images with Prod Platform
         id: share
         env:
-          AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api.bodo.ai"
