@@ -190,11 +190,11 @@ def test_hash_join_dynamic_budget_increase(memory_leak_check, capfd):
         # Operator 0 increasing its budget dynamically -- This is the main one we're looking for
         "[DEBUG] OperatorComptroller::RequestAdditionalBudget: Increased budget for operator 0 by 1.0MiB (from 1.0MiB to 2.0MiB).",
         # The rest are just sanity checks:
-        "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3. Estimated max partition size: ",
+        "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 2. Estimated max partition size: ",
         "Total size of all partitions: ",
         "Estimated required size of Op-Pool: ",
-        "[DEBUG] OperatorComptroller::ReduceOperatorBudget: Reduced budget for operator 0 from 2.0MiB to 614KiB",
-        "[DEBUG] OperatorComptroller::ReduceOperatorBudget: Reduced budget for operator 0 from 614KiB to 0 bytes.",
+        "[DEBUG] OperatorComptroller::ReduceOperatorBudget: Reduced budget for operator 0 from 2.0MiB to 1.13MiB",
+        "[DEBUG] OperatorComptroller::ReduceOperatorBudget: Reduced budget for operator 0 from 1.13MiB to 0 bytes.",
     ]
     for expected_log_message in expected_log_messages:
         assert (
@@ -208,7 +208,7 @@ def test_hash_join_dynamic_budget_increase(memory_leak_check, capfd):
     ), f"Final output size ({output.shape[0]}) is not as expected ({expected_out_size})"
 
     # Verify that the op pool budget is as expected after the build and probe stages
-    expected_op_pool_budget_after_build = (628000, 631000)
+    expected_op_pool_budget_after_build = (1190000, 1190500)
     assert (
         expected_op_pool_budget_after_build[0]
         <= op_pool_budget_after_build

@@ -70,7 +70,9 @@ JoinPartition::JoinPartition(
     const std::vector<std::shared_ptr<DictionaryBuilder>>&
         probe_table_dict_builders_,
     bool is_active_, bodo::OperatorBufferPool* op_pool_,
-    const std::shared_ptr<::arrow::MemoryManager> op_mm_)
+    const std::shared_ptr<::arrow::MemoryManager> op_mm_,
+    bodo::OperatorScratchPool* op_scratch_pool_,
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
       probe_arr_c_types(probe_arr_c_types_),
@@ -83,14 +85,15 @@ JoinPartition::JoinPartition(
       build_table_join_hashes(op_pool_),
       build_hash_table(std::make_unique<bodo::pinnable<hash_table_t>>(
           0, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
-          op_pool_)),
-      num_rows_in_group(
-          std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(op_pool_)),
+          op_scratch_pool_)),
+      num_rows_in_group(std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(
+          op_scratch_pool_)),
       build_row_to_group_map(
-          std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(op_pool_)),
-      groups(op_pool_),
-      groups_offsets(op_pool_),
-      build_table_matched(op_pool_),
+          std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(
+              op_scratch_pool_)),
+      groups(op_scratch_pool_),
+      groups_offsets(op_scratch_pool_),
+      build_table_matched(op_scratch_pool_),
       dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
@@ -99,6 +102,8 @@ JoinPartition::JoinPartition(
       n_keys(n_keys_),
       op_pool(op_pool_),
       op_mm(op_mm_),
+      op_scratch_pool(op_scratch_pool_),
+      op_scratch_mm(op_scratch_mm_),
       is_active(is_active_) {
     // Pin everything by default during initialization.
     // From here on out, the HashJoinState will manage pinning
@@ -170,6 +175,10 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     this->groups_offsets_guard.value()->resize(0);
     this->groups_offsets_guard.value()->shrink_to_fit();
     this->groups_offsets_guard.reset();
+    // Release the bitmap memory
+    this->build_table_matched_guard.value()->resize(0);
+    this->build_table_matched_guard.value()->shrink_to_fit();
+    this->build_table_matched_guard.reset();
 
     // Get dictionary hashes from the dict-builders of build table.
     // Dictionaries of key columns are shared between build and probe tables,
@@ -196,14 +205,15 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
-        is_active, this->op_pool, this->op_mm);
+        is_active, this->op_pool, this->op_mm, this->op_scratch_pool,
+        this->op_scratch_mm);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
         this->build_arr_c_types, this->build_arr_array_types,
         this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders, false,
-        this->op_pool, this->op_mm);
+        this->op_pool, this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -1092,6 +1102,9 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
           bodo::BufferPool::Default(),
           JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
+      op_scratch_pool(
+          std::make_unique<bodo::OperatorScratchPool>(this->op_pool.get())),
+      op_scratch_mm(bodo::buffer_memory_manager(this->op_scratch_pool.get())),
       max_partition_depth(max_partition_depth_),
       build_shuffle_state(build_arr_c_types, build_arr_array_types,
                           this->build_table_dict_builders, this->n_keys,
@@ -1155,7 +1168,8 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
         probe_arr_array_types, n_keys_, build_table_outer_, probe_table_outer_,
         this->build_table_dict_builders, this->probe_table_dict_builders,
-        /*is_active*/ true, this->op_pool.get(), this->op_mm));
+        /*is_active*/ true, this->op_pool.get(), this->op_mm,
+        this->op_scratch_pool.get(), this->op_scratch_mm));
 
     this->global_bloom_filter = create_bloom_filter();
 }
@@ -1219,7 +1233,8 @@ void HashJoinState::ResetPartitions() {
         this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
-        /*is_active*/ true, this->op_pool.get(), this->op_mm));
+        /*is_active*/ true, this->op_pool.get(), this->op_mm,
+        this->op_scratch_pool.get(), this->op_scratch_mm));
 }
 
 void HashJoinState::AppendBuildBatchHelper(

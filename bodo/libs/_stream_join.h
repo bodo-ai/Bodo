@@ -97,7 +97,9 @@ class JoinPartition {
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             probe_table_dict_builders_,
         bool is_active_, bodo::OperatorBufferPool* op_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_mm_);
+        const std::shared_ptr<::arrow::MemoryManager> op_mm_,
+        bodo::OperatorScratchPool* op_scratch_pool_,
+        const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
 
     // The types of the columns in the build table and probe tables.
     const std::vector<int8_t> build_arr_c_types;
@@ -439,6 +441,10 @@ class JoinPartition {
     bodo::OperatorBufferPool* const op_pool;
     // Memory manager instance for op_pool.
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
+    /// @brief OperatorScratchPool corresponding to the op_pool.
+    bodo::OperatorScratchPool* const op_scratch_pool;
+    /// @brief Memory manager instance for op_scratch_pool.
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm;
     /// @brief Whether the partition is active / has been activated yet.
     /// The 0th partition is active to begin with, and other partitions
     /// are activated at the end of the build step.
@@ -597,6 +603,11 @@ class HashJoinState : public JoinState {
     /// @brief Memory manager for op_pool. This is used during buffer
     /// allocations.
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
+    /// @brief OperatorScratchPool corresponding to the op_pool.
+    const std::unique_ptr<bodo::OperatorScratchPool> op_scratch_pool;
+    /// @brief Memory manager for op_scratch_pool.
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm;
 
    public:
     // Partitioning information.
