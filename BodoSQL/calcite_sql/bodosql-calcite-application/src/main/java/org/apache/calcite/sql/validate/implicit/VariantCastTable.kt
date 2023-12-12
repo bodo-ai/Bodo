@@ -220,6 +220,66 @@ internal class VariantCastTable {
         }
 
         /**
+         * Cast for dateadd/timeadd/timestampadd. The unit argument
+         * cannot be a variant, but the other two arguments cast to
+         * NUMBER(9, 0) and TIMESTAMP_NTZ.
+         *
+         * Note: for the time being the number argument is casted to an integer
+         * type based on the precision. In future, we will switch this to use
+         * the correct decimal type.
+         */
+        private val dateTimeAddCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+            when (idx) {
+                1 ->
+                    factory.createTypeWithNullability(
+                        factory.createSqlType(chooseIntegerType(9)),
+                        inType.isNullable,
+                    )
+                2 ->
+                    factory.createTypeWithNullability(
+                        factory.createSqlType(SqlTypeName.TIMESTAMP),
+                        inType.isNullable,
+                    )
+                else ->  inType
+            }
+        }
+
+        /**
+         * Cast for datediff/timediff/timestampdiff. The unit argument
+         * cannot be a variant, but the other two arguments cast to
+         * TIMESTAMP_NTZ.
+         */
+        private val dateTimeDiffCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+            when (idx) {
+                1, 2 ->
+                    factory.createTypeWithNullability(
+                        factory.createSqlType(SqlTypeName.TIMESTAMP),
+                        inType.isNullable,
+                    )
+                else ->  inType
+            }
+        }
+
+        /**
+         * Cast for next_day/previous_day. The first argument
+         * is cast to date, and the second to char.
+         */
+        private val nextPrevDayCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+            if (idx == 0) { factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.DATE),
+                inType.isNullable,
+            ) } else {
+                factory.createTypeWithNullability(
+                    factory.createSqlType(SqlTypeName.VARCHAR),
+                    inType.isNullable,
+                )
+            }
+        }
+
+        /**
          * Cast for (VARCHAR, VARCHAR, BIGINT, VARCHAR).
          */
         private val varcharVarcharBigIntVarcharCast = {
@@ -420,6 +480,14 @@ internal class VariantCastTable {
             DatetimeOperatorTable.TIME_FROM_PARTS to anyArgNumberCast(9, 9, 9, 18),
             DatetimeOperatorTable.TIMEFROMPARTS to anyArgNumberCast(9, 9, 9, 18),
             NumericOperatorTable.MEDIAN to anyArgNumberCast(9),
+            DatetimeOperatorTable.DATEADD to dateTimeAddCast,
+            DatetimeOperatorTable.TIMEADD to dateTimeAddCast,
+            SqlBodoOperatorTable.TIMESTAMP_ADD to dateTimeAddCast,
+            DatetimeOperatorTable.DATEDIFF to dateTimeDiffCast,
+            DatetimeOperatorTable.TIMEDIFF to dateTimeDiffCast,
+            SqlBodoOperatorTable.TIMESTAMP_DIFF to dateTimeDiffCast,
+            DatetimeOperatorTable.PREVIOUS_DAY to nextPrevDayCast,
+            DatetimeOperatorTable.NEXT_DAY to nextPrevDayCast,
         ).mapKeys { it.key.name }
     }
 }
