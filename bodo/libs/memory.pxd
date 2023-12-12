@@ -105,10 +105,15 @@ cdef extern from "_operator_pool.h" namespace "bodo" nogil:
         void SetErrorThreshold(double error_threshold) except +
         void SetBudget(uint64_t new_operator_budget) except +
         CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
+        CStatus AllocateScratch(int64_t size, int64_t alignment, uint8_t** out) except +
         CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
+        CStatus ReallocateScratch(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
         void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
+        void FreeScratch(uint8_t* buffer, int64_t size, int64_t alignment) except +
         CStatus Pin(uint8_t** ptr, int64_t size, int64_t alignment) except +
+        CStatus PinScratch(uint8_t** ptr, int64_t size, int64_t alignment) except +
         void Unpin(uint8_t* ptr, int64_t size, int64_t alignment) except +
+        void UnpinScratch(uint8_t* ptr, int64_t size, int64_t alignment) except +
         c_bool ThresholdEnforcementEnabled() const
         void DisableThresholdEnforcement()
         void EnableThresholdEnforcement() except +
@@ -119,7 +124,30 @@ cdef extern from "_operator_pool.h" namespace "bodo" nogil:
 
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
-        uint64_t get_bytes_pinned" bytes_pinned"()
-        int64_t get_bytes_allocated" bytes_allocated"()
-        int64_t get_max_memory" max_memory"()
-        c_string get_backend_name" backend_name"()
+        uint64_t get_bytes_pinned" bytes_pinned"() const
+        int64_t get_bytes_allocated" bytes_allocated"() const
+        int64_t get_max_memory" max_memory"() const
+        c_string get_backend_name" backend_name"() const
+
+        # Main/Scratch stats
+        int64_t main_mem_bytes_allocated() const
+        int64_t scratch_mem_bytes_allocated() const
+        uint64_t main_mem_bytes_pinned() const
+        uint64_t scratch_mem_bytes_pinned() const
+        int64_t main_mem_max_memory() const
+
+    cdef cppclass COperatorScratchPool" bodo::OperatorScratchPool"(CIBufferPool):
+
+        COperatorScratchPool(COperatorBufferPool* parent_pool)
+        CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
+        CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
+        CStatus Pin(uint8_t** ptr, int64_t size, int64_t alignment) except +
+        void Unpin(uint8_t* ptr, int64_t size, int64_t alignment) except +
+
+        # put overloads under a different name to avoid cython bug with multiple
+        # layers of inheritance
+        uint64_t get_bytes_pinned" bytes_pinned"() const
+        int64_t get_bytes_allocated" bytes_allocated"() const
+        int64_t get_max_memory" max_memory"() const
+        c_string get_backend_name" backend_name"() const

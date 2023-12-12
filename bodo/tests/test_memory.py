@@ -19,6 +19,7 @@ from bodo.libs.memory import (
     BufferPoolAllocation,
     BufferPoolOptions,
     OperatorBufferPool,
+    OperatorScratchPool,
     SizeClass,
     StorageOptions,
     default_buffer_pool,
@@ -527,7 +528,7 @@ def test_malloc_allocation():
     # go through malloc
     allocation: BufferPoolAllocation = pool.allocate(5 * 1024)
 
-    # Verify that default allocation is 64B
+    # Verify that default allocation is 64B aligned
     assert allocation.alignment == 64
     assert allocation.get_ptr_as_int() % 64 == 0
 
@@ -582,7 +583,7 @@ def test_mmap_smallest_size_class_allocation():
     # Allocate 6KiB+1 (minimum amount to allocate through mmap)
     alloc1: BufferPoolAllocation = pool.allocate((6 * 1024) + 1)
 
-    # Verify that default allocation is 64B
+    # Verify that default allocation is 64B aligned
     assert alloc1.alignment == 64
     assert alloc1.get_ptr_as_int() % 64 == 0
 
@@ -657,7 +658,7 @@ def test_mmap_medium_size_classes_allocation():
     # Allocate 12KiB (in the 16KiB SizeClass)
     alloc1: BufferPoolAllocation = pool.allocate(12 * 1024)
 
-    # Verify that default allocation is 64B
+    # Verify that default allocation is 64B aligned
     assert alloc1.alignment == 64
     assert alloc1.get_ptr_as_int() % 64 == 0
 
@@ -749,7 +750,7 @@ def test_mmap_largest_size_class_allocation():
     # Allocate 3MiB (in the 4MiB SizeClass)
     alloc1: BufferPoolAllocation = pool.allocate(3 * 1024 * 1024)
 
-    # Verify that default allocation is 64B
+    # Verify that default allocation is 64B aligned
     assert alloc1.alignment == 64
     assert alloc1.get_ptr_as_int() % 64 == 0
 
@@ -3525,6 +3526,17 @@ def test_operator_pool_enable_disable_enforcement():
     assert not op_pool.threshold_enforcement_enabled
 
     op_pool.free(allocation)
+
+    # Allocating 300KiB through the scratch portion and
+    # 100KiB through the main portion should not raise
+    # the exception
+    allocation1 = op_pool.allocate_scratch(300 * 1024)
+    allocation2 = op_pool.allocate_scratch(100 * 1024)
+    op_pool.enable_threshold_enforcement()
+    assert op_pool.threshold_enforcement_enabled
+
+    op_pool.free(allocation1)
+    op_pool.free(allocation2)
     del op_pool
 
 
@@ -3573,6 +3585,8 @@ def test_operator_pool_set_threshold():
     # Free allocation
     op_pool.free(allocation)
     assert op_pool.bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
 
     # Verify that we can set the threshold back to 0.5 now.
     op_pool.set_error_threshold(0.5)
@@ -3638,6 +3652,33 @@ def test_operator_pool_set_budget():
     op_pool.free(allocation)
     assert op_pool.bytes_pinned() == 0
     assert op_pool.bytes_allocated() == 0
+    op_pool.enable_threshold_enforcement()
+    assert op_pool.threshold_enforcement_enabled
+
+    # Allocate through the scratch portion. Trying to reduce
+    # the budget below this amount should raise an exception:
+    allocation = op_pool.allocate_scratch(300 * 1024)
+    with pytest.raises(
+        RuntimeError,
+        match="OperatorPoolThresholdExceededError: Tried allocating more space than what's allowed to be pinned!",
+    ):
+        op_pool.set_budget(200 * 1024)
+    assert op_pool.operator_budget_bytes == 400 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 200 * 1024
+
+    # The same should be fine to do when threshold enforcement is disabled
+    op_pool.disable_threshold_enforcement()
+    op_pool.set_budget(200 * 1024)
+    assert op_pool.operator_budget_bytes == 200 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 100 * 1024
+
+    # Cleanup
+    op_pool.free(allocation)
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+
     del op_pool
 
 
@@ -3663,7 +3704,7 @@ def test_operator_pool_allocation():
 
     allocation: BufferPoolAllocation = op_pool.allocate(5 * 1024)
 
-    # Verify that default allocation is 64B
+    # Verify that default allocation is 64B aligned
     assert allocation.alignment == 64
     assert allocation.get_ptr_as_int() % 64 == 0
 
@@ -3872,6 +3913,25 @@ def test_operator_pool_allocation():
         # This would take the total to over 4MiB, which is higher than
         # the BufferPool limit.
         op_pool.allocate(3900 * 1024)
+
+    # Verify stats after allocation attempt
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 320 * 1024
+    # Verify through the parent pool that the first allocation is still pinned
+    assert pool.is_pinned(allocation1)
+
+    # Test the same through the allocate_scratch API
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match=re.escape("Allocation failed. Not enough space in the buffer pool"),
+    ):
+        # This would take the total to over 4MiB, which is higher than
+        # the BufferPool limit.
+        op_pool.allocate_scratch(3900 * 1024)
 
     # Verify stats after allocation attempt
     assert op_pool.bytes_allocated() == 220 * 1024
@@ -4390,6 +4450,542 @@ def test_operator_pool_reallocate_edge_cases():
     assert pool.bytes_allocated() == 0
     assert pool.bytes_pinned() == 0
 
+    del op_pool
+    del pool
+
+
+def test_operator_pool_scratch_allocation():
+    """
+    Test that allocating memory from the scratch mem
+    portion of the OperatorBufferPool works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+    )  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+
+    ## 1. Basic test
+
+    allocation: BufferPoolAllocation = op_pool.allocate_scratch(5 * 1024)
+
+    # Verify that default allocation is 64B aligned
+    assert allocation.alignment == 64
+    assert allocation.get_ptr_as_int() % 64 == 0
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 5 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 5 * 1024
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 5 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 5 * 1024
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert op_pool.max_memory() == 5 * 1024
+    assert op_pool.main_mem_max_memory() == 0
+    assert pool.bytes_allocated() == 5 * 1024
+    assert pool.bytes_pinned() == 5 * 1024
+    assert pool.max_memory() == 5 * 1024
+
+    # Free and verify stats
+    op_pool.free_scratch(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    # Max memory should still be the same
+    assert op_pool.max_memory() == 5 * 1024
+    assert op_pool.main_mem_max_memory() == 0
+    assert pool.max_memory() == 5 * 1024
+
+    ## 2. Allocate both main and scratch
+    alloc_main: BufferPoolAllocation = op_pool.allocate(250 * 1024)
+    alloc_scratch: BufferPoolAllocation = op_pool.allocate_scratch(250 * 1024)
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 500 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 250 * 1024
+    assert op_pool.main_mem_bytes_allocated() == 250 * 1024
+    assert op_pool.bytes_pinned() == 500 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 250 * 1024
+    assert op_pool.main_mem_bytes_pinned() == 250 * 1024
+    assert op_pool.max_memory() == 500 * 1024
+    assert op_pool.main_mem_max_memory() == 250 * 1024
+    assert pool.bytes_allocated() == 512 * 1024
+    assert pool.bytes_pinned() == 512 * 1024
+    assert pool.max_memory() == 512 * 1024
+
+    # Free and verify stats
+    op_pool.free(alloc_main)
+    op_pool.free_scratch(alloc_scratch)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    # Max memory should still be the same
+    assert op_pool.max_memory() == 500 * 1024
+    assert op_pool.main_mem_max_memory() == 250 * 1024
+    assert pool.max_memory() == 512 * 1024
+
+    ## 3. Verify that error is raised when trying to allocate more than
+    ## total even when main mem is under threshold
+    assert op_pool.threshold_enforcement_enabled
+    alloc_main = op_pool.allocate(10 * 1024)
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.allocate_scratch(510 * 1024)
+    # Verify stats
+    assert op_pool.bytes_allocated() == 10 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_allocated() == 10 * 1024
+    assert op_pool.bytes_pinned() == 10 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_pinned() == 10 * 1024
+    op_pool.free(alloc_main)
+
+    ## 4. Same as (3), but the other way around
+    alloc_scratch = op_pool.allocate_scratch(510 * 1024)
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.allocate(10 * 1024)
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 510 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 510 * 1024
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 510 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 510 * 1024
+    assert op_pool.main_mem_bytes_pinned() == 0
+    op_pool.free_scratch(alloc_scratch)
+
+    # Cleanup
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    del op_pool
+    del pool
+
+
+def test_operator_pool_scratch_pin_unpin():
+    """
+    Test than pinning/unpinning from the scratch mem
+    portion of the OperatorBufferPool works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=2,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+    )  # 2MiB total, 8KiB min size class
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool)
+
+    # Allocate a moderate size, then try to allocate amount
+    # such that both together are not below budget. But after
+    # unpinning the 1st allocation, the second is. Try pinning
+    # the 1st back and verify behavior. Then free the second
+    # and pin 1st back and verify behavior.
+
+    allocation1: BufferPoolAllocation = op_pool.allocate_scratch(220 * 1024)
+    op_pool.enable_threshold_enforcement()
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.allocate_scratch(320 * 1024)
+
+    # Verify stats after both allocation attempts
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 220 * 1024
+
+    # Unpin allocation and try again:
+    op_pool.unpin_scratch(allocation1)
+    allocation2: BufferPoolAllocation = op_pool.allocate_scratch(320 * 1024)
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 320 * 1024
+    assert op_pool.max_memory() == 540 * 1024
+
+    # Trying to pin allocation1 back should error out
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.pin_scratch(allocation1)
+
+    # Verify stats after pin attempt
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 320 * 1024
+    assert op_pool.max_memory() == 540 * 1024
+
+    # Unpin the 2nd, and then pin the 1st. This should go through.
+    op_pool.unpin_scratch(allocation2)
+    op_pool.pin_scratch(allocation1)
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 540 * 1024
+
+    # Cleanup
+    op_pool.free_scratch(allocation1)
+    op_pool.free_scratch(allocation2)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.max_memory() == 540 * 1024
+
+    del op_pool
+    del pool
+
+
+def test_operator_pool_scratch_reallocate():
+    """
+    Test than reallocating from the scratch mem
+    portion of the OperatorBufferPool works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+    )  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+
+    ## Simple reallocate
+
+    allocation: BufferPoolAllocation = op_pool.allocate_scratch(40 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 40 * 1024
+    assert op_pool.bytes_pinned() == 40 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 40 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 40 * 1024
+    assert op_pool.max_memory() == 40 * 1024
+    assert pool.is_pinned(allocation)
+
+    op_pool.reallocate_scratch(80 * 1024, allocation)
+
+    # Verify stats after re-allocation
+    assert op_pool.bytes_allocated() == 80 * 1024
+    assert op_pool.bytes_pinned() == 80 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 80 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 80 * 1024
+    assert op_pool.max_memory() == 80 * 1024
+    assert pool.is_pinned(allocation)
+
+    # Unpin and reallocate again
+    op_pool.unpin_scratch(allocation)
+    op_pool.reallocate_scratch(120 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 120 * 1024
+    assert op_pool.bytes_pinned() == 120 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 120 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 120 * 1024
+    assert op_pool.max_memory() == 120 * 1024
+    assert pool.is_pinned(allocation)  # reallocate pins by default
+
+    # Free and verify stats
+    op_pool.free_scratch(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.max_memory() == 120 * 1024
+
+    del op_pool
+    del pool
+
+
+## OperatorScratchPool tests
+
+
+def test_operator_scratch_pool_attributes():
+    """
+    Verify that the operator scratch pool attributes are
+    initialized correctly.
+    """
+
+    # Create one with default BufferPool as its parent
+    pool = BufferPool.default()
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.4)
+    op_scratch_pool: OperatorScratchPool = OperatorScratchPool(op_pool)
+    assert op_scratch_pool.backend_name == op_pool.backend_name == pool.backend_name
+    del op_scratch_pool
+    del op_pool
+    del pool
+
+
+def test_operator_scratch_pool_allocation():
+    """
+    Test that allocating from the OperatorScratchPool
+    works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+    )  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+    op_scratch_pool: OperatorScratchPool = OperatorScratchPool(op_pool)
+
+    ## 1. Basic allocation
+    allocation: BufferPoolAllocation = op_scratch_pool.allocate(5 * 1024)
+    # Verify that default allocation is 64B aligned
+    assert allocation.alignment == 64
+    assert allocation.get_ptr_as_int() % 64 == 0
+    # Verify stats after allocation
+    assert op_scratch_pool.bytes_allocated() == 5 * 1024
+    assert op_scratch_pool.bytes_pinned() == 5 * 1024
+    assert op_pool.bytes_allocated() == 5 * 1024
+    assert op_pool.bytes_pinned() == 5 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 5 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 5 * 1024
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert pool.bytes_allocated() == 5 * 1024
+    assert pool.bytes_pinned() == 5 * 1024
+    assert op_pool.max_memory() == 5 * 1024
+    assert pool.max_memory() == 5 * 1024
+    # We don't track max-memory for scratch portion,
+    # so it'll be 0
+    assert op_scratch_pool.max_memory() == 0
+
+    # Free and verify stats
+    op_scratch_pool.free(allocation)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    # Max memory should still be the same
+    assert op_pool.max_memory() == 5 * 1024
+    assert pool.max_memory() == 5 * 1024
+    assert op_scratch_pool.max_memory() == 0
+
+    ## 2. Test that we can go above the threshold safely.
+    allocation = op_scratch_pool.allocate(400 * 1024)
+    assert op_scratch_pool.bytes_allocated() == 400 * 1024
+    assert op_scratch_pool.bytes_pinned() == 400 * 1024
+    assert op_scratch_pool.bytes_allocated() == 400 * 1024
+    assert op_scratch_pool.bytes_pinned() == 400 * 1024
+    assert op_pool.bytes_allocated() == 400 * 1024
+    assert op_pool.bytes_pinned() == 400 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 400 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 400 * 1024
+
+    op_scratch_pool.free(allocation)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+
+    ## 3. Test that we can't go over the budget.
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_scratch_pool.allocate(600 * 1024)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+
+    ## 4. Test that we can't go over the budget if we
+    ## have a main mem allocation and then some from
+    ## the scratch portion.
+    allocation_main_mem: BufferPoolAllocation = op_pool.allocate(250 * 1024)
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_scratch_pool.allocate(275 * 1024)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_allocated() == 250 * 1024
+    assert op_pool.main_mem_bytes_pinned() == 250 * 1024
+
+    op_pool.free(allocation_main_mem)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+    assert op_pool.main_mem_bytes_allocated() == 0
+    assert op_pool.main_mem_bytes_pinned() == 0
+
+    del op_scratch_pool
+    del op_pool
+    del pool
+
+
+def test_operator_scratch_pool_pin_unpin():
+    """
+    Test that pinning/unpinning from the OperatorScratchPool
+    works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=2,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+    )  # 2MiB total, 8KiB min size class
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool)
+    op_scratch_pool: OperatorScratchPool = OperatorScratchPool(op_pool)
+
+    # Allocate a moderate size, then try to allocate amount
+    # such that both together are not below budget. But after
+    # unpinning the 1st allocation, the second is. Try pinning
+    # the 1st back and verify behavior. Then free the second
+    # and pin 1st back and verify behavior.
+
+    allocation1: BufferPoolAllocation = op_scratch_pool.allocate(220 * 1024)
+    op_pool.enable_threshold_enforcement()
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_scratch_pool.allocate(320 * 1024)
+
+    # Verify stats after both allocation attempts
+    assert op_scratch_pool.bytes_allocated() == 220 * 1024
+    assert op_scratch_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 220 * 1024
+
+    # Unpin allocation and try again:
+    op_scratch_pool.unpin(allocation1)
+    allocation2: BufferPoolAllocation = op_scratch_pool.allocate(320 * 1024)
+    assert op_scratch_pool.bytes_allocated() == 540 * 1024
+    assert op_scratch_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 320 * 1024
+
+    # Trying to pin allocation1 back should error out
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_scratch_pool.pin(allocation1)
+
+    # Verify stats after pin attempt
+    assert op_scratch_pool.bytes_allocated() == 540 * 1024
+    assert op_scratch_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 320 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 320 * 1024
+
+    # Unpin the 2nd, and then pin the 1st. This should go through.
+    op_scratch_pool.unpin(allocation2)
+    op_scratch_pool.pin(allocation1)
+    assert op_scratch_pool.bytes_allocated() == 540 * 1024
+    assert op_scratch_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.bytes_allocated() == 540 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 540 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 220 * 1024
+
+    # Cleanup
+    op_scratch_pool.free(allocation1)
+    op_scratch_pool.free(allocation2)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+
+    del op_scratch_pool
+    del op_pool
+    del pool
+
+
+def test_operator_scratch_pool_reallocate():
+    """
+    Test that re-allocating from the OperatorScratchPool
+    works as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+    )  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+    op_scratch_pool: OperatorScratchPool = OperatorScratchPool(op_pool)
+
+    ## Simple reallocate
+
+    allocation: BufferPoolAllocation = op_scratch_pool.allocate(40 * 1024)
+
+    # Verify stats after allocation
+    assert op_scratch_pool.bytes_allocated() == 40 * 1024
+    assert op_scratch_pool.bytes_pinned() == 40 * 1024
+    assert op_pool.bytes_allocated() == 40 * 1024
+    assert op_pool.bytes_pinned() == 40 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 40 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 40 * 1024
+    assert pool.is_pinned(allocation)
+
+    op_scratch_pool.reallocate(80 * 1024, allocation)
+    # Verify stats after re-allocation
+    assert op_scratch_pool.bytes_allocated() == 80 * 1024
+    assert op_scratch_pool.bytes_pinned() == 80 * 1024
+    assert op_pool.bytes_allocated() == 80 * 1024
+    assert op_pool.bytes_pinned() == 80 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 80 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 80 * 1024
+    assert pool.is_pinned(allocation)
+
+    # Unpin and reallocate again
+    op_scratch_pool.unpin(allocation)
+    op_scratch_pool.reallocate(120 * 1024, allocation)
+    assert op_scratch_pool.bytes_allocated() == 120 * 1024
+    assert op_scratch_pool.bytes_pinned() == 120 * 1024
+    assert op_pool.bytes_allocated() == 120 * 1024
+    assert op_pool.bytes_pinned() == 120 * 1024
+    assert op_pool.scratch_mem_bytes_allocated() == 120 * 1024
+    assert op_pool.scratch_mem_bytes_pinned() == 120 * 1024
+    assert pool.is_pinned(allocation)  # reallocate pins by default
+
+    # Free and verify stats
+    op_scratch_pool.free(allocation)
+    assert op_scratch_pool.bytes_allocated() == 0
+    assert op_scratch_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.scratch_mem_bytes_allocated() == 0
+    assert op_pool.scratch_mem_bytes_pinned() == 0
+
+    del op_scratch_pool
     del op_pool
     del pool
 
