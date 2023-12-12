@@ -20,12 +20,16 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.type.ArraySqlType;
+import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.VariantSqlType;
 
 /** Class filled with static utility functions. */
 public class Utils {
@@ -228,6 +232,28 @@ public class Utils {
             "Internal Error: Calcite Plan Produced an Unsupported Type: " + typeName.getName());
     }
     return dtype;
+  }
+
+  /**
+   * Check if input type is VARIANT/MAP or has a VARIANT/MAP component (which means concrete type
+   * not fully known). NOTE: MAP could be a struct array or map array in Bodo compiler and is not
+   * fully concrete.
+   *
+   * @param type input type to check
+   * @return true flag if there is VARIANT/MAP
+   */
+  public static boolean hasVariantOrMapType(RelDataType type) {
+    if (type instanceof VariantSqlType) {
+      return true;
+    }
+    if (type instanceof MapSqlType) {
+      return true;
+    }
+    if (type instanceof ArraySqlType) {
+      ArraySqlType arrayType = ((ArraySqlType) type);
+      return hasVariantOrMapType(arrayType.getComponentType());
+    }
+    return false;
   }
 
   /**

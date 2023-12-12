@@ -296,7 +296,9 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
             for stmt in block.body:
                 if isinstance(stmt, ir.Assign):
                     fdef = guard(find_callname, fir, stmt.value)
-                    found = found or fdef == ("bodosql_case_kernel", "")
+                    found = found or (
+                        fdef is not None and fdef[0] == "bodosql_case_kernel"
+                    )
         assert found, "bodosql_case_kernel not found in IR, case statement was inlined"
 
     finally:

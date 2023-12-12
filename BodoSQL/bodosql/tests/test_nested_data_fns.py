@@ -770,12 +770,7 @@ def test_array_construct(data_values, use_case, memory_leak_check):
     build a column of arrays.
     """
     data_values, dtype = data_values
-    if any(isinstance(elem, list) for elem in data_values) and use_case:
-        pytest.skip(reason="[BSE-511] TODO: support array in CASE statements")
-    if any(isinstance(elem, dict) for elem in data_values) and use_case:
-        pytest.skip(
-            reason="[BSE-1889] TODO: support returning JSON or arrays of JSON in CASE statements"
-        )
+
     if use_case:
         query = "SELECT CASE WHEN C THEN ARRAY_CONSTRUCT(A, B) ELSE ARRAY_CONSTRUCT(B, A) END FROM table1"
     else:
@@ -823,12 +818,7 @@ def test_array_construct_compact(data_values, use_case, memory_leak_check):
     build a column of arrays.
     """
     data_values, dtype = data_values
-    if any(isinstance(elem, list) for elem in data_values) and use_case:
-        pytest.skip(reason="[BSE-511] TODO: support array in CASE statements")
-    if any(isinstance(elem, dict) for elem in data_values) and use_case:
-        pytest.skip(
-            reason="[BSE-1889] TODO: support returning JSON or arrays of JSON in CASE statements"
-        )
+
     if use_case:
         query = "SELECT CASE WHEN C THEN ARRAY_CONSTRUCT_COMPACT(A, B) ELSE ARRAY_CONSTRUCT_COMPACT(B, A) END FROM table1"
     else:

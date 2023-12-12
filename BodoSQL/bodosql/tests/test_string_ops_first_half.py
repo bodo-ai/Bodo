@@ -1356,10 +1356,6 @@ def test_strtok_to_array(query, expected, memory_leak_check):
                 ),
             ),
             id="all_vector_with_case",
-            marks=pytest.mark.skip(
-                reason="TODO: [BSE-511] Support ARRAY with CASE statement."
-            ),
-            # We don't support null ARRAY literal and astype conversion for ARRAY now
         ),
     ],
 )
