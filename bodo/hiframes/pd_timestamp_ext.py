@@ -1658,7 +1658,6 @@ def to_datetime_scalar(
     format=None,
     exact=True,
     unit=None,
-    infer_datetime_format=False,
     origin="unix",
     cache=True,
 ):  # pragma: no cover
@@ -1677,7 +1676,6 @@ def to_datetime_scalar(
             format=format,
             exact=exact,
             unit=unit,
-            infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
         ).tz_localize(None)
@@ -1694,7 +1692,6 @@ def pandas_string_array_to_datetime(
     format,
     exact,
     unit,
-    infer_datetime_format,
     origin,
     cache,
 ):  # pragma: no cover
@@ -1709,7 +1706,6 @@ def pandas_string_array_to_datetime(
             format=format,
             exact=exact,
             unit=unit,
-            infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
         )
@@ -1726,7 +1722,6 @@ def pandas_dict_string_array_to_datetime(
     format,
     exact,
     unit,
-    infer_datetime_format,
     origin,
     cache,
 ):  # pragma: no cover
@@ -1751,7 +1746,6 @@ def pandas_dict_string_array_to_datetime(
         format,
         exact,
         unit,
-        infer_datetime_format,
         origin,
         cache,
     ).values
@@ -1773,7 +1767,6 @@ def overload_to_datetime(
     format=None,
     exact=True,
     unit=None,
-    infer_datetime_format=False,
     origin="unix",
     cache=True,
 ):
@@ -1813,7 +1806,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -1826,7 +1818,6 @@ def overload_to_datetime(
                 format=format,
                 exact=exact,
                 unit=unit,
-                infer_datetime_format=infer_datetime_format,
                 origin=origin,
                 cache=cache,
             )
@@ -1845,7 +1836,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -1862,7 +1852,6 @@ def overload_to_datetime(
                     format=format,
                     exact=exact,
                     unit=unit,
-                    infer_datetime_format=infer_datetime_format,
                     origin=origin,
                     cache=cache,
                 )
@@ -1887,7 +1876,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -1908,7 +1896,7 @@ def overload_to_datetime(
 
     # return DatetimeIndex if input is array(dt64)
     if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return lambda arg_a, errors="raise", dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, infer_datetime_format=False, origin="unix", cache=True: bodo.hiframes.pd_index_ext.init_datetime_index(
+        return lambda arg_a, errors="raise", dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, origin="unix", cache=True: bodo.hiframes.pd_index_ext.init_datetime_index(
             arg_a, None
         )  # pragma: no cover
 
@@ -1924,7 +1912,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -1939,7 +1926,6 @@ def overload_to_datetime(
                 format,
                 exact,
                 unit,
-                infer_datetime_format,
                 origin,
                 cache,
             )
@@ -1959,7 +1945,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -1976,7 +1961,6 @@ def overload_to_datetime(
                     format=format,
                     exact=exact,
                     unit=unit,
-                    infer_datetime_format=infer_datetime_format,
                     origin=origin,
                     cache=cache,
                 )
@@ -2001,7 +1985,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -2018,7 +2001,6 @@ def overload_to_datetime(
                 format,
                 exact,
                 unit,
-                infer_datetime_format,
                 origin,
                 cache,
             ).values
@@ -2044,7 +2026,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -2057,7 +2038,6 @@ def overload_to_datetime(
                 format,
                 exact,
                 unit,
-                infer_datetime_format,
                 origin,
                 cache,
             )
@@ -2078,7 +2058,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -2100,7 +2079,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -2121,7 +2099,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
@@ -2140,7 +2117,6 @@ def overload_to_datetime(
             format=None,
             exact=True,
             unit=None,
-            infer_datetime_format=False,
             origin="unix",
             cache=True,
         ):  # pragma: no cover
