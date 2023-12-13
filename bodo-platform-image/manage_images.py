@@ -95,7 +95,7 @@ if __name__ == "__main__":
     assert "BOT_PLATFORM_PASSWORD" in os.environ
     assert "BACKEND_SERVICE_URL" in os.environ
 
-    logging.info(f"Log into the platform using {os.environ["BOT_PLATFORM_USERNAME"]} account and get an access token...")
+    logging.info(f"Log into the platform using {os.environ['BOT_PLATFORM_USERNAME']} account and get an access token...")
     try:
         access_token = login(os.environ["AUTH_SERVICE_URL"], os.environ["BOT_PLATFORM_USERNAME"],
                              os.environ["BOT_PLATFORM_PASSWORD"])
