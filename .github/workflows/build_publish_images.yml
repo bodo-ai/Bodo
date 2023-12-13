@@ -300,7 +300,7 @@ jobs:
       - name: Share Images with Testing Platform
         id: share
         env:
-          AUTH_SERVICE_URL: "https://bodo-testing.us.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-test.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
