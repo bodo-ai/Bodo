@@ -182,8 +182,31 @@ StorageManager::StorageManager(std::string storage_name,
 template <typename Fs>
 class ArrowStorageManager final : public StorageManager {
    public:
-    arrow::Status Initialize() override {
-        return this->fs->CreateDir(this->location.string());
+    explicit ArrowStorageManager(
+        const std::shared_ptr<StorageOptions> options, std::string storage_name,
+        std::shared_ptr<Fs> fs,
+        const std::span<const uint64_t> size_class_bytes_, bool is_object_store)
+        : StorageManager(storage_name, options),
+          location(std::filesystem::path(options->location) / this->uuid),
+          fs(fs) {
+        // Object stores don't require directories to be created
+        // beforehand, since all objects are stored in a flat namespace
+        // with tags for the directory structure
+        if (is_object_store) {
+            return;
+        }
+
+        // Create Top Directory and Subdirectories for Each Block Size
+        CHECK_ARROW_MEM(this->fs->CreateDir(this->location.string()),
+                        storage_name + ": Unable to Create Top Directory -");
+
+        for (const auto& size_ : size_class_bytes_) {
+            std::filesystem::path fpath =
+                this->location / std::to_string(size_);
+            CHECK_ARROW_MEM(
+                this->fs->CreateDir(fpath.string()),
+                storage_name + ": Unable to Create Sub-Block Directory -");
+        }
     }
 
     arrow::Status ReadBlock(uint64_t block_id, int64_t n_bytes,
@@ -240,10 +263,6 @@ class ArrowStorageManager final : public StorageManager {
         std::filesystem::path fpath = this->location / std::to_string(n_bytes);
         std::filesystem::path fname = fpath / std::to_string(block_id);
 
-        CHECK_ARROW_MEM_RET(
-            this->fs->CreateDir(fpath.string(), true),
-            storage_name + "::WriteBlock: Unable to Create Directory -");
-
         std::shared_ptr<arrow::io::OutputStream> out_stream;
         CHECK_ARROW_AND_ASSIGN(
             this->fs->OpenOutputStream(fname.string()),
@@ -291,20 +310,6 @@ class ArrowStorageManager final : public StorageManager {
             storage_name + "::Cleanup: Failed to delete spill directory");
     }
 
-    explicit ArrowStorageManager(const std::shared_ptr<StorageOptions> options,
-                                 std::string storage_name,
-                                 std::shared_ptr<Fs> fs)
-        : StorageManager(storage_name, options),
-          location(std::filesystem::path(options->location) / this->uuid),
-          fs(fs) {}
-
-    explicit ArrowStorageManager(const std::shared_ptr<StorageOptions> options,
-                                 std::string storage_name,
-                                 std::shared_ptr<Fs> fs, std::string location)
-        : StorageManager(storage_name, options),
-          location(std::filesystem::path(location) / this->uuid),
-          fs(fs) {}
-
    private:
     /// @brief Location to write spill contents to
     std::filesystem::path location;
@@ -315,15 +320,17 @@ class ArrowStorageManager final : public StorageManager {
 
 using LocalStorageManager = ArrowStorageManager<arrow::fs::LocalFileSystem>;
 static std::unique_ptr<LocalStorageManager> MakeLocal(
-    const std::shared_ptr<StorageOptions> options) {
+    const std::shared_ptr<StorageOptions> options,
+    const std::span<const uint64_t> size_class_bytes_) {
     auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
     return std::make_unique<LocalStorageManager>(options, "LocalStorageManager",
-                                                 fs);
+                                                 fs, size_class_bytes_, false);
 }
 
 using S3StorageManager = ArrowStorageManager<arrow::fs::S3FileSystem>;
 static std::unique_ptr<S3StorageManager> MakeS3(
-    const std::shared_ptr<StorageOptions> options) {
+    const std::shared_ptr<StorageOptions> options,
+    const std::span<const uint64_t> size_class_bytes_) {
     auto s3_location = options->location;
     std::string rel_path;
 
@@ -352,25 +359,24 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                     "Spilling -");
     auto fs = fs_res.ValueOrDie();
 
+    options->location = rel_path;
     return std::make_unique<S3StorageManager>(options, "S3StorageManager", fs,
-                                              rel_path);
+                                              size_class_bytes_, true);
 }
 
 std::unique_ptr<StorageManager> MakeStorageManager(
-    const std::shared_ptr<StorageOptions>& options) {
+    const std::shared_ptr<StorageOptions>& options,
+    const std::span<const uint64_t> size_class_bytes_) {
     std::unique_ptr<StorageManager> manager;
 
     switch (options->type) {
         case StorageType::Local:
-            manager = MakeLocal(options);
+            manager = MakeLocal(options, size_class_bytes_);
             break;
         case StorageType::S3:
-            manager = MakeS3(options);
+            manager = MakeS3(options, size_class_bytes_);
             break;
     }
-
-    CHECK_ARROW_MEM(manager->Initialize(),
-                    "Failed to Initialize Storage Manager:");
 
     return manager;
 }
