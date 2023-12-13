@@ -141,10 +141,6 @@ class StorageManager {
 
     // ------------------------- Virtual Functions ------------------------- //
 
-    /// @brief Initialize the Manager by Setting Up any
-    /// Background Resources
-    virtual arrow::Status Initialize() = 0;
-
     /**
      * @brief Read a block with id block_id and size of n_bytes
      * from storage, write its contents to out_ptr, and delete
@@ -209,7 +205,8 @@ class StorageManager {
 
 /// @brief Factory Function to Create StorageManager based on StorageOptions
 std::unique_ptr<StorageManager> MakeStorageManager(
-    const std::shared_ptr<StorageOptions>& options);
+    const std::shared_ptr<StorageOptions>& options,
+    const std::span<const uint64_t> size_class_bytes_);
 
 /// @brief Print Storage Manager Statistics for All Managers
 /// in an easy-to-read table format
