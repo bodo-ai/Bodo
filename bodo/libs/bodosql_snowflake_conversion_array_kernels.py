@@ -1016,7 +1016,6 @@ def pd_to_datetime_error_checked(
     format=None,
     exact=True,
     unit=None,
-    infer_datetime_format=False,
     origin="unix",
     cache=True,
 ):  # pragma: no cover
@@ -1055,7 +1054,6 @@ def pd_to_datetime_error_checked(
             format=format,
             exact=exact,
             unit=unit,
-            infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
         )

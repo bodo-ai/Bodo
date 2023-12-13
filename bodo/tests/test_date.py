@@ -540,16 +540,6 @@ def test_function_to_datetime_array_int(memory_leak_check):
     check_func(f, (S,))
 
 
-def test_function_to_datetime_infer_datetime_format(memory_leak_check):
-    """Test unix to_datetime"""
-
-    def f(S):
-        return pd.to_datetime(S, infer_datetime_format=True)
-
-    S = pd.Series(["3/11/2000", "3/12/2000", "3/13/2000"] * 1000)
-    check_func(f, (S,))
-
-
 @pytest.mark.slow
 def test_function_to_datetime_unix_epoch(memory_leak_check):
     """Test unix to_datetime"""
