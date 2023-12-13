@@ -95,7 +95,7 @@ if __name__ == "__main__":
     assert "BOT_PLATFORM_PASSWORD" in os.environ
     assert "BACKEND_SERVICE_URL" in os.environ
 
-    logging.info("Log into the platform using herman_bot account and get an access token...")
+    logging.info(f"Log into the platform using {os.environ["BOT_PLATFORM_USERNAME"]} account and get an access token...")
     try:
         access_token = login(os.environ["AUTH_SERVICE_URL"], os.environ["BOT_PLATFORM_USERNAME"],
                              os.environ["BOT_PLATFORM_PASSWORD"])
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     update = os.environ.get("UPDATE_IMAGE", "false") == "true"
     updated_bodo_version = os.environ.get("UPDATED_IMAGE_NAME", None)
 
-    logging.info("Update? ", update)
+    logging.info("Update Image: ", update)
 
     # Create the data to be shared
     if args.deregister or update:

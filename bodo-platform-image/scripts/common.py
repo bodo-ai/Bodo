@@ -24,10 +24,12 @@ def login(auth_url, bot_username, bot_password):
     )
 
     if response.status_code != 200:
+        logging.info(response.json())
         raise Exception(f"Login to Bodo Platform failed: {response.status_code}")
 
     # use organization id to switch tenant with superadmin capability
     assert "ORGANIZATION_UUID" in os.environ
+    logging.info("ORGANIZATION_UUID: ",os.environ["ORGANIZATION_UUID"])
     payload = {"tenantId": os.environ["ORGANIZATION_UUID"]}
     url = f"{auth_url}/identity/resources/users/v1/tenant"
     headers = {
@@ -51,6 +53,7 @@ def login(auth_url, bot_username, bot_password):
     )
 
     if response.status_code != 200:
+        logging.info(response.json())
         raise Exception(f"Switch to organization failed: {response.status_code}")
 
     return response.json()["accessToken"]
