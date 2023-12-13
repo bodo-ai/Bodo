@@ -732,12 +732,6 @@ class BufferPool final : public IBufferPool {
     int64_t bytes_freed_through_malloc_since_last_trim_ = 0;
 
     /**
-     * @brief Helper function for initializing
-     * the BufferPool. This is called from the constructor.
-     */
-    void Initialize();
-
-    /**
      * @brief Returns a size that is 'alignment' aligned, essentially
      * rounding up to the closest multiple of 'alignment'.
      *

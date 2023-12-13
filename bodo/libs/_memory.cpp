@@ -665,21 +665,6 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
 
 //// BufferPool
 
-BufferPool::BufferPool(const BufferPoolOptions& options)
-    : options_(std::move(options)),
-      // Convert MiB to bytes
-      memory_size_bytes_(options.memory_size * 1024 * 1024) {
-    for (auto& storage_option : this->options_.storage_options) {
-        auto manager = MakeStorageManager(storage_option);
-        // std::move is needed to push a unique_ptr
-        this->storage_managers_.push_back(std::move(manager));
-    }
-
-    this->Initialize();
-}
-
-BufferPool::BufferPool() : BufferPool(BufferPoolOptions::Defaults()) {}
-
 /**
  * @brief Find the highest power of 2 that is lesser than or equal
  * to N. Note that 0 returns 0.
@@ -704,13 +689,15 @@ static inline int64_t highest_power_of_2(int64_t N) {
     return 0x8000000000000000UL >> (__builtin_clzll(N));
 }
 
-void BufferPool::Initialize() {
+BufferPool::BufferPool(const BufferPoolOptions& options)
+    : options_(std::move(options)),
+      // Convert MiB to bytes
+      memory_size_bytes_(options.memory_size * 1024 * 1024) {
     // Verify that min-size-class is a power of 2
-    // TODO Move to BufferPoolOptions constructor.
     if (((this->options_.min_size_class &
           (this->options_.min_size_class - 1)) != 0) ||
         (this->options_.min_size_class == 0)) {
-        throw std::runtime_error("BufferPool::Initialize: min_size_class (" +
+        throw std::runtime_error("BufferPool(): min_size_class (" +
                                  std::to_string(this->options_.min_size_class) +
                                  ") must be a power of 2");
     }
@@ -724,7 +711,7 @@ void BufferPool::Initialize() {
         static_cast<uint64_t>(highest_power_of_2(this->memory_size_bytes_));
 
     if (min_size_class_bytes > max_size_class_possible_bytes) {
-        throw std::runtime_error("BufferPool::Initialize: min_size_class " +
+        throw std::runtime_error("BufferPool(): min_size_class " +
                                  std::to_string(min_size_class_bytes) +
                                  " is larger than available "
                                  "memory!");
@@ -742,24 +729,35 @@ void BufferPool::Initialize() {
         std::min(this->options_.max_num_size_classes, max_num_size_classes),
         (uint64_t)63));
 
-    // Create the SizeClass objects
-    this->size_classes_.reserve(num_size_classes);
-    this->size_class_bytes_.reserve(num_size_classes);
-    uint64_t size_class_bytes_i = min_size_class_bytes;
-    for (uint8_t i = 0; i < num_size_classes; i++) {
-        uint64_t num_blocks = static_cast<uint64_t>(this->memory_size_bytes_ /
-                                                    size_class_bytes_i);
-        this->size_classes_.emplace_back(std::make_unique<SizeClass>(
-            i, std::span(this->storage_managers_), num_blocks,
-            size_class_bytes_i, this->options_.spill_on_unpin,
-            this->options_.move_on_unpin, this->options_.tracing_mode));
-        this->size_class_bytes_.emplace_back(size_class_bytes_i);
-        size_class_bytes_i *= 2;
-    }
-
     this->malloc_threshold_ =
         static_cast<uint64_t>(MALLOC_THRESHOLD_RATIO * min_size_class_bytes);
+
+    // Construct Size Class Sizes in Bytes
+    for (uint8_t i = 0; i < num_size_classes; i++) {
+        this->size_class_bytes_.push_back(min_size_class_bytes);
+        min_size_class_bytes *= 2;
+    }
+
+    // Construct Storage Managers
+    for (auto& storage_option : this->options_.storage_options) {
+        auto manager = MakeStorageManager(storage_option, size_class_bytes_);
+        // std::move is needed to push a unique_ptr
+        this->storage_managers_.push_back(std::move(manager));
+    }
+
+    // Create the SizeClass objects
+    this->size_classes_.reserve(num_size_classes);
+    for (uint8_t i = 0; i < num_size_classes; i++) {
+        uint64_t num_blocks = static_cast<uint64_t>(this->memory_size_bytes_ /
+                                                    size_class_bytes_[i]);
+        this->size_classes_.emplace_back(std::make_unique<SizeClass>(
+            i, std::span(this->storage_managers_), num_blocks,
+            size_class_bytes_[i], this->options_.spill_on_unpin,
+            this->options_.move_on_unpin, this->options_.tracing_mode));
+    }
 }
+
+BufferPool::BufferPool() : BufferPool(BufferPoolOptions::Defaults()) {}
 
 size_t BufferPool::num_size_classes() const {
     return this->size_classes_.size();
