@@ -579,6 +579,19 @@ def snowflake_connect(
     # Set a short login timeout so people don't have to wait the default
     # 60 seconds to find out they added the wrong credentials.
     params["login_timeout"] = 5
+    # Bodo executes async queries to perform writes. While most should be quick,
+    # some could take longer than the Snowflake default of 5 minutes so we need to
+    # ensure ABORT_DETACHED_QUERY is set to False. This should be the case typically,
+    # but some organizations may have updated their value.
+    if "session_parameters" not in params:
+        params["session_parameters"] = {}
+    if params["session_parameters"].get("ABORT_DETACHED_QUERY", False):
+        warning = BodoWarning(
+            "Session parameter 'ABORT_DETACHED_QUERY' found in connection string and will be ignored. "
+            "Bodo forces this value to always be False because it may submit async queries."
+        )
+        warnings.warn(warning)
+    params["session_parameters"]["ABORT_DETACHED_QUERY"] = False
 
     try:
         import snowflake.connector
