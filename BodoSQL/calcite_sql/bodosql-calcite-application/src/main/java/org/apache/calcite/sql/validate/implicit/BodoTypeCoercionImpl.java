@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function3;
+import kotlin.jvm.functions.Function4;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -67,14 +68,15 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
    *                     overloaded function is encountered additional information may be required.
    * @param argNum Which argument is being cast. This is important for functions where arguments have different
    *               defined types.
+   * @param operandTypes The original list of types to the function call.
    * @return A new type or the original type.
    */
-  protected RelDataType variantImplicitCast(RelDataType variantType, String operatorName, int argNum) {
+  protected RelDataType variantImplicitCast(RelDataType variantType, String operatorName, int argNum, List<RelDataType> operandTypes) {
     // TODO(njriasan): Define a simpler name for this type
-    Map<String, Function3<RelDataType, RelDataTypeFactory, Integer, RelDataType>> variantMap = VariantCastTable.Companion.getVariantNameMapping();
+    Map<String, Function4<RelDataType, RelDataTypeFactory, Integer, List<? extends RelDataType>, RelDataType>> variantMap = VariantCastTable.Companion.getVariantNameMapping();
     if (variantMap.containsKey(operatorName)) {
-      Function3<RelDataType, RelDataTypeFactory, Integer, RelDataType> castFunction = variantMap.get(operatorName);
-      return castFunction.invoke(variantType, factory, argNum);
+      Function4<RelDataType, RelDataTypeFactory, Integer, List<? extends RelDataType>, RelDataType> castFunction = variantMap.get(operatorName);
+      return castFunction.invoke(variantType, factory, argNum, operandTypes);
     } else {
       return variantType;
     }
@@ -106,7 +108,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     for (int i = 0; i < operandTypes.size(); i++) {
       RelDataType operandType = operandTypes.get(i);
       if (operandType instanceof VariantSqlType) {
-        RelDataType implicitType = variantImplicitCast(operandType, operatorName, i);
+        RelDataType implicitType = variantImplicitCast(operandType, operatorName, i, operandTypes);
         coerced = null != implicitType
                 && operandTypes.get(i) != implicitType
                 && coerceOperandType(binding.getScope(), binding.getCall(), i, implicitType)
