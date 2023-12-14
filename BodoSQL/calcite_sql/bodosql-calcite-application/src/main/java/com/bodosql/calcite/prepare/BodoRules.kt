@@ -15,6 +15,7 @@ import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
 import com.bodosql.calcite.application.logicalRules.FilterSetOpTransposeRuleNoWindow
+import com.bodosql.calcite.application.logicalRules.FilterWindowSplitRule
 import com.bodosql.calcite.application.logicalRules.InnerJoinRemoveRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
@@ -42,10 +43,12 @@ import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.plan.RelRule.OperandBuilder
 import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
+import org.apache.calcite.rel.rules.CoreRules
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
 import org.apache.calcite.rel.rules.JoinProjectTransposeRule
@@ -415,6 +418,16 @@ object BodoRules {
             .toRule()
 
     /**
+     * Split a FILTER containing a window function and other functions if possible,
+     * effectively pushing some filters past the others.
+     */
+    @JvmField
+    val FILTER_WINDOW_SPLIT_RULE: RelOptRule =
+        FilterWindowSplitRule.Config.DEFAULT
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
      * Rule that tries to push filter expressions into a join condition and into the inputs of the join.
      */
     @JvmField
@@ -464,7 +477,27 @@ object BodoRules {
         .toRule()
 
     /**
-     * Converts a BodoLogicalFilter to a SnowflakeFilter if it is located directly on top of a
+     * Rule that derives IS NOT NULL predicates from a inner {@link Join} and creates
+     * {@link Filter}s with those predicates as new inputs of the {@link Join}.
+     *
+     * TODO(njriasan) why can't I access JoinDeriveIsNotNullFilterRule.Config.DEFAULT
+     */
+    @JvmField
+    val JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE: RelOptRule = CoreRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE.config
+        .withOperandSupplier {
+                b: OperandBuilder ->
+            b.operand(BodoLogicalJoin::class.java).predicate { join: BodoLogicalJoin ->
+                (
+                    join.joinType == JoinRelType.INNER &&
+                        !join.condition.isAlwaysTrue
+                    )
+            }.anyInputs()
+        }
+        .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+        .toRule()
+
+    /**
+     * Converts a PandasFilter to a SnowflakeFilter if it is located directly on top of a
      * SnowflakeRel.
      */
     @JvmField
@@ -546,11 +579,14 @@ object BodoRules {
         FILTER_FLATTEN_TRANSPOSE_RULE,
         // Combining filters can simplify filters for pushing
         FILTER_MERGE_RULE,
+        // Push some filters past filters in window functions.
+        FILTER_WINDOW_SPLIT_RULE,
         // Reordering conditions can lead to greater filter pushing.
         FILTER_REORDER_CONDITION_RULE,
         JOIN_REORDER_CONDITION_RULE,
         // Process for inserting new filters to push
         JOIN_PUSH_TRANSITIVE_PREDICATES,
+        JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
         // Locking in any filters that can become SnowflakeFilter
         SNOWFLAKE_FILTER_LOCK_RULE,
         // Locking in any Limit pushdown
@@ -567,10 +603,14 @@ object BodoRules {
 
     /**
      * These are rules used for simplification of expressions.
+     *
+     * Note we don't include FILTER_REDUCE_EXPRESSIONS_RULE because it creates a cycle
+     * in q_succulent_archway. This didn't alter any other plans, so it should be
+     * fine to remove, but we may want to revisit in the future with a more concrete
+     * reason or re-enabling this rule.
      */
     val SIMPLIFICATION_RULES: List<RelOptRule> = listOf(
         PROJECT_REDUCE_EXPRESSIONS_RULE,
-        FILTER_REDUCE_EXPRESSIONS_RULE,
         // simplifies constants after aggregates
         // This is needed to take advantage of constant prop done by the above rules
         AGGREGATE_CONSTANT_PULL_UP_RULE,
@@ -690,6 +730,7 @@ object BodoRules {
     val VOLCANO_OPTIMIZE_RULE_SET: List<RelOptRule> = listOf(
         PROJECT_REMOVE_RULE,
         FILTER_MERGE_RULE,
+        FILTER_WINDOW_SPLIT_RULE,
         PROJECT_MERGE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
         AGGREGATE_JOIN_REMOVE_RULE,

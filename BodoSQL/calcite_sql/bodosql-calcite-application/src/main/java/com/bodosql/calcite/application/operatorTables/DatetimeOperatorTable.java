@@ -584,7 +584,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction DATE_TRUNC =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATE_TRUNC",
           // What Value should the return type be
           opBinding -> datetruncReturnType(opBinding),

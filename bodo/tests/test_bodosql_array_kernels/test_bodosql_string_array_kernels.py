@@ -1268,8 +1268,10 @@ def test_ord_ascii(s, memory_leak_check):
 
     # Simulates ORD/ASCII on a single row
     def ord_ascii_scalar_fn(elem):
-        if pd.isna(elem) or len(elem) == 0:
+        if pd.isna(elem):
             return None
+        elif len(elem) == 0:
+            return 0
         else:
             return ord(elem[0])
 

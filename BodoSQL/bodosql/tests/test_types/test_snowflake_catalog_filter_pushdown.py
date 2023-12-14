@@ -284,7 +284,7 @@ def test_snowflake_coalesce_lower_pushdown(
             # TODO(njriasan) [BS-1231]: Determine how to say LOWER(A) IS NULL -> A IS NULL
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") = $$macedonia$$ OR LOWER("A") IS NULL',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") = $$macedonia$$ OR "A" IS NULL',
             )
 
 

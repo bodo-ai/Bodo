@@ -556,9 +556,7 @@ public class BodoReturnTypes {
      * since split can create variable sized strings on each row.
      */
     public static final SqlReturnTypeInference SPLIT_RETURN_TYPE = ARG0_NULLABLE.andThen(SqlTypeTransforms.TO_VARYING).andThen(
-            (opBinding, typeToTransform) -> {
-                return toArrayTypeIfNotAlready(opBinding, typeToTransform, true);
-            }
+            (opBinding, typeToTransform) -> toArrayTypeIfNotAlready(opBinding, typeToTransform, true)
     );
 
     /**

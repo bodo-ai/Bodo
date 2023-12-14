@@ -44,7 +44,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction CONCAT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "CONCAT",
           // Concat sums together all input precision.
           // DYADIC_STRING_SUM always expects at least two arguments, which means that we need
@@ -56,7 +56,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction CONCAT_WS =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "CONCAT_WS",
           // Concat sums together all input precision and
           // includes the separator where appropriate.
@@ -97,8 +97,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction LEFT =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction LEFT =
+      SqlNullPolicyFunction.createAnyPolicy(
           "LEFT",
           // Match input precision. The substring is at most the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
@@ -110,7 +110,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction RIGHT = LEFT.withName("RIGHT");
 
   public static final SqlFunction REPEAT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "REPEAT",
           // Repeat has an unknown static output precision.
           BodoReturnTypes.ARG0_NULLABLE_VARYING_UNKNOWN_PRECISION,
@@ -130,7 +130,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction EDITDISTANCE =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "EDITDISTANCE",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -140,7 +140,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction JAROWINKLER_SIMILARITY =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "JAROWINKLER_SIMILARITY",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -150,7 +150,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction FORMAT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "FORMAT",
           // Return type has an unknown precision, but it should only be
           // null if there is a null input.
@@ -200,7 +200,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction ORD =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "ORD",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -222,7 +222,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction CHR = CHAR.withName("CHR");
 
   public static final SqlFunction RTRIMMED_LENGTH =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "RTRIMMED_LENGTH",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -232,7 +232,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SPACE =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "SPACE",
           // What Value should the return type be
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
@@ -241,8 +241,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction STARTSWITH =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction STARTSWITH =
+      SqlNullPolicyFunction.createAnyPolicy(
           "STARTSWITH",
           ReturnTypes.BOOLEAN_NULLABLE,
           OperandTypes.STRING_STRING,
@@ -265,8 +265,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction CHARINDEX =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction CHARINDEX =
+      SqlNullPolicyFunction.createAnyPolicy(
           "CHARINDEX",
           ReturnTypes.INTEGER_NULLABLE,
           argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
@@ -275,7 +275,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction POSITION = CHARINDEX.withName("POSITION");
 
   public static final SqlFunction SPLIT_PART =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "SPLIT_PART",
           // The precision is the same as in the worst
           // case we keep the same string.
@@ -288,12 +288,12 @@ public final class StringOperatorTable implements SqlOperatorTable {
           "STRTOK",
           // The precision is the same as in the worst
           // case we keep the same string.
-          ReturnTypes.ARG0_NULLABLE_VARYING,
+          BodoReturnTypes.ARG0_FORCE_NULLABLE_VARYING,
           OperandTypes.STRING.or(OperandTypes.STRING_STRING).or(OperandTypes.STRING_STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction STRTOK_TO_ARRAY =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "STRTOK_TO_ARRAY",
           BodoReturnTypes.TO_NULLABLE_VARYING_ARRAY,
           OperandTypes.CHARACTER.or(BodoOperandTypes.CHARACTER_CHARACTER),
@@ -320,7 +320,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SUBSTRING_INDEX =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "SUBSTRING_INDEX",
           // In the worst case we return the whole string,
           // so maintain the precision.
@@ -330,8 +330,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction REGEXP_LIKE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction REGEXP_LIKE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "REGEXP_LIKE",
           ReturnTypes.BOOLEAN_NULLABLE,
           argumentRange(
@@ -345,7 +345,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction RLIKE = REGEXP_LIKE.withName("RLIKE");
 
   public static final SqlFunction REGEXP_COUNT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "REGEXP_COUNT",
           ReturnTypes.INTEGER_NULLABLE,
           argumentRange(
@@ -357,7 +357,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REGEXP_REPLACE =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "REGEXP_REPLACE",
           // Return string has an unknown precision.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
@@ -388,7 +388,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REGEXP_INSTR =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "REGEXP_INSTR",
           ReturnTypes.INTEGER_NULLABLE,
           argumentRange(
@@ -403,7 +403,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction INITCAP =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "INITCAP",
           // This is a mappable function so the precision is the same.
           ReturnTypes.ARG0_NULLABLE,
@@ -413,15 +413,15 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction CONTAINS = STARTSWITH.withName("CONTAINS");
 
   public static final SqlFunction SPLIT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "SPLIT",
           // Return type for split is the exact same as TO_ARRAY
           SPLIT_RETURN_TYPE,
           OperandTypes.CHARACTER_CHARACTER,
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction SHA2 =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction SHA2 =
+      SqlNullPolicyFunction.createAnyPolicy(
           "SHA2",
           // SHA2 outputs at most 128 characters.
           BodoReturnTypes.VARCHAR_128_NULLABLE,
@@ -430,8 +430,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction SHA2_HEX = SHA2.withName("SHA2_HEX");
 
-  public static final SqlBasicFunction MD5 =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction MD5 =
+      SqlNullPolicyFunction.createAnyPolicy(
           "MD5",
           // MD5 outputs at most 32 characters.
           BodoReturnTypes.VARCHAR_32_NULLABLE,

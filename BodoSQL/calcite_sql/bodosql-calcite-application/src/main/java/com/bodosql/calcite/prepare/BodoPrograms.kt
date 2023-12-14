@@ -418,10 +418,9 @@ object BodoPrograms {
                             val elseOperators: MutableList<RexNode> = ArrayList()
                             val elseExpr = operands[operands.size - 1]
                             if (elseExpr is RexCall) {
-                                val elseCall = elseExpr
-                                if (elseCall.operator === SqlStdOperatorTable.CASE) {
+                                if (elseExpr.operator === SqlStdOperatorTable.CASE) {
                                     foundNestedCase = true
-                                    elseOperators.addAll(elseCall.getOperands())
+                                    elseOperators.addAll(elseExpr.getOperands())
                                 }
                             }
                             if (elseOperators.isEmpty()) {
@@ -586,7 +585,7 @@ object BodoPrograms {
         ): RelNode {
             val relBuilder = if (isPhysical) {
                 val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
-                physicalBuilder.transform({ t -> t.withBloat(-1) })
+                physicalBuilder.transform { t -> t.withBloat(-1) }
             } else {
                 com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
             }
@@ -613,7 +612,7 @@ object BodoPrograms {
             lattices: MutableList<RelOptLattice>,
         ): RelNode {
             val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
-            val builder = physicalBuilder.transform({ t -> t.withBloat(-1) })
+            val builder = physicalBuilder.transform { t -> t.withBloat(-1) }
             return BatchingPropertyPass.applyBatchingInfo(rel, builder)
         }
     }
@@ -640,7 +639,7 @@ object BodoPrograms {
             materializations: MutableList<RelOptMaterialization>?,
             lattices: MutableList<RelOptLattice>?,
         ): RelNode {
-            System.out.println(RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
+            println(RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
             return rel
         }
     }

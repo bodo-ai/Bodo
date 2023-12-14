@@ -1,10 +1,13 @@
 package com.bodosql.calcite.application.logicalRules;
 
 import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.rexNodeContainsCase;
+import static com.bodosql.calcite.application.logicalRules.WindowFilterTranspose.findPushableFilterComponents;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import java.util.Collections;
+import java.util.List;
 import java.util.function.Predicate;
+import kotlin.Pair;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelRule;
@@ -40,18 +43,30 @@ public class FilterProjectTransposeNoCaseRule
   public void onMatch(RelOptRuleCall call) {
     final Filter filter = call.rel(0);
     final Project project = call.rel(1);
+    RelBuilder builder = call.builder();
 
+    // Bodo Change: Support pushing part of a filter if there are window functions.
+    final RexNode condition;
+    final List<RexNode> keptConditions;
     if (project.containsOver()) {
-      // In general a filter cannot be pushed below a windowing calculation.
-      // Applying the filter before the aggregation function changes
-      // the results of the windowing invocation.
-      //
-      // When the filter is on the PARTITION BY expression of the OVER clause
-      // it can be pushed down. For now, we don't support this.
-      return;
+      // The filter on the PARTITION BY expression of the OVER clause
+      // can be pushed down if there are no window functions in the filter.
+      // If part of the filter could be pushed past both it will be split
+      // in another rule.
+      Pair<List<RexNode>, List<RexNode>> filterInfo = findPushableFilterComponents(project, filter);
+      List<RexNode> conditionParts = filterInfo.getFirst();
+      // Nothing can be pushed
+      if (conditionParts.isEmpty()) {
+        return;
+      }
+      condition = RexUtil.composeConjunction(builder.getRexBuilder(), conditionParts);
+      keptConditions = filterInfo.getSecond();
+    } else {
+      condition = filter.getCondition();
+      keptConditions = List.of();
     }
     // convert the filter to one that references the child of the project
-    RexNode newCondition = RelOptUtil.pushPastProject(filter.getCondition(), project);
+    RexNode newCondition = RelOptUtil.pushPastProject(condition, project);
     // Bodo Change: Don't push the filter if it now contains a case statement.
     // If the previous filter contained a case statement already a separate rule will
     // extract it from the filter.
@@ -95,7 +110,35 @@ public class FilterProjectTransposeNoCaseRule
                     project.getVariablesSet())
                 .build();
 
-    call.transformTo(newProject);
+    // Bodo Change: Apply any remaining filters from window functions.
+    final RelNode finalNode;
+    if (keptConditions.isEmpty()) {
+      finalNode = newProject;
+    } else {
+      RexNode outerCondition = RexUtil.composeConjunction(builder.getRexBuilder(), keptConditions);
+      if (config.isCopyFilter()) {
+        final RelTraitSet traitSet =
+            filter
+                .getTraitSet()
+                .replaceIfs(
+                    RelCollationTraitDef.INSTANCE,
+                    () ->
+                        Collections.singletonList(
+                            newProject.getTraitSet().getTrait(RelCollationTraitDef.INSTANCE)))
+                .replaceIfs(
+                    RelDistributionTraitDef.INSTANCE,
+                    () ->
+                        Collections.singletonList(
+                            newProject.getTraitSet().getTrait(RelDistributionTraitDef.INSTANCE)));
+        RexNode finalCondition =
+            RexUtil.removeNullabilityCast(relBuilder.getTypeFactory(), outerCondition);
+        finalNode = filter.copy(traitSet, newProject, finalCondition);
+      } else {
+        finalNode = relBuilder.push(newProject).filter(outerCondition).build();
+      }
+    }
+
+    call.transformTo(finalNode);
   }
 
   /**
