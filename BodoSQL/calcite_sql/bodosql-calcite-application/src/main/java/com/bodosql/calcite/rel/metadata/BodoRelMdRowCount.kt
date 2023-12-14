@@ -3,9 +3,12 @@ package com.bodosql.calcite.rel.metadata
 import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.RowSample
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.Sort
@@ -16,7 +19,10 @@ import org.apache.calcite.rex.RexDynamicParam
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexOver
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.util.ImmutableBitSet
+import org.apache.calcite.util.NumberUtil.multiply
 import org.apache.calcite.util.Util
 import kotlin.math.max
 import kotlin.math.min
@@ -324,5 +330,51 @@ class BodoRelMdRowCount : RelMdRowCount() {
     private fun computeDefaultUniqueCount(tableSize: Double): Double {
         val defaultGroupSize = 1000.0
         return max(1.0, tableSize / defaultGroupSize)
+    }
+
+    /**
+     * Estimates the row count after a MIN_ROW_NUMBER_FILTER based on the partition keys.
+     */
+    private fun getMinRowNumFilterRowCount(windowCond: RexOver, input: RelNode, mq: RelMetadataQuery): Double {
+        // rowCount is the cardinality of the partition by columns, fallback to divided by 10
+        // if anything goes wrong.
+        val totalRows = mq.getRowCount(input)
+        val default = totalRows / 10
+        val partitionKeys: MutableList<Int> = mutableListOf()
+        windowCond.window.partitionKeys.forEach {
+            if (it is RexInputRef) {
+                partitionKeys.add(it.index)
+            } else {
+                return default
+            }
+        }
+        val partitionCountEstimate = mq.getDistinctRowCount(input, ImmutableBitSet.of(partitionKeys), null) ?: default
+        // Cap the output at a certain ratio of the input so the row count at least decreases a little.
+        return minOf(partitionCountEstimate, totalRows * 0.999)
+    }
+
+    override fun getRowCount(rel: Filter, mq: RelMetadataQuery): Double? {
+        // Separate the conditions into window functions vs others
+        val conjunctions = RelOptUtil.conjunctions(rel.condition)
+        val windowConds: MutableList<RexOver> = mutableListOf()
+        val otherConds: MutableList<RexNode> = mutableListOf()
+        conjunctions.forEach {
+            if (it is RexOver) {
+                windowConds.add(it)
+            } else {
+                otherConds.add(it)
+            }
+        }
+
+        // If there is not exactly 1 OVER condition and it is not an MRNF, fall back to the regular implementation
+        if (otherConds.any { RexOver.containsOver(it) } || windowConds.size != 1) return super.getRowCount(rel, mq)
+        val windowCond = windowConds[0]
+        if (windowCond.aggOperator.name != CondOperatorTable.MIN_ROW_NUMBER_FILTER.name) return super.getRowCount(rel, mq)
+
+        // Estimate how many rows remain based on the # of combinations of the partition keys
+        val mrnfRowCount = getMinRowNumFilterRowCount(windowCond, rel.input, mq)
+        if (otherConds.size == 0) return mrnfRowCount
+        val otherConditionsCombined = otherConds[0]
+        return multiply(mrnfRowCount, mq.getSelectivity(rel.input, otherConditionsCombined))
     }
 }

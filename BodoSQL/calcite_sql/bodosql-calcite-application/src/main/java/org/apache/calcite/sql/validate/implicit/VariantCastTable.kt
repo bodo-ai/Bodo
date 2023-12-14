@@ -240,7 +240,7 @@ internal class VariantCastTable {
                         factory.createSqlType(SqlTypeName.TIMESTAMP),
                         inType.isNullable,
                     )
-                else ->  inType
+                else -> inType
             }
         }
 
@@ -257,7 +257,7 @@ internal class VariantCastTable {
                         factory.createSqlType(SqlTypeName.TIMESTAMP),
                         inType.isNullable,
                     )
-                else ->  inType
+                else -> inType
             }
         }
 
