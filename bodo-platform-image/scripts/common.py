@@ -2,6 +2,7 @@ import os
 import sys
 
 import requests
+import logging
 
 
 def login(auth_url, bot_username, bot_password):
@@ -60,6 +61,7 @@ def login(auth_url, bot_username, bot_password):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     if len(sys.argv) == 4:
         # Only print here as the bash scripts captures the access token to use it for authentication
         print(login(sys.argv[1], sys.argv[2], sys.argv[3]))
