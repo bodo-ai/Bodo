@@ -147,7 +147,7 @@ def type_code_to_arrow_type(
         return pa.time64("ns")
     # Variant / Union Type
     elif code == 5:
-        return pa.string()
+        return UnknownSnowflakeType.VARIANT
     # Timestamp stored in UTC - TIMESTAMP_LTZ
     # Timestamp with a timezone offset per item - TIMESTAMP_TZ
     elif code in (6, 7):
@@ -888,7 +888,7 @@ def snowflake_type_str_to_pyarrow_datatype(
             source_colname,
             cur_type,
             tz,
-            False,
+            can_system_sample,
         )
     elif value_type == "OBJECT":
         return get_map_type_from_metadata(
@@ -898,7 +898,7 @@ def snowflake_type_str_to_pyarrow_datatype(
             source_colname,
             cur_type,
             tz,
-            False,
+            can_system_sample,
         )
 
     elif value_type == "VARIANT":
@@ -934,15 +934,8 @@ def get_list_type_from_metadata(
 
         # However, we should only use this method of sampling if the row count is non-trivial
         # (e.g. above a thousand)
-        rowcount_res = execute_query(
-            cursor,
-            f"SELECT COUNT(*) FROM {sql_query}",
-            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
-        )
-        if rowcount_res is not None:
-            rowcount_df = rowcount_res.fetch_pandas_all()
-            if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
-                sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size({cur_colname}) > 0"
+        if enough_rows_for_system_sample(cursor, sql_query):
+            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size({cur_colname}) > 0"
 
     if sample_clauses is None:
         # If the source is a view, do the same but using a large limit to quickly narrow down
@@ -1004,6 +997,103 @@ def get_list_type_from_metadata(
         )
 
     return pa.large_list(pa_type)
+
+
+def enough_rows_for_system_sample(cursor: "SnowflakeCursor", sql_query: str):
+    """
+    Returns True if the table produced by a sql query which is valid for system sampling is
+    large enough that system sample should be done at all (current cutoff: at least 1k rows).
+    """
+    rowcount_res = execute_query(
+        cursor,
+        f"SELECT COUNT(*) FROM {sql_query}",
+        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    )
+    if rowcount_res is not None:
+        rowcount_df = rowcount_res.fetch_pandas_all()
+        if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
+            return True
+    return False
+
+
+def get_variant_type_from_metadata(
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    cur_colname: str,
+    source_colname: str,
+    tz: str,
+    can_system_sample: bool,
+):
+    """
+    Determine a precise output type for variant Columns from Snowflake
+    See snowflake_type_str_to_pyarrow_datatype for argument types
+    """
+    sample_clauses = None
+    if can_system_sample:
+        # If the source is a table, use system sampling to get 0.1% of all blocks which is a
+        # quick way to reduce the total number of rows. Also filters to remove all rows where
+        # the value is null, so subsequent steps are only looking at rows that have
+        # useful information.
+
+        # However, we should only use this method of sampling if the row count is non-trivial
+        # (e.g. above a thousand)
+        if enough_rows_for_system_sample(cursor, sql_query):
+            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null"
+
+    if sample_clauses is None:
+        # If the source is a view, do the same but using a large limit to quickly narrow down
+        # the number of rows to sample from. System sampling is fast but doesn't work on views,
+        # row sampling does work on views but is prohibitively slow, so limit is the only option.
+        sample_clauses = f"WHERE {cur_colname} is not null LIMIT 1000000"
+
+    # Use row sampling on the narrowed down result that does not contain null rows to
+    # reduce the number of rows that are exploded to at most 10000.
+    narrowed_query = f"(SELECT {cur_colname} as V FROM {sql_query} {sample_clauses}) SAMPLE (10000 ROWS)"
+
+    # Gather all of the distinct types of the reduced rows to infer the correct row type.
+    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({narrowed_query})"
+    # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
+    start_time = time.time()
+    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+        probe_res = execute_query(
+            cursor,
+            probe_query,
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+        )
+        if probe_res is not None and len(types_df := probe_res.fetch_pandas_all()) > 0:
+            break
+    # If the query failed or did not produce any type strings, indicate failure since
+    # it will not be possible to infer the correct type.
+    if probe_res is None or len(types_df) == 0:
+        raise BodoError(
+            f"Snowflake Probe Query Failed or Timed out While Typing List Content in Column {source_colname}. "
+            f"It is currently statically typed as VARIANT in the Source:\n"
+            f"{sql_query}"
+        )
+
+    value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
+    pa_type = snowflake_type_str_to_pyarrow_datatype(
+        value_types,
+        cursor,
+        sql_query,
+        cur_colname,
+        source_colname,
+        "variant",
+        tz,
+        can_system_sample,
+    )
+
+    if pa_type is None:
+        raise BodoError(
+            f"Snowflake Probe determined that Column {source_colname} in query or table:\n"
+            f"{sql_query}\n"
+            "is type variant. We are unable to narrow the type further, because the `variant` "
+            f"content has items of types {sorted(value_types)}. This indicated that the column is "
+            "a variant / union column with multiple datatypes.\n"
+            "Bodo currently does not support this array type."
+        )
+
+    return pa_type
 
 
 def get_struct_type_from_metadata(
@@ -1116,15 +1206,8 @@ def get_map_type_from_metadata(
 
         # However, we should only use this method of sampling if the row count is non-trivial
         # (e.g. above a thousand)
-        rowcount_res = execute_query(
-            cursor,
-            f"SELECT COUNT(*) FROM {sql_query}",
-            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
-        )
-        if rowcount_res is not None:
-            rowcount_df = rowcount_res.fetch_pandas_all()
-            if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
-                sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0"
+        if enough_rows_for_system_sample(cursor, sql_query):
+            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0"
 
     if sample_clauses is None:
         # If the source is a view, do the same but using a large limit to quickly narrow down
@@ -1268,7 +1351,7 @@ def get_schema_from_metadata(
         if isinstance(dtype, UnknownSnowflakeType):
             can_system_sample = can_table_be_system_sampled(cursor, orig_table)
             if orig_table is None:
-                src, cur_col = f"({desc_query})", field_meta.name
+                src, cur_col = f"({desc_query})", f"${i+1}"
             else:
                 src, cur_col = orig_table, f"${orig_table_indices[i]+1}"
             if dtype == UnknownSnowflakeType.LIST:
@@ -1288,6 +1371,15 @@ def get_schema_from_metadata(
                     cur_col,
                     field_meta.name,
                     "{}",
+                    tz,
+                    can_system_sample,
+                )
+            elif dtype == UnknownSnowflakeType.VARIANT:
+                dtype = get_variant_type_from_metadata(
+                    cursor,
+                    src,
+                    cur_col,
+                    field_meta.name,
                     tz,
                     can_system_sample,
                 )

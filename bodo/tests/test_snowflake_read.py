@@ -382,6 +382,63 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_variant_metadata_handling(cursor):
+    """
+    Test that Variant Columns are typed correctly, with the following original types:
+    V1: timestamp_ntz (column casted as variant)
+    V2: number(38, 0) (column casted as variant)
+    V3: float (column casted as variant)
+    V4: boolean (column casted as variant)
+    V5: map[str,float] (map column stored as variant in Snowflake)
+    V6: bigint (field pushdown on struct column stored as variant in Snowflake)
+    V7: array[struct[A:bigint,B:array[varchar]]] (parse json)
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        """
+        select 
+            ts_create::variant as V1, 
+            id::variant as V2, 
+            tusd::variant as V3, 
+            ifd::variant as V4, 
+            json_ffdubt as V5, 
+            json_rnks['b'] as V6,
+            parse_json('[{"A": 42, "B": []}, {"A": -1, "B": ["C", null, "D"]}, {"A": null, "B": null}]') as V7
+        from can_brod
+        """,
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 7
+    assert [f.name for f in pa_fields] == [f"V{i+1}" for i in range(7)]
+    assert all([f.nullable for f in pa_fields])
+
+    target_types = [
+        pa.timestamp("ns"),
+        pa.int64(),
+        pa.float64(),
+        pa.bool_(),
+        pa.map_(pa.large_string(), pa.float64()),
+        pa.int64(),
+        pa.large_list(
+            pa.struct(
+                [
+                    pa.field("A", pa.int64()),
+                    pa.field("B", pa.large_list(pa.large_string())),
+                ]
+            )
+        ),
+    ]
+    for i in range(6):
+        assert pa_fields[i].type == target_types[i]
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
 def test_float_array_metadata_handling(cursor):
     """
     Test that Numeric Array Columns, that may contain Integers, Floats, and Decimals
@@ -1240,6 +1297,51 @@ def test_read_struct_col(memory_leak_check):
         (query, conn),
         py_output=py_output,
     )
+
+
+def test_read_variant_col(memory_leak_check):
+    """
+    Basic test of reading a variant column from Snowflake
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT i, try_parse_json(s) as v FROM (
+        select 1 as i, '{"A": []}' as s
+        union all
+        select 2 as i, '{"B": ["C"]}' as s
+        union all
+        select 3 as i, '{}' as s
+        union all
+        select 4 as i, '{"D": null, "E": ["F", "G"]}' as s
+        union all
+        select 5 as i, '{"H": [null]}' as s
+    )
+    ORDER BY i
+    """
+    py_output = pd.DataFrame(
+        {
+            "i": [1, 2, 3, 4, 5],
+            "v": pd.array(
+                [
+                    {"A": []},
+                    {"B": ["C"]},
+                    {},
+                    {"D": None, "E": ["F", "G"]},
+                    {"H": [None]},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.large_list(pa.large_string()))
+                ),
+            ),
+        }
+    )
+
+    check_func(impl, (query, conn), py_output=py_output, check_dtype=False)
 
 
 def test_read_nested_in_array_col(memory_leak_check):
