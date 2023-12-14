@@ -3162,6 +3162,24 @@ class DistributedAnalysis:
                 args[2:], array_dists, "extra argument in groupby.apply()", rhs.loc
             )
             return
+        if fdef == ("fft2", "scipy.fftpack._basic"):
+            # If input is REP, output is REP
+            # If input is 1D_Var, output is 1D_Var
+            # If input is 1D, output is 1D_Var
+            if lhs not in array_dists:
+                # Default to 1D_Var, fftw's distribution does not match our 1D distribution
+                # so 1D always becomes 1D_Var
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            new_dist = Distribution(
+                min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
+            )
+            array_dists[lhs] = new_dist
+            # If output is REP set input to REP
+            if new_dist == Distribution.REP:
+                self._set_REP(
+                    rhs.args[0], array_dists, "Output of FFT is replicated.", rhs.loc
+                )
+            return
 
         # handle calling other Bodo functions that have distributed flags
         func_type = self.typemap[func_var]

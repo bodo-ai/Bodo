@@ -6,6 +6,7 @@
 
 #include <arrow/type_fwd.h>
 #include <mpi.h>
+#include <complex>
 #include <iostream>
 #include <span>
 #include <string>
@@ -1705,6 +1706,16 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
     if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)ptrdata;
         return std::to_string(*ptr);
+    }
+    if (dtype == Bodo_CTypes::COMPLEX128) {
+        std::complex<double>* ptr = (std::complex<double>*)ptrdata;
+        return std::to_string(ptr->real()) + "+" + std::to_string(ptr->imag()) +
+               "j";
+    }
+    if (dtype == Bodo_CTypes::COMPLEX64) {
+        std::complex<float>* ptr = (std::complex<float>*)ptrdata;
+        return std::to_string(ptr->real()) + "+" + std::to_string(ptr->imag()) +
+               "j";
     }
     return "no matching type";
 }

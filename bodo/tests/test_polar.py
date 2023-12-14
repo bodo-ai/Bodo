@@ -258,15 +258,12 @@ def test_taylor(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pytest.param((np.int64, "C"), id="int-C", marks=pytest.mark.slow),
-        pytest.param((np.int64, "F"), id="int-F", marks=pytest.mark.slow),
-        pytest.param((np.int64, "A"), id="int-A", marks=pytest.mark.slow),
-        pytest.param((np.float64, "C"), id="float64-C", marks=pytest.mark.slow),
-        pytest.param((np.float64, "F"), id="float64-F", marks=pytest.mark.slow),
-        pytest.param((np.float64, "A"), id="float64-A", marks=pytest.mark.slow),
-        pytest.param((np.complex128, "C"), id="complex-C"),
-        pytest.param((np.complex128, "F"), id="complex-F", marks=pytest.mark.slow),
-        pytest.param((np.complex128, "A"), id="complex-A", marks=pytest.mark.slow),
+        pytest.param((np.complex128, "C"), id="complex128-C"),
+        pytest.param((np.complex128, "F"), id="complex128-F", marks=pytest.mark.slow),
+        pytest.param((np.complex128, "A"), id="complex128-A", marks=pytest.mark.slow),
+        pytest.param((np.complex64, "C"), id="complex64-C", marks=pytest.mark.slow),
+        pytest.param((np.complex64, "F"), id="complex64-F", marks=pytest.mark.slow),
+        pytest.param((np.complex64, "A"), id="complex64-A", marks=pytest.mark.slow),
     ]
 )
 def grid_layouts(request):
@@ -277,6 +274,7 @@ def grid_layouts(request):
     params=[
         pytest.param((5, 5), id="odd_dims"),
         pytest.param((10, 10), id="even_dims"),
+        pytest.param((1024, 1001), id="big_mismatched_dims"),
     ]
 )
 def fft_arr(request, grid_layouts):
@@ -320,9 +318,22 @@ def test_fft2(fft_arr, memory_leak_check):
 
     def impl(data):
         res = fft2(data)
+        return res
+
+    def impl_layout(data):
+        res = fft2(data)
         return res, res[0], res[:, 0], res[1, 2]
 
-    check_func(impl, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
+    # Single precision results have higher error
+    # than the default closeness
+    rtol = 1e-05
+    if fft_arr.dtype == np.complex64:
+        rtol = 1e-03
+
+    check_func(impl, (fft_arr,), convert_to_nullable_float=False, rtol=rtol)
+    check_func(
+        impl, (fft_arr,), convert_to_nullable_float=False, only_seq=True, rtol=rtol
+    )
 
 
 def test_ft2(fft_arr, memory_leak_check):
@@ -334,7 +345,15 @@ def test_ft2(fft_arr, memory_leak_check):
         F = fftshift(fft2(fftshift(f))) * delta**2
         return F
 
-    check_func(ft2, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
+    # Single precision results have higher error
+    # than the default closeness
+    rtol = 1e-05
+    if fft_arr.dtype == np.complex64:
+        rtol = 1e-03
+
+    check_func(
+        ft2, (fft_arr,), convert_to_nullable_float=False, only_seq=True, rtol=rtol
+    )
 
 
 def test_fft_error(memory_leak_check):

@@ -1109,7 +1109,7 @@ def _test_equal(
                 )
         else:
             # parallel reduction can result in floating point differences
-            if py_out.dtype in (np.float32, np.float64, np.complex128):
+            if py_out.dtype in (np.float32, np.float64, np.complex128, np.complex64):
                 np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
             elif isinstance(bodo_out, pd.arrays.ArrowStringArray):
                 pd.testing.assert_extension_array_equal(
@@ -1169,7 +1169,7 @@ def _test_equal(
             atol=atol,
             rtol=rtol,
         )
-    elif isinstance(py_out, (float, np.floating)):
+    elif isinstance(py_out, (float, np.floating, np.complex128, np.complex64)):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, rtol=rtol, atol=atol)
     elif isinstance(py_out, tuple):

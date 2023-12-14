@@ -1,6 +1,7 @@
 #include "_bodo_common.h"
 
 #include <arrow/array.h>
+#include <complex>
 
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
@@ -36,6 +37,10 @@ void bodo_common_init() {
     numpy_item_size[Bodo_CTypes::TIME] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::TIMEDELTA] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::INT128] = BYTES_PER_DECIMAL;
+    // std::complex is bit compatible with fftw_complex and C99 fftw_complex
+    // https://www.fftw.org/fftw3_doc/Complex-numbers.html
+    numpy_item_size[Bodo_CTypes::COMPLEX64] = sizeof(std::complex<float>);
+    numpy_item_size[Bodo_CTypes::COMPLEX128] = sizeof(std::complex<double>);
 
     PyObject* np_mod = PyImport_ImportModule("numpy");
     PyObject* dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
@@ -185,6 +190,11 @@ static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
         return "LIST";
     if (dtype == Bodo_CTypes::STRUCT)
         return "STRUCT";
+    if (dtype == Bodo_CTypes::COMPLEX64)
+        return "COMPLEX64";
+    if (dtype == Bodo_CTypes::COMPLEX128)
+        return "COMPLEX128";
+
     return "UNKNOWN";
 }
 
@@ -1275,6 +1285,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, stream_groupby_cpp);
     SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
     SetAttrStringFromPyInit(m, table_builder_cpp);
+    SetAttrStringFromPyInit(m, fft_cpp);
 
 #ifdef IS_TESTING
     SetAttrStringFromPyInit(m, test_cpp);

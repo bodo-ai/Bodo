@@ -343,9 +343,10 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         (info->arr_type != bodo_array_type::CATEGORICAL) &&
         (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
-        PyErr_SetString(PyExc_RuntimeError,
-                        "_array.cpp::info_to_numpy_array: info_to_numpy_array "
-                        "requires numpy input.");
+        PyErr_Format(PyExc_RuntimeError,
+                     "_array.cpp::info_to_numpy_array: info_to_numpy_array "
+                     "requires numpy input but got %s",
+                     GetArrType_as_string(info->arr_type).c_str());
         return;
     }
 

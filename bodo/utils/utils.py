@@ -90,6 +90,8 @@ class CTypeEnum(Enum):
     LIST = 18
     STRUCT = 19
     BINARY = 20
+    COMPLEX64 = 21
+    COMPLEX128 = 22
 
 
 _numba_to_c_type_map = {
@@ -116,6 +118,8 @@ _numba_to_c_type_map = {
     # TODO[BSE-433]: support null dtype in C++ directly
     # https://github.com/Bodo-inc/Bodo/blob/b9b38a8643d61a5038bcf4a3a5dff4f14040b76c/bodo/libs/_array.cpp#L165
     null_dtype: CTypeEnum.Bool.value,
+    types.complex64: CTypeEnum.COMPLEX64.value,
+    types.complex128: CTypeEnum.COMPLEX128.value,
 }
 
 
