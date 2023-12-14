@@ -1408,7 +1408,7 @@ def ord_ascii_util(arr, dict_encoding_state, func_id):
     arg_types = [arr, dict_encoding_state, func_id]
     propagate_null = [True] + [False] * 2
     scalar_text = "if len(arg0) == 0:\n"
-    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "   res[i] = 0\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = ord(arg0[0])"
 

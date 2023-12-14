@@ -432,7 +432,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         # lower(A) = val OR A IS NULL
         check_logger_msg(
             stream,
-            "(((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))) | ((pa.compute.utf8_lower(ds.field('A')).is_null())))",
+            "(((ds.field('A').is_null())) | ((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))))",
         )
 
 

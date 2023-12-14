@@ -7,6 +7,8 @@ import com.bodosql.calcite.sql.func.SqlRandomOperator;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Supplier;
+import org.apache.calcite.plan.Strong;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlBasicFunction;
@@ -31,6 +33,7 @@ import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.dataflow.qual.Pure;
 
 public final class NumericOperatorTable implements SqlOperatorTable {
 
@@ -51,8 +54,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
 
-  public static final SqlBasicFunction BITAND =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction BITAND =
+      SqlNullPolicyFunction.createAnyPolicy(
           "BITAND",
           ReturnTypes.ARG0_NULLABLE,
           OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
@@ -63,7 +66,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction BITXOR = BITAND.withName("BITXOR");
 
   public static final SqlFunction BITNOT =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "BITNOT", ReturnTypes.ARG0_NULLABLE, OperandTypes.INTEGER, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction BITSHIFTLEFT = BITAND.withName("BITSHIFTLEFT");
@@ -72,8 +75,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction GETBIT = BITAND.withName("GETBIT");
 
-  public static final SqlBasicFunction SNOWFLAKE_CEIL =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction SNOWFLAKE_CEIL =
+      SqlNullPolicyFunction.createAnyPolicy(
           "CEIL",
           ReturnTypes.ARG0_NULLABLE,
           argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
@@ -83,7 +86,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction SNOWFLAKE_FLOOR = SNOWFLAKE_CEIL.withName("FLOOR");
 
   public static final SqlFunction CEILING =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "CEILING",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -93,7 +96,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction DIV0 =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "DIV0",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -104,7 +107,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction HAVERSINE =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "HAVERSINE",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -118,7 +121,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "LOG",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -129,7 +132,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG2 =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "LOG2",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -139,14 +142,14 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction POW =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "POW",
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC_NUMERIC,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction CONV =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "CONV",
           // precision cannot be statically determined
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
@@ -157,7 +160,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction WIDTH_BUCKET =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "WIDTH_BUCKET",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -171,27 +174,23 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction ACOSH =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction ACOSH =
+      SqlNullPolicyFunction.createAnyPolicy(
           "ACOSH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction ASINH =
-      SqlBasicFunction.create(
-          "ASINH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction ASINH = ACOSH.withName("ASINH");
 
-  public static final SqlFunction ATANH =
-      SqlBasicFunction.create(
-          "ATANH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction ATANH = ACOSH.withName("ATANH");
 
   public static final SqlFunction FACTORIAL =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "FACTORIAL",
           ReturnTypes.BIGINT_NULLABLE,
           OperandTypes.INTEGER,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction SQUARE =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "SQUARE", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction COSH = SqlLibraryOperators.COSH;
@@ -415,6 +414,20 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       } else {
         return GREATEST;
       }
+    }
+
+    /**
+     * Returns the {@link Strong.Policy} strategy for this operator, or null if there is no
+     * particular strategy, in which case this policy will be deducted from the operator's {@link
+     * SqlKind}.
+     *
+     * @see Strong
+     */
+    @Override
+    @Pure
+    public @Nullable Supplier<Strong.Policy> getStrongPolicyInference() {
+      // TODO: Define a new policy ALL, that means all inputs must be nullable.
+      return () -> Strong.Policy.ANY;
     }
 
     private static class LeastGreatestOperandTypeChecker extends SameOperandTypeChecker {

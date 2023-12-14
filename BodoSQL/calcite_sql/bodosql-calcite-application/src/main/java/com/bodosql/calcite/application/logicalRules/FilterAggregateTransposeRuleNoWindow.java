@@ -17,21 +17,29 @@ package com.bodosql.calcite.application.logicalRules;
  * limitations under the License.
  */
 
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable;
+import com.bodosql.calcite.application.operatorTables.NumericOperatorTable;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.Aggregate.Group;
+import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.immutables.value.Value;
@@ -82,6 +90,20 @@ public class FilterAggregateTransposeRuleNoWindow
     final List<RexNode> pushedConditions = new ArrayList<>();
     final List<RexNode> remainingConditions = new ArrayList<>();
 
+    // Bodo Change: IS NOT NULL is a special filter because it can be pushed past
+    // certain aggregations. This is only safe if the IS NOT NULL is shared for
+    // every aggregate call and the function can only produce null when the entire
+    // group is null.
+    //
+    // Right now we require there be exactly one aggregate, but this is also safe so long
+    // as for every aggregate we are pushing is not null and they share an input column.
+
+    List<AggregateCall> aggregateCalls = aggRel.getAggCallList();
+    boolean pushIsNotNull =
+        aggregateCalls.size() == 1
+            && !aggregateCalls.get(0).hasFilter()
+            && NULL_IF_ALL_NULL.contains(aggregateCalls.get(0).getAggregation().getName());
+
     for (RexNode condition : conditions) {
       ImmutableBitSet rCols = RelOptUtil.InputFinder.bits(condition);
       if (canPush(aggRel, rCols)) {
@@ -92,6 +114,26 @@ public class FilterAggregateTransposeRuleNoWindow
                     origFields,
                     aggRel.getInput(0).getRowType().getFieldList(),
                     adjustments)));
+
+      } else if (pushIsNotNull
+          && condition.getKind() == SqlKind.IS_NOT_NULL
+          && ((RexCall) condition).getOperands().get(0) instanceof RexInputRef) {
+        // Remap to the original input ref. Note all these functions accept 1 argument.
+        Integer input = aggregateCalls.get(0).getArgList().get(0);
+        // Note: Since we assume this only happens at most once we don't need to extract it from the
+        // loop.
+        final int[] notNullAdjustments = new int[origFields.size()];
+        for (int i = groupCount; i < aggRel.getRowType().getFieldCount(); i++) {
+          notNullAdjustments[j] = input - i;
+        }
+
+        pushedConditions.add(
+            condition.accept(
+                new RelOptUtil.RexInputConverter(
+                    rexBuilder,
+                    origFields,
+                    aggRel.getInput(0).getRowType().getFieldList(),
+                    notNullAdjustments)));
       } else {
         remainingConditions.add(condition);
       }
@@ -169,4 +211,19 @@ public class FilterAggregateTransposeRuleNoWindow
           .as(FilterAggregateTransposeRuleNoWindow.Config.class);
     }
   }
+
+  // Bodo Change: Define functions that can only be null if the whole group is null.
+  private static Set<String> NULL_IF_ALL_NULL =
+      Set.of(
+          SqlStdOperatorTable.MAX.getName(),
+          SqlStdOperatorTable.MIN.getName(),
+          SqlStdOperatorTable.SUM.getName(),
+          SqlStdOperatorTable.AVG.getName(),
+          NumericOperatorTable.MEDIAN.getName(),
+          NumericOperatorTable.BITAND_AGG.getName(),
+          NumericOperatorTable.BITOR_AGG.getName(),
+          NumericOperatorTable.BITXOR_AGG.getName(),
+          CondOperatorTable.BOOLAND_AGG.getName(),
+          CondOperatorTable.BOOLOR_AGG.getName(),
+          CondOperatorTable.BOOLXOR_AGG.getName());
 }

@@ -925,8 +925,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
 
     /** Defines an operand tree for the given classes. */
     default BodoSQLReduceExpressionsRule.Config withOperandFor(Class<? extends RelNode> relClass) {
-      // Bodo Change: Since we only adopted the filter framework we disallow containsOver for
-      // filters.
       return withOperandSupplier(b -> b.operand(relClass).anyInputs())
           .as(BodoSQLReduceExpressionsRule.Config.class);
     }
