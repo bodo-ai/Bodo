@@ -18,7 +18,7 @@ internal class VariantCastTable {
 
     companion object {
         private val anyArgBooleanCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.BOOLEAN),
                 inType.isNullable,
@@ -26,7 +26,7 @@ internal class VariantCastTable {
         }
 
         private val anyArgDateCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.DATE),
                 inType.isNullable,
@@ -34,7 +34,7 @@ internal class VariantCastTable {
         }
 
         private val anyArgVarcharCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.VARCHAR),
                 inType.isNullable,
@@ -42,7 +42,7 @@ internal class VariantCastTable {
         }
 
         private val anyArgIntegerCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.INTEGER),
                 inType.isNullable,
@@ -50,7 +50,7 @@ internal class VariantCastTable {
         }
 
         private val anyArgDoubleCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, _: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.DOUBLE),
                 inType.isNullable,
@@ -79,9 +79,9 @@ internal class VariantCastTable {
          * the precision. In future, we will switch this to use the correct
          * decimal type.
          */
-        private fun anyArgNumberCast(vararg precisions: Int): (RelDataType, RelDataTypeFactory, Int) -> RelDataType =
+        private fun anyArgNumberCast(vararg precisions: Int) =
             {
-                    inType: RelDataType, factory: RelDataTypeFactory, i: Int ->
+                    inType: RelDataType, factory: RelDataTypeFactory, i: Int, _: List<RelDataType> ->
                 if (i >= precisions.size) { inType } else {
                     factory.createTypeWithNullability(
                         factory.createSqlType(chooseIntegerType(precisions[i])),
@@ -92,7 +92,7 @@ internal class VariantCastTable {
 
         // TODO: switch to decimal types with precisions
         private val padCasting = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             val typeName = if (idx == 1) {
                 SqlTypeName.INTEGER
             } else {
@@ -147,7 +147,7 @@ internal class VariantCastTable {
          * is tinyInt.
          */
         private val varcharTinyintCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 2, setOf(0), SqlTypeName.TINYINT)
         }
 
@@ -156,7 +156,7 @@ internal class VariantCastTable {
          * is integer.
          */
         private val varcharIntegerCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 2, setOf(0), SqlTypeName.INTEGER)
         }
 
@@ -165,7 +165,7 @@ internal class VariantCastTable {
          * is integer.
          */
         private val varcharVarcharIntegerCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 3, setOf(0, 1), SqlTypeName.INTEGER)
         }
 
@@ -174,7 +174,7 @@ internal class VariantCastTable {
          * two are BIGINT.
          */
         private val varcharBigintBigintCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 3, setOf(0), SqlTypeName.BIGINT)
         }
 
@@ -200,7 +200,7 @@ internal class VariantCastTable {
          * or we don't support it yet).
          */
         private val arg0VarcharCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             onlyStringCast(inType, factory, idx, setOf(0))
         }
 
@@ -214,7 +214,7 @@ internal class VariantCastTable {
          * and only enable the VARCHAR
          */
         private val insertCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             onlyStringCast(inType, factory, idx, setOf(0, 3))
         }
 
@@ -228,7 +228,7 @@ internal class VariantCastTable {
          * the correct decimal type.
          */
         private val dateTimeAddCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             when (idx) {
                 1 ->
                     factory.createTypeWithNullability(
@@ -250,7 +250,7 @@ internal class VariantCastTable {
          * TIMESTAMP_NTZ.
          */
         private val dateTimeDiffCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             when (idx) {
                 1, 2 ->
                     factory.createTypeWithNullability(
@@ -266,7 +266,7 @@ internal class VariantCastTable {
          * is cast to date, and the second to char.
          */
         private val nextPrevDayCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             if (idx == 0) { factory.createTypeWithNullability(
                 factory.createSqlType(SqlTypeName.DATE),
                 inType.isNullable,
@@ -279,10 +279,45 @@ internal class VariantCastTable {
         }
 
         /**
+         * Cast for timestamp_from_parts family of functions, with the following
+         * rules depending on the number of original operands:
+         *
+         * - 2 operands: FUNC(DATE, TIME)
+         * - 6+ operands: FUNC(NUMBER(9, 0), NUMBER(9, 0), NUMBER(9, 0), NUMBER(9, 0), NUMBER(9, 0), NUMBER(9, 0), NUMBER(18, 0), CHAR)
+         *
+         * The 2-operand version is only allowed for the tz-naive versions of this function, but validation will
+         * reject those earlier so there is no need to add such a check to this implicit casting rule.
+         *
+         * Note: for the time being the number arguments are casted to an integer
+         * type based on the precision. In future, we will switch this to use
+         * the correct decimal type.
+         */
+        private val timestampPartsCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, operandTypes: List<RelDataType> ->
+            if (operandTypes.size == 2) {
+                val typeName = if (idx == 0) { SqlTypeName.DATE } else { SqlTypeName.TIME }
+                factory.createTypeWithNullability(
+                    factory.createSqlType(typeName),
+                    inType.isNullable,
+                )
+            } else {
+                val typeName = when (idx) {
+                    6 -> SqlTypeName.BIGINT
+                    7 -> SqlTypeName.CHAR
+                    else -> SqlTypeName.INTEGER
+                }
+                factory.createTypeWithNullability(
+                    factory.createSqlType(typeName),
+                    inType.isNullable,
+                )
+            }
+        }
+
+        /**
          * Cast for (VARCHAR, VARCHAR, BIGINT, VARCHAR).
          */
         private val varcharVarcharBigIntVarcharCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 4, setOf(0, 1, 3), SqlTypeName.BIGINT)
         }
 
@@ -293,7 +328,7 @@ internal class VariantCastTable {
          * (VARCHAR, VARCHAR, BIGINT, BIGINT, VARCHAR, BIGINT)
          */
         private val regexpSubstrCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 6, setOf(0, 1, 4), SqlTypeName.BIGINT)
         }
 
@@ -304,7 +339,7 @@ internal class VariantCastTable {
          * (VARCHAR, VARCHAR, VARCHAR, BIGINT, BIGINT, VARCHAR)
          */
         private val regexpReplaceCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 6, setOf(0, 1, 2, 5), SqlTypeName.BIGINT)
         }
 
@@ -315,7 +350,7 @@ internal class VariantCastTable {
          * (VARCHAR, VARCHAR, BIGINT, BIGINT, BIGINT, VARCHAR, BIGINT)
          */
         private val regexpInstrCast = {
-                inType: RelDataType, factory: RelDataTypeFactory, idx: Int ->
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
             varcharNumericHelper(inType, factory, idx, 7, setOf(0, 1, 5), SqlTypeName.BIGINT)
         }
 
@@ -487,6 +522,14 @@ internal class VariantCastTable {
             SqlBodoOperatorTable.TIMESTAMP_DIFF to dateTimeDiffCast,
             DatetimeOperatorTable.PREVIOUS_DAY to nextPrevDayCast,
             DatetimeOperatorTable.NEXT_DAY to nextPrevDayCast,
+            DatetimeOperatorTable.TIMESTAMP_FROM_PARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMP_NTZ_FROM_PARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMP_LTZ_FROM_PARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMP_TZ_FROM_PARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMPFROMPARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMPNTZFROMPARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMPLTZFROMPARTS to timestampPartsCast,
+            DatetimeOperatorTable.TIMESTAMPTZFROMPARTS to timestampPartsCast,
         ).mapKeys { it.key.name }
     }
 }
