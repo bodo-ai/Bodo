@@ -2318,3 +2318,32 @@ def test_logged_queryid_write(memory_leak_check):
             bodo.jit(impl)(df, table_name, conn)
 
         check_logger_msg(stream, "Snowflake Query Submission")
+
+
+def test_aborted_detached_query(memory_leak_check):
+    """
+    Test that our snowflake connection always has ABORT_DETACHED_QUERY = False
+    in a user's account. This is not a write test, but it is grouped here because
+    if this is True it can cause write to fail.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    df = pd.read_sql("show parameters like 'ABORT_DETACHED_QUERY'", conn)
+    old_value = df["value"].iloc[0]
+    try:
+        pd.read_sql(f"alter user set ABORT_DETACHED_QUERY=True", conn)
+        # Test the values of the session from snowflake_connect
+        connection = bodo.io.snowflake.snowflake_connect(conn)
+        cur = connection.cursor()
+        cur.execute("show parameters like 'ABORT_DETACHED_QUERY'")
+        rows = cur.fetchall()
+        result = rows[0][1]
+        assert (
+            result.lower() == "false"
+        ), "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
+    finally:
+        pd.read_sql(f"alter user set ABORT_DETACHED_QUERY={old_value}", conn)
