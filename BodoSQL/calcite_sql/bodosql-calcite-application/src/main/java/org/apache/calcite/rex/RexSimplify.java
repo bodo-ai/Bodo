@@ -18,6 +18,7 @@ package org.apache.calcite.rex;
 
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.avatica.util.TimeUnitRange;
+import org.apache.calcite.plan.BodoStrong;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.Strong;
@@ -995,7 +996,26 @@ public class RexSimplify {
         if (hasCustomNullabilityRules(a.getKind())) {
             return null;
         }
-        switch (Strong.policy(a)) {
+        // Bodo Change: Add explicit handling for simplifying IS NOT NULL(COALESCE)
+        // Calcite likely doesn't have this because COALESCE is replaced with CASE.
+        // Here we simplify IS NOT NULL(COALESCE(X, Y) into IS NOT NULL(X) OR IS NOT NULL(Y)
+        if (a.getKind() == SqlKind.COALESCE) {
+            final List<RexNode> operands = new ArrayList<>();
+            for (RexNode operand : ((RexCall) a).getOperands()) {
+                final RexNode simplified = simplifyIsNotNull(operand);
+                if (simplified == null) {
+                    operands.add(
+                            rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, operand));
+                } else if (simplified.isAlwaysTrue()) {
+                    return rexBuilder.makeLiteral(true);
+                } else {
+                    operands.add(simplified);
+                }
+            }
+            return RexUtil.composeDisjunction(rexBuilder, operands);
+        }
+        // Bodo Change: Replace Strong with BodoStrong
+        switch (BodoStrong.policy(a)) {
             case NOT_NULL:
                 return rexBuilder.makeLiteral(true);
             case ANY:
@@ -1050,7 +1070,8 @@ public class RexSimplify {
         if (hasCustomNullabilityRules(a.getKind())) {
             return null;
         }
-        switch (Strong.policy(a)) {
+        // Bodo Change: Replace Strong with BodoStrong
+        switch (BodoStrong.policy(a)) {
             case NOT_NULL:
                 return rexBuilder.makeLiteral(false);
             case ANY:
@@ -1083,7 +1104,8 @@ public class RexSimplify {
         if (hasCustomNullabilityRules(rexNode.getKind())) {
             return;
         }
-        switch (Strong.policy(rexNode)) {
+        // Bodo Change: Replace Strong with BodoStrong
+        switch (BodoStrong.policy(rexNode)) {
             case NOT_NULL:
                 assert !rexNode.getType().isNullable();
                 break;
