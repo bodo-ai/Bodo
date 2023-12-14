@@ -284,6 +284,8 @@ struct Bodo_CTypes {
         LIST = 18,    // for nested data structures, maps to Arrow List
         STRUCT = 19,  // for nested data structures, maps to Arrow Struct
         BINARY = 20,
+        COMPLEX64 = 21,
+        COMPLEX128 = 22,
         _numtypes
     };
 };
@@ -342,10 +344,19 @@ inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
 }
 
 /**
- * @brief Check if typ is an integer, floating or decimal type.
+ * @brief Check if typ is COMPLEX64 or COMPLEX128.
+ */
+inline bool is_complex(Bodo_CTypes::CTypeEnum typ) {
+    return ((typ == Bodo_CTypes::COMPLEX64) ||
+            (typ == Bodo_CTypes::COMPLEX128));
+}
+
+/**
+ * @brief Check if typ is an integer, floating, complex or decimal type.
  */
 inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
-    return (is_integer(typ) || is_float(typ) || (typ == Bodo_CTypes::DECIMAL));
+    return (is_integer(typ) || is_float(typ) || is_complex(typ) ||
+            (typ == Bodo_CTypes::DECIMAL));
 }
 
 /** Getting the expression of a T value as a vector of characters
@@ -1692,6 +1703,7 @@ PyMODINIT_FUNC PyInit_memory_budget_cpp(void);
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
 PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
 PyMODINIT_FUNC PyInit_table_builder_cpp(void);
+PyMODINIT_FUNC PyInit_fft_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif

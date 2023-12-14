@@ -34,3 +34,6 @@ dependencies:
   - openjdk =11
   - py4j ==0.10.9.7
   - maven
+
+  # FFT
+  - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*

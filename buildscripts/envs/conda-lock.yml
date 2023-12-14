@@ -15,16 +15,16 @@
 version: 1
 metadata:
   content_hash:
-    osx-arm64: 68f98cca5dd0b581c3b40065a56682fbfe4103e1305c264c84b27a4017643752
-    osx-64: f2ae12e19e6ec80b002c57ec5b15630a8eef4bd62501f7b4f1a4a6bc5fd7738f
-    linux-64: 3b402d985d8613a3e8feee5889ccfab28c3868fe22603a6136c18396fd571b35
+    osx-arm64: 7287ba166cc790572f5d28ee8ff0e239eeb8e1db86ae3a2cc276fc2a3103219d
+    osx-64: ffc5c6be366ded80bec9a1adc3c7ad0f325a9bd3e4b5633a0ad6a3d8aa7e5a96
+    linux-64: 3f277aeb3c45c44aa38dc31eb62ce7a0c4331d5098a72f81f0da959fa3efc9b5
   channels:
   - url: conda-forge
     used_env_vars: []
   platforms:
-  - linux-64
-  - osx-64
   - osx-arm64
+  - osx-64
+  - linux-64
   sources:
   - main.yml
   - build.yml
@@ -2520,6 +2520,54 @@ package:
   hash:
     md5: 8b9b5aca60558d02ddaa09d599e55920
     sha256: 36dfeb4375059b3bba75ce9b38c29c69fd257342a79e6cf20e9f25c1523f785f
+  category: main
+  optional: false
+- name: fftw
+  version: 3.3.10
+  manager: conda
+  platform: linux-64
+  dependencies:
+    libgcc-ng: '>=12'
+    libgfortran-ng: ''
+    libgfortran5: '>=11.4.0'
+    libstdcxx-ng: '>=12'
+    mpich: '>=4.1.1,<5.0a0'
+  url: https://conda.anaconda.org/conda-forge/linux-64/fftw-3.3.10-mpi_mpich_h5537406_8.conda
+  hash:
+    md5: e1d6091118e52266e9b8e20e0dc6cc23
+    sha256: 5da13e009b98bf6e2a176b4b3927c11b3017562713646133706b4e6a26353772
+  category: main
+  optional: false
+- name: fftw
+  version: 3.3.10
+  manager: conda
+  platform: osx-64
+  dependencies:
+    libcxx: '>=14.0.6'
+    libgfortran: 5.*
+    libgfortran5: '>=12.2.0'
+    llvm-openmp: '>=14.0.6'
+    mpich: '>=4.1.1,<5.0a0'
+  url: https://conda.anaconda.org/conda-forge/osx-64/fftw-3.3.10-mpi_mpich_h4a8b384_8.conda
+  hash:
+    md5: dee20f993f99366c5350a5715aa25680
+    sha256: b2a35f0932751bfa8296ec78d310751fd50de2119f87848707c496e9fb389588
+  category: main
+  optional: false
+- name: fftw
+  version: 3.3.10
+  manager: conda
+  platform: osx-arm64
+  dependencies:
+    libcxx: '>=14.0.6'
+    libgfortran: 5.*
+    libgfortran5: '>=12.2.0'
+    llvm-openmp: '>=14.0.6'
+    mpich: '>=4.1.1,<5.0a0'
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/fftw-3.3.10-mpi_mpich_h0cb5807_8.conda
+  hash:
+    md5: 548b72c1a41c3256259a73bd6ad1564e
+    sha256: 4399ebe1ba366a090597c90a6faa8330ee2b83d93714b69942ed06ca8df514db
   category: main
   optional: false
 - name: filelock
@@ -5562,11 +5610,11 @@ package:
   manager: conda
   platform: linux-64
   dependencies:
-    libgcc-ng: '>=10.3.0'
-  url: https://conda.anaconda.org/conda-forge/linux-64/libiconv-1.17-h166bdaf_0.tar.bz2
+    libgcc-ng: '>=12'
+  url: https://conda.anaconda.org/conda-forge/linux-64/libiconv-1.17-hd590300_1.conda
   hash:
-    md5: b62b52da46c39ee2bc3c162ac7f1804d
-    sha256: 6a81ebac9f1aacdf2b4f945c87ad62b972f0f69c8e0981d68e111739e6720fd7
+    md5: 4b06b43d0eca61db2899e4d7a289c302
+    sha256: a9364735ef2542558ed59aa5f404707dab674df465cbdf312edeaf5e827b55ed
   category: main
   optional: false
 - name: libiconv
@@ -5574,10 +5622,10 @@ package:
   manager: conda
   platform: osx-64
   dependencies: {}
-  url: https://conda.anaconda.org/conda-forge/osx-64/libiconv-1.17-hac89ed1_0.tar.bz2
+  url: https://conda.anaconda.org/conda-forge/osx-64/libiconv-1.17-hd75f5a5_1.conda
   hash:
-    md5: 691d103d11180486154af49c037b7ed9
-    sha256: 4a3294037d595754f7da7c11a41f3922f995aaa333f3cb66f02d8afa032a7bc2
+    md5: c4069fa5c051d41093d3fd52caffa285
+    sha256: c479e7e0df4a59117ee02152fb85565aa6e4091bbb8e044f3367e52b0ccd8970
   category: main
   optional: false
 - name: libiconv
@@ -5585,10 +5633,10 @@ package:
   manager: conda
   platform: osx-arm64
   dependencies: {}
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/libiconv-1.17-he4db4b2_0.tar.bz2
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/libiconv-1.17-h0d3ecfb_1.conda
   hash:
-    md5: 686f9c755574aa221f29fbcf36a67265
-    sha256: 2eb33065783b802f71d52bef6f15ce0fafea0adc8506f10ebd0d490244087bec
+    md5: df3fbfc1fddc8fa40122206a4e47ea4e
+    sha256: d407ebd1e72ebb20716ea325cdebdd018bdc3c3d3424e67825db3eaa8809164e
   category: main
   optional: false
 - name: libjpeg-turbo

@@ -229,6 +229,11 @@ ext_metadata["libraries"] += mpi_libs + [
     "arrow",
     "arrow_python",
     "parquet",
+    "fftw3",
+    "fftw3f",
+    "fftw3_mpi",
+    "fftw3f_mpi",
+    "m",
     "fmt",
 ]
 
@@ -332,6 +337,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_stream_shuffle.cpp",
     "bodo/libs/_storage_manager.cpp",
     "bodo/libs/_utils.cpp",
+    "bodo/libs/_fft.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -395,6 +401,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_stream_shuffle.h",
     "bodo/libs/_storage_manager.h",
     "bodo/libs/_utils.h",
+    "bodo/libs/_fft.h",
 ]
 
 if is_testing:
