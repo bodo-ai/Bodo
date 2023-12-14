@@ -54,6 +54,7 @@ requirements:
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
+    - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
 
   run:
     - python
@@ -68,6 +69,7 @@ requirements:
     - mpi4py
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
+    - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
 
   # run constrained will not install these packages when building,
   # but will restrict them if they are present in the conda env.

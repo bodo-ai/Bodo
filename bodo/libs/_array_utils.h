@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #pragma once
 
+#include <complex>
 #include <concepts>
 #include <set>
 #include <span>
@@ -47,6 +48,8 @@ DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
 DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::DATE)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
+DTYPE_TO_C_TYPE(std::complex<double>, Bodo_CTypes::COMPLEX128)
+DTYPE_TO_C_TYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
 
 #define DICT_INDEX_C_TYPE int32_t
 

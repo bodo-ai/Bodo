@@ -468,6 +468,11 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
         case Bodo_CTypes::INT128:
         case Bodo_CTypes::DECIMAL:
             return decimal_mpi_type;
+        case Bodo_CTypes::COMPLEX128:
+            return MPI_C_DOUBLE_COMPLEX;
+        case Bodo_CTypes::COMPLEX64:
+            return MPI_C_FLOAT_COMPLEX;
+
         default:
             std::cerr << "Invalid MPI_Type " << typ_enum << "\n";
     }
