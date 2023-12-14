@@ -3092,7 +3092,7 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
         ),
         pytest.param(
             """
-            SELECT m, COUNT(*) as c
+            SELECT m::date as m, COUNT(*) as c
             FROM (
             SELECT date_trunc(month, logts) as m, json_boi:sbo1 as ids
             FROM etl_ddss),
@@ -3106,7 +3106,7 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
                     "m": [
                         datetime.date(2025, 3, 1),
                         datetime.date(2025, 1, 1),
-                        datetime.date(2025, 10, 1),
+                        datetime.date(2023, 10, 1),
                         datetime.date(2025, 5, 1),
                         datetime.date(2025, 8, 1),
                     ],
@@ -3114,25 +3114,24 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
                 }
             ),
             id="json_field_pushdown-no_filter",
-            marks=pytest.mark.skip(reason="[BSE-1807] Support variant read"),
         ),
         pytest.param(
             """
-            SELECT lat.value as country, COUNT(*) as cnt
+            SELECT lat.key as country, COUNT(*) as cnt
             FROM can_bf,
-            LATERAL FLATTEN(object_keys(json_fom)) lat
+            LATERAL FLATTEN(json_fom) lat
+            WHERE PILI IS NOT NULL AND FOCB < 1500
             GROUP BY 1
             ORDER BY cnt desc
             LIMIT 5
             """,
             pd.DataFrame(
                 {
-                    "country": ["USE", "CHE", "HKD", "CAD", "MEX"],
-                    "cnt": [86760, 81504, 76353, 71533, 65933],
+                    "country": ["USA", "CHE", "HKD", "CAD", "MEX"],
+                    "cnt": [8914, 8353, 7737, 7301, 6666],
                 }
             ),
-            id="map_of_structs-with_variant-no_filter",
-            marks=pytest.mark.skip(reason="[BSE-1807] Support variant read"),
+            id="map_of_structs-with_variant-with_filter",
         ),
     ],
 )
