@@ -361,7 +361,7 @@ def test_groupby_dynamic_budget_increase(memory_leak_check, capfd):
         # Operator 0 increasing its budget dynamically -- This is the main one we're looking for
         "[DEBUG] OperatorComptroller::RequestAdditionalBudget: Increased budget for operator 0 by 1.98MiB (from 1.0MiB to 3.0MiB).",
         # Sanity check:
-        "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 1.",
     ]
     for expected_log_message in expected_log_messages:
         assert (

@@ -391,13 +391,16 @@ GroupbyPartition::GroupbyPartition(
     const std::vector<int32_t>& f_running_value_offsets_, bool is_active_,
     bool accumulate_before_update_, bool req_extended_group_info_,
     bodo::OperatorBufferPool* op_pool_,
-    const std::shared_ptr<::arrow::MemoryManager> op_mm_)
+    const std::shared_ptr<::arrow::MemoryManager> op_mm_,
+    bodo::OperatorScratchPool* op_scratch_pool_,
+    const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
       build_table_dict_builders(build_table_dict_builders_),
       build_hash_table(std::make_unique<hash_table_t>(
           0, HashGroupbyTable<true>(this, nullptr),
-          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_), op_pool_)),
+          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_),
+          op_scratch_pool_)),
       build_table_groupby_hashes(op_pool_),
       separate_out_cols_c_types(separate_out_col_c_types_),
       separate_out_cols_array_types(separate_out_col_array_types_),
@@ -412,7 +415,9 @@ GroupbyPartition::GroupbyPartition(
       req_extended_group_info(req_extended_group_info_),
       is_active(is_active_),
       op_pool(op_pool_),
-      op_mm(op_mm_) {
+      op_mm(op_mm_),
+      op_scratch_pool(op_scratch_pool_),
+      op_scratch_mm(op_scratch_mm_) {
     if (this->is_active) {
         this->build_table_buffer = std::make_unique<TableBuildBuffer>(
             this->build_arr_c_types, this->build_arr_array_types,
@@ -422,7 +427,9 @@ GroupbyPartition::GroupbyPartition(
             this->separate_out_cols_array_types,
             std::vector<std::shared_ptr<DictionaryBuilder>>(
                 this->separate_out_cols_array_types.size(), nullptr),
-            this->op_pool, this->op_mm);
+            // The out columns can be freed before repartitioning and should
+            // therefore be considered scratch.
+            this->op_scratch_pool, this->op_scratch_mm);
     } else {
         this->build_table_buffer_chunked =
             std::make_unique<ChunkedTableBuilder>(
@@ -684,6 +691,17 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
     // Release separate out cols buffer.
     this->separate_out_cols.reset();
 
+    // Ensure that the scratch mem usage is 0.
+    // If we're splitting an active partition, all ColSet mem
+    // usage should've already been cleared before calling this
+    // and we've just cleared the hash-table and separate_out_cols
+    // which are all the allocations that go through the scratch
+    // memory.
+    // If we're splitting an inactive partition, there should
+    // be no memory usage from the Op-Pool (main or scratch)
+    // anyway.
+    assert(this->op_scratch_pool->bytes_pinned() == 0);
+
     // Get dictionary hashes from the dict-builders of build table.
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = std::make_shared<
@@ -708,7 +726,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, is_active,
             this->accumulate_before_update, this->req_extended_group_info,
-            this->op_pool, this->op_mm);
+            this->op_pool, this->op_mm, this->op_scratch_pool,
+            this->op_scratch_mm);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
@@ -719,7 +738,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, false,
             this->accumulate_before_update, this->req_extended_group_info,
-            this->op_pool, this->op_mm);
+            this->op_pool, this->op_mm, this->op_scratch_pool,
+            this->op_scratch_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -899,7 +919,7 @@ void GroupbyPartition::ActivatePartition() {
         this->separate_out_cols_c_types, this->separate_out_cols_array_types,
         std::vector<std::shared_ptr<DictionaryBuilder>>(
             this->separate_out_cols_array_types.size(), nullptr),
-        this->op_pool, this->op_mm);
+        this->op_scratch_pool, this->op_scratch_mm);
 
     if (this->accumulate_before_update) {
         /// Concatenate all build chunks into contiguous build buffer
@@ -958,17 +978,22 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 
     std::shared_ptr<table_info> out_table;
     if (accumulate_before_update) {
+        // NOTE: Since the allocations made during the update and eval steps are
+        // not required for re-partitioning (in case there is one), we will use
+        // the scratch portion of the pool for them.
+
         // Get update table with the running values:
         std::shared_ptr<table_info> update_table =
             get_update_table</*is_acc_case*/ true>(
                 this->build_table_buffer->data_table, this->n_keys,
                 this->col_sets, this->f_in_offsets, this->f_in_cols,
-                this->req_extended_group_info, this->op_pool, this->op_mm);
+                this->req_extended_group_info, this->op_scratch_pool,
+                this->op_scratch_mm);
         // Call eval on these running values to get the final output.
         out_table = eval_groupby_funcs_helper</*is_acc_case*/ true>(
             this->f_running_value_offsets, this->col_sets, update_table,
-            this->n_keys, this->separate_out_cols->data_table, this->op_pool,
-            this->op_mm);
+            this->n_keys, this->separate_out_cols->data_table,
+            this->op_scratch_pool, this->op_scratch_mm);
     } else {
         // Note that we don't need to call RebuildHashTableFromBuildBuffer
         // here. If the partition was inactive, ActivatePartition could've
@@ -1119,6 +1144,9 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
           bodo::BufferPool::Default(),
           GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
+      op_scratch_pool(
+          std::make_unique<bodo::OperatorScratchPool>(this->op_pool.get())),
+      op_scratch_mm(bodo::buffer_memory_manager(this->op_scratch_pool.get())),
       // Get the max partition depth from env var if set. This is primarily
       // for unit testing purposes. If it's not set, use the default.
       max_partition_depth(std::getenv("BODO_STREAM_GROUPBY_MAX_PARTITION_DEPTH")
@@ -1407,7 +1435,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
         this->f_in_cols, this->f_running_value_offsets,
         /*is_active*/ true, this->accumulate_before_update,
-        this->req_extended_group_info, this->op_pool.get(), this->op_mm));
+        this->req_extended_group_info, this->op_pool.get(), this->op_mm,
+        this->op_scratch_pool.get(), this->op_scratch_mm));
     this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));
 
     // Reserve space upfront. The output-batch-size is typically the same
