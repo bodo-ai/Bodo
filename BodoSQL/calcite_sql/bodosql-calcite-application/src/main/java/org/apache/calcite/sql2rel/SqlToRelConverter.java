@@ -637,7 +637,17 @@ public class SqlToRelConverter {
     RelCollation collation = RelCollations.EMPTY;
     if (!query.isA(SqlKind.DML)) {
       if (isOrdered(query)) {
-        collation = requiredCollation(result);
+        // Bodo Change: We may not have a collation if the
+        // sub-query has a sort which has been optimized out.
+        // Note: If the catch is reached we used the default
+        // RelCollations.EMPTY that is defined above.
+        try {
+          collation = requiredCollation(result);
+        } catch (AssertionError e) {
+          if (!removeSortInSubQuery(top)) {
+            throw e;
+          }
+        }
       }
     }
     checkConvertedType(query, result);
@@ -4158,7 +4168,7 @@ public class SqlToRelConverter {
     case VALUES:
       return RelRoot.of(convertValues((SqlCall) query, targetRowType), kind);
     case CREATE_TABLE:
-      //Create table has to be the topmost relnode
+      // Create table has to be the topmost relnode
       assert top;
       return RelRoot.of(convertCreateTable((SqlCreateTable) query), kind);
     default:
