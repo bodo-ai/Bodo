@@ -12,6 +12,9 @@ import java.math.BigDecimal
 internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: BodoEngineTable, val fields: List<Field>) :
     OperandResolver {
     private val rexTranslator = ctx.rexTranslator(input)
+
+    // Translator for args that must always be arrays.
+    private val arrayRexTranslator = ctx.arrayRexTranslator(input)
     private val _extraFields: MutableList<Pair<String, Expr>> = mutableListOf()
     val extraFields: List<Pair<String, Expr>> get() = _extraFields.toList()
 
@@ -28,9 +31,9 @@ internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: BodoEngin
 
         // We have an expression that has not been processed
         // into a series-compatible argument. Evaluate it using
-        // the RexTranslator and then insert it as an additional
+        // the ArrayRexTranslator and then insert it as an additional
         // column we can reference by name.
-        val argExpr = node.accept(rexTranslator)
+        val argExpr = arrayRexTranslator.apply(node)
 
         // Store this expression with a generated name so it
         // can be embedded within the passed in Table.
