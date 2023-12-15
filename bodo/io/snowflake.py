@@ -593,6 +593,24 @@ def snowflake_connect(
         warnings.warn(warning)
     params["session_parameters"]["ABORT_DETACHED_QUERY"] = False
 
+    # When running benchmarks, we want to ensure that Snowflake is not returning
+    # results directly from its result cache (i.e. retrieval optimization).
+    # (Ref: https://docs.snowflake.com/en/user-guide/querying-persisted-results#retrieval-optimization)
+    # Setting the 'USE_CACHED_RESULT' session parameter
+    # (https://docs.snowflake.com/en/sql-reference/parameters#use-cached-result)
+    # forces Snowflake to skip the result cache and execute the query even if
+    # it has a cached result. Note that this only affects the result cache and not
+    # the data cache on its warehouse.
+    # (Ref: https://community.snowflake.com/s/article/Caching-in-the-Snowflake-Cloud-Data-Platform)
+    if os.environ.get("BODO_DISABLE_SF_RESULT_CACHE", "0") == "1":
+        if params["session_parameters"].get("USE_CACHED_RESULT", False):
+            warning = BodoWarning(
+                "Session parameter 'USE_CACHED_RESULT' found in connection string and "
+                "will be ignored since BODO_DISABLE_SF_RESULT_CACHE is set to 1."
+            )
+            warnings.warn(warning)
+        params["session_parameters"]["USE_CACHED_RESULT"] = False
+
     try:
         import snowflake.connector
     except ImportError:
