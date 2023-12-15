@@ -38,11 +38,9 @@ internal class Group(
      */
     fun emit(ctx: PandasRel.BuildContext): List<Variable> {
         val arrayRexTranslator = ctx.arrayRexTranslator(input)
-        // Retrieve the partition keys and the ordering keys.
         val partitionKeys = partitionBy(arrayRexTranslator)
         val orderKeys = orderBy(arrayRexTranslator)
-        val rexTranslator = ctx.rexTranslator(input)
-        val fields = aggregateInputs(rexTranslator)
+        val fields = aggregateInputs(arrayRexTranslator)
 
         // Generate the appropriate function invocation for this group of aggregates.
         // This will always generate a dataframe with aggregate outputs that correspond
@@ -568,6 +566,6 @@ internal class Group(
     /**
      * Maps the inputs to the aggregate function to names for the windowed function.
      */
-    private fun aggregateInputs(rexTranslator: RexToPandasTranslator): List<Field> =
-        localRefs.mapIndexed { i, n -> Field("AGG_OP_$i", n.accept(rexTranslator), n.type) }
+    private fun aggregateInputs(arrayRexToPandasTranslator: ArrayRexToPandasTranslator): List<Field> =
+        localRefs.mapIndexed { i, n -> Field("AGG_OP_$i", arrayRexToPandasTranslator.apply(n), n.type) }
 }
