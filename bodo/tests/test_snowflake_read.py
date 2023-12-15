@@ -33,6 +33,7 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_snowflake,
     run_rank0,
+    temp_env_override,
 )
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -3171,3 +3172,49 @@ def test_logged_queryid_read(memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo.jit(impl)(query, conn)
         check_logger_msg(stream, "Snowflake Query Submission")
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="This test is only designed for 1 rank")
+def test_disable_result_cache_session_param(memory_leak_check):
+    """
+    Test that our snowflake connection sets USE_CACHED_RESULT = False
+    when the BODO_DISABLE_SF_RESULT_CACHE env var is set to 1.
+    """
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    df = pd.read_sql("show parameters like 'USE_CACHED_RESULT'", conn)
+    old_value = df["value"].iloc[0]
+
+    def get_use_cached_result_val():
+        connection = bodo.io.snowflake.snowflake_connect(conn)
+        cur = connection.cursor()
+        cur.execute("show parameters like 'USE_CACHED_RESULT'")
+        rows = cur.fetchall()
+        result = rows[0][1]
+        return result
+
+    try:
+        # Sanity check: Default value is the same as old_value
+        result = get_use_cached_result_val()
+        assert (
+            result.lower() == str(old_value).lower()
+        ), f"USE_CACHED_RESULT is not the expected default ({str(old_value).lower()})"
+
+        # Now set the user level parameter to True.
+        pd.read_sql(f"alter user set USE_CACHED_RESULT=True", conn)
+
+        # Verify that it's now set to True by default:
+        result = get_use_cached_result_val()
+        assert result.lower() == "true", "'USE_CACHED_RESULT' is not set to true!"
+
+        # Now verify that setting the BODO_DISABLE_SF_RESULT_CACHE env var sets
+        # it to false.
+        with temp_env_override({"BODO_DISABLE_SF_RESULT_CACHE": "1"}):
+            result = get_use_cached_result_val()
+            assert (
+                result.lower() == "false"
+            ), "'USE_CACHED_RESULT' is not set to false by snowflake_connect()"
+    finally:
+        pd.read_sql(f"alter user set USE_CACHED_RESULT={old_value}", conn)
