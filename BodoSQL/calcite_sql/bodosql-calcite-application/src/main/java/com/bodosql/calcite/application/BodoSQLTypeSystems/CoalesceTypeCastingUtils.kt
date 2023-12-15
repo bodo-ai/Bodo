@@ -356,18 +356,20 @@ class CoalesceTypeCastingUtils {
                 for (typ2 in SF_TYPE.values()) {
                     if (typ1.equals(typ2)) continue
                     if (!pairTypeMap.containsKey(Pair(typ1, typ2))) {
-                        System.out.println("EXPLAIN SELECT Coalesce(${SFTypeToColumNameDict.get(typ1)}, ${SFTypeToColumNameDict.get(typ2)}) FROM TEST_DB.PUBLIC.KEATON_LOCAL_TEST;")
+                        println("EXPLAIN SELECT Coalesce(${SFTypeToColumNameDict.get(typ1)}, ${SFTypeToColumNameDict.get(typ2)}) FROM TEST_DB.PUBLIC.KEATON_LOCAL_TEST;")
                     }
                 }
             }
         }
 
-        fun checkTwoHelperFunction(key: Pair<SF_TYPE, SF_TYPE>, value: Pair<SF_TYPE, SqlOperator>): Pair<List<String>, SF_TYPE> {
+        fun checkTwoHelperFunction(
+            key: Pair<SF_TYPE, SF_TYPE>,
+            value: Pair<SF_TYPE, SqlOperator>,
+        ): Pair<List<String>, SF_TYPE> {
             val lhs: String = SFTypeToColumNameDict.get(key.first)!!
             val rhs: String = SFTypeToColumNameDict.get(key.second)!!
             val outputType: SF_TYPE = value.first
-            val out: Pair<List<String>, SF_TYPE> = Pair(listOf(lhs, rhs), outputType)
-            return out
+            return Pair(listOf(lhs, rhs), outputType)
         }
 
         /**
@@ -375,7 +377,7 @@ class CoalesceTypeCastingUtils {
          * see com.bodosql.calcite.application.CoalesceCastTest.testCoalescePairs for an example of where this
          * is used in the bodo testing suite
          */
-        public fun genCheckTwo(): List<Pair<List<String>, CoalesceTypeCastingUtils.SF_TYPE>> {
+        public fun genCheckTwo(): List<Pair<List<String>, SF_TYPE>> {
             return validPairTypeMap.map { cast -> checkTwoHelperFunction(cast.key, cast.value) }
         }
 
@@ -414,15 +416,14 @@ class CoalesceTypeCastingUtils {
                     expectedOutType = validPairTypeMap.get(nextKeyInChain)!!.first
                     argsList.add(nextKeyInChain.first)
                     reamainingKeys.remove(nextKeyInChain)
-                    nextKeyOptional = findValidCastIfExists(reamainingKeys, expectedOutType!!)
+                    nextKeyOptional = findValidCastIfExists(reamainingKeys, expectedOutType)
                 }
 
                 val element: Pair<List<String>, SF_TYPE> = Pair(
-                    argsList.reversed().map { it,
-                        ->
-                        SFTypeToColumNameDict.get(it)!!
+                    argsList.reversed().map {
+                        SFTypeToColumNameDict[it]!!
                     },
-                    expectedOutType!!,
+                    expectedOutType,
                 )
 
                 outStmts.add(element)
