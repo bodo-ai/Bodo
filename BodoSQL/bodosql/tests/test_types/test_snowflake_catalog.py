@@ -3203,3 +3203,47 @@ def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
         match="Unable to resolve function: TEST_DB\\.PUBLIC\\.PLUS_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
     ):
         impl(bc, query)
+
+
+def test_order_by_inline_view(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined with an order by is properly inlined.
+
+    Note: From everything I have seen online there is no guarentee that the an order
+    by is maintained inside a view and calcite even seems to have explicit check for t
+    the situations in which it is required (e.g. there is a limit).
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create view order_by_view as select * from nick_base_table order by A
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from order_by_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    # Ensure we always inline views
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "NICK_BASE_TABLE")
