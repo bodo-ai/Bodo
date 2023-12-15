@@ -192,6 +192,20 @@ open class SnowflakeCatalogTable(
                 e.message,
             )
             PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
+        } catch (e: Error) {
+            // Log the failure
+            val message = String.format(
+                Locale.ROOT,
+                """
+              Unable to expand view %s with definition:
+              %s. Error encountered when compiling view:
+              %s
+                """.trimIndent(),
+                qualifiedName,
+                input.viewDefinition,
+                e.message,
+            )
+            PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
         }
         return null
     }
