@@ -2,6 +2,7 @@ package org.apache.calcite.sql.validate.implicit;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
+import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function3;
 import kotlin.jvm.functions.Function4;
@@ -19,6 +20,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -221,9 +223,14 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
   }
 
   private static SqlNode castTo(SqlNode node, RelDataType type) {
-    // Utilize our own version of convertTypeToSpec.
-    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
-        BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
+    if (type instanceof ArraySqlType) {
+      // When casting to an array, call TO_ARRAY
+      return ArrayOperatorTable.TO_ARRAY.createCall(SqlParserPos.ZERO, node);
+    } else {
+      // Utilize our own version of convertTypeToSpec.
+      return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+              BodoSqlTypeUtil.convertTypeToSpec(type).withNullable(type.isNullable()));
+    }
   }
 
   private static class TypeCoercionFactoryImpl implements TypeCoercionFactory {

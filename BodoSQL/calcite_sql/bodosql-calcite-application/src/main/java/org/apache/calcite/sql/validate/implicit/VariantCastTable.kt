@@ -1,11 +1,13 @@
 package org.apache.calcite.sql.validate.implicit
 
+import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
@@ -23,6 +25,44 @@ internal class VariantCastTable {
                 factory.createSqlType(SqlTypeName.BOOLEAN),
                 inType.isNullable,
             )
+        }
+
+        // Helper function to create a RelDataType for ARRAY[variant] with the given nullability
+        private val makeArrayType = {  factory: RelDataTypeFactory, nullable: Boolean ->
+            factory.createTypeWithNullability(
+                factory.createArrayType(
+                    BodoRelDataTypeFactory.createVariantSqlType(factory), -1
+                ),
+                nullable,
+            )
+        }
+
+        // Converts all inputs to array
+        private val anyArgArrayCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
+            makeArrayType(factory, inType.isNullable)
+        }
+
+        // Converts the first argument to an array
+        private val arg0ArrayCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                0 -> makeArrayType(factory, inType.isNullable)
+                else -> inType
+            }
+        }
+
+        // Converts the first argument to an array and the rest to number(9, 0)
+        // Note: uses INTEGER for now
+        private val arg0ArrayRestNumber9Cast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                0 -> makeArrayType(factory, inType.isNullable)
+                else -> factory.createTypeWithNullability(
+                    factory.createSqlType(SqlTypeName.INTEGER),
+                    inType.isNullable,
+                )
+            }
         }
 
         private val anyArgDateCast = {
@@ -360,6 +400,12 @@ internal class VariantCastTable {
          * TODO: Ensure these lists are exhaustive.
          */
         val variantNameMapping = mapOf(
+            ArrayOperatorTable.ARRAY_EXCEPT to anyArgArrayCast,
+            ArrayOperatorTable.ARRAY_INTERSECTION to anyArgArrayCast,
+            ArrayOperatorTable.ARRAYS_OVERLAP to anyArgArrayCast,
+            ArrayOperatorTable.ARRAY_REMOVE to arg0ArrayCast,
+            ArrayOperatorTable.ARRAY_REMOVE_AT to arg0ArrayRestNumber9Cast,
+            ArrayOperatorTable.ARRAY_SLICE to arg0ArrayRestNumber9Cast,
             CondOperatorTable.BOOLOR_AGG to anyArgBooleanCast,
             CondOperatorTable.BOOLAND_AGG to anyArgBooleanCast,
             CondOperatorTable.BOOLXOR_AGG to anyArgBooleanCast,
