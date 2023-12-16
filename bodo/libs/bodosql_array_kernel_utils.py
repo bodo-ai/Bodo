@@ -920,12 +920,16 @@ def is_valid_timedelta_arg(arg):
     and the columnar timedelta types are both .
     """
 
-    return arg == pd_timedelta_type or (
-        bodo.utils.utils.is_array_typ(arg, True)
-        and (
-            is_timedelta64_series_typ(arg)
-            or isinstance(arg, PDTimeDeltaType)
-            or arg.dtype == bodo.timedelta64ns
+    return (
+        arg == pd_timedelta_type
+        or arg == types.NPTimedelta("ns")
+        or (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and (
+                is_timedelta64_series_typ(arg)
+                or isinstance(arg, PDTimeDeltaType)
+                or arg.dtype == bodo.timedelta64ns
+            )
         )
     )
 

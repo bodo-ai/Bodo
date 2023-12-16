@@ -47,10 +47,12 @@ public class CastCodeGen {
     // Create the args. Some function paths may have multiple args.
     List<Expr> args = new ArrayList<>();
     args.add(arg);
+    ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
     boolean appendStreamingArgs = false;
     switch (outputTypeName) {
       case CHAR:
       case VARCHAR:
+        kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(outputScalar)));
         fnName = "bodo.libs.bodosql_array_kernels.to_char";
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
@@ -120,7 +122,10 @@ public class CastCodeGen {
           args.set(0, newArg);
         }
     }
-    return new Expr.Call(fnName, args, appendStreamingArgs ? streamingNamedArgs : List.of());
+    if (appendStreamingArgs) {
+      kwargs.addAll(streamingNamedArgs);
+    }
+    return new Expr.Call(fnName, args, kwargs);
   }
 
   /**

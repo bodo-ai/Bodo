@@ -9,6 +9,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visit
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateStrToDateCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateTimestampFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToArrayCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToBinaryFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToBooleanFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToCharFnCode;
@@ -1020,8 +1021,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     return generatePosition(operands, streamingNamedArgs);
   }
 
-  protected Expr visitCastFunc(RexCall fnOperation, List<Expr> operands) {
-    return visitCastFunc(fnOperation, operands, List.of());
+  protected Expr visitCastFunc(RexCall fnOperation, List<Expr> operands, List<Boolean> argScalars) {
+    return visitCastFunc(fnOperation, operands, argScalars, List.of());
   }
 
   /**
@@ -1034,7 +1035,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @return The generated expression.
    */
   protected Expr visitCastFunc(
-      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+      RexCall fnOperation,
+      List<Expr> operands,
+      List<Boolean> argScalars,
+      List<Pair<String, Expr>> streamingNamedArgs) {
     String fnName = fnOperation.getOperator().getName();
     switch (fnName) {
       case "TIMESTAMP":
@@ -1066,7 +1070,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return generateToBinaryFnCode(operands, fnName, streamingNamedArgs);
       case "TO_CHAR":
       case "TO_VARCHAR":
-        return generateToCharFnCode(operands);
+        return generateToCharFnCode(operands, argScalars);
       case "TO_NUMBER":
       case "TO_NUMERIC":
       case "TO_DECIMAL":
@@ -1082,9 +1086,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TO_TIME":
       case "TRY_TO_TIME":
         return generateToTimeCode(operands, fnName, streamingNamedArgs);
-      case "ARRAY_TO_STRING":
-        assert operands.size() == 2;
-        return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
+      case "TO_ARRAY":
+        return generateToArrayCode(operands, argScalars);
       case "TO_VARIANT":
         // TO_VARIANT is currently implemented as a no-op that serves as a type-hint for the calcite
         // side but has no effect on the generated code.
@@ -1465,24 +1468,24 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       argScalars.add(isOperandScalar(operand));
     }
     // Handle functions that do not care about nulls separately
-    if (fnName == "COALESCE"
-        || fnName == "NVL"
-        || fnName == "NVL2"
-        || fnName == "ARRAY_CONSTRUCT"
+    if (fnName == "ARRAY_CONSTRUCT"
         || fnName == "ARRAY_CONSTRUCT_COMPACT"
         || fnName == "BOOLAND"
+        || fnName == "BOOLNOT"
         || fnName == "BOOLOR"
         || fnName == "BOOLXOR"
-        || fnName == "BOOLNOT"
+        || fnName == "COALESCE"
+        || fnName == "DECODE"
         || fnName == "EQUAL_NULL"
-        || fnName == "ZEROIFNULL"
-        || fnName == "IFNULL"
+        || fnName == "HASH"
         || fnName == "IF"
         || fnName == "IFF"
-        || fnName == "DECODE"
+        || fnName == "IFNULL"
+        || fnName == "NVL"
+        || fnName == "NVL2"
         || fnName == "OBJECT_CONSTRUCT"
         || fnName == "OBJECT_CONSTRUCT_KEEP_NULL"
-        || fnName == "HASH") {
+        || fnName == "ZEROIFNULL") {
       return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, argScalars);
     }
 
@@ -1700,74 +1703,75 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 operands.get(0), isScalar(fnOperation.operands.get(0)), operands.get(1).emit());
           case "TIME_SLICE":
             return generateTimeSliceFnCode(operands, 0);
-          case "TIMESTAMP":
           case "DATE":
-          case "TO_DATE":
-          case "TRY_TO_DATE":
-          case "TO_TIMESTAMP":
-          case "TO_TIMESTAMP_NTZ":
-          case "TO_TIMESTAMP_LTZ":
-          case "TO_TIMESTAMP_TZ":
-          case "TRY_TO_TIMESTAMP":
-          case "TRY_TO_TIMESTAMP_NTZ":
-          case "TRY_TO_TIMESTAMP_LTZ":
-          case "TRY_TO_TIMESTAMP_TZ":
-          case "TRY_TO_BOOLEAN":
-          case "TO_BOOLEAN":
-          case "TRY_TO_BINARY":
+          case "TIME":
+          case "TIMESTAMP":
+          case "TO_ARRAY":
           case "TO_BINARY":
+          case "TO_BOOLEAN":
           case "TO_CHAR":
-          case "TO_VARCHAR":
-          case "TO_VARIANT":
+          case "TO_DATE":
+          case "TO_DECIMAL":
+          case "TO_DOUBLE":
           case "TO_NUMBER":
           case "TO_NUMERIC":
           case "TO_OBJECT":
-          case "TO_DECIMAL":
+          case "TO_TIME":
+          case "TO_TIMESTAMP":
+          case "TO_TIMESTAMP_LTZ":
+          case "TO_TIMESTAMP_NTZ":
+          case "TO_TIMESTAMP_TZ":
+          case "TO_VARCHAR":
+          case "TO_VARIANT":
+          case "TRY_TO_BINARY":
+          case "TRY_TO_BOOLEAN":
+          case "TRY_TO_DATE":
+          case "TRY_TO_DECIMAL":
+          case "TRY_TO_DOUBLE":
           case "TRY_TO_NUMBER":
           case "TRY_TO_NUMERIC":
-          case "TRY_TO_DECIMAL":
-          case "TO_DOUBLE":
-          case "TRY_TO_DOUBLE":
-          case "TIME":
-          case "TO_TIME":
           case "TRY_TO_TIME":
-            return visitCastFunc(fnOperation, operands);
-          case "ASINH":
-          case "ACOSH":
-          case "ATANH":
-          case "SINH":
-          case "COSH":
-          case "TANH":
-          case "COS":
-          case "SIN":
-          case "TAN":
-          case "COT":
+          case "TRY_TO_TIMESTAMP":
+          case "TRY_TO_TIMESTAMP_LTZ":
+          case "TRY_TO_TIMESTAMP_NTZ":
+          case "TRY_TO_TIMESTAMP_TZ":
+            return visitCastFunc(fnOperation, operands, argScalars);
           case "ACOS":
+          case "ACOSH":
           case "ASIN":
+          case "ASINH":
           case "ATAN":
+          case "ATAN2":
+          case "ATANH":
+          case "COS":
+          case "COSH":
+          case "COT":
           case "DEGREES":
           case "RADIANS":
-          case "ATAN2":
+          case "SIN":
+          case "SINH":
+          case "TAN":
+          case "TANH":
             return getTrigFnCode(fnName, operands);
           case "ABS":
+          case "BITAND":
+          case "BITNOT":
+          case "BITOR":
+          case "BITSHIFTLEFT":
+          case "BITSHIFTRIGHT":
+          case "BITXOR":
           case "CBRT":
           case "EXP":
           case "FACTORIAL":
-          case "LOG2":
-          case "LOG10":
-          case "LN":
-          case "SIGN":
-          case "SQUARE":
-          case "SQRT":
-          case "BITNOT":
-          case "POWER":
-          case "POW":
-          case "BITAND":
-          case "BITOR":
-          case "BITXOR":
-          case "BITSHIFTLEFT":
-          case "BITSHIFTRIGHT":
           case "GETBIT":
+          case "LN":
+          case "LOG10":
+          case "LOG2":
+          case "POW":
+          case "POWER":
+          case "SIGN":
+          case "SQRT":
+          case "SQUARE":
             return getNumericFnCode(fnName, operands);
           case "TRUNC":
           case "TRUNCATE":
@@ -2028,19 +2032,18 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFuncCode(fnName, operands);
-          case "ARRAY_CONTAINS":
-          case "ARRAY_POSITION":
+          case "ARRAYS_OVERLAP":
+          case "ARRAY_CAT":
           case "ARRAY_COMPACT":
+          case "ARRAY_CONTAINS":
           case "ARRAY_EXCEPT":
           case "ARRAY_INTERSECTION":
-          case "ARRAY_CAT":
-          case "ARRAYS_OVERLAP":
-          case "ARRAY_SIZE":
+          case "ARRAY_POSITION":
           case "ARRAY_REMOVE":
           case "ARRAY_REMOVE_AT":
+          case "ARRAY_SIZE":
           case "ARRAY_SLICE":
           case "ARRAY_TO_STRING":
-          case "TO_ARRAY":
             return visitNestedArrayFunc(fnName, operands, argScalars);
         }
       default:

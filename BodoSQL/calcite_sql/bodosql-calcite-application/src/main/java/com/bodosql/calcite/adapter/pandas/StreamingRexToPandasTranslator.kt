@@ -89,8 +89,8 @@ class StreamingRexToPandasTranslator(
         return visitPosition(operands, genDictEncodingArgs())
     }
 
-    override fun visitCastFunc(fnOperation: RexCall, operands: List<Expr>): Expr {
-        return visitCastFunc(fnOperation, operands, genDictEncodingArgs())
+    override fun visitCastFunc(fnOperation: RexCall, operands: List<Expr>, argScalars: List<Boolean>): Expr {
+        return visitCastFunc(fnOperation, operands, argScalars, genDictEncodingArgs())
     }
 
     override fun visitStringFunc(fnOperation: RexCall, operands: List<Expr>): Expr {
