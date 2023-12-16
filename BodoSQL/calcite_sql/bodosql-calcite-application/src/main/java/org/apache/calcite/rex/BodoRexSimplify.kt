@@ -2,6 +2,7 @@ package org.apache.calcite.rex
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
@@ -586,6 +587,37 @@ class BodoRexSimplify(
     }
 
     /**
+     * Returns if a RexNode is a call to IFF.
+     */
+    private fun isIFF(e: RexNode): Boolean {
+        return e is RexCall && e.operator.name == CondOperatorTable.IFF_FUNC.name
+    }
+
+    /**
+     * Simplify IFF based on the value of the arguments. There are 4 supported
+     * transformations
+     *
+     * IFF(true, A, B) -> A
+     * IFF(false, A, B) -> B
+     * IFF(null, A, B) -> B
+     * IFF(A, null, null) -> null
+     */
+    private fun simplifyIFF(e: RexCall): RexNode {
+        val arg0 = e.operands[0]
+        val arg1 = e.operands[1]
+        val arg2 = e.operands[2]
+        return if (arg0.isAlwaysTrue) {
+            arg1
+        } else if (arg0.isAlwaysFalse || arg0.type.sqlTypeName == SqlTypeName.NULL) {
+            arg2
+        } else if (arg1.type.sqlTypeName == SqlTypeName.NULL && arg2.type.sqlTypeName == SqlTypeName.NULL) {
+            rexBuilder.makeNullLiteral(e.getType())
+        } else {
+            e
+        }
+    }
+
+    /**
      * Returns a simplification in the formats below:
      * LEAST(A, B, C) <= D  --> A <= D OR B <= D OR C <= D
      * LEAST(A, B, C) >= D  --> A >= D AND B >= D AND C >= D
@@ -923,6 +955,7 @@ class BodoRexSimplify(
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
                 isCoalesceComparison(e) -> simplifyCoalesceComparison(e as RexCall)
                 isLength(e) -> simplifyLength(e as RexCall)
+                isIFF(e) -> simplifyIFF(e as RexCall)
                 e is RexOver -> simplifyRexOver(e)
                 else -> e
             }

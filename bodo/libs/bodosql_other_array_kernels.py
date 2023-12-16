@@ -85,8 +85,12 @@ def boolnot(A):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def cond(arr, ifbranch, elsebranch):
+def cond(arr, ifbranch, elsebranch):  # pragma: no cover
+    pass
+
+
+@overload(cond)
+def overload_cond(arr, ifbranch, elsebranch):
     """Handles cases where IF receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, ifbranch, elsebranch]
@@ -476,8 +480,12 @@ def regr_valy(y, x):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def cond_util(arr, ifbranch, elsebranch):
+def cond_util(arr, ifbranch, elsebranch):  # pragma: no cover
+    pass
+
+
+@overload(cond_util)
+def overload_cond_util(arr, ifbranch, elsebranch):
     """A dedicated kernel for the SQL function IF which takes in 3 values:
     a boolean (or boolean column) and two values (or columns) with the same
     type and returns the first or second value depending on whether the boolean
@@ -496,7 +504,9 @@ def cond_util(arr, ifbranch, elsebranch):
     verify_boolean_arg(arr, "cond", "arr")
 
     # Both branches cannot be scalar nulls if the output is an array
-    # (causes a typing ambiguity)
+    # (causes a typing ambiguity). This shouldn't occur in practice.
+    # See testIFF in SimplificationTest
+    # TODO: Replace with null array for robustness.
     if (
         bodo.utils.utils.is_array_typ(arr, True)
         and ifbranch == bodo.none
