@@ -15,7 +15,7 @@ dependencies:
   # Core
   - numba =0.57.1
   - numpy >=1.23,<1.25
-  - pandas >=2,<2.2
+  - pandas >=2,<2.1
 
   # IO
   - pyarrow =13.0.0=*_cpu
