@@ -940,16 +940,15 @@ def test_array_construct_compact(data_values, use_case, memory_leak_check):
             "SELECT ARRAY_TO_STRING(time_col, '| ') from table1",
             pd.Series(
                 [
-                    "true| false| and| or| not| xor",
-                    "kgspoas| 0q3e0j| ;.2qe",
                     None,
+                    "12:00:00| 01:01:03| 02:00:00| 15:00:50| 09:01:03",
                     "",
-                    " | ^#%&| VCX:>?| 3ews| zxcv",
+                    "06:11:03| 12:30:42| 04:05:06",
+                    "05:06:07| 12:13:14| 17:33:26| 00:24:43| 03:59:06| 11:59:59",
                 ]
                 * 4
             ),
             id="time",
-            marks=pytest.mark.skip(reason="TODO: Support str() for time type."),
         ),
         pytest.param(
             "SELECT ARRAY_TO_STRING(timestamp_col, '-*-') from table1",
@@ -964,7 +963,6 @@ def test_array_construct_compact(data_values, use_case, memory_leak_check):
                 * 4
             ),
             id="timestamp",
-            marks=pytest.mark.skip(reason="TODO: Support TO_VARCHAR for time type."),
         ),
     ],
 )
@@ -1016,7 +1014,6 @@ def test_array_to_string_column(array_df, query, answer, memory_leak_check):
             "TO_TIME('16:47:23')",
             "16:47:23",
             id="time",
-            marks=pytest.mark.skip(reason="TODO: Support str() for time type."),
         ),
         pytest.param(
             "TO_TIMESTAMP('2023-06-13 16:49:50')",

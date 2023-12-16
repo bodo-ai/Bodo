@@ -772,11 +772,9 @@ def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cove
     propagate_null = [True, True, False]
     out_dtype = bodo.string_array_type
     scalar_text = "arr_str = ''\n"
-    scalar_text += "if len(arg0) > 0:\n"
-    scalar_text += "    arr_str = '' if bodo.libs.array_kernels.isna(arg0, 0) else bodo.libs.bodosql_array_kernels.to_char(arg0[0])\n"
-    scalar_text += "    for idx0 in bodo.prange(len(arg0) - 1):\n"
-    scalar_text += "        arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, idx0 + 1) else bodo.libs.bodosql_array_kernels.to_char(arg0[idx0 + 1]))\n"
-    scalar_text += "res[i] = arr_str"
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, idx0) else bodo.libs.bodosql_array_kernels.to_char(arg0[idx0], None, True))\n"
+    scalar_text += "res[i] = arr_str[len(arg1):]"
     return gen_vectorized(
         arg_names,
         arg_types,
