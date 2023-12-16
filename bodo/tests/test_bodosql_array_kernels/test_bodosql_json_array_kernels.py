@@ -462,6 +462,178 @@ def test_json_extract_path_text_invalid(data, path):
 
 
 @pytest.mark.parametrize(
+    "vector", [pytest.param(False, id="scalar"), pytest.param(True, id="vector")]
+)
+@pytest.mark.parametrize(
+    "data, path, answer",
+    [
+        pytest.param(
+            pd.Series(list(range(5)), dtype=np.int32),
+            "a",
+            pd.Series([None] * 5),
+            id="int",
+        ),
+        pytest.param(
+            pd.Series(
+                [["a"], ["b"], ["c"], ["d"], ["e"], []],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            "[0]",
+            pd.Series(["a", "b", "c", "d", "e", None]),
+            id="list",
+        ),
+        pytest.param(
+            pd.Series(
+                [[["a", "a"]], [["b"]], [["c", "c"]], [["d"]], [["e", "e"]], []],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.string()))),
+            ),
+            "[0][1]",
+            pd.Series(["a", None, "c", None, "e", None]),
+            id="nested_list",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": i} for i in range(5)],
+                dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
+            ),
+            "a",
+            pd.Series(list(range(5))),
+            id="struct_present_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": i} for i in range(5)],
+                dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())])),
+            ),
+            "b",
+            pd.Series([None] * 5),
+            id="struct_missing_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": 0}, {"b": 0}, {"a": 1}, {"b": 1}, {"a": 2, "b": 2}, {}, None],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            "a",
+            pd.Series([0, None, 1, None, 2, None, None]),
+            id="map",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": {"b": i}} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("a", pa.struct([pa.field("b", pa.int32())]))])
+                ),
+            ),
+            "a.b",
+            pd.Series(list(range(5))),
+            id="struct_nested_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"a": {"b": 0}},
+                    {"a": {"c": 1}},
+                    {"b": {"a": 2}},
+                    {"a": {"b": 3}},
+                    {"a": None},
+                    {},
+                    None,
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.map_(pa.string(), pa.int32()))
+                ),
+            ),
+            "a.b",
+            pd.Series([0, None, None, 3, None, None, None]),
+            id="map_nested_map_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": {"b": 0}}, {"b": {"b": 1}}, None, {"a": {"b": 3}}, None],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.struct([pa.field("b", pa.int32())]))
+                ),
+            ),
+            "a.b",
+            pd.Series([0, None, None, 3, None]),
+            id="map_nested_struct_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": [{"b": i}]} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field(
+                                "a",
+                                pa.large_list(pa.struct([pa.field("b", pa.int32())])),
+                            )
+                        ]
+                    )
+                ),
+            ),
+            "a[0].b",
+            pd.Series(list(range(5))),
+            id="struct_field_index_field",
+        ),
+        pytest.param(
+            pd.Series(
+                [[{"a": i}] for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.struct([pa.field("a", pa.int32())]))
+                ),
+            ),
+            "[0].a",
+            pd.Series(list(range(5))),
+            id="list_index_field",
+        ),
+    ],
+)
+def test_get_path(data, path, answer, vector, memory_leak_check):
+    def impl_vector(data):
+        return pd.Series(bodo.libs.bodosql_array_kernels.get_path(data, path))
+
+    def impl_scalar(data):
+        return bodo.libs.bodosql_array_kernels.get_path(data[0], path, is_scalar=True)
+
+    if vector:
+        check_func(
+            impl_vector,
+            (data,),
+            py_output=answer,
+            check_dtype=False,
+            sort_output=False,
+        )
+    else:
+        check_func(
+            impl_scalar,
+            (data,),
+            py_output=answer[0],
+            check_dtype=False,
+            sort_output=False,
+            distributed=False,
+        )
+
+
+def test_option_get_path(memory_leak_check):
+    def impl(data, present_data):
+        arg = data[0] if present_data else None
+        return bodo.libs.bodosql_array_kernels.get_path(arg, "[0]", is_scalar=True)
+
+    data = pd.Series([["a"]], dtype=pd.ArrowDtype(pa.large_list(pa.string())))
+    for present in [True, False]:
+        check_func(
+            impl,
+            (data, present),
+            py_output="a" if present else None,
+            check_dtype=False,
+            sort_output=False,
+            distributed=False,
+        )
+
+
+@pytest.mark.parametrize(
     "vector",
     [
         pytest.param(True, id="vector"),

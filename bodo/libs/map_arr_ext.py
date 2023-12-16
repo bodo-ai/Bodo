@@ -39,6 +39,30 @@ from bodo.utils.typing import BodoError, is_list_like_index_type, unwrap_typeref
 from bodo.libs import array_ext, hdist  # isort:skip
 
 
+class MapScalarType(types.Type):
+    """Data type for map elements taken as scalars from map arrays. A regular
+    dictionary doesn't work in the general case since values can have nulls and a
+    key/value pair could be null, which is not supported by Numba's dictionaries.
+    """
+
+    def __init__(self, key_arr_type, value_arr_type):
+        self.key_arr_type = key_arr_type
+        self.value_arr_type = value_arr_type
+        super(MapScalarType, self).__init__(
+            name=f"MapScalarType({key_arr_type}, {value_arr_type})"
+        )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
+
 class MapArrayType(types.ArrayCompatible):
     """Data type for arrays of maps"""
 
@@ -55,7 +79,7 @@ class MapArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        return types.DictType(self.key_arr_type.dtype, self.value_arr_type.dtype)
+        return MapScalarType(self.key_arr_type, self.value_arr_type)
 
     def copy(self):
         return MapArrayType(self.key_arr_type, self.value_arr_type)
@@ -337,30 +361,6 @@ def contains_map_array(arr):
         return any(contains_map_array(t) for t in arr.data)
     else:
         return False
-
-
-class MapScalarType(types.Type):
-    """Data type for map elements taken as scalars from map arrays. A regular
-    dictionary doesn't work in the general case since values can have nulls and a
-    key/value pair could be null, which is not supported by Numba's dictionaries.
-    """
-
-    def __init__(self, key_arr_type, value_arr_type):
-        self.key_arr_type = key_arr_type
-        self.value_arr_type = value_arr_type
-        super(MapScalarType, self).__init__(
-            name=f"MapScalarType({key_arr_type}, {value_arr_type})"
-        )
-
-    @property
-    def mangling_args(self):
-        """
-        Avoids long mangled function names in the generated LLVM, which slows down
-        compilation time. See [BE-1726]
-        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
-        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
-        """
-        return self.__class__.__name__, (self._code,)
 
 
 @register_model(MapScalarType)

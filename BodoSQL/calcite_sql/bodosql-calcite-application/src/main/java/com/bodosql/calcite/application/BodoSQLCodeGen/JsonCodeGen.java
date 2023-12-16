@@ -19,6 +19,7 @@ public class JsonCodeGen {
   static {
     jsonFnMap = new HashMap<>();
     jsonFnMap.put("JSON_EXTRACT_PATH_TEXT", "json_extract_path_text");
+    jsonFnMap.put("GET_PATH", "get_path");
     jsonFnMap.put("OBJECT_KEYS", "object_keys");
   }
 
@@ -72,13 +73,20 @@ public class JsonCodeGen {
    * @param operands The arguments to the function
    * @return The function call expression
    */
-  public static Expr visitJsonFunc(String fnName, List<Expr> operands) {
+  public static Expr visitJsonFunc(String fnName, List<Expr> operands, List<Boolean> arg_scalars) {
 
     if (!(jsonFnMap.containsKey(fnName))) {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
 
-    return ExprKt.BodoSQLKernel(jsonFnMap.get(fnName), operands, List.of());
+    List<Pair<String, Expr>> kwargs = List.of();
+    if (fnName.equals("GET_PATH")) {
+      // TODO(aneesh) Ideally we'd do this for all methods, but that requires some discussion on how
+      // to make this more generic
+      kwargs = new ArrayList<>();
+      kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(arg_scalars.get(0))));
+    }
+    return ExprKt.BodoSQLKernel(jsonFnMap.get(fnName), operands, kwargs);
   }
 
   /**

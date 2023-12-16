@@ -142,6 +142,7 @@ broadcasted_fixed_arg_functions = {
     "get_minute",
     "get_month",
     "get_nanosecond",
+    "get_path",
     "get_quarter",
     "get_second",
     "get_timezone_offset",

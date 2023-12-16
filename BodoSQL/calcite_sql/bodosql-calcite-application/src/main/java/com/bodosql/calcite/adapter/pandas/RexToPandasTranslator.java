@@ -1906,9 +1906,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
             return generateFromUnixTimeCode(operands.get(0));
+          case "GET_PATH":
           case "JSON_EXTRACT_PATH_TEXT":
           case "OBJECT_KEYS":
-            return visitJsonFunc(fnName, operands);
+            return visitJsonFunc(fnName, operands, argScalars);
           case "OBJECT_DELETE":
             return visitObjectDelete(operands);
           case "OBJECT_PICK":
