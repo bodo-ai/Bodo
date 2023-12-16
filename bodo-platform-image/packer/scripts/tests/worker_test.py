@@ -201,6 +201,7 @@ def test_connectors(connector, pip_packages, conda_packages):
         ("ipyparallel", "8.6.1"),
         ("ipywidgets", "8.1.1"),
         ("bodo-azurefs-sas-token-provider", "1.0"),
+        ("pandas", "2.0.3"),
     ],
 )
 def test_versions(package, expected_version, conda_packages):
