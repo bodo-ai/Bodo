@@ -18,9 +18,9 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
-    is_str_arr_type,
     raise_bodo_error,
 )
+from bodo.utils.utils import is_array_typ
 
 
 def make_to_boolean(_try):
@@ -634,28 +634,46 @@ def try_to_binary(arr, dict_encoding_state=None, func_id=-1):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def to_char(arr, format_str=None):
+def to_char(arr, format_str=None, is_scalar=False):  # pragma: no cover
+    pass
+
+
+@overload(to_char, no_unliteral=True)
+def overload_to_char(arr, format_str=None, is_scalar=False):  # pragma: no cover
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-
     args = [arr, format_str]
     for i in range(len(args)):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+        if isinstance(args[i], types.optional):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.to_char",
-                ["arr", "format_str"],
+                ["arr", "format_str", "is_scalar"],
                 i,
+                default_map={"format_str": None, "is_scalar": False},
             )
 
-    def impl(arr, format_str=None):  # pragma: no cover
-        return to_char_util(arr, format_str)
+    def impl(arr, format_str=None, is_scalar=False):
+        return to_char_util(arr, format_str, is_scalar)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_char_util(arr, format_str=None):
+def to_char_helper(input, format_str):  # pragma: no cover
+    """A simple helper function used to handle fields of inner type"""
+    return (
+        (lambda input, format_str: f'"{input}"')
+        if is_valid_string_arg(input)
+        else (lambda input, format_str: to_char(input, format_str, True))
+    )
+
+
+def to_char_util(arr, format_str, is_scalar):  # pragma: no cover
+    pass
+
+
+@overload(to_char_util, no_unliteral=True)
+def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     """A dedicated kernel for the SQL function TO_CHAR which takes in a
     number (or column) and returns a string representation of it.
 
@@ -671,52 +689,67 @@ def to_char_util(arr, format_str=None):
         string series/scalar: the string representation of the number(s) with the
         specified null handling rules
     """
-    arg_names = ["arr", "format_str"]
-    arg_types = [arr, format_str]
-    propagate_null = [True, False]
-
-    assert is_overload_none(format_str) or is_overload_constant_str(
-        format_str
-    ), "format_str must be a string literal or None"
-
+    if is_overload_none(arr):
+        return lambda arr, format_str, is_scalar: None
+    arg_names = ["arr", "format_str", "is_scalar"]
+    arg_types = [arr, format_str, is_scalar]
+    propagate_null = [True, False, False]
+    are_arrays = [
+        is_array_typ(arr)
+        if is_overload_none(is_scalar)
+        else not get_overload_const_bool(is_scalar, "to_char", "is_scalar"),
+        is_array_typ(format_str),
+        False,
+    ]
+    inner_type = arr.dtype if are_arrays[0] else arr
+    out_dtype = bodo.string_array_type
     convert_func_str = "bodo.libs.bodosql_snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
-    if is_str_arr_type(arr):
+    if is_array_typ(inner_type):
+        scalar_text = "arr_str = ''\n"
+        scalar_text += "for idx0 in range(len(arg0)):\n"
+        scalar_text += "  arr_str += ',' + ('undefined' if bodo.libs.array_kernels.isna(arg0, idx0) else bodo.libs.bodosql_array_kernels.to_char_helper(arg0[idx0], arg1))\n"
+        scalar_text += "res[i] = '[' + arr_str[1:] + ']'"
+    elif is_valid_string_arg(inner_type):
         # Strings are unchanged.
-        return lambda arr, format_str: arr  # pragma: no cover
+        return lambda arr, format_str, is_scalar: arr
     # TODO [BE-3744]: support binary data for to_char
-    elif is_valid_binary_arg(arr):
-        # currently only support hex encoding
+    elif is_valid_binary_arg(inner_type):
+        # TODO(Yipeng): Support all binary encoding. Currently only hex encoding is supported.
+        # Using bodo.libs.bodosql_array_kernels.hex_encode(arg0, 0) here will break test_cast_char_other[Bytes]
         scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
-    elif is_valid_time_arg(arr):
-        if not is_overload_none(format_str):
-            scalar_text = f"res[i] = arg0.strftime({convert_func_str}(arg1))\n"
-        else:
-            # Use the default format of HH:MM:SS (1 digits are always extended to 2,
-            # and sub-second units are ignored)
-            scalar_text = "res[i] = format(arg0.hour, '0>2') + ':' + format(arg0.minute, '0>2') + ':' + format(arg0.second, '0>2')"
-    elif is_valid_timedelta_arg(arr):
-        scalar_text = "v = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
-        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
-        scalar_text += "    r = str(v)\n"
-        scalar_text += "res[i] = r"
-    elif is_valid_datetime_or_date_arg(arr):
-        box_str = (
-            "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(arr, True)
-            else ""
+    elif is_valid_time_arg(inner_type):
+        scalar_text = (
+            "if bodo.libs.array_kernels.isna(format_str, i):\n"
+            if are_arrays[1]
+            else f"if {is_overload_none(format_str)}:\n"
         )
-        scalar_text = f"arg0 = {box_str}(arg0)\n"
-        if not is_overload_none(format_str):
-            scalar_text += f"res[i] = arg0.strftime({convert_func_str}(arg1))\n"
-        elif is_valid_date_arg(arr):
-            scalar_text += "res[i] = str(arg0)\n"
-        elif is_valid_tz_aware_datetime_arg(arr):
-            scalar_text += "res[i] = arg0.isoformat(' ')\n"
+        # Use the default format of HH:MM:SS (1 digits are always extended to 2, and sub-second units are ignored)
+        scalar_text += "  res[i] = format(arg0.hour, '0>2') + ':' + format(arg0.minute, '0>2') + ':' + format(arg0.second, '0>2')\n"
+        scalar_text += "else:\n"
+        scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
+    elif is_valid_timedelta_arg(inner_type):
+        scalar_text = "arg0 = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
+        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "  r = str(arg0)\n"
+        scalar_text += "res[i] = r"
+    elif is_valid_datetime_or_date_arg(inner_type):
+        scalar_text = "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
+        scalar_text += (
+            "if bodo.libs.array_kernels.isna(format_str, i):\n"
+            if are_arrays[1]
+            else f"if {is_overload_none(format_str)}:\n"
+        )
+        if is_valid_date_arg(inner_type):
+            scalar_text += "  res[i] = str(arg0)\n"
+        elif is_valid_tz_aware_datetime_arg(inner_type):
+            scalar_text += "  res[i] = arg0.isoformat(' ')\n"
         else:
-            scalar_text += "res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
-    elif is_valid_float_arg(arr):
+            scalar_text += "  res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
+        scalar_text += "else:\n"
+        scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
+    elif is_valid_float_arg(inner_type):
         scalar_text = "if np.isinf(arg0):\n"
         scalar_text += "  res[i] = 'inf' if arg0 > 0 else '-inf'\n"
         # currently won't use elif branch since np.nan is caught by
@@ -726,37 +759,49 @@ def to_char_util(arr, format_str=None):
         scalar_text += "  res[i] = 'NaN'\n"
         scalar_text += "else:\n"
         scalar_text += "  res[i] = str(arg0)"
-    elif is_valid_boolean_arg(arr):
+    elif is_valid_boolean_arg(inner_type):
         scalar_text = "res[i] = 'true' if arg0 else 'false'"
-    elif arr == bodo.null_array_type:
-        scalar_text = "res[i] = None "
-    else:
+    elif is_overload_none(inner_type):
+        scalar_text = "res[i] = None"
+    elif is_valid_int_arg(inner_type):
         int_types = {
             8: np.int8,
             16: np.int16,
             32: np.int32,
             64: np.int64,
         }
-        if is_valid_int_arg(arr):
-            if hasattr(arr, "dtype"):
-                bw = arr.dtype.bitwidth
-            else:
-                bw = arr.bitwidth
-            scalar_text = f"if arg0 == {np.iinfo(int_types[bw]).min}:\n"
-            scalar_text += f"  res[i] = '{np.iinfo(int_types[bw]).min}'\n"
-            scalar_text += "else:\n"
-            scalar_text += "  res[i] = str(arg0)"
-        else:
-            scalar_text = "res[i] = str(arg0)"
-
-    out_dtype = bodo.string_array_type
-
+        scalar_text = f"if arg0 == {np.iinfo(int_types[inner_type.bitwidth]).min}:\n"
+        scalar_text += f"  res[i] = '{np.iinfo(int_types[inner_type.bitwidth]).min}'\n"
+        scalar_text += "else:\n"
+        scalar_text += "  res[i] = str(arg0)"
+    elif isinstance(inner_type, bodo.StructType):
+        scalar_text = "arr_str = ''\n"
+        for i in range(len(inner_type.names)):
+            name_w_quotes = '"' + inner_type.names[i] + '"'
+            scalar_text += f"if not bodo.libs.struct_arr_ext.is_field_value_null(arg0, {name_w_quotes}):\n"
+            scalar_text += f"  arr_str += ',{name_w_quotes}:' + bodo.libs.bodosql_array_kernels.to_char_helper(arg0[{name_w_quotes}], arg1)\n"
+        scalar_text += "res[i] = '{' + arr_str[1:] + '}'"
+    elif isinstance(inner_type, types.DictType):
+        scalar_text = "arr_str = ''\n"
+        scalar_text += "for idx0 in range(len(arg0._keys)):\n"
+        scalar_text += "  if not bodo.libs.array_kernels.isna(arg0._keys, idx0) and not bodo.libs.array_kernels.isna(arg0._values, idx0):\n"
+        scalar_text += "    arr_str += ',' + bodo.libs.bodosql_array_kernels.to_char_helper(arg0._keys[idx0], arg1) + ':' + bodo.libs.bodosql_array_kernels.to_char_helper(arg0._values[idx0], arg1)\n"
+        scalar_text += "res[i] = '{' + arr_str[1:] + '}'"
+    elif isinstance(inner_type, bodo.libs.map_arr_ext.MapScalarType):
+        scalar_text = "arr_str = ''\n"
+        scalar_text += "for idx0 in range(len(arg0._keys)):\n"
+        scalar_text += "  if not bodo.libs.array_kernels.isna(arg0._keys, idx0) and not bodo.libs.array_kernels.isna(arg0._values, idx0):\n"
+        scalar_text += "    arr_str += ',' + bodo.libs.bodosql_array_kernels.to_char_helper(arg0._keys[idx0], arg1) + ':' + bodo.libs.bodosql_array_kernels.to_char_helper(arg0._values[idx0], arg1)\n"
+        scalar_text += "res[i] = '{' + arr_str[1:] + '}'"
+    else:
+        scalar_text = "res[i] = str(arg0)"
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        are_arrays=are_arrays,
     )
 
 

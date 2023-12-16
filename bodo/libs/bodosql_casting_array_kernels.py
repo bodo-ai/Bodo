@@ -140,7 +140,8 @@ def create_cast_func_overload(func_name):
         if func_name == "boolean":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True), dict_encoding_state, func_id)\n"
         elif func_name == "char":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr)\n"
+            # TODO(Yipeng): Correctly support semi-structured type cast_char for scalar & vector with is_scalar parameter
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr, None, None)\n"
         elif func_name == "date":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, dict_encoding_state, func_id)\n"
         elif func_name == "timestamp":

@@ -122,13 +122,11 @@ public class ConversionCodeGen {
    * @param operandsInfo List of operands
    * @return Expr for the TO_CHAR function
    */
-  public static Expr generateToCharFnCode(List<Expr> operandsInfo) {
-    List<Expr> args = new ArrayList<>();
-    args.addAll(operandsInfo);
-    if (operandsInfo.size() == 1) {
-      args.add(Expr.None.INSTANCE);
-    }
-    return BodoSQLKernel("to_char", args, List.of());
+  public static Expr generateToCharFnCode(List<Expr> operandsInfo, List<Boolean> argScalars) {
+    return BodoSQLKernel(
+        "to_char",
+        operandsInfo,
+        List.of(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0)))));
   }
 
   /**
@@ -162,6 +160,19 @@ public class ConversionCodeGen {
           fnName.toLowerCase() + ": format argument not yet supported");
     }
     return BodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
+  }
+
+  /**
+   * Handles codegen for Snowflake TO_ARRAY function.
+   *
+   * @param operands List of operands
+   * @param argScalars Whether each argument is a scalar or a column
+   * @return Expr for the TO_ARRAY function
+   */
+  public static Expr generateToArrayCode(List<Expr> operands, List<Boolean> argScalars) {
+    ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
+    kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0))));
+    return BodoSQLKernel("to_array", operands, kwargs);
   }
 
   /**
