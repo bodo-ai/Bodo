@@ -1407,7 +1407,10 @@ def test_cond_option(memory_leak_check):
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                answer = "A" if flag0 and flag1 else None
+                if flag0:
+                    answer = "A" if flag1 else None
+                else:
+                    answer = "B" if flag2 else None
                 check_func(
                     impl, (True, "A", "B", flag0, flag1, flag2), py_output=answer
                 )
