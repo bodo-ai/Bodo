@@ -255,7 +255,7 @@ class BodoConstUpdatedError(Exception):
     """
 
 
-def raise_bodo_error(msg, loc=None):
+def raise_bodo_error(msg, loc=None) -> typing.NoReturn:
     """Raises BodoException during partial typing in case typing transforms can handle
     the issue. Otherwise, raises BodoError.
     """
@@ -1578,6 +1578,8 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         if convert_nullable:
             return to_nullable_type(arr)
         return arr
+    if isinstance(dtype, bodo.MapScalarType):
+        return bodo.MapArrayType(dtype.key_arr_type, dtype.value_arr_type)
     raise BodoError(f"dtype {dtype} cannot be stored in arrays")  # pragma: no cover
 
 
@@ -1944,6 +1946,40 @@ def get_common_scalar_dtype(
 
         # Combine max_float (float) and base_out (float or int) types
         return get_common_scalar_dtype([max_float, base_out])
+
+    # If we have a mix of MapScalarTypes and DictTypes, then we first convert
+    # all DictTypes to MapScalarType.
+    if any(isinstance(t, types.DictType) for t in scalar_types) and any(
+        isinstance(t, bodo.MapScalarType) for t in scalar_types
+    ):
+        new_types = []
+        for t in scalar_types:
+            if isinstance(t, types.DictType):
+                equivalent_map_type = bodo.MapScalarType(
+                    dtype_to_array_type(t.key_type), dtype_to_array_type(t.value_type)
+                )
+                new_types.append(equivalent_map_type)
+            else:
+                new_types.append(t)
+        scalar_types = new_types
+
+    # MapScalarType types are combinable if their key types and value types are
+    # also combinable.
+    if all(isinstance(t, bodo.MapScalarType) for t in scalar_types):
+        key_type, key_downcast = get_common_scalar_dtype(
+            [t.key_arr_type.dtype for t in scalar_types]
+        )
+        val_type, val_downcast = get_common_scalar_dtype(
+            [t.value_arr_type.dtype for t in scalar_types]
+        )
+        if key_type is None or val_type is None:
+            return (None, False)
+        key_arr_type = dtype_to_array_type(key_type)
+        val_arr_type = dtype_to_array_type(val_type)
+        return (
+            bodo.MapScalarType(key_arr_type, val_arr_type),
+            key_downcast or val_downcast,
+        )
 
     # Dict types are combinable if their key types and value types
     # are also combinable.

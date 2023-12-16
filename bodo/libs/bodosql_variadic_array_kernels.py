@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import overload
-from numba.typed import Dict
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -201,52 +200,46 @@ def overload_object_construct(values, names, scalars):
     val_type = out_dtype.value_arr_type
     prefix_code = ""
 
+    # build a struct array to insert into the final map array.
+    extra_globals["struct_typ_tuple"] = (key_type, val_type)
+    extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
+        ("key", "value")
+    )
+    # Build an array of booleans to determine which pairs from the current
+    # row should be kept.
+    scalar_text = f"pairs_to_keep = np.zeros({len(names)}, dtype=np.bool_)\n"
+    for i in range(len(values)):
+        scalar_text += f"if not ({nulls[i]}):\n"
+        scalar_text += f"  pairs_to_keep[{i}] = True\n"
+    # Based on the number to be kept, allocate a struct array to store that many
+    # key-value pairs.
+    scalar_text += "n_keep = pairs_to_keep.sum()\n"
+    scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+    # For each pair, if it is to be kept, write a struct containing that pair
+    # into he struct array.
+    scalar_text += "write_idx = 0\n"
+    for i in range(len(values)):
+        scalar_text += f"if pairs_to_keep[{i}]:\n"
+        if isinstance(values[i], bodo.MapArrayType):
+            prefix_code += f"  in_offsets_{i} = bodo.libs.array_item_arr_ext.get_offsets(v{i}._data)\n"
+            prefix_code += f"  in_struct_arr_{i} = bodo.libs.array_item_arr_ext.get_data(v{i}._data)\n"
+            scalar_text += f"  start_offset_{i} = in_offsets_{i}[np.int64(i)]\n"
+            scalar_text += f"  end_offset_{i} = in_offsets_{i}[np.int64(i+1)]\n"
+            scalar_text += f"  val_arg_{i} = in_struct_arr_{i}[start_offset_{i} : end_offset_{i}]\n"
+            val_arg = f"val_arg_{i}"
+        else:
+            val_arg = f"arg{i}"
+        scalar_text += f"  struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({repr(names[i])}, {val_arg}), (False, False), map_struct_names)\n"
+        scalar_text += "  write_idx += 1\n"
     if any(are_arrays):
-        # If any of the inputs are arrays, build a struct array to insert
-        # into the final map array.
-        extra_globals["struct_typ_tuple"] = (key_type, val_type)
-        extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
-            ("key", "value")
-        )
-        # Build an array of booleans to determine which pairs from the current
-        # row should be kept.
-        scalar_text = f"pairs_to_keep = np.zeros({len(names)}, dtype=np.bool_)\n"
-        for i in range(len(values)):
-            scalar_text += f"if not ({nulls[i]}):\n"
-            scalar_text += f"  pairs_to_keep[{i}] = True\n"
-        # Based on the number to be kept, allocate a struct array to store that many
-        # key-value pairs.
-        scalar_text += "n_keep = pairs_to_keep.sum()\n"
-        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
-        # For each pair, if it is to be kept, write a struct containing that pair
-        # into he struct array.
-        scalar_text += "write_idx = 0\n"
-        for i in range(len(values)):
-            scalar_text += f"if pairs_to_keep[{i}]:\n"
-            if isinstance(values[i], bodo.MapArrayType):
-                prefix_code += f"  in_offsets_{i} = bodo.libs.array_item_arr_ext.get_offsets(v{i}._data)\n"
-                prefix_code += f"  in_struct_arr_{i} = bodo.libs.array_item_arr_ext.get_data(v{i}._data)\n"
-                scalar_text += f"  start_offset_{i} = in_offsets_{i}[np.int64(i)]\n"
-                scalar_text += f"  end_offset_{i} = in_offsets_{i}[np.int64(i+1)]\n"
-                scalar_text += f"  val_arg_{i} = in_struct_arr_{i}[start_offset_{i} : end_offset_{i}]\n"
-                val_arg = f"val_arg_{i}"
-            else:
-                val_arg = f"arg{i}"
-            scalar_text += f"  struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({repr(names[i])}, {val_arg}), (False, False), map_struct_names)\n"
-            scalar_text += "  write_idx += 1\n"
         scalar_text += "res[i] = struct_arr\n"
-
     else:
-        # If all of the values are scalars, build a numba typed dict
-        extra_globals["key_type"] = key_type.dtype
-        extra_globals["val_type"] = val_type.dtype
-        extra_globals["Dict"] = Dict
-        scalar_text = "out_dict = Dict.empty(key_type, val_type)\n"
-        # For each value, if that value is non-null, add it to the dict
-        for i in range(len(values)):
-            scalar_text += f"if not ({nulls[i]}):\n"
-            scalar_text += f"  out_dict[{repr(names[i])}] = arg{i}\n"
-        scalar_text += "res[i] = out_dict\n"
+        # If our output should be scalar, then construct the map scalar we need
+        scalar_text += (
+            "key_data, value_data = bodo.libs.struct_arr_ext.get_data(struct_arr)\n"
+        )
+        scalar_text += "nulls = bodo.libs.struct_arr_ext.get_null_bitmap(struct_arr)\n"
+        scalar_text += "res[i] = bodo.libs.map_arr_ext.init_map_value(key_data, value_data, nulls)\n"
 
     return gen_vectorized(
         arg_names,

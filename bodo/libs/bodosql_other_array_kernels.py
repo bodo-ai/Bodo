@@ -1153,24 +1153,23 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
         arr's inner type/column of inner type: the element at ind of array arr
     """
 
-    if (
-        not is_overload_none(arr)
-        and not is_array_item_array(arr)
-        and not (is_scalar_arr and is_array_typ(arr, True))
-    ):
-        raise_bodo_error(
-            f"Error in array GET: first argument must be a nested array, found {arr}"
-        )
-
     verify_int_arg(ind, "GET", "ind")
-    is_scalar_arr_bool = get_overload_const_bool(
-        is_scalar_arr, "arr_get", "is_scalar_arr"
-    )
     arg_names = ["arr", "ind", "is_scalar_arr"]
     arg_types = [arr, ind, is_scalar_arr]
     propagate_null = [True, True, False]
 
-    if is_overload_none(arr):
+    is_scalar_arr_bool = get_overload_const_bool(
+        is_scalar_arr, "arr_get", "is_scalar_arr"
+    )
+
+    # If this input type is invalid, then we need to create a null array
+    invalid_type = (
+        not is_overload_none(arr)
+        and not is_array_item_array(arr)
+        and not (is_scalar_arr_bool and is_array_typ(arr, True))
+    )
+
+    if invalid_type or is_overload_none(arr):
         out_dtype = bodo.null_array_type
     else:
         dtype = (
@@ -1185,10 +1184,13 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
         )
         out_dtype = bodo.utils.typing.to_nullable_type(arr_type)
 
-    scalar_text = "if arg1 < 0 or arg1 >= len(arg0) or bodo.libs.array_kernels.isna(arg0, arg1):\n"
-    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
-    scalar_text += "else:\n"
-    scalar_text += "   res[i] = arg0[arg1]"
+    if invalid_type:
+        scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        scalar_text = "if arg1 < 0 or arg1 >= len(arg0) or bodo.libs.array_kernels.isna(arg0, arg1):\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = arg0[arg1]"
     return gen_vectorized(
         arg_names,
         arg_types,

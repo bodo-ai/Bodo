@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -125,6 +126,196 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
                 "I": range(len(data)),
                 "D": data,
                 "P": path,
+                "B": [i % 4 == 3 for i in range(len(data))],
+            }
+        )
+    }
+    expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
+    if use_case:
+        expected_output[1][ctx["table1"].B] = None
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "use_colon_syntax",
+    [
+        pytest.param(False, id="function"),
+        pytest.param(True, id="colon", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, path, answer, supports_colon",
+    # Everything that has supports_colon = False, should be changed to True
+    # after the parser changes to enable it are done
+    [
+        pytest.param(
+            pd.Series(
+                [[["a", "a"]], [["b"]], [["c", "c"]], [["d"]], [["e", "e"]], []],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.string()))),
+            ),
+            "[0][1]",
+            pd.Series(["a", None, "c", None, "e", None]),
+            False,
+            id="nested_list",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": {"b": i}} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("a", pa.struct([pa.field("b", pa.int32())]))])
+                ),
+            ),
+            "a.b",
+            pd.Series(list(range(5))),
+            True,
+            id="struct_nested_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": {"b": i}} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.map_(pa.string(), pa.int32()))
+                ),
+            ),
+            "a.b",
+            pd.Series(list(range(5))),
+            True,
+            id="map_nested_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": [{"b": i}]} for i in range(5)],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field(
+                                "a",
+                                pa.large_list(pa.struct([pa.field("b", pa.int32())])),
+                            )
+                        ]
+                    )
+                ),
+            ),
+            "a[0].b",
+            pd.Series(list(range(5))),
+            False,
+            id="struct_field_index_field",
+        ),
+    ],
+)
+def test_get_path(
+    data, path, answer, supports_colon, use_case, use_colon_syntax, memory_leak_check
+):
+    if use_colon_syntax and not supports_colon:
+        pytest.skip(
+            reason="[BSE-2242] cannot test colon syntax with mixed index and field access"
+        )
+
+    if use_colon_syntax:
+        get_path_call = f"D:{path}"
+    else:
+        get_path_call = f"GET_PATH(D, {repr(path)})"
+
+    if use_case:
+        query = f"SELECT I, CASE WHEN B THEN NULL ELSE {get_path_call} END FROM TABLE1"
+    else:
+        query = f"SELECT I, {get_path_call} FROM TABLE1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": range(len(data)),
+                "D": data,
+                "B": [i % 4 == 3 for i in range(len(data))],
+            }
+        )
+    }
+    expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
+    if use_case:
+        expected_output[1][ctx["table1"].B] = None
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "use_colon_syntax",
+    [
+        pytest.param(False, id="function"),
+        pytest.param(True, id="colon", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, path, answer, supports_colon",
+    # Everything that has supports_colon = False, should be changed to True
+    # after the parser changes to enable it are done
+    [
+        pytest.param(
+            pd.Series(list(range(5)), dtype=np.int32),
+            "a",
+            pd.Series([None] * 5),
+            True,
+            id="int_field",
+        ),
+        pytest.param(
+            pd.Series(list(range(5)), dtype=np.int32),
+            "[0]",
+            pd.Series([None] * 5),
+            False,
+            id="int_index",
+        ),
+    ],
+)
+def test_get_path_on_incorrect_variant_types(
+    data, path, answer, supports_colon, use_case, use_colon_syntax, memory_leak_check
+):
+    """Test that GET_PATH returns NULLs for inputs that are VARIANT, but not a semi-structured type."""
+    if use_colon_syntax and not supports_colon:
+        pytest.skip(
+            reason="[BSE-2242] cannot test colon syntax with mixed index and field access"
+        )
+
+    if use_colon_syntax:
+        get_path_call = f"TO_VARIANT(D):{path}"
+    else:
+        get_path_call = f"GET_PATH(TO_VARIANT(D), {repr(path)})"
+
+    if use_case:
+        query = f"SELECT I, CASE WHEN B THEN NULL ELSE {get_path_call} END FROM TABLE1"
+    else:
+        query = f"SELECT I, {get_path_call} FROM TABLE1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": range(len(data)),
+                "D": data,
                 "B": [i % 4 == 3 for i in range(len(data))],
             }
         )

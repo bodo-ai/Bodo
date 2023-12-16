@@ -666,6 +666,162 @@ def parse_and_extract_json_string(
     return data
 
 
+def get_path(data, path, is_scalar=False):  # pragma: no cover
+    pass
+
+
+@overload(get_path, no_unliteral=True)
+def overload_get_path(data, path, is_scalar=False):  # pragma: no cover
+    args = [data, path, is_scalar]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.get_path",
+                ["data", "path", "is_scalar"],
+                i,
+                default_map={"is_scalar": False},
+            )
+
+    def impl(data, path, is_scalar=False):
+        return bodo.libs.bodosql_json_array_kernels.get_path_util(data, path, is_scalar)
+
+    return impl
+
+
+def get_path_util(data, path, is_scalar):  # pragma: no cover
+    """dummy method for overload"""
+    pass
+
+
+@overload(get_path_util, no_unliteral=True)
+def overload_get_path_util(data, path, is_scalar):
+    if not is_overload_constant_str(path):
+        raise_bodo_error("Only constant path expressions are supported at this time")
+
+    is_scalar_bool = get_overload_const_bool(is_scalar)
+
+    path_parts, err_msg = process_json_path(get_overload_const_str(path))
+    if len(err_msg) > 0:
+        raise ValueError(err_msg)
+
+    func_text = "def impl(data, path, is_scalar):\n"
+    func_text += f"  tmp0 = data\n"
+    for i, (target_index, target_key) in enumerate(path_parts):
+        if target_index >= 0:
+            func_text += f"  tmp{i + 1} = bodo.libs.bodosql_array_kernels.arr_get(tmp{i}, {target_index}, is_scalar_arr={is_scalar_bool})\n"
+        else:
+            func_text += f"  tmp{i + 1} = bodo.libs.bodosql_json_array_kernels.get_field(tmp{i}, {repr(target_key)}, {is_scalar_bool})\n"
+    func_text += f"  return tmp{len(path_parts)}\n"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+def get_field(data, key, is_scalar):  # pragma: no cover
+    """dummy method for overload"""
+    pass
+
+
+@overload(get_field, no_unliteral=True)
+def overload_get_field(data, field, is_scalar):  # pragma: no cover
+    args = [data, field, is_scalar]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.get_field",
+                ["data", "field", "is_scalar"],
+                i,
+            )
+
+    def impl(data, field, is_scalar):
+        return bodo.libs.bodosql_json_array_kernels.get_field_util(
+            data, field, is_scalar
+        )
+
+    return impl
+
+
+def get_field_util(data, field, is_scalar):  # pragma: no cover
+    """dummy method for overload"""
+    pass
+
+
+@overload(get_field_util, no_unliteral=True)
+def overload_get_field_util(data, field, is_scalar):
+    """BodoSQL Implementation of accessing a field from a MAP type (map/struct/etc). If the input is not a map type, returns NULL"""
+    json_type = data
+    if bodo.hiframes.pd_series_ext.is_series_type(json_type):
+        json_type = json_type.data
+
+    arg_names = ["data", "field", "is_scalar"]
+    arg_types = [data, field, is_scalar]
+    propagate_null = [True, True, False]
+
+    struct_mode = False
+    map_mode = False
+    if isinstance(
+        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+    ):
+        struct_mode = True
+    elif isinstance(
+        json_type, (bodo.MapArrayType, bodo.libs.map_arr_ext.MapScalarType)
+    ):
+        map_mode = True
+
+    scalar_text = ""
+    if struct_mode:
+        if not is_overload_constant_str(field):
+            raise_bodo_error(
+                "Only constant path expressions are supported at this time"
+            )
+        key_str = get_overload_const_str(field)
+        field_pos = None
+        n_fields = len(json_type.data)
+        for i in range(n_fields):
+            name = json_type.names[i]
+            if name == key_str:  # pragma: no cover
+                field_pos = i
+                break
+        if field_pos == None:
+            out_dtype = bodo.null_array_type
+            scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
+        else:
+            out_dtype = json_type.data[field_pos]
+            scalar_text += f"if bodo.libs.struct_arr_ext.is_field_value_null(arg0, {repr(key_str)}):\n"
+            scalar_text += f"  bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += f"else:\n"
+            scalar_text += f"  res[i] = arg0[{repr(key_str)}]\n"
+    elif map_mode:
+        out_dtype = json_type.value_arr_type
+        scalar_text += "keys = list(arg0)\n"
+        scalar_text += "if arg1 in keys:\n"
+        scalar_text += "  value = arg0[arg1]\n"
+        scalar_text += "  if value is None:\n"
+        scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    res[i] = value\n"
+        scalar_text += "else:\n"
+        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        out_dtype = bodo.null_array_type
+        scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=[
+            not get_overload_const_bool(is_scalar),
+            bodo.utils.utils.is_array_typ(field),
+            False,
+        ],
+    )
+
+
 def object_insert(
     data, new_field_name, new_field_value, update, is_scalar=False
 ):  # pragma: no cover
@@ -735,7 +891,6 @@ def object_insert_util(data, new_field_name, new_field_value, update, is_scalar)
             new_field_name_str = ""
         else:
             if not is_overload_constant_str(new_field_name):  # pragma: no cover
-                # TODO improve error msg
                 raise_bodo_error(
                     "object_insert unsupported on struct arrays with non-constant keys"
                 )

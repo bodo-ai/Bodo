@@ -262,7 +262,7 @@ from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.primitive_arr_ext import PrimitiveArrayType
-from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.map_arr_ext import MapArrayType, MapScalarType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
