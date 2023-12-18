@@ -746,12 +746,12 @@ def test_default_table_type(
     table_name = comm.bcast(table_name)
 
     # Write to Snowflake
-    succsess_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    success_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
 
     exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
         output_df = None
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
         # to reduce the demand on Snowflake.
@@ -811,6 +811,7 @@ def test_snowflake_catalog_create_table_temporary(
     Tests that explicitly supplying "TEMPORARY" as the table type works.
     Since the table will be dropped before we have the opportunity to read
     it, we're just testing that it runs without error.
+    Also tests column name escaping during write. See [BSE-2318].
     """
     # default for test_db_snowflake_catalog is transient
     catalog = test_db_snowflake_catalog
@@ -833,8 +834,14 @@ def test_snowflake_catalog_create_table_temporary(
         )
     table_name = comm.bcast(table_name)
 
-    succsess_query = f"CREATE OR REPLACE TEMPORARY TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
-    check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+    success_query = f"""
+    CREATE OR REPLACE TEMPORARY TABLE {schema}.{table_name} AS
+    Select 'literal' as "column1 (C1)",
+    A + 1 as "column2 (C2)",
+    '2023-02-21'::date as "column3 (C3)"
+    from __bodolocal__.table1
+    """
+    check_func(impl, (bc, success_query), only_1D=True, py_output=5)
 
 
 @pytest.mark.parametrize(
@@ -950,11 +957,11 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         )
     table_name = comm.bcast(table_name)
 
-    succsess_query = f"CREATE OR REPLACE TRANSIENT TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    success_query = f"CREATE OR REPLACE TRANSIENT TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
     exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
 
         output_df = None
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
@@ -1038,13 +1045,13 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
 
     # Write to Snowflake
     insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
-    succsess_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    success_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
     # This should succeed, since the table does not exist
 
     exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
         output_df = None
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
         # to reduce the demand on Snowflake.
@@ -1157,9 +1164,9 @@ def test_snowflake_catalog_create_table_already_exists(
         # Write to Snowflake
         insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
 
-        succsess_query = f"CREATE OR REPLACE TABLE {insert_table} AS Select 2 as column1, A as column2, 'hello world' as column3 from __bodolocal__.table1"
+        success_query = f"CREATE OR REPLACE TABLE {insert_table} AS Select 2 as column1, A as column2, 'hello world' as column3 from __bodolocal__.table1"
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
         output_df = None
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
         # to reduce the demand on Snowflake.
@@ -1746,7 +1753,7 @@ def test_snowflake_catalog_defaults_to_public(memory_leak_check):
     # Table is present in TEST_DB.TEST_SCHEMA, __bodolocal__, but not PUBLIC.
     # We should be able to find the table if the schema is specified,
     # even if it's not in the default search path
-    succsess_query = f"SELECT * FROM {tableScopingTest1TableName}"
+    success_query = f"SELECT * FROM {tableScopingTest1TableName}"
 
     def impl(bc, q):
         return bc.sql(q)
@@ -1755,7 +1762,7 @@ def test_snowflake_catalog_defaults_to_public(memory_leak_check):
     # name resolution is successful
     check_func(
         impl,
-        (bc, succsess_query),
+        (bc, success_query),
         None,
         py_output=expected_out_PUBLIC_catalog_schema,
         check_dtype=False,
@@ -1819,7 +1826,7 @@ def test_snowflake_catalog_table_find_able_if_not_default(memory_leak_check):
 
     # Table is present in TEST_DB.TEST_SCHEMA, __bodolocal__, but not PUBLIC.
     # Therefore, we should be able to find it IF we qualify it
-    succsess_query = f"SELECT * FROM TEST_SCHEMA.{tableScopingTest2TableName}"
+    success_query = f"SELECT * FROM TEST_SCHEMA.{tableScopingTest2TableName}"
 
     def impl(bc, q):
         return bc.sql(q)
@@ -1828,7 +1835,7 @@ def test_snowflake_catalog_table_find_able_if_not_default(memory_leak_check):
     # name resolution is successful
     check_func(
         impl,
-        (bc, succsess_query),
+        (bc, success_query),
         None,
         py_output=expected_out_TEST_SCHEMA_catalog_schema,
         check_dtype=False,

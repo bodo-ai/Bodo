@@ -2195,9 +2195,7 @@ def create_table_handle_exists(
     # quotes.
     create_table_col_lst = []
     for col_name, typ in sf_schema.items():
-        col_name = (
-            col_name if col_name[0].isalnum() or col_name[0] == "_" else f'"{col_name}"'
-        )
+        col_name = escape_col_name(col_name)
         create_table_col_lst.append(f"{col_name} {typ}")
     create_table_columns = ", ".join(create_table_col_lst)
     create_table_sql = (
@@ -2353,9 +2351,7 @@ def execute_copy_into(
     # or _ to be able to write to it. Otherwise we must wrap the column in
     # quotes.
     for col_name in sf_schema.keys():
-        col_name = (
-            col_name if col_name[0].isalnum() or col_name[0] == "_" else f'"{col_name}"'
-        )
+        col_name = escape_col_name(col_name)
         cols_list.append(f"{col_name}")
     columns = ",".join(cols_list)
 
