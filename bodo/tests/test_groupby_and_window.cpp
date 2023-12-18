@@ -126,7 +126,12 @@ template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
           empty_return_enum RetType>
     requires(RetType == empty_return_enum::EMPTY_ARRAY)
 std::shared_ptr<array_info> make_result_output(size_t n) {
-    std::shared_ptr<array_info> inner_arr = alloc_numpy(0, DType);
+    std::shared_ptr<array_info> inner_arr;
+    if (DType == Bodo_CTypes::STRUCT) {
+        inner_arr = alloc_struct(0, {});
+    } else {
+        inner_arr = alloc_numpy(0, DType);
+    }
     std::shared_ptr<array_info> array_arr = alloc_array_item(n, inner_arr);
     offset_t *offsets =
         (offset_t *)(array_arr->buffers[0]->mutable_data() + array_arr->offset);
@@ -259,8 +264,7 @@ static bodo::tests::suite tests([] {
         };
         std::set<size_t> untested_window_function_ftypes = {
             // These functions do not have a permanent all-null C++ test since
-            // the
-            // result is technically nondeterministic.
+            // the result is technically nondeterministic.
             Bodo_FTypes::row_number,      Bodo_FTypes::min_row_number_filter,
             Bodo_FTypes::ntile,           Bodo_FTypes::idxmin_na_first,
             Bodo_FTypes::idxmax_na_first, Bodo_FTypes::idx_n_columns,
@@ -667,13 +671,13 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::median,
             Bodo_FTypes::percentile_cont,
             Bodo_FTypes::percentile_disc,
+            Bodo_FTypes::object_agg,
         };
         std::set<size_t> untested_groupby_function_ftypes = {
             // These ftypes have bugs when run with all
             // null, so their tests are skipped until
             // followup issues fix the bugs.
             Bodo_FTypes::listagg,
-            Bodo_FTypes::object_agg,
             // Untested because it doesn't make sense to test
             // this function with this setup.
             Bodo_FTypes::nunique,
@@ -1063,10 +1067,8 @@ static bodo::tests::suite tests([] {
         TEST_GROUPBY_FN(array_agg_distinct_set, n, bodo_array_type::ARRAY_ITEM,
                         Bodo_CTypes::INT64, empty_return_enum::EMPTY_ARRAY);
 
-        // [BSE-2133] Ensure OBJECT_AGG doesn't include key-value pairs that are
-        // null. auto object_agg_set = new ObjectAggColSet(str_col, int_col,
-        // false); TEST_GROUPBY_FN(object_agg_set, n,
-        //             bodo_array_type::ARRAY_ITEM,
-        //             Bodo_CTypes::INT64, empty_return_enum::EMPTY_ARRAY);
+        auto object_agg_set = new ObjectAggColSet(str_col, int_col, false);
+        TEST_GROUPBY_FN(object_agg_set, n, bodo_array_type::ARRAY_ITEM,
+                        Bodo_CTypes::STRUCT, empty_return_enum::EMPTY_ARRAY);
     });
 });
