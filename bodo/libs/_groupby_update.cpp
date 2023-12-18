@@ -1352,22 +1352,36 @@ void object_agg_computation(const std::shared_ptr<array_info>& key_col,
     size_t n_total = keys->length;
     offset_t* offset_buffer = (offset_t*)(out_arr->buffers[0]->mutable_data());
     offset_buffer[0] = 0;
-    offset_buffer[num_group] = n_total;
     size_t offset_idx = 1;
     // Declare a cutoff each time the group number (which the sorted table
-    // was sorted by) changes.
-    for (size_t i = 1; i < n_total; i++) {
-        if (!TestEqualColumn(groups, i, groups, i - 1, true)) {
-            offset_buffer[offset_idx] = i;
+    // was sorted by) changes, but ignore any rows along the way that were
+    // null in either the key or value column. Also keep track of which rows
+    // should be copied over.
+    size_t non_null_count = 0;
+    std::vector<int64_t> rows_to_copy;
+    for (size_t i = 0; i < n_total; i++) {
+        if (i > 0 && !TestEqualColumn(groups, i, groups, i - 1, true)) {
+            offset_buffer[offset_idx] = non_null_count;
             offset_idx++;
         }
+        if (keys->get_null_bit(i) &&
+            (values->arr_type == bodo_array_type::NUMPY ||
+             values->get_null_bit(i))) {
+            non_null_count++;
+            rows_to_copy.push_back(i);
+        }
     }
-
-    // Replace the two child arrays of the struct array with the sorted
-    // key and value columns
-    std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
-    inner_arr->child_arrays[0] = keys;
-    inner_arr->child_arrays[1] = values;
+    offset_buffer[num_group] = non_null_count;
+    std::shared_ptr<array_info> key_array =
+        RetrieveArray_SingleColumn(keys, rows_to_copy);
+    std::shared_ptr<array_info> val_array =
+        RetrieveArray_SingleColumn(values, rows_to_copy);
+    std::vector<std::shared_ptr<array_info>> child_arrays(2);
+    child_arrays[0] = key_array;
+    child_arrays[1] = val_array;
+    std::shared_ptr<array_info> inner_arr =
+        alloc_struct(non_null_count, child_arrays);
+    out_arr->child_arrays[0] = inner_arr;
 }
 
 // NUNIQUE

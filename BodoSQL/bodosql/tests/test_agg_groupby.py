@@ -1392,8 +1392,6 @@ def test_all_nulls_2(memory_leak_check):
 
     Todo items:
     [BSE-2182] Fix listagg in groupby when strings are all-null
-    [BSE-2133] Fix object_agg in groupby when there are any/all
-               null keys/values.
     """
     selects = [
         "K",
@@ -1413,8 +1411,7 @@ def test_all_nulls_2(memory_leak_check):
         # [BSE-2182]
         # "LISTAGG(I::varchar, ',') as LA", # [BSE-2182]
         "ARRAY_AGG(I) as AA",
-        # [BSE-2133]
-        # "OBJECT_AGG(I::varchar, I) as OA", # [BSE-2133]
+        "OBJECT_AGG(I::varchar, I) as OA",
         "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY I) as PC",
         "PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY I) as PD",
     ]
@@ -1446,8 +1443,9 @@ def test_all_nulls_2(memory_leak_check):
             # [BSE-2182]
             # "LA": pd.Series([""]),
             "AA": pd.Series([[]], dtype=pd.ArrowDtype(pa.large_list(pa.int32()))),
-            # [BSE-2133]
-            # "OA": pd.Series([{}], dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32()))),
+            "OA": pd.Series(
+                [{}], dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32()))
+            ),
             "PC": pd.Series([None], dtype=pd.Int32Dtype()),
             "PD": pd.Series([None], dtype=pd.Int32Dtype()),
         }
@@ -1814,13 +1812,15 @@ def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_che
     ctx = {"table1": in_df}
     pairs = []
     unique_keys = in_df["G"].drop_duplicates()
+    keep = pd.notna(in_df["K"]) & pd.notna(in_df["V"])
     for group_key in unique_keys:
         j_data = {}
         for i in range(len(in_df)):
             if in_df["G"][i] == group_key:
                 k = in_df["K"][i]
                 v = in_df["V"][i]
-                j_data[k] = v
+                if keep[i]:
+                    j_data[k] = v
         pairs.append(j_data)
 
     answer = pd.DataFrame(

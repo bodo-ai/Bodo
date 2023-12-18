@@ -230,23 +230,31 @@ def object_agg_data(request):
     to construct the input column.
     """
     vals, val_dtype, out_dtype = request.param
-    value_pool = vals + [None]
+    value_pool = vals[:5] + [None] + vals[5:]
     group_keys_unique = list("ABCDEFGHIJ")
-    counts = [0] * 10
+    counts = [0] * len(group_keys_unique)
     group_keys = []
     json_keys = []
     json_values = []
     for i in range(100):
-        prng_a = ((i**9) % 29) % 10
-        prng_b = (i**15) % 10
+        prng_a = ((i**9) % 29) % len(group_keys_unique)
+        prng_b = (i**15) % len(group_keys_unique)
         group_key_idx = min(prng_a, prng_b)
         group_key = group_keys_unique[group_key_idx]
         counts[group_key_idx] += 1
-        json_key = f"k{counts[group_key_idx] ** 2}"
+        json_key = (
+            None if counts[group_key_idx] == 2 else f"k{counts[group_key_idx] ** 2}"
+        )
         json_value = value_pool[max(prng_a, prng_b)]
         group_keys.append(group_key)
         json_keys.append(json_key)
         json_values.append(json_value)
+
+    group_keys_unique.append("K")
+    for idx in [80, 42]:
+        group_keys.insert(idx, "K")
+        json_keys.insert(idx, None)
+        json_values.insert(idx, None)
 
     in_data = pd.DataFrame(
         {
@@ -263,6 +271,8 @@ def object_agg_data(request):
             if group_keys[i] == group_key:
                 json_key = json_keys[i]
                 json_value = json_values[i]
+                if json_key is None or json_value is None:
+                    continue
                 json_obj[json_key] = json_value
         json_out.append(json_obj)
 
