@@ -1737,6 +1737,13 @@ def test_batched_write_agg(
 
 
 @pytest.mark.parametrize(
+    "is_variant",
+    [
+        pytest.param(False, id="not_variant"),
+        pytest.param(True, id="variant"),
+    ],
+)
+@pytest.mark.parametrize(
     "df, expected_df, column_type",
     [
         (  # array item array
@@ -1759,21 +1766,6 @@ def test_batched_write_agg(
                 }
             ),
             "array",
-        ),
-        (  # array item array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [np.arange(5)] * 10,
-                        dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
-                    ),
-                }
-            ),
-            pd.DataFrame(
-                {"a": np.arange(10), "b": ["[\n  0,\n  1,\n  2,\n  3,\n  4\n]"] * 10}
-            ),
-            "variant",
         ),
         pytest.param(  # struct array
             pd.DataFrame(
@@ -1819,39 +1811,6 @@ def test_batched_write_agg(
                 }
             ),
             "object",
-        ),
-        (  # struct array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [
-                            {"W": 1, "X": "AB", "Y": 1.100000000000000e00, "Z": i}
-                            for i in range(10)
-                        ],
-                        dtype=pd.ArrowDtype(
-                            pa.struct(
-                                [
-                                    pa.field("W", pa.int64()),
-                                    pa.field("X", pa.string()),
-                                    pa.field("Y", pa.float64()),
-                                    pa.field("Z", pa.int64()),
-                                ]
-                            )
-                        ),
-                    ),
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [
-                        f'{{\n  "W": 1,\n  "X": "AB",\n  "Y": 1.100000000000000e+00,\n  "Z": {i}\n}}'
-                        for i in range(10)
-                    ],
-                }
-            ),
-            "variant",
         ),
         (  # map array
             pd.DataFrame(
@@ -1912,78 +1871,26 @@ def test_batched_write_agg(
             ),
             "object",
         ),
-        (  # map array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": pd.Series(
-                        [{"2": 4.1, "1": 5.1}, {"3": 100.38}] * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.float64())),
-                    ),
-                    "c": pd.Series(
-                        [{"a": "a", "b": "b"}, {"c": "c"}] * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
-                    ),
-                    "d": pd.Series(
-                        [
-                            {
-                                "a": pd.Timestamp("2000-01-01"),
-                                "b": pd.Timestamp("2000-01-02"),
-                            },
-                            {"c": pd.Timestamp("2000-01-03")},
-                        ]
-                        * 5,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.timestamp("ns"))),
-                    ),
-                    "e": pd.Series(
-                        [{"a": datetime.date(2010, 1, 10)}] * 10,
-                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.date32())),
-                    ),
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [
-                        '{\n  "1": 5.100000000000000e+00,\n  "2": 4.100000000000000e+00\n}',
-                        '{\n  "3": 1.003800000000000e+02\n}',
-                    ]
-                    * 5,
-                    "c": [
-                        '{\n  "a": "a",\n  "b": "b"\n}',
-                        '{\n  "c": "c"\n}',
-                    ]
-                    * 5,
-                    "d": [
-                        '{\n  "a": "2000-01-01 00:00:00.000",\n  "b": "2000-01-02 00:00:00.000"\n}',
-                        '{\n  "c": "2000-01-03 00:00:00.000"\n}',
-                    ]
-                    * 5,
-                    "e": ['{\n  "a": "2010-01-10"\n}'] * 10,
-                }
-            ),
-            "variant",
-        ),
     ],
     ids=[
         "array_item_array",
-        "array_item_variant",
         "struct_object",
-        "struct_variant",
         "map_object",
-        "map_variant",
     ],
 )
 @pytest.mark.parametrize("write_type", ["append", "replace"])
 def test_batched_write_nested_array(
-    df, expected_df, column_type, write_type, memory_leak_check
+    df, expected_df, column_type, is_variant, write_type, memory_leak_check
 ):
     """
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
-    if column_type == "variant" and write_type == "replace":
+    if is_variant and write_type == "replace":
         pytest.skip("When replacing a table columns are never written as variant")
+
+    if is_variant:
+        column_type = "variant"
 
     from bodo.io.snowflake import snowflake_connect
 
