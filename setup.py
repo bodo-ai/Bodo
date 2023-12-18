@@ -7,6 +7,7 @@ import typing as pt
 import shutil
 
 from setuptools import Extension, find_packages, setup
+from setuptools.command.install import install
 from Cython.Build import cythonize
 import numpy as np
 import pyarrow
@@ -568,6 +569,28 @@ else:
     _cython_ext_mods = []
 
 
+class PostInstallCommand(install):
+    def run(self):
+        install.run(self)
+        # Installation has completed, run post-install steps
+        if install_mode:
+            # find the directory bodo was installed to
+            for p in sys.path:
+                if os.path.isdir(p) and "bodo" in os.listdir(p):
+                    # For every cythonized file, attempt to delete the source
+                    # python file. This is because cythonized files cannot be
+                    # obfuscated before cythonization, and aren't needed after
+                    # compilation. If we leave them as is, we risk leaking IP.
+                    for f in _cython_ext_mods:
+                        cythonized_install_path = os.path.join(p, f)
+                        if os.path.exists(cythonized_install_path):
+                            os.remove(cythonized_install_path)
+
+
+cmdclass = versioneer.get_cmdclass()
+assert "install" not in cmdclass
+cmdclass["install"] = PostInstallCommand
+
 setup(
     name="bodo",
     version=versioneer.get_version(),
@@ -623,7 +646,7 @@ setup(
         ]
     ),
     extras_require={"HDF5": ["h5py"]},
-    cmdclass=versioneer.get_cmdclass(),
+    cmdclass=cmdclass,
     ext_modules=(
         [bodo_ext]
         + cythonize(
