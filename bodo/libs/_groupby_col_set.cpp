@@ -1223,17 +1223,10 @@ ObjectAggColSet::~ObjectAggColSet() {}
 void ObjectAggColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
-    size_t in_length = key_col->length;
     std::vector<std::shared_ptr<array_info>> child_arrays;
-    // Allocate dummy arrays for the keys and values since they will be replaced
-    // later.
-    std::shared_ptr<array_info> key_array =
-        alloc_array_top_level(0, 0, 0, key_col->arr_type, key_col->dtype);
-    std::shared_ptr<array_info> val_array =
-        alloc_array_top_level(0, 0, 0, val_col->arr_type, val_col->dtype);
-    child_arrays.push_back(key_array);
-    child_arrays.push_back(val_array);
-    std::shared_ptr inner_arr = alloc_struct(in_length, child_arrays);
+    // Allocate dummy array for the struct array containing the keys and values
+    // since they will be replaced later.
+    std::shared_ptr inner_arr = alloc_numpy(0, Bodo_CTypes::INT64);
     out_cols.push_back(
         alloc_array_item(num_groups, inner_arr, 0, pool, std::move(mm)));
 }
