@@ -20,6 +20,17 @@ std::unique_ptr<array_info> alloc_empty_array(
         };
 
         return alloc_struct(0, arrs, 0, pool, mm);
+    } else if (datatype->is_map()) {
+        bodo::MapType* map_type = static_cast<bodo::MapType*>(datatype.get());
+        std::unique_ptr<array_info> key_arr =
+            alloc_empty_array(map_type->key_type, pool, mm);
+        std::unique_ptr<array_info> value_arr =
+            alloc_empty_array(map_type->value_type, pool, mm);
+        std::unique_ptr<array_info> struct_arr = alloc_struct(
+            0, {std::move(key_arr), std::move(value_arr)}, 0, pool, mm);
+        std::unique_ptr<array_info> array_item_arr =
+            alloc_array_item(0, std::move(struct_arr), 0, pool, mm);
+        return alloc_map(0, std::move(array_item_arr));
     } else {
         return alloc_array_top_level(0, 0, 0, datatype->array_type,
                                      datatype->c_type, -1, 0, 0, false, false,

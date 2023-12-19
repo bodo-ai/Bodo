@@ -4,6 +4,7 @@
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 
+#include <arrow/compute/cast.h>
 #include <arrow/type_fwd.h>
 #include <mpi.h>
 #include <complex>
@@ -196,6 +197,30 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 (void)str_builder->AppendValues(
                     {str_array->GetString(start_offset + i)});
         }
+    } else if (input_array->type_id() == arrow::Type::MAP) {
+        std::shared_ptr<arrow::MapArray> map_array =
+            std::dynamic_pointer_cast<arrow::MapArray>(input_array);
+        auto map_builder = dynamic_cast<arrow::MapBuilder*>(builder);
+
+        arrow::ArrayBuilder* key_builder = map_builder->key_builder();
+        arrow::ArrayBuilder* item_builder = map_builder->item_builder();
+
+        for (int64_t idx = start_offset; idx < end_offset; idx++) {
+            if (map_array->IsNull(idx)) {
+                (void)map_builder->AppendNull();
+                continue;
+            }
+
+            (void)map_builder->Append();  // indicate list boundary
+
+            append_to_out_array(map_array->keys(), map_array->value_offset(idx),
+                                map_array->value_offset(idx + 1), key_builder);
+
+            append_to_out_array(map_array->items(),
+                                map_array->value_offset(idx),
+                                map_array->value_offset(idx + 1), item_builder);
+        }
+
     } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
         auto dict_array =
             std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
@@ -593,7 +618,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             break;
         }
         case bodo_array_type::ARRAY_ITEM:
-        case bodo_array_type::STRUCT: {
+        case bodo_array_type::STRUCT:
+        case bodo_array_type::MAP: {
             // NOTE: We don't support using custom pool for these dtypes.
             //   These probably need to be re-written to not go through
             //   Arrow anyway.
@@ -879,7 +905,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         }
     }
     if (arr_type == bodo_array_type::STRUCT ||
-        arr_type == bodo_array_type::ARRAY_ITEM) {
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::MAP) {
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -1021,6 +1048,23 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             }
         }
         return process_length(len1, len2);
+    } else if (arr1->type_id() == arrow::Type::MAP) {
+        // MapArray is subclass of ListArray so we cast to LargeList to reuse
+        // code above
+        auto res1 = arrow::compute::Cast(
+            *arr1, arrow::large_list(arr1->type()->field(0)),
+            arrow::compute::CastOptions::Safe(),
+            bodo::default_buffer_exec_context());
+        std::shared_ptr<arrow::Array> casted_arr1;
+        CHECK_ARROW_AND_ASSIGN(res1, "Cast", casted_arr1);
+        auto res2 = arrow::compute::Cast(
+            *arr2, arrow::large_list(arr2->type()->field(0)),
+            arrow::compute::CastOptions::Safe(),
+            bodo::default_buffer_exec_context());
+        std::shared_ptr<arrow::Array> casted_arr2;
+        CHECK_ARROW_AND_ASSIGN(res2, "Cast", casted_arr2);
+        return ComparisonArrowColumn(casted_arr1, pos1_s, pos1_e, casted_arr2,
+                                     pos2_s, pos2_e, na_position_bis);
     } else if (arr1->type_id() == arrow::Type::STRUCT) {
         auto struct_array1 =
             std::dynamic_pointer_cast<arrow::StructArray>(arr1);
@@ -1166,7 +1210,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                      const std::shared_ptr<array_info>& arr2, int64_t pos2,
                      bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
-        arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
+        arr1->arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr1->arr_type == bodo_array_type::MAP) {
         // TODO: Handle is_na_equal in Arrow arrays
         int64_t pos1_s = pos1;
         int64_t pos1_e = pos1 + 1;
@@ -1288,7 +1333,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                                  const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
-        arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
+        arr1->arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr1->arr_type == bodo_array_type::MAP) {
         int64_t pos1_s = iRow1;
         int64_t pos1_e = iRow1 + 1;
         int64_t pos2_s = iRow2;
@@ -1563,7 +1609,8 @@ uint8_t* create_temp_null_bitmask_for_array(
             break;
         }
         case bodo_array_type::ARRAY_ITEM:
-        case bodo_array_type::STRUCT: {
+        case bodo_array_type::STRUCT:
+        case bodo_array_type::MAP: {
             // For robustness, we do a for loop and use the IsNull function
             // to determine if an element is null. IsNull correctly handles
             // all cases including no nulls, all nulls (Null array type),
@@ -1848,6 +1895,21 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             }
         }
         string_builder += "]";
+    } else if (input_array->type_id() == arrow::Type::MAP) {
+        auto map_array =
+            std::dynamic_pointer_cast<arrow::MapArray>(input_array);
+        for (int64_t idx = start_offset; idx < end_offset; idx++) {
+            if (idx > start_offset)
+                string_builder += ",";
+            if (map_array->IsNull(idx)) {
+                string_builder += "None";
+                continue;
+            } else {
+                DEBUG_append_to_out_array(
+                    map_array->values(), map_array->value_offset(idx),
+                    map_array->value_offset(idx + 1), string_builder);
+            }
+        }
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
         // TODO: assert builder.type() == STRUCT
         auto struct_array =
@@ -1992,7 +2054,8 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::STRUCT ||
-        arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr->arr_type == bodo_array_type::MAP) {
         std::shared_ptr<arrow::Array> in_arr = to_arrow(arr);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";

@@ -203,6 +203,18 @@ struct ChunkedTableArrayBuilder {
                         GetDtype_as_string(this->data_array->dtype) +
                         " not supported!");
             }
+        } else if (this->data_array->arr_type == bodo_array_type::MAP &&
+                   in_arr->arr_type == bodo_array_type::MAP) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::MAP,
+                                       bodo_array_type::MAP, Bodo_CTypes::MAP)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
         } else if (this->data_array->arr_type == bodo_array_type::STRUCT &&
                    in_arr->arr_type == bodo_array_type::STRUCT) {
             switch (this->data_array->dtype) {
@@ -720,6 +732,24 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype>
         requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
                  in_arr_type == bodo_array_type::ARRAY_ITEM)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length);
+
+    /**
+     * @brief UnsafeAppendRows implementation where both arrays are map
+     * arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::MAP &&
+                 in_arr_type == bodo_array_type::MAP)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length);

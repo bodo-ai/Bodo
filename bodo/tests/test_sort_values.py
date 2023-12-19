@@ -2367,7 +2367,7 @@ def nested_df(request):
 
 
 @pytest.mark.parametrize(
-    "nested_df, use_map_arrays",
+    "nested_df",
     [
         pytest.param(
             pd.DataFrame(
@@ -2376,7 +2376,6 @@ def nested_df(request):
                     "B": gen_random_arrow_array_struct_int(10, 1000),
                 }
             ),
-            False,
             id="struct_int",
         ),
         pytest.param(
@@ -2386,7 +2385,6 @@ def nested_df(request):
                     "B": gen_random_arrow_array_struct_list_int(10, 1000),
                 }
             ),
-            False,
             id="struct_list_int",
         ),
         pytest.param(
@@ -2396,7 +2394,6 @@ def nested_df(request):
                     "B": gen_random_arrow_list_list_int(1, -0.1, 1000),
                 }
             ),
-            False,
             id="list_list_int",
         ),
         pytest.param(
@@ -2406,7 +2403,6 @@ def nested_df(request):
                     "B": gen_random_arrow_struct_struct(10, 1000),
                 }
             ),
-            False,
             id="struct_struct",
         ),
         pytest.param(
@@ -2416,37 +2412,33 @@ def nested_df(request):
                     "B": gen_random_arrow_list_list_decimal(2, -0.1, 1000),
                 }
             ),
-            False,
             id="list_list_decimal",
         ),
         pytest.param(
             pd.DataFrame(
                 {
                     "A": np.arange(1000),
-                    "B": gen_random_arrow_array_struct_int(10, 1000),
+                    "B": gen_random_arrow_array_struct_int(10, 1000, True),
                 }
             ),
-            True,
             id="map_int",
         ),
         pytest.param(
             pd.DataFrame(
                 {
                     "A": np.arange(1000),
-                    "B": gen_random_arrow_array_struct_list_int(10, 1000),
+                    "B": gen_random_arrow_array_struct_list_int(10, 1000, True),
                 }
             ),
-            True,
             id="map_list_int",
         ),
         pytest.param(
             pd.DataFrame(
                 {
                     "A": np.arange(1000),
-                    "B": gen_random_arrow_struct_struct(10, 1000),
+                    "B": gen_random_arrow_struct_struct(10, 1000, True),
                 }
             ),
-            True,
             id="map_map",
         ),
         pytest.param(
@@ -2456,7 +2448,6 @@ def nested_df(request):
                     "B": gen_random_list_string_array(1, 1000),
                 }
             ),
-            False,
             id="array_string",
         ),
         pytest.param(
@@ -2466,7 +2457,6 @@ def nested_df(request):
                     "B": gen_random_arrow_struct_string(10, 1000),
                 }
             ),
-            False,
             id="struct_string",
         ),
         pytest.param(
@@ -2476,22 +2466,18 @@ def nested_df(request):
                     "B": gen_random_arrow_array_struct_string(10, 3, 1000),
                 }
             ),
-            False,
             id="array_struct_string",
         ),
     ],
 )
-def test_sort_nested_arrays_passthrough_random(
-    nested_df, use_map_arrays, memory_leak_check
-):
+def test_sort_nested_arrays_passthrough_random(nested_df, memory_leak_check):
     """Test sort for tables with nested array data"""
-    random.seed(5)
 
     def f(df):
         df2 = df.sort_values(by="A")
         return df2
 
-    check_func(f, (df,), use_map_arrays=use_map_arrays)
+    check_func(f, (nested_df,))
 
 
 def test_sort_values_nested_arr_dict(memory_leak_check):

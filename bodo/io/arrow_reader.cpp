@@ -914,6 +914,11 @@ std::shared_ptr<arrow::DataType> bodo_arr_type_to_arrow_dtype(
                 bodo_arr_type_to_arrow_dtype(arr->child_arrays[i])));
         }
         return arrow::struct_(fields);
+    } else if (arr->arr_type == bodo_array_type::MAP) {
+        return arrow::map(
+            bodo_arr_type_to_arrow_dtype(arr->child_arrays[0]->child_arrays[0]),
+            bodo_arr_type_to_arrow_dtype(arr->child_arrays[0]->child_arrays[1]),
+            false);
     } else if (arr->arr_type == bodo_array_type::DICT) {
         return arrow::dictionary(arrow::int32(), arrow::large_utf8());
     } else if (arr->arr_type == bodo_array_type::STRING) {
@@ -999,7 +1004,8 @@ TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
         } else if (arr->arr_type == bodo_array_type::STRING) {
             columns.push_back(std::make_unique<StringBuilder>(arr->dtype));
         } else if (arr->arr_type == bodo_array_type::STRUCT ||
-                   arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+                   arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+                   arr->arr_type == bodo_array_type::MAP) {
             columns.push_back(std::make_unique<ArrowBuilder>(
                 bodo_arr_type_to_arrow_dtype(arr)));
         } else {

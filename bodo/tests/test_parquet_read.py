@@ -349,7 +349,9 @@ def test_pq_arrow_array_random():
         fname = "test_pq_nested_tmp.pq"
         with ensure_clean(fname):
             if bodo.get_rank() == 0:
-                df.to_parquet(fname)
+                # Using Bodo to write since Pandas as of 2.0.3 doesn't read/write
+                # Arrow arrays properly
+                bodo.jit(lambda df: df.to_parquet(fname))(df)
             bodo.barrier()
             check_func(test_impl, (fname,), check_dtype=False)
 

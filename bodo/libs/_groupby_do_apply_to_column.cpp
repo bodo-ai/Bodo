@@ -1708,6 +1708,14 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                     in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             }
         }
+    } else if (in_col->arr_type == bodo_array_type::MAP) {
+        switch (ftype) {
+            case Bodo_FTypes::first: {
+                return apply_to_column_array_item<Bodo_FTypes::first>(
+                    in_col->child_arrays[0], out_col->child_arrays[0], aux_cols,
+                    grp_info, pool, std::move(mm));
+            }
+        }
     } else if (in_col->arr_type == bodo_array_type::STRUCT) {
         switch (ftype) {
             case Bodo_FTypes::first: {

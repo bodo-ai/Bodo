@@ -574,6 +574,11 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                     (uint8_t*)send_arr->null_bitmask(),
                     (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
                     comm_info.n_pes, n_rows, comm_info.row_dest);
+
+            } else if (in_arr->arr_type == bodo_array_type::MAP) {
+                fill_send_array(send_arr->child_arrays[0],
+                                in_arr->child_arrays[0], comm_info,
+                                str_comm_info, is_parallel);
             } else if (in_arr->arr_type != bodo_array_type::DICT) {
                 throw std::runtime_error(
                     "Invalid data type for fill_send_array: " +
@@ -1019,6 +1024,12 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
             }
             break;
         }
+        case bodo_array_type::MAP: {
+            out_arr->child_arrays[0] =
+                shuffle_array(in_arr->child_arrays[0], comm_info,
+                              tmp_null_bytes, is_parallel);
+            break;
+        }
         default:
             throw std::runtime_error(
                 "Unsupported array type for shuffle_array: " +
@@ -1324,129 +1335,6 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
                    MPI_COMM_WORLD);
     delete[] send_char;
     return buffer;
-}
-
-/*
-  We need to exchange arrays between nodes.
-  We use dynamic allocation since the scheme is recursive and reusability of
-  arrays appear difficult to do.
-  ---
-  The hashes specify how the nodes will be sent.
- */
-std::shared_ptr<arrow::Array> shuffle_arrow_array(
-    std::shared_ptr<arrow::Array> input_array, int n_pes,
-    const std::span<const int> row_dest) {
-    // Computing total number of rows on output
-    // Note that the number of rows, counts and hashes varies according
-    // to the array in the recursive structure
-    size_t n_rows = (size_t)input_array->length();
-    std::vector<int64_t> send_count(n_pes, 0);
-    std::vector<int64_t> recv_count(n_pes);
-    for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        int node = row_dest[i_row];
-        if (node == -1) {
-            continue;
-        }
-        send_count[node]++;
-    }
-    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
-    int64_t n_rows_out =
-        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
-    //
-    //
-#if OFFSET_BITWIDTH == 32
-    if (input_array->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_array =
-            std::dynamic_pointer_cast<arrow::ListArray>(input_array);
-#else
-    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
-        std::shared_ptr<arrow::LargeListArray> list_array =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
-#endif
-        // Computing the offsets, hashes
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            shuffle_arrow_offset_buffer(send_count, recv_count, n_pes,
-                                        list_array, row_dest);
-        bodo::vector<int> row_dest_out = map_hashes_array(
-            send_count, recv_count, row_dest, n_pes, list_array);
-        // Now computing the bitmap
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
-                                        list_array, row_dest);
-        // Computing the child_array
-        std::shared_ptr<arrow::Array> child_array =
-            shuffle_arrow_array(list_array->values(), n_pes, row_dest_out);
-        // Now returning the shuffled array
-#if OFFSET_BITWIDTH == 32
-        return std::make_shared<arrow::ListArray>(list_array->type(),
-#else
-        return std::make_shared<arrow::LargeListArray>(
-            list_array->type(),
-#endif
-                                                  n_rows_out, list_offsets,
-                                                  child_array, null_bitmap_out);
-
-    } else if (input_array->type_id() == arrow::Type::STRUCT) {
-        // Converting to the right pointer type.
-        auto struct_array =
-            std::dynamic_pointer_cast<arrow::StructArray>(input_array);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        // Now computing the children arrays
-        std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int64_t i = 0; i < struct_type->num_fields(); i++)
-            children.push_back(
-                shuffle_arrow_array(struct_array->field(i), n_pes, row_dest));
-        // Now computing the bitmap
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
-                                        struct_array, row_dest);
-        // Now returning the arrays
-        return std::make_shared<arrow::StructArray>(
-            struct_array->type(), n_rows_out, children, null_bitmap_out);
-#if OFFSET_BITWIDTH == 32
-    } else if (input_array->type_id() == arrow::Type::STRING) {
-        auto string_array =
-            std::dynamic_pointer_cast<arrow::StringArray>(input_array);
-#else
-    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
-        auto string_array =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
-#endif
-        // Now computing the offsets
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            shuffle_arrow_offset_buffer(send_count, recv_count, n_pes,
-                                        string_array, row_dest);
-        // Now computing the bitmap
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
-                                        string_array, row_dest);
-        // Now computing the characters
-        std::shared_ptr<arrow::Buffer> data = shuffle_string_buffer(
-            send_count, recv_count, row_dest, n_pes, string_array);
-        // Now returning the array
-#if OFFSET_BITWIDTH == 32
-        return std::make_shared<arrow::StringArray>(n_rows_out, list_offsets,
-#else
-        return std::make_shared<arrow::LargeStringArray>(n_rows_out,
-                                                         list_offsets,
-#endif
-                                                    data, null_bitmap_out);
-    } else {
-        // Converting pointers
-        auto primitive_array =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        // Now computing the data
-        std::shared_ptr<arrow::Buffer> data = shuffle_arrow_primitive_buffer(
-            send_count, recv_count, n_pes, primitive_array, row_dest);
-        // Now computing the bitmap
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
-                                        primitive_array, row_dest);
-        return std::make_shared<arrow::PrimitiveArray>(
-            primitive_array->type(), n_rows_out, data, null_bitmap_out);
-    }
 }
 
 /*
@@ -1889,7 +1777,8 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
                                               comm_info);
 
         } else if (in_arr->arr_type == bodo_array_type::STRUCT ||
-                   in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+                   in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+                   in_arr->arr_type == bodo_array_type::MAP) {
             Bodo_PyErr_SetString(
                 PyExc_RuntimeError,
                 "Reverse shuffle for nested data not yet supported");
@@ -2210,131 +2099,6 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
     return buffer;
 }
 
-/* Broadcasting the arrow array to other nodes.
-
-   @param ref_arr : the arrow array used for the datatype
-   @param arr : the arrow array put in input
-   @return the arrow array put in all the nodes
-*/
-std::shared_ptr<arrow::Array> broadcast_arrow_array(
-    std::shared_ptr<arrow::Array> const& ref_arr,
-    std::shared_ptr<arrow::Array> const& arr) {
-    int myrank, mpi_root = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    int64_t arr_bcast[2];
-    if (myrank == mpi_root) {
-        arr_bcast[0] = arr->length();
-        int64_t typ = arr->type_id();
-        arr_bcast[1] = typ;
-    }
-    MPI_Bcast(arr_bcast, 2, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
-    int64_t n_rows = arr_bcast[0];
-    arrow::Type::type typ_arrow = arrow::Type::type(arr_bcast[1]);
-    //
-#if OFFSET_BITWIDTH == 32
-    if (typ_arrow == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_arr = nullptr;
-        std::shared_ptr<arrow::ListArray> ref_list_arr =
-            std::dynamic_pointer_cast<arrow::ListArray>(ref_arr);
-#else
-    if (typ_arrow == arrow::Type::LARGE_LIST) {
-        std::shared_ptr<arrow::LargeListArray> list_arr = nullptr;
-        std::shared_ptr<arrow::LargeListArray> ref_list_arr =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(ref_arr);
-#endif
-        std::shared_ptr<arrow::Array> arr_values = nullptr;
-        if (myrank == mpi_root) {
-#if OFFSET_BITWIDTH == 32
-            list_arr = std::dynamic_pointer_cast<arrow::ListArray>(arr);
-#else
-            list_arr = std::dynamic_pointer_cast<arrow::LargeListArray>(arr);
-#endif
-            arr_values = list_arr->values();
-        }
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            broadcast_arrow_offsets_buffer(n_rows, list_arr);
-        std::shared_ptr<arrow::Buffer> null_bitmap =
-            broadcast_arrow_bitmap_buffer(n_rows, list_arr);
-        std::shared_ptr<arrow::Array> child_array =
-            broadcast_arrow_array(ref_list_arr->values(), arr_values);
-        // Now returning the broadcast array
-#if OFFSET_BITWIDTH == 32
-        return std::make_shared<arrow::ListArray>(ref_list_arr->type(), n_rows,
-#else
-        return std::make_shared<arrow::LargeListArray>(
-            ref_list_arr->type(), n_rows,
-#endif
-                                                  list_offsets, child_array,
-                                                  null_bitmap);
-    } else if (typ_arrow == arrow::Type::STRUCT) {
-        std::shared_ptr<arrow::StructArray> struct_arr = nullptr;
-        std::shared_ptr<arrow::StructArray> ref_struct_arr =
-            std::dynamic_pointer_cast<arrow::StructArray>(ref_arr);
-        int64_t num_fields = 0;
-        if (myrank == mpi_root) {
-            struct_arr = std::dynamic_pointer_cast<arrow::StructArray>(arr);
-            auto struct_type = std::dynamic_pointer_cast<arrow::StructType>(
-                struct_arr->type());
-            num_fields = struct_type->num_fields();
-        }
-        MPI_Bcast(&num_fields, 1, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
-        std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int i_field = 0; i_field < int(num_fields); i_field++) {
-            std::shared_ptr<arrow::Array> child = nullptr;
-            std::shared_ptr<arrow::Array> ref_child =
-                ref_struct_arr->field(i_field);
-            if (myrank == mpi_root)
-                child = struct_arr->field(i_field);
-            children.push_back(broadcast_arrow_array(ref_child, child));
-        }
-        std::shared_ptr<arrow::Buffer> null_bitmap =
-            broadcast_arrow_bitmap_buffer(n_rows, struct_arr);
-        return std::make_shared<arrow::StructArray>(
-            ref_struct_arr->type(), n_rows, children, null_bitmap);
-#if OFFSET_BITWIDTH == 32
-    } else if (typ_arrow == arrow::Type::STRING) {
-        std::shared_ptr<arrow::StringArray> string_array = nullptr;
-#else
-    } else if (typ_arrow == arrow::Type::LARGE_STRING) {
-        std::shared_ptr<arrow::LargeStringArray> string_array = nullptr;
-#endif
-        if (myrank == mpi_root) {
-#if OFFSET_BITWIDTH == 32
-            string_array = std::dynamic_pointer_cast<arrow::StringArray>(arr);
-#else
-            string_array =
-                std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
-#endif
-        }
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            broadcast_arrow_offsets_buffer(n_rows, string_array);
-        std::shared_ptr<arrow::Buffer> null_bitmap =
-            broadcast_arrow_bitmap_buffer(n_rows, string_array);
-        std::shared_ptr<arrow::Buffer> data =
-            broadcast_arrow_string_buffer(n_rows, string_array);
-#if OFFSET_BITWIDTH == 32
-        return std::make_shared<arrow::StringArray>(n_rows, list_offsets, data,
-#else
-        return std::make_shared<arrow::LargeStringArray>(n_rows, list_offsets,
-                                                         data,
-#endif
-                                                    null_bitmap);
-    } else {
-        std::shared_ptr<arrow::PrimitiveArray> primitive_arr = nullptr;
-        std::shared_ptr<arrow::PrimitiveArray> ref_primitive_arr =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(ref_arr);
-        if (myrank == mpi_root)
-            primitive_arr =
-                std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        std::shared_ptr<arrow::Buffer> data =
-            broadcast_arrow_primitive_buffer(n_rows, primitive_arr);
-        std::shared_ptr<arrow::Buffer> null_bitmap =
-            broadcast_arrow_bitmap_buffer(n_rows, primitive_arr);
-        return std::make_shared<arrow::PrimitiveArray>(
-            ref_primitive_arr->type(), n_rows, data, null_bitmap);
-    }
-}
-
 std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                                             std::shared_ptr<array_info> in_arr,
                                             bool is_parallel, int mpi_root,
@@ -2440,6 +2204,15 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                 ref_arr->child_arrays[i], out_arr->child_arrays[i], is_parallel,
                 mpi_root, myrank);
         }
+    } else if (arr_type == bodo_array_type::MAP) {
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+        } else {
+            out_arr = alloc_map(n_rows, alloc_array_item(n_rows, nullptr));
+        }
+        out_arr->child_arrays[0] =
+            broadcast_array(ref_arr->child_arrays[0], out_arr->child_arrays[0],
+                            is_parallel, mpi_root, myrank);
     } else {
         throw std::runtime_error(
             "Unsupported array type for broadcast_array: " +
@@ -2742,98 +2515,6 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
     return buffer;
 }
 
-std::shared_ptr<arrow::Array> gather_arrow_array(
-    std::shared_ptr<arrow::Array> const& arr, bool all_gather) {
-    int n_pes, myrank, mpi_root = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    int n_rows_tot = 0, n_rows = arr->length();
-    if (all_gather)
-        MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
-    else
-        MPI_Reduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, mpi_root,
-                   MPI_COMM_WORLD);
-#if OFFSET_BITWIDTH == 32
-    if (arr->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_arr =
-            std::dynamic_pointer_cast<arrow::ListArray>(arr);
-#else
-    if (arr->type_id() == arrow::Type::LARGE_LIST) {
-        std::shared_ptr<arrow::LargeListArray> list_arr =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(arr);
-#endif
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            gather_arrow_offset_buffer(list_arr, all_gather);
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(list_arr, all_gather);
-        std::shared_ptr<arrow::Array> child_array =
-            gather_arrow_array(list_arr->values(), all_gather);
-        if (myrank == mpi_root || all_gather) {
-#if OFFSET_BITWIDTH == 32
-            return std::make_shared<arrow::ListArray>(
-#else
-            return std::make_shared<arrow::LargeListArray>(
-#endif
-                list_arr->type(), n_rows_tot, list_offsets, child_array,
-                null_bitmap_out);
-        }
-        return nullptr;
-    } else if (arr->type_id() == arrow::Type::STRUCT) {
-        std::shared_ptr<arrow::StructArray> struct_arr =
-            std::dynamic_pointer_cast<arrow::StructArray>(arr);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
-        std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int i_field = 0; i_field < struct_type->num_fields(); i_field++)
-            children.push_back(
-                gather_arrow_array(struct_arr->field(i_field), all_gather));
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(struct_arr, all_gather);
-        if (myrank == mpi_root || all_gather) {
-            return std::make_shared<arrow::StructArray>(
-                struct_arr->type(), n_rows_tot, children, null_bitmap_out);
-        }
-        return nullptr;
-#if OFFSET_BITWIDTH == 32
-    } else if (arr->type_id() == arrow::Type::STRING) {
-        std::shared_ptr<arrow::StringArray> string_arr =
-            std::dynamic_pointer_cast<arrow::StringArray>(arr);
-#else
-    } else if (arr->type_id() == arrow::Type::LARGE_STRING) {
-        std::shared_ptr<arrow::LargeStringArray> string_arr =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
-#endif
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            gather_arrow_offset_buffer(string_arr, all_gather);
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(string_arr, all_gather);
-        std::shared_ptr<arrow::Buffer> data =
-            gather_arrow_string_buffer(string_arr, all_gather);
-        if (myrank == mpi_root || all_gather) {
-#if OFFSET_BITWIDTH == 32
-            return std::make_shared<arrow::StringArray>(
-#else
-            return std::make_shared<arrow::LargeStringArray>(
-#endif
-                n_rows_tot, list_offsets, data, null_bitmap_out);
-        }
-        return nullptr;
-    } else {
-        std::shared_ptr<arrow::PrimitiveArray> primitive_arr =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(primitive_arr, all_gather);
-        std::shared_ptr<arrow::Buffer> data =
-            gather_arrow_primitive_buffer(n_rows, primitive_arr, all_gather);
-        if (myrank == mpi_root || all_gather) {
-            return std::make_shared<arrow::PrimitiveArray>(
-                primitive_arr->type(), n_rows_tot, data, null_bitmap_out);
-        }
-        return nullptr;
-    }
-}
-
 /**
  * @brief Gather an array. Parameters have the same meaning as gather_table.
  *
@@ -3041,6 +2722,11 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                              mpi_root, n_pes, myrank);
             }
         }
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> out_arr_item =
+            gather_array(in_arr->child_arrays[0], all_gather, is_parallel,
+                         mpi_root, n_pes, myrank);
+        return alloc_map(out_arr_item->length, out_arr_item);
     } else {
         throw std::runtime_error("Unexpected array type in gather_array: " +
                                  GetArrType_as_string(arr_type));
