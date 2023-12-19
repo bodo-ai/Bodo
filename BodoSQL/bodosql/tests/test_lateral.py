@@ -62,6 +62,38 @@ def test_lateral_split_to_table(memory_leak_check):
             id="flatten_array-output_index_value-replicate_int",
         ),
         pytest.param(
+            "SELECT int_col as R, lat.index as I, lat.value as V, lat.this as T FROM table1, lateral flatten(input=>arr_col, outer=>true) lat",
+            pd.DataFrame(
+                {
+                    "R": [0, 1, 2, 2, 3, 3, 3, 4, 5, 5, 6, 6, 6, 7, 8, 9],
+                    "I": pd.array(
+                        [0, None, 0, 1, 0, 1, 2, 0, 0, 1, 0, 1, 2, 0, None, 0],
+                        dtype=pd.Int64Dtype(),
+                    ),
+                    "V": [1, None, 2, 3, 4, 5, None, 7, 8, 9, 10, 11, 12, 13, None, 14],
+                    "T": [
+                        [1],
+                        [],
+                        [2, 3],
+                        [2, 3],
+                        [4, 5, None],
+                        [4, 5, None],
+                        [4, 5, None],
+                        [7],
+                        [8, 9],
+                        [8, 9],
+                        [10, 11, 12],
+                        [10, 11, 12],
+                        [10, 11, 12],
+                        [13],
+                        None,
+                        [14],
+                    ],
+                }
+            ),
+            id="flatten_array-output_index_value_this-replicate_int-outer",
+        ),
+        pytest.param(
             "SELECT str_col as S, lat.this as T FROM table1, lateral flatten(arr_col) lat",
             pd.DataFrame(
                 {

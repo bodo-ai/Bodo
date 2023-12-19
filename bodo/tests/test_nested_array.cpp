@@ -16,7 +16,8 @@ std::unique_ptr<table_info> make_array_item_testing_table() {
     }
 
     // Create the internal array containing numbers from 0 to 9
-    std::shared_ptr<array_info> inner_arr = alloc_numpy(10, Bodo_CTypes::INT64);
+    std::shared_ptr<array_info> inner_arr =
+        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64, 0);
     for (int64_t i = 0; i < 10; i++) {
         getv<int64_t>(inner_arr, i) = i;
     }
@@ -145,14 +146,14 @@ static bodo::tests::suite tests([] {
                            "i_row=4 S=[[7,8,9]]\n");
     });
 
-    bodo::tests::test("test_lateral_array_flatten_no_index", [] {
+    bodo::tests::test("test_lateral_flatten_array_no_index", [] {
         std::unique_ptr<table_info> in_table = make_array_item_testing_table();
         std::stringstream ss;
         int64_t n_rows = 0;
 
         // Call lateral flatten without the index but with the value
         std::unique_ptr<table_info> out_table = lateral_flatten_array(
-            in_table, &n_rows, false, false, false, false, true, false);
+            in_table, &n_rows, false, false, false, false, true, false, false);
 
         // Check to make sure the lengths match.
         bodo::tests::check(out_table->columns.size() == 4);
@@ -165,7 +166,7 @@ static bodo::tests::suite tests([] {
         // Dumping the table to a string to ensure it matches.
         DEBUG_PrintTable(ss, out_table.release());
         bodo::tests::check(ss.str() ==
-                           "Column 0 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 0 : arr_type=NULLABLE dtype=INT64\n"
                            "Column 1 : arr_type=NUMPY dtype=INT64\n"
                            "Column 2 : arr_type=STRING dtype=STRING\n"
                            "Column 3 : arr_type=DICT dtype=STRING\n"
@@ -182,14 +183,14 @@ static bodo::tests::suite tests([] {
                            "9 : 9 16 HIJ Alphabet\n");
     });
 
-    bodo::tests::test("test_lateral_array_flatten_with_index", [] {
+    bodo::tests::test("test_lateral_flatten_array_with_index", [] {
         std::unique_ptr<table_info> in_table = make_array_item_testing_table();
         std::stringstream ss;
         int64_t n_rows = 0;
 
         // Call lateral flatten with the index and the value
         std::unique_ptr<table_info> out_table = lateral_flatten_array(
-            in_table, &n_rows, false, false, false, true, true, false);
+            in_table, &n_rows, false, false, false, true, true, false, false);
 
         // Check to make sure the lengths match.
         bodo::tests::check(out_table->columns.size() == 5);
@@ -203,8 +204,8 @@ static bodo::tests::suite tests([] {
         // Dumping the table to a string to ensure it matches.
         DEBUG_PrintTable(ss, out_table.release());
         bodo::tests::check(ss.str() ==
-                           "Column 0 : arr_type=NUMPY dtype=INT64\n"
-                           "Column 1 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 0 : arr_type=NULLABLE dtype=INT64\n"
+                           "Column 1 : arr_type=NULLABLE dtype=INT64\n"
                            "Column 2 : arr_type=NUMPY dtype=INT64\n"
                            "Column 3 : arr_type=STRING dtype=STRING\n"
                            "Column 4 : arr_type=DICT dtype=STRING\n"
@@ -219,6 +220,49 @@ static bodo::tests::suite tests([] {
                            "7 : 0 7 16 HIJ Alphabet\n"
                            "8 : 1 8 16 HIJ Alphabet\n"
                            "9 : 2 9 16 HIJ Alphabet\n");
+    });
+
+    bodo::tests::test("test_lateral_flatten_array_outer", [] {
+        std::unique_ptr<table_info> in_table = make_array_item_testing_table();
+        std::stringstream ss;
+        int64_t n_rows = 0;
+
+        // Call lateral flatten with the index, value, this, & the outer
+        // parameter
+        std::unique_ptr<table_info> out_table = lateral_flatten_array(
+            in_table, &n_rows, false, false, false, true, true, true, true);
+
+        // Check to make sure the lengths match.
+        bodo::tests::check(out_table->columns.size() == 6);
+        bodo::tests::check(n_rows == 11);
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[0]->length));
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[1]->length));
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[2]->length));
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[3]->length));
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[4]->length));
+        bodo::tests::check(n_rows == (int64_t)(out_table->columns[5]->length));
+
+        // Dumping the table to a string to ensure it matches.
+        DEBUG_PrintTable(ss, out_table.release());
+        bodo::tests::check(ss.str() ==
+                           "Column 0 : arr_type=NULLABLE dtype=INT64\n"
+                           "Column 1 : arr_type=NULLABLE dtype=INT64\n"
+                           "Column 2 : arr_type=ARRAY_ITEM dtype=LIST\n"
+                           "Column 3 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 4 : arr_type=STRING dtype=STRING\n"
+                           "Column 5 : arr_type=DICT dtype=STRING\n"
+                           "nCol=6 List of number of rows: 11 11 11 11 11 11\n"
+                           "0 : 0  0  [[0]]       0  ABC Alphabet\n"
+                           "1 : 0  1  [[1,2,3,4]] 1  DE  NA      \n"
+                           "2 : 1  2  [[1,2,3,4]] 1  DE  NA      \n"
+                           "3 : 2  3  [[1,2,3,4]] 1  DE  NA      \n"
+                           "4 : 3  4  [[1,2,3,4]] 1  DE  NA      \n"
+                           "5 : 0  5  [[5,6]]     4  NA  Soup    \n"
+                           "6 : 1  6  [[5,6]]     4  NA  Soup    \n"
+                           "7 : NA NA [[]]        9  FG  Alphabet\n"
+                           "8 : 0  7  [[7,8,9]]   16 HIJ Alphabet\n"
+                           "9 : 1  8  [[7,8,9]]   16 HIJ Alphabet\n"
+                           "10 : 2  9  [[7,8,9]]   16 HIJ Alphabet\n");
     });
 
     bodo::tests::test("test_alloc_array_like", [] {

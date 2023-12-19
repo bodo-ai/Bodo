@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_lateral.h"
 #include <Python.h>
+#include <iostream>
 #include "_array_utils.h"
 #include "_bodo_common.h"
 
@@ -315,8 +316,8 @@ void lateral_flatten_copy_numeric_value(
  * @return the interleaved column of the original field columns.
  */
 std::shared_ptr<array_info> interleave_struct_columns(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
+    const std::vector<int64_t> &fields_to_pick,
+    const std::vector<int64_t> &rows_to_pick,
     const std::vector<std::shared_ptr<array_info>> &inner_arrs,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm);
 
@@ -333,8 +334,8 @@ std::shared_ptr<array_info> interleave_struct_columns(
  * @return the interleaved column of the original field columns.
  */
 std::shared_ptr<array_info> interleave_string_arrays(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
+    const std::vector<int64_t> &fields_to_pick,
+    const std::vector<int64_t> &rows_to_pick,
     const std::vector<std::shared_ptr<array_info>> &inner_arrs,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Setup the string and null vectors.
@@ -346,9 +347,10 @@ std::shared_ptr<array_info> interleave_string_arrays(
     // the inputs and the row from the column to select, and add that entry
     // to the null and string vectors.
     for (size_t row = 0; row < rows_kept; row++) {
-        size_t field_to_pick = fields_to_pick[row];
-        size_t row_to_pick = rows_to_pick[row];
-        if (inner_arrs[field_to_pick]->get_null_bit(row_to_pick)) {
+        int64_t field_to_pick = fields_to_pick[row];
+        int64_t row_to_pick = rows_to_pick[row];
+        if (row_to_pick != -1 &&
+            inner_arrs[field_to_pick]->get_null_bit(row_to_pick)) {
             SetBitTo(null_vector.data(), row, 1);
             std::string s;
             if (inner_arrs[field_to_pick]->arr_type ==
@@ -385,29 +387,34 @@ std::shared_ptr<array_info> interleave_string_arrays(
  * @return the interleaved column of the original field columns.
  */
 std::shared_ptr<array_info> interleave_array_item_arrays(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
+    const std::vector<int64_t> &fields_to_pick,
+    const std::vector<int64_t> &rows_to_pick,
     const std::vector<std::shared_ptr<array_info>> &inner_arrs,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Extrapolate the fields to pick and rows to pick to the child
     // arrays of the columns.
     size_t n_fields = inner_arrs.size();
     size_t rows_kept = fields_to_pick.size();
-    std::vector<size_t> sub_fields_to_pick;
-    std::vector<size_t> sub_rows_to_pick;
+    std::vector<int64_t> sub_fields_to_pick;
+    std::vector<int64_t> sub_rows_to_pick;
     std::vector<size_t> array_sizes;
     std::vector<bool> is_null;
     for (size_t row = 0; row < rows_kept; row++) {
-        size_t field_to_pick = fields_to_pick[row];
-        size_t row_to_pick = rows_to_pick[row];
+        int64_t field_to_pick = fields_to_pick[row];
+        int64_t row_to_pick = rows_to_pick[row];
+        if (row_to_pick == -1) {
+            array_sizes.push_back(0);
+            is_null.push_back(true);
+            continue;
+        }
         offset_t *offset_buffer =
             (offset_t *)(inner_arrs[field_to_pick]->buffers[0]->mutable_data() +
                          inner_arrs[field_to_pick]->offset);
         size_t start_idx = offset_buffer[row_to_pick];
         size_t end_idx = offset_buffer[row_to_pick + 1];
         for (size_t idx = start_idx; idx < end_idx; idx++) {
-            sub_fields_to_pick.push_back(field_to_pick);
-            sub_rows_to_pick.push_back(idx);
+            sub_fields_to_pick.push_back(static_cast<int64_t>(field_to_pick));
+            sub_rows_to_pick.push_back(static_cast<int64_t>(idx));
         }
         array_sizes.push_back(end_idx - start_idx);
         is_null.push_back(
@@ -439,7 +446,6 @@ std::shared_ptr<array_info> interleave_array_item_arrays(
         }
     }
     return result;
-    // throw std::runtime_error("interleave_array_item_arrays: TODO");
 }
 
 /**
@@ -454,9 +460,9 @@ std::shared_ptr<array_info> interleave_array_item_arrays(
  *
  * @return the interleaved column of the original field columns.
  */
-std::shared_ptr<array_info> interleave_nullable_arrays(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
+std::shared_ptr<array_info> interleave_numeric_arrays(
+    const std::vector<int64_t> &fields_to_pick,
+    const std::vector<int64_t> &rows_to_pick,
     const std::vector<std::shared_ptr<array_info>> &inner_arrs,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Find the numerical type that all the values will be casted to,
@@ -469,10 +475,11 @@ std::shared_ptr<array_info> interleave_nullable_arrays(
     // For each row, iterate across all of the fields and write them
     // to the output array at the corresponding index.
     for (size_t row = 0; row < rows_kept; row++) {
-        size_t field_to_pick = fields_to_pick[row];
-        size_t row_to_pick = rows_to_pick[row];
-        if ((inner_arrs[field_to_pick]->arr_type == bodo_array_type::NUMPY) ||
-            (inner_arrs[field_to_pick]->get_null_bit(row_to_pick))) {
+        int64_t field_to_pick = fields_to_pick[row];
+        int64_t row_to_pick = rows_to_pick[row];
+        if (row_to_pick != -1 &&
+            ((inner_arrs[field_to_pick]->arr_type == bodo_array_type::NUMPY) ||
+             (inner_arrs[field_to_pick]->get_null_bit(row_to_pick)))) {
             lateral_flatten_copy_numeric_value(
                 out_arr, row, inner_arrs[field_to_pick], row_to_pick);
         } else {
@@ -482,43 +489,9 @@ std::shared_ptr<array_info> interleave_nullable_arrays(
     return out_arr;
 }
 
-/**
- * Procedure to interleave the fields of a struct array, invoked on a collection
- * of numpy arrays.
- *
- * @param[in] fields_to_pick: array mapping each row in the output array
- * to which of the columns should a value be picked from.
- * @param[in] rows_to_pick: array mapping each row in the output array
- * to which of the rows in the desired column should a value be picked from.
- * @param[in] inner_arrs: the current child arrays being interleaved.
- *
- * @return the interleaved column of the original field columns.
- */
-std::shared_ptr<array_info> interleave_numpy_arrays(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
-    const std::vector<std::shared_ptr<array_info>> &inner_arrs,
-    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
-    // Find the numerical type that all the values will be casted to,
-    // and allocate a numpy array with the correct size.
-    size_t rows_kept = fields_to_pick.size();
-    Bodo_CTypes::CTypeEnum dtype = get_common_numeric_dtype(inner_arrs);
-    std::shared_ptr out_arr = alloc_numpy(rows_kept, dtype);
-
-    // For each row, iterate across all of the fields and write them
-    // to the output array at the corresponding index.
-    for (size_t row = 0; row < rows_kept; row++) {
-        size_t field_to_pick = fields_to_pick[row];
-        size_t row_to_pick = rows_to_pick[row];
-        lateral_flatten_copy_numeric_value(
-            out_arr, row, inner_arrs[field_to_pick], row_to_pick);
-    }
-    return out_arr;
-}
-
 std::shared_ptr<array_info> interleave_struct_columns(
-    const std::vector<size_t> &fields_to_pick,
-    const std::vector<size_t> &rows_to_pick,
+    const std::vector<int64_t> &fields_to_pick,
+    const std::vector<int64_t> &rows_to_pick,
     const std::vector<std::shared_ptr<array_info>> &inner_arrs,
     bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     /* Identify which type of array combination procedure will
@@ -527,44 +500,27 @@ std::shared_ptr<array_info> interleave_struct_columns(
      * arrays)
      * - dict_mode: combine only dictionary-encoded arrays
      * - array_mode: combine only array item arrays
-     * - nullable_mode: combine nullable arrays (possibly with numpy arrays)
-     * - numpy_mode: combine only numpy arrays
+     * - numeric_mode: combine nullable arrays (possibly with numpy arrays)
      * - none of the above: implies combining only numpy arrays
      * All other combinations are currently not allowed.
      */
     bool string_mode = false;
     bool array_mode = false;
-    bool nullable_mode = false;
-    bool numpy_mode = false;
+    bool numeric_mode = false;
     size_t n_fields = inner_arrs.size();
     for (size_t i = 0; i < n_fields; i++) {
         switch (inner_arrs[i]->arr_type) {
             case bodo_array_type::DICT:
             case bodo_array_type::STRING: {
                 string_mode = true;
-                if (array_mode || nullable_mode || numpy_mode)
+                if (array_mode || numeric_mode)
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
                 break;
             }
+            case bodo_array_type::NUMPY:
             case bodo_array_type::NULLABLE_INT_BOOL: {
-                nullable_mode = true;
-                numpy_mode = false;
-                if (string_mode || array_mode)
-                    throw std::runtime_error(
-                        "lateral_flatten_struct: invalid struct child arrays");
-                break;
-            }
-            case bodo_array_type::NUMPY: {
-                if (inner_arrs[i]->dtype == Bodo_CTypes::FLOAT32 ||
-                    inner_arrs[i]->dtype == Bodo_CTypes::FLOAT64) {
-                    // If the input arrays are float arrays, the combined array
-                    // should be a nullable array even if the inputs are numpy
-                    // arrays.
-                    nullable_mode = true;
-                }
-                if (!nullable_mode)
-                    numpy_mode = true;
+                numeric_mode = true;
                 if (string_mode || array_mode)
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
@@ -572,7 +528,7 @@ std::shared_ptr<array_info> interleave_struct_columns(
             }
             case bodo_array_type::ARRAY_ITEM: {
                 array_mode = true;
-                if (string_mode || nullable_mode || numpy_mode)
+                if (string_mode || numeric_mode)
                     throw std::runtime_error(
                         "lateral_flatten_struct: invalid struct child arrays");
                 break;
@@ -592,22 +548,64 @@ std::shared_ptr<array_info> interleave_struct_columns(
     } else if (array_mode) {
         return interleave_array_item_arrays(fields_to_pick, rows_to_pick,
                                             inner_arrs, pool, mm);
-    } else if (nullable_mode) {
-        return interleave_nullable_arrays(fields_to_pick, rows_to_pick,
-                                          inner_arrs, pool, mm);
-    } else if (numpy_mode) {
-        return interleave_numpy_arrays(fields_to_pick, rows_to_pick, inner_arrs,
-                                       pool, mm);
+    } else if (numeric_mode) {
+        return interleave_numeric_arrays(fields_to_pick, rows_to_pick,
+                                         inner_arrs, pool, mm);
     } else {
         throw std::runtime_error("lateral_flatten_struct: invalid state");
     }
 }
 
+/*
+ * Helper utility to transform one of the output columns (e.g. the index
+ * or key column) when the OUTER keyword is set to true by injecting
+ * nulls at every row where the original array/map was null/empty.
+ *
+ * @param[in] column_to_transform the column to inject the nulls into.
+ * @param[in] exploded_rows_to_copy the vector storing the mapping of
+ * rows in the new column to the row from the original column to copy,
+ * or -1 if a null is to be inserted. The first time this function is called,
+ * this will be empty and should be populated by this function so later calls
+ * can re-use it.
+ * @param[in] offset_buffer the buffer used to determine which arrays/maps
+ * don't contain any elements and therefore need a null injected.
+ * @param[in] outer_elems the number of arrays/maps represented by
+ * offset_buffer.
+ * @param[in] exploded_size the number of rows in the final answer.
+ */
+std::shared_ptr<array_info> outer_transform_flatten_cols(
+    std::shared_ptr<array_info> column_to_transform,
+    std::vector<int64_t> &exploded_rows_to_copy, offset_t *offset_buffer,
+    size_t outer_elems, bodo::IBufferPool *const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    // If this is the first time calling the function with this
+    // vector, populate the vector with a mapping back to the rows
+    // of the regular column, with -1 inserted for each empty
+    // array/map.
+    if (exploded_rows_to_copy.size() == 0) {
+        size_t inner_read_idx = 0;
+        for (size_t i = 0; i < outer_elems; i++) {
+            size_t n_rows = offset_buffer[i + 1] - offset_buffer[i];
+            if (n_rows == 0) {
+                exploded_rows_to_copy.push_back(-1);
+            } else {
+                for (size_t idx = 0; idx < n_rows; idx++) {
+                    exploded_rows_to_copy.push_back(inner_read_idx);
+                    inner_read_idx++;
+                }
+            }
+        }
+    }
+    // Then use RetrieveArray to get the desired transformation
+    return RetrieveArray_SingleColumn(column_to_transform,
+                                      exploded_rows_to_copy, false, pool, mm);
+}
+
 std::unique_ptr<table_info> lateral_flatten_array(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this, bodo::IBufferPool *const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    bool output_value, bool output_this, bool is_outer,
+    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Create the table where we will place all of the out columns in.
     std::unique_ptr<table_info> out_table = std::make_unique<table_info>();
 
@@ -618,25 +616,32 @@ std::unique_ptr<table_info> lateral_flatten_array(
     offset_t *offset_buffer =
         (offset_t *)(explode_arr->buffers[0]->mutable_data() +
                      explode_arr->offset);
-    size_t exploded_size = offset_buffer[n_inner_arrs] - offset_buffer[0];
-    std::vector<int64_t> rows_to_copy(exploded_size);
-    size_t write_idx = 0;
+
+    size_t exploded_size = 0;
+    std::vector<int64_t> rows_to_copy;
+    // Calculate the normal size and times each row is copied based
+    // on the offset buffers which indicate how many elements are in
+    // each row of the explode array.
     for (size_t i = 0; i < n_inner_arrs; i++) {
         size_t n_rows = offset_buffer[i + 1] - offset_buffer[i];
+        // If in outer mode, each row gets copied once even if the
+        // corresponding row of the explode column is null or empty.
+        if (is_outer && n_rows == 0) {
+            n_rows = 1;
+        }
+        exploded_size += n_rows;
         for (size_t j = 0; j < n_rows; j++) {
-            rows_to_copy[write_idx] = i;
-            write_idx++;
+            rows_to_copy.push_back(i);
         }
     }
+
+    std::vector<int64_t> exploded_rows_to_copy;
 
     // If we need to output the index, then create a column with the
     // indices within each inner array.
     if (output_index) {
         std::shared_ptr<array_info> idx_arr =
-            alloc_numpy(exploded_size, Bodo_CTypes::INT64);
-        offset_t *offset_buffer =
-            (offset_t *)(explode_arr->buffers[0]->mutable_data() +
-                         explode_arr->offset);
+            alloc_nullable_array_no_nulls(exploded_size, Bodo_CTypes::INT64, 0);
         for (size_t i = 0; i < explode_arr->length; i++) {
             offset_t start_offset = offset_buffer[i];
             offset_t end_offset = offset_buffer[i + 1];
@@ -644,13 +649,24 @@ std::unique_ptr<table_info> lateral_flatten_array(
                 getv<int64_t>(idx_arr, j) = j - start_offset;
             }
         }
+        if (is_outer) {
+            idx_arr = outer_transform_flatten_cols(
+                idx_arr, exploded_rows_to_copy, offset_buffer, n_inner_arrs,
+                pool, mm);
+        }
         out_table->columns.push_back(idx_arr);
     }
 
     // If we need to output the array, then append the inner array
     // from the exploded column
     if (output_value) {
-        out_table->columns.push_back(explode_arr->child_arrays[0]);
+        std::shared_ptr<array_info> value_arr = explode_arr->child_arrays[0];
+        if (is_outer) {
+            value_arr = outer_transform_flatten_cols(
+                value_arr, exploded_rows_to_copy, offset_buffer, n_inner_arrs,
+                pool, mm);
+        }
+        out_table->columns.push_back(value_arr);
     }
 
     // If we need to output the 'this' column, then repeat the replication
@@ -679,35 +695,47 @@ std::unique_ptr<table_info> lateral_flatten_array(
 std::unique_ptr<table_info> lateral_flatten_map(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this, bodo::IBufferPool *const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    bool output_value, bool output_this, bool is_outer,
+    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Create the table where we will place all of the out columns in.
     std::unique_ptr<table_info> out_table = std::make_unique<table_info>();
 
-    // Find the column to be exploded and calculate the number of times each
-    // row should be duplicated.
+    // Calculate the normal size and times each row is copied based
+    // on the offset buffers which indicate how many elements are in
+    // each row of the explode map.
     std::shared_ptr<array_info> explode_arr =
         in_table->columns[0]->child_arrays[0];
     size_t n_inner_arrs = explode_arr->length;
     offset_t *offset_buffer =
         (offset_t *)(explode_arr->buffers[0]->mutable_data() +
                      explode_arr->offset);
-    size_t exploded_size = offset_buffer[n_inner_arrs] - offset_buffer[0];
-    std::vector<int64_t> rows_to_copy(exploded_size);
-    size_t write_idx = 0;
+    size_t exploded_size = 0;
+    std::vector<int64_t> rows_to_copy;
     for (size_t i = 0; i < n_inner_arrs; i++) {
         size_t n_rows = offset_buffer[i + 1] - offset_buffer[i];
+        // If in outer mode, each row gets copied once even if the
+        // corresponding row of the explode column is null or empty.
+        if (is_outer && n_rows == 0) {
+            n_rows = 1;
+        }
+        exploded_size += n_rows;
         for (size_t j = 0; j < n_rows; j++) {
-            rows_to_copy[write_idx] = i;
-            write_idx++;
+            rows_to_copy.push_back(i);
         }
     }
+
+    std::vector<int64_t> exploded_rows_to_copy;
 
     // If we need to output the key, then add the first column
     // of the inner struct array.
     if (output_key) {
         std::shared_ptr<array_info> key_arr =
             explode_arr->child_arrays[0]->child_arrays[0];
+        if (is_outer) {
+            key_arr = outer_transform_flatten_cols(
+                key_arr, exploded_rows_to_copy, offset_buffer, n_inner_arrs,
+                pool, mm);
+        }
         out_table->columns.push_back(key_arr);
     }
 
@@ -716,6 +744,11 @@ std::unique_ptr<table_info> lateral_flatten_map(
     if (output_value) {
         std::shared_ptr<array_info> value_arr =
             explode_arr->child_arrays[0]->child_arrays[1];
+        if (is_outer) {
+            value_arr = outer_transform_flatten_cols(
+                value_arr, exploded_rows_to_copy, offset_buffer, n_inner_arrs,
+                pool, mm);
+        }
         out_table->columns.push_back(value_arr);
     }
 
@@ -746,8 +779,8 @@ std::unique_ptr<table_info> lateral_flatten_map(
 std::unique_ptr<table_info> lateral_flatten_struct(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this, bodo::IBufferPool *const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    bool output_value, bool output_this, bool is_outer,
+    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Create the table where we will place all of the out columns in.
     std::unique_ptr<table_info> out_table = std::make_unique<table_info>();
 
@@ -759,16 +792,22 @@ std::unique_ptr<table_info> lateral_flatten_struct(
     size_t exploded_size = 0;
     std::vector<int64_t> rows_to_copy;
     for (size_t i = 0; i < n_structs; i++) {
-        if (!(explode_arr->get_null_bit(i)))
+        if (!(explode_arr->get_null_bit(i))) {
+            // If in outer mode, add 1 dummy for any null rows.
+            if (is_outer) {
+                rows_to_copy.push_back(i);
+                exploded_size++;
+            }
             continue;
+        }
         for (size_t j = 0; j < n_fields; j++) {
             rows_to_copy.push_back(i);
             exploded_size++;
         }
     }
 
-    // If we need to output the key, then add the first column
-    // of the inner struct array.
+    // If we need to output the key, then add a series of interleaved
+    // copies of the field names.
     if (output_key) {
         bodo::vector<uint8_t> null_vector((n_fields + 7) >> 3, 0, pool);
         bodo::vector<std::string> string_vector;
@@ -781,10 +820,18 @@ std::unique_ptr<table_info> lateral_flatten_struct(
             Bodo_CTypes::STRING, null_vector, string_vector, -1, pool, mm);
         std::shared_ptr<array_info> idx_arr = alloc_nullable_array_no_nulls(
             exploded_size, Bodo_CTypes::INT32, 0, pool, mm);
+        size_t write_idx = 0;
         for (size_t i = 0; i < n_structs; i++) {
+            if (!explode_arr->get_null_bit(i)) {
+                if (is_outer) {
+                    idx_arr->set_null_bit(write_idx, false);
+                    write_idx++;
+                }
+                continue;
+            }
             for (size_t j = 0; j < n_fields; j++) {
-                size_t idx = (n_fields * i) + j;
-                getv<int32_t>(idx_arr, idx) = j;
+                getv<int32_t>(idx_arr, write_idx) = j;
+                write_idx++;
             }
         }
 
@@ -793,17 +840,22 @@ std::unique_ptr<table_info> lateral_flatten_struct(
         out_table->columns.push_back(key_arr);
     }
 
-    // If we need to output the key, then add the second column
-    // of the inner struct array.
+    // If we need to output the value, then add the interleaved values
+    // from the field columns.
     if (output_value) {
-        std::vector<size_t> fields_to_pick;
-        std::vector<size_t> rows_to_pick;
+        std::vector<int64_t> fields_to_pick;
+        std::vector<int64_t> rows_to_pick;
         for (size_t row = 0; row < n_structs; row++) {
-            if (!explode_arr->get_null_bit(row))
+            if (!explode_arr->get_null_bit(row)) {
+                if (is_outer) {
+                    fields_to_pick.push_back(-1);
+                    rows_to_pick.push_back(-1);
+                }
                 continue;
+            }
             for (size_t field = 0; field < n_fields; field++) {
-                fields_to_pick.push_back(field);
-                rows_to_pick.push_back(row);
+                fields_to_pick.push_back(static_cast<int64_t>(field));
+                rows_to_pick.push_back(static_cast<int64_t>(row));
             }
         }
         std::shared_ptr<array_info> val_arr = interleave_struct_columns(
@@ -839,7 +891,7 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
                                        bool output_seq, bool output_key,
                                        bool output_path, bool output_index,
                                        bool output_value, bool output_this,
-                                       bool json_mode) {
+                                       bool json_mode, bool is_outer) {
     try {
         std::unique_ptr<table_info> tab(in_table);
         std::unique_ptr<table_info> result;
@@ -848,13 +900,13 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
                 case bodo_array_type::MAP: {
                     result = lateral_flatten_map(
                         tab, n_rows, output_seq, output_key, output_path,
-                        output_index, output_value, output_this);
+                        output_index, output_value, output_this, is_outer);
                     break;
                 }
                 case bodo_array_type::STRUCT: {
                     result = lateral_flatten_struct(
                         tab, n_rows, output_seq, output_key, output_path,
-                        output_index, output_value, output_this);
+                        output_index, output_value, output_this, is_outer);
                     break;
                 }
                 default: {
@@ -871,7 +923,7 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
             }
             result = lateral_flatten_array(tab, n_rows, output_seq, output_key,
                                            output_path, output_index,
-                                           output_value, output_this);
+                                           output_value, output_this, is_outer);
         }
         table_info *raw_result = result.release();
         return raw_result;

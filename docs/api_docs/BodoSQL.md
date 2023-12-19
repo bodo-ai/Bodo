@@ -3942,7 +3942,8 @@ Bodo currently supports the following functions that produce tables:
 
     - `#!sql INPUT` (required): the expression of semi-structured data to flatten. Also allowed to be passed in as a positional argument without the `INPUT` keyword.
     - `#!sql PATH` (optional): a constant expression referencing how to access the semi-structured data to flatten from the input expression. BodoSQL currently only supports when this argument is omitted or is an empty string (indicating that the expression itself is the array to flatten).
-    - `#!sql OUTER` (optional): a boolean indicating if a row should be generated even if the input data is empty. BodoSQL currently only supports when this argument is omitted or is false (which is the default).
+    - `#!sql OUTER` (optional): a boolean indicating if a row should be generated even if the input data is an
+    empty/null array/struct/map. The default is false. If provided, the `KEY`, `PATH`, `INDEX` and `VALUE` outputs will be null in the generated row.
     - `#!sql RECURSIVE` (optional): a boolean indicating if flattening should occur recursively, as opposed to just on the data referenced by `PATH`. BodoSQL currently only supports when this argument is omitted or is false (which is the default).
     - `#!sql MODE` (optional): a string literal that can be either `'OBJECT'`, `'ARRAY'` or `'BOTH'`, indicating what type of flattening rule should be done. BodoSQL currently only supports when this argument is omitted or is `'BOTH'` (which is the default).
 
