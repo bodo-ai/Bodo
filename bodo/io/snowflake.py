@@ -2270,8 +2270,8 @@ def gen_flatten_sql(
     # Create a subquery to flatten each required column
     subqueries = []
     for i, c in enumerate(flatten):
-        select_arg = (",".join(no_flatten) + ", ") if i == 0 else ""
-        groups = ("," + ",".join(no_flatten)) if i == 0 else ""
+        select_arg = (",".join(no_flatten) + ", ") if i == 0 and no_flatten else ""
+        groups = ("," + ",".join(no_flatten)) if i == 0 and no_flatten else ""
         subqueries.append(
             (
                 c,

@@ -329,8 +329,9 @@ def gen_dataframe(num_elements, write_index):
             # TODO: include Nones
             df[col_name] = pd.Series(gen_random_arrow_list_list_int(2, 0, num_elements))
         elif dtype == "nested_arrow1":
+            # NOTE: converting to object since Pandas as of 2.0.3 fails with Arrow types
             df[col_name] = pd.Series(
-                gen_random_arrow_array_struct_int(10, num_elements)
+                gen_random_arrow_array_struct_int(10, num_elements), dtype=object
             )
         elif dtype == "nested_arrow2":
             # TODO: Include following types when they are supported in PYARROW:
@@ -339,7 +340,10 @@ def gen_dataframe(num_elements, write_index):
             # This dataframe can be written by the code. However we cannot read
             # due to a limitation in pyarrow
             # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
-            df[col_name] = pd.Series(gen_random_arrow_struct_struct(10, num_elements))
+            # NOTE: converting to object since Pandas as of 2.0.3 fails with Arrow types
+            df[col_name] = pd.Series(
+                gen_random_arrow_struct_struct(10, num_elements), dtype=object
+            )
         else:
             df[col_name] = np.arange(num_elements, dtype=dtype)
         cur_col += 1

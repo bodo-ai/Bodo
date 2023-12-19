@@ -34,6 +34,9 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     } else if (_data_array->arr_type == bodo_array_type::ARRAY_ITEM) {
         this->child_array_builders.emplace_back(
             this->data_array->child_arrays[0]);
+    } else if (_data_array->arr_type == bodo_array_type::MAP) {
+        this->child_array_builders.emplace_back(
+            this->data_array->child_arrays[0]);
     } else if (_data_array->arr_type == bodo_array_type::STRUCT) {
         for (const std::shared_ptr<array_info>& child_array :
              this->data_array->child_arrays) {
@@ -208,6 +211,10 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
         if (in_arr->dtype == Bodo_CTypes::LIST) {
             APPEND_ROWS(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
         }
+    } else if (in_arr->arr_type == bodo_array_type::MAP) {
+        if (in_arr->dtype == Bodo_CTypes::MAP) {
+            APPEND_ROWS(bodo_array_type::MAP, Bodo_CTypes::MAP);
+        }
     } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
         if (in_arr->dtype == Bodo_CTypes::STRUCT) {
             APPEND_ROWS(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
@@ -374,6 +381,10 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
     } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
         if (in_arr->dtype == Bodo_CTypes::LIST) {
             APPEND_BATCH_ARRAY(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::MAP) {
+        if (in_arr->dtype == Bodo_CTypes::MAP) {
+            APPEND_BATCH_ARRAY(bodo_array_type::MAP, Bodo_CTypes::MAP);
         }
     } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
         if (in_arr->dtype == Bodo_CTypes::STRUCT) {
@@ -626,6 +637,9 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
                 capacity = new_capacity;
             }
         } break;
+        case bodo_array_type::MAP: {
+            this->child_array_builders[0].ReserveSize(new_data_len);
+        } break;
         case bodo_array_type::STRUCT: {
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
@@ -677,6 +691,9 @@ void ArrayBuildBuffer::Reset() {
                             "ArrayBuildBuffer::Reset: SetSize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");
+        } break;
+        case bodo_array_type::MAP: {
+            this->child_array_builders.front().Reset();
         } break;
         case bodo_array_type::STRUCT: {
             for (ArrayBuildBuffer child_array_builder :
@@ -898,6 +915,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
             if (in_arr->dtype == Bodo_CTypes::LIST) {
                 APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
             }
+        } else if (in_arr->arr_type == bodo_array_type::MAP) {
+            if (in_arr->dtype == Bodo_CTypes::MAP) {
+                APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
+            }
         } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
             if (in_arr->dtype == Bodo_CTypes::STRUCT) {
                 APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
@@ -1067,6 +1088,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
             if (in_arr->dtype == Bodo_CTypes::LIST) {
                 APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
             }
+        } else if (in_arr->arr_type == bodo_array_type::MAP) {
+            if (in_arr->dtype == Bodo_CTypes::MAP) {
+                APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
+            }
         } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
             if (in_arr->dtype == Bodo_CTypes::STRUCT) {
                 APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
@@ -1207,6 +1232,10 @@ int get_type_arr_size(int8_t* arr_array_types, int n_arrs) {
                 get_type_arr_size(arr_array_types + type_arr_size + 2,
                                   arr_array_types[type_arr_size + 1]) +
                 1;
+            ++n_col;
+        } else if (arr_array_types[type_arr_size] == bodo_array_type::MAP) {
+            type_arr_size +=
+                get_type_arr_size(arr_array_types + type_arr_size + 1, 2);
             ++n_col;
         } else if (arr_array_types[type_arr_size] !=
                    bodo_array_type::ARRAY_ITEM) {

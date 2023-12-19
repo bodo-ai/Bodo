@@ -31,7 +31,7 @@ from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
     temporary_directory_type,
 )
-from bodo.libs.array import array_to_info, py_table_to_cpp_table
+from bodo.libs.array import array_to_info, cpp_table_map_to_list, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
@@ -699,7 +699,12 @@ def gen_snowflake_writer_append_table_impl_inner(
                 ev_pq_write_cpp.add_attribute("chunk_path", chunk_path)
                 parquet_write_table_cpp(
                     unicode_to_utf8(chunk_path),
-                    py_table_to_cpp_table(out_table, py_table_typ),
+                    # Convert map columns to list(struct) before writing since Snowflake
+                    # reads map as "key_value" rows that our flattening code cannot
+                    # handle currently
+                    cpp_table_map_to_list(
+                        py_table_to_cpp_table(out_table, py_table_typ)
+                    ),
                     array_to_info(col_names_arr),
                     0,
                     False,  # write_index

@@ -224,7 +224,8 @@ struct multi_col_key {
             size_t size_type;
             switch (c1->arr_type) {
                 case bodo_array_type::ARRAY_ITEM:
-                case bodo_array_type::STRUCT: {
+                case bodo_array_type::STRUCT:
+                case bodo_array_type::MAP: {
                     int64_t pos1_s = row;
                     int64_t pos1_e = row + 1;
                     int64_t pos2_s = other.row;
@@ -970,6 +971,13 @@ inline constexpr decltype(auto) type_dispatcher(
                     throw std::runtime_error(
                         "invalid dtype for struct arrays " +
                         std::to_string(dtype));
+            }
+        case bodo_array_type::MAP:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::MAP, Bodo_CTypes::MAP);
+                default:
+                    throw std::runtime_error("invalid dtype for map arrays " +
+                                             std::to_string(dtype));
             }
         default:
             throw std::runtime_error("invalid array type " +

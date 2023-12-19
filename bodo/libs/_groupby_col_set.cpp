@@ -115,6 +115,16 @@ void FirstColSet::alloc_running_value_columns(
         std::shared_ptr<array_info> out_col =
             alloc_array_item(num_groups, inner_arr, 0, pool, mm);
         out_cols.push_back(out_col);
+    } else if (in_col->arr_type == bodo_array_type::MAP) {
+        // For MAP array, allocate dummy inner arrays for
+        // now since the true array cannot be computed until later
+        std::shared_ptr<array_info> inner_arr =
+            alloc_numpy(0, Bodo_CTypes::INT8, pool, mm);
+        std::shared_ptr<array_info> inner_item_arr =
+            alloc_array_item(num_groups, inner_arr, 0, pool, mm);
+        std::shared_ptr<array_info> out_col =
+            alloc_map(num_groups, inner_item_arr);
+        out_cols.push_back(out_col);
     } else if (in_col->arr_type == bodo_array_type::STRUCT) {
         // For STRUCT array, allocate dummy inner arrays for
         // now since the true array cannot be computed until later for
@@ -1227,8 +1237,9 @@ void ObjectAggColSet::alloc_running_value_columns(
     // Allocate dummy array for the struct array containing the keys and values
     // since they will be replaced later.
     std::shared_ptr inner_arr = alloc_numpy(0, Bodo_CTypes::INT64);
-    out_cols.push_back(
-        alloc_array_item(num_groups, inner_arr, 0, pool, std::move(mm)));
+    out_cols.push_back(alloc_map(
+        num_groups,
+        alloc_array_item(num_groups, inner_arr, 0, pool, std::move(mm))));
 }
 
 void ObjectAggColSet::update(const std::vector<grouping_info>& grp_infos,

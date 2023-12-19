@@ -157,6 +157,10 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                             "ChunkedTableArrayBuilder::"
                             "ChunkedTableArrayBuilder: Resize failed!");
         } break;
+        case bodo_array_type::MAP: {
+            this->child_array_builders.emplace_back(
+                this->data_array->child_arrays[0]);
+        } break;
         case bodo_array_type::STRUCT: {
             for (const std::shared_ptr<array_info>& child_array :
                  this->data_array->child_arrays) {
@@ -233,6 +237,26 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
             this->child_array_builders.front().UnsafeAppendRow(
                 in_arr->child_arrays[0], static_cast<int64_t>(j));
         }
+    }
+
+    this->data_array->length += idx_length;
+}
+
+template <bodo_array_type::arr_type_enum out_arr_type,
+          bodo_array_type::arr_type_enum in_arr_type,
+          Bodo_CTypes::CTypeEnum dtype>
+    requires(out_arr_type == bodo_array_type::MAP &&
+             in_arr_type == bodo_array_type::MAP)
+void ChunkedTableArrayBuilder::UnsafeAppendRows(
+    const std::shared_ptr<array_info>& in_arr,
+    const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
+    for (size_t i = 0; i < idx_length; i++) {
+        int64_t row_idx = idxs[i + idx_start];
+        // Append rows for child array
+        this->child_array_builders[0].ReserveArrayRow(in_arr->child_arrays[0],
+                                                      row_idx);
+        this->child_array_builders[0].UnsafeAppendRow(in_arr->child_arrays[0],
+                                                      row_idx);
     }
 
     this->data_array->length += idx_length;
@@ -400,6 +424,9 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                     null_bitmap_buffer_req_size, /*shrink_to_fit*/ false),
                 "ChunkedTableArrayBuilder::Finalize: Resize failed!");
         } break;
+        case bodo_array_type::MAP: {
+            // Map doesn't have any buffers to resize
+        } break;
         case bodo_array_type::STRUCT: {
             int64_t null_bitmap_buffer_req_size =
                 ::arrow::bit_util::BytesForBits(this->size);
@@ -457,6 +484,9 @@ void ChunkedTableArrayBuilder::Reset() {
                             "ChunkedTableArrayBuilder::Reset: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
                             "ChunkedTableArrayBuilder::Reset: Resize failed!");
+        } break;
+        case bodo_array_type::MAP: {
+            // Map doesn't have any buffers to reset
         } break;
         case bodo_array_type::STRUCT: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
@@ -633,6 +663,8 @@ void ChunkedTableBuilder::AppendBatch(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::DICT);
             } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::ARRAY_ITEM);
+            } else if (in_arr->arr_type == bodo_array_type::MAP) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::MAP);
             } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRUCT);
             }
@@ -1026,6 +1058,11 @@ void ChunkedTableBuilder::AppendBatch(
                                     bodo_array_type::ARRAY_ITEM,
                                     Bodo_CTypes::LIST);
                 }
+            } else if (in_arr->arr_type == bodo_array_type::MAP) {
+                if (in_arr->dtype == Bodo_CTypes::MAP) {
+                    APPEND_ROWS_COL(bodo_array_type::MAP, bodo_array_type::MAP,
+                                    Bodo_CTypes::MAP);
+                }
             } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
                 if (in_arr->dtype == Bodo_CTypes::STRUCT) {
                     APPEND_ROWS_COL(bodo_array_type::STRUCT,
@@ -1139,6 +1176,8 @@ void ChunkedTableBuilder::AppendJoinOutput(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::DICT);
             } else if (col->arr_type == bodo_array_type::ARRAY_ITEM) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::ARRAY_ITEM);
+            } else if (col->arr_type == bodo_array_type::MAP) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::MAP);
             } else if (col->arr_type == bodo_array_type::STRUCT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRUCT);
             }
@@ -1435,6 +1474,15 @@ void ChunkedTableBuilder::AppendJoinOutput(
                     APPEND_ROWS_COL(bodo_array_type::STRUCT,
                                     bodo_array_type::STRUCT,
                                     Bodo_CTypes::STRUCT);
+                }
+            }
+
+            // MAP ARRAY
+            else if (out_arr_type == bodo_array_type::MAP &&
+                     in_arr_type == bodo_array_type::MAP) {
+                if (col->dtype == Bodo_CTypes::MAP) {
+                    APPEND_ROWS_COL(bodo_array_type::MAP, bodo_array_type::MAP,
+                                    Bodo_CTypes::MAP);
                 }
             }
         }

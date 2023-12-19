@@ -686,7 +686,8 @@ std::unique_ptr<table_info> lateral_flatten_map(
 
     // Find the column to be exploded and calculate the number of times each
     // row should be duplicated.
-    std::shared_ptr<array_info> explode_arr = in_table->columns[0];
+    std::shared_ptr<array_info> explode_arr =
+        in_table->columns[0]->child_arrays[0];
     size_t n_inner_arrs = explode_arr->length;
     offset_t *offset_buffer =
         (offset_t *)(explode_arr->buffers[0]->mutable_data() +
@@ -721,10 +722,11 @@ std::unique_ptr<table_info> lateral_flatten_map(
     // If we need to output the 'this' column, then repeat the replication
     // procedure on the input column
     if (output_this) {
-        std::shared_ptr<array_info> old_col = in_table->columns[0];
+        std::shared_ptr<array_info> old_col =
+            in_table->columns[0]->child_arrays[0];
         std::shared_ptr<array_info> new_col =
             RetrieveArray_SingleColumn(old_col, rows_to_copy, false, pool, mm);
-        out_table->columns.push_back(new_col);
+        out_table->columns.push_back(alloc_map(new_col->length, new_col));
     }
 
     // For each column in the table (except the one to be exploded) create
@@ -843,13 +845,7 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
         std::unique_ptr<table_info> result;
         if (json_mode) {
             switch (tab->columns[0]->arr_type) {
-                case bodo_array_type::ARRAY_ITEM: {
-                    if (tab->columns[0]->child_arrays[0]->arr_type !=
-                        bodo_array_type::STRUCT) {
-                        throw std::runtime_error(
-                            "lateral flatten with json mode requires a map "
-                            "array or struct array as an input");
-                    }
+                case bodo_array_type::MAP: {
                     result = lateral_flatten_map(
                         tab, n_rows, output_seq, output_key, output_path,
                         output_index, output_value, output_this);

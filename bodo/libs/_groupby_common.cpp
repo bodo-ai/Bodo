@@ -82,6 +82,11 @@ void aggfunc_output_initialize_kernel(
                           false, start_row);
     }
 
+    if (out_col->arr_type == bodo_array_type::MAP) {
+        InitializeBitMask((uint8_t*)out_col->child_arrays[0]->null_bitmask(),
+                          out_col->length, false, start_row);
+    }
+
     if (out_col->arr_type == bodo_array_type::CATEGORICAL) {
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
             ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {

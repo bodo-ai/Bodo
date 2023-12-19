@@ -472,7 +472,8 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
     if (array->arr_type == bodo_array_type::STRUCT ||
-        array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::MAP) {
         if (start_row_offset != 0) {
             // Support for these isn't required since start_row_offset
             // is only used in streaming hash join and STRUCT and
@@ -804,7 +805,8 @@ void hash_array_combine(const hashes_t& out_hashes,
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::STRUCT ||
-        array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::MAP) {
         // Support for these isn't required since start_row_offset
         // is only used in streaming hash join and STRUCT and
         // ARRAY_ITEM arrays cannot be keys at this time.
@@ -1098,6 +1100,7 @@ void coherent_hash_array(const hashes_t& out_hashes,
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::MAP ||
         array->arr_type == bodo_array_type::STRING) {
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
@@ -1289,6 +1292,7 @@ void coherent_hash_array_combine(const hashes_t& out_hashes,
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::MAP ||
         array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine(out_hashes, array, n_rows, seed, true,
                                   is_parallel);

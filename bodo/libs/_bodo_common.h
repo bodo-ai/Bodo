@@ -260,7 +260,6 @@ size_t get_stats_mi_alloc();
 size_t get_stats_mi_free();
 
 // NOTE: should match CTypeEnum in utils/utils.py
-// NOTE: should match Bodo_CTypes_names in _bodo_common.cpp
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -286,6 +285,7 @@ struct Bodo_CTypes {
         BINARY = 20,
         COMPLEX64 = 21,
         COMPLEX128 = 22,
+        MAP = 23,
         _numtypes
     };
 };
@@ -445,6 +445,7 @@ struct bodo_array_type {
         INTERVAL = 6,
         DICT = 7,  // dictionary-encoded string array
         // string_array_split_view_type, etc.
+        MAP = 8,
 
         // Used to fallback to runtime type checks
         // for templated functions
@@ -491,6 +492,7 @@ struct DataType {
     bool is_primitive() {
         return array_type != bodo_array_type::STRUCT &&
                array_type != bodo_array_type::ARRAY_ITEM &&
+               array_type != bodo_array_type::MAP &&
                array_type != bodo_array_type::DICT;
     }
 
@@ -499,6 +501,9 @@ struct DataType {
 
     /// @brief If the Array a Struct Array?
     bool is_struct() { return array_type == bodo_array_type::STRUCT; }
+
+    /// @brief If the Array a Map Array?
+    bool is_map() { return array_type == bodo_array_type::MAP; }
 
     /// @brief Helper Function to Generate the Output of ToString()
     virtual void to_string_inner(std::string& out);
@@ -538,6 +543,24 @@ struct StructType final : public DataType {
     StructType(std::vector<std::unique_ptr<DataType>>& _child_types)
         : DataType(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT),
           child_types(std::move(_child_types)) {}
+
+    void to_string_inner(std::string& out) override;
+
+    void Serialize(std::vector<int8_t>& arr_array_types,
+                   std::vector<int8_t>& arr_c_types) override;
+};
+
+/// @brief Wrapper class for representing the type of Map Arrays
+struct MapType final : public DataType {
+    std::unique_ptr<DataType> key_type;
+    std::unique_ptr<DataType> value_type;
+
+    /// @brief Construct a new MapType given the key and value types
+    MapType(std::unique_ptr<DataType>& _key_type,
+            std::unique_ptr<DataType>& _value_type)
+        : DataType(bodo_array_type::MAP, Bodo_CTypes::MAP),
+          key_type(std::move(_key_type)),
+          value_type(std::move(_value_type)) {}
 
     void to_string_inner(std::string& out) override;
 
@@ -642,6 +665,11 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- null_bitmask is the mask
  * --- child_arrays is the arrays for all fields
  * --- field_names is the field names
+ *
+ * case of MAP:
+ * MAP array is just a wrapper around list(struct) array that stores the
+ * key/value pairs (the same as the Python side). The only used fields are
+ * length and child_arrays which includes the list(struct) array.
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
@@ -730,6 +758,7 @@ struct array_info {
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
             default:
                 return nullptr;
         }
@@ -753,6 +782,7 @@ struct array_info {
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
             default:
                 return nullptr;
         }
@@ -774,6 +804,7 @@ struct array_info {
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -798,6 +829,7 @@ struct array_info {
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -826,6 +858,9 @@ struct array_info {
                     ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
             case bodo_array_type::STRUCT:
                 return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::MAP:
+                return (char*)this->child_arrays[0]
+                    ->null_bitmask<bodo_array_type::ARRAY_ITEM>();
             case bodo_array_type::INTERVAL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -854,6 +889,9 @@ struct array_info {
                     ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
             case bodo_array_type::STRUCT:
                 return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::MAP:
+                return (char*)this->child_arrays[0]
+                    ->null_bitmask<bodo_array_type::ARRAY_ITEM>();
             case bodo_array_type::INTERVAL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -939,6 +977,7 @@ struct array_info {
                 }
                 break;
             case bodo_array_type::DICT:
+            case bodo_array_type::MAP:
                 for (auto& arr : this->child_arrays) {
                     arr->pin();
                 }
@@ -968,6 +1007,7 @@ struct array_info {
                 break;
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
                 for (auto& buffer : this->buffers) {
                     buffer->unpin();
                 }
@@ -1000,6 +1040,7 @@ struct array_info {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
             case bodo_array_type::CATEGORICAL:
                 return true;
             case bodo_array_type::NUMPY:
@@ -1024,6 +1065,7 @@ struct array_info {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
                 for (size_t i = 0; i < length; i++) {
                     not_na[i] = get_null_bit(i);
                 }
@@ -1060,6 +1102,14 @@ struct array_info {
                 child_types.push_back(child->data_type());
             }
             return std::make_unique<bodo::StructType>(child_types);
+        } else if (arr_type == bodo_array_type::MAP) {
+            std::shared_ptr<array_info> inner_struct =
+                child_arrays[0]->child_arrays[0];
+            std::unique_ptr<bodo::DataType> key_type =
+                inner_struct->child_arrays[0]->data_type();
+            std::unique_ptr<bodo::DataType> value_type =
+                inner_struct->child_arrays[1]->data_type();
+            return std::make_unique<bodo::MapType>(key_type, value_type);
         } else {
             return std::make_unique<bodo::DataType>(arr_type, dtype);
         }
@@ -1105,6 +1155,9 @@ std::unique_ptr<array_info> alloc_struct(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
+
+std::unique_ptr<array_info> alloc_map(int64_t n_rows,
+                                      std::shared_ptr<array_info> inner_arr);
 
 std::unique_ptr<array_info> alloc_categorical(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
@@ -1497,7 +1550,7 @@ void bodo_common_init();
  *
  * @param arr the array to be copied
  * @param shallow_copy_child_arrays whether to shallow copy of child arrays for
- * ARRAY_ITEM and STRUCT array
+ * ARRAY_ITEM, STRUCT and MAP array
  * @return The copy
  */
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
@@ -1532,6 +1585,14 @@ void delete_info(array_info* arr);
  * delete table pointer and its column array_info pointers (but not the arrays).
  */
 void delete_table(table_info* table);
+
+/**
+ * @brief Create a new table with table's map columns converted to list(struct)
+ *
+ * @param table input table
+ * @return table_info* output table with map columns converted
+ */
+table_info* cpp_table_map_to_list(table_info* table);
 
 extern "C" {
 

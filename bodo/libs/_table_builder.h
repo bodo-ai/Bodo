@@ -332,6 +332,26 @@ struct ArrayBuildBuffer {
      */
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::MAP)
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
+        this->child_array_builders.front().UnsafeAppendBatch(
+            in_arr->child_arrays[0], append_rows, append_rows_sum);
+    }
+
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::STRUCT)
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
                            const std::vector<bool>& append_rows,
@@ -642,6 +662,23 @@ struct ArrayBuildBuffer {
      */
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::MAP)
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        this->child_array_builders[0].UnsafeAppendBatch(
+            in_arr->child_arrays[0]);
+        this->data_array->length += in_arr->length;
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data element
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::STRUCT)
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         // Reserve space for and append child arrays
@@ -852,6 +889,10 @@ struct ArrayBuildBuffer {
                 bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
                 SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
             } break;
+            case bodo_array_type::MAP: {
+                this->child_array_builders[0].UnsafeAppendRow(
+                    in_arr->child_arrays[0], row_ind);
+            } break;
             default:
                 throw std::runtime_error(
                     "ArrayBuildBuffer::UnsafeAppendRow: Invalid array type " +
@@ -872,7 +913,7 @@ struct ArrayBuildBuffer {
      * array to buffer. This requires reserving space for variable-sized
      * elements like strings.
      *
-     * NOTE: For semi-structured data array (ARRAY_ITEM and STRUCT),
+     * NOTE: For semi-structured data array (ARRAY_ITEM, STRUCT and MAP),
      * ReserveArray only reserve space for the buffers and NOT the child arrays.
      * Reserving space for inner array seperately is required before appending.
      *

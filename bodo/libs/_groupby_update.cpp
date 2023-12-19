@@ -1350,7 +1350,8 @@ void object_agg_computation(const std::shared_ptr<array_info>& key_col,
     // Populate the offset buffer based on the number of pairs in each group
     size_t num_group = grp_info.group_to_first_row.size();
     size_t n_total = keys->length;
-    offset_t* offset_buffer = (offset_t*)(out_arr->buffers[0]->mutable_data());
+    offset_t* offset_buffer =
+        (offset_t*)(out_arr->child_arrays[0]->buffers[0]->mutable_data());
     offset_buffer[0] = 0;
     size_t offset_idx = 1;
     // Declare a cutoff each time the group number (which the sorted table
@@ -1381,7 +1382,7 @@ void object_agg_computation(const std::shared_ptr<array_info>& key_col,
     child_arrays[1] = val_array;
     std::shared_ptr<array_info> inner_arr =
         alloc_struct(non_null_count, child_arrays);
-    out_arr->child_arrays[0] = inner_arr;
+    out_arr->child_arrays[0]->child_arrays[0] = inner_arr;
 }
 
 // NUNIQUE

@@ -57,11 +57,14 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::MAP ||
         array->arr_type == bodo_array_type::STRUCT) {
         if (array->arr_type == bodo_array_type::STRING) {
             null_bitmap = array->buffers[2];
         } else if (array->arr_type == bodo_array_type::STRUCT) {
             null_bitmap = array->buffers[0];
+        } else if (array->arr_type == bodo_array_type::MAP) {
+            null_bitmap = array->child_arrays[0]->buffers[1];
         } else {
             null_bitmap = array->buffers[1];
         }
@@ -126,6 +129,46 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         *out = std::make_shared<arrow::LargeListArray>(
             arrow::large_list(field), array->length, offsets_buffer,
             inner_array, null_bitmap);
+        return (*out)->type();
+    }
+
+    if (array->arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> array_item_arr = array->child_arrays[0];
+        std::shared_ptr<array_info> struct_arr =
+            array_item_arr->child_arrays[0];
+
+        // Convert offset buffer to 32-bits as required by Arrow MapArray
+        std::shared_ptr<BodoBuffer> offsets_buffer = array_item_arr->buffers[0];
+        offset_t *offsets_ptr = (offset_t *)offsets_buffer->mutable_data();
+        std::unique_ptr<BodoBuffer> offsets_buffer_32 = AllocateBodoBuffer(
+            array_item_arr->length + 1, Bodo_CTypes::CTypeEnum::UINT32);
+        uint32_t *offsets_ptr_32 =
+            (uint32_t *)offsets_buffer_32->mutable_data();
+        for (size_t i = 0; i < (array_item_arr->length + 1); i++) {
+            if (offsets_ptr[i] > std::numeric_limits<int32_t>::max()) {
+                throw std::runtime_error(
+                    "bodo_array_to_arrow: Map array offset too large to "
+                    "convert to 32-bit Arrow offset: " +
+                    std::to_string(offsets_ptr[i]));
+            }
+            offsets_ptr_32[i] = static_cast<uint32_t>(offsets_ptr[i]);
+        }
+
+        // Convert key array
+        std::shared_ptr<arrow::Array> key_array;
+        std::shared_ptr<arrow::DataType> key_type = bodo_array_to_arrow(
+            pool, struct_arr->child_arrays[0], &key_array,
+            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+
+        // Convert item array
+        std::shared_ptr<arrow::Array> item_array;
+        std::shared_ptr<arrow::DataType> item_type = bodo_array_to_arrow(
+            pool, struct_arr->child_arrays[1], &item_array,
+            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+
+        *out = std::make_shared<arrow::MapArray>(
+            arrow::map(key_type, item_type, false), array_item_arr->length,
+            std::move(offsets_buffer_32), key_array, item_array, null_bitmap);
         return (*out)->type();
     }
 
@@ -763,6 +806,88 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
 }
 
 /**
+ * @brief Convert Arrow map array to Bodo map array. The
+ * output Bodo array holds references to the Arrow array's buffers and releases
+ * them when deleted.
+ * This is not entirely zero-copy since Arrow has 32-bit offsets
+ * which need to be converted to 64-bit for Bodo.
+ *
+ * @param arrow_map_arr Input Arrow MapArray
+ * @param dicts_ref_arr Array used for setting dictionaries if provided. Should
+ * have the same structure as input (i.e. child array types)
+ * @return std::shared_ptr<array_info> Output Bodo array
+ */
+std::shared_ptr<array_info> arrow_map_array_to_bodo(
+    std::shared_ptr<arrow::MapArray> arrow_map_arr,
+    std::shared_ptr<array_info> dicts_ref_arr) {
+    int64_t n = arrow_map_arr->length();
+
+    // Cast offsets from int32 to int64 required by Bodo
+    std::shared_ptr<arrow::Array> offsets_arr = arrow_map_arr->offsets();
+    auto res = arrow::compute::Cast(*offsets_arr, arrow::int64(),
+                                    arrow::compute::CastOptions::Safe(),
+                                    bodo::default_buffer_exec_context());
+    std::shared_ptr<arrow::Array> casted_arr;
+    CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+
+    std::shared_ptr<arrow::NumericArray<arrow::Int64Type>> offsets_64_arr =
+        std::static_pointer_cast<arrow::NumericArray<arrow::Int64Type>>(
+            casted_arr);
+
+    // Convert offset buffer to Bodo
+    std::shared_ptr<BodoBuffer> offset_buffer = arrow_buffer_to_bodo(
+        offsets_64_arr->values(), (void *)offsets_64_arr->raw_values(),
+        (n + 1) * sizeof(offset_t), Bodo_CType_offset);
+
+    // Convert null bitmap buffer to Bodo
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_map_arr->null_bitmap(), arrow_map_arr->null_bitmap_data(),
+        arrow_map_arr->offset(), arrow_map_arr->null_count(), n);
+
+    // Convert key array to Bodo
+    std::shared_ptr<array_info> key_arr = arrow_array_to_bodo(
+        arrow_map_arr->keys(), -1,
+        dicts_ref_arr == nullptr
+            ? nullptr
+            : dicts_ref_arr->child_arrays[0]->child_arrays[0]->child_arrays[0]);
+
+    // Convert item array to Bodo
+    std::shared_ptr<array_info> item_arr = arrow_array_to_bodo(
+        arrow_map_arr->items(), -1,
+        dicts_ref_arr == nullptr
+            ? nullptr
+            : dicts_ref_arr->child_arrays[0]->child_arrays[0]->child_arrays[1]);
+
+    // Get struct array null bitmap buffer (same as key array since Arrow
+    // doesn't have a separate null bitmap)
+    std::shared_ptr<BodoBuffer> struct_null_bitmap_buffer =
+        arrow_null_bitmap_to_bodo(arrow_map_arr->keys()->null_bitmap(),
+                                  arrow_map_arr->keys()->null_bitmap_data(),
+                                  arrow_map_arr->keys()->offset(),
+                                  arrow_map_arr->keys()->null_count(),
+                                  arrow_map_arr->keys()->length());
+
+    // Create inner struct array
+    std::shared_ptr<array_info> struct_arr = std::make_shared<array_info>(
+        bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, key_arr->length,
+        std::vector<std::shared_ptr<BodoBuffer>>({struct_null_bitmap_buffer}),
+        std::vector<std::shared_ptr<array_info>>({key_arr, item_arr}), 0, 0, 0,
+        -1, false, false, false, 0, std::vector<std::string>({"key", "value"}));
+
+    // Create inner array(item) array
+    std::shared_ptr<array_info> array_item_arr = std::make_shared<array_info>(
+        bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {offset_buffer, null_bitmap_buffer}),
+        std::vector<std::shared_ptr<array_info>>({struct_arr}));
+
+    return std::make_shared<array_info>(
+        bodo_array_type::MAP, Bodo_CTypes::MAP, n,
+        std::vector<std::shared_ptr<BodoBuffer>>({}),
+        std::vector<std::shared_ptr<array_info>>({std::move(array_item_arr)}));
+}
+
+/**
  * @brief Convert Arrow decimal128 array to Bodo array_info (DECIMAL type) with
  * zero-copy. The output Bodo array holds references to the Arrow array's
  * buffers and releases them when deleted.
@@ -997,7 +1122,6 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 dicts_ref_arr);
         // convert 32-bit offset array to 64-bit offset array to match Bodo data
         // layout
-        case arrow::Type::MAP:
         case arrow::Type::LIST: {
             static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(
@@ -1008,6 +1132,11 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_list_array_to_bodo(
                 std::static_pointer_cast<arrow::LargeListArray>(casted_arr),
+                dicts_ref_arr);
+        }
+        case arrow::Type::MAP: {
+            return arrow_map_array_to_bodo(
+                std::static_pointer_cast<arrow::MapArray>(arrow_arr),
                 dicts_ref_arr);
         }
         case arrow::Type::STRUCT:

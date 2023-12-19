@@ -140,6 +140,8 @@ static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {
         return "ARRAY_ITEM";
     if (arr_type == bodo_array_type::STRUCT)
         return "STRUCT";
+    if (arr_type == bodo_array_type::MAP)
+        return "MAP";
     if (arr_type == bodo_array_type::CATEGORICAL)
         return "CATEGORICAL";
     if (arr_type == bodo_array_type::DICT)
@@ -190,6 +192,8 @@ static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
         return "LIST";
     if (dtype == Bodo_CTypes::STRUCT)
         return "STRUCT";
+    if (dtype == Bodo_CTypes::MAP)
+        return "MAP";
     if (dtype == Bodo_CTypes::COMPLEX64)
         return "COMPLEX64";
     if (dtype == Bodo_CTypes::COMPLEX128)
@@ -238,6 +242,15 @@ void StructType::to_string_inner(std::string& out) {
     out += "]";
 }
 
+void MapType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    this->key_type->to_string_inner(out);
+    out += ", ";
+    this->value_type->to_string_inner(out);
+    out += "]";
+}
+
 void DataType::Serialize(std::vector<int8_t>& arr_array_types,
                          std::vector<int8_t>& arr_c_types) {
     arr_array_types.push_back(array_type);
@@ -263,6 +276,14 @@ void StructType::Serialize(std::vector<int8_t>& arr_array_types,
     }
 }
 
+void MapType::Serialize(std::vector<int8_t>& arr_array_types,
+                        std::vector<int8_t>& arr_c_types) {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    key_type->Serialize(arr_array_types, arr_c_types);
+    value_type->Serialize(arr_array_types, arr_c_types);
+}
+
 static std::unique_ptr<DataType> from_byte_helper(
     const std::span<const int8_t> arr_array_types,
     const std::span<const int8_t> arr_c_types, size_t& i) {
@@ -285,7 +306,12 @@ static std::unique_ptr<DataType> from_byte_helper(
                 from_byte_helper(arr_array_types, arr_c_types, i));
         }
         return std::make_unique<StructType>(child_types);
-
+    } else if (array_type == bodo_array_type::MAP) {
+        std::unique_ptr<DataType> key_arr =
+            from_byte_helper(arr_array_types, arr_c_types, i);
+        std::unique_ptr<DataType> value_arr =
+            from_byte_helper(arr_array_types, arr_c_types, i);
+        return std::make_unique<MapType>(key_arr, value_arr);
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
@@ -480,6 +506,14 @@ std::unique_ptr<array_info> alloc_struct(
         bodo_array_type::STRUCT, Bodo_CTypes::CTypeEnum::STRUCT, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer_bitmask)}),
         std::move(child_arrays));
+}
+
+std::unique_ptr<array_info> alloc_map(int64_t n_rows,
+                                      std::shared_ptr<array_info> inner_arr) {
+    return std::make_unique<array_info>(
+        bodo_array_type::MAP, Bodo_CTypes::MAP, n_rows,
+        std::vector<std::shared_ptr<BodoBuffer>>({}),
+        std::vector<std::shared_ptr<array_info>>({std::move(inner_arr)}));
 }
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -792,6 +826,11 @@ std::unique_ptr<array_info> alloc_array_top_level(
         case bodo_array_type::STRUCT:
             return alloc_struct(length, {}, extra_null_bytes, pool,
                                 std::move(mm));
+        case bodo_array_type::MAP: {
+            std::unique_ptr<array_info> inner_array = alloc_array_item(
+                length, nullptr, extra_null_bytes, pool, std::move(mm));
+            return alloc_map(length, std::move(inner_array));
+        }
         default:
             throw std::runtime_error("alloc_array: array type (" +
                                      GetArrType_as_string(arr_type) +
@@ -813,6 +852,15 @@ std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
             child_arrays.push_back(alloc_array_like(child_array));
         }
         return alloc_struct(0, std::move(child_arrays));
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::unique_ptr<array_info> array_item_arr = alloc_array_item(
+            0, alloc_array_like(
+                   in_arr->child_arrays.front()->child_arrays.front()));
+        return std::make_unique<array_info>(
+            bodo_array_type::MAP, Bodo_CTypes::MAP, 0,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {std::move(array_item_arr)}));
     } else {
         std::unique_ptr<array_info> out_arr =
             alloc_array_top_level(0, 0, 0, arr_type, dtype);
@@ -842,6 +890,16 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
         std::shared_ptr<arrow::Array> arr_values = list_arr->values();
         return siz_offset + siz_null_bitmap +
                arrow_array_memory_size(arr_values);
+    }
+    if (arr->type_id() == arrow::Type::MAP) {
+        std::shared_ptr<arrow::MapArray> map_arr =
+            std::dynamic_pointer_cast<arrow::MapArray>(arr);
+        int64_t siz_offset = sizeof(uint32_t) * (n_rows + 1);
+        int64_t siz_null_bitmap = n_bytes;
+        int64_t total_siz = siz_offset + siz_null_bitmap;
+        total_siz += arrow_array_memory_size(map_arr->keys());
+        total_siz += arrow_array_memory_size(map_arr->items());
+        return total_siz;
     }
     if (arr->type_id() == arrow::Type::STRUCT) {
         std::shared_ptr<arrow::StructArray> struct_arr =
@@ -925,6 +983,8 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
                 array_memory_size(child_array, include_dict_size);
         }
         return n_bytes + child_array_size;
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        return array_memory_size(earr->child_arrays.front(), include_dict_size);
     }
     throw std::runtime_error(
         "Array Type: " + GetArrType_as_string(earr->arr_type) +
@@ -971,6 +1031,11 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
             }
         }
         farr = alloc_struct(earr->length, child_arrays);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> arr_item_arr =
+            shallow_copy_child_arrays ? earr->child_arrays.front()
+                                      : copy_array(earr->child_arrays.front());
+        farr = alloc_map(arr_item_arr->length, arr_item_arr);
     } else {
         farr = alloc_array_top_level(
             earr->length, earr->n_sub_elems(), 0, earr->arr_type, earr->dtype,
@@ -1008,6 +1073,8 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
                sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        // Map array has no buffers to copy
     } else if (earr->arr_type == bodo_array_type::STRUCT) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
@@ -1035,6 +1102,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
         case bodo_array_type::NULLABLE_INT_BOOL:
         case bodo_array_type::STRUCT:
         case bodo_array_type::ARRAY_ITEM:
+        case bodo_array_type::MAP:
             nullable = 1;
             break;
         default:
@@ -1063,6 +1131,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
             return (nullable + numpy_item_size[c_type]) << 3;
         case Bodo_CTypes::STRING:
         case Bodo_CTypes::LIST:
+        case Bodo_CTypes::MAP:
         case Bodo_CTypes::STRUCT:
         case Bodo_CTypes::BINARY:
             return nullable +
@@ -1101,6 +1170,21 @@ void delete_info(array_info* arr) { delete arr; }
  * Called from Python.
  */
 void delete_table(table_info* table) { delete table; }
+
+table_info* cpp_table_map_to_list(table_info* table) {
+    std::vector<std::shared_ptr<array_info>> new_columns;
+    for (std::shared_ptr<array_info>& v : table->columns) {
+        // Get underlying list(struct) array for map array
+        if (v->arr_type == bodo_array_type::MAP) {
+            new_columns.emplace_back(v->child_arrays[0]);
+        } else {
+            new_columns.emplace_back(v);
+        }
+    }
+    table_info* out_table = new table_info(new_columns);
+    delete table;
+    return out_table;
+}
 
 void decref_meminfo(MemInfo* meminfo) {
     if (meminfo != NULL && meminfo->refct != -1) {
@@ -1157,9 +1241,18 @@ void _get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array,
                                              arr_array_types);
         }
     }
-    if (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
+    if (array->arr_type == bodo_array_type::ARRAY_ITEM) {
         _get_dtypes_arr_types_from_array(array->child_arrays[0], arr_c_types,
                                          arr_array_types);
+    }
+    if (array->arr_type == bodo_array_type::MAP) {
+        // Handle key and value arrays
+        _get_dtypes_arr_types_from_array(
+            array->child_arrays[0]->child_arrays[0]->child_arrays[0],
+            arr_c_types, arr_array_types);
+        _get_dtypes_arr_types_from_array(
+            array->child_arrays[0]->child_arrays[0]->child_arrays[1],
+            arr_c_types, arr_array_types);
     }
 }
 
@@ -1202,6 +1295,11 @@ size_t get_next_col_idx(const std::span<const int8_t>& arr_array_types,
         while (tot--) {
             idx = get_next_col_idx(arr_array_types, idx);
         }
+        return idx;
+    } else if (arr_array_types[idx] == bodo_array_type::MAP) {
+        idx++;
+        idx = get_next_col_idx(arr_array_types, idx);
+        idx = get_next_col_idx(arr_array_types, idx);
         return idx;
     } else {
         return idx + 1;
