@@ -1866,17 +1866,25 @@ def check_parallel_coherency(
     assert n_passed == n_pes, "Parallel test failed"
 
 
-def gen_random_arrow_array_struct_int(span, n):
+def gen_random_arrow_array_struct_int(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         valA = random.randint(0, span)
         valB = random.randint(0, span)
         e_ent = {"A": valA, "B": valB}
         e_list.append(e_ent)
-    return e_list
+    dtype = pd.ArrowDtype(
+        pa.struct([pa.field("A", pa.int64()), pa.field("B", pa.int64())])
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64()))
+    S = pd.Series(e_list, dtype=dtype)
+    return S
 
 
-def gen_random_arrow_array_struct_list_int(span, n):
+def gen_random_arrow_array_struct_list_int(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         # We cannot allow empty block because if the first one is such type
@@ -1885,10 +1893,24 @@ def gen_random_arrow_array_struct_list_int(span, n):
         valB = [random.randint(0, span) for _ in range(random.randint(1, 5))]
         e_ent = {"A": valA, "B": valB}
         e_list.append(e_ent)
-    return e_list
+
+    dtype = pd.ArrowDtype(
+        pa.struct(
+            [
+                pa.field("A", pa.large_list(pa.int64())),
+                pa.field("B", pa.large_list(pa.int64())),
+            ]
+        )
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(pa.map_(pa.large_string(), pa.large_list(pa.int64())))
+    S = pd.Series(e_list, dtype=dtype)
+    return S
 
 
 def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1906,6 +1928,8 @@ def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
 
 
 def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1921,6 +1945,8 @@ def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
 
 
 def gen_random_arrow_list_list_double(rec_lev, prob_none, n):
+    random.seed(0)
+
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
             return None
@@ -1935,7 +1961,8 @@ def gen_random_arrow_list_list_double(rec_lev, prob_none, n):
     return [random_list_rec(rec_lev) for _ in range(n)]
 
 
-def gen_random_arrow_struct_struct(span, n):
+def gen_random_arrow_struct_struct(span, n, return_map=False):
+    random.seed(0)
     e_list = []
     for _ in range(n):
         valA1 = random.randint(0, span)
@@ -1944,10 +1971,31 @@ def gen_random_arrow_struct_struct(span, n):
         valB2 = random.randint(0, span)
         e_ent = {"A": {"A1": valA1, "A2": valA2}, "B": {"B1": valB1, "B2": valB2}}
         e_list.append(e_ent)
-    return e_list
+
+    dtype = pd.ArrowDtype(
+        pa.struct(
+            [
+                pa.field(
+                    "A",
+                    pa.struct([pa.field("A1", pa.int64()), pa.field("A2", pa.int64())]),
+                ),
+                pa.field(
+                    "B",
+                    pa.struct([pa.field("B1", pa.int64()), pa.field("B2", pa.int64())]),
+                ),
+            ]
+        )
+    )
+    if return_map:
+        dtype = pd.ArrowDtype(
+            pa.map_(pa.large_string(), pa.map_(pa.large_string(), pa.int64()))
+        )
+    S = pd.Series(e_list, dtype=dtype)
+    return S
 
 
 def gen_random_arrow_struct_string(string_size, n):
+    random.seed(0)
     return [
         {
             "A": "".join(
@@ -2059,6 +2107,7 @@ def gen_random_list_string_array(option, n):
     option=1 for series with nullable values
     option=2 for series without nullable entries.
     """
+    random.seed(0)
 
     def rand_col_str(n):
         e_ent = []
@@ -2112,6 +2161,7 @@ def gen_random_decimal_array(option, n):
     option=1 will give random arrays with collision happening (guaranteed for n>100)
     option=2 will give random arrays with collision unlikely to happen
     """
+    random.seed(0)
 
     def random_str1():
         e_str1 = str(1 + random.randint(1, 8))

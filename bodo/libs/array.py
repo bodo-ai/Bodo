@@ -74,6 +74,7 @@ from bodo.utils.utils import check_and_propagate_cpp_exception, numba_to_c_type
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
+ll.add_symbol("map_array_to_info", array_ext.map_array_to_info)
 ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("dict_str_array_to_info", array_ext.dict_str_array_to_info)
 ll.add_symbol("get_has_global_dictionary", array_ext.get_has_global_dictionary)
@@ -108,6 +109,7 @@ ll.add_symbol(
 )
 ll.add_symbol("array_info_unpin", array_ext.array_info_unpin)
 ll.add_symbol("delete_table", array_ext.delete_table)
+ll.add_symbol("cpp_table_map_to_list", array_ext.cpp_table_map_to_list)
 ll.add_symbol("shuffle_table_py_entrypt", array_ext.shuffle_table_py_entrypt)
 ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
 ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
@@ -247,12 +249,28 @@ def array_to_info_codegen(context, builder, sig, args):
         )
 
     if isinstance(arr_type, MapArrayType):
-        # Note: The C++ code doesn't contain any special handling for MapArrayType.
-        # We just use the underlying ArrayItemArray without telling C++ the array is
-        # actually a MapArray.
         map_array = context.make_helper(builder, arr_type, in_arr)
-        in_arr = map_array.data
-        arr_type = _get_map_arr_data_type(arr_type)
+        inner_arr = map_array.data
+        inner_arr_type = _get_map_arr_data_type(arr_type)
+        inner_arr_info = array_to_info_codegen(
+            context, builder, array_info_type(inner_arr_type), (inner_arr,)
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="map_array_to_info"
+        )
+        return builder.call(
+            fn_tp,
+            [
+                inner_arr_info,
+            ],
+        )
 
     if isinstance(arr_type, ArrayItemArrayType):
         payload = _get_array_item_arr_payload(context, builder, arr_type, in_arr)
@@ -906,14 +924,30 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         return tuple_array._getvalue()
 
     if isinstance(arr_type, MapArrayType):
-        # Note: The C++ code doesn't contain any special handling for MapArrayType.
-        # We just use the underlying ArrayItemArray without telling C++ the array is
-        # actually a MapArray.
+        # Extract data array info from input array info
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_child_info"
+        )
+        data_arr_info = builder.call(
+            fn_tp,
+            [
+                in_info,
+                lir.Constant(lir.IntType(64), 0),
+            ],
+        )
+
+        map_data_arr_type = _get_map_arr_data_type(arr_type)
+        inner_sig = map_data_arr_type(array_info_type, map_data_arr_type)
         map_array = context.make_helper(builder, arr_type)
-        map_arr_type = _get_map_arr_data_type(arr_type)
-        inner_sig = map_arr_type(array_info_type, map_arr_type)
         map_array.data = info_to_array_codegen(
-            context, builder, inner_sig, args, raise_py_err
+            context, builder, inner_sig, [data_arr_info, args[1]], raise_py_err
         )
         return map_array._getvalue()
 
@@ -2244,6 +2278,12 @@ delete_info = types.ExternalFunction(
 delete_table = types.ExternalFunction(
     "delete_table",
     types.void(table_type),
+)
+
+
+cpp_table_map_to_list = types.ExternalFunction(
+    "cpp_table_map_to_list",
+    table_type(table_type),
 )
 
 

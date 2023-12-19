@@ -92,6 +92,7 @@ class CTypeEnum(Enum):
     BINARY = 20
     COMPLEX64 = 21
     COMPLEX128 = 22
+    Map = 23
 
 
 _numba_to_c_type_map = {
@@ -134,6 +135,7 @@ class CArrayTypeEnum(Enum):
     ARRAY_ITEM = 5
     INTERVAL = 6
     DICT = 7  # dictionary-encoded string array
+    MAP = 8
 
 
 # silence Numba error messages for now
@@ -215,9 +217,7 @@ def numba_to_c_types(
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
         elif isinstance(arr_type, bodo.MapArrayType):
-            c_types.append(CTypeEnum.LIST.value)
-            c_types.append(CTypeEnum.STRUCT.value)
-            c_types.append(2)
+            c_types.append(CTypeEnum.Map.value)
             c_types.extend(
                 numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )
@@ -288,9 +288,7 @@ def numba_to_c_array_types(
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
         elif isinstance(arr_type, bodo.MapArrayType):
-            c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
-            c_arr_types.append(CArrayTypeEnum.STRUCT.value)
-            c_arr_types.append(2)
+            c_arr_types.append(CArrayTypeEnum.MAP.value)
             c_arr_types.extend(
                 numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
             )

@@ -65,6 +65,13 @@ array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
                           {std::shared_ptr<array_info>(inner_array)});
 }
 
+array_info* map_array_to_info(array_info* inner_array) {
+    // Python is responsible for deleting pointer
+    return new array_info(bodo_array_type::MAP, Bodo_CTypes::MAP,
+                          inner_array->length, {},
+                          {std::shared_ptr<array_info>(inner_array)});
+}
+
 array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
                                  NRT_MemInfo* offsets, NRT_MemInfo* null_bitmap,
                                  int is_bytes) {
@@ -1064,6 +1071,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // DEC_MOD_METHOD(string_array_to_info);
     SetAttrStringFromVoidPtr(m, array_item_array_to_info);
     SetAttrStringFromVoidPtr(m, struct_array_to_info);
+    SetAttrStringFromVoidPtr(m, map_array_to_info);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, string_array_to_info);
     // Not covered by error handler
@@ -1100,6 +1108,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, delete_info);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, delete_table);
+    SetAttrStringFromVoidPtr(m, cpp_table_map_to_list);
     SetAttrStringFromVoidPtr(m, shuffle_table_py_entrypt);
     SetAttrStringFromVoidPtr(m, get_shuffle_info);
     SetAttrStringFromVoidPtr(m, delete_shuffle_info);

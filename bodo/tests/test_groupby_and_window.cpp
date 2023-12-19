@@ -12,6 +12,7 @@ typedef enum {
     NULL_OUTPUT,
     EMPTY_STRING,
     EMPTY_ARRAY,
+    EMPTY_MAP,
 } empty_return_enum;
 
 // Create an array of the desired type without directly setting the null bit
@@ -139,6 +140,16 @@ std::shared_ptr<array_info> make_result_output(size_t n) {
         offsets[i] = 0;
     }
     return array_arr;
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          empty_return_enum RetType>
+    requires(RetType == empty_return_enum::EMPTY_MAP)
+std::shared_ptr<array_info> make_result_output(size_t n) {
+    std::shared_ptr<array_info> inner_arr =
+        make_result_output<bodo_array_type::ARRAY_ITEM, Bodo_CTypes::STRUCT,
+                           empty_return_enum::EMPTY_ARRAY>(n);
+    return alloc_map(n, inner_arr);
 }
 
 /**
@@ -1068,7 +1079,7 @@ static bodo::tests::suite tests([] {
                         Bodo_CTypes::INT64, empty_return_enum::EMPTY_ARRAY);
 
         auto object_agg_set = new ObjectAggColSet(str_col, int_col, false);
-        TEST_GROUPBY_FN(object_agg_set, n, bodo_array_type::ARRAY_ITEM,
-                        Bodo_CTypes::STRUCT, empty_return_enum::EMPTY_ARRAY);
+        TEST_GROUPBY_FN(object_agg_set, n, bodo_array_type::MAP,
+                        Bodo_CTypes::MAP, empty_return_enum::EMPTY_MAP);
     });
 });

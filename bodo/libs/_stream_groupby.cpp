@@ -1298,7 +1298,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             this->getSeparateOutputColumns(local_input_cols, ftypes[i]);
         std::set<bodo_array_type::arr_type_enum> force_acc_types = {
             bodo_array_type::STRING, bodo_array_type::DICT,
-            bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT};
+            bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
+            bodo_array_type::MAP};
         for (auto t : std::get<0>(running_value_arr_types)) {
             if (force_acc_types.contains(t)) {
                 this->accumulate_before_update = true;
