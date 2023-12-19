@@ -47,6 +47,7 @@ def _lateral_flatten(
     output_val_t,
     output_this_t,
     json_mode_t,
+    outer_t,
 ):
     assert table_t == table_type
 
@@ -56,6 +57,7 @@ def _lateral_flatten(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -85,18 +87,21 @@ def _lateral_flatten(
             types.bool_,
             types.bool_,
             types.bool_,
+            types.bool_,
         ),
         codegen,
     )
 
 
-def lateral_flatten(in_table, keep_cols, explode_col, outputs):  # pragma: no cover
+def lateral_flatten(
+    in_table, keep_cols, explode_col, outputs, outer
+):  # pragma: no cover
     # Dummy function to overload
     pass
 
 
 @overload(lateral_flatten, no_unliteral=True)
-def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
+def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
     """
     Kernel used to implement the SQL functionality LATERAL FLATTEN(A).
     Explodes the rows of column A from nested arrays into a column of the inner
@@ -113,6 +118,8 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
             3: INDEX
             4: VALUE
             5: THIS (supported unless the explode column is an array of strings)
+        outer (boolean): if true, ensure 1 row is generated even when the
+        explode col is null/empty.
 
     Returns:
         (TableType): the input table with the rows of the kept columns duplicated
@@ -198,7 +205,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     # If the index column is included in the output, add an extra column to store it
     output_index_bool = get_overload_const_bool(output_index)
     if output_index_bool:
-        out_typs += (types.Array(types.int64, 1, "C"),)
+        out_typs += (bodo.IntegerArrayType(types.int64),)
 
     # If the value column is included in the output, add an extra column to store it
     output_val_bool = get_overload_const_bool(output_val)
@@ -230,7 +237,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
 
     json_mode = struct_mode or map_mode
 
-    def impl(in_table, keep_cols, explode_col, outputs):  # pragma: no cover
+    def impl(in_table, keep_cols, explode_col, outputs, outer):  # pragma: no cover
         # Create a single-element numpy array that C++ can use to store the number
         # of rows in the output table
         total_rows = np.array([0], dtype=np.int64)
@@ -247,6 +254,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
             output_val_bool,
             output_this_bool,
             json_mode,
+            outer,
         )
         bodo.utils.utils.check_and_propagate_cpp_exception()
 

@@ -14,6 +14,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.util.ImmutableBitSet
 
 class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode, call: RexCall, callType: RelDataType, usedColOutputs: ImmutableBitSet, repeatColumns: ImmutableBitSet) : FlattenBase(cluster, traits.replace(PandasRel.CONVENTION), input, call, callType, usedColOutputs, repeatColumns), PandasRel {
@@ -63,7 +64,8 @@ class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode,
         val explodeCol = Expr.IntegerLiteral(explodeColIdx)
         val outputColsExpressions = callType.fieldList.mapIndexed { idx, _ -> Expr.BooleanLiteral(this.usedColOutputs.contains(idx)) }
         val outputColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(outputColsExpressions)))
-        return ctx.returns(Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal)))
+        val outer = Expr.BooleanLiteral(RexLiteral.booleanValue(flattenCall.operands[2]))
+        return ctx.returns(Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal, outer)))
     }
 
     /**

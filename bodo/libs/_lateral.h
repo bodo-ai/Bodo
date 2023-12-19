@@ -26,7 +26,7 @@
 std::unique_ptr<table_info> lateral_flatten_array(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this,
+    bool output_value, bool output_this, bool outer,
     bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -54,7 +54,7 @@ std::unique_ptr<table_info> lateral_flatten_array(
 std::unique_ptr<table_info> lateral_flatten_map(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this,
+    bool output_value, bool output_this, bool outer,
     bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -82,7 +82,7 @@ std::unique_ptr<table_info> lateral_flatten_map(
 std::unique_ptr<table_info> lateral_flatten_struct(
     const std::unique_ptr<table_info> &in_table, int64_t *n_rows,
     bool output_seq, bool output_key, bool output_path, bool output_index,
-    bool output_value, bool output_this,
+    bool output_value, bool output_this, bool outer,
     bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
