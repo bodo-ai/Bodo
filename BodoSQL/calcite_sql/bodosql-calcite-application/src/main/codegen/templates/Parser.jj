@@ -6716,7 +6716,8 @@ int PrecisionOpt(final int defaultPrecision) :
 *
 * <p>We also support "with local time zone".
 *
-* @return true if this is "with local time zone".
+* @return true if this is "with local time zone" or "with time zone".
+* TODO: differentiate between time zone vs local time zone.
 */
 boolean TimeZoneOpt() :
 {
@@ -6725,7 +6726,7 @@ boolean TimeZoneOpt() :
     LOOKAHEAD(3)
     <WITHOUT> <TIME> <ZONE> { return false; }
 |
-    <WITH> <LOCAL> <TIME> <ZONE> { return true; }
+    <WITH> [ <LOCAL> ] <TIME> <ZONE> { return true; }
 |
     { return false; }
 }
