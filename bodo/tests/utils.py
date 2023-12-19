@@ -828,11 +828,11 @@ def _get_dist_arg(
 
     start, end = get_start_end(l)
     # for var length case to be different than regular 1D in chunk sizes, add
-    # one extra element to last processor
-    if var_length and bodo.get_size() >= 2:
-        if bodo.get_rank() == bodo.get_size() - 2:
+    # one extra element to the second processor
+    if var_length and bodo.get_size() >= 2 and l > bodo.get_size():
+        if bodo.get_rank() == 0:
             end -= 1
-        if bodo.get_rank() == bodo.get_size() - 1:
+        if bodo.get_rank() == 1:
             start -= 1
 
     if isinstance(a, (pd.Series, pd.DataFrame)):

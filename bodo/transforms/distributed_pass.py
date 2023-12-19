@@ -2361,6 +2361,11 @@ class DistributedPass:
         ):
             set_last_arg_to_true(self, assign.value)
             return [assign]
+        if fdef == ("fftshift", "numpy.fft") and self._is_1D_or_1D_Var_arr(
+            rhs.args[0].name
+        ):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
 
         return out
 

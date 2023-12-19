@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #pragma once
 
+#include <complex>
 #include <memory>
 #if defined(__GNUC__)
 #define __UNUSED__ __attribute__((unused))
@@ -346,7 +347,7 @@ inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
 /**
  * @brief Check if typ is COMPLEX64 or COMPLEX128.
  */
-inline bool is_complex(Bodo_CTypes::CTypeEnum typ) {
+constexpr inline bool is_complex(Bodo_CTypes::CTypeEnum typ) {
     return ((typ == Bodo_CTypes::COMPLEX64) ||
             (typ == Bodo_CTypes::COMPLEX128));
 }
@@ -359,6 +360,11 @@ inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
             (typ == Bodo_CTypes::DECIMAL));
 }
 
+template <Bodo_CTypes::CTypeEnum DType>
+    requires(is_complex(DType))
+using complex_type =
+    typename std::conditional<DType == Bodo_CTypes::COMPLEX128,
+                              std::complex<double>, std::complex<float>>::type;
 /** Getting the expression of a T value as a vector of characters
  *
  * The template parameter is T.
