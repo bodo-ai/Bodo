@@ -28,10 +28,11 @@ internal class VariantCastTable {
         }
 
         // Helper function to create a RelDataType for ARRAY[variant] with the given nullability
-        private val makeArrayType = {  factory: RelDataTypeFactory, nullable: Boolean ->
+        private val makeArrayType = { factory: RelDataTypeFactory, nullable: Boolean ->
             factory.createTypeWithNullability(
                 factory.createArrayType(
-                    BodoRelDataTypeFactory.createVariantSqlType(factory), -1
+                    BodoRelDataTypeFactory.createVariantSqlType(factory),
+                    -1,
                 ),
                 nullable,
             )
