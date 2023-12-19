@@ -53,7 +53,7 @@ class SnowflakeReader : public ArrowReader {
             empty_table->schema(), dict_builders, (size_t)batch_size);
     }
 
-    virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
+    ~SnowflakeReader() override { Py_XDECREF(sf_conn); }
 
     /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
     size_t get_num_pieces() const override {

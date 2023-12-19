@@ -54,7 +54,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_bool spill_on_unpin
         c_bool move_on_unpin
         c_bool debug_mode
-        c_bool tracing_mode
+        uint8_t trace_level
         int64_t malloc_free_trim_threshold
 
         CBufferPoolOptions()
@@ -84,6 +84,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
         uint64_t get_bytes_pinned" bytes_pinned"()
+        uint64_t get_bytes_in_memory" bytes_in_memory"()
         int64_t get_bytes_allocated" bytes_allocated"()
         int64_t get_max_memory" max_memory"()
         c_string get_backend_name" backend_name"()

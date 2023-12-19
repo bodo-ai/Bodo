@@ -1,7 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
-#include <atomic>
 #include <mutex>
 #include <span>
 
@@ -133,7 +132,10 @@ struct BufferPoolOptions {
     /// @brief Track various statistics about the buffer pool.
     /// Primarily used to enable timers for various operations
     /// for benchmarking purposes.
-    bool tracing_mode = false;
+    /// trace_level = 0: No tracing
+    /// trace_level = 1: Trace time, print for rank 0
+    /// trace_level = 2: Trace time, print for all ranks
+    uint8_t trace_level = 0;
 
     /// @brief Number of bytes free-d through malloc after which
     /// we call malloc_trim.
@@ -145,6 +147,9 @@ struct BufferPoolOptions {
     int64_t malloc_free_trim_threshold = MALLOC_FREE_TRIM_DEFAULT_THRESHOLD;
 
     static BufferPoolOptions Defaults();
+
+    /// @brief Is tracing mode enabled?
+    bool tracing_mode() const noexcept { return trace_level > 0; }
 };
 
 /// @brief Statistics for a SizeClass
@@ -164,9 +169,6 @@ struct SizeClassStats {
     milli_double total_find_unmapped_time{};
     /// @brief Total Time Spent on madvise
     milli_double total_advise_away_time{};
-
-    /// @brief Print Statistics Out to File (or stdout/stderr)
-    void Print(FILE* out = stderr) const;
 };
 
 /// @brief Represents a range of virtual addresses used for allocating
@@ -476,6 +478,94 @@ class SizeClass final {
     void moveFrame(uint64_t source_idx, uint64_t target_idx);
 };
 
+/// @brief Top Level Buffer Pool Statistics
+struct BufferPoolStats {
+    /// @brief Current number of bytes allocated in the pool
+    int64_t curr_bytes_allocated = 0;
+    /// @brief Current number of bytes in memory owned by the pool
+    /// curr_bytes_allocated - curr_bytes_in_memory = curr_bytes_spilled
+    int64_t curr_bytes_in_memory = 0;
+    /// @brief Current number of bytes allocated through malloc
+    /// curr_bytes_allocated - curr_bytes_malloced = curr_bytes_mmapped
+    int64_t curr_bytes_malloced = 0;
+    /// @brief Current number of bytes pinned in the pool
+    /// curr_bytes_in_memory - curr_bytes_pinned = curr_bytes_unpinned
+    int64_t curr_bytes_pinned = 0;
+
+    /// @brief Current number of allocations in the pool
+    /// curr_bytes_allocated / curr_num_allocations = avg_allocation_size
+    int64_t curr_num_allocations = 0;
+
+    /// @brief Total number of bytes allocated in the pool
+    uint64_t total_bytes_allocated = 0;
+    /// @brief Total number of bytes requested through the pool
+    /// total_bytes_requested / total_bytes_allocated = memory utilization
+    uint64_t total_bytes_requested = 0;
+    /// @brief Total number of bytes allocated through malloc
+    /// total_bytes_allocated - total_bytes_malloced = total_bytes_mmapped
+    uint64_t total_bytes_malloced = 0;
+    /// @brief Total number of bytes pinned in all pin() calls by the pool
+    /// No-op calls are ignored
+    uint64_t total_bytes_pinned = 0;
+    /// @brief Total number of bytes unpinned in all unpin() calls the pool
+    /// No-op calls are ignored
+    uint64_t total_bytes_unpinned = 0;
+    /// @brief Total number of bytes that are reused through realloc
+    uint64_t total_bytes_reallocs_reused = 0;
+
+    /// @brief Total number of allocations performed by pool
+    /// Includes allocations performed for realloc
+    /// total_bytes_allocated / total_num_allocations = avg_allocation_size
+    uint64_t total_num_allocations = 0;
+    /// @brief Total number of reallocations performed by pool
+    uint64_t total_num_reallocations = 0;
+    /// @brief Total number of times allocations were pinned
+    /// Note allocation are auto-pinned so
+    /// total_num_pins - total_num_allocations = # BufferPool::Pin was called
+    uint64_t total_num_pins = 0;
+    /// @brief Total number of times allocations were unpinned
+    /// Equivalent to # of times BufferPool::Unpin was called
+    uint64_t total_num_unpins = 0;
+    /// @brief Total number of times a spilled allocation was free'd
+    uint64_t total_num_frees_from_spill = 0;
+    /// @brief Total number of reallocations that are reused
+    uint64_t total_num_reallocs_reused = 0;
+
+    /// @brief Peak number of bytes allocated in the pool
+    int64_t max_bytes_allocated = 0;
+    /// @brief Peak number of bytes in memory owned by the pool
+    int64_t max_bytes_in_memory = 0;
+    /// @brief Peak number of bytes malloc-ed
+    int64_t max_bytes_malloced = 0;
+    /// @brief Peak number of bytes pinned in the pool
+    int64_t max_bytes_pinned = 0;
+
+    /// @brief Total time spent for allocations
+    milli_double total_allocation_time{};
+    /// @brief Total time spent for allocations through malloc
+    /// Included in total_allocation_time
+    milli_double total_malloc_time{};
+    /// @brief Total time spent for reallocations
+    milli_double total_realloc_time{};
+    /// @brief Total time spent for frees
+    milli_double total_free_time{};
+    /// @brief Total time spent for pins
+    milli_double total_pin_time{};
+    /// @brief Total time spent for finding frames to evict
+    milli_double total_find_evict_time{};
+
+    void AddAllocatedBytes(uint64_t diff);
+
+    void AddInMemoryBytes(uint64_t diff);
+
+    void AddPinnedBytes(uint64_t diff);
+
+    void AddMallocedBytes(uint64_t diff);
+
+    /// @brief Print the current stats to file 'out'
+    void Print(FILE* out) const;
+};
+
 class BufferPool final : public IBufferPool {
    public:
     /* ------ Functions from IBufferPool that we implement ------ */
@@ -559,13 +649,25 @@ class BufferPool final : public IBufferPool {
     void Unpin(uint8_t* ptr, int64_t size = -1,
                int64_t alignment = arrow::kDefaultBufferAlignment) override;
 
+    /// @brief The number of bytes currently available in memory
+    /// in the pool.
+    uint64_t bytes_in_memory() const {
+        return this->stats_.curr_bytes_in_memory;
+    }
+
     /// @brief The number of bytes currently allocated through
     /// this allocator.
     int64_t bytes_allocated() const override;
 
-    int64_t total_bytes_allocated() const override { return 0; }
+    /// @brief Number of bytes allocated by the pool for its entire history
+    int64_t total_bytes_allocated() const override {
+        return this->stats_.total_bytes_allocated;
+    }
 
-    int64_t num_allocations() const override { return 0; }
+    /// @brief Number of allocation performed by the pool for its entire history
+    int64_t num_allocations() const override {
+        return this->stats_.total_num_allocations;
+    }
 
     /// @brief The number of bytes currently pinned.
     /// TODO: Get inline to work correctly
@@ -684,15 +786,12 @@ class BufferPool final : public IBufferPool {
      */
     int64_t get_bytes_freed_through_malloc_since_last_trim() const;
 
+    /// @brief Get the current allocation stats for the BufferPool
+    BufferPoolStats get_stats() const { return this->stats_; }
+
    protected:
     /// @brief Options that were used for building the BufferPool.
     BufferPoolOptions options_;
-
-    // Re-using Arrow's MemoryPoolStats for now.
-    // This will be replaced with our own stats class (that extends this)
-    // when we have custom stats (like number of evictions, number of
-    // deallocations, etc.) that we want to track.
-    ::arrow::internal::MemoryPoolStats stats_;
 
     /// @brief Vector of unique-pointers to the SizeClass-es.
     /// Ordered by the frame size (ascending).
@@ -705,16 +804,18 @@ class BufferPool final : public IBufferPool {
     std::vector<std::unique_ptr<StorageManager>> storage_managers_;
 
    private:
+    /// @brief Current allocation stats. For now, tracks the
+    /// - Current and Overall Total Number of Bytes Allocated, Pinned, etc
+    /// - Current and Overall Number of Allocations, Pins, etc
+    /// - Peak Number of Bytes Allocated, Pinned, etc at any point
+    BufferPoolStats stats_;
+
     /// @brief Threshold for allocation through malloc. Allocations of this size
     /// and lower will go through malloc
     uint64_t malloc_threshold_;
 
     /// @brief Total memory size in bytes.
     uint64_t memory_size_bytes_;
-
-    /// @brief Number of bytes currently pinned
-    /// TODO: Integrate into stats_ class at some point?
-    std::atomic<uint64_t> bytes_pinned_;
 
     /// @brief Vector of block sizes of the allocated SizeClass-es for easy
     /// access.
@@ -863,15 +964,6 @@ class BufferPool final : public IBufferPool {
      * @return ::arrow::Status
      */
     ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
-
-    /**
-     * @brief Atomically update the number of pinned bytes in the
-     * BufferPool by the diff.
-     *
-     * @param diff The number of bytes to add to the current pinned
-     * byte count.
-     */
-    inline void update_pinned_bytes(int64_t diff);
 };
 
 /// Helper Tools for using BufferPool in STL Containers

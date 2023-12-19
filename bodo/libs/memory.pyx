@@ -363,7 +363,7 @@ cdef class BufferPoolOptions(_Weakrefable):
                  spill_on_unpin=None,
                  move_on_unpin=None,
                  debug_mode=None,
-                 tracing_mode=None,
+                 trace_level=None,
                  malloc_free_trim_threshold=None):
         """
         Constructor for BufferPoolOptions.
@@ -388,8 +388,8 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.move_on_unpin = move_on_unpin
         if debug_mode is not None:
             self.options.debug_mode = debug_mode
-        if tracing_mode is not None:
-            self.options.tracing_mode = tracing_mode
+        if trace_level is not None:
+            self.options.trace_level = trace_level
         if malloc_free_trim_threshold is not None:
             self.options.malloc_free_trim_threshold = malloc_free_trim_threshold
 
@@ -445,8 +445,8 @@ cdef class BufferPoolOptions(_Weakrefable):
         return self.options.debug_mode
 
     @property
-    def tracing_mode(self):
-        return self.options.tracing_mode
+    def trace_level(self):
+        return self.options.trace_level
 
     @property
     def malloc_free_trim_threshold(self):
@@ -545,10 +545,17 @@ cdef class BufferPool(IBufferPool):
         """
         return deref(self.c_pool).get_bytes_pinned()
 
+    def bytes_in_memory(self) -> int:
+        """
+        Get number of bytes currently in memory by the
+        BufferPool.
+        """
+        return deref(self.c_pool).get_bytes_in_memory()
+
     def bytes_allocated(self) -> int:
         """
         Get number of bytes currently allocated by the
-        BufferPool.
+        BufferPool including spilled memory.
         """
         return deref(self.c_pool).get_bytes_allocated()
 
@@ -562,7 +569,7 @@ cdef class BufferPool(IBufferPool):
     def max_memory(self) -> int:
         """
         Get the max-memory usage of the BufferPool
-        at any point in its lifetime.
+        at any point in its lifetime, including spilled memory.
         """
         return deref(self.c_pool).get_max_memory()
 
