@@ -129,7 +129,10 @@ template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
 std::shared_ptr<array_info> make_result_output(size_t n) {
     std::shared_ptr<array_info> inner_arr;
     if (DType == Bodo_CTypes::STRUCT) {
-        inner_arr = alloc_struct(0, {});
+        std::shared_ptr<array_info> dummy_inner =
+            make_result_output<bodo_array_type::STRING, Bodo_CTypes::STRING,
+                               empty_return_enum::EMPTY_STRING>(0);
+        inner_arr = alloc_struct(0, {dummy_inner, dummy_inner});
     } else {
         inner_arr = alloc_numpy(0, DType);
     }
@@ -1062,7 +1065,9 @@ static bodo::tests::suite tests([] {
                               Bodo_CTypes::INT64>(n);
 
         // [BSE-2182] Ensure LISTAGG with groupby returns "" instead of NULL on
-        // all-null inputs. auto listagg_col_set = new ListAggColSet(str_col,
+        // all-null inputs.
+
+        // auto listagg_col_set = new ListAggColSet(str_col,
         // dict_col, {int_col}, {true}, {false});
         // TEST_GROUPBY_FN(listagg_col_set, n,
         //             bodo_array_type::STRING,
