@@ -275,6 +275,18 @@ def grid_layouts(request):
         pytest.param((5, 5), id="odd_dims"),
         pytest.param((10, 10), id="even_dims"),
         pytest.param((1024, 1001), id="big_mismatched_dims"),
+        pytest.param((1, 513), id="one_by_large_odd", marks=pytest.mark.slow),
+        pytest.param((1, 840), id="one_by_large_even", marks=pytest.mark.slow),
+        pytest.param((513, 1), id="large_odd_by_one", marks=pytest.mark.slow),
+        pytest.param((840, 1), id="large_even_by_one", marks=pytest.mark.slow),
+        pytest.param((1, 1), id="one_by_one", marks=pytest.mark.slow),
+        pytest.param((513, 840), id="large_odd_by_even", marks=pytest.mark.slow),
+        pytest.param((840, 513), id="large_even_by_odd", marks=pytest.mark.slow),
+        pytest.param((540, 740), id="large_even_by_even", marks=pytest.mark.slow),
+        pytest.param((513, 867), id="large_odd_by_odd", marks=pytest.mark.slow),
+        pytest.param(
+            (2048, 2048), id="large_power_2_by_power_2", marks=pytest.mark.slow
+        ),
     ]
 )
 def fft_arr(request, grid_layouts):
@@ -303,9 +315,10 @@ def test_fftshift(fft_arr, memory_leak_check):
     """
 
     def impl(data):
-        return fftshift(data)
+        res = fftshift(data)
+        return res
 
-    check_func(impl, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
+    check_func(impl, (fft_arr,), convert_to_nullable_float=False)
 
 
 def test_fft2(fft_arr, memory_leak_check):
@@ -351,9 +364,7 @@ def test_ft2(fft_arr, memory_leak_check):
     if fft_arr.dtype == np.complex64:
         rtol = 1e-03
 
-    check_func(
-        ft2, (fft_arr,), convert_to_nullable_float=False, only_seq=True, rtol=rtol
-    )
+    check_func(ft2, (fft_arr,), convert_to_nullable_float=False, rtol=rtol)
 
 
 def test_fft_error(memory_leak_check):
@@ -367,6 +378,21 @@ def test_fft_error(memory_leak_check):
     with pytest.raises(
         BodoError,
         match="fft2 currently unsupported on input of type .*",
+    ):
+        bodo.jit(impl)(np.array([1, 2, 3, 4, 5], dtype=np.int64))
+
+
+def test_fftshift_error(memory_leak_check):
+    """
+    Verifies that fftshift raises an error on unsupported types.
+    """
+
+    def impl(A):
+        return fftshift(A)
+
+    with pytest.raises(
+        BodoError,
+        match="fftshift currently unsupported on input of type .*",
     ):
         bodo.jit(impl)(np.array([1, 2, 3, 4, 5], dtype=np.int64))
 
