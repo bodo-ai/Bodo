@@ -679,3 +679,23 @@ def test_date_part_timezone_unit_case(memory_leak_check):
         }
     )
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
+
+
+@pytest.mark.flaky(max_runs=3)
+def test_current_date_timestamp_tz_to_char_fmt(memory_leak_check):
+    """
+    Tests the following sequence of events:
+        - Call CURRENT_DATE
+        - Cast with :: TIMESTAMP WITH TIME ZONE
+        - Call TO_CHAR with a format string
+
+    The test re-runs up to 3 times in case the day changed between the calculation
+    of the refsol and the evaluation of the query.
+    """
+    table = pd.DataFrame({"I": list(range(5))})
+    query = "SELECT I, TO_CHAR(CURRENT_DATE::TIMESTAMP WITH TIME ZONE, 'YYYYMMDD'::text) as S from table1"
+    ctx = {"table1": table}
+    ts = pd.Timestamp.now()
+    as_str = "{:04}{:02}{:02}".format(ts.year, ts.month, ts.day)
+    answer = pd.DataFrame({"I": list(range(5)), "S": [as_str] * 5})
+    check_query(query, ctx, None, expected_output=answer, check_dtype=False)
