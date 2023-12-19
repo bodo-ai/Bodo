@@ -1585,9 +1585,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               assert operands.size() == 2 && fnOperation.operands.size() == 2;
               return ExprKt.BodoSQLKernel("div0", operands, List.of());
             }
-          case "NULLIFZERO":
-            assert operands.size() == 1;
-            return visitNullIfFunc(List.of(operands.get(0), new Expr.IntegerLiteral(0)));
           case "DATEADD":
           case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.

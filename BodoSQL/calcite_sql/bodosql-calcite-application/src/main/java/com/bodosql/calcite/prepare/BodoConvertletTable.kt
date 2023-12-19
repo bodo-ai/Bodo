@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
@@ -53,6 +54,7 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             SqlKind.OTHER_FUNCTION -> {
                 when (call.operator.name) {
                     "TRUNC" -> DateTruncConverter
+                    "NULLIFZERO" -> NullIfZeroConverter
                     else -> super.get(call)
                 }
             }
@@ -68,6 +70,19 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                 SqlTypeFamily.NUMERIC -> cx.rexBuilder.makeCall(SqlStdOperatorTable.TRUNCATE, operands)
                 else -> cx.rexBuilder.makeCall(DatetimeOperatorTable.DATE_TRUNC, operands)
             }
+        }
+    }
+
+    private object NullIfZeroConverter : SqlRexConvertlet {
+        override fun convertCall(cx: SqlRexContext, call: SqlCall): RexNode {
+            // Convert NULLIFZERO(a) into IFF(a = 0, NULL, a)
+            val originalOperands = call.operandList.map { op -> cx.convertExpression(op) }
+            val arg0 = originalOperands[0]
+            val literalZero = cx.rexBuilder.makeZeroLiteral(arg0.type)
+            val equalityCheck = cx.rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, listOf(arg0, literalZero))
+            // NULL returned in the "then" branch
+            val nullValue = cx.rexBuilder.makeNullLiteral(arg0.type)
+            return cx.rexBuilder.makeCall(CondOperatorTable.IFF_FUNC, listOf(equalityCheck, nullValue, arg0))
         }
     }
     private object AliasConverter : SqlRexConvertlet {
