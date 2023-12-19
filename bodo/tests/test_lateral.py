@@ -1,5 +1,7 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 
+import datetime
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -11,7 +13,7 @@ from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def simulate_lateral_flatten_array(
-    df, keep_cols, explode_col, output_idx, output_val, output_this
+    df, keep_cols, explode_col, output_idx, output_val, output_this, outer
 ):
     """
     Generates the expected results for a LATERAL FLATTEN operation on an array.
@@ -23,6 +25,7 @@ def simulate_lateral_flatten_array(
         output_idx (bool): whether to include the indices within the inner array in the output
         output_val (bool): whether to include the values within the inner array in the output
         output_this (bool): whether to include the replicated values of the exploded column
+        outer (bool): if true, ensure 1 row is generated even when the explode col is null/empty
     """
     keep_cols_idx = df.columns[list(keep_cols)]
     df_subset = df.loc[:, keep_cols_idx]
@@ -39,6 +42,9 @@ def simulate_lateral_flatten_array(
     for i in range(len(df)):
         sub_arr = column_to_explode.iloc[i]
         explode_length = 0 if sub_arr is None else len(sub_arr)
+        dummy_row = outer and (sub_arr is None or len(sub_arr) == 0)
+        if dummy_row:
+            explode_length = 1
         if explode_length == 0:
             continue
         for j in range(len(keep_cols)):
@@ -46,18 +52,24 @@ def simulate_lateral_flatten_array(
             for _ in range(explode_length):
                 out_dict[j].append(val)
         if output_idx:
-            out_dict["idx"].extend(list(range(explode_length)))
+            if dummy_row:
+                out_dict["idx"].append(None)
+            else:
+                out_dict["idx"].extend(list(range(explode_length)))
         if output_val:
-            out_dict["val"].extend(sub_arr)
+            if dummy_row:
+                out_dict["val"].append(None)
+            else:
+                out_dict["val"].extend(sub_arr)
         if output_this:
-            out_dict["this"].extend([sub_arr] * len(sub_arr))
+            out_dict["this"].extend([sub_arr] * explode_length)
     for i in range(len(keep_cols)):
         out_dict[i] = pd.Series(out_dict[i], dtype=df_subset.iloc[:, i].dtype)
     return pd.DataFrame(out_dict)
 
 
 def simulate_lateral_flatten_json(
-    df, keep_cols, explode_col, output_key, output_val, output_this
+    df, keep_cols, explode_col, output_key, output_val, output_this, outer
 ):
     """
     Generates the expected results for a LATERAL FLATTEN operation on a JSON object.
@@ -69,6 +81,7 @@ def simulate_lateral_flatten_json(
         output_key (bool): whether to include the keys from the JSON key-value pairs
         output_val (bool): whether to include the values from the JSON key-value pairs
         output_this (bool): whether to include the replicated values of the exploded column
+        outer (bool): if true, ensure 1 row is generated even when the explode col is null/empty
     """
     keep_cols_idx = df.columns[list(keep_cols)]
     df_subset = df.loc[:, keep_cols_idx]
@@ -93,6 +106,10 @@ def simulate_lateral_flatten_json(
             for k, v in json_obj.items():
                 keys.append(k)
                 vals.append(v)
+        if outer and (json_obj is None or json_obj is pd.NA or len(json_obj) == 0):
+            keys.append(None)
+            vals.append(None)
+            explode_length = 1
         if explode_length == 0:
             continue
         for j in range(len(keep_cols)):
@@ -113,18 +130,27 @@ def simulate_lateral_flatten_json(
 
 
 @pytest.mark.parametrize(
-    "output_idx, output_val, output_this",
+    "outer, output_idx, output_val, output_this",
     [
-        pytest.param(False, False, False, id="output_nothing", marks=pytest.mark.slow),
-        pytest.param(False, True, False, id="output_value", marks=pytest.mark.slow),
-        pytest.param(True, True, True, id="output_all"),
+        pytest.param(
+            True,
+            False,
+            False,
+            False,
+            id="output_nothing-with_outer",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            False, False, True, False, id="output_value", marks=pytest.mark.slow
+        ),
+        pytest.param(False, True, True, True, id="output_all"),
+        pytest.param(True, True, True, True, id="output_all-with_outer"),
     ],
 )
 @pytest.mark.parametrize(
     "keep_cols",
     [
         pytest.param((0,), id="keep_int", marks=pytest.mark.slow),
-        pytest.param((2,), id="keep_string", marks=pytest.mark.slow),
         pytest.param((0, 1, 2, 4), id="keep_all_but_string_array"),
     ],
 )
@@ -136,7 +162,13 @@ def simulate_lateral_flatten_json(
     ],
 )
 def test_lateral_flatten_array(
-    explode_col, keep_cols, output_idx, output_val, output_this, memory_leak_check
+    explode_col,
+    keep_cols,
+    output_idx,
+    output_val,
+    output_this,
+    outer,
+    memory_leak_check,
 ):
     """
     Tests the lateral_flatten kernel with exploding array columns.
@@ -148,14 +180,14 @@ def test_lateral_flatten_array(
             "b": pd.Series(
                 [
                     [1],
-                    [2, 3],
+                    None,
                     [4, 5, 6],
                     [],
                     [7],
                     [8, 9],
                     [10, 11, 12],
                     [13],
-                    [14],
+                    [14, None],
                     [15],
                 ]
             ),
@@ -180,7 +212,7 @@ def test_lateral_flatten_array(
         }
     )
     answer = simulate_lateral_flatten_array(
-        df, keep_cols, explode_col, output_idx, output_val, output_this
+        df, keep_cols, explode_col, output_idx, output_val, output_this, outer
     )
     global_1 = MetaType((0, 1, 2, 3, 4))
     global_2 = MetaType(keep_cols)
@@ -191,7 +223,9 @@ def test_lateral_flatten_array(
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
         )
-        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, explode_col, global_4)
+        T2 = bodo.libs.lateral.lateral_flatten(
+            T1, global_2, explode_col, global_4, outer
+        )
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T2), 1, None)
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
         return df2
@@ -209,16 +243,15 @@ def test_lateral_flatten_array(
 @pytest.mark.parametrize(
     "output_key, output_val, output_this",
     [
-        pytest.param(True, False, False, id="output_key", marks=pytest.mark.slow),
         pytest.param(False, True, False, id="output_value", marks=pytest.mark.slow),
         pytest.param(True, True, True, id="output_all"),
     ],
 )
 @pytest.mark.parametrize(
-    "keep_cols",
+    "outer, keep_cols",
     [
-        pytest.param((2,), id="keep_string", marks=pytest.mark.slow),
-        pytest.param((0, 1, 2), id="keep_all"),
+        pytest.param(False, (2,), id="keep_string"),
+        pytest.param(True, (0, 1, 2), id="keep_all-with_outer"),
     ],
 )
 @pytest.mark.parametrize(
@@ -233,7 +266,7 @@ def test_lateral_flatten_array(
                 {"hex": None, "name": "midnight"},
             ],
             pa.struct([pa.field("hex", pa.string()), pa.field("name", pa.string())]),
-            id="explode_struct_string",
+            id="explode_struct-string",
         ),
         pytest.param(
             [
@@ -249,7 +282,7 @@ def test_lateral_flatten_array(
                     pa.field("scores", pa.list_(pa.float64())),
                 ]
             ),
-            id="explode_struct_float_arrays",
+            id="explode_struct-float_arrays",
         ),
         pytest.param(
             [
@@ -274,7 +307,7 @@ def test_lateral_flatten_array(
                     pa.field("cities", pa.list_(pa.string())),
                 ]
             ),
-            id="explode_struct_string_arrays",
+            id="explode_struct-string_arrays",
         ),
         pytest.param(
             [
@@ -293,7 +326,7 @@ def test_lateral_flatten_array(
                     )
                 ]
             ),
-            id="explode_struct_double_nested_int_arrays",
+            id="explode_struct-double_nested_int_arrays",
         ),
         pytest.param(
             [
@@ -304,30 +337,53 @@ def test_lateral_flatten_array(
                 {},
             ],
             pa.map_(pa.string(), pa.int64()),
-            id="explode_map_int",
+            id="explode-map_int",
         ),
         pytest.param(
             [
                 {
-                    "RPDR_S8": {"name": "BTDQ", "rank": 1},
-                    "RPDRAS_S3": {"name": "TM", "rank": 1},
+                    "RPDR_S8": {"name": "BTDQ", "rank": 1, "dates": None},
+                    "RPDRAS_S3": {"name": "TM", "rank": 1, "dates": []},
                 },
-                {"RPDRAS_S2": {"name": "KZ", "rank": 2}, "RPDR_S2": None},
-                {"RPDR_S7": {"name": "VC", "rank": 1}},
                 {
-                    "RPDR_S1": {"name": "PC", "rank": 9},
-                    "RPDR_S12": {"name": "WVD", "rank": 7},
-                    "RPDR_S10": {"name": "VVM", "rank": 14},
+                    "RPDRAS_S2": {
+                        "name": "KZ",
+                        "rank": 2,
+                        "dates": [datetime.date(2023, 1, 1)],
+                    },
+                    "RPDR_S2": None,
+                },
+                {"RPDR_S7": {"name": "VC", "rank": 1, "dates": [None]}},
+                {
+                    "RPDR_S1": {
+                        "name": "PC",
+                        "rank": 9,
+                        "dates": [
+                            datetime.date(2023, 7, 4),
+                            datetime.date(2023, 10, 15),
+                            datetime.date(2023, 4, 1),
+                        ],
+                    },
+                    "RPDR_S12": {"name": "WVD", "rank": 7, "dates": None},
+                    "RPDR_S10": {
+                        "name": "VVM",
+                        "rank": 14,
+                        "dates": [datetime.date(1999, 12, 31), None],
+                    },
                 },
                 {},
             ],
             pa.map_(
                 pa.string(),
                 pa.struct(
-                    [pa.field("name", pa.string()), pa.field("rank", pa.int32())]
+                    [
+                        pa.field("name", pa.string()),
+                        pa.field("rank", pa.int32()),
+                        pa.field("dates", pa.large_list(pa.date32())),
+                    ]
                 ),
             ),
-            id="explode_map_struct",
+            id="explode_map-struct_string_int_date_list",
         ),
     ],
 )
@@ -338,6 +394,7 @@ def test_lateral_flatten_json(
     output_key,
     output_val,
     output_this,
+    outer,
     memory_leak_check,
 ):
     """
@@ -346,27 +403,30 @@ def test_lateral_flatten_json(
 
     df = pd.DataFrame(
         {
-            "a": pd.Series(range(10), dtype=np.int64),
+            "a": pd.Series(range(13), dtype=np.int64),
             "b": pd.Series(
                 [
                     explode_col_values[0],
                     explode_col_values[1],
+                    None,
                     explode_col_values[2],
                     explode_col_values[3],
                     explode_col_values[2],
+                    explode_col_values[4],
                     explode_col_values[1],
                     explode_col_values[0],
+                    None,
                     None,
                     explode_col_values[3],
                     explode_col_values[4],
                 ],
                 dtype=pd.ArrowDtype(val_type),
             ),
-            "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U".split(","),
+            "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U,VW,XYZ,".split(","),
         }
     )
     answer = simulate_lateral_flatten_json(
-        df, keep_cols, 1, output_key, output_val, output_this
+        df, keep_cols, 1, output_key, output_val, output_this, outer
     )
     global_1 = MetaType((0, 1, 2))
     global_2 = MetaType(keep_cols)
@@ -377,7 +437,7 @@ def test_lateral_flatten_json(
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
         )
-        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, 1, global_4)
+        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, 1, global_4, outer)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T2), 1, None)
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
         return df2
@@ -457,7 +517,7 @@ def test_lateral_flatten_with_array_agg(memory_leak_check):
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
         )
-        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, 1, global_4)
+        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, 1, global_4, False)
         # First array_agg
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T2), 1, None)
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
@@ -472,7 +532,7 @@ def test_lateral_flatten_with_array_agg(memory_leak_check):
         T3 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df3), (), global_1, 2
         )
-        T4 = bodo.libs.lateral.lateral_flatten(T3, global_2, 1, global_4)
+        T4 = bodo.libs.lateral.lateral_flatten(T3, global_2, 1, global_4, False)
         # Second array_agg
         index_2 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T4), 1, None)
         df4 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T4,), index_2, global_3)
@@ -532,7 +592,7 @@ def test_lateral_streaming(memory_leak_check):
             T2 = bodo.hiframes.table.table_local_filter(
                 T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
             )
-            T3 = bodo.libs.lateral.lateral_flatten(T2, global_2, 1, global_3)
+            T3 = bodo.libs.lateral.lateral_flatten(T2, global_2, 1, global_3, False)
             __bodo_is_last_streaming_output_1 = (_iter_1 * batch_size) >= _temp1
             bodo.libs.table_builder.table_builder_append(
                 __bodo_streaming_batches_table_builder_1, T3
