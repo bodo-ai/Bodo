@@ -19,6 +19,7 @@ uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
         const bodo::vector<uint32_t>& build_hashes =
             is_local ? this->groupby_partition->build_table_groupby_hashes
                      : this->groupby_shuffle_state->groupby_hashes;
+
         return build_hashes[iRow];
     } else {
         const std::shared_ptr<uint32_t[]>& in_hashes =

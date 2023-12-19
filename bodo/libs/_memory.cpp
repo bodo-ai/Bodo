@@ -1,6 +1,7 @@
 #include "_memory.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <numeric>
@@ -21,8 +22,6 @@
 
 #include "_utils.h"
 
-#define MAX_NUM_STORAGE_MANAGERS 4
-
 #undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(expr, msg, lhs)  \
     {                                           \
@@ -32,6 +31,7 @@
     }
 
 using namespace std::chrono;
+constexpr uint8_t MAX_NUM_STORAGE_MANAGERS = 4;
 
 namespace bodo {
 
@@ -128,11 +128,10 @@ SizeClass::SizeClass(
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
                      /*offset*/ 0);
     if (ptr == MAP_FAILED || ptr == nullptr) {
-        throw std::runtime_error(std::string("SizeClass::SizeClass: Could not "
-                                             "allocate memory for SizeClass ") +
-                                 std::to_string(block_size) +
-                                 std::string(". Failed with errno: ") +
-                                 std::strerror(errno) + std::string("."));
+        throw std::runtime_error(
+            fmt::format("SizeClass::SizeClass: Could not allocate memory for "
+                        "SizeClass {}. Failed with errno: {}.",
+                        block_size, std::strerror(errno)));
     }
     this->address_ = static_cast<uint8_t*>(ptr);
 }
@@ -273,7 +272,6 @@ int64_t SizeClass::findMappedUnpinnedFrame() const noexcept {
             }
         }
     }
-
     // Return -1 if not found
     return -1;
 }
@@ -523,7 +521,115 @@ arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
     return arrow::Status::OK();
 }
 
-//// StorageOptions and BufferPoolOptions
+void BufferPoolStats::Print(FILE* out) const {
+    fmt::println(out, "{0:─^43}\n{1:─^43}", " Pool Current Metrics ", "");
+    fmt::println(out, "Curr Bytes Allocated:           {0:>11}",
+                 BytesToHumanReadableString(curr_bytes_allocated));
+    fmt::println(out, "Curr Bytes In Memory:           {0:>11}",
+                 BytesToHumanReadableString(curr_bytes_in_memory));
+    fmt::println(out, "Curr Bytes Malloced:            {0:>11}",
+                 BytesToHumanReadableString(curr_bytes_malloced));
+    fmt::println(out, "Curr Bytes Pinned:              {0:>11}",
+                 BytesToHumanReadableString(curr_bytes_pinned));
+    fmt::println(out, "Curr Num Allocations:           {0:>11}",
+                 curr_num_allocations);
+
+    fmt::println(out, "{1:─^43}\n{0:─^43}\n{1:─^43}", " Overall Total Counts ",
+                 "");
+    fmt::println(out, "Total Num Allocations:          {0:>11}",
+                 total_num_allocations);
+    fmt::println(out, "Total Num Reallocs:             {0:>11}",
+                 total_num_reallocations);
+    fmt::println(out, "Total Num Pins:                 {0:>11}",
+                 total_num_pins);
+    fmt::println(out, "Total Num Unpins:               {0:>11}",
+                 total_num_unpins);
+    fmt::println(out, "Total Num Frees from Spill:     {0:>11}",
+                 total_num_frees_from_spill);
+    fmt::println(out, "Total Num Reallocs Reused:      {0:>11}",
+                 total_num_reallocs_reused);
+
+    fmt::println(out, "{1:─^43}\n{0:─^43}\n{1:─^43}",
+                 " Overall Total Size Metrics ", "");
+    fmt::println(out, "Total Bytes Allocated:          {0:>11}",
+                 BytesToHumanReadableString(total_bytes_allocated));
+    fmt::println(out, "Total Bytes Requested:          {0:>11}",
+                 BytesToHumanReadableString(total_bytes_requested));
+    fmt::println(out, "Total Bytes Malloced:           {0:>11}",
+                 BytesToHumanReadableString(total_bytes_malloced));
+    fmt::println(out, "Total Bytes Pinned:             {0:>11}",
+                 BytesToHumanReadableString(total_bytes_pinned));
+    fmt::println(out, "Total Bytes Unpinned:           {0:>11}",
+                 BytesToHumanReadableString(total_bytes_unpinned));
+    fmt::println(out, "Total Bytes Reused in Realloc:  {0:>11}",
+                 BytesToHumanReadableString(total_bytes_reallocs_reused));
+
+    fmt::println(out, "{1:─^43}\n{0:─^43}\n{1:─^43}", " Overall Peak Metrics ",
+                 "");
+    fmt::println(out, "Peak Bytes Allocated:           {0:>11}",
+                 BytesToHumanReadableString(max_bytes_allocated));
+    fmt::println(out, "Peak Bytes In Memory:           {0:>11}",
+                 BytesToHumanReadableString(max_bytes_in_memory));
+    fmt::println(out, "Peak Bytes Malloced:            {0:>11}",
+                 BytesToHumanReadableString(max_bytes_malloced));
+    fmt::println(out, "Peak Bytes Pinned:              {0:>11}",
+                 BytesToHumanReadableString(max_bytes_pinned));
+
+    fmt::println(out, "{1:─^43}\n{0:─^43}\n{1:─^43}", " Total Time Metrics ",
+                 "");
+    fmt::println(out, "Total Allocation Time:          {0:>11}",
+                 total_allocation_time);
+    fmt::println(out, "Total Malloc Time:              {0:>11}",
+                 total_malloc_time);
+    fmt::println(out, "Total Realloc Time:             {0:>11}",
+                 total_realloc_time);
+    fmt::println(out, "Total Free Time:                {0:>11}",
+                 total_free_time);
+    fmt::println(out, "Total Pin Time:                 {0:>11}",
+                 total_pin_time);
+    fmt::println(out, "Total Find Evict Time:          {0:>11}",
+                 total_find_evict_time);
+}
+
+void BufferPoolStats::AddAllocatedBytes(uint64_t diff) {
+    curr_bytes_allocated += diff;
+    curr_num_allocations++;
+    total_bytes_allocated += diff;
+    total_num_allocations++;
+
+    if (curr_bytes_allocated > max_bytes_allocated) {
+        max_bytes_allocated = curr_bytes_allocated;
+    }
+}
+
+void BufferPoolStats::AddInMemoryBytes(uint64_t diff) {
+    curr_bytes_in_memory += diff;
+
+    if (curr_bytes_in_memory > max_bytes_in_memory) {
+        max_bytes_in_memory = curr_bytes_in_memory;
+    }
+}
+
+void BufferPoolStats::AddPinnedBytes(uint64_t diff) {
+    curr_bytes_pinned += diff;
+    total_bytes_pinned += diff;
+
+    if (curr_bytes_pinned > max_bytes_pinned) {
+        max_bytes_pinned = curr_bytes_pinned;
+    }
+}
+
+void BufferPoolStats::AddMallocedBytes(uint64_t diff) {
+    curr_bytes_malloced += diff;
+    total_bytes_malloced += diff;
+
+    if (curr_bytes_malloced > max_bytes_malloced) {
+        max_bytes_malloced = curr_bytes_malloced;
+    }
+}
+
+//// BufferPoolOptions
+
 BufferPoolOptions BufferPoolOptions::Defaults() {
     BufferPoolOptions options;
 
@@ -532,9 +638,10 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         options.debug_mode = !std::strcmp(debug_mode_env_, "1");
     }
 
-    if (const char* tracing_mode_env_ =
-            std::getenv("BODO_BUFFER_POOL_TRACING_MODE")) {
-        options.tracing_mode = !std::strcmp(tracing_mode_env_, "1");
+    if (const char* tracing_level_env_ =
+            std::getenv("BODO_BUFFER_POOL_TRACING_LEVEL")) {
+        options.trace_level =
+            static_cast<uint8_t>(std::stoi(tracing_level_env_));
     }
 
     // Disable Storage Manager Parsing
@@ -546,7 +653,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         for (uint8_t i = 1; i <= MAX_NUM_STORAGE_MANAGERS; i++) {
             auto storage_option = StorageOptions::Defaults(i);
             if (storage_option != nullptr) {
-                storage_option->tracing_mode = options.tracing_mode;
+                storage_option->tracing_mode = options.tracing_mode();
                 options.storage_options.push_back(storage_option);
             } else {
                 break;
@@ -753,7 +860,7 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
         this->size_classes_.emplace_back(std::make_unique<SizeClass>(
             i, std::span(this->storage_managers_), num_blocks,
             size_class_bytes_[i], this->options_.spill_on_unpin,
-            this->options_.move_on_unpin, this->options_.tracing_mode));
+            this->options_.move_on_unpin, this->options_.tracing_mode()));
     }
 }
 
@@ -768,16 +875,16 @@ inline int64_t BufferPool::size_align(int64_t size, int64_t alignment) const {
     return (remainder == 0) ? size : (size + alignment - remainder);
 }
 
-int64_t BufferPool::max_memory() const { return this->stats_.max_memory(); }
-
-int64_t BufferPool::bytes_allocated() const {
-    return this->stats_.bytes_allocated();
+int64_t BufferPool::max_memory() const {
+    return this->stats_.max_bytes_allocated;
 }
 
-uint64_t BufferPool::bytes_pinned() const { return this->bytes_pinned_.load(); }
+int64_t BufferPool::bytes_allocated() const {
+    return this->stats_.curr_bytes_allocated;
+}
 
-inline void BufferPool::update_pinned_bytes(int64_t diff) {
-    this->bytes_pinned_.fetch_add(diff);
+uint64_t BufferPool::bytes_pinned() const {
+    return this->stats_.curr_bytes_pinned;
 }
 
 std::string BufferPool::backend_name() const { return "bodo"; }
@@ -807,6 +914,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
             "BufferPool::best_effort_evict_helper: Cannot evict blocks when "
             "spilling is not enabled/available!");
     }
+
+    auto start = start_now(this->options_.tracing_mode());
 
     // Attempt to evict smaller size classes
     int64_t bytes_rem = static_cast<int64_t>(bytes);
@@ -845,6 +954,11 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     // haven't, we'll come back to these after looking through larger
     // SizeClass-es.
     if (bytes_rem <= 0) {
+        if (this->options_.tracing_mode()) {
+            milli_double dur = steady_clock::now() - start.value();
+            this->stats_.total_find_evict_time += dur;
+        }
+
         // Evict the identified frames. These shouldn't fail due to spill
         // locations not found errors since we already checked that spilling is
         // enabled.
@@ -855,9 +969,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
             if (!evict_status.ok()) {
                 return evict_status;
             }
-            this->stats_.UpdateAllocatedBytes(
-                -this->size_class_bytes_[evicting_frames_size_class[i]],
-                /*is_free*/ true);
+            this->stats_.curr_bytes_in_memory -=
+                this->size_class_bytes_[evicting_frames_size_class[i]];
         }
         return true;
     }
@@ -872,13 +985,17 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         auto num_frames = size_class->getNumBlocks();
         for (uint64_t j = 0; j < num_frames; j++) {
             if (size_class->isFrameMapped(j) && !size_class->isFramePinned(j)) {
+                if (this->options_.tracing_mode()) {
+                    milli_double dur = steady_clock::now() - start.value();
+                    this->stats_.total_find_evict_time += dur;
+                }
+
                 auto evict_status = size_class->EvictFrame(j);
                 if (!evict_status.ok()) {
                     return evict_status;
                 }
 
-                this->stats_.UpdateAllocatedBytes(-this->size_class_bytes_[i],
-                                                  /*is_free*/ true);
+                this->stats_.curr_bytes_in_memory -= this->size_class_bytes_[i];
                 return true;
             }
         }
@@ -893,9 +1010,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         if (!evict_status.ok()) {
             return evict_status;
         }
-        this->stats_.UpdateAllocatedBytes(
-            -this->size_class_bytes_[evicting_frames_size_class[i]],
-            /*is_free*/ true);
+        this->stats_.curr_bytes_in_memory -=
+            this->size_class_bytes_[evicting_frames_size_class[i]];
     }
 
     // Even though we might have reduced memory pressure by spilling some
@@ -948,6 +1064,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                 << std::endl;
         }
     }
+
     return ::arrow::Status::OK();
 }
 
@@ -977,6 +1094,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         return ::arrow::Status::OK();
     }
 
+    auto start = start_now(this->options_.tracing_mode());
+
     const int64_t aligned_size = this->size_align(size, alignment);
 
     // Get a lock on the BufferPool state for the duration
@@ -987,6 +1106,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
 
     if (aligned_size <= static_cast<int64_t>(this->malloc_threshold_)) {
         // Use malloc
+        auto start = start_now(this->options_.tracing_mode());
 
         // If non-pinned memory is less than needed, immediately fail
         // if enforce_max_limit_during_allocation is set.
@@ -1003,15 +1123,15 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // being enforced.
         int64_t bytes_available_in_mem =
             static_cast<int64_t>(this->memory_size_bytes_) -
-            this->bytes_allocated();
+            static_cast<int64_t>(this->stats_.curr_bytes_in_memory);
 
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (aligned_size > bytes_available_in_mem) {
-            CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ aligned_size -
-                                                        bytes_available_in_mem,
-                                                    /*caller*/ "Allocate"),
-                                "BufferPool::Allocate failed: ");
+            CHECK_ARROW_MEM_RET(
+                this->evict_handler(aligned_size - bytes_available_in_mem,
+                                    "Allocate"),
+                "BufferPool::Allocate failed: ");
         }
 
         // There's essentially two options:
@@ -1039,13 +1159,20 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         *out = static_cast<uint8_t*>(result);
 
         // Update statistics
-        this->update_pinned_bytes(aligned_size);
-        this->stats_.UpdateAllocatedBytes(aligned_size);
+        this->stats_.AddMallocedBytes(aligned_size);
+        this->stats_.AddAllocatedBytes(aligned_size);
+        this->stats_.AddInMemoryBytes(aligned_size);
+        this->stats_.AddPinnedBytes(aligned_size);
 
         // Zero-pad to match Arrow
         // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L932
         // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/buffer.h#L125
         this->zero_padding(static_cast<uint8_t*>(result), size, aligned_size);
+
+        if (this->options_.tracing_mode()) {
+            milli_double dur = steady_clock::now() - start.value();
+            this->stats_.total_malloc_time += dur;
+        }
 
     } else {
         // Mmap-ed memory is always page (typically 4096B) aligned
@@ -1089,7 +1216,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // being enforced.
         int64_t bytes_available_in_mem =
             static_cast<int64_t>(this->memory_size_bytes_) -
-            this->bytes_allocated();
+            static_cast<int64_t>(this->stats_.curr_bytes_in_memory);
 
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
@@ -1135,9 +1262,12 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // make sure to zero pad the buffer.
 
         // Update statistics
-        this->update_pinned_bytes(size_class_bytes);
-        this->stats_.UpdateAllocatedBytes(size_class_bytes);
+        this->stats_.AddAllocatedBytes(size_class_bytes);
+        this->stats_.AddInMemoryBytes(size_class_bytes);
+        this->stats_.AddPinnedBytes(size_class_bytes);
     }
+
+    this->stats_.total_bytes_requested += aligned_size;
 
     // Add debug markers.
     // See notes here about why these memory markers are useful:
@@ -1145,6 +1275,10 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     // Only fill up a couple cache lines to minimize overhead.
     memset(*out, 0xCB, std::min(size, (int64_t)256));
 
+    if (this->options_.tracing_mode()) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_allocation_time += dur;
+    }
     return ::arrow::Status::OK();
 }
 
@@ -1198,6 +1332,11 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
     } else {
         frame_pinned = true;
         ::free(ptr);
+
+        if (size_aligned != -1) {
+            this->stats_.curr_bytes_malloced -= size_aligned;
+        }
+
 #ifdef __linux__
         // malloc doesn't always return memory back to the OS after
         // a 'free'. It may keep the freed memory for use by future
@@ -1220,10 +1359,12 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
 
     if (size_aligned != -1) {
         if (frame_pinned) {
-            this->update_pinned_bytes(-size_aligned);
+            this->stats_.curr_bytes_pinned -= size_aligned;
         }
-        this->stats_.UpdateAllocatedBytes(-size_aligned, /*is_free*/ true);
+        this->stats_.curr_bytes_in_memory -= size_aligned;
+        this->stats_.curr_bytes_allocated -= size_aligned;
     }
+    this->stats_.curr_num_allocations--;
 }
 
 void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
@@ -1247,6 +1388,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     // lock will be released when the function ends (even if
     // there's an exception).
     std::scoped_lock lock(this->mtx_);
+    auto start = start_now(this->options_.tracing_mode());
 
     // Evicted frames should be deleted directly from disk
     auto swip_info = extract_swip_ptr(buffer);
@@ -1256,10 +1398,17 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         auto status = this->storage_managers_[storage_manager_idx]->DeleteBlock(
             block_id, this->size_class_bytes_[size_class_idx]);
 
-        // For simplicity of free, we will print any failures as warnings for
-        // now
-        if (!status.ok()) {
+        // For simplicity of free, we will print failures as warnings for now
+        if (status.ok()) {
+            this->stats_.total_num_frees_from_spill++;
+            this->stats_.curr_bytes_allocated -=
+                this->size_class_bytes_[size_class_idx];
+        } else {
             std::cerr << "Free Failed. " << status.ToString() << std::endl;
+        }
+
+        if (this->options_.tracing_mode()) {
+            this->stats_.total_free_time += steady_clock::now() - start.value();
         }
         return;
     }
@@ -1275,6 +1424,9 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     // XXX In the case where we still don't know the size of the allocation and
     // it was through malloc, we can't update stats_. Should we just enforce
     // that size be provided?
+    if (this->options_.tracing_mode()) {
+        this->stats_.total_free_time += steady_clock::now() - start.value();
+    }
 }
 
 bool BufferPool::IsPinned(uint8_t* buffer, int64_t size,
@@ -1369,13 +1521,22 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
     // otherwise we should change the SizeClass (to make sure assumptions
     // in other places still hold).
     // In case of mmap-allocation, old_size_aligned is the size of the block.
-    // TODO To handle the size reduction case, change logic to check that the
-    // size-class remains the same (and that it doesn't drop into the malloc
-    // bucket).
-    if (is_mmap_alloc && (new_size >= old_size) &&
-        (new_size <= old_size_aligned)) {
+    const int64_t new_size_aligned = this->size_align(new_size, alignment);
+
+    if (
+        // Both are mmap allocs
+        is_mmap_alloc &&
+        (new_size_aligned > static_cast<int64_t>(this->malloc_threshold_)) &&
+        // Both are in the same SizeClass
+        (size_class_idx == this->find_size_class_idx(new_size_aligned))) {
+        this->stats_.total_bytes_reallocs_reused += old_size_aligned;
+        this->stats_.total_num_reallocs_reused++;
+        this->stats_.total_bytes_requested +=
+            new_size_aligned - old_size_aligned;
         return ::arrow::Status::OK();
     }
+
+    auto start = start_now(this->options_.tracing_mode());
 
     // Allocate new_size
     // Point ptr to the new memory. We have a pointer to old
@@ -1412,6 +1573,12 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
     this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
                       old_size_aligned);
 
+    stats_.total_num_reallocations++;
+    if (this->options_.tracing_mode()) {
+        milli_double dur = steady_clock::now() - start.value();
+        stats_.total_realloc_time += dur;
+    }
+
     return ::arrow::Status::OK();
 }
 
@@ -1428,6 +1595,7 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
     // there's an exception).
     std::scoped_lock lock(this->mtx_);
 
+    auto start = start_now(this->options_.tracing_mode());
     auto swip_info = extract_swip_ptr(*ptr);
 
     if (swip_info.has_value()) {
@@ -1456,14 +1624,13 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
         // being enforced.
         int64_t bytes_available_in_mem =
             static_cast<int64_t>(this->memory_size_bytes_) -
-            this->bytes_allocated();
+            static_cast<int64_t>(this->stats_.curr_bytes_in_memory);
 
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (static_cast<int64_t>(block_bytes) > bytes_available_in_mem) {
             int64_t rem_bytes = block_bytes - bytes_available_in_mem;
-            CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ rem_bytes,
-                                                    /*caller*/ "Pin"),
+            CHECK_ARROW_MEM_RET(this->evict_handler(rem_bytes, "Pin"),
                                 "BufferPool::Pin failed: ");
         }
 
@@ -1482,9 +1649,8 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
                                         storage_manager_idx),
             "Pin failed. Error when reading back block from storage:");
 
-        this->update_pinned_bytes(block_bytes);
-        this->stats_.UpdateAllocatedBytes(block_bytes);
-        return arrow::Status::OK();
+        this->stats_.AddPinnedBytes(block_bytes);
+        this->stats_.AddInMemoryBytes(block_bytes);
 
     } else {
         // If ptr is swizzled, then just need to mark the
@@ -1499,10 +1665,17 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
 
         if (!this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
             this->size_classes_[size_class_idx]->PinFrame(frame_idx);
-            this->update_pinned_bytes(this->size_class_bytes_[size_class_idx]);
+            this->stats_.AddPinnedBytes(
+                this->size_class_bytes_[size_class_idx]);
         }
-        return arrow::Status::OK();
     }
+
+    if (this->options_.tracing_mode()) {
+        milli_double dur = steady_clock::now() - start.value();
+        this->stats_.total_pin_time += dur;
+    }
+    this->stats_.total_num_pins++;
+    return arrow::Status::OK();
 }
 
 void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
@@ -1535,7 +1708,8 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
     if (this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
         bool was_spilled =
             this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
-        this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
+        this->stats_.curr_bytes_pinned -=
+            this->size_class_bytes_[size_class_idx];
 
         // In the spill_on_unpin case, we will spill any unpinned frames.
         // In the move_on_unpin case, we might've spilled the frame if
@@ -1545,10 +1719,12 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
         // of these macros are defined, so we can skip this check entirely
         // in the regular case.
         if (was_spilled) {
-            this->stats_.UpdateAllocatedBytes(
-                -this->size_class_bytes_[size_class_idx], /*is_free*/ true);
+            this->stats_.curr_bytes_in_memory -=
+                this->size_class_bytes_[size_class_idx];
         }
     }
+
+    this->stats_.total_num_unpins++;
 }
 
 SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {
@@ -1572,13 +1748,22 @@ void BufferPool::Cleanup() {
         manager->Cleanup();
     }
 
-    if (this->options_.tracing_mode) {
-        const char* COL_NAMES[8] = {
-            "Size Class",       "Blocks Spilled",     "Time Spilling",
-            "Blocks Read Back", "Time Reading Back",  "Num Advise Away",
-            "Time Advise Away", "Time Find Unmapped",
+    // Determine what rank to print based on tracing_level
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    bool print_on_rank = (this->options_.trace_level >= 2) ||
+                         ((this->options_.trace_level == 1) && (rank == 0));
 
+    if (print_on_rank) {
+        this->stats_.Print(stderr);
+    }
+
+    if (print_on_rank) {
+        const char* COL_NAMES[8] = {
+            "SizeClass",     "Num Spilled", "Spill Time",   "Num Readback",
+            "Readback Time", "Num Madvise", "Madvise Time", "Unmapped Time",
         };
+
         std::vector<size_t> col_widths(8);
         std::transform(std::begin(COL_NAMES), std::end(COL_NAMES),
                        col_widths.begin(), strlen);
@@ -1623,7 +1808,7 @@ void BufferPool::Cleanup() {
         fmt::println(stderr, "");
     }
 
-    if (this->options_.tracing_mode && this->storage_managers_.size() > 0) {
+    if (this->storage_managers_.size() > 0 && print_on_rank) {
         std::vector<std::string_view> manager_names;
         for (auto& manager : this->storage_managers_) {
             manager_names.push_back(manager->storage_name);

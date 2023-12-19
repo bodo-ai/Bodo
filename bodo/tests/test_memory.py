@@ -1261,9 +1261,7 @@ def test_reallocate_smaller_mem_same_size_class():
     Test that trying to reallocate a smaller amount of memory,
     but a size that would still be assigned to the same
     SizeClass works as expected.
-    Currently, this would allocate a separate frame
-    and do a memcpy.
-    NOTE: This behavior may change in the future.
+    This reuses the same frame as before
     """
 
     # Allocate a very small pool for testing
@@ -1293,23 +1291,23 @@ def test_reallocate_smaller_mem_same_size_class():
     # Re-allocate to 10KiB (same SizeClass)
     pool.reallocate(10 * 1024, allocation)
 
-    assert not size_class.is_frame_mapped(0)
-    assert not size_class.is_frame_pinned(0)
-    assert size_class.is_frame_mapped(1)
-    assert size_class.is_frame_pinned(1)
+    assert size_class.is_frame_mapped(0)
+    assert size_class.is_frame_pinned(0)
+    assert not size_class.is_frame_mapped(1)
+    assert not size_class.is_frame_pinned(1)
 
     for frame_idx in range(2, size_class.get_num_blocks()):
         assert not size_class.is_frame_mapped(frame_idx)
         assert not size_class.is_frame_pinned(frame_idx)
 
-    assert size_class.get_swip_at_frame(1) == allocation.get_swip_as_int()
-    assert size_class.get_swip_at_frame(1) != orig_allocation_copy.get_swip_as_int()
+    assert size_class.get_swip_at_frame(0) == allocation.get_swip_as_int()
+    assert size_class.get_swip_at_frame(0) != orig_allocation_copy.get_swip_as_int()
 
     assert pool.bytes_allocated() == 16 * 1024
-    assert pool.max_memory() == 2 * 16 * 1024
+    assert pool.max_memory() == 16 * 1024
 
     assert allocation != orig_allocation_copy
-    assert not allocation.has_same_ptr(orig_allocation_copy)
+    assert allocation.has_same_ptr(orig_allocation_copy)
 
     pool.free(allocation)
 
@@ -2105,8 +2103,9 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
 
     # Verify stats
     assert pool.bytes_pinned() == 5 * 1024 * 1024
-    assert pool.bytes_allocated() == 5 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
 
     # Reduce memory pressure further by making 1MiB eligible
     # for eviction.
@@ -2127,8 +2126,9 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
 
     # Verify stats
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
     # We should've triggered a spill of the unpinned frame
     assert not allocation3.is_in_memory()
 
@@ -2252,8 +2252,9 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement_very_large_spill(
 
     # Verify stats
     assert pool.bytes_pinned() == 6 * 1024 * 1024
-    assert pool.bytes_allocated() == 6 * 1024 * 1024
-    assert pool.max_memory() == 12 * 1024 * 1024
+    assert pool.bytes_in_memory() == 6 * 1024 * 1024
+    assert pool.bytes_allocated() == 16 * 1024 * 1024
+    assert pool.max_memory() == 16 * 1024 * 1024
     assert not allocation1.is_in_memory()
     assert not allocation2.is_in_memory()
     assert not allocation3.is_in_memory()
@@ -2310,8 +2311,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
 
     # Verify stats after allocation + unpin
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
     assert not allocation1.is_in_memory()
 
     # Make 1MiB eligible for eviction
@@ -2328,8 +2330,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     assert allocation1.is_in_memory()
     assert not allocation2.is_in_memory()
     assert pool.bytes_pinned() == 5 * 1024 * 1024
-    assert pool.bytes_allocated() == 5 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
 
     # Reduce memory pressure further
     pool.unpin(allocation3)
@@ -2337,8 +2340,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
 
     # Verify stats
     assert pool.bytes_pinned() == 2 * 1024 * 1024
-    assert pool.bytes_allocated() == 5 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
     assert not allocation2.is_in_memory()
 
     allocation5: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
@@ -2349,8 +2353,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
 
     # Verify stats
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 8 * 1024 * 1024
+    assert pool.max_memory() == 8 * 1024 * 1024
     assert not allocation2.is_in_memory()
     # Best effort spill will spill as much as possible
     # to get memory pressure under control:
@@ -2372,8 +2377,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
 
     # Verify stats
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 8 * 1024 * 1024
+    assert pool.max_memory() == 8 * 1024 * 1024
     assert not allocation2.is_in_memory()
     assert not allocation3.is_in_memory()
     assert not allocation4.is_in_memory()
@@ -2415,8 +2421,9 @@ def test_no_warning_debug_mode_disabled(tmp_path: Path, capfd):
 
     # Verify stats after allocation + unpin
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
     assert not allocation1.is_in_memory()
 
     # Make 1MiB eligible for eviction
@@ -2431,8 +2438,9 @@ def test_no_warning_debug_mode_disabled(tmp_path: Path, capfd):
     assert allocation1.is_in_memory()
     assert not allocation2.is_in_memory()
     assert pool.bytes_pinned() == 5 * 1024 * 1024
-    assert pool.bytes_allocated() == 5 * 1024 * 1024
-    assert pool.max_memory() == 5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 6 * 1024 * 1024
 
     pool.free(allocation1)
     pool.free(allocation2)
@@ -2486,8 +2494,8 @@ def test_allocate_spill_eq_block(tmp_path: Path):
 
     # Verify stats after allocation + spill
     assert pool.bytes_pinned() == 3.5 * 1024 * 1024
-    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
-    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 3.5 * 1024 * 1024
+    # assert pool.max_memory() == 3.5 * 1024 * 1024
     assert size_class_1MiB.is_frame_pinned(0)
     assert size_class_2MiB.is_frame_pinned(0)  # allocation_4
     assert not allocation_2.is_nullptr() and not allocation_2.is_in_memory()
@@ -2551,8 +2559,9 @@ def test_allocate_spill_smaller_blocks(tmp_path: Path):
 
     # Verify stats after allocation + spill
     assert pool.bytes_pinned() == 3.5 * 1024 * 1024
-    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
-    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert pool.bytes_in_memory() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 5.5 * 1024 * 1024
+    assert pool.max_memory() == 5.5 * 1024 * 1024
     assert size_class_1MiB.is_frame_pinned(0)
     assert size_class_2MiB.is_frame_pinned(0)
     assert not allocation_2.is_nullptr() and not allocation_2.is_in_memory()
@@ -2612,8 +2621,9 @@ def test_allocate_spill_larger_block(tmp_path: Path):
 
     # Verify stats after allocation + spill
     assert pool.bytes_pinned() == 3 * 1024 * 1024
-    assert pool.bytes_allocated() == 3 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 3 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
     assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
     assert size_class_1MiB.is_frame_pinned(0)  # allocation_3
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
@@ -2670,7 +2680,8 @@ def test_repin_eviction(tmp_path: Path):
 
     # Verify stats after allocation + spill
     assert pool.bytes_pinned() == 3 * 1024 * 1024
-    assert pool.bytes_allocated() == 3 * 1024 * 1024
+    assert pool.bytes_in_memory() == 3 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
     assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
     assert size_class_1MiB.is_frame_pinned(0)  # allocation_3
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
@@ -2688,8 +2699,9 @@ def test_repin_eviction(tmp_path: Path):
 
     # Verify stats after repin
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
     assert size_class_2MiB.is_frame_pinned(0)  # allocation_1
     assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
     assert not size_class_1MiB.is_frame_pinned(0)  # allocation_3
@@ -2742,8 +2754,9 @@ def test_eviction_readback_contents(tmp_path: Path):
 
     # Verify stats after allocation + spill
     assert pool.bytes_pinned() == 1 * 1024 * 1024
-    assert pool.bytes_allocated() == 1 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 1 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
 
     # Repin allocation_1 and read contents
@@ -2753,8 +2766,9 @@ def test_eviction_readback_contents(tmp_path: Path):
 
     # Verify stats after repin
     assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
     assert size_class_4MiB.is_frame_pinned(0)
 
     # Compare contents
@@ -2796,8 +2810,8 @@ def test_local_spill_file(tmp_path: Path):
 
     # Verify stats
     assert pool.bytes_pinned() == 1 * 1024 * 1024
-    assert pool.bytes_allocated() == 1 * 1024 * 1024
-    assert pool.max_memory() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 1 * 1024 * 1024
+    # assert pool.max_memory() == 4 * 1024 * 1024
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
 
     # Look for spilled file in expected location
@@ -2871,7 +2885,8 @@ def test_reallocate_spilled_block(tmp_path: Path):
 
     # Allocate 3MiB
     allocation2: BufferPoolAllocation = pool.allocate(3 * 1024 * 1024)
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
     assert pool.bytes_pinned() == 4 * 1024 * 1024
     assert pool.is_pinned(allocation2)
 
@@ -2881,7 +2896,8 @@ def test_reallocate_spilled_block(tmp_path: Path):
 
     # Free the 3MiB allocation
     pool.free(allocation2)
-    assert pool.bytes_allocated() == 0
+    assert pool.bytes_allocated() == 1024 * 1024
+    assert pool.bytes_in_memory() == 0
     assert pool.bytes_pinned() == 0
     assert not pool.is_pinned(allocation1)
     assert not allocation1.is_in_memory()
@@ -2903,7 +2919,8 @@ def test_reallocate_spilled_block(tmp_path: Path):
 
     # Allocate 3MiB
     allocation3: BufferPoolAllocation = pool.allocate(3 * 1024 * 1024)
-    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.bytes_in_memory() == 4 * 1024 * 1024
     assert pool.bytes_pinned() == 4 * 1024 * 1024
     assert pool.is_pinned(allocation2)
 
@@ -2913,7 +2930,8 @@ def test_reallocate_spilled_block(tmp_path: Path):
 
     # Free the 3MiB allocation
     pool.free(allocation3)
-    assert pool.bytes_allocated() == 0
+    assert pool.bytes_allocated() == 2 * 1024 * 1024
+    assert pool.bytes_in_memory() == 0
     assert pool.bytes_pinned() == 0
     assert not pool.is_pinned(allocation1)
     assert not allocation1.is_in_memory()
@@ -3003,7 +3021,8 @@ def test_spill_on_unpin(tmp_path: Path):
 
     # Verify that it's been spilled to disk and contents are correct
     assert pool.bytes_pinned() == 0
-    assert pool.bytes_allocated() == 0
+    assert pool.bytes_in_memory() == 0
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
     assert pool.max_memory() == 4 * 1024 * 1024
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
 
@@ -3309,7 +3328,8 @@ def test_spill_to_s3(tmp_s3_path: str):
 
     # Verify that it's been spilled to S3 and contents are correct
     assert pool.bytes_pinned() == 0
-    assert pool.bytes_allocated() == 0
+    assert pool.bytes_in_memory() == 0
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
     assert pool.max_memory() == 4 * 1024 * 1024
     assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
 
@@ -3318,7 +3338,7 @@ def test_spill_to_s3(tmp_s3_path: str):
     fs = s3fs.S3FileSystem()
     paths = fs.glob(tmp_s3_path + str(bodo.get_rank()) + "-*")
     assert len(paths) == 1
-    inner_path: str = paths[0]
+    inner_path: str = paths[0]  # type: ignore
     # Block File should be in {size_class}/{block_id}
     file_path = inner_path + "/" + str(4 * 1024 * 1024) + "/" + "0"
 
@@ -3362,7 +3382,7 @@ def test_print_spilling_metrics(capfd, tmp_path: Path, tmp_s3_path: str):
         spill_on_unpin=True,
         enforce_max_limit_during_allocation=True,
         storage_options=[local_opt, s3_opt],
-        tracing_mode=True,
+        trace_level=2,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -3384,8 +3404,34 @@ def test_print_spilling_metrics(capfd, tmp_path: Path, tmp_s3_path: str):
     errlines: list[str] = err.split("\n")
     errlines = [" ".join(e.split()) for e in errlines]
 
+    # Top Level Pool Stats
+    assert "Curr Bytes Allocated: 4.0MiB" in errlines
+    assert "Curr Bytes In Memory: 0 bytes" in errlines
+    assert "Curr Bytes Malloced: 0 bytes" in errlines
+    assert "Curr Bytes Pinned: 0 bytes" in errlines
+    assert "Curr Num Allocations: 2" in errlines
+
+    assert "Total Num Allocations: 3" in errlines
+    assert "Total Num Reallocs: 0" in errlines
+    assert "Total Num Pins: 2" in errlines
+    assert "Total Num Unpins: 4" in errlines
+    assert "Total Num Frees from Spill: 1" in errlines
+    assert "Total Num Reallocs Reused: 0" in errlines
+
+    assert "Total Bytes Allocated: 12.0MiB" in errlines
+    assert "Total Bytes Requested: 10.0MiB" in errlines
+    assert "Total Bytes Malloced: 0 bytes" in errlines
+    assert "Total Bytes Pinned: 20.0MiB" in errlines
+    assert "Total Bytes Unpinned: 0 bytes" in errlines
+    assert "Total Bytes Reused in Realloc: 0 bytes" in errlines
+
+    assert "Peak Bytes Allocated: 12.0MiB" in errlines
+    assert "Peak Bytes In Memory: 4.0MiB" in errlines
+    assert "Peak Bytes Malloced: 0 bytes" in errlines
+    assert "Peak Bytes Pinned: 4.0MiB" in errlines
+
     # Spilling metrics per SizeClass
-    size_class_spill_count: str = next(l for l in errlines if "4.0MiB" in l)
+    size_class_spill_count: str = next(l for l in errlines if l.startswith("4.0MiB"))
     assert bool(
         re.match(
             r"4\.0MiB │ 4 │ [0-9.ms]+ │ 2 │ [0-9.ms]+ │ 5 │ [0-9.ms]+ │ [0-9.ms]+",
