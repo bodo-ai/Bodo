@@ -22,16 +22,45 @@ ll.add_symbol(
     "fft2_py_entry",
     fft_cpp.fft2_py_entry,
 )
+ll.add_symbol(
+    "fftshift_py_entry",
+    fft_cpp.fftshift_py_entry,
+)
 
 
-@overload(fftshift, inline="always")
-def overload_fftshift(A):
+@intrinsic
+def _fftshift(typing_context, A, shape, parallel):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.ArrayType(lir.IntType(64), 2).as_pointer(),
+                lir.IntType(1),
+            ],
+        )
+        shape_ptr = cgutils.alloca_once(builder, lir.ArrayType(lir.IntType(64), 2))
+        builder.store(args[1], shape_ptr)
+
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="fftshift_py_entry"
+        )
+        ret = builder.call(fn_tp, [args[0], shape_ptr, args[2]])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        new_shape = builder.load(shape_ptr)
+        return context.make_tuple(builder, sig.return_type, [ret, new_shape])
+
+    sig = types.Tuple([bodo.libs.array.array_info_type, shape])(A, shape, parallel)
+    return sig, codegen
+
+
+@overload(fftshift)
+def overload_fftshift(A, parallel=False):
     """
     Performs the fft shift operation on the input data. This rolls each
     axis by 50%. For a 1D array, this switches the two halves of the
     array. For a 2D array, this switches quadrant 1 with quadrant 3,
-    and quadrant 2 with quadrant 4. This kernel currently only works
-    sequentially.
+    and quadrant 2 with quadrant 4.
 
     Args:
         A (np.array): array of data to be shifted. Currently only
@@ -40,23 +69,29 @@ def overload_fftshift(A):
     Returns:
         (np.array) The input array shifted as desired.
     """
-    if bodo.utils.utils.is_array_typ(A, False) and A.ndim == 2:  # pragma: no cover
-        dtype = A.dtype
+    if (
+        bodo.utils.utils.is_array_typ(A, False)
+        and A.ndim == 2
+        and A.dtype in (types.complex128, types.complex64)
+    ):
 
-        def impl(A):  # pragma: no cover
-            rows, cols = A.shape
-            r_off = rows // 2
-            c_off = cols // 2
-            res = np.empty((rows, cols), dtype)
-            for r in range(rows):
-                r_write = (r + r_off) % rows
-                for c in range(cols):
-                    c_write = (c + c_off) % cols
-                    res[r_write, c_write] = A[r, c]
-            return res
+        def impl(A, parallel=False):  # pragma: no cover
+            # If we don't copy we'll overwrite A with the output if there's no later copy
+            A = A.copy()
+            # array_to_info only supports 1D arrays, so we flatten the array
+            flattened = np.ascontiguousarray(A).reshape(-1)
+            arr_info = array_to_info(flattened)
+            loaded_arr_info, new_shape = _fftshift(arr_info, A.shape, parallel)
+            # info_to_array only supports 1D arrays, so we reshape the array
+            # the c++ kernel may have changed the shape of the array so we need to reshape it to the new shape
+            ret_arr = info_to_array(loaded_arr_info, flattened).reshape(new_shape)
+            delete_info(loaded_arr_info)
+            return ret_arr
 
         return impl
-    raise_bodo_error("fftshift only currently supported on 2d arrays")
+    raise_bodo_error(
+        f"fftshift currently unsupported on input of type {A}, try casting to complex128"
+    )
 
 
 @intrinsic

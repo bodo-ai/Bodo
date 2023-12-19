@@ -1,31 +1,26 @@
 #include <fftw3-mpi.h>
 #include <fftw3.h>
 #include <mpi.h>
+#include "_array_utils.h"
 #include "_bodo_common.h"
-
-/**
- * @brief Performs a parallel FFT2 on the given array, of shap shape.
- * @param arr The array to perform the FFT on
- * @param shape The shape of the array
- * @param parallel Whether arr is distributed or not
- * @return  The result of the FFT
- */
-array_info *fft2_py_entry(array_info *arr, uint64_t shape[2], bool parallel);
 
 // All of the below code is to allow for templating on the dtype of the array.
 // FFTW has two different sets of functions and types, one for single precision
 // and one for double precision.
 template <Bodo_CTypes::CTypeEnum dtype>
+    requires complex_dtype<dtype>
 using fftw_complex_type =
     typename std::conditional<dtype == Bodo_CTypes::COMPLEX128, fftw_complex,
                               fftwf_complex>::type;
 
 template <Bodo_CTypes::CTypeEnum dtype>
+    requires complex_dtype<dtype>
 using fftw_plan_type =
     typename std::conditional<dtype == Bodo_CTypes::COMPLEX128, fftw_plan,
                               fftwf_plan>::type;
 
 template <Bodo_CTypes::CTypeEnum dtype>
+    requires complex_dtype<dtype>
 auto fftw_mpi_type = dtype == Bodo_CTypes::COMPLEX128 ? MPI_C_DOUBLE_COMPLEX
                                                       : MPI_C_FLOAT_COMPLEX;
 

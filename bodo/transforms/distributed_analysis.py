@@ -3180,6 +3180,29 @@ class DistributedAnalysis:
                     rhs.args[0], array_dists, "Output of FFT is replicated.", rhs.loc
                 )
             return
+        if fdef == ("fftshift", "numpy.fft"):
+            # If input is REP, output is REP
+            # If input is 1D_Var, output is 1D
+            # If input is 1D, output is 1D
+            if lhs not in array_dists:
+                # Default to 1D, this always does an alltoallv
+                # so 1D_Var always becomes 1D
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            new_dist = Distribution(
+                min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
+            )
+            if new_dist == Distribution.OneD_Var:
+                new_dist = Distribution.OneD
+            # If output is REP set input to REP
+            if new_dist == Distribution.REP:
+                self._set_REP(
+                    rhs.args[0],
+                    array_dists,
+                    "Output of fftshift is replicated.",
+                    rhs.loc,
+                )
+            array_dists[lhs] = new_dist
+            return
 
         # handle calling other Bodo functions that have distributed flags
         func_type = self.typemap[func_var]
