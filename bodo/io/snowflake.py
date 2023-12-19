@@ -472,6 +472,16 @@ def escape_col_name(col_name: str) -> str:
     return '"{}"'.format(col_name.replace('"', '""'))
 
 
+def matches_unquoted_id_rules(col_name: str) -> bool:
+    """
+    Check if col_name follows Snowflake's unquoted identifier rules:
+    https://docs.snowflake.com/en/sql-reference/identifiers-syntax
+    """
+    return all(c.isalnum() or c == "_" or c == "$" for c in col_name) and (
+        (len(col_name) == 0) or col_name[0] != "$"
+    )
+
+
 def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> dict[str, Any]:
     """
     Parse a Snowflake Connection URL into Individual Components,
@@ -2190,12 +2200,15 @@ def create_table_handle_exists(
     # in order.
     ev_create_table = tracing.Event("create_table", is_parallel=False)
 
-    # Snowflake requires all column start with a alphanumeric character
-    # or _ to be able to write to it. Otherwise we must wrap the column in
-    # quotes.
+    # Wrap column names in quotes if they don't match Snowflake's unquoted identifier
+    # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
+    # This is a workaround since BodoSQL doesn't follow Snowflake identifier rules yet.
+    # Otherwise, we should always escape assuming BodoSQL has made unquoted identifiers
+    # uppercase. See [BSE-2331].
     create_table_col_lst = []
     for col_name, typ in sf_schema.items():
-        col_name = escape_col_name(col_name)
+        if not matches_unquoted_id_rules(col_name):
+            col_name = escape_col_name(col_name)
         create_table_col_lst.append(f"{col_name} {typ}")
     create_table_columns = ", ".join(create_table_col_lst)
     create_table_sql = (
@@ -2347,11 +2360,14 @@ def execute_copy_into(
     ev.add_attribute("synchronous", synchronous)
 
     cols_list = []
-    # Snowflake requires all column start with a alphanumeric character
-    # or _ to be able to write to it. Otherwise we must wrap the column in
-    # quotes.
+    # Wrap column names in quotes if they don't match Snowflake's unquoted identifier
+    # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
+    # This is a workaround since BodoSQL doesn't follow Snowflake identifier rules yet.
+    # Otherwise, we should always escape assuming BodoSQL has made unquoted identifiers
+    # uppercase. See [BSE-2331].
     for col_name in sf_schema.keys():
-        col_name = escape_col_name(col_name)
+        if not matches_unquoted_id_rules(col_name):
+            col_name = escape_col_name(col_name)
         cols_list.append(f"{col_name}")
     columns = ",".join(cols_list)
 
