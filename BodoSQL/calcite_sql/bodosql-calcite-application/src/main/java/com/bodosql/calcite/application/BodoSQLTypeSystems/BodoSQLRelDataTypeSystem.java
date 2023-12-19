@@ -2,9 +2,11 @@ package com.bodosql.calcite.application.BodoSQLTypeSystems;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Class for the RelDataTypeSystem used by BodoSQL. */
@@ -214,5 +216,132 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
     } else {
       return SqlTypeName.BIGINT;
     }
+  }
+
+  /**
+   * Infers the return type of a decimal addition. Decimal addition involves at least one decimal
+   * operand and requires both operands to have exact numeric types.
+   *
+   * <p>This matches the Snowflake type definition.
+   * https://docs.snowflake.com/en/sql-reference/operators-arithmetic#addition-and-subtraction
+   *
+   * @param typeFactory TypeFactory used to create output type
+   * @param type1 Type of the first operand
+   * @param type2 Type of the second operand
+   * @return Result type for a decimal addition
+   */
+  @Override
+  @Nullable
+  public RelDataType deriveDecimalPlusType(
+      RelDataTypeFactory typeFactory, RelDataType type1, RelDataType type2) {
+    if (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2)) {
+      if (SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) {
+        // Java numeric will always have invalid precision/scale,
+        // use its default decimal precision/scale instead.
+        type1 = RelDataTypeFactoryImpl.isJavaType(type1) ? typeFactory.decimalOf(type1) : type1;
+        type2 = RelDataTypeFactoryImpl.isJavaType(type2) ? typeFactory.decimalOf(type2) : type2;
+        int p1 = type1.getPrecision();
+        int p2 = type2.getPrecision();
+        int s1 = type1.getScale();
+        int s2 = type2.getScale();
+        int l1 = p1 - s1;
+        int l2 = p2 - s2;
+        int l = Math.max(l1, l2) + 1;
+        final int scale = Math.min(Math.max(s1, s2), getMaxNumericScale());
+        final int precision = Math.min(l + scale, getMaxNumericPrecision());
+        return typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Infers the return type of a decimal multiplication. Decimal multiplication involves at least
+   * one decimal operand and requires both operands to have exact numeric types.
+   *
+   * <p>This matches the Snowflake type definition.
+   * https://docs.snowflake.com/en/sql-reference/operators-arithmetic#multiplication
+   *
+   * @param typeFactory TypeFactory used to create output type
+   * @param type1 Type of the first operand
+   * @param type2 Type of the second operand
+   * @return Result type for a decimal multiplication, or null if decimal multiplication should not
+   *     be applied to the operands
+   */
+  @Override
+  @Nullable
+  public RelDataType deriveDecimalMultiplyType(
+      RelDataTypeFactory typeFactory, RelDataType type1, RelDataType type2) {
+    if (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2)) {
+      if (SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) {
+        // Java numeric will always have invalid precision/scale,
+        // use its default decimal precision/scale instead.
+        type1 = RelDataTypeFactoryImpl.isJavaType(type1) ? typeFactory.decimalOf(type1) : type1;
+        type2 = RelDataTypeFactoryImpl.isJavaType(type2) ? typeFactory.decimalOf(type2) : type2;
+        int p1 = type1.getPrecision();
+        int p2 = type2.getPrecision();
+        int s1 = type1.getScale();
+        int s2 = type2.getScale();
+
+        int l1 = p1 - s1;
+        int l2 = p2 - s2;
+        int l = l1 + l2;
+        int s = Math.min(s1 + s2, Math.max(Math.max(s1, s2), 12));
+        final int scale = Math.min(s, getMaxNumericScale());
+        final int precision = Math.min(l + scale, getMaxNumericPrecision());
+
+        RelDataType ret;
+        ret = typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
+
+        return ret;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Infers the return type of a decimal division. Decimal division involves at least one decimal
+   * operand and requires both operands to have exact numeric types.
+   *
+   * <p>This matches the Snowflake type definition.
+   * https://docs.snowflake.com/en/sql-reference/operators-arithmetic#division
+   *
+   * @param typeFactory TypeFactory used to create output type
+   * @param type1 Type of the first operand
+   * @param type2 Type of the second operand
+   * @return Result type for a decimal division, or null if decimal division should not be applied
+   *     to the operands
+   */
+  @Override
+  @Nullable
+  public RelDataType deriveDecimalDivideType(
+      RelDataTypeFactory typeFactory, RelDataType type1, RelDataType type2) {
+
+    if (SqlTypeUtil.isExactNumeric(type1) && SqlTypeUtil.isExactNumeric(type2)) {
+      if (SqlTypeUtil.isDecimal(type1) || SqlTypeUtil.isDecimal(type2)) {
+        // Java numeric will always have invalid precision/scale,
+        // use its default decimal precision/scale instead.
+        type1 = RelDataTypeFactoryImpl.isJavaType(type1) ? typeFactory.decimalOf(type1) : type1;
+        type2 = RelDataTypeFactoryImpl.isJavaType(type2) ? typeFactory.decimalOf(type2) : type2;
+        int p1 = type1.getPrecision();
+        int p2 = type2.getPrecision();
+        int s1 = type1.getScale();
+        int s2 = type2.getScale();
+
+        int l1 = p1 - s1;
+        int l = l1 + s2;
+        int s = Math.max(s1, Math.min(s1 + 6, 12));
+        final int scale = Math.min(s, getMaxNumericScale());
+        final int precision = Math.min(l + scale, getMaxNumericPrecision());
+
+        RelDataType ret;
+        ret = typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
+
+        return ret;
+      }
+    }
+
+    return null;
   }
 }
