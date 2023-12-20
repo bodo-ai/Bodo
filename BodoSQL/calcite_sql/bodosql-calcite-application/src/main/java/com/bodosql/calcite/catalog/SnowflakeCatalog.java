@@ -1,5 +1,6 @@
 package com.bodosql.calcite.catalog;
 
+import static com.bodosql.calcite.adapter.snowflake.SnowflakeUtils.snowflakeYesNoToBoolean;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_THREE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
@@ -42,6 +43,7 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNodeList;
@@ -444,7 +446,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         BodoSQLColumnDataType elemType = typeInfo.elemType;
         int precision = typeInfo.precision;
         // The column is nullable unless we are certain it has no nulls.
-        boolean nullable = tableInfo.getString(4).toUpperCase(Locale.ROOT).equals("Y");
+        boolean nullable = snowflakeYesNoToBoolean(tableInfo.getString(4));
         columns.add(
             new BodoSQLColumnImpl(
                 readName, writeName, type, elemType, nullable, tzInfo, precision));
@@ -842,16 +844,98 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   public Collection<org.apache.calcite.schema.Function> getFunctions(
       ImmutableList<String> schemaPath, String funcName) {
     if (schemaPath.size() != 2) {
-      return Set.of();
+      return List.of();
     }
-    throw new RuntimeException(
-        String.format(
-            Locale.ROOT,
-            "Unable to resolve function: %s.%s.%s. BodoSQL does not have support for Snowflake"
-                + " UDFs yet",
-            schemaPath.get(0),
-            schemaPath.get(1),
-            funcName));
+    return getFunctionsImpl(schemaPath.get(0), schemaPath.get(1), funcName, isConnectionCached());
+  }
+
+  /**
+   * Implementation of getFunctionNames that enables retrying if a cached connection fails. This
+   * submits a show functions like call to Snowflake and uses the information to construct Calcite
+   * function objects.
+   *
+   * @param databaseName The name of the database to use to load the table.
+   * @param schemaName The name of the schema to use to load the table.
+   * @param functionName The name of the function to load.
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return
+   */
+  public Collection<org.apache.calcite.schema.Function> getFunctionsImpl(
+      String databaseName, String schemaName, String functionName, boolean shouldRetry) {
+    List<org.apache.calcite.schema.Function> functions = new ArrayList<>();
+    try {
+      String query =
+          String.format(
+              Locale.ROOT,
+              "show functions like '%s' in schema %s.%s",
+              functionName,
+              databaseName,
+              schemaName);
+      ResultSet results = executeSnowflakeQuery(query, 5);
+      while (results.next()) {
+        // See the return values here:
+        // https://docs.snowflake.com/en/sql-reference/sql/show-functions
+        // Note: JDBC makes things 1-indexed.
+        // Min arguments (column 7):
+        int minArgs = results.getInt(7);
+        // Max arguments (column 8)
+        int maxArgs = results.getInt(8);
+        // Function args + return value, including names (column 9)
+        String signature = results.getString(9);
+        // TODO: Add parsing on the signature.
+        // Function args + return value, including names (column 9)
+        // Is this a table function? (column 12)
+        Boolean isTable = snowflakeYesNoToBoolean(results.getString(12));
+        // Is this a secure function? (column 14)
+        Boolean isSecure = snowflakeYesNoToBoolean(results.getString(14));
+        // Is this an external function? (column 15)
+        Boolean isExternal = snowflakeYesNoToBoolean(results.getString(15));
+        // What is this function's language? (column 16)
+        String language = results.getString(16);
+        // Is this function memoizable? (column 17)
+        Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString(17));
+        SnowflakeUserDefinedFunction function =
+            SnowflakeUserDefinedFunction.create(
+                ImmutableList.of(databaseName, schemaName, functionName),
+                this,
+                signature,
+                minArgs,
+                maxArgs,
+                isTable,
+                isSecure,
+                isExternal,
+                language,
+                isMemoizable);
+        functions.add(function);
+      }
+    } catch (SQLException e) {
+      String errorMsg =
+          String.format(
+              "Unable to get functions names for Schema '%s'.'%s' from Snowflake account. Error"
+                  + " message: %s",
+              databaseName, schemaName, e);
+      if (shouldRetry) {
+        VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
+        closeConnections();
+        return getFunctionsImpl(databaseName, schemaName, functionName, false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
+    }
+    // We don't support functions with multiple definitions yet.
+    if (functions.size() > 1) {
+      throw new RuntimeException(
+          String.format(
+              Locale.ROOT,
+              "Unable to resolve function: %s.%s.%s. BodoSQL only supports Snowflake UDFs with a"
+                  + " single definition. Found %d definitions.",
+              databaseName,
+              schemaName,
+              functionName,
+              functions.size()));
+    } else {
+      return functions;
+    }
   }
 
   /**
