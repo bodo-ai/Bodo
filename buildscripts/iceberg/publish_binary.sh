@@ -17,7 +17,7 @@ TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # Get the Connector Version
-export CONNECTOR_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+export CONNECTOR_VERSION=`python -m setuptools_scm`
 CONNECTOR_VERSION+="alpha"
 export IS_RELEASE=`git tag --points-at HEAD`
 
@@ -44,7 +44,7 @@ elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
 fi
 
 cd buildscripts/iceberg/conda-recipe/
-conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
+conda mambabuild . --no-test -c conda-forge
 
 # Upload to Anaconda
 package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`

@@ -15,19 +15,13 @@ if not os.path.samefile(cwd, setup_py_dir_path):
         "setup.py should only be invoked if the current working directory is in the same directory as setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
     )
 
-# --------- Trick to pass the Bodo Version in CI ---------
-# During CI, conda copies and isolates the iceberg subfolder from the monorep
-# Thus, we can not import the top-level versioneer.py to get the version
-# Instead, we first get the version, save it in the CONNECTOR_VERSION environment variable
-# and then pass that in during the build step
-if "CONNECTOR_VERSION" in os.environ:
-    version = os.environ["CONNECTOR_VERSION"]
-else:
-    sys.path.insert(0, "..")
-    from versioneer import get_version
+# ----------------- Get Version in Build -----------------
+from setuptools_scm import get_version
 
-    version = get_version()
-    version += "alpha"
+version = get_version(root="..", relative_to=__file__)
+version += "alpha"
+# --------------------------------------------------------
+
 
 development_mode = "develop" in sys.argv
 

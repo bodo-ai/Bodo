@@ -13,7 +13,7 @@ ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '
 
 # Get the BodoSQL version
 # Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version together
-export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+export BODOSQL_VERSION=`python -m setuptools_scm`
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:

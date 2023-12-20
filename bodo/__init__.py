@@ -82,10 +82,19 @@ _orig_except_hook = sys.excepthook
 sys.excepthook = _global_except_hook
 
 
+# ------------------------------ Version Import ------------------------------
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("bodo")
+except PackageNotFoundError:
+    # package is not installed
+    pass
+
+
+# ----------------------------- Streaming Config -----------------------------
 import os
 import platform
-
-#### START STREAMING CONFIGURATION ####
 
 # Flag to track if we should use the streaming plan in BodoSQL.
 bodosql_use_streaming_plan = os.environ.get("BODO_STREAMING_ENABLED", "1") == "1"
@@ -103,7 +112,7 @@ default_stream_loop_sync_iters = 1000
 # If BodoSQL encounters a view should it attempt to inline it?
 bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "1") != "0"
 
-#### END STREAMING CONFIGURATION ####
+# --------------------------- End Streaming Config ---------------------------
 
 
 # For pip version of Bodo:
@@ -124,10 +133,6 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
-from ._version import get_versions
-
-__version__ = get_versions()["version"]
-del get_versions
 
 # NOTE: 'pandas_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's use.

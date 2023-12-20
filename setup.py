@@ -12,7 +12,6 @@ from Cython.Build import cythonize
 import numpy as np
 import pyarrow
 
-import versioneer
 
 cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -587,13 +586,8 @@ class PostInstallCommand(install):
                             os.remove(cythonized_install_path)
 
 
-cmdclass = versioneer.get_cmdclass()
-assert "install" not in cmdclass
-cmdclass["install"] = PostInstallCommand
-
 setup(
     name="bodo",
-    version=versioneer.get_version(),
     description="The Python Supercomputing Analytics Platform",
     long_description=readme(),
     classifiers=[
@@ -646,7 +640,8 @@ setup(
         ]
     ),
     extras_require={"HDF5": ["h5py"]},
-    cmdclass=cmdclass,
+    use_scm_version={},
+    cmdclass={"install": PostInstallCommand},
     ext_modules=(
         [bodo_ext]
         + cythonize(
