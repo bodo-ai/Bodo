@@ -2589,3 +2589,22 @@ def alias_ext_logical_table_to_table(lhs_name, args, alias_map, arg_aliases):
 numba.core.ir_utils.alias_func_extensions[
     ("logical_table_to_table", "bodo.hiframes.table")
 ] = alias_ext_logical_table_to_table
+
+
+def generate_empty_table_with_rows(n_rows):  # pragma: no cover
+    pass
+
+
+@overload(generate_empty_table_with_rows)
+def overload_generate_empty_table_with_rows(n_rows):
+    """
+    Generates a table with no columns and n_rows rows.
+    """
+    table_typ = TableType(())
+
+    def impl(n_rows):  # pragma: no cover
+        T = init_table(table_typ, False)
+        result = set_table_len(T, n_rows)
+        return result
+
+    return impl

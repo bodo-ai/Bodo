@@ -4047,6 +4047,15 @@ Bodo currently supports the following functions that produce tables:
     | 75 | 1   | "blue"   |
 
 
+#### GENERATOR
+-   `#!sql GENERATOR([ROWCOUNT=>count][, TIMELIMIT=>sec])`
+
+    Generates a table with a certain number of rows, specified by the `ROWCOUNT` argument. 
+    Currently only supports when the `ROW_COUNT` argument is provided and when it is a 
+    non-negative integer. Does not support when the `TIMELIMIT` argument is provided, neither
+    argument is provided, or both are provided.
+
+
 ###   Type Predicates
 
 #### IS_ARRAY

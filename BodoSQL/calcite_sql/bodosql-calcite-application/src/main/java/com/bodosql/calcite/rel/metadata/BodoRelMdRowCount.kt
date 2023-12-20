@@ -6,12 +6,14 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.RowSample
+import com.bodosql.calcite.rel.core.TableFunctionScanBase
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.Sort
+import org.apache.calcite.rel.core.TableFunctionScan
 import org.apache.calcite.rel.metadata.RelMdRowCount
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexCall
@@ -68,6 +70,10 @@ class BodoRelMdRowCount : RelMdRowCount() {
         // row is copied over.
         var inputRowCount = mq?.getRowCount(rel.input)
         return inputRowCount?.times(PandasCostEstimator.AVG_ARRAY_ENTRIES_PER_ROW)
+    }
+
+    fun getRowCount(rel: TableFunctionScan, mq: RelMetadataQuery): Double? {
+        return (rel as TableFunctionScanBase).estimateRowCount(mq)
     }
 
     /**

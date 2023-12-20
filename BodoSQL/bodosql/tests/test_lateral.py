@@ -3,6 +3,8 @@
 Test correctness of SQL the flatten operation in BodoSQL
 """
 
+import datetime
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -213,6 +215,61 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
         check_names=False,
         check_dtype=False,
         sort_output=False,  # Sorting semi-structured data unsupported in Python
+    )
+
+
+@pytest.mark.parametrize(
+    "query, answer, is_out_distributed",
+    [
+        pytest.param(
+            "SELECT 'A' as K, COUNT(*) as C FROM TABLE(GENERATOR(ROWCOUNT=>1776)) GROUP BY 1",
+            pd.DataFrame({"K": "A", "C": 1776}, index=np.arange(1)),
+            None,
+            id="groupby_aggregate-without_lateral",
+        ),
+        pytest.param(
+            "SELECT COUNT(*) as C FROM TABLE(GENERATOR(ROWCOUNT=>1776))",
+            pd.DataFrame({"C": 1776}, index=np.arange(1)),
+            False,
+            id="nogroupby_aggregate-without_lateral",
+        ),
+        pytest.param(
+            "SELECT I, COUNT(*) as C FROM table1, LATERAL TABLE(GENERATOR(ROWCOUNT=>10)) GROUP BY I",
+            pd.DataFrame({"I": [0, 1, 2], "C": [50, 30, 10]}),
+            None,
+            id="groupby_aggregate-with_lateral",
+            marks=pytest.mark.skip(
+                reason="[BSE-2309] Support zero-column table in streaming join"
+            ),
+        ),
+        pytest.param(
+            "SELECT DATEADD(week, 3 * ROW_NUMBER() OVER (ORDER BY NULL), DATE '2023-01-01') as dates FROM TABLE(GENERATOR(ROWCOUNT=>5))",
+            pd.DataFrame(
+                {
+                    "dates": [
+                        datetime.date(2023, 1, 22),
+                        datetime.date(2023, 2, 12),
+                        datetime.date(2023, 3, 5),
+                        datetime.date(2023, 3, 26),
+                        datetime.date(2023, 4, 16),
+                    ]
+                },
+            ),
+            None,
+            id="row_number-without_lateral",
+        ),
+    ],
+)
+def test_generator(query, answer, is_out_distributed, memory_leak_check):
+    ctx = {"table1": pd.DataFrame({"I": [0, 0, 1, 0, 0, 1, 2, 1, 0]})}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=is_out_distributed,
     )
 
 
