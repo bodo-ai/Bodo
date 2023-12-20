@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -90,7 +91,50 @@ public class TableFunctionOperatorTable implements SqlOperatorTable {
           0,
           TableCharacteristic.Semantics.ROW);
 
-  private List<SqlOperator> functionList = Arrays.asList(FLATTEN);
+  private static final SnowflakeNamedOperandMetadataImpl GENERATOR_OPERAND_METADATA =
+      SnowflakeNamedOperandMetadataImpl.create(
+          List.of(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          List.of("ROWCOUNT", "TIMELIMIT"),
+          // Generator technically does not require either of its arguments to be provided, but
+          // this is a simple way of helping to enforce that the ROWCOUNT argument must be provided.
+          1,
+          List.of(true, true),
+          (SqlLiteral literal, int argNumber) -> {
+            // Currently only allows ROWCOUNT
+            if (argNumber != 0) {
+              throw new RuntimeException(
+                  "Function \"GENERATOR\" does not currently allow providing any arguments except"
+                      + " \"ROWCOUNT\".");
+            }
+            // The literal must be a non-negative integer, or null.
+            if (SqlTypeName.INT_TYPES.contains(literal.getTypeName())
+                || literal.getTypeName() == SqlTypeName.DECIMAL) {
+              BigDecimal value = literal.getValueAs(BigDecimal.class);
+              return value.compareTo(BigDecimal.ZERO) >= 0;
+            } else {
+              return false;
+            }
+          },
+          (RexBuilder builder, int i) -> {
+            final RexNode literal;
+            if (i == 0 || i == 1) {
+              literal = builder.makeNullLiteral(SqlTypeName.INTEGER);
+            } else {
+              throw new RuntimeException("Invalid input");
+            }
+            return literal;
+          });
+
+  public static final SnowflakeSqlTableFunction GENERATOR =
+      SnowflakeNamedArgumentSqlTableFunction.create(
+          "GENERATOR",
+          BodoReturnTypes.GENERATOR_RETURN_TYPE,
+          GENERATOR_OPERAND_METADATA,
+          SnowflakeSqlTableFunction.FunctionType.GENERATOR,
+          0,
+          TableCharacteristic.Semantics.ROW);
+
+  private List<SqlOperator> functionList = Arrays.asList(FLATTEN, GENERATOR);
 
   @Override
   public void lookupOperatorOverloads(

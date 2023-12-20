@@ -15,6 +15,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalFlatten
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
+import com.bodosql.calcite.rel.logical.BodoLogicalTableFunctionScan
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
@@ -343,6 +344,18 @@ object BodoPrograms {
                     sort.offset,
                     sort.fetch,
                 )
+
+            override fun visit(other: RelNode): RelNode {
+                if (other is LogicalTableFunctionScan) {
+                    return BodoLogicalTableFunctionScan.create(
+                        other.cluster,
+                        other.inputs,
+                        other.call as RexCall,
+                        other.rowType,
+                    )
+                }
+                return super.visit(other)
+            }
         }
     }
 
@@ -486,49 +499,63 @@ object BodoPrograms {
             override fun visit(other: RelNode): RelNode {
                 // Note: LogicalTableFunctionScan doesn't have accept implemented, so we have to match on other.
                 if (other is LogicalTableFunctionScan) {
-                    // LogicalTableFunctionScan can have several arguments. We currently only support 0
-                    // argument inputs.
-                    if (other.call is RexCall && other.inputs.size == 0) {
-                        // Verify we have a Snowflake table call that's a "flatten" node.
+                    if (other.call is RexCall) {
+                        // Verify we have a Snowflake table call that is one of the supported functions:
+                        // - A "flatten" node
+                        // - A call to the generator function
                         val rexCall = other.call as RexCall
-                        if (rexCall.op is SnowflakeSqlTableFunction && rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
-                            // A scan always has no inputs, so first create a dummy LogicalValues.
-                            val fieldName = "DUMMY"
-                            val expr = true
-                            builder.values(arrayOf(fieldName), expr)
-                            // Check the RexCall arguments. We will let any operands with literals be unchanged,
-                            // but all other values should be replaced.
-                            var projectIdx = 0
-                            val projectOperands = ArrayList<RexNode>()
-                            val replaceMap = HashMap<Int, Int>()
-                            for ((idx, value) in rexCall.operands.withIndex()) {
-                                // Skip defaults
-                                if (BodoSqlUtil.isDefaultCall(value)) {
-                                    continue
+                        if (rexCall.op is SnowflakeSqlTableFunction) {
+                            if (rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
+                                // Flatten has no inputs, so first create a dummy LogicalValues.
+                                val fieldName = "DUMMY"
+                                val expr = true
+                                builder.values(arrayOf(fieldName), expr)
+                                // Check the RexCall arguments. We will let any operands with literals be unchanged,
+                                // but all other values should be replaced.
+                                var projectIdx = 0
+                                val projectOperands = ArrayList<RexNode>()
+                                val replaceMap = HashMap<Int, Int>()
+                                for ((idx, value) in rexCall.operands.withIndex()) {
+                                    // Skip defaults
+                                    if (BodoSqlUtil.isDefaultCall(value)) {
+                                        continue
+                                    }
+                                    if (value !is RexLiteral) {
+                                        replaceMap[idx] = projectIdx
+                                        projectOperands.add(value)
+                                        projectIdx += 1
+                                    }
                                 }
-                                if (value !is RexLiteral) {
-                                    replaceMap[idx] = projectIdx
-                                    projectOperands.add(value)
-                                    projectIdx += 1
+                                // Add a projection if there are any non-literal nodes
+                                if (projectOperands.isNotEmpty()) {
+                                    builder.project(projectOperands)
                                 }
-                            }
-                            // Add a projection if there are any non-literal nodes
-                            if (projectOperands.isNotEmpty()) {
-                                builder.project(projectOperands)
-                            }
-                            val newOperands = ArrayList<RexNode>()
-                            for ((idx, value) in rexCall.operands.withIndex()) {
-                                if (BodoSqlUtil.isDefaultCall(value)) {
-                                    // Replace default values.
-                                    newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
-                                } else if (replaceMap.contains(idx)) {
-                                    newOperands.add(builder.field(replaceMap[idx]!!))
-                                } else {
-                                    newOperands.add(value)
+                                val newOperands = ArrayList<RexNode>()
+                                for ((idx, value) in rexCall.operands.withIndex()) {
+                                    if (BodoSqlUtil.isDefaultCall(value)) {
+                                        // Replace default values.
+                                        newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
+                                    } else if (replaceMap.contains(idx)) {
+                                        newOperands.add(builder.field(replaceMap[idx]!!))
+                                    } else {
+                                        newOperands.add(value)
+                                    }
                                 }
+                                val updatedCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
+                                return BodoLogicalFlatten.create(builder.build(), updatedCall, other.getRowType())
+                            } else if (rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.GENERATOR) {
+                                val newOperands = ArrayList<RexNode>()
+                                rexCall.operands.mapIndexed {
+                                        idx, value ->
+                                    if (BodoSqlUtil.isDefaultCall(value)) {
+                                        newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
+                                    } else {
+                                        newOperands.add(value)
+                                    }
+                                }
+                                val newCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
+                                return BodoLogicalTableFunctionScan.create(other.cluster, other.inputs, newCall, other.rowType)
                             }
-                            val updatedCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
-                            return BodoLogicalFlatten.create(builder.build(), updatedCall, other.getRowType())
                         }
                     }
                 }

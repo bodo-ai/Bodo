@@ -97,6 +97,14 @@ public class BodoReturnTypes {
                 List<String> names = List.of("SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS");
                 return factory.createStructType(types, names);
             };
+    /**
+     * Defines the return type for GENERATOR
+     */
+    public static final SqlReturnTypeInference GENERATOR_RETURN_TYPE =
+            (opBinding) -> {
+                RelDataTypeFactory factory = opBinding.getTypeFactory();
+                return factory.createStructType(List.of(), List.of());
+            };
 
     /**
      * Determine the return type of the TO_ARRAY function
