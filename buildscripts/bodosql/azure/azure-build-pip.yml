@@ -12,7 +12,7 @@ jobs:
   - script: |
       set -eo pipefail
 
-      export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      export BODOSQL_VERSION=`python -m setuptools_scm`
       export BODO_VERSION=BODOSQL_VERSION
       echo "##vso[task.setvariable variable=BODOSQL_VERSION]$BODOSQL_VERSION"
       echo "BODOSQL_VERSION: $BODOSQL_VERSION"

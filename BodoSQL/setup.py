@@ -5,10 +5,7 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from setuptools.errors import ExecError
-
-import versioneer
-
-versioneer_cmdclass = versioneer.get_cmdclass()
+from setuptools_scm import get_version
 
 cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -23,12 +20,7 @@ try:
     # only exist when building for pip
     from wheel.bdist_wheel import bdist_wheel
 
-    bdist_wheel_parent = bdist_wheel
-    # Set the parent to extend versioneer
-    if "bdist_wheel" in versioneer_cmdclass:
-        bdist_wheel_parent = versioneer_cmdclass["bdist_wheel"]
-
-    class CustomBDistWheelCommand(bdist_wheel_parent):
+    class CustomBDistWheelCommand(bdist_wheel):
         def run(self):
             """Creates the generated library/tests, builds maven, and then calls the original run command"""
             build_libs(self)
@@ -57,7 +49,7 @@ def build_libs(obj):
     try:
         pom_dir = os.path.join("calcite_sql", "pom.xml")
         dmvn_repo = os.path.dirname("bodosql-protocol-mvn/")
-        cmd_list = ["mvn", "clean", "install", "--batch-mode"]
+        cmd_list = ["mvn", "clean", "install", "--batch-mode", "--no-transfer-progress"]
         if update_calcite:
             cmd_list.append("-U")
 
@@ -93,23 +85,14 @@ def readme():
         return f.read()
 
 
-develop_parent = develop
-if "develop" in versioneer_cmdclass:
-    develop_parent = versioneer_cmdclass["develop"]
-
-build_py_parent = build_py
-if "build_py" in versioneer_cmdclass:
-    build_py_parent = versioneer_cmdclass["build_py"]
-
-
-class CustomDevelopCommand(develop_parent):
+class CustomDevelopCommand(develop):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""
         build_libs(self)
         super().run()
 
 
-class CustomBuildCommand(build_py_parent):
+class CustomBuildCommand(build_py):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""
         build_libs(self)
@@ -118,17 +101,18 @@ class CustomBuildCommand(build_py_parent):
 
 # TODO: Include a clean command that cleans Maven + deletes the generated lib
 
-cmdclass = versioneer_cmdclass.copy()
 # Replace any subclass. Update always takes the value from
 # the new dictionary.
-cmdclass.update({"develop": CustomDevelopCommand, "build_py": CustomBuildCommand})
+cmdclass = {"develop": CustomDevelopCommand, "build_py": CustomBuildCommand}
 if bdist_wheel_command is not None:
     # If wheel is installed add the bdist wheel command.
     cmdclass["bdist_wheel"] = bdist_wheel_command
 
+repo_version = get_version(root="..", relative_to=__file__)
+
 setup(
     name="bodosql",
-    version=versioneer.get_version(),
+    version=repo_version,
     description="compile SQL for clusters",
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -156,7 +140,7 @@ setup(
     # match Bodo version to install with BodoSQL version
     install_requires=[]
     if development_mode
-    else [f"bodo=={versioneer.get_version()}", "py4j==0.10.9.7"],
+    else [f"bodo=={repo_version}", "py4j==0.10.9.7"],
     python_requires=">=3.9,<3.12",
     # Update the build and develop commands
     cmdclass=cmdclass,

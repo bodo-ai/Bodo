@@ -15,3 +15,13 @@ from bodo_iceberg_connector.table_info import (
     bodo_connector_get_current_snapshot_id,
 )
 from bodo_iceberg_connector.write import commit_merge_cow, commit_write
+
+
+# ------------------------------ Version Import ------------------------------
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("bodo-iceberg-connector")
+except PackageNotFoundError:
+    # Package is not installed
+    pass

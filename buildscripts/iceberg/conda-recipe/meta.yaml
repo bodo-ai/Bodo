@@ -14,7 +14,8 @@ build:
 requirements:
   host:
     - python >=3.8,<3.12
-    - setuptools
+    - setuptools >=64
+    - setuptools_scm >=8
     - openjdk >=9.0,<12
     - maven
 

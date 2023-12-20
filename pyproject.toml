@@ -1,3 +1,5 @@
+[tool.setuptools_scm]
+
 [tool.black]
 exclude = 'demo/.*'
 
@@ -58,10 +60,6 @@ exclude = [
     
     "demo/",
     "examples/",
-    "versioneer.py",
-    "BodoSQL/versioneer.py",
-    "bodo/_version.py",
-    "BodoSQL/bodosql/_version.py",
 
     # TODO: Skip specific rules for these files
     "bodo/__init__.py",

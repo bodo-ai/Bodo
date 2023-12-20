@@ -1,5 +1,3 @@
 include README.md
-include versioneer.py
-include bodo/_version.py
 include bodo/pytest.ini
 graft bodo/tests/data

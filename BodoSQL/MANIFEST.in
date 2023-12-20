@@ -1,5 +1,3 @@
 include README.md
-include versioneer.py
-include bodosql/_version.py
 include bodosql/pytest.ini
 include bodosql/opensource/calcite.NOTICE
