@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import java.lang.RuntimeException
+import com.google.common.collect.ImmutableList
+import java.util.*
 
 /**
  * Utility functions for parsing information obtained from Snowflake. This is intended
@@ -20,6 +21,43 @@ class SnowflakeUtils {
                 "Y" -> true
                 "N" -> false
                 else -> throw RuntimeException("Internal Processing Error: Snowflake column expected to hold Y/N but a different value '$loweredStr' was encountered")
+            }
+        }
+
+        /**
+         * Helper function to parse the arguments value of show functions
+         * into a form that can be passed to describe function.
+         * https://docs.snowflake.com/en/sql-reference/sql/show-functions
+         *
+         * The signature has the form
+         * FUNC_NAME(TYPE_1, ..., TYPE_N, [OPTIONAL_TYPE_1, ..., OPTIONAL_TYPE_N]) RETURN RETURN_TYPE
+         *
+         * We don't support optional arguments yet because we have not figured out how to load defaults
+         * from Snowflake.
+         *
+         * Note that a builtin function can have multiple signatures in general, but we only care about
+         * UDFS.
+         *
+         * @param
+         *
+         * @param arguments The output of the arguments column for show functions.
+         * @return A call to the function that can be fed to describe function.
+         */
+        @JvmStatic
+        fun parseSnowflakeShowFunctionsArguments(arguments: String, functionPath: ImmutableList<String>): String {
+            // Remove the return
+            val callParts = arguments.split("RETURN")
+            val call = callParts[0]
+            // Remove any optional arguments
+            val argParts = call.split("[")
+            val validArgs = argParts[0].trim()
+            // If there is no "[" found we didn't have optional args.
+            return if (argParts.size == 1) {
+                validArgs
+            } else {
+                throw RuntimeException(
+                    "Unable to resolve function: ${functionPath[0]}.${functionPath[1]}.${functionPath[2]}. BodoSQL does not support Snowflake UDFs with default arguments.",
+                )
             }
         }
     }
