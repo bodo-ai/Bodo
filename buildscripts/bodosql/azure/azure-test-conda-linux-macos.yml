@@ -62,7 +62,7 @@ jobs:
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      export BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      export BODO_BODOSQL_VERSION=`python -m setuptools_scm`
       cd $(System.DefaultWorkingDirectory)
 
       CIN="mamba install -y --no-update-deps"
@@ -82,6 +82,18 @@ jobs:
     displayName: "Build Iceberg Connector"
 
   - script: |
+      set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
+      mkdir env
+      mamba env export | tee env/environment.yml
+      mamba list --explicit > env/package-list.txt
+      pip list | tee env/requirements.txt
+    continueOnError: true
+    displayName: Export Environment Spec
+
+  - script: |
       set -exo pipefail
       mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
@@ -93,6 +105,11 @@ jobs:
       else
         cp -r $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql
       fi
+
+      # Remove Originals in case we run from the working directory
+      # to catch any mistakes faster.
+      rm -rf $(System.DefaultWorkingDirectory)/bodo/
+      rm -rf $(System.DefaultWorkingDirectory)/BodoSQL/
     displayName: 'Copy Tests and Test Data'
 
   - task: DownloadSecureFile@1
@@ -105,6 +122,8 @@ jobs:
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
+      python -c "import bodo; print(bodo.__version__)"
+      python -c "import bodosql; print(bodosql.__version__)"
 
       sudo chmod a+r $(testLicense.secureFilePath)
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc

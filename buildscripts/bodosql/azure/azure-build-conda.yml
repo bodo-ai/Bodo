@@ -25,7 +25,7 @@ jobs:
       bash mambaforge.sh -b
       export PATH=$HOME/mambaforge/bin:$PATH
 
-      mamba create -n $CONDA_ENV -y -c conda-forge python=$PYTHON_VERSION conda-build anaconda-client conda-verify curl 'python-libarchive-c=4.0'
+      mamba create -n $CONDA_ENV -y -c conda-forge python=$PYTHON_VERSION conda-build anaconda-client conda-verify curl 'python-libarchive-c=4.0' setuptools_scm
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
@@ -41,13 +41,13 @@ jobs:
       set -x
 
       # Determine Output Versions
-      export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      export BODOSQL_VERSION=`python -m setuptools_scm`
       export BODO_VERSION=$BODOSQL_VERSION
 
       # Build Conda Package with Conda-Build
       # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ points to previously
       # build Bodo package for Linux
-      conda-build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-test
+      conda build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-test
 
       # Copy Build Folder to Working Directory
       cp -r $HOME/mambaforge/envs/$CONDA_ENV/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/

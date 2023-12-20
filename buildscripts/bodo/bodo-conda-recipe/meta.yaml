@@ -19,7 +19,8 @@ requirements:
 
   host:
     - python
-    - setuptools
+    - setuptools >=64
+    - setuptools_scm >=8
     - numba 0.57.1
     # Compatible with Numba requirements.
     # Resolves build issues on nightly

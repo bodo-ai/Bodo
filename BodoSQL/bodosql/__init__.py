@@ -32,7 +32,12 @@ else:
     )
 
 from bodosql.context import BodoSQLContext
-from ._version import get_versions
 
-__version__ = get_versions()["version"]
-del get_versions
+# ------------------------------ Version Import ------------------------------
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("bodosql")
+except PackageNotFoundError:
+    # Package is not installed
+    pass

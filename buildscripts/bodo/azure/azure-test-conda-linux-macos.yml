@@ -74,7 +74,7 @@ jobs:
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      export BODO_VERSION=`python -m setuptools_scm`
 
       # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ is used to install the package
       # from the locally built artifact in the previous step.
