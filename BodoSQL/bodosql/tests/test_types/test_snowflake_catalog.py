@@ -3280,3 +3280,26 @@ def test_unsupported_udf_multiple_definions(
         match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO\\. BodoSQL only supports Snowflake UDFs with a single definition\\. Found 2 definitions",
     ):
         impl(bc, query)
+
+
+def test_unsupported_udf_defaults(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with defaults gives a message they aren't supported.
+    This is because we can't find the default values yet.
+
+    ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select ADD_DEFAULT_ONE(1)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not support Snowflake UDFs with default arguments\\.",
+    ):
+        impl(bc, query)

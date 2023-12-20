@@ -1,5 +1,6 @@
 package com.bodosql.calcite.catalog;
 
+import static com.bodosql.calcite.adapter.snowflake.SnowflakeUtils.parseSnowflakeShowFunctionsArguments;
 import static com.bodosql.calcite.adapter.snowflake.SnowflakeUtils.snowflakeYesNoToBoolean;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_THREE_LOGGER;
@@ -9,6 +10,7 @@ import static java.lang.Math.min;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.ir.Expr;
@@ -42,6 +44,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import kotlin.Triple;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -499,11 +502,18 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     if (typeName.startsWith("NUMBER")) {
       // If we encounter a number type we need to parse it to determine the actual
       // type.
-      // The type information is of the form NUMBER(PRECISION, SCALE)
-      String internalFields = typeName.split("\\(|\\)")[1];
-      String[] numericParts = internalFields.split(",");
-      precision = Integer.valueOf(numericParts[0].trim());
-      int scale = Integer.valueOf(numericParts[1].trim());
+      // The type information is of the form NUMBER(PRECISION, SCALE).
+      // For UDFs it may just be NUMBER, in case we use the default of 38, 0.
+      final int scale;
+      if (typeName.contains("(")) {
+        String internalFields = typeName.split("\\(|\\)")[1];
+        String[] numericParts = internalFields.split(",");
+        precision = Integer.valueOf(numericParts[0].trim());
+        scale = Integer.valueOf(numericParts[1].trim());
+      } else {
+        precision = 38;
+        scale = 0;
+      }
       if (scale > 0) {
         // If scale > 0 then we have a Float, Double, or Decimal Type
         // Currently we only support having DOUBLE inside SQL
@@ -534,14 +544,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       columnDataType = BodoSQLColumnDataType.STRING;
       // Load max string information if it exists
       precision = RelDataType.PRECISION_NOT_SPECIFIED;
-      String[] typeFields = typeName.split("\\(|\\)");
-      if (typeFields.length > 1) {
-        // The precision is passed as VARCHAR(N)/CHAR(N)
-        precision = Integer.valueOf(typeFields[1].trim());
-        // If precision is the Snowflake max, convert it back to -1 to avoid
-        // max character issues.
-        if (precision == 16777216) {
-          precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      // Snowflake columns should contain precision, but UDFs may not.
+      if (typeName.contains("(")) {
+        String[] typeFields = typeName.split("\\(|\\)");
+        if (typeFields.length > 1) {
+          // The precision is passed as VARCHAR(N)/CHAR(N)
+          precision = Integer.valueOf(typeFields[1].trim());
+          // If precision is the Snowflake max, convert it back to -1 to avoid
+          // max character issues.
+          if (precision == 16777216) {
+            precision = RelDataType.PRECISION_NOT_SPECIFIED;
+          }
         }
       }
     } else if (typeName.equals("DATE")) {
@@ -551,23 +564,38 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       // Most likely Snowflake should never return this type as
       // its a user alias
       columnDataType = BodoSQLColumnDataType.DATETIME;
-      precision = 9;
-    } else if (typeName.startsWith("TIMESTAMP_NTZ(")) {
+      precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+    } else if (typeName.startsWith("TIMESTAMP_NTZ")) {
       columnDataType = BodoSQLColumnDataType.DATETIME;
-      // Determine the precision by parsing the type.
-      String precisionString = typeName.split("\\(|\\)")[1];
-      precision = Integer.valueOf(precisionString.trim());
-    } else if (typeName.startsWith("TIMESTAMP_TZ(") || typeName.startsWith("TIMESTAMP_LTZ(")) {
+      // Snowflake table types should contain precision, but UDFs may not.
+      if (typeName.contains("(")) {
+        // Determine the precision by parsing the type.
+        String precisionString = typeName.split("\\(|\\)")[1];
+        precision = Integer.valueOf(precisionString.trim());
+      } else {
+        precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+      }
+    } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
       // TODO(njriasan): Remove TIMESTAMP_TZ
       columnDataType = BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP;
-      // Determine the precision by parsing the type.
-      String precisionString = typeName.split("\\(|\\)")[1];
-      precision = Integer.valueOf(precisionString.trim());
-    } else if (typeName.startsWith("TIME(")) {
+      // Snowflake table types should contain precision, but UDFs may not.
+      if (typeName.contains("(")) {
+        // Determine the precision by parsing the type.
+        String precisionString = typeName.split("\\(|\\)")[1];
+        precision = Integer.valueOf(precisionString.trim());
+      } else {
+        precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+      }
+    } else if (typeName.startsWith("TIME")) {
       columnDataType = BodoSQLColumnDataType.TIME;
-      // Determine the precision by parsing the type.
-      String precisionString = typeName.split("\\(|\\)")[1];
-      precision = Integer.valueOf(precisionString.trim());
+      // Snowflake table types should contain precision, but UDFs may not.
+      if (typeName.contains("(")) {
+        // Determine the precision by parsing the type.
+        String precisionString = typeName.split("\\(|\\)")[1];
+        precision = Integer.valueOf(precisionString.trim());
+      } else {
+        precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+      }
     } else if (typeName.startsWith("BINARY") || typeName.startsWith("VARBINARY")) {
       columnDataType = BodoSQLColumnDataType.BINARY;
     } else if (typeName.equals("VARIANT")) {
@@ -867,7 +895,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String query =
           String.format(
               Locale.ROOT,
-              "show functions like '%s' in schema %s.%s",
+              "show user functions like '%s' in schema %s.%s",
               functionName,
               databaseName,
               schemaName);
@@ -880,10 +908,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         int minArgs = results.getInt(7);
         // Max arguments (column 8)
         int maxArgs = results.getInt(8);
-        // Function args + return value, including names (column 9)
-        String signature = results.getString(9);
-        // TODO: Add parsing on the signature.
-        // Function args + return value, including names (column 9)
+        // Function args + return value, not names (column 9)
+        String arguments = results.getString(9);
         // Is this a table function? (column 12)
         Boolean isTable = snowflakeYesNoToBoolean(results.getString(12));
         // Is this a secure function? (column 14)
@@ -894,11 +920,21 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         String language = results.getString(16);
         // Is this function memoizable? (column 17)
         Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString(17));
+        // Generate a call to describe function to get the information needed to validate the
+        // function.
+        // This is necessary because the arguments column doesn't contain names.
+        ImmutableList<String> functionPath =
+            ImmutableList.of(databaseName, schemaName, functionName);
+        Triple<String, String, String> functionInfo = describeFunctionImpl(functionPath, arguments);
+        String args = functionInfo.component1();
+        String returns = functionInfo.component2();
+        String body = functionInfo.component3();
         SnowflakeUserDefinedFunction function =
             SnowflakeUserDefinedFunction.create(
-                ImmutableList.of(databaseName, schemaName, functionName),
-                this,
-                signature,
+                functionPath,
+                args,
+                returns,
+                body,
                 minArgs,
                 maxArgs,
                 isTable,
@@ -935,6 +971,71 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               functions.size()));
     } else {
       return functions;
+    }
+  }
+
+  /**
+   * Fetch the Arguments, Return Type information, and body from a Snowflake UDF definition.
+   *
+   * @param functionPath The path to the function, including the name.
+   * @param showFunctionArguments The arguments loaded from show functions.
+   * @return The arguments, return type, and body information.
+   */
+  private Triple<String, String, @Nullable String> describeFunctionImpl(
+      ImmutableList<String> functionPath, String showFunctionArguments) {
+    String describeFunctionInput =
+        parseSnowflakeShowFunctionsArguments(showFunctionArguments, functionPath);
+    String describeQuery =
+        String.format(
+            Locale.ROOT,
+            "describe function %s.%s.%s",
+            functionPath.get(0),
+            functionPath.get(1),
+            describeFunctionInput);
+    try {
+      ResultSet describeResults = executeSnowflakeQuery(describeQuery, 5);
+      // There must be exactly 4 Rows. Row 1 is args, row 2 is returns, row 3 is language,
+      // and row 4 is the body.
+      // Documentation: https://docs.snowflake.com/en/sql-reference/sql/desc-function.
+      // Note: JDBC connections are 1-indexed
+      fetchResultSetRow(describeQuery, describeResults, true);
+      String signature = describeResults.getString(2);
+      fetchResultSetRow(describeQuery, describeResults, true);
+      String returns = describeResults.getString(2);
+      fetchResultSetRow(describeQuery, describeResults, true);
+      fetchResultSetRow(describeQuery, describeResults, true);
+      String body = describeResults.getString(2);
+      // Verify there are no additional rows
+      fetchResultSetRow(describeQuery, describeResults, false);
+      return new Triple<>(signature, returns, body);
+    } catch (SQLException e) {
+      String errorMsg =
+          String.format(
+              "Error encountered when running describe function query: %s. Error found: %s",
+              describeQuery, e);
+      throw new RuntimeException(errorMsg);
+    }
+  }
+
+  /**
+   * Fetch a single row in a result set, throwing an error if it's not valid.
+   *
+   * <p>Note: This updates the iterator in place.
+   *
+   * @param query The query for the error message.
+   * @param resultSet The result set to update.
+   * @param expectedOutput The expected output of next. This function can be used to both require
+   *     another row and no more rows.
+   */
+  private void fetchResultSetRow(String query, ResultSet resultSet, boolean expectedOutput) {
+    try {
+      if (resultSet.next() != expectedOutput) {
+        String errorMsg =
+            String.format("Unexpected results returned when processing query: %s", query);
+        throw new RuntimeException(errorMsg);
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
   }
 

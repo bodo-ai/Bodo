@@ -8,6 +8,7 @@ import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
+import org.apache.calcite.sql.SnowflakeUserDefinedFunction
 import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
@@ -15,10 +16,13 @@ import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.sql.validate.SqlUserDefinedFunction
 import org.apache.calcite.sql2rel.SqlRexContext
 import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.StandardConvertletTable
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
+import java.lang.RuntimeException
+import java.util.*
 
 /**
  * Custom convertlet table for Bodo code generation. Handles custom functions
@@ -40,6 +44,12 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
     }
 
     override fun get(call: SqlCall): SqlRexConvertlet? {
+        if (call.operator is SqlUserDefinedFunction) {
+            val function = (call.operator as SqlUserDefinedFunction).function
+            if (function is SnowflakeUserDefinedFunction) {
+                throw RuntimeException("Unable to resolve function: ${function.functionPath[0]}.${function.functionPath[1]}.${function.functionPath[2]}. BodoSQL does not have support for Snowflake UDFs yet")
+            }
+        }
         return when (call.kind) {
             // LEAST and GREATEST default to expanding into case statements
             // in the standard convertlet table. We natively support these
