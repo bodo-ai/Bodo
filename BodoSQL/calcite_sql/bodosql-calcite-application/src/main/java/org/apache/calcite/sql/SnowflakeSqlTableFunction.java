@@ -87,6 +87,7 @@ public class SnowflakeSqlTableFunction extends SqlFunction
         // Place-holder for all non-specialized functions.
         DEFAULT,
         FLATTEN,
+        GENERATOR,
     }
 
     /**

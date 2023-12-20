@@ -2830,6 +2830,13 @@ class DistributedAnalysis:
 
             return
 
+        if fdef == ("generate_empty_table_with_rows", "bodo.hiframes.table"):
+            # [BSE-2310] investigate interaction with row_number kernel causing the output
+            # to be assigned 1DVar when it should not be.
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD
+            return
+
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):
             # input arrays and output index have the same distribution
             tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0])

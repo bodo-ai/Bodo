@@ -40,6 +40,9 @@ class PandasRules private constructor() {
         @JvmField
         val PANDAS_FLATTEN_RULE: RelOptRule = PandasFlattenRule.DEFAULT_CONFIG.toRule()
 
+        @JvmField
+        val PANDAS_TABLE_FUNCTION_SCAN_RULE: RelOptRule = PandasTableFunctionScanRule.DEFAULT_CONFIG.toRule()
+
         // TODO(jsternberg): The following rules aren't necessarily correct.
         // These ones should probably be part of a different section of the codebase
         // as they're physical interactions with outside sources. The current code
@@ -78,6 +81,7 @@ class PandasRules private constructor() {
             PANDAS_TABLE_CREATE_RULE,
             PANDAS_TABLE_SCAN,
             PANDAS_TARGET_TABLE_SCAN,
+            PANDAS_TABLE_FUNCTION_SCAN_RULE,
         )
 
         fun rules(): List<RelOptRule> = PANDAS_RULES

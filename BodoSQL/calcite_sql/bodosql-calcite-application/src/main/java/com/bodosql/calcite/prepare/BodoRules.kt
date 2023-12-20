@@ -16,7 +16,6 @@ import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
 import com.bodosql.calcite.application.logicalRules.FilterSetOpTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterWindowSplitRule
-import com.bodosql.calcite.application.logicalRules.InnerJoinRemoveRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
@@ -57,6 +56,7 @@ import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
 import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
+import org.apache.calcite.rel.rules.PruneEmptyRules
 import org.apache.calcite.rel.rules.SortProjectTransposeRule
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rel.rules.UnionMergeRule
@@ -320,10 +320,15 @@ object BodoRules {
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
-    // Prune trivial cross-joins
     @JvmField
-    val INNER_JOIN_REMOVE_RULE: RelOptRule =
-        InnerJoinRemoveRule.Config.DEFAULT
+    val LEFT_JOIN_REMOVE_RULE: RelOptRule =
+        PruneEmptyRules.JoinLeftEmptyRuleConfig.DEFAULT
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val RIGHT_JOIN_REMOVE_RULE: RelOptRule =
+        PruneEmptyRules.JoinLeftEmptyRuleConfig.DEFAULT
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -708,8 +713,8 @@ object BodoRules {
         // finalized. Ideally this should only run after every join is pushed
         // as far as possible since this should be a correctness constraint.
         JOIN_CONDITION_TO_FILTER_RULE,
-        // This rule should probably be replaced with the PruneEmptyRules
-        INNER_JOIN_REMOVE_RULE,
+        LEFT_JOIN_REMOVE_RULE,
+        RIGHT_JOIN_REMOVE_RULE,
         // Should be handled by RelFieldTrimmer now. Needs join fully supported.
         PROJECT_JOIN_TRANSPOSE_RULE,
 
@@ -744,7 +749,8 @@ object BodoRules {
         AGGREGATE_PROJECT_MERGE_RULE,
         PROJECT_AGGREGATE_MERGE_RULE,
         FILTER_PROJECT_TRANSPOSE_RULE,
-        INNER_JOIN_REMOVE_RULE,
+        LEFT_JOIN_REMOVE_RULE,
+        RIGHT_JOIN_REMOVE_RULE,
         JOIN_REORDER_CONDITION_RULE,
         FILTER_REORDER_CONDITION_RULE,
         LIMIT_PROJECT_TRANSPOSE_RULE,

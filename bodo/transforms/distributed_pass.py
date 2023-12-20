@@ -2151,6 +2151,14 @@ class DistributedPass:
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
 
+        if fdef == (
+            "generate_empty_table_with_rows",
+            "bodo.hiframes.table",
+        ) and self._is_1D_arr(lhs):
+            return self._run_call_generate_empty_table_with_rows(
+                lhs, assign, rhs.args, avail_vars, equiv_set
+            )
+
         if fdef == ("_bodo_groupby_apply_impl", "") and self._is_1D_or_1D_Var_arr(lhs):
             # inline shuffling of groupby apply data to make sure input arrays are
             # deallocated during shuffle and there is less memory pressure.
@@ -2465,6 +2473,26 @@ class DistributedPass:
                 self,
                 extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
             )
+
+    def _run_call_generate_empty_table_with_rows(
+        self, lhs, assign, args, avail_vars, equiv_set
+    ):
+        """transform generate_empty_table_with_rows() calls"""
+        assert len(args) == 1, "invalid generate_empty_table_with_rows() call"
+        size_var = args[0]
+        out = []
+        args[0] = self._get_1D_count(size_var, out)
+        func_text = (
+            ""
+            "def impl(n_rows):\n"
+            "    res = bodo.hiframes.table.generate_empty_table_with_rows(n_rows)\n"
+            "    return res\n"
+        )
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        return out + compile_func_single_block(
+            loc_vars["impl"], args, assign.target, self
+        )
 
     def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
         """transform np.func() calls"""
