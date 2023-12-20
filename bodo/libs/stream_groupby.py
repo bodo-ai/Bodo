@@ -466,6 +466,29 @@ def init_groupby_state(
         if fname not in supported_agg_funcs:
             raise BodoError(fname + " is not a supported aggregate function.")
         ftypes.append(supported_agg_funcs.index(fname))
+
+    # If there are any semi-structured arrays, we only support first
+    for i in range(len(output_type.fnames)):
+        if output_type.build_table_type == types.unknown:
+            # Typing transformations haven't fully finished yet.
+            break
+
+        # Note: Use _f_in_cols because we need the original column location before reordering
+        # for C++.
+        col_arr_type = output_type.build_table_type.arr_types[
+            output_type._f_in_cols[output_type.f_in_offsets[i]]
+        ]
+
+        if (
+            isinstance(
+                col_arr_type,
+                (bodo.MapArrayType, bodo.ArrayItemArrayType, bodo.StructArrayType),
+            )
+            and fname != "first"
+        ):
+            raise BodoError(
+                "Groupby does not support semi-structured arrays for aggregations other than first"
+            )
     ftypes_arr = np.array(ftypes, np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
     f_in_cols_arr = np.array(output_type.f_in_cols, np.int32)
