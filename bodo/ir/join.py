@@ -85,7 +85,7 @@ join_gen_cond_cfunc = {}
 join_gen_cond_cfunc_addr = {}
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
     """This "registers" a cfunc that implements a general join condition
     so it can be cached. It does two things:

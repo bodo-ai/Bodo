@@ -352,7 +352,7 @@ def unbox_datetime_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_datetime_index(typingctx, data, name):
     """Create a DatetimeIndex with provided data and name values."""
     name = types.none if name is None else name
@@ -1393,7 +1393,7 @@ def unbox_timedelta_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_timedelta_index(typingctx, data, name=None):
     """Create a TimedeltaIndex with provided data and name values."""
     name = types.none if name is None else name
@@ -1789,7 +1789,7 @@ def box_range_index(typ, val, c):
     return index_obj
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_range_index(typingctx, start, stop, step, name=None):
     """Create RangeIndex object"""
     name = types.none if name is None else name
@@ -2096,7 +2096,7 @@ def overload_period_index_copy(A, name=None, deep=False, dtype=None, names=None)
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_period_index(typingctx, data, name, freq):
     """Create a PeriodIndex with provided data, name and freq values."""
     name = types.none if name is None else name
@@ -2347,7 +2347,7 @@ def unbox_categorical_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_categorical_index(typingctx, data, name=None):
     """Create a CategoricalIndex with provided data and name values."""
     name = types.none if name is None else name
@@ -2559,7 +2559,7 @@ def unbox_interval_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_interval_index(typingctx, data, name=None):
     """Create a IntervalIndex with provided data and name values."""
     name = types.none if name is None else name
@@ -2719,7 +2719,7 @@ def box_numeric_index(typ, val, c):
     return index_obj
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_numeric_index(typingctx, data, name=None):
     """Create NumericIndex object"""
     name = types.none if is_overload_none(name) else name
@@ -2976,7 +2976,7 @@ def box_binary_str_index(typ, val, c):
     return index_obj
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_binary_str_index(typingctx, data, name=None):
     """Create StringIndex or BinaryIndex object"""
     name = types.none if name is None else name
@@ -4471,7 +4471,7 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     return index_obj
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_heter_index(typingctx, data, name=None):
     """Create HeterogeneousIndex object"""
     name = types.none if name is None else name

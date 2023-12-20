@@ -40,7 +40,7 @@ _file_write_parallel = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_dtype_size(typingctx, dtype=None):
     assert isinstance(dtype, types.DTypeSpec)
 
@@ -53,7 +53,6 @@ def get_dtype_size(typingctx, dtype=None):
 
 @overload_method(types.Array, "tofile")
 def tofile_overload(arr, fname):
-
     # TODO: fix Numba to convert literal
     if fname == string_type or isinstance(fname, types.StringLiteral):
 
@@ -71,7 +70,7 @@ def tofile_overload(arr, fname):
 
 
 # from llvmlite import ir as lir
-# @intrinsic
+# @intrinsic(prefer_literal=True)
 # def print_array_ptr(typingctx, arr_ty):
 #     assert isinstance(arr_ty, types.Array)
 #     def codegen(context, builder, sig, args):

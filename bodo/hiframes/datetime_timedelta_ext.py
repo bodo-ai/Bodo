@@ -261,7 +261,7 @@ def pd_timedelta(
     return impl_timedelta
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_pd_timedelta(typingctx, value):
     def codegen(context, builder, signature, args):
         typ = signature.return_type
@@ -878,7 +878,7 @@ def datetime_timedelta(
     return impl_timedelta
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_timedelta(typingctx, d, s, us):
     def codegen(context, builder, signature, args):
         typ = signature.return_type
@@ -1083,7 +1083,7 @@ def timedelta_abs(lhs):
         return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_numpy_timedelta_to_int(typingctx, val=None):
     """Cast timedelta64 value to int"""
     assert val in (types.NPTimedelta("ns"), types.int64)
@@ -1270,7 +1270,7 @@ def box_datetime_timedelta_array(typ, val, c):
     return obj_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_datetime_timedelta_array(
     typingctx, days_data, seconds_data, microseconds_data, nulls=None
 ):

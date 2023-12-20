@@ -76,7 +76,7 @@ class SeriesStrModel(models.StructModel):
 make_attribute_wrapper(SeriesStrMethodType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_str_method(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -621,7 +621,6 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
 
 @overload_method(SeriesStrMethodType, "cat", no_unliteral=True)
 def overload_str_method_cat(S_str, others=None, sep=None, na_rep=None, join="left"):
-
     # only DataFrame input is currently supported (TODO: support Series/Index/array)
     if not isinstance(others, DataFrameType):
         raise_bodo_error("Series.str.cat(): 'others' must be a DataFrame currently")
@@ -1298,7 +1297,6 @@ def overload_str_method_getitem(S_str, ind):
 
 @overload_method(SeriesStrMethodType, "extract", inline="always", no_unliteral=True)
 def overload_str_method_extract(S_str, pat, flags=0, expand=True):
-
     if not is_overload_constant_bool(expand):
         raise BodoError(
             "Series.str.extract(): 'expand' argument should be a constant bool"
@@ -1385,7 +1383,6 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 
 @overload_method(SeriesStrMethodType, "extractall", inline="always", no_unliteral=True)
 def overload_str_method_extractall(S_str, pat, flags=0):
-
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
     n_cols = len(columns)
     is_index_string = isinstance(S_str.stype.index, StringIndexType)
@@ -1530,7 +1527,6 @@ def _get_column_names_from_regex(pat, flags, func_name):
 
 
 def create_str2str_methods_overload(func_name):
-
     # All of the functions except for strip take no arguments.
     # Strip takes one optional argument, which is the character(s) to strip.
     # In order to resolve this with minmal code duplication, we create/exec the func text
@@ -1708,7 +1704,7 @@ class SeriesCatModel(models.StructModel):
 make_attribute_wrapper(SeriesCatMethodType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_cat_method(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args

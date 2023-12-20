@@ -587,7 +587,7 @@ def impl_ctor_time(context, builder, sig, args):  # pragma: no cover
     return nopython_time
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_int_to_time(typingctx, val, precision):
     """Cast int value to Time"""
     assert types.unliteral(val) == types.int64, "val must be int64"
@@ -601,7 +601,7 @@ def cast_int_to_time(typingctx, val, precision):
     return TimeType(precision.literal_value)(types.int64, types.int64), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_time_to_int(typingctx, val):
     """Cast Time value to int"""
     assert isinstance(val, TimeType), "val must be Time"
@@ -746,7 +746,7 @@ def box_time_array(typ, val, c):
     return obj_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_time_array(typingctx, data, nulls, precision):
     """Create a TimeArrayType with provided data values."""
     assert data == types.Array(types.int64, 1, "C"), "data must be an array of int64"

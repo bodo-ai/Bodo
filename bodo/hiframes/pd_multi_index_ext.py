@@ -241,7 +241,7 @@ def impl(iterables, sortorder=None, names=None):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_multi_index(typingctx, data, names, name=None):
     """Create a MultiIndex with provided data, names and name values."""
     name = types.none if name is None else name
@@ -284,7 +284,6 @@ def overload_multi_index_getitem(I, ind):
 
     # TODO(ehsan): scalar indexing
     if not isinstance(ind, types.Integer):
-
         n_fields = len(I.array_types)
         func_text = "def impl(I, ind):\n"
         func_text += "  data = I._data\n"

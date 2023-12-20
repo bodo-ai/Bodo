@@ -393,7 +393,7 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     return series._getvalue()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series(typingctx, data, index, name=None):
     """Create a Series with provided data, index and name values.
     Used as a single constructor for Series and assigning its data, so that
@@ -476,7 +476,7 @@ def get_series_payload(context, builder, series_type, value):
     return context.make_helper(builder, payload_type, ref=payload)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_series_data(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
@@ -489,7 +489,7 @@ def get_series_data(typingctx, series_typ=None):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_series_index(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
@@ -504,7 +504,7 @@ def get_series_index(typingctx, series_typ=None):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_series_name(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(

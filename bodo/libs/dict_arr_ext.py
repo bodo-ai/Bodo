@@ -141,7 +141,7 @@ make_attribute_wrapper(DictionaryArrayType, "dict_id", "_dict_id")
 lower_builtin("getiter", dict_str_arr_type)(numba.np.arrayobj.getiter_array)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_dict_arr(
     typingctx, data_t, indices_t, glob_dict_t, unique_dict_t, dict_id_if_present_t
 ):
@@ -200,7 +200,7 @@ def generate_dict_id_codegen(context, builder, sig, args):
     return new_dict_id
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def generate_dict_id(typingctx, length_t):
     """Generate a new id for a dictionary with the
     given length. This is exposed directly for APIs that can use

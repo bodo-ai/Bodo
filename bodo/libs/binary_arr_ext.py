@@ -146,7 +146,7 @@ def pre_alloc_binary_array(n_bytestrs, n_chars):  # pragma: no cover
     return bin_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_binary_arr(typingctx, data_typ=None):
     """create a new binary array from input data array(char) array data"""
     assert (
@@ -164,7 +164,7 @@ def init_binary_arr(typingctx, data_typ=None):
     return binary_array_type(data_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_bytes_type(typingctx, data_typ, length_type):
     """create a new bytes array from input data array(uint8) data and length,
     where it is assumed that length <= len(data)"""
@@ -217,7 +217,7 @@ def init_bytes_type(typingctx, data_typ, length_type):
     return bytes_type(data_typ, length_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_bytes_uint8array(typingctx, data_typ):
     """cast a bytes array to array(uint8) for use in setitem."""
     assert data_typ == bytes_type
@@ -229,7 +229,7 @@ def cast_bytes_uint8array(typingctx, data_typ):
     return types.Array(types.uint8, 1, "C")(data_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cast_uint8array_bytes(typingctx, data_typ):
     """cast array(uint8) to a bytes array for use in setitem."""
     assert data_typ == types.Array(types.uint8, 1, "C")
@@ -295,7 +295,7 @@ def bytes_hash(arr):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def bytes_to_hex(typingctx, output, arr):
     """Call C implementation of bytes_to_hex"""
 

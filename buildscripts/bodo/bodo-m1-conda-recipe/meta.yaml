@@ -30,14 +30,14 @@ requirements:
     - numpy >=1.23                          # [build_platform != target_platform]
     - arrow-cpp =13.0.0                     # [build_platform != target_platform]
     - pyarrow =13.0.0                       # [build_platform != target_platform]
-    - numba 0.57.1
+    - numba 0.58.1
 
   host:
     - python
     - setuptools
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.23,<1.25
+    - numpy >=1.23,<1.27
     - cython <3.0
     - pandas >=2,<2.1
     - fsspec >=2021.09
@@ -63,7 +63,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - libcurl <=8.4
-    - numba =0.57.1
+    - numba =0.58.1
     - mpich *=h* # [not win]
     - msmpi # [win]
     - mpi4py
@@ -78,7 +78,7 @@ requirements:
   run_constrained:
     - matplotlib <= 3.5.1
   run_constrained:
-    - numpy >=1.23,<1.25
+    - numpy >=1.23,<1.27
   run_constrained:
     - scikit-learn =1.1.*
   run_constrained:

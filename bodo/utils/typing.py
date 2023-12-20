@@ -2262,7 +2262,7 @@ def from_iterable_impl(A):  # pragma: no cover
     return bodo.utils.conversion.flatten_array(bodo.utils.conversion.coerce_to_array(A))
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def unliteral_val(typingctx, val=None):
     """converts the type of value 'val' to nonliteral"""
 

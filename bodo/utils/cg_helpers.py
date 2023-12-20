@@ -62,7 +62,7 @@ def get_bitmap_bit(builder, null_bitmap_ptr, ind):
     return builder.and_(byte, mask)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_bit_to(typingctx, null_bitmap_ptr_t, ind_t, val_t):
     """intrinsic equivalent of SetBitTo() in C++. Sets bitmap array's bit to value.
 

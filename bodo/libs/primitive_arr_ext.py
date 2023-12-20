@@ -81,7 +81,7 @@ def overload_primitive_arr_shape(A):
     return lambda A: (A._length,)  # pragma: no cover
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def alloc_primitive_array(typingctx, n_typ, dtype_typ):
     """Allocate a primitive array with specified length and dtype"""
     assert isinstance(n_typ, types.Integer) and isinstance(
@@ -108,7 +108,7 @@ def alloc_primitive_array(typingctx, n_typ, dtype_typ):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def primitive_to_np(typingctx, primitive_arr_t):
     """Convert primitive array to Numpy array (view with same meminfo) to allow reusing
     Numpy operations.
@@ -134,7 +134,7 @@ def primitive_to_np(typingctx, primitive_arr_t):
     return np_arr_type(primitive_arr_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def np_to_primitive(typingctx, np_arr_t):
     """Convert Numpy array to primitive array (view with same meminfo)"""
     assert (

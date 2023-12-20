@@ -198,7 +198,7 @@ def define_snowflake_writer_dtor(
     return fn
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sf_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
     expected_state_type = unwrap_typeref(expected_state_type_t)
     if is_overload_none(expected_state_type):
@@ -254,7 +254,7 @@ def _get_snowflake_writer_payload(
     return payload, meminfo_data_ptr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sf_writer_getattr(typingctx, writer_typ, attr_typ):  # pragma: no cover
     """Get attribute of a Snowflake writer"""
     assert isinstance(writer_typ, SnowflakeWriterType), (
@@ -280,7 +280,7 @@ def sf_writer_getattr(typingctx, writer_typ, attr_typ):  # pragma: no cover
     return val_typ(writer_typ, attr_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sf_writer_setattr(typingctx, writer_typ, attr_typ, val_typ):  # pragma: no cover
     """Set attribute of a Snowflake writer"""
     assert isinstance(writer_typ, SnowflakeWriterType), (

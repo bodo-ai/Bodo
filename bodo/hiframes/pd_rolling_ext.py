@@ -202,7 +202,7 @@ def overload_series_rolling(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_rolling(
     typingctx, obj_type, window_type, min_periods_type, center_type, on_type=None
 ):
@@ -558,7 +558,6 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
 
 @overload_method(RollingType, "corr", inline="always", no_unliteral=True)
 def overload_rolling_corr(rolling, other=None, pairwise=None, ddof=1):
-
     args_dict = {
         "pairwise": pairwise,
         "ddof": ddof,
@@ -578,7 +577,6 @@ def overload_rolling_corr(rolling, other=None, pairwise=None, ddof=1):
 
 @overload_method(RollingType, "cov", inline="always", no_unliteral=True)
 def overload_rolling_cov(rolling, other=None, pairwise=None, ddof=1):
-
     args_dict = {
         "ddof": ddof,
         "pairwise": pairwise,

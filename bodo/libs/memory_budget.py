@@ -37,7 +37,7 @@ class OperatorType(Enum):
     ACCUMULATE_TABLE = 5
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_operator_comptroller(typingctx):
     """Wrapper for init_operator_comptroller in _memory_budget.cpp"""
 
@@ -54,7 +54,7 @@ def init_operator_comptroller(typingctx):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_operator_comptroller_with_budget(typingctx, budget):
     """Wrapper for init_operator_comptroller_with_budget in _memory_budget.cpp"""
 
@@ -76,7 +76,7 @@ def init_operator_comptroller_with_budget(typingctx, budget):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def register_operator(
     typingctx, operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
 ):
@@ -106,7 +106,7 @@ def register_operator(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def compute_satisfiable_budgets(typingctx):
     """Wrapper for compute_satisfiable_budgets in _memory_budget.cpp"""
 
@@ -126,7 +126,7 @@ def compute_satisfiable_budgets(typingctx):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def reduce_operator_budget(typingctx, operator_id, new_estimate):
     """
     Wrapper for reduce_operator_budget in _memory_budget.cpp
@@ -152,7 +152,7 @@ def reduce_operator_budget(typingctx, operator_id, new_estimate):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def increase_operator_budget(typingctx, operator_id):
     """
     Wrapper for increase_operator_budget in _memory_budget.cpp

@@ -2488,14 +2488,20 @@ def test_sort_values_nested_arr_dict(memory_leak_check):
 
     df1 = pd.DataFrame(
         {
-            "A": [2, 1, 3] * 4,
-            "B": np.array([["a1", None, "a2"], ["a3"], None] * 4, object),
+            "A": [2, 1, 3],
+            "B": pd.array(
+                [["a1", None, "a2"], ["a3"], None],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
         }
     )
     df2 = pd.DataFrame(
         {
-            "A": [2, 1, 3] * 4,
-            "B": np.array([[["1", "2", "8"], ["3"]], [["2", None]], None] * 4, object),
+            "A": [2, 1, 3],
+            "B": pd.array(
+                [[["1", "2", "8"], ["3"]], [["2", None]], None],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.large_string()))),
+            ),
         }
     )
     # TODO[BSE-1257]: support parallel sort

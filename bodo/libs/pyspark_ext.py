@@ -80,7 +80,7 @@ spark_session_builder_type = SparkSessionBuilderType()
 register_model(SparkSessionBuilderType)(models.OpaqueModel)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_session(typingctx=None):
     """Create a SparkSession() value.
     creates a null value since the value isn't used
@@ -92,7 +92,7 @@ def init_session(typingctx=None):
     return spark_session_type(), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_session_builder(typingctx=None):
     """Create a SparkSession.builder value.
     creates a null value since the value isn't used
@@ -166,7 +166,6 @@ class RowType(types.BaseNamedTuple):
     """data type for Spark Row object."""
 
     def __init__(self, types, fields):
-
         self.types = tuple(types)
         self.count = len(self.types)
         self.fields = tuple(fields)
@@ -322,7 +321,7 @@ class SparkDataFrameModel(models.StructModel):
 make_attribute_wrapper(SparkDataFrameType, "df", "_df")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_spark_df(typingctx, df_typ=None):
     """Create a Spark DataFrame value from a Pandas dataframe value"""
 
@@ -726,7 +725,7 @@ class ExprType(types.Type):
 register_model(ExprType)(models.OpaqueModel)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_col_from_name(typingctx, col=None):
     """create Column object from column name"""
     assert is_overload_constant_str(col)
@@ -751,7 +750,7 @@ def overload_f_col(col):
     return lambda col: init_col_from_name(col)  # pragma: no cover
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_f_sum(typingctx, col=None):
     """create a Column object for F.sum"""
     col_type = ColumnType(ExprType("sum", (col.expr,)))

@@ -43,7 +43,7 @@ _lead_lag_seq_py_entry = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def ptr_to_voidptr(typingctx, val):
     """Convert type of input to voidptr (just type change with no runtime value change)"""
 
