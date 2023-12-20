@@ -1193,7 +1193,7 @@ def get_df_obj_column_codegen(context, builder, pyapi, df_obj, col_ind, data_typ
     return arr_obj
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def unbox_dataframe_column(typingctx, df, i=None):
     assert isinstance(df, DataFrameType) and is_overload_constant_int(i)
 

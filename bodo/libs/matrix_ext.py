@@ -96,7 +96,7 @@ def box_matrix(typ, val, c):
     return res
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_np_matrix(typingctx, data_t):
     """Create a np.matrix with the provided underlying 2D array."""
     assert isinstance(data_t, types.Array) and data_t.ndim == 2

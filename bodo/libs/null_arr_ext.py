@@ -93,7 +93,7 @@ class NullArrayModel(models.StructModel):
 make_attribute_wrapper(NullArrayType, "length", "_length")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_null_array(typingctx, length_t):
     """Create a null array with the provided length."""
 

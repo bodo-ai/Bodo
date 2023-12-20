@@ -105,7 +105,6 @@ class DataFrameGetItemTemplate(AbstractTemplate):
 
         # df.loc[idx, col_ind]
         if isinstance(idx, types.BaseTuple) and len(idx) == 2:
-
             df_index_indexer_type = idx.types[0]
             df_columns_indexer_type = idx.types[1]
 
@@ -511,7 +510,7 @@ class DataFrameILocModel(models.StructModel):
 make_attribute_wrapper(DataFrameILocType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_dataframe_iloc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -736,7 +735,7 @@ class DataFrameLocModel(models.StructModel):
 make_attribute_wrapper(DataFrameLocType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_dataframe_loc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -769,7 +768,6 @@ def loc_getitem_lower(context, builder, sig, args):
 
 
 def overload_loc_getitem(I, idx):
-
     # This check shouldn't be needeed, but it can't hurt to keep it in
     if not isinstance(I, DataFrameLocType):
         return
@@ -921,7 +919,7 @@ class DataFrameIatModel(models.StructModel):
 make_attribute_wrapper(DataFrameIatType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_dataframe_iat(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args

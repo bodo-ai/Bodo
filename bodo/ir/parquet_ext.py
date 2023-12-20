@@ -1154,7 +1154,7 @@ pq_read_py_entry = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def pq_reader_init_py_entry(
     typingctx,
     path_t,

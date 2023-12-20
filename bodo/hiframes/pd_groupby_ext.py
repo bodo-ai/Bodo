@@ -177,7 +177,7 @@ def validate_udf(func_name, func):
         raise_bodo_error(f"Groupby.{func_name}: 'func' must be user defined function")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_groupby(
     typingctx,
     obj_type,

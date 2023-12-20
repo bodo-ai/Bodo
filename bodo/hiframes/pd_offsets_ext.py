@@ -128,7 +128,7 @@ def MonthBegin(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_month_begin(typingctx, n, normalize):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -201,7 +201,6 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
 
     # rhs is a timestamp
     if lhs == month_begin_type and isinstance(rhs, PandasTimestampType):
-
         tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -324,7 +323,7 @@ def MonthEnd(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_month_end(typingctx, n, normalize):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -403,7 +402,6 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
 
     # rhs is a timestamp
     if lhs == month_end_type and isinstance(rhs, PandasTimestampType):
-
         tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -660,7 +658,6 @@ def box_date_offset(typ, val, c):
 
 @unbox(DateOffsetType)
 def unbox_date_offset(typ, val, c):
-
     n_obj = c.pyapi.object_getattr_string(val, "n")
     normalize_obj = c.pyapi.object_getattr_string(val, "normalize")
     n = c.pyapi.long_as_longlong(n_obj)
@@ -861,7 +858,7 @@ def DateOffset(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_date_offset(
     typingctx,
     n,
@@ -1201,6 +1198,7 @@ class WeekType(types.Type):
 
 week_type = WeekType()
 
+
 # Tell Numba's type inference to map Week's type to WeekType
 @typeof_impl.register(pd.tseries.offsets.Week)
 def typeof_week(val, c):
@@ -1224,6 +1222,7 @@ make_attribute_wrapper(WeekType, "n", "n")
 make_attribute_wrapper(WeekType, "normalize", "normalize")
 make_attribute_wrapper(WeekType, "weekday", "weekday")
 
+
 # Constructor Overload
 @overload(pd.tseries.offsets.Week, no_unliteral=True)
 def Week(
@@ -1244,7 +1243,7 @@ def Week(
 
 
 # LLVM helper for constructing the object
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_week(typingctx, n, normalize, weekday):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -1315,7 +1314,6 @@ def unbox_week(typ, val, c):
     is_none = c.builder.icmp_unsigned("==", weekday_obj, none_obj)
 
     with c.builder.if_else(is_none) as (weekday_undefined, weekday_defined):
-
         with weekday_defined:
             res_if = c.pyapi.long_as_longlong(weekday_obj)
             weekday_defined_bb = c.builder.block

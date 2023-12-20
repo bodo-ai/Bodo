@@ -76,7 +76,7 @@ def str_findall_count(regex, in_str):
 utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, "C"))
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def unicode_to_utf8_and_len(typingctx, str_typ):
     """convert unicode string to utf8 string and return its utf8 length.
     If input is ascii, just wrap its data and meminfo. Otherwise, allocate
@@ -157,7 +157,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ):
     return ret_typ(string_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def re_escape_len(typingctx, str_typ):
     """Intrinsic to call into a C++ function that determines the length
     of the output string when calling re.escape.
@@ -196,7 +196,7 @@ def re_escape_len(typingctx, str_typ):
     return types.int64(string_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def re_escape_with_output(typingctx, in_str_typ, out_str_typ):
     """Intrinsic to call into a C++ function that implements
     re.escape. The output data is written to the buffer allocated
@@ -291,7 +291,7 @@ def overload_builtin_min(lhs, rhs):
         return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def memcmp(typingctx, dest_t, src_t, count_t=None):
     """call memcmp() in C"""
 
@@ -477,7 +477,7 @@ def gen_get_unicode_chars(context, builder, unicode_val):
     return uni_str.data
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def unicode_to_std_str(typingctx, unicode_t=None):
     def codegen(context, builder, sig, args):
         return gen_unicode_to_std_str(context, builder, args[0])
@@ -485,7 +485,7 @@ def unicode_to_std_str(typingctx, unicode_t=None):
     return std_str_type(string_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def std_str_to_unicode(typingctx, unicode_t=None):
     def codegen(context, builder, sig, args):
         return gen_std_str_to_unicode(context, builder, args[0], True)
@@ -528,7 +528,7 @@ class RandomAccessStringArrayModel(models.StructModel):
 make_attribute_wrapper(RandomAccessStringArrayType, "data", "_data")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def alloc_random_access_string_array(typingctx, n_t=None):
     def codegen(context, builder, sig, args):
         (nitems,) = args
@@ -889,7 +889,7 @@ def fast_ceil_log2(x):
     return total
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def int_to_hex(typingctx, output, out_len, header_len, int_val):
     """Call C implementation of bytes_to_hex"""
 

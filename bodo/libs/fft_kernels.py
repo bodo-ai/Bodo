@@ -94,7 +94,7 @@ def overload_fftshift(A, parallel=False):
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _fft2(typing_context, A, shape, parallel):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(

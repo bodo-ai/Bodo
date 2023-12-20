@@ -91,7 +91,7 @@ def typeof_interval_array(val, c):
     return IntervalArrayType(arr_type)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_interval_array(typingctx, left, right=None):
     """Create a IntervalArray with provided left and right arrays."""
     assert left == right, "Interval left/right array types should be the same"
