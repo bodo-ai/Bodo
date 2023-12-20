@@ -147,13 +147,12 @@ def datetime_datetime(year, month, day, hour=0, minute=0, second=0, microsecond=
     def impl_datetime(
         year, month, day, hour=0, minute=0, second=0, microsecond=0
     ):  # pragma: no cover
-
         return init_datetime(year, month, day, hour, minute, second, microsecond)
 
     return impl_datetime
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_datetime(typingctx, year, month, day, hour, minute, second, microsecond):
     def codegen(context, builder, signature, args):
         typ = signature.return_type
@@ -242,6 +241,7 @@ def datetime_get_microsecond(dt):
 @overload_method(DatetimeDatetimeType, "date", no_unliteral=True)
 def date(dt):
     """Return the date part."""
+
     # TODO: support datetime.datetime.time() method once datetime.time is implemented
     def impl(dt):  # pragma: no cover
         return datetime.date(dt.year, dt.month, dt.day)
@@ -288,7 +288,7 @@ def _cmp(x, y):  # pragma: no cover
 
 
 def create_cmp_op_overload(op):
-    """ create overload function for comparison operators with datetime_datetime_type. """
+    """create overload function for comparison operators with datetime_datetime_type."""
 
     def overload_datetime_cmp(lhs, rhs):
         if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
@@ -311,7 +311,6 @@ def create_cmp_op_overload(op):
 
 
 def overload_sub_operator_datetime_datetime(lhs, rhs):
-
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
         def impl(lhs, rhs):  # pragma: no cover

@@ -416,7 +416,7 @@ def overload_snowflake_catalog_constructor(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_snowflake_connector(
     typingctx, username, password, account, warehouse, database, connection_params
 ):

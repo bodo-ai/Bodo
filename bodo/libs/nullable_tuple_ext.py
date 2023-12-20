@@ -92,7 +92,7 @@ make_attribute_wrapper(NullableTupleType, "data", "_data")
 make_attribute_wrapper(NullableTupleType, "null_values", "_null_values")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def build_nullable_tuple(typingctx, data_tuple, null_values):
     assert isinstance(
         data_tuple, types.BaseTuple

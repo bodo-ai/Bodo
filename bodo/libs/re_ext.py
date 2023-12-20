@@ -212,7 +212,7 @@ def cast_match_obj_bool(context, builder, fromty, toty, val):
     return builder.load(out)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def match_obj_is_none(typingctx, match_typ=None):
     assert match_typ == re_match_type
 
@@ -304,7 +304,7 @@ def overload_re_purge():
     return _re_purge_impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_const_pattern(typingctx, pat, pat_const=None):
     """dummy intrinsic to add constant pattern string to Pattern data type"""
     pat_const_str = get_overload_const_str(pat_const)

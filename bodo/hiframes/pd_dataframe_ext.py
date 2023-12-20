@@ -1084,7 +1084,7 @@ def construct_dataframe(
     return dataframe._getvalue()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_runtime_cols_dataframe(
     typingctx, data_typ, index_typ, colnames_index_typ=None
 ):
@@ -1130,7 +1130,7 @@ def init_runtime_cols_dataframe(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     """Create a DataFrame with provided data, index and columns values.
     Used as a single constructor for DataFrame and assigning its data, so that
@@ -1227,7 +1227,7 @@ def overload_pushdown_safe_init_df(table, colNames):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def has_parent(typingctx, df=None):
     check_runtime_cols_unsupported(df, "has_parent")
 
@@ -1240,7 +1240,7 @@ def has_parent(typingctx, df=None):
     return signature(types.bool_, df), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _column_needs_unboxing(typingctx, df_typ, i_typ=None):
     check_runtime_cols_unsupported(df_typ, "_column_needs_unboxing")
     assert isinstance(df_typ, DataFrameType) and is_overload_constant_int(i_typ)
@@ -1284,7 +1284,7 @@ def get_dataframe_payload(context, builder, df_type, value):
     return context.make_helper(builder, payload_type, ref=payload)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _get_dataframe_data(typingctx, df_typ=None):
     check_runtime_cols_unsupported(df_typ, "_get_dataframe_data")
     ret_typ = types.Tuple(df_typ.data)
@@ -1304,7 +1304,7 @@ def _get_dataframe_data(typingctx, df_typ=None):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_dataframe_index(typingctx, df_typ=None):
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
@@ -1360,7 +1360,7 @@ def get_dataframe_data_impl(df, i):
     return _impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_dataframe_table(typingctx, df_typ=None):
     """return internal data table for dataframe with table format"""
     assert df_typ.is_table_format, "get_dataframe_table() expects table format"
@@ -1441,7 +1441,7 @@ def lower_get_dataframe_all_data(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_dataframe_column_names(typingctx, df_typ=None):
     """return internal column names for dataframe with runtime columns"""
     assert (
@@ -1614,7 +1614,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_colu
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     """set column data of a dataframe inplace"""
     check_runtime_cols_unsupported(df_typ, "set_dataframe_data")
@@ -1668,7 +1668,7 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_df_index(typingctx, df_t, index_t=None):
     """used in very limited cases like distributed to_csv() to create a new
     dataframe with index
@@ -1705,7 +1705,7 @@ def set_df_index(typingctx, df_t, index_t=None):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t=None):
     """Set df column and reflect to parent Python object
     return a new df.
@@ -2301,7 +2301,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     return _init_df
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _tuple_to_table_format_decoded(typingctx, df_typ):
     """
     Internal testing function used to convert a
@@ -2335,7 +2335,7 @@ def _tuple_to_table_format_decoded(typingctx, df_typ):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _table_to_tuple_format_decoded(typingctx, df_typ):
     """
     Internal testing function used to convert a

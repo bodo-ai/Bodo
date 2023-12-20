@@ -1938,7 +1938,7 @@ def _gen_sql_reader_py(
 parquet_predicate_type = ParquetPredicateType()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def iceberg_pq_read_py_entry(
     typingctx,
     conn_str,
@@ -2069,7 +2069,7 @@ def iceberg_pq_read_py_entry(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def iceberg_pq_reader_init_py_entry(
     typingctx,
     conn_str,
@@ -2182,7 +2182,7 @@ _snowflake_read = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def snowflake_reader_init_py_entry(
     typingctx,
     query_t,

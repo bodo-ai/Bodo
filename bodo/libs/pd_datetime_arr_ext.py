@@ -369,7 +369,7 @@ def box_pd_datetime_array(typ, val, c):
     return res
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_datetime_array(typingctx, data, null_bitmap, tz):
     """
     Initialize a pandas.arrays.DatetimeArray.

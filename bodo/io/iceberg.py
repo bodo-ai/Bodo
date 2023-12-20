@@ -1175,7 +1175,7 @@ from bodo.io import arrow_cpp
 ll.add_symbol("iceberg_pq_write_py_entry", arrow_cpp.iceberg_pq_write_py_entry)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def iceberg_pq_write_table_cpp(
     typingctx,
     table_data_loc_t,

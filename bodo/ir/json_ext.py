@@ -66,7 +66,7 @@ from bodo.io import json_cpp
 ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def json_file_chunk_reader(
     typingctx,
     fname_t,

@@ -329,7 +329,7 @@ class GroupbyStateType(types.Type):
 register_model(GroupbyStateType)(models.OpaqueModel)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _init_groupby_state(
     typingctx,
     operator_id,
@@ -521,7 +521,7 @@ def init_groupby_state(
     return impl_init_groupby_state
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _groupby_build_consume_batch(
     typingctx,
     groupby_state,
@@ -604,7 +604,7 @@ def lower_groupby_build_consume_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _groupby_produce_output_batch(
     typingctx,
     groupby_state,
@@ -707,7 +707,7 @@ def lower_groupby_produce_output_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def delete_groupby_state(
     typingctx,
     groupby_state,
@@ -729,7 +729,7 @@ def delete_groupby_state(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_op_pool_bytes_pinned(
     typingctx,
     groupby_state,
@@ -758,7 +758,7 @@ def get_op_pool_bytes_pinned(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_op_pool_bytes_allocated(
     typingctx,
     groupby_state,
@@ -787,7 +787,7 @@ def get_op_pool_bytes_allocated(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_num_partitions(
     typingctx,
     groupby_state,
@@ -815,7 +815,7 @@ def get_num_partitions(
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_partition_num_top_bits_by_idx(typingctx, groupby_state, idx):
     """
     Get the number of bits in the 'top_bitmask' of a partition of this groupby
@@ -839,7 +839,7 @@ def get_partition_num_top_bits_by_idx(typingctx, groupby_state, idx):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_partition_top_bitmask_by_idx(typingctx, groupby_state, idx):
     """
     Get the 'top_bitmask' of a partition of this groupby operator by the partition index.

@@ -61,7 +61,7 @@ class SeriesDtModel(models.StructModel):
 make_attribute_wrapper(SeriesDatetimePropertiesType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_dt_properties(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -271,7 +271,6 @@ def series_dt_date_overload(S_dt):
 
 def create_series_dt_df_output_overload(attr):
     def series_dt_df_output_overload(S_dt):
-
         if not (
             (attr == "components" and S_dt.stype.dtype == types.NPTimedelta("ns"))
             or (
@@ -624,7 +623,6 @@ def create_bin_op_overload(op):
     """
 
     def overload_series_dt_binop(lhs, rhs):
-
         # lhs is series(dt64) and rhs is series(dt64)
         if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
             lhs

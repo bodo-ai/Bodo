@@ -142,7 +142,7 @@ def construct_str_arr_split_view(context, builder):
     return meminfo, meminfo_data_ptr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
     assert str_arr_typ == string_array_type and isinstance(sep_typ, types.StringLiteral)
 
@@ -319,7 +319,7 @@ def box_str_arr_split_view(typ, val, c):
     return out_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
     assert num_items_t == types.intp and num_offsets_t == types.intp
 
@@ -359,7 +359,7 @@ def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
     return string_array_split_view_type(types.intp, types.intp, data_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_c_arr_ptr(typingctx, c_arr, ind_t=None):
     assert isinstance(c_arr, (types.CPointer, types.ArrayCTypes))
 
@@ -373,7 +373,7 @@ def get_c_arr_ptr(typingctx, c_arr, ind_t=None):
     return types.voidptr(c_arr, ind_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def getitem_c_arr(typingctx, c_arr, ind_t=None):
     def codegen(context, builder, sig, args):
         in_arr, ind = args
@@ -384,7 +384,7 @@ def getitem_c_arr(typingctx, c_arr, ind_t=None):
     return c_arr.dtype(c_arr, ind_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def setitem_c_arr(typingctx, c_arr, ind_t, item_t=None):
     def codegen(context, builder, sig, args):
         in_arr, ind, item = args
@@ -394,7 +394,7 @@ def setitem_c_arr(typingctx, c_arr, ind_t, item_t=None):
     return types.void(c_arr, ind_t, c_arr.dtype), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_array_ctypes_ptr(typingctx, arr_ctypes_t, ind_t=None):
     def codegen(context, builder, sig, args):
         in_arr_ctypes, ind = args

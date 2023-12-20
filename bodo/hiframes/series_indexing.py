@@ -78,7 +78,7 @@ class SeriesIatModel(models.StructModel):
 make_attribute_wrapper(SeriesIatType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_iat(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -221,7 +221,7 @@ class SeriesIlocModel(models.StructModel):
 make_attribute_wrapper(SeriesIlocType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_iloc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -246,7 +246,6 @@ def overload_series_iloc(s):
 @overload(operator.getitem, no_unliteral=True)
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
-
         # convert dt64 to pd.timedelta
         if I.stype.dtype == types.NPTimedelta("ns") and isinstance(idx, types.Integer):
             return lambda I, idx: convert_numpy_timedelta64_to_pd_timedelta(
@@ -393,11 +392,9 @@ def overload_series_iloc_setitem(I, idx, val):
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
         ):
-
             # Scalar case the same as int/slice. Needs a separate
             # implementation for bodo.utils.conversion.coerce_to_array
             if is_scalar_type(val):
-
                 if (
                     I.stype.dtype == types.NPDatetime("ns")
                     and val == pd_timestamp_tz_naive_type
@@ -504,7 +501,7 @@ class SeriesLocModel(models.StructModel):
 make_attribute_wrapper(SeriesLocType, "obj", "_obj")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_series_loc(typingctx, obj=None):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
@@ -578,7 +575,6 @@ def overload_series_loc_setitem(I, idx, val):
 
     # S.loc[cond]
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         # Series.loc[] setitem with boolean array is same as Series[] setitem
         def impl(I, idx, val):  # pragma: no cover
             S = I._obj

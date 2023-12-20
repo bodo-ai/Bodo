@@ -2796,16 +2796,25 @@ def calc_nitems_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_calc_nitems = calc_nitems_equiv
 
 
-def arange_parallel_impl(return_type, *args):
-    dtype = as_dtype(return_type.dtype)
+def arange_parallel_impl(return_type, *args, dtype=None):
+    inferred_dtype = as_dtype(return_type.dtype)
 
     def arange_1(stop):  # pragma: no cover
+        return np.arange(0, stop, 1, inferred_dtype)
+
+    def arange_1_dtype(stop, dtype):  # pragma: no cover
         return np.arange(0, stop, 1, dtype)
 
     def arange_2(start, stop):  # pragma: no cover
+        return np.arange(start, stop, 1, inferred_dtype)
+
+    def arange_2_dtype(start, stop, dtype):  # pragma: no cover
         return np.arange(start, stop, 1, dtype)
 
     def arange_3(start, stop, step):  # pragma: no cover
+        return np.arange(start, stop, step, inferred_dtype)
+
+    def arange_3_dtype(start, stop, step, dtype):  # pragma: no cover
         return np.arange(start, stop, step, dtype)
 
     if any(isinstance(a, types.Complex) for a in args):
@@ -2832,11 +2841,11 @@ def arange_parallel_impl(return_type, *args):
             return arr
 
     if len(args) == 1:
-        return arange_1
+        return arange_1 if dtype is None else arange_1_dtype
     elif len(args) == 2:
-        return arange_2
+        return arange_2 if dtype is None else arange_2_dtype
     elif len(args) == 3:
-        return arange_3
+        return arange_3 if dtype is None else arange_3_dtype
     elif len(args) == 4:
         return arange_4
     else:
@@ -2848,7 +2857,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.parfors.parfor.arange_parallel_impl)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "c72b0390b4f3e52dcc5426bd42c6b55ff96bae5a425381900985d36e7527a4bd"
+        != "5b03ca42e1fd827f472cf01fc039ffbf9f09742babf39a1be0eac86112aa59d2"
     ):  # pragma: no cover
         warnings.warn("numba.parfors.parfor.arange_parallel_impl has changed")
 numba.parfors.parfor.swap_functions_map[("arange", "numpy")] = arange_parallel_impl

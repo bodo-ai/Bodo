@@ -191,7 +191,7 @@ def bodosql_listagg_seq(df, ascending, na_position, separator=""):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def listagg_seq_cpp(
     typingctx,
     table_t,

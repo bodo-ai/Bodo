@@ -221,7 +221,7 @@ def lower_array_type(context, builder, fromty, toty, val):  # pragma: no cover
     return val
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def array_to_info(typingctx, arr_type_t):
     """convert array to array info wrapper to pass to C++"""
     return array_info_type(arr_type_t), array_to_info_codegen
@@ -1434,7 +1434,7 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr, raise_py_err
     return string_array._getvalue()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def info_to_array(typingctx, info_type, array_type):
     """convert array info wrapper from C++ to regular array object"""
     arr_type = unwrap_typeref(array_type)
@@ -1698,7 +1698,7 @@ def box_nested_array(typ, val, c):
     return arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def arr_info_list_to_table(typingctx, list_arr_info_typ=None):
     assert list_arr_info_typ == types.List(array_info_type)
     return table_type(list_arr_info_typ), arr_info_list_to_table_codegen
@@ -1743,7 +1743,7 @@ def array_from_cpp_table_codegen(context, builder, sig, args):
     return out_arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
     """Return a Python array from a column of a C++ table pointer
 
@@ -1764,7 +1764,7 @@ def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
     return arr_type(table_t, ind_t, array_type_t), array_from_cpp_table_codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def cpp_table_to_py_table(
     typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t
 ):
@@ -2036,7 +2036,7 @@ def cpp_table_to_py_data(
     return loc_vars["impl"]
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     """Extract columns of a Python table and creates a C++ table."""
     assert isinstance(
@@ -2288,7 +2288,7 @@ cpp_table_map_to_list = types.ExternalFunction(
 
 
 # TODO add a test for this
-@intrinsic
+@intrinsic(prefer_literal=True)
 def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
     assert table_info_list_t == types.List(
         table_type
@@ -2317,7 +2317,7 @@ def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
     return table_type(table_info_list_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def union_tables_cpp(typing_ctx, table_info_list_t, drop_duplicates_t, is_parallel_t):
     assert table_info_list_t == types.List(
         table_type
@@ -2407,7 +2407,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
 
 
 # TODO Add a test for this
-@intrinsic
+@intrinsic(prefer_literal=True)
 def shuffle_table(
     typingctx, table_t, n_keys_t, _is_parallel, keep_comm_info_t
 ):  # pragma: no cover
@@ -2455,7 +2455,7 @@ get_shuffle_info = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def delete_shuffle_info(typingctx, shuffle_info_t=None):
     """delete shuffle info data if not none"""
 
@@ -2472,7 +2472,7 @@ def delete_shuffle_info(typingctx, shuffle_info_t=None):
     return types.none(shuffle_info_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def reverse_shuffle_table(typingctx, table_t, shuffle_info_t=None):
     """call reverse shuffle if shuffle info not none"""
 
@@ -2492,7 +2492,7 @@ def reverse_shuffle_table(typingctx, table_t, shuffle_info_t=None):
     return table_type(table_type, shuffle_info_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_null_shuffle_info(typingctx):
     """return a null shuffle info object"""
 
@@ -2502,7 +2502,7 @@ def get_null_shuffle_info(typingctx):
     return shuffle_info_type(), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def hash_join_table(
     typingctx,
     left_table_t,
@@ -2603,7 +2603,7 @@ def hash_join_table(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def nested_loop_join_table(
     typingctx,
     left_table_t,
@@ -2680,7 +2680,7 @@ def nested_loop_join_table(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def interval_join_table(
     typingctx,
     left_table_t,
@@ -2759,7 +2759,7 @@ def interval_join_table(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sort_values_table_py_entry(
     typingctx,
     table_t,
@@ -2814,7 +2814,7 @@ def sort_values_table_py_entry(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sort_table_for_interval_join(
     typingctx,
     table_t,
@@ -2859,7 +2859,7 @@ def sort_table_for_interval_join(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def sample_table(
     typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
 ):
@@ -2902,7 +2902,7 @@ def sample_table(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_parallel_t):
     """
     Interface to the rebalancing of the table
@@ -2934,7 +2934,7 @@ def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_para
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def shuffle_renormalization_group(
     typingctx, table_t, random_t, random_seed_t, is_parallel_t, num_ranks_t, ranks_t
 ):
@@ -2972,7 +2972,7 @@ def shuffle_renormalization_group(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def drop_duplicates_cpp_table(
     typingctx, table_t, parallel_t, nkey_t, keep_t, dropna, drop_local_first
 ):
@@ -3015,7 +3015,7 @@ def drop_duplicates_cpp_table(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def groupby_and_aggregate(
     typingctx,
     table_t,
@@ -3207,7 +3207,7 @@ _get_replace_regex = types.ExternalFunction(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _get_replace_regex_dict_state(
     typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
 ):
@@ -3312,7 +3312,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
             col_dtype = bodo.datetime64ns
 
         # This code path just returns the data.
-        @intrinsic
+        @intrinsic(prefer_literal=True)
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
                 table, row_ind = args
@@ -3358,7 +3358,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
         # This code path returns the data + length
 
-        @intrinsic
+        @intrinsic(prefer_literal=True)
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
                 table, row_ind = args
@@ -3405,7 +3405,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         # extract the index in the dictionary in the intrinsic and get the
         # unicode data from C++.
         # This code path returns the data + length
-        @intrinsic
+        @intrinsic(prefer_literal=True)
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
                 # Define some constants
@@ -3514,7 +3514,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
         or is_str_arr_type(col_array_dtype)
     ):
         # These arrays use a null bitmap to store NA values.
-        @intrinsic
+        @intrinsic(prefer_literal=True)
         def checkna_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
                 null_bitmaps, row_ind = args
@@ -3558,7 +3558,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
                 col_dtype = bodo.datetime64ns
 
             # Datetime arrays represent NULL by using pd._libs.iNaT
-            @intrinsic
+            @intrinsic(prefer_literal=True)
             def checkna_func(typingctx, table_t, ind_t):
                 def codegen(context, builder, sig, args):
                     table, row_ind = args
@@ -3589,7 +3589,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
             # If we have float NA values are stored as nan.
             # In this situation we need to check isnan. If we assume IEEE-754 Floating Point,
             # this check is simply checking certain bits
-            @intrinsic
+            @intrinsic(prefer_literal=True)
             def checkna_func(typingctx, table_t, ind_t):
                 def codegen(context, builder, sig, args):
                     table, row_ind = args

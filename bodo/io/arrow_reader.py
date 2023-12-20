@@ -42,7 +42,7 @@ class ArrowReaderType(types.Type):
 register_model(ArrowReaderType)(models.OpaqueModel)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def arrow_reader_read_py_entry(
     typingctx, arrow_reader_t, produce_output
 ):  # pragma: no cover
@@ -156,7 +156,7 @@ def lower_read_arrow_next(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def arrow_reader_del(typingctx, arrow_reader_t):  # pragma: no cover
     """
     Delete an ArrowReader object by calling the `delete` keyword in C++

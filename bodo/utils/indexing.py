@@ -482,7 +482,7 @@ def none_optional_setitem_overload(A, idx, val):
         )  # pragma: no cover
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def unoptional(typingctx, val_t=None):
     """Return value inside Optional type assuming that it is not None"""
     # just return input if not Optional

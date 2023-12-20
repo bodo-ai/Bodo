@@ -323,7 +323,7 @@ def box_float_array(typ, val, c):  # pragma: no cover
     return res
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_float_array(typingctx, data, null_bitmap=None):  # pragma: no cover
     """Create a FloatingArray with provided data and null bitmap values."""
     assert isinstance(data, types.Array)

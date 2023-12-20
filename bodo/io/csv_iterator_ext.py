@@ -174,7 +174,7 @@ def iternext_csv_iterator(context, builder, sig, args, result):
         result.yield_(out_df)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_csv_iterator(typingctx, csv_reader, csv_iterator_typeref):
     """Create a CSV iterator with the provided csv_reader. This reader contains
     the relevant info to call pd.read_csv. csv_iterator_typeref is a typeref

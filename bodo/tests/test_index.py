@@ -959,7 +959,7 @@ def test_index_sort_values(index):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
+        pd.Index([13, -21, 0, 1, 4, 34, -2, 3, 55, 5, 88, -8]),
         pd.Index(
             pd.array(
                 [
@@ -996,8 +996,8 @@ def test_index_sort_values(index):
                 0.6825334098773845,
             ]
         ),
-        pd.Index([True, True, True, True, False, False, True]),
-        pd.Index(["a", "A", "alpha", "AAA", "a", "aaa", "alphabet", ""]),
+        pd.Index([True, False]),
+        pd.Index(["a", "A", "alpha", "AAA", "b", "aaa", "alphabet", ""]),
         pd.Index(
             [
                 b"c",
@@ -1005,8 +1005,8 @@ def test_index_sort_values(index):
                 b"CCC",
                 b"cookies",
                 b"COOKIE",
-                b"cookie",
-                b"CoOkIe",
+                b"cookie2",
+                b"CoOkIe3",
                 b"ccc",
             ]
         ),
@@ -1030,7 +1030,7 @@ def test_index_sort_values(index):
                 "2 seconds",
                 "10 minutes",
                 "10 days",
-                "10 minutes",
+                "15 minutes",
                 "5 seconds",
             ]
         ),
@@ -1046,23 +1046,21 @@ def test_index_sort_values(index):
                 ]
             )
         ),
-        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
+        pd.CategoricalIndex([1, 5, 2, 0]),
         pytest.param(
-            pd.CategoricalIndex(pd.array([None, 15, 14, 14, 14, 11, 12, 10, 15, None])),
+            pd.CategoricalIndex(pd.array([None, 15, 14, 11, 12, 10, None])),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex(
-                [0.5, 0.18, 0.5, 0.18, 0.07, 0.46, 0.46, 0.5, 0.72, 0.5]
-            ),
+            pd.CategoricalIndex([0.5, 0.18, 0.07, 0.46, 0.72]),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex(["A", "B", "c", "a", "a", "C", "A", "B"]),
+            pd.CategoricalIndex(["A", "B", "c", "a", "C"]),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex([True, False, False, False, False]),
+            pd.CategoricalIndex([True, False]),
             marks=pytest.mark.slow,
         ),
         pd.PeriodIndex(

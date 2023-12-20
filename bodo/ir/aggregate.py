@@ -117,7 +117,7 @@ gb_agg_cfunc = {}
 gb_agg_cfunc_addr = {}
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def add_agg_cfunc_sym(typingctx, func, sym):
     """This "registers" a cfunc that implements part of groupby.agg UDF to ensure
     it can be cached. It does two things:

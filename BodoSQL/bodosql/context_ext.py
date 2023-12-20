@@ -194,7 +194,7 @@ def unbox_bodosql_context(typ, val, c):
     return NativeValue(bodosql_context_struct._getvalue())
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_sql_context(typingctx, names_type, dataframes_type, catalog):
     """Create a BodoSQLContext given table names and dataframes."""
     table_names = tuple(get_overload_const(names_type))

@@ -1393,7 +1393,7 @@ ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
 ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def parquet_write_table_cpp(
     typingctx,
     filename_t,
@@ -1478,7 +1478,7 @@ def parquet_write_table_cpp(
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def parquet_write_table_partitioned_cpp(
     typingctx,
     filename_t,

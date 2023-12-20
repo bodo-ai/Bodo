@@ -53,7 +53,6 @@ def check_tablepath_constant_arguments(
         )
     # conn_str is required for sql
     if file_type == "sql":
-
         if conn_str is None:
             raise BodoError(
                 f"bodosql.TablePath(): `conn_str` is required for the `sql` `file_type`."
@@ -265,6 +264,7 @@ class TablePathModel(models.StructModel):
 make_attribute_wrapper(TablePathType, "file_path", "_file_path")
 make_attribute_wrapper(TablePathType, "conn_str", "_conn_str")
 
+
 # Support boxing and unboxing in case someone passes the value as an
 # argument or we need to cross into objmode
 @box(TablePathType)
@@ -380,7 +380,7 @@ def overload_table_path_constructor(
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_table_path(
     typingctx,
     file_path_typ,

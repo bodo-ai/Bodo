@@ -31,7 +31,7 @@ ll.add_symbol(
 )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def run_crypto_function(typingctx, in_str_typ, crypto_func_typ, out_str_typ):
     """Call C++ implementation of run_crypto_function"""
 
@@ -100,7 +100,7 @@ def overload_md5_algorithm(msg):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def run_hex_encode(
     typingctx,
     in_str_t,
@@ -273,7 +273,7 @@ def overload_hex_encode_algorithm(msg):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def run_base64_encode(
     typingctx,
     in_str_t,
@@ -393,7 +393,7 @@ def overload_base64_encode_algorithm(msg, max_line_length, char_63, char_64, cha
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def run_base64_decode_string(
     typingctx,
     in_str_t,

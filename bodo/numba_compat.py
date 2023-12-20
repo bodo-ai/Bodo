@@ -30,6 +30,7 @@ from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
+    _create_function_from_code_obj,
     analysis,
     build_definitions,
     find_callname,
@@ -1951,48 +1952,6 @@ def slice_size(self, index, dsize, equiv_set, scope, stmts):
 # See https://bodo.atlassian.net/browse/BE-2230
 # TODO: fix slice analysis in Numba
 numba.parfors.array_analysis.ArrayAnalysis.slice_size = slice_size
-
-
-def _create_function_from_code_obj(fcode, func_env, func_arg, func_clo, glbls):
-    """
-    Creates a function from a code object. Args:
-    * fcode - the code object
-    * func_env - string for the freevar placeholders
-    * func_arg - string for the function args (e.g. "a, b, c, d=None")
-    * func_clo - string for the closure args
-    * glbls - the function globals
-    """
-    # Bodo change: fix Numba 0.57 bug that replaces e.g. b=1.1 with b=11 here
-    # TODO(ehsan): fix the Python 3.11 issue properly
-    # in py3.11, func_arg contains '.'
-    # func_arg = func_arg.replace('.', '_')
-    sanitized_co_name = fcode.co_name.replace("<", "_").replace(">", "_")
-    func_text = (
-        f"def closure():\n{func_env}\n"
-        f"\tdef {sanitized_co_name}({func_arg}):\n"
-        f"\t\treturn ({func_clo})\n"
-        f"\treturn {sanitized_co_name}"
-    )
-    loc = {}
-    exec(func_text, glbls, loc)
-
-    f = loc["closure"]()
-    # replace the code body
-    f.__code__ = fcode
-    f.__name__ = fcode.co_name
-    return f
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.ir_utils._create_function_from_code_obj)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "5e9d10597cfc64f8541d83a912ff07f16adfe8528ac1e3c92ca462cab817368e"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.ir_utils._create_function_from_code_obj has changed")
-
-
-numba.core.ir_utils._create_function_from_code_obj = _create_function_from_code_obj
 
 
 # support handling nested UDFs inside and outside the jit functions
@@ -5464,19 +5423,31 @@ def define_untyped_pipeline(state, name="untyped"):
         ReconstructSSA,
         RewriteDynamicRaises,
         RewriteSemanticConstants,
+        RVSDGFrontend,
         TranslateByteCode,
         WithLifting,
     )
     from numba.core.utils import PYVERSION
 
     pm = PassManager(name)
-    if state.func_ir is None:
-        pm.add_pass(TranslateByteCode, "analyzing bytecode")
-        # Bodo Change: Insert Python 3.10 Bytecode peepholes
-        if PYVERSION >= (3, 10):
-            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-        pm.add_pass(FixupArgs, "fix up args")
-    pm.add_pass(IRProcessing, "processing IR")
+
+    if numba.core.config.USE_RVSDG_FRONTEND:
+        if state.func_ir is None:
+            pm.add_pass(RVSDGFrontend, "rvsdg frontend")
+            # Bodo Change: Insert Python 3.10 Bytecode peepholes
+            if PYVERSION >= (3, 10):
+                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+            pm.add_pass(FixupArgs, "fix up args")
+        pm.add_pass(IRProcessing, "processing IR")
+    else:
+        if state.func_ir is None:
+            pm.add_pass(TranslateByteCode, "analyzing bytecode")
+            # Bodo Change: Insert Python 3.10 Bytecode peepholes
+            if PYVERSION >= (3, 10):
+                pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+            pm.add_pass(FixupArgs, "fix up args")
+        pm.add_pass(IRProcessing, "processing IR")
+
     pm.add_pass(WithLifting, "Handle with contexts")
 
     # inline closures early in case they are using nonlocal's
@@ -5519,7 +5490,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "9b9aac90e0a51780d921aecec19a5acc63f608b3a8af4d3c16d86fd8344d94e1"
+        != "ee2d8498b402655ac08d02018fab21932d416c2e8caed3f98cfe0126af0f044d"
     ):
         warnings.warn(
             "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"

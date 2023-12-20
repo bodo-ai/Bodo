@@ -133,7 +133,7 @@ make_attribute_wrapper(BinaryArrayType, "data", "_data")
 lower_builtin("getiter", string_array_type)(numba.np.arrayobj.getiter_array)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_str_arr(typingctx, data_typ=None):
     """create a new string array from input data array(char) array data"""
     assert isinstance(data_typ, ArrayItemArrayType) and data_typ.dtype == char_arr_type
@@ -373,7 +373,7 @@ def _get_str_binary_arr_payload(context, builder, arr_value, arr_typ):
     return payload
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def num_strings(typingctx, str_arr_typ=None):
     # None default to make IntelliSense happy
     assert str_arr_typ == string_array_type
@@ -414,7 +414,7 @@ def check_offsets(str_arr):  # pragma: no cover
             break
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def num_total_chars(typingctx, in_arr_typ=None):
     # None default to make IntelliSense happy
     assert in_arr_typ in [binary_array_type, string_array_type]
@@ -431,7 +431,7 @@ def num_total_chars(typingctx, in_arr_typ=None):
     return types.uint64(in_arr_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_offset_ptr(typingctx, in_arr_typ=None):
     assert in_arr_typ in [binary_array_type, string_array_type]
 
@@ -472,7 +472,7 @@ def get_data_ptr_cg(context, builder, data_arr):
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_data_ptr(typingctx, in_arr_typ=None):
     assert in_arr_typ in [binary_array_type, string_array_type]
 
@@ -491,7 +491,7 @@ def get_data_ptr(typingctx, in_arr_typ=None):
     return data_ctypes_type(in_arr_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_data_ptr_ind(typingctx, in_arr_typ, int_t=None):
     assert in_arr_typ in [binary_array_type, string_array_type]
 
@@ -511,7 +511,7 @@ def get_data_ptr_ind(typingctx, in_arr_typ, int_t=None):
     return data_ctypes_type(in_arr_typ, types.intp), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def copy_single_char(typingctx, dst_ptr_t, dst_ind_t, src_ptr_t, src_ind_t=None):
     """copy a single character value from src_ptr[src_ind] to dst_ptr[dst_ind]"""
 
@@ -531,7 +531,7 @@ def copy_single_char(typingctx, dst_ptr_t, dst_ind_t, src_ptr_t, src_ind_t=None)
     return types.void(types.voidptr, types.intp, types.voidptr, types.intp), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def get_null_bitmap_ptr(typingctx, in_arr_typ=None):
     assert in_arr_typ in [binary_array_type, string_array_type]
 
@@ -548,7 +548,7 @@ def get_null_bitmap_ptr(typingctx, in_arr_typ=None):
     return data_ctypes_type(in_arr_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def getitem_str_offset(typingctx, in_arr_typ, ind_t=None):
     assert in_arr_typ in [binary_array_type, string_array_type]
 
@@ -564,7 +564,7 @@ def getitem_str_offset(typingctx, in_arr_typ, ind_t=None):
     return offset_type(in_arr_typ, ind_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
     """set offset value of string array.
     Equivalent to: get_offsets(str_arr._data)[ind] = val
@@ -587,7 +587,7 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
     return types.void(string_array_type, ind_t, offset_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind = args
@@ -599,7 +599,7 @@ def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
     return char_type(in_bitmap_typ, ind_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
     def codegen(context, builder, sig, args):
         in_bitmap, ind, val = args
@@ -612,7 +612,7 @@ def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
     return types.void(in_bitmap_typ, ind_t, char_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
     """
     Copy a slice of input array (from the beginning) to output array.
@@ -665,7 +665,7 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
     return types.void(string_array_type, string_array_type, ind_t), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
     # precondition: output is allocated with data the same size as input's data
     assert str_arr_typ == string_array_type and out_str_arr_typ == string_array_type
@@ -700,7 +700,7 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
     return types.void(string_array_type, string_array_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
     # precondition: output is allocated with offset the size non-nulls in input
     assert str_arr_typ == string_array_type and out_str_arr_typ == string_array_type
@@ -757,7 +757,7 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
     return types.void(string_array_type, string_array_type), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_copy(typingctx, buff_arr_typ, ind_typ, str_typ, len_typ=None):
     def codegen(context, builder, sig, args):
         buff_arr, ind, str, len_str = args
@@ -772,7 +772,7 @@ def str_copy(typingctx, buff_arr_typ, ind_typ, str_typ, len_typ=None):
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
     def codegen(context, builder, sig, args):
         ptr, ind, _str, len_str = args
@@ -1238,7 +1238,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     return f
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_all_offsets_to_0(typingctx, arr_typ=None):
     """
     Set all the offsets of a string/binary array to 0. Useful for
@@ -1275,7 +1275,7 @@ def set_all_offsets_to_0(typingctx, arr_typ=None):
     return types.none(arr_typ), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_bitmap_all_NA(typingctx, arr_typ=None):
     """
     Set all the bitmap of a string/binary array to 0. Useful for
@@ -1385,7 +1385,7 @@ def copy_nulls_range(out_str_arr, in_str_arr, out_start):  # pragma: no cover
         set_bit_to(out_null_bitmap_ptr, out_start + j, bit)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_string_array_range(
     typingctx, out_typ, in_typ, curr_str_typ, curr_chars_typ=None
 ):
@@ -1543,7 +1543,7 @@ def box_str_arr(typ, val, c):
     return arr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
     assert str_arr_typ in (
@@ -1576,7 +1576,7 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     return types.bool_(str_arr_typ, types.intp), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
     assert str_arr_typ in [
@@ -1636,7 +1636,7 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     return types.void(str_arr_typ, types.intp), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
     assert str_arr_typ in [
@@ -1670,7 +1670,7 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     return types.void(str_arr_typ, types.intp), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def set_null_bits_to_value(typingctx, arr_typ, value_typ=None):
     """
     Sets all the bits in the null bitmap of the string/binary array
@@ -1718,7 +1718,7 @@ def _get_str_binary_arr_data_payload_ptr(context, builder, str_arr):
     return meminfo_data_ptr
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def move_str_binary_arr_payload(typingctx, to_arr_typ, from_arr_typ=None):
     """Move string/binary array payload from one array to another."""
     assert (to_arr_typ == string_array_type and from_arr_typ == string_array_type) or (
@@ -1780,7 +1780,7 @@ def get_utf8_size(s):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
         arr, ind, ptr, length = args
@@ -1837,7 +1837,7 @@ def lower_is_na(context, builder, bull_bitmap, ind):
     return builder.call(fn_getitem, [bull_bitmap, ind])
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _memcpy(typingctx, dest_t, src_t, count_t, item_size_t=None):
     def codegen(context, builder, sig, args):
         dst, src, count, itemsize = args
@@ -1909,7 +1909,7 @@ def overload_str_arr_setitem_int_to_str(A, ind, val):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def inplace_set_NA_str(typingctx, ptr_typ=None):
     """
     Write "<NA>" (string representation of pd.NA) to string pointer
@@ -2410,7 +2410,7 @@ def str_arr_to_dict_str_arr(A):  # pragma: no cover
     return str_arr_to_dict_str_arr_cpp(A)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
     def codegen(context, builder, sig, args):
         (str_arr,) = args
@@ -2458,7 +2458,7 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
     return sig, codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decode_utf8(typingctx, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
         ptr, length = args
@@ -2545,7 +2545,7 @@ def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
     set_to_numeric_out_na_err(out_arr, out_ind, err_code)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t=None):
     assert str_arr_t == string_array_type, "_str_arr_item_to_numeric: str arr expected"
     assert ind_t == types.int64, "_str_arr_item_to_numeric: integer index expected"

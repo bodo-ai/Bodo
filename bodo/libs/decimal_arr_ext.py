@@ -99,7 +99,7 @@ def typeof_decimal_value(val, c):
 register_model(Decimal128Type)(models.IntegerModel)
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
     """cast int128 to decimal128"""
     assert val == int128_type
@@ -117,7 +117,7 @@ def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
     )
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decimal128type_to_int128(typingctx, val):
     """cast int128 to decimal128"""
     assert isinstance(val, Decimal128Type)
@@ -167,7 +167,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
     return uni_str._getvalue()
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decimal_to_str(typingctx, val_t=None):
     """convert decimal128 to string"""
     assert isinstance(val_t, Decimal128Type)
@@ -197,7 +197,7 @@ def str_to_decimal_codegen(context, builder, signature, args):
     return decimal_val
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def str_to_decimal(typingctx, val, precision_tp, scale_tp=None):
     """convert string ot decimal128"""
     assert val == bodo.string_type or is_overload_constant_str(val)
@@ -228,7 +228,7 @@ def overload_str_decimal(val):
     return impl
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decimal128type_to_int64_tuple(typingctx, val):
     """convert decimal128type to a 2-tuple of int64 values"""
     assert isinstance(val, Decimal128Type)
@@ -242,7 +242,7 @@ def decimal128type_to_int64_tuple(typingctx, val):
     return types.UniTuple(types.int64, 2)(val), codegen
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decimal128type_cmp(typingctx, val1, scale1, val2, scale2, func_name):
     assert is_overload_constant_str(func_name)
     _func_name = get_overload_const_str(func_name)
@@ -349,7 +349,7 @@ def decimal_to_float64_codegen(context, builder, signature, args, scale):
     return ret
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def decimal_to_float64(typingctx, val_t):
     """convert decimal128 to float"""
     assert isinstance(val_t, Decimal128Type)
@@ -473,7 +473,7 @@ make_attribute_wrapper(DecimalArrayType, "data", "_data")
 make_attribute_wrapper(DecimalArrayType, "null_bitmap", "_null_bitmap")
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None):
     """Create a DecimalArray with provided data and null bitmap values."""
     assert data == types.Array(int128_type, 1, "C")
