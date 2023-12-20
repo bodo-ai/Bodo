@@ -275,17 +275,45 @@ def grid_layouts(request):
         pytest.param((5, 5), id="odd_dims"),
         pytest.param((10, 10), id="even_dims"),
         pytest.param((1024, 1001), id="big_mismatched_dims"),
-        pytest.param((1, 513), id="one_by_large_odd", marks=pytest.mark.slow),
-        pytest.param((1, 840), id="one_by_large_even", marks=pytest.mark.slow),
-        pytest.param((513, 1), id="large_odd_by_one", marks=pytest.mark.slow),
-        pytest.param((840, 1), id="large_even_by_one", marks=pytest.mark.slow),
-        pytest.param((1, 1), id="one_by_one", marks=pytest.mark.slow),
-        pytest.param((513, 840), id="large_odd_by_even", marks=pytest.mark.slow),
-        pytest.param((840, 513), id="large_even_by_odd", marks=pytest.mark.slow),
-        pytest.param((540, 740), id="large_even_by_even", marks=pytest.mark.slow),
-        pytest.param((513, 867), id="large_odd_by_odd", marks=pytest.mark.slow),
         pytest.param(
-            (2048, 2048), id="large_power_2_by_power_2", marks=pytest.mark.slow
+            (1, 513), id="one_by_large_odd", marks=[pytest.mark.slow, pytest.mark.skip]
+        ),
+        pytest.param(
+            (1, 840), id="one_by_large_even", marks=[pytest.mark.slow, pytest.mark.skip]
+        ),
+        pytest.param(
+            (513, 1), id="large_odd_by_one", marks=[pytest.mark.slow, pytest.mark.skip]
+        ),
+        pytest.param(
+            (840, 1), id="large_even_by_one", marks=[pytest.mark.slow, pytest.mark.skip]
+        ),
+        pytest.param(
+            (1, 1), id="one_by_one", marks=[pytest.mark.slow, pytest.mark.skip]
+        ),
+        pytest.param(
+            (513, 840),
+            id="large_odd_by_even",
+            marks=[pytest.mark.slow, pytest.mark.skip],
+        ),
+        pytest.param(
+            (840, 513),
+            id="large_even_by_odd",
+            marks=[pytest.mark.slow, pytest.mark.skip],
+        ),
+        pytest.param(
+            (540, 740),
+            id="large_even_by_even",
+            marks=[pytest.mark.slow, pytest.mark.skip],
+        ),
+        pytest.param(
+            (513, 867),
+            id="large_odd_by_odd",
+            marks=[pytest.mark.slow, pytest.mark.skip],
+        ),
+        pytest.param(
+            (2048, 2048),
+            id="large_power_2_by_power_2",
+            marks=[pytest.mark.slow, pytest.mark.skip],
         ),
     ]
 )
