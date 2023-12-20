@@ -13,6 +13,7 @@ from bodo.libs.stream_groupby import (
     init_groupby_state,
 )
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.parametrize(
@@ -698,7 +699,8 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
     ],
     ids=("array_item", "struct", "map"),
 )
-def test_groupby_nested_array_data(memory_leak_check, df):
+@pytest.mark.parametrize("check_error", (True, False))
+def test_groupby_nested_array_data(memory_leak_check, df, check_error):
     """
     Tests support for streaming groupby with nested array data.
     """
@@ -708,7 +710,8 @@ def test_groupby_nested_array_data(memory_leak_check, df):
     num_cols = len(df.columns)
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
-    fnames = bodo.utils.typing.MetaType(tuple(["first"]) * (num_cols - 1))
+    fstr = "sum" if check_error else "first"
+    fnames = bodo.utils.typing.MetaType(tuple([fstr]) * (num_cols - 1))
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
 
@@ -750,12 +753,19 @@ def test_groupby_nested_array_data(memory_leak_check, df):
     expected_df = df.groupby("A", as_index=False).agg(
         {column: "first" for column in df.columns}
     )
-    check_func(
-        test_groupby,
-        (df,),
-        py_output=expected_df,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-        sort_output=True,
-        only_seq=True,
-    )
+    if check_error:
+        with pytest.raises(
+            BodoError,
+            match="Groupby does not support semi-structured arrays for aggregations other than first",
+        ):
+            bodo.jit(test_groupby)(df)
+    else:
+        check_func(
+            test_groupby,
+            (df,),
+            py_output=expected_df,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+            sort_output=True,
+            only_seq=True,
+        )
