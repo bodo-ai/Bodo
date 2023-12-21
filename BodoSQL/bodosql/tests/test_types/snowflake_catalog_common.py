@@ -66,7 +66,7 @@ def snowflake_sample_data_conn_str():
 @pytest.fixture(
     params=[
         bodosql.SnowflakeCatalog(
-            os.environ.get("SF_AZURE_USERNAME", ""),
+            os.environ.get("SF_AZURE_USER", ""),
             os.environ.get("SF_AZURE_PASSWORD", ""),
             "kl02615.east-us-2.azure",
             "DEMO_WH",

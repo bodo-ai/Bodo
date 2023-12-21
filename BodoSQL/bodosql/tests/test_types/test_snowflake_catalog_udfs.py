@@ -6,13 +6,7 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.utils import (
-    DistTestPipeline,
-    check_func,
-    create_snowflake_table,
-    get_snowflake_connection_string,
-    pytest_snowflake,
-)
+from bodo.tests.utils import pytest_snowflake
 from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     azure_snowflake_catalog,
