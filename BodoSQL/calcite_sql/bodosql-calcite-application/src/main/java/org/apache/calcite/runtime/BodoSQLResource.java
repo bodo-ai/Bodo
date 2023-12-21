@@ -62,4 +62,7 @@ public interface BodoSQLResource {
 
    @Resources.BaseMessage("Function \"{0}\" requires a valid array or json value for argument \"{1}\".")
    Resources.ExInst<SqlValidatorException> requiresArrayOrJson(String fnName, String argName);
+
+   @Resources.BaseMessage("Function \"{0}\".\"{1}\".\"{2}\" contains an unsupported feature. Error message: \"{3}\"")
+   Resources.ExInst<SqlValidatorException> snowflakeUDFContainsUnsupportedFeature(String databaseName, String schemaName, String functionName, String errorMessage);
 }

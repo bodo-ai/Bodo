@@ -904,10 +904,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // See the return values here:
         // https://docs.snowflake.com/en/sql-reference/sql/show-functions
         // Note: JDBC makes things 1-indexed.
-        // Min arguments (column 7):
-        int minArgs = results.getInt(7);
-        // Max arguments (column 8)
-        int maxArgs = results.getInt(8);
         // Function args + return value, not names (column 9)
         String arguments = results.getString(9);
         // Is this a table function? (column 12)
@@ -935,8 +931,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                 args,
                 returns,
                 body,
-                minArgs,
-                maxArgs,
                 isTable,
                 isSecure,
                 isExternal,
@@ -994,19 +988,31 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             describeFunctionInput);
     try {
       ResultSet describeResults = executeSnowflakeQuery(describeQuery, 5);
-      // There must be exactly 4 Rows. Row 1 is args, row 2 is returns, row 3 is language,
-      // and row 4 is the body.
+      // There may be several rows per languages. We determine the rows we want based
+      // on the property.
       // Documentation: https://docs.snowflake.com/en/sql-reference/sql/desc-function.
       // Note: JDBC connections are 1-indexed
-      fetchResultSetRow(describeQuery, describeResults, true);
-      String signature = describeResults.getString(2);
-      fetchResultSetRow(describeQuery, describeResults, true);
-      String returns = describeResults.getString(2);
-      fetchResultSetRow(describeQuery, describeResults, true);
-      fetchResultSetRow(describeQuery, describeResults, true);
-      String body = describeResults.getString(2);
-      // Verify there are no additional rows
-      fetchResultSetRow(describeQuery, describeResults, false);
+      String signature = null;
+      String returns = null;
+      String body = null;
+      while (describeResults.next()) {
+        String property = describeResults.getString(1).toUpperCase(Locale.ROOT);
+        String value = describeResults.getString(2);
+        if (property.equals("SIGNATURE")) {
+          signature = value;
+        } else if (property.equals("RETURNS")) {
+          returns = value;
+        } else if (property.equals("BODY")) {
+          body = value;
+        }
+      }
+      // Signature and returns must be provided. If a query is externally defined there
+      // might not be a body.
+      if (signature == null || returns == null) {
+        String errorMsg =
+            String.format("Unexpected results returned when processing query: %s", describeQuery);
+        throw new RuntimeException(errorMsg);
+      }
       return new Triple<>(signature, returns, body);
     } catch (SQLException e) {
       String errorMsg =
@@ -1014,28 +1020,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               "Error encountered when running describe function query: %s. Error found: %s",
               describeQuery, e);
       throw new RuntimeException(errorMsg);
-    }
-  }
-
-  /**
-   * Fetch a single row in a result set, throwing an error if it's not valid.
-   *
-   * <p>Note: This updates the iterator in place.
-   *
-   * @param query The query for the error message.
-   * @param resultSet The result set to update.
-   * @param expectedOutput The expected output of next. This function can be used to both require
-   *     another row and no more rows.
-   */
-  private void fetchResultSetRow(String query, ResultSet resultSet, boolean expectedOutput) {
-    try {
-      if (resultSet.next() != expectedOutput) {
-        String errorMsg =
-            String.format("Unexpected results returned when processing query: %s", query);
-        throw new RuntimeException(errorMsg);
-      }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
