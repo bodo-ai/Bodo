@@ -10,17 +10,16 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.sql.type.SqlOperandCountRanges;
-import org.apache.calcite.sql.type.SqlOperandTypeChecker;
-import org.apache.calcite.sql.type.SqlReturnTypeInference;
-import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+import org.apache.calcite.sql.validate.SqlValidatorException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
 import static com.bodosql.calcite.catalog.SnowflakeCatalog.snowflakeTypeNameToTypeInfo;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 /**
  * Function definition used for all UDFs defined inside Snowflake. These functions
@@ -39,14 +38,9 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
     // The function body
     private @Nullable String body;
 
-    // Is this function a table function. Eventually this should be removed
-    // when we add actual UserDefinedTableFunction support, but this
-    private final boolean isTableFunction;
     // Hold information to determine functions we cannot support or may produce
     // performance concerns.
     private final SnowflakeUserDefinedFunctionErrorInfo errorInfo;
-    private final int minNumArgs;
-    private final int maxNumArgs;
 
     // -- Constructors --
 
@@ -57,27 +51,23 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * @param args                 A string containing the args output from describe function.
      * @param returns              A string containing the returns output from describe function
      * @param body                 A string containing the body output from describe function or NULL if the function is not a SQL UDF.
-     * @param minNumArgs           The minimum number of required arguments. This is used for error handling while we have partial support.
-     * @param maxNumArgs           The maximum number of required arguments. This is used for error handling while we have partial support.
      * @param isTableFunction      Is this function actually a table function.
-     * @param errorInfo            Other snowflake fields used for generating errors.
+     * @param isSecure             Is the function a secure function?
+     * @param isExternal           Is the function an external function?
+     * @param language             What is the UDF's source language?
+     * @param isMemoizable         Is the UDF memoizable?
      */
-    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, int minNumArgs, int maxNumArgs, boolean isTableFunction, SnowflakeUserDefinedFunctionErrorInfo errorInfo) {
+    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
         this.functionPath = functionPath;
         this.parameters = parseParameters(args);
         this.returnTypeInfo = snowflakeTypeNameToTypeInfo(returns);
         this.body = body;
-        // TODO: Remove arg counts when we support default arguments.
-        this.minNumArgs = minNumArgs;
-        this.maxNumArgs = maxNumArgs;
-        this.isTableFunction = isTableFunction;
-        this.errorInfo = errorInfo;
+        this.errorInfo = new SnowflakeUserDefinedFunctionErrorInfo(isTableFunction, isSecure, isExternal, language, isMemoizable);
     }
 
     // -- static creators
-    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, int minNumArgs, int maxNumArgs, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
-        SnowflakeUserDefinedFunctionErrorInfo errorInfo = new SnowflakeUserDefinedFunctionErrorInfo(isSecure, isExternal, language, isMemoizable);
-        return new SnowflakeUserDefinedFunction(functionPath, args, returns, body, minNumArgs, maxNumArgs, isTableFunction, errorInfo);
+    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+        return new SnowflakeUserDefinedFunction(functionPath, args, returns, body, isTableFunction, isSecure, isExternal, language, isMemoizable);
     }
 
     /**
@@ -133,25 +123,85 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
         return parameters;
     }
 
+
+    /**
+     * Raise an error or warning if the Snowflake UDF contains features that we
+     * are unable to support. A warning should only be raised if the function
+     * doesn't error.
+     */
+    public void errorOrWarn() throws SqlValidatorException {
+        this.errorInfo.error();
+        this.errorInfo.warn();
+    }
+
     // -- Helper Classes --
     /**
      * Class that holds additional information returned by show functions that are not yet supported in Bodo.
      * This is used to compactly hold individualized error and warning messages if the Snowflake API changes.
      */
-    protected static class SnowflakeUserDefinedFunctionErrorInfo {
+    private class SnowflakeUserDefinedFunctionErrorInfo {
 
         // -- Fields --
+
+        // Is this function a table function. Eventually this should be removed
+        // when we add actual UserDefinedTableFunction support.
+        private final boolean isTableFunction;
         private final boolean isSecure;
         private final boolean isExternal;
         private final String language;
         private final boolean isMemoizable;
 
-        protected SnowflakeUserDefinedFunctionErrorInfo(boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+        private SnowflakeUserDefinedFunctionErrorInfo(boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+            this.isTableFunction = isTableFunction;
             this.isSecure = isSecure;
             this.isExternal = isExternal;
             // Normalize to upper case to simplify checks
             this.language = language.toUpperCase(Locale.ROOT);
             this.isMemoizable = isMemoizable;
+        }
+
+        /**
+         * Raise an error if we cannot support this UDF.
+         * @throws SqlValidatorException the Validation error.
+         */
+        private void error() throws SqlValidatorException {
+            // Note this order is not strictly required, but in general we aim to go from least
+            // to most recoverable.
+            final String errorMsg;
+            if (!this.language.equals("SQL")) {
+                errorMsg = String.format(Locale.ROOT, "Unsupported source language. Bodo only support SQL UDFs, but found %s", this.language);
+            } else if (this.isExternal) {
+                errorMsg = "Bodo does not support external UDFs";
+            } else if (this.isSecure) {
+                errorMsg = "Bodo does not support secure UDFs";
+            } else if (this.isTableFunction) {
+                errorMsg = "UDF is a table function. Bodo does not support UDTFs yet.";
+            } else if (SnowflakeUserDefinedFunction.this.body == null) {
+                errorMsg = "Unable to determine the function body for the UDF.";
+            } else {
+                errorMsg = null;
+            }
+            if (errorMsg != null) {
+                ImmutableList<String> functionPath = SnowflakeUserDefinedFunction.this.functionPath;
+                String databaseName = functionPath.get(0);
+                String schemaName = functionPath.get(1);
+                String functionName = functionPath.get(2);
+                throw BODO_SQL_RESOURCE.snowflakeUDFContainsUnsupportedFeature(databaseName, schemaName, functionName, errorMsg).ex();
+            }
+        }
+
+        /**
+         * Log a Level 2 warning if this UDF contains a feature that could impact performance.
+         */
+        private void warn() {
+            if (this.isMemoizable) {
+                ImmutableList<String> functionPath = SnowflakeUserDefinedFunction.this.functionPath;
+                String databaseName = functionPath.get(0);
+                String schemaName = functionPath.get(1);
+                String functionName = functionPath.get(2);
+                String msg = String.format(Locale.ROOT, "Function \"%s\".\"%s\".\"%s\" is defined to be Memoized, but BodoSQL doesn't support UDF memoization yet. This may impact performance", databaseName, schemaName, functionName);
+                VERBOSE_LEVEL_TWO_LOGGER.warning(msg);
+            }
         }
     }
 }

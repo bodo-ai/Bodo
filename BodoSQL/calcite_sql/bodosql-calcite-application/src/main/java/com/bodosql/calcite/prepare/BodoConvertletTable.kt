@@ -47,6 +47,7 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         if (call.operator is SqlUserDefinedFunction) {
             val function = (call.operator as SqlUserDefinedFunction).function
             if (function is SnowflakeUserDefinedFunction) {
+                function.errorOrWarn()
                 throw RuntimeException("Unable to resolve function: ${function.functionPath[0]}.${function.functionPath[1]}.${function.functionPath[2]}. BodoSQL does not have support for Snowflake UDFs yet")
             }
         }
