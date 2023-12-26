@@ -83,7 +83,7 @@ def test_unsupported_udf_defaults(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not support Snowflake UDFs with default arguments\\.",
+        match='Function "TEST_DB"\\."PUBLIC"\\."ADD_DEFAULT_ONE" uses default arguments, which are not supported on Snowflake UDFs because the default values cannot be found in Snowflake metadata\\. Missing argument\\(s\\): Y',
     ):
         impl(bc, query)
 
@@ -129,5 +129,55 @@ def test_unsupported_python_udf(azure_snowflake_catalog, memory_leak_check):
     with pytest.raises(
         BodoError,
         match='Function "TEST_DB"\\."PUBLIC"\\."PYTHON_ADD_ONE" contains an unsupported feature. Error message: "Unsupported source language. Bodo only support SQL UDFs, but found PYTHON"',
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_with_provided_defaults(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs that allow defaults gives a message they aren't supported.
+    because Snowflake UDFs are not supported yet, not because of the signature accepting
+    default values.
+
+    ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select ADD_DEFAULT_ONE(1, 2)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_with_named_args(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with named args gives a message they aren't supported.
+    because Snowflake UDFs are not supported yet, not because we don't handle named
+    arguments.
+
+    ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select ADD_DEFAULT_ONE(Y => 1, X => 2)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
     ):
         impl(bc, query)

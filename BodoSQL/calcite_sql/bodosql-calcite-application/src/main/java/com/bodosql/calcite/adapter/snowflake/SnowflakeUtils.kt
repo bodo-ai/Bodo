@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.google.common.collect.ImmutableList
 import java.util.*
 
 /**
@@ -32,19 +31,19 @@ class SnowflakeUtils {
          * The signature has the form
          * FUNC_NAME(TYPE_1, ..., TYPE_N, [OPTIONAL_TYPE_1, ..., OPTIONAL_TYPE_N]) RETURN RETURN_TYPE
          *
-         * We don't support optional arguments yet because we have not figured out how to load defaults
-         * from Snowflake.
+         * While we cannot support the default values in Snowflake, we can handle optional arguments if
+         * they are provided (and produce a higher quality error message about which arguments are missing).
          *
          * Note that a builtin function can have multiple signatures in general, but we only care about
-         * UDFS.
-         *
-         * @param
+         * UDFs.
          *
          * @param arguments The output of the arguments column for show functions.
-         * @return A call to the function that can be fed to describe function.
+         * @return A pair of values containing the signature to pass to describe function
+         * and the number of optional arguments (because optional arguments must always come
+         * at the end).
          */
         @JvmStatic
-        fun parseSnowflakeShowFunctionsArguments(arguments: String, functionPath: ImmutableList<String>): String {
+        fun parseSnowflakeShowFunctionsArguments(arguments: String): Pair<String, Int> {
             // Remove the return
             val callParts = arguments.split("RETURN")
             val call = callParts[0]
@@ -53,11 +52,15 @@ class SnowflakeUtils {
             val validArgs = argParts[0].trim()
             // If there is no "[" found we didn't have optional args.
             return if (argParts.size == 1) {
-                validArgs
+                Pair(validArgs, 0)
             } else {
-                throw RuntimeException(
-                    "Unable to resolve function: ${functionPath[0]}.${functionPath[1]}.${functionPath[2]}. BodoSQL does not support Snowflake UDFs with default arguments.",
-                )
+                // Remove the remaining ] and count the number of optional arguments.
+                val optionalPart = argParts[1].split("]")[0].trim()
+                // Number of optional elements is number of commas + 1.
+                val numOptional: Int = optionalPart.count { it == ',' } + 1
+                // Recombine the signatures. The ) and space have been removed.
+                val newSignature = "$validArgs $optionalPart)"
+                Pair(newSignature, numOptional)
             }
         }
     }
