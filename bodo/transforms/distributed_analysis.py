@@ -542,7 +542,7 @@ class DistributedAnalysis:
                         warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
                         warnings.warn(BodoWarning(warning_msg))
                     return
-            # Handle [df] * n
+            # Handle [df] * n and matrix multiply
             elif is_expr(rhs, "binop") and rhs.fn == operator.mul:
                 if (
                     isinstance(rhs.lhs, ir.Var)
@@ -562,6 +562,31 @@ class DistributedAnalysis:
                     if rhs.rhs.name in array_dists:
                         self._meet_array_dists(lhs, rhs.rhs.name, array_dists)
                         return
+                # Matrix multiply
+                elif (
+                    isinstance(rhs.rhs, ir.Var)
+                    and rhs.rhs.name in self.typemap
+                    and isinstance(
+                        self.typemap[rhs.rhs.name], bodo.libs.matrix_ext.MatrixType
+                    )
+                ) and (
+                    isinstance(rhs.lhs, ir.Var)
+                    and rhs.lhs.name in self.typemap
+                    and isinstance(
+                        self.typemap[rhs.lhs.name], bodo.libs.matrix_ext.MatrixType
+                    )
+                ):
+                    # C = A * B
+                    # B is replicated since accessed across rows but A and C can be
+                    # distributed
+                    self._set_REP(
+                        rhs.rhs.name,
+                        array_dists,
+                        "matrix multiply right hand side input",
+                        rhs.loc,
+                    )
+                    self._meet_array_dists(lhs, rhs.lhs.name, array_dists)
+                    return
             # Handle Tuple append
             elif is_expr(rhs, "binop") and rhs.fn == operator.add:
                 lhs_tuple = (
@@ -1290,10 +1315,15 @@ class DistributedAnalysis:
             return
 
         if fdef == ("norm", "numpy.linalg"):
-            if "axis" in kws:
-                # With axis=1 (the only version supported at the moment), the
-                # input and the output have the same distribution.
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            # get axis argument
+            axis_var = get_call_expr_arg("numpy.linalg.norm", args, kws, 2, "axis", "")
+            if axis_var != "":
+                msg = "numpy.linalg.norm(): 'axis' should be constant"
+                axis = get_const_value(axis_var, self.func_ir, msg)
+                if axis == 1:
+                    # With axis=1 (the only version supported at the moment), the
+                    # input and the output have the same distribution.
+                    self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("accum_func", "bodo.libs.array_kernels"):
@@ -1914,15 +1944,6 @@ class DistributedAnalysis:
         if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
             # LHS should match RHS
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("tile_transpose_upcast_helper", "bodo.libs.array_kernels"):
-            # Case #2 of np.tile: Upcasting 1D array into 2D array where the elements of the
-            # original array become columns in the output array. Rows of the input become columns
-            # of the output. Rows of the output are scattered evenly between the various ranks,
-            # with the final rank getting all of the excess rows.
-            if lhs not in array_dists:  # pragma: no cover
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return
 
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
@@ -3534,6 +3555,24 @@ class DistributedAnalysis:
                     loc,
                 )
             return
+
+        if func_name == "asmatrix":
+            input_type = self.typemap[args[0].name]
+            # Returns the data as is for 2D array and matrix input so no change in
+            # distribution. Other input cases provide matrix rows individually so output
+            # is replicated.
+            if (
+                isinstance(input_type, types.Array) and input_type.ndim == 2
+            ) or isinstance(input_type, bodo.libs.matrix_ext.MatrixType):
+                self._meet_array_dists(lhs, args[0].name, array_dists)
+                return
+            else:
+                self._set_REP(
+                    lhs,
+                    array_dists,
+                    "output of np.asmatrix() call is REP if input is not 2D array or matrix",
+                    loc,
+                )
 
         if func_name == "interp":
             # Output matches 1st input, and 2nd/3rd must match each other

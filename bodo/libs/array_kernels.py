@@ -4102,47 +4102,6 @@ def _overload_validate_multivar_norm(cov):
     return impl
 
 
-def tile_transpose_upcast_helper(
-    A, replicated_rows, parallel=False
-):  # pragma: no cover
-    # Dummy function used for overload
-    pass
-
-
-@overload(tile_transpose_upcast_helper)
-def overload_tile_transpose_upcast_helper(A, replicated_rows, parallel=False):
-    """Helper for np.tile in case #2 (A is 1D, reps = (n, 1))
-
-    Args:
-        A (np.ndarray) 1D array of integers
-        replicated_rows (integer) How many total rows should the output have.
-        parallel (boolean) Is the operation happening across multiple ranks?
-    """
-    dtype = A.dtype
-
-    def impl(A, replicated_rows, parallel=False):  # pragma: no cover
-        r = bodo.get_rank()
-        s = bodo.get_size()
-        if parallel:
-            # Each rank needs to have all of the rows since they become columns
-            # in the new array
-            A = bodo.allgatherv(A)
-            # Calculate the number of rows the current rank should possess so
-            # that all the ranks combined have replicated_rows rows
-            start = bodo.libs.distributed_api.get_start(replicated_rows, s, r)
-            end = bodo.libs.distributed_api.get_end(replicated_rows, s, r)
-            local_rows = end - start
-        else:
-            local_rows = replicated_rows
-        n = len(A)
-        res = np.empty((local_rows, n), dtype=dtype)
-        for r in range(local_rows):
-            res[r, :] = A
-        return res
-
-    return impl
-
-
 @overload(np.tile, inline="always", no_unliteral=True)
 def np_tile(A, reps):
     """Performs the operation np.tile(A, reps) under limited cases:
@@ -4189,8 +4148,8 @@ def np_tile(A, reps):
         def impl(A, reps):  # pragma: no cover
             n, m = A.shape
             replicated_cols = reps[1]
-            res = np.empty((n, m * replicated_cols), dtype=dtype)
             numba.parfors.parfor.init_prange()
+            res = np.empty((n, m * replicated_cols), dtype=dtype)
             # Loop over each row in the original 2D array
             for r in numba.parfors.parfor.internal_prange(n):
                 # Loop over the number of times we want to replicate the columns
@@ -4212,7 +4171,13 @@ def np_tile(A, reps):
         dtype = A.dtype
 
         def impl(A, reps):  # pragma: no cover
-            return bodo.libs.array_kernels.tile_transpose_upcast_helper(A, reps[0])
+            n_rows = reps[0]
+            n_cols = len(A)
+            numba.parfors.parfor.init_prange()
+            res = np.empty((n_rows, n_cols), dtype=dtype)
+            for r in numba.parfors.parfor.internal_prange(n_rows):
+                res[r, :] = A
+            return res
 
         return impl
     else:  # pragma: no cover
