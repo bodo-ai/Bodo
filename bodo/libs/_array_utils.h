@@ -81,6 +81,12 @@ concept complex_dtype =
     (DType == Bodo_CTypes::COMPLEX64) || (DType == Bodo_CTypes::COMPLEX128);
 
 template <Bodo_CTypes::CTypeEnum DType>
+concept complex128_dtype = DType == Bodo_CTypes::COMPLEX128;
+
+template <Bodo_CTypes::CTypeEnum DType>
+concept complex64_dtype = DType == Bodo_CTypes::COMPLEX64;
+
+template <Bodo_CTypes::CTypeEnum DType>
 concept numeric_dtype = decimal<DType> || float_dtype<DType> ||
                         integer_dtype<DType> || complex_dtype<DType>;
 
