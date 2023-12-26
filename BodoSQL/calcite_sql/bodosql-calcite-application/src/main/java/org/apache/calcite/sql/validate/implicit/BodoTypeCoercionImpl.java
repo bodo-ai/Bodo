@@ -2,6 +2,8 @@ package org.apache.calcite.sql.validate.implicit;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
+import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
+import com.bodosql.calcite.application.operatorTables.JsonOperatorTable;
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function3;
@@ -22,6 +24,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
+import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
@@ -223,7 +226,9 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
   }
 
   private static SqlNode castTo(SqlNode node, RelDataType type) {
-    if (type instanceof ArraySqlType) {
+    if (type instanceof MapSqlType) {
+      return CastingOperatorTable.TO_OBJECT.createCall(SqlParserPos.ZERO, node);
+    } else if (type instanceof ArraySqlType) {
       // When casting to an array, call TO_ARRAY
       return ArrayOperatorTable.TO_ARRAY.createCall(SqlParserPos.ZERO, node);
     } else {

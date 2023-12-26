@@ -354,6 +354,58 @@ internal class VariantCastTable {
             }
         }
 
+        // Helper function to create a RelDataType for MAP[varchar, variant] with the given nullability
+        private val makeMapType = { factory: RelDataTypeFactory, nullable: Boolean ->
+            factory.createTypeWithNullability(
+                factory.createMapType(
+                    factory.createSqlType(SqlTypeName.VARCHAR),
+                    BodoRelDataTypeFactory.createVariantSqlType(factory),
+                ),
+                nullable,
+            )
+        }
+
+        /**
+         * Cast all arguments to MAP[varchar, variant]
+         */
+        private val anyArgMapCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
+            makeMapType(factory, inType.isNullable)
+        }
+
+        /**
+         * Cast for OBJECT_INSERT function, with the following rule:
+         *
+         * FUNC(object, char, any)
+         */
+        private val objectInsertCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                0 -> makeMapType(factory, inType.isNullable)
+                1 -> factory.createTypeWithNullability(
+                    factory.createSqlType(SqlTypeName.VARCHAR),
+                    inType.isNullable,
+                )
+                else -> inType
+            }
+        }
+
+        /**
+         * Cast for OBJECT_DELETE/OBJECT_PICK functions, with the following rule:
+         *
+         * FUNC(object, char[, char, ...])
+         */
+        private val objectPickDeleteCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                0 -> makeMapType(factory, inType.isNullable)
+                else -> factory.createTypeWithNullability(
+                    factory.createSqlType(SqlTypeName.VARCHAR),
+                    inType.isNullable,
+                )
+            }
+        }
+
         /**
          * Cast for (VARCHAR, VARCHAR, BIGINT, VARCHAR).
          */
@@ -577,6 +629,10 @@ internal class VariantCastTable {
             DatetimeOperatorTable.TIMESTAMPNTZFROMPARTS to timestampPartsCast,
             DatetimeOperatorTable.TIMESTAMPLTZFROMPARTS to timestampPartsCast,
             DatetimeOperatorTable.TIMESTAMPTZFROMPARTS to timestampPartsCast,
+            JsonOperatorTable.OBJECT_KEYS to anyArgMapCast,
+            JsonOperatorTable.OBJECT_INSERT to objectInsertCast,
+            JsonOperatorTable.OBJECT_PICK to objectPickDeleteCast,
+            JsonOperatorTable.OBJECT_DELETE to objectPickDeleteCast,
         ).mapKeys { it.key.name }
     }
 }
