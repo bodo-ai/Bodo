@@ -44,7 +44,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import kotlin.Triple;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -921,14 +920,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // This is necessary because the arguments column doesn't contain names.
         ImmutableList<String> functionPath =
             ImmutableList.of(databaseName, schemaName, functionName);
-        Triple<String, String, String> functionInfo = describeFunctionImpl(functionPath, arguments);
-        String args = functionInfo.component1();
-        String returns = functionInfo.component2();
-        String body = functionInfo.component3();
+        DescribeFunctionOutput functionInfo = describeFunctionImpl(functionPath, arguments);
+        String args = functionInfo.signature;
+        int numOptional = functionInfo.numOptional;
+        String returns = functionInfo.returns;
+        String body = functionInfo.body;
         SnowflakeUserDefinedFunction function =
             SnowflakeUserDefinedFunction.create(
                 functionPath,
                 args,
+                numOptional,
                 returns,
                 body,
                 isTable,
@@ -973,12 +974,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    *
    * @param functionPath The path to the function, including the name.
    * @param showFunctionArguments The arguments loaded from show functions.
-   * @return The arguments, return type, and body information.
+   * @return The arguments, number of optional values, return type, and body information.
    */
-  private Triple<String, String, @Nullable String> describeFunctionImpl(
+  private DescribeFunctionOutput describeFunctionImpl(
       ImmutableList<String> functionPath, String showFunctionArguments) {
-    String describeFunctionInput =
-        parseSnowflakeShowFunctionsArguments(showFunctionArguments, functionPath);
+    kotlin.Pair<String, Integer> parsedInput =
+        parseSnowflakeShowFunctionsArguments(showFunctionArguments);
+    String describeFunctionInput = parsedInput.getFirst();
+    int numOptional = parsedInput.getSecond();
     String describeQuery =
         String.format(
             Locale.ROOT,
@@ -1013,13 +1016,29 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             String.format("Unexpected results returned when processing query: %s", describeQuery);
         throw new RuntimeException(errorMsg);
       }
-      return new Triple<>(signature, returns, body);
+      return new DescribeFunctionOutput(signature, numOptional, returns, body);
     } catch (SQLException e) {
       String errorMsg =
           String.format(
               "Error encountered when running describe function query: %s. Error found: %s",
               describeQuery, e);
       throw new RuntimeException(errorMsg);
+    }
+  }
+
+  private class DescribeFunctionOutput {
+
+    private final String signature;
+    private final int numOptional;
+    private final String returns;
+    private final @Nullable String body;
+
+    DescribeFunctionOutput(
+        String signature, int numOptional, String returns, @Nullable String body) {
+      this.signature = signature;
+      this.numOptional = numOptional;
+      this.returns = returns;
+      this.body = body;
     }
   }
 
