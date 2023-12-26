@@ -144,8 +144,6 @@ def overload_fft2(A, parallel=False):
     ):
 
         def impl(A, parallel=False):  # pragma: no cover
-            # If we don't copy we'll overwrite A with the output if there's no later copy
-            A = A.copy()
             # array_to_info only supports 1D arrays, so we flatten the array
             flattened = np.ascontiguousarray(A).reshape((-1,))
             arr_info = array_to_info(flattened)
