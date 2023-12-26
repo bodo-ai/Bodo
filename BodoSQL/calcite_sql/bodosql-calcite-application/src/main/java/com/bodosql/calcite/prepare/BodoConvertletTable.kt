@@ -22,7 +22,6 @@ import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.StandardConvertletTable
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import java.lang.RuntimeException
-import java.util.*
 
 /**
  * Custom convertlet table for Bodo code generation. Handles custom functions
@@ -48,6 +47,7 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             val function = (call.operator as SqlUserDefinedFunction).function
             if (function is SnowflakeUserDefinedFunction) {
                 function.errorOrWarn()
+                function.errorOnDefaults(call.operandList)
                 throw RuntimeException("Unable to resolve function: ${function.functionPath[0]}.${function.functionPath[1]}.${function.functionPath[2]}. BodoSQL does not have support for Snowflake UDFs yet")
             }
         }

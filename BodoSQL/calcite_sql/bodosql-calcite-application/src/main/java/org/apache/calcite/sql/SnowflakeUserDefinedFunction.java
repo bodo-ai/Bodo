@@ -2,6 +2,7 @@ package org.apache.calcite.sql;
 
 import com.bodosql.calcite.catalog.SnowflakeCatalog;
 import com.bodosql.calcite.schema.SnowflakeUDFFunctionParameter;
+import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.google.common.collect.ImmutableList;
@@ -11,6 +12,7 @@ import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.validate.SqlValidatorException;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
@@ -49,6 +51,7 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      *
      * @param functionPath         The full path to this function including the function name.
      * @param args                 A string containing the args output from describe function.
+     * @param numOptional          How many of the arguments are optional. Optional args must be at the end.
      * @param returns              A string containing the returns output from describe function
      * @param body                 A string containing the body output from describe function or NULL if the function is not a SQL UDF.
      * @param isTableFunction      Is this function actually a table function.
@@ -57,17 +60,17 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
      */
-    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
         this.functionPath = functionPath;
-        this.parameters = parseParameters(args);
+        this.parameters = parseParameters(args, numOptional);
         this.returnTypeInfo = snowflakeTypeNameToTypeInfo(returns);
         this.body = body;
         this.errorInfo = new SnowflakeUserDefinedFunctionErrorInfo(isTableFunction, isSecure, isExternal, language, isMemoizable);
     }
 
     // -- static creators
-    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
-        return new SnowflakeUserDefinedFunction(functionPath, args, returns, body, isTableFunction, isSecure, isExternal, language, isMemoizable);
+    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+        return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isTableFunction, isSecure, isExternal, language, isMemoizable);
     }
 
     /**
@@ -105,19 +108,20 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * @param args The arguments that are of the form:
      *             (name1 arg1, name2, arg2, ... nameN argN)
      */
-    private List<FunctionParameter> parseParameters(String args) {
+    private List<FunctionParameter> parseParameters(String args, int numOptional) {
         List<FunctionParameter> parameters = new ArrayList<>();
         // Remove the starting ( and trailing )
         String trimmedArgs = args.substring(1, args.length() - 1).trim();
         if (!trimmedArgs.isEmpty()) {
             String[] inputs = trimmedArgs.split(",");
+            int startOptionalIdx = inputs.length - numOptional;
             for (int i = 0; i < inputs.length; i++) {
-                String input = inputs[i];
+                String input = inputs[i].trim();
                 String[] typeParts = input.split(" ");
                 String argName = typeParts[0];
                 String type = typeParts[1];
                 SnowflakeCatalog.SnowflakeTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(type);
-                parameters.add(new SnowflakeUDFFunctionParameter(argName, i, typeInfo));
+                parameters.add(new SnowflakeUDFFunctionParameter(argName, i, typeInfo, i >= startOptionalIdx));
             }
         }
         return parameters;
@@ -128,10 +132,42 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * Raise an error or warning if the Snowflake UDF contains features that we
      * are unable to support. A warning should only be raised if the function
      * doesn't error.
+     * @throws SqlValidatorException
      */
     public void errorOrWarn() throws SqlValidatorException {
         this.errorInfo.error();
         this.errorInfo.warn();
+    }
+
+    /**
+     * Raise an error if any function argument is omitted. We cannot support
+     * default values yet because this information is not yet available in
+     * Snowflake metadata.
+     * @throws SqlValidatorException
+     */
+    public void errorOnDefaults(List<SqlNode> operandList) throws SqlValidatorException {
+        ImmutableBitSet.Builder builder = ImmutableBitSet.builder();
+        for (int i = 0; i < operandList.size(); i++) {
+            SqlNode operand = operandList.get(i);
+            if (BodoSqlUtil.isDefaultCall(operand)) {
+                builder.set(i);
+            }
+        }
+        ImmutableBitSet bits = builder.build();
+        // If there is at least 1 bit set we need to throw an
+        // exception because we cannot support default arguments.
+        if (!bits.isEmpty()) {
+            List<String> argumentNames = new ArrayList();
+            for (int bit: bits) {
+                argumentNames.add(parameters.get(bit).getName());
+            }
+            String databaseName = functionPath.get(0);
+            String schemaName = functionPath.get(1);
+            String functionName = functionPath.get(2);
+            String badArguments = String.join(", ", argumentNames);
+            throw BODO_SQL_RESOURCE.snowflakeUDFContainsDefaultArguments(databaseName, schemaName, functionName, badArguments).ex();
+
+        }
     }
 
     // -- Helper Classes --

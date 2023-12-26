@@ -12,13 +12,16 @@ public class SnowflakeUDFFunctionParameter implements FunctionParameter {
 
   private final String name;
   private final int ord;
+
+  private final boolean isOptional;
   private final SnowflakeCatalog.SnowflakeTypeInfo typeInfo;
 
   public SnowflakeUDFFunctionParameter(
-      String name, int ord, SnowflakeCatalog.SnowflakeTypeInfo typeInfo) {
+      String name, int ord, SnowflakeCatalog.SnowflakeTypeInfo typeInfo, boolean isOptional) {
     this.name = name;
     this.ord = ord;
     this.typeInfo = typeInfo;
+    this.isOptional = isOptional;
   }
 
   /**
@@ -64,6 +67,6 @@ public class SnowflakeUDFFunctionParameter implements FunctionParameter {
   /** Bodo requires every argument to be required for now. */
   @Override
   public boolean isOptional() {
-    return false;
+    return isOptional;
   }
 }
