@@ -205,7 +205,7 @@ def test_matrix_ops(operation, testing_matrices, memory_leak_check):
 
     impl = impls[operation]
 
-    check_func(impl, testing_matrices)
+    check_func(impl, testing_matrices, only_seq=True)
 
 
 @pytest.mark.parametrize(
@@ -255,7 +255,16 @@ def test_matrix_multiplication(
     }
 
     impl = impls[operation]
-    check_func(impl, testing_matrices_for_multiplication)
+    # Only star operator has parallel support currently
+    if operation == "star":
+        check_func(
+            impl,
+            testing_matrices_for_multiplication,
+            distributed=[("m1", 0)],
+            is_out_distributed=True,
+        )
+    else:
+        check_func(impl, testing_matrices_for_multiplication, only_seq=True)
 
 
 def test_matrix_markov(memory_leak_check):
@@ -278,7 +287,7 @@ def test_matrix_markov(memory_leak_check):
         ],
         dtype=np.float64,
     )
-    check_func(impl, (A, pi), convert_to_nullable_float=False)
+    check_func(impl, (A, pi), convert_to_nullable_float=False, only_seq=True)
 
 
 @pytest.mark.slow
@@ -304,7 +313,7 @@ def test_mixed_type_arithmetic(dtype_a, dtype_b):
 
     A, _ = make_matrix(dtype_a, (100, 8))
     _, B = make_matrix(dtype_b, (100, 8))
-    check_func(impl, (A, B.T))
+    check_func(impl, (A, B.T), only_seq=True)
 
 
 def test_conv_matrix(matrix_layout, memory_leak_check):
@@ -352,8 +361,11 @@ def test_asmatrix(A, memory_leak_check):
     def impl(A):
         return np.asmatrix(A)
 
-    # [BSE-986] TODO: investigate parallel support
-    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=True)
+    # Matrix and 2D arrays input can be parallelized
+    test_parallel = isinstance(A, np.matrix) or (
+        isinstance(A, np.ndarray) and A.ndim == 2
+    )
+    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=not test_parallel)
 
 
 @pytest.mark.parametrize(

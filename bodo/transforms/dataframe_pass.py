@@ -336,6 +336,27 @@ class DataFramePass:
                 self.typemap[rhs.func.name], types.Dispatcher
             ):
                 return [assign]
+            # Cases like dtype(value) in np.linspace implementation
+            elif isinstance(
+                func_def, (ir.Const, ir.FreeVar, ir.Global)
+            ) and func_def.value in (
+                int,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+                float,
+                np.float32,
+                np.float64,
+                complex,
+                np.complex64,
+                np.complex128,
+            ):
+                return [assign]
 
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None

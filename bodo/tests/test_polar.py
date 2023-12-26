@@ -113,7 +113,8 @@ def test_polar_format_e2e(datapath, memory_leak_check):
         u_hat = np.asmatrix([u_hat])
         v_hat = np.asmatrix([v_hat])
 
-        k_matrix = np.tile(k, (npulses, 1))
+        # NOTE: commented out dead code in original function
+        # k_matrix = np.tile(k, (npulses, 1))
         k_matrix = np.asmatrix(k)
 
         # Compute kx and ky meshgrid
@@ -450,7 +451,18 @@ def test_tile(A, reps, memory_leak_check):
     loc_vars = {}
     exec(func_text, {"np": np}, loc_vars)
     impl = loc_vars["impl"]
-    check_func(impl, (A,), convert_to_nullable_float=False)
+    # Input to row repeat is not distributed
+    is_row_repeat = A.ndim == 1
+    if is_row_repeat:
+        check_func(
+            impl,
+            (A,),
+            convert_to_nullable_float=False,
+            is_out_distributed=True,
+            distributed=[],
+        )
+    else:
+        check_func(impl, (A,), convert_to_nullable_float=False)
 
 
 def test_tile_non_constant(memory_leak_check):
@@ -468,7 +480,14 @@ def test_tile_non_constant(memory_leak_check):
     A1 = np.linspace(0, 1, 11).reshape((11, 1))
     check_func(impl1, (A1, 7), convert_to_nullable_float=False)
     A2 = np.linspace(0, 1, 11)
-    check_func(impl2, (A2, 7), convert_to_nullable_float=False)
+    # Argument isn't distributed in this case
+    check_func(
+        impl2,
+        (A2, 7),
+        convert_to_nullable_float=False,
+        is_out_distributed=True,
+        distributed=[],
+    )
 
 
 @pytest.mark.parametrize(
