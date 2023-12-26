@@ -582,124 +582,194 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
 @pytest.mark.parametrize(
     "df",
     [
-        pd.DataFrame(
-            {
-                "A": [
-                    1,
-                    2,
-                    1,
-                    0,
-                    2,
-                    1,
-                    2,
-                    2,
-                ],
-                "B": np.array(
-                    [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
-                ),
-                "C": np.array([[1, 2], [3], [4, 5, 6], [0]] * 2, object),
-                "D": pd.array([1, 2, 3, 4] * 2),
-                "E": ["xyz", "xyz", "wxy", "wxy"] * 2,
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": np.array(
+                        [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
+                    ),
+                    "C": np.array([[1, 2], [3], [4, 5, 6], [0]] * 2, object),
+                    "D": pd.array([1, 2, 3, 4] * 2),
+                    "E": ["xyz", "xyz", "wxy", "wxy"] * 2,
+                    "F": pd.array(
+                        [
+                            [],
+                            None,
+                            ["A"],
+                            ["A", None, "B"],
+                            ["A"],
+                            ["X", None, "Y"],
+                            None,
+                            [],
+                        ],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                    ),
+                }
+            ),
+            id="array",
         ),
-        pd.DataFrame(
-            {
-                "A": [
-                    1,
-                    2,
-                    1,
-                    0,
-                    2,
-                    1,
-                    2,
-                    2,
-                ],
-                "B": [
-                    {
-                        "X": "AB",
-                        "Y": [1.1, 2.2],
-                        "Z": [[1], None, [3, None]],
-                        "W": {"A": 1, "B": "A"},
-                    },
-                    {
-                        "X": "C",
-                        "Y": [1.1],
-                        "Z": [[11], None],
-                        "W": {"A": 1, "B": "ABC"},
-                    },
-                    None,
-                    {
-                        "X": "D",
-                        "Y": [4.0, 6.0],
-                        "Z": [[1], None],
-                        "W": {"A": 1, "B": ""},
-                    },
-                    {
-                        "X": "VFD",
-                        "Y": [1.2],
-                        "Z": [[], [3, 1]],
-                        "W": {"A": 1, "B": "AA"},
-                    },
-                    {
-                        "X": "LMMM",
-                        "Y": [9.0, 1.2, 3.1],
-                        "Z": [[10, 11], [11, 0, -3, -5]],
-                        "W": {"A": 1, "B": "DFG"},
-                    },
-                    {
-                        "X": "LMMM",
-                        "Y": [9.0, 1.2, 3.1],
-                        "Z": [[10, 11], [11, 0, -3, -5]],
-                        "W": {"A": 1, "B": "DFG"},
-                    },
-                    None,
-                ],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": pd.array(
+                        [
+                            {
+                                "X": "AB",
+                                "Y": [1.1, 2.2],
+                                "Z": [[1], None, [3, None]],
+                                "W": {"A": 1, "B": "A"},
+                                "Q": ["A"],
+                            },
+                            {
+                                "X": "C",
+                                "Y": [1.1],
+                                "Z": [[11], None],
+                                "W": {"A": 1, "B": "ABC"},
+                                "Q": None,
+                            },
+                            None,
+                            {
+                                "X": "D",
+                                "Y": [4.0, 6.0],
+                                "Z": [[1], None],
+                                "W": {"A": 1, "B": ""},
+                                "Q": ["AE", "IOU", None],
+                            },
+                            {
+                                "X": "VFD",
+                                "Y": [1.2],
+                                "Z": [[], [3, 1]],
+                                "W": {"A": 1, "B": "AA"},
+                                "Q": ["Y"],
+                            },
+                            {
+                                "X": "LMMM",
+                                "Y": [9.0, 1.2, 3.1],
+                                "Z": [[10, 11], [11, 0, -3, -5]],
+                                "W": {"A": 1, "B": "DFG"},
+                                "Q": [],
+                            },
+                            {
+                                "X": "LMMM",
+                                "Y": [9.0, 1.2, 3.1],
+                                "Z": [[10, 11], [11, 0, -3, -5]],
+                                "W": {"A": 1, "B": "DFG"},
+                                "Q": ["X", None, "Z"],
+                            },
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("X", pa.string()),
+                                    pa.field("Y", pa.large_list(pa.float64())),
+                                    pa.field(
+                                        "Z", pa.large_list(pa.large_list(pa.int64()))
+                                    ),
+                                    pa.field(
+                                        "W",
+                                        pa.struct(
+                                            [
+                                                pa.field("A", pa.int8()),
+                                                pa.field("B", pa.string()),
+                                            ]
+                                        ),
+                                    ),
+                                    pa.field("Q", pa.large_list(pa.string())),
+                                ]
+                            )
+                        ),
+                    ),
+                }
+            ),
+            id="struct",
         ),
-        pd.DataFrame(
-            {
-                "A": [
-                    1,
-                    2,
-                    1,
-                    0,
-                    2,
-                    1,
-                    2,
-                    2,
-                ],
-                "B": pd.Series(
-                    [
-                        {1: 1.4, 2: 3.1},
-                        None,
-                        {},
-                        {11: 3.4, 21: 3.1, 9: 8.1},
-                    ]
-                    * 2,
-                    dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
-                ),
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": pd.Series(
+                        [
+                            {1: 1.4, 2: 3.1},
+                            None,
+                            {},
+                            {11: 3.4, 21: 3.1, 9: 8.1},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+                    ),
+                    "C": pd.Series(
+                        [
+                            {1: [], 2: None},
+                            None,
+                            {},
+                            {11: ["A"], 21: ["B", None], 9: ["C"]},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.map_(pa.int64(), pa.large_list(pa.string()))
+                        ),
+                    ),
+                }
+            ),
+            id="map",
         ),
-        # TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing
-        # pd.DataFrame(
-        #     {
-        #         "A": [
-        #             1,
-        #             2,
-        #             1,
-        #             0,
-        #             2,
-        #             1,
-        #             2,
-        #             2,
-        #         ],
-        #         "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
-        #     }
-        # ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        2,
+                        1,
+                        0,
+                        2,
+                        1,
+                        2,
+                        2,
+                    ],
+                    "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
+                }
+            ),
+            id="tuple",
+            marks=pytest.mark.skip(
+                "[BSE-2076] TODO: Support tuple array in Arrow boxing/unboxing"
+            ),
+        ),
     ],
-    ids=("array_item", "struct", "map"),
 )
-@pytest.mark.parametrize("check_error", (True, False))
+@pytest.mark.parametrize(
+    "check_error",
+    [pytest.param(True, id="check_error"), pytest.param(False, id="no_error")],
+)
 def test_groupby_nested_array_data(memory_leak_check, df, check_error):
     """
     Tests support for streaming groupby with nested array data.

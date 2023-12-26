@@ -1267,6 +1267,10 @@ void array_agg_dtype_helper(
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::FLOAT64)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::DECIMAL)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::_BOOL)
+        ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::DATE)
+        ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::TIME)
+        ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::DATETIME)
+        ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::TIMEDELTA)
         default: {
             throw std::runtime_error(
                 "Unsupported dtype encountered with array_agg. Found type: " +
@@ -1321,6 +1325,48 @@ void array_agg_computation(
                                     false>(in_arr, out_arr, orderby_cols,
                                            ascending, na_position, grp_info,
                                            is_parallel, pool, std::move(mm));
+            }
+            break;
+        }
+        case bodo_array_type::MAP: {
+            if (is_distinct) {
+                array_agg_operation<bodo_array_type::MAP, Bodo_CTypes::STRUCT,
+                                    true>(in_arr, out_arr, orderby_cols,
+                                          ascending, na_position, grp_info,
+                                          is_parallel, pool, std::move(mm));
+            } else {
+                array_agg_operation<bodo_array_type::MAP, Bodo_CTypes::STRUCT,
+                                    false>(in_arr, out_arr, orderby_cols,
+                                           ascending, na_position, grp_info,
+                                           is_parallel, pool, std::move(mm));
+            }
+            break;
+        }
+        case bodo_array_type::STRUCT: {
+            if (is_distinct) {
+                array_agg_operation<bodo_array_type::STRUCT,
+                                    Bodo_CTypes::STRUCT, true>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
+            } else {
+                array_agg_operation<bodo_array_type::STRUCT,
+                                    Bodo_CTypes::STRUCT, false>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
+            }
+            break;
+        }
+        case bodo_array_type::ARRAY_ITEM: {
+            if (is_distinct) {
+                array_agg_operation<bodo_array_type::ARRAY_ITEM,
+                                    Bodo_CTypes::LIST, true>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
+            } else {
+                array_agg_operation<bodo_array_type::ARRAY_ITEM,
+                                    Bodo_CTypes::LIST, false>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
             }
             break;
         }

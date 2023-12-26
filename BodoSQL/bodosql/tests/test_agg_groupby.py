@@ -719,7 +719,7 @@ def test_nested_grouping_clauses(
         pytest.param("H", id="string_array"),
     ],
 )
-def test_any_value(agg_col, spark_info, memory_leak_check):
+def test_any_value(agg_col, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
     value). The test data is set up so that each group has all identical values."""
@@ -833,7 +833,8 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         [20, 30],
                         [40, None],
                         [50, None, 60, 1],
-                    ]
+                    ],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
                 ),
                 "H": pd.Series(
                     [
@@ -852,28 +853,25 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         [""],
                         ["A", "CD", "B"],
                         ["alphabet", "soup"],
-                    ]
+                    ],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.string())),
                 ),
             }
         )
     }
 
-    query = (
-        f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K ORDER BY K NULLS FIRST"
-    )
+    query = f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K"
+
+    answer = ctx["table1"].groupby("K", as_index=False, dropna=False)[agg_col].first()
 
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
+        expected_output=answer,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
-        # TODO[BE-3456]: enable dict-encoded string test when segfault is fixed
-        use_dict_encoded_strings=False,
-        # df.sort_values is unsupported in Python with array item array in the table.
-        # Uses ORDER BY clause instead to get the rows in a consistent order.
-        sort_output=False,
+        convert_columns_to_pandas=True,
     )
 
 

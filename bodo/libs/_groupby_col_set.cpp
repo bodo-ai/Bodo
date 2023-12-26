@@ -1196,16 +1196,6 @@ void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos,
                 "does not equal 1. Each ArrayAggColSet should handle only one "
                 "group");
         }
-        if (in_col->arr_type != bodo_array_type::arr_type_enum::NUMPY &&
-            in_col->arr_type !=
-                bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL &&
-            in_col->arr_type != bodo_array_type::arr_type_enum::STRING &&
-            in_col->arr_type != bodo_array_type::arr_type_enum::DICT) {
-            throw std::runtime_error(
-                "Internal error in ArrayAggColSet::update: unsupported array "
-                "type " +
-                (GetArrType_as_string(in_col->arr_type)));
-        }
         array_agg_computation(in_col, update_cols[0], orderby_cols, ascending,
                               na_position, grp_infos[0], is_parallel,
                               is_distinct, pool, std::move(mm));

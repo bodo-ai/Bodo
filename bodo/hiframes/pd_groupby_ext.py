@@ -420,18 +420,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         )
     elif func_name in {"array_agg", "array_agg_distinct"}:
         # For array_agg, output is a nested array where the internal arrays' dtypes
-        # are the same as the original input. Only numerical data currently supported.
-        if (
-            not isinstance(
-                in_dtype, (types.Integer, types.Float, types.Boolean, types.Bytes)
-            )
-            and not isinstance(arr_type, bodo.DecimalArrayType)
-            and in_dtype != string_type
-        ):  # pragma: no cover
-            return (
-                None,
-                f"Unsupported array type for {func_name}: {arr_type}",
-            )
+        # are the same as the original input.
         return ArrayItemArrayType(arr_type), "ok"
     elif func_name == "object_agg":
         # For object_agg, output is a map array where the keys are the

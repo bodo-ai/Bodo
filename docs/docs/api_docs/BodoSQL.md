@@ -1479,8 +1479,7 @@ numeric types
     then the `WITHIN GROUP` clause can only refer to the same column as the aggregation input.
 
     !!! note
-        This aggregation function is currently only supported with a `GROUP BY` clause,
-        and on numerical data (integers, floats, etc.) or string/binary data.
+        This aggregation function is currently only supported with a `GROUP BY` clause.
 
 
 #### OBJECT_AGG

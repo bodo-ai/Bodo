@@ -1664,6 +1664,7 @@ def convert_non_pandas_columns(df):
                                 dict,
                                 tuple,
                                 Decimal,
+                                datetime.time,
                                 np.ndarray,
                                 pd.arrays.IntegerArray,
                                 pd.arrays.FloatingArray,
