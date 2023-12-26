@@ -1,10 +1,13 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import java.util.ArrayList;
 import java.util.List;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ObjectDeleteOperandChecker extends SameOperandTypeChecker {
@@ -36,11 +39,24 @@ public class ObjectDeleteOperandChecker extends SameOperandTypeChecker {
     // Extract and verify the number of operands
     int nOperandsActual = operatorBinding.getOperandCount();
     if (nOperandsActual < 2) {
-      throw new IllegalArgumentException(
-          "OBJECT_DELETE functions must be called on at least 2 arguments");
+      if (throwOnFailure) {
+        throw new IllegalArgumentException(
+            "OBJECT_DELETE functions must be called on at least 2 arguments");
+      }
+      return false;
     }
     // Extract each operand type and verify that it is valid
     final List<Integer> operandList = getOperandList(operatorBinding.getOperandCount());
+    if (callBinding.isTypeCoercionEnabled()) {
+      TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
+      List<RelDataType> operandTypes = callBinding.collectOperandTypes();
+      ArrayList<SqlTypeFamily> expectedFamilies = new ArrayList<>();
+      expectedFamilies.add(SqlTypeFamily.MAP);
+      for (int i = 1; i < operandTypes.size(); i++) {
+        expectedFamilies.add(SqlTypeFamily.CHARACTER);
+      }
+      typeCoercion.builtinFunctionCoercion(callBinding, operandTypes, expectedFamilies);
+    }
     for (int i : operandList) {
       if (i == 0) {
         // Throw an error if the first argument is not a JSON type
