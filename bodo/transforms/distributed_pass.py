@@ -1980,11 +1980,6 @@ class DistributedPass:
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
-        if fdef == ("tile_transpose_upcast_helper", "bodo.libs.array_kernels"):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
-                set_last_arg_to_true(self, assign.value)
-            return [assign]
-
         if fdef == (
             "get_valid_entries_from_date_offset",
             "bodo.libs.array_kernels",
