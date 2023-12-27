@@ -297,8 +297,8 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
     # Note this was verified against Snowflake by running with each scalar directly
     py_output = pd.DataFrame(
         {
-            "out1": pd.array([92557381, 0, -41269886] * 5),
-            "out2": pd.array([-25710, 0, 11464] * 5),
+            "OUT1": pd.array([92557381, 0, -41269886] * 5),
+            "OUT2": pd.array([-25710, 0, 11464] * 5),
         }
     )
     query = (
@@ -373,7 +373,7 @@ def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
     value = pd.Timestamp(timestamp_literal).tz_localize(None)
     query = f"SELECT CAST ('{timestamp_literal}' AS TIMESTAMP) AS ts"
     ctx = {}
-    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    expected_output = pd.DataFrame({"TS": value}, index=np.arange(1))
     check_query(query, ctx, None, expected_output=expected_output)
 
 
@@ -411,7 +411,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "out1": pd.array(
+                    "OUT1": pd.array(
                         [
                             1699226484,
                             1522540800,
@@ -425,7 +425,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out2": pd.array(
+                    "OUT2": pd.array(
                         [
                             1699226484324,
                             1522540800000,
@@ -439,7 +439,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out3": pd.array(
+                    "OUT3": pd.array(
                         [
                             1699226484324140,
                             1522540800000000,
@@ -453,7 +453,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out4": pd.array(
+                    "OUT4": pd.array(
                         [
                             1699226484324140000,
                             1522540800000000000,
@@ -493,7 +493,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "out1": pd.array(
+                    "OUT1": pd.array(
                         [
                             1699255284,
                             1522566000,
@@ -507,7 +507,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out2": pd.array(
+                    "OUT2": pd.array(
                         [
                             1699255284324,
                             1522566000000,
@@ -521,7 +521,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out3": pd.array(
+                    "OUT3": pd.array(
                         [
                             1699255284324140,
                             1522566000000000,
@@ -535,7 +535,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                         ],
                         dtype="Int64",
                     ),
-                    "out4": pd.array(
+                    "OUT4": pd.array(
                         [
                             1699255284324140000,
                             1522566000000000000,
@@ -587,7 +587,7 @@ def test_date_part_epoch_case(memory_leak_check):
     ctx = {"table1": table}
     answer = pd.DataFrame(
         {
-            "out1": pd.array(
+            "OUT1": pd.array(
                 [
                     1699226484,
                     1522540800,
@@ -626,8 +626,8 @@ def test_date_part_epoch_case(memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "out1": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
-                    "out2": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
+                    "OUT1": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
+                    "OUT2": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
                 }
             ),
             id="tz_naive",
@@ -649,8 +649,8 @@ def test_date_part_epoch_case(memory_leak_check):
             ),
             pd.DataFrame(
                 {
-                    "out1": pd.array([-9, -9, None, -9, -9] * 3, dtype="Int32"),
-                    "out2": pd.array([-30, -30, None, -30, -30] * 3, dtype="Int32"),
+                    "OUT1": pd.array([-9, -9, None, -9, -9] * 3, dtype="Int32"),
+                    "OUT2": pd.array([-30, -30, None, -30, -30] * 3, dtype="Int32"),
                 }
             ),
             id="tz_aware",
@@ -686,7 +686,7 @@ def test_date_part_timezone_unit_case(memory_leak_check):
     ctx = {"table1": table}
     answer = pd.DataFrame(
         {
-            "out1": pd.array([-8, -1, None, -7, -1] * 3, dtype="Int32"),
+            "OUT1": pd.array([-8, -1, None, -7, -1] * 3, dtype="Int32"),
         }
     )
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)

@@ -174,7 +174,7 @@ def test_unix_timestamp(basic_df, memory_leak_check):
     expected_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "output": np.float64(pd.Timestamp.now().value // (10000 * 1000000000)),
+            "OUTPUT": np.float64(pd.Timestamp.now().value // (10000 * 1000000000)),
         }
     )
 

@@ -45,6 +45,7 @@ def test_snowflake_catalog_caching(fn_distribution, is_cached):
         query,
         get_snowflake_connection_string(db, schema),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
@@ -95,8 +96,8 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
 
     new_df = pd.DataFrame(
         {
-            "a": [1, 2, 3] * 10,
-            "b": np.arange(30),
+            "A": [1, 2, 3] * 10,
+            "B": np.arange(30),
         }
     )
 

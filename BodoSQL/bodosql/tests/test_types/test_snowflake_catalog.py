@@ -69,6 +69,7 @@ def test_snowflake_catalog_read(
             snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     check_func(impl, (bc,), py_output=py_output)
 
 
@@ -85,6 +86,7 @@ def test_snowflake_catalog_from_conn_str_read(
         "Select r_name from REGION ORDER BY r_name",
         snowflake_sample_data_conn_str,
     )
+    py_output.columns = py_output.columns.str.upper()
     check_func(impl, (bc,), py_output=py_output)
 
 
@@ -102,6 +104,7 @@ def test_snowflake_catalog_aggregate_pushdown_sum(
             snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     # Case insensitive.
     query1 = "SELECT SUM(l_quantity) as total FROM TPCH_SF1.LINEITEM"
@@ -124,6 +127,7 @@ def test_snowflake_catalog_aggregate_pushdown_count(
             snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -181,9 +185,8 @@ def test_snowflake_catalog_insert_into(
         assert_tables_equal(output_df, result_df)
 
 
-# TODO: re add memory_leak_check. See https://bodo.atlassian.net/browse/BSE-990
 def test_snowflake_catalog_insert_into_read(
-    test_db_snowflake_catalog,
+    test_db_snowflake_catalog, memory_leak_check
 ):
     """
     Tests insert into in a snowflake catalog and afterwards reading the result.
@@ -204,9 +207,6 @@ def test_snowflake_catalog_insert_into_read(
     py_output = pd.concat(
         (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
     )
-    # Rename columns for comparison with the default capitalization when
-    # read from Snowflake.
-    py_output.columns = ["a", "b", "c"]  # type: ignore
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test3", db, schema
@@ -224,9 +224,8 @@ def test_snowflake_catalog_insert_into_read(
         )
 
 
-# TODO: re add memory_leak_check. See https://bodo.atlassian.net/browse/BSE-990
 def test_snowflake_catalog_insert_into_null_literal(
-    test_db_snowflake_catalog,
+    test_db_snowflake_catalog, memory_leak_check
 ):
     """
     Tests insert into in a snowflake catalog with a literal null value.
@@ -251,8 +250,6 @@ def test_snowflake_catalog_insert_into_null_literal(
         py_output = pd.concat(
             (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
         )
-        # Rename columns for comparison
-        py_output.columns = ["a", "b", "c"]  # type: ignore
         write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
         # Only test with only_1D=True so we only insert into the table once.
@@ -314,8 +311,7 @@ def test_snowflake_catalog_insert_into_date(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.concat((new_df, date_table))
@@ -347,11 +343,12 @@ def test_snowflake_catalog_default(
             snowflake_sample_data_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     check_func(impl1, (bc,), py_output=py_output)
 
     # We use a different type for the local table to clearly tell if we
     # got the correct table.
-    local_table = pd.DataFrame({"r_name": np.arange(100)})
+    local_table = pd.DataFrame({"R_NAME": np.arange(100)})
     bc = bc.add_or_replace_view("LOCAL_REGION", local_table)
     # We should select the local table
     check_func(impl2, (bc,), py_output=local_table, reset_index=True)
@@ -402,6 +399,7 @@ def test_snowflake_catalog_read_tpch(
             snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     check_func(impl, (bc,), py_output=py_output, reset_index=True)
 
@@ -487,7 +485,9 @@ def test_create_table_timing_debug_message(
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             impl(bc, query)
-            check_logger_msg(stream, f"Execution time for writing table {table_name}")
+            check_logger_msg(
+                stream, f"Execution time for writing table {table_name.upper()}"
+            )
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
@@ -552,8 +552,7 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Convert output to match the input.
-            output_df.columns = [colname.upper() for colname in output_df.columns]  # type: ignore
+            output_df.columns = output_df.columns.str.upper()
         output_df = comm.bcast(output_df)
         result_df = new_df[new_df.A == 3]
         assert_tables_equal(output_df, result_df)
@@ -672,13 +671,13 @@ def test_current_timestamp_case(
     V[~df.A] = None
     py_output = pd.DataFrame(
         {
-            "now_trunc": normalize_val,
-            "local_trunc": normalize_val,
-            "getdate_trunc": normalize_val,
-            "sys_trunc": normalize_val,
-            "case_current_trunc": S,
-            "is_valid_now": V,
-            "is_valid_localtime": V,
+            "NOW_TRUNC": normalize_val,
+            "LOCAL_TRUNC": normalize_val,
+            "GETDATE_TRUNC": normalize_val,
+            "SYS_TRUNC": normalize_val,
+            "CASE_CURRENT_TRUNC": S,
+            "IS_VALID_NOW": V,
+            "IS_VALID_LOCALTIME": V,
         },
     )
     check_func(
@@ -758,20 +757,17 @@ def test_default_table_type(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
             {
-                "column1": "literal",
-                "column2": np.arange(1, 11),
-                "column3": datetime.date(2023, 2, 21),
+                "COLUMN1": "literal",
+                "COLUMN2": np.arange(1, 11),
+                "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
-        output_df.columns = output_df.columns.str.upper()
-        result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
 
         table_type = None
@@ -815,7 +811,6 @@ def test_snowflake_catalog_create_table_temporary(
     """
     # default for test_db_snowflake_catalog is transient
     catalog = test_db_snowflake_catalog
-    db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     bc = bodosql.BodoSQLContext(catalog=catalog)
     bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
@@ -969,20 +964,16 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
-        # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
             {
-                "column1": "literal",
-                "column2": np.arange(1, 11),
-                "column3": datetime.date(2023, 2, 21),
+                "COLUMN1": "literal",
+                "COLUMN2": np.arange(1, 11),
+                "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
-        output_df.columns = output_df.columns.str.upper()
-        result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
 
         output_table_type = None
@@ -1058,20 +1049,16 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
-        # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
             {
-                "column1": "literal",
-                "column2": np.arange(1, 11),
-                "column3": datetime.date(2023, 2, 21),
+                "COLUMN1": "literal",
+                "COLUMN2": np.arange(1, 11),
+                "COLUMN3": datetime.date(2023, 2, 21),
             }
         )
-        output_df.columns = output_df.columns.str.upper()
-        result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
@@ -1173,16 +1160,13 @@ def test_snowflake_catalog_create_table_already_exists(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         # Recreate the expected output by manually doing an append.
         result_df = pd.DataFrame(
-            {"column1": 2, "column2": np.arange(10), "column3": "hello world"}
+            {"COLUMN1": 2, "COLUMN2": np.arange(10), "COLUMN3": "hello world"}
         )
-        output_df.columns = output_df.columns.str.upper()
-        result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
         # create_snowflake_table handles dropping the table for us
 
@@ -1229,13 +1213,10 @@ def test_snowflake_catalog_simple_rewrite(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         result_df = local_table
-        output_df.columns = output_df.columns.str.upper()
-        result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
     except Exception as e:
         # In the case that another exception ocurred within the body of the try,
@@ -1275,7 +1256,7 @@ def test_snowflake_catalog_simple_rewrite_2(
     random.seed(42)
     local_table = pd.DataFrame(
         {
-            "r_name": random.choices(
+            "R_NAME": random.choices(
                 ["abc gobrandon", "xyz bong", "gobrandon", "bong", "a98y7guhb"], k=20
             )
         }
@@ -1289,9 +1270,9 @@ def test_snowflake_catalog_simple_rewrite_2(
         else:
             return None
 
-    expected_output_col = local_table["r_name"].apply(lambda x: row_fn(x))
+    expected_output_col = local_table["R_NAME"].apply(lambda x: row_fn(x))
     expected_output_col = expected_output_col.dropna()
-    expected_output = pd.DataFrame({"output_case": expected_output_col})
+    expected_output = pd.DataFrame({"OUTPUT_CASE": expected_output_col})
 
     bc = bc.add_or_replace_view("table1", local_table)
 
@@ -1324,13 +1305,10 @@ def test_snowflake_catalog_simple_rewrite_2(
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         expected_result_df = expected_output
-        output_df.columns = output_df.columns.str.upper()
-        expected_result_df.columns = expected_result_df.columns.str.upper()
         assert_tables_equal(output_df, expected_result_df)
     finally:
         # dropping the table
@@ -1457,18 +1435,13 @@ def test_snowflake_catalog_create_table_tpch(
             expected_output = pd.read_sql(
                 f"select * from {expected_output_table_name}", conn_str
             )
+            expected_output.columns = expected_output.columns.str.upper()
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
             # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
-            expected_output.columns = [
-                colname.upper() for colname in expected_output.columns
-            ]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         expected_output = comm.bcast(expected_output)
-        # Recreate the expected output by manually doing an append.
-        output_df.columns = output_df.columns.str.upper()
-        expected_output.columns = expected_output.columns.str.upper()
         assert_tables_equal(output_df, expected_output, check_dtype=False)
     except Exception as e:
         # In the case that the try body throws an error,
@@ -1523,7 +1496,7 @@ def test_snowflake_catalog_create_table_orderby_with():
 
 
 @pytest.mark.parametrize(
-    "table_name_qualifer",
+    "table_name_qualifier",
     [
         f"SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER",
         f"TPCH_SF1.CUSTOMER",
@@ -1531,7 +1504,7 @@ def test_snowflake_catalog_create_table_orderby_with():
     ],
 )
 def test_snowflake_catalog_fully_qualified(
-    snowflake_sample_data_snowflake_catalog, table_name_qualifer, memory_leak_check
+    snowflake_sample_data_snowflake_catalog, table_name_qualifier, memory_leak_check
 ):
     """Tests that the snowflake catalog correctly handles table names with varying levels of qualification"""
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
@@ -1539,7 +1512,7 @@ def test_snowflake_catalog_fully_qualified(
     def impl(bc, query):
         return bc.sql(query)
 
-    query = f"SELECT C_ADDRESS from {table_name_qualifer} where C_CUSTKEY = 60000"
+    query = f"SELECT C_ADDRESS from {table_name_qualifier} where C_CUSTKEY = 60000"
     py_output = pd.DataFrame({"C_ADDRESS": ["gUTQNtV,KAQve"]})
 
     # Only testing Seq, since output is tiny and we're only really testing
@@ -1584,9 +1557,9 @@ tableScopingTest3TableName = "tableScopingTest3"
 tableScopingTest4TableName = "tableScopingTest4"
 
 # Expected outputs, assuming we select the local/non-default catalog/default catalog schemas
-expected_out_local = pd.DataFrame({"a": ["local"]})
-expected_out_TEST_SCHEMA_catalog_schema = pd.DataFrame({"a": ["TEST_DB.TEST_SCHEMA"]})
-expected_out_PUBLIC_catalog_schema = pd.DataFrame({"a": ["TEST_DB.PUBLIC"]})
+expected_out_local = pd.DataFrame({"A": ["local"]})
+expected_out_TEST_SCHEMA_catalog_schema = pd.DataFrame({"A": ["TEST_DB.TEST_SCHEMA"]})
+expected_out_PUBLIC_catalog_schema = pd.DataFrame({"A": ["TEST_DB.PUBLIC"]})
 
 
 @pytest.mark.parametrize(
@@ -1800,7 +1773,9 @@ def test_snowflake_catalog_table_not_found(memory_leak_check):
     def impl(bc, q):
         return bc.sql(q)
 
-    with pytest.raises(BodoError, match=".*Object 'tableScopingTest2' not found.*"):
+    with pytest.raises(
+        BodoError, match=f".*Object '{tableScopingTest2TableName.upper()}' not found.*"
+    ):
         impl(bc, fail_query)
 
 
@@ -1909,18 +1884,12 @@ def test_snowflake_catalog_create_table_like(
         # to reduce the demand on Snowflake.
         if bodo.get_rank() == 0:
             expected_output = pd.read_sql(f"select * from LINEITEM1 LIMIT 0", conn_str)
+            expected_output.columns = expected_output.columns.str.upper()
             output_df = pd.read_sql(f"select * from {output_table_name}", conn_str)
-            # Reset the columns to the original names for simpler testing.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
-            expected_output.columns = [
-                colname.upper() for colname in expected_output.columns
-            ]
+            output_df.columns = output_df.columns.str.upper()
 
         output_df = comm.bcast(output_df)
         expected_output = comm.bcast(expected_output)
-        # Recreate the expected output by manually doing an append.
-        output_df.columns = output_df.columns.str.upper()
-        expected_output.columns = expected_output.columns.str.upper()
         assert_tables_equal(output_df, expected_output)
     except Exception as e:
         # Drop the table. In the case that the try body throws an error,
@@ -1954,10 +1923,10 @@ def test_sf_filter_pushdown_rowcount_estimate(
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
 
-    # This is a specifically exteneded version of the TPCH Table.
+    # This is a specifically extended version of the TPCH Table.
     # The table has 1.5M rows, and the filter will return 1 row.
     # Assuming we're using some heuristic to estimate the number of rows,
-    # it's almost certain that the expected ammount will be greater than 1 row.
+    # it's almost certain that the expected amount will be greater than 1 row.
     # if we're pushing the filter directly to snowflake, we should only
     # see 1 row in the cost estimate.
     sql = "SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'"
@@ -1972,7 +1941,6 @@ def test_filter_pushdown_row_count_caching(
     """E2E test that checks that we don't ping snowflake more
     than once when getting the row count for a duplicate filter"""
     bodo.bodosql_use_streaming_plan = True
-    comm = MPI.COMM_WORLD
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn_str = get_snowflake_connection_string(db, schema)
@@ -2097,7 +2065,7 @@ def test_read_with_array(test_db_snowflake_catalog, memory_leak_check):
     out: pd.DataFrame = bc.sql("SELECT * FROM BODOSQL_ARRAY_READ_TEST")
     assert len(out) == 100
     assert len(out.columns) == 3
-    assert all(isinstance(i, list) for i in out["a"])
+    assert all(isinstance(i, list) for i in out["A"])
 
 
 def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
@@ -2109,7 +2077,7 @@ def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "a": pd.Series(
+            "A": pd.Series(
                 [
                     [pd.NA, 12.4, -0.57],
                     [-1235.0, 0.01234567890123456789],
@@ -2120,7 +2088,7 @@ def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
             ),
-            "b": [1, 2, 3, 4, 5, 6],
+            "B": [1, 2, 3, 4, 5, 6],
         }
     )
     check_func(
@@ -2141,7 +2109,7 @@ def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "a": pd.Series(
+            "A": pd.Series(
                 [
                     ["\n    test multiline \\t  \n    string with junk\n    "],
                     ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
@@ -2153,7 +2121,7 @@ def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.list_(pa.string())),
             ),
-            "b": [1, 2, 3, 4, 5, 6, 7],
+            "B": [1, 2, 3, 4, 5, 6, 7],
         }
     )
     check_func(
@@ -2174,8 +2142,8 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "idx": pd.Series([1, 2, 3, 4, 5, 6], dtype="Int8"),
-            "a": pd.Series(
+            "IDX": pd.Series([1, 2, 3, 4, 5, 6], dtype="Int8"),
+            "A": pd.Series(
                 [
                     None,
                     {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
@@ -2208,8 +2176,8 @@ def test_struct_read(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "idx": [1, 2, 3, 4, 5, 6],
-            "a": [
+            "IDX": [1, 2, 3, 4, 5, 6],
+            "A": [
                 np.nan,
                 {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
                 {
@@ -2538,7 +2506,7 @@ def test_snowflake_json_filter_pushdown(
         return
     query = f"SELECT id FROM BODOSQL_JSON_READ_TEST WHERE {condition}"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    answer_df = pd.DataFrame({"id": answer})
+    answer_df = pd.DataFrame({"ID": answer})
     out = bc.sql(query)
     pd.testing.assert_frame_equal(
         out,
@@ -2558,8 +2526,8 @@ def test_snowflake_json_filter_pushdown(
             ["GROUP BY color_first_letter", "ORDER BY color_first_letter"],
             pd.DataFrame(
                 {
-                    "color_first_letter": list("abcdfghlmoprstvwy"),
-                    "color_count": [2, 2, 2, 1, 5, 1, 1, 1, 4, 2, 4, 3, 5, 3, 1, 1, 2],
+                    "COLOR_FIRST_LETTER": list("abcdfghlmoprstvwy"),
+                    "COLOR_COUNT": [2, 2, 2, 1, 5, 1, 1, 1, 4, 2, 4, 3, 5, 3, 1, 1, 2],
                 }
             ),
             id="count_color_first_letter",
@@ -2569,8 +2537,8 @@ def test_snowflake_json_filter_pushdown(
             ["GROUP BY size", "ORDER BY avg_price"],
             pd.DataFrame(
                 {
-                    "size": ["LG", "WRAP", "MED", "SM", "JUMBO"],
-                    "avg_price": [
+                    "SIZE": ["LG", "WRAP", "MED", "SM", "JUMBO"],
+                    "AVG_PRICE": [
                         1_026.67,
                         1_028.2525,
                         1_031.006666667,
@@ -2589,7 +2557,7 @@ def test_snowflake_json_filter_pushdown(
             ["WHERE data:price < 1025.0", "ORDER BY data:rank::integer"],
             pd.DataFrame(
                 {
-                    "ucolor": [
+                    "UCOLOR": [
                         "YELLOW",
                         "PALE",
                         "YELLOW",
@@ -2599,7 +2567,7 @@ def test_snowflake_json_filter_pushdown(
                         "METALLIC",
                         "ROSY",
                     ],
-                    "prange": [3, 3, 2, 2, 6, 6, 4, 4],
+                    "PRANGE": [3, 3, 2, 2, 6, 6, 4, 4],
                 }
             ),
             id="cheap_ranked_colors",
@@ -2774,6 +2742,7 @@ def test_simple_inline_view(test_db_snowflake_catalog, memory_leak_check):
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2815,6 +2784,7 @@ def test_secure_view_no_inlining(test_db_snowflake_catalog, memory_leak_check):
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2853,6 +2823,7 @@ def test_separate_schema_inline_view(test_db_snowflake_catalog, memory_leak_chec
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2886,6 +2857,7 @@ def test_separate_database_read(test_db_snowflake_catalog, memory_leak_check):
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     check_func(
         impl,
@@ -2919,6 +2891,7 @@ def test_separate_database_inline_view(test_db_snowflake_catalog, memory_leak_ch
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2972,6 +2945,7 @@ def test_missing_select_permission_no_inline(
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -3013,6 +2987,7 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -3045,14 +3020,14 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             """,
             pd.DataFrame(
                 {
-                    "k": [
+                    "K": [
                         "UNBOXED_WHITEWARE",
                         "GARGOYLE_PROUNIFORMITY",
                         "UNFOLDER_KINDREND",
                         "DUSTHEAP_LOLLARDLIKE",
                         "BRAMBLEBUSH_ONYMOUS",
                     ],
-                    "avg_size": [181.0, 156.0, 82.0, 64.125, 45.1],
+                    "AVG_SIZE": [181.0, 156.0, 82.0, 64.125, 45.1],
                 }
             ),
             id="map_of_string_list-no_variant-with_filter",
@@ -3067,8 +3042,8 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             """,
             pd.DataFrame(
                 {
-                    "k": ["sbo1", "sbo1wc"],
-                    "avg_val": [1382192, 201333],
+                    "K": ["sbo1", "sbo1wc"],
+                    "AVG_VAL": [1382192, 201333],
                 }
             ),
             id="struct_of_array_of_integer-no_variant-no_filter",
@@ -3085,14 +3060,14 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             """,
             pd.DataFrame(
                 {
-                    "k": [
+                    "K": [
                         "'KVUTZAH_MALEVOLENCY_PROLEPTIC_BLANKETER'",
                         "'ANACREON_PELTINERVED_PLUMPEST_CHANDELIERS'",
                         "'CELLARESS_MICROPARASITE_PETROLEUM_SUPERSOCIAL'",
                         "'COLOURMAN_DULBERT_AUTOGRAPHIST_QUINTUPLING'",
                         "'EYELAST_SILVERROD_MICROSPHERICAL_CRESOL'",
                     ],
-                    "c": [41, 32, 28, 21, 17],
+                    "C": [41, 32, 28, 21, 17],
                 }
             ),
             id="array_of_strings-no_variant-with_filter",
@@ -3110,14 +3085,14 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             """,
             pd.DataFrame(
                 {
-                    "m": [
+                    "M": [
                         datetime.date(2025, 3, 1),
                         datetime.date(2025, 1, 1),
                         datetime.date(2023, 10, 1),
                         datetime.date(2025, 5, 1),
                         datetime.date(2025, 8, 1),
                     ],
-                    "c": [40617, 40318, 40097, 39942, 39187],
+                    "C": [40617, 40318, 40097, 39942, 39187],
                 }
             ),
             id="json_field_pushdown-no_filter",
@@ -3134,8 +3109,8 @@ def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_che
             """,
             pd.DataFrame(
                 {
-                    "country": ["USA", "CHE", "HKD", "CAD", "MEX"],
-                    "cnt": [8914, 8353, 7737, 7301, 6666],
+                    "COUNTRY": ["USA", "CHE", "HKD", "CAD", "MEX"],
+                    "CNT": [8914, 8353, 7737, 7301, 6666],
                 }
             ),
             id="map_of_structs-with_variant-with_filter",
@@ -3215,6 +3190,7 @@ def test_order_by_inline_view(test_db_snowflake_catalog, memory_leak_check):
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)

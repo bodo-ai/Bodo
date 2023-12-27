@@ -370,5 +370,5 @@ def test_equal_null(dtype, val1, val2, use_case, use_symbol, memory_leak_check):
         ctx,
         None,
         check_dtype=False,
-        expected_output=pd.DataFrame({"are_equal": result}),
+        expected_output=pd.DataFrame({"ARE_EQUAL": result}),
     )

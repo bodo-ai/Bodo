@@ -266,7 +266,7 @@ def test_missing_table(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"Object 'table_1' not found",
+        match=r"Object 'TABLE_1' not found",
     ):
         impl(df)
 
@@ -285,7 +285,7 @@ def test_missing_table_jit(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"Object 'table_1' not found",
+        match=r"Object 'TABLE_1' not found",
     ):
         impl(df)
 

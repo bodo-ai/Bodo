@@ -9,32 +9,49 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
-def test_aliasing_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
     """test aliasing in queries"""
+    table1 = bodosql_numeric_types["table1"]
     check_query(
         "select A as testCol, C from table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=pd.DataFrame({"TESTCOL": table1["A"], "C": table1["C"]}),
     )
     check_query(
         "select sum(B) as testCol from table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         is_out_distributed=False,
+        expected_output=pd.DataFrame({"TESTCOL": [table1["B"].sum()]}),
+    )
+    expected_output = (
+        table1.groupby("A")
+        .agg({"B": "sum", "C": "sum"})
+        .rename({"B": "TESTCOL1", "C": "TESTCOL2"}, axis=1)
     )
     check_query(
         "select sum(B) as testCol1, sum(C) as testCol2 from table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=expected_output,
+    )
+    filtered_output = table1[(table1.A > 1) & (table1.A < 3)]
+    grouped_output = filtered_output.groupby("A", as_index=False).agg({"B": "sum"})
+    expected_output = (
+        grouped_output.rename({"B": "TESTCOL"}, axis=1)
+        .sort_values("TESTCOL", ascending=False)
+        .head(10)
     )
     check_query(
         "select A, sum(b) as testCol from table1 where (A > 1 and A < 3) group by A order by testCol desc limit 10",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        expected_output=expected_output,
     )
 
 
@@ -261,14 +278,14 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
             for colname in join_dataframes["table1"].columns
         ]
     ):
-        convert_columns_bytearray = ["table2", "table1"]
+        convert_columns_bytearray = ["TABLE2", "TABLE1"]
     else:
         convert_columns_bytearray = None
     query = """
         SELECT
-           table1.C as table2, table2.A as table1
+           TABLE1.C as TABLE2, TABLE2.A as TABLE1
         FROM
-            table1, table2
+            TABLE1, TABLE2
         """
     check_query(
         query,

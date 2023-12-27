@@ -426,7 +426,7 @@ def test_large_day_literals(bodosql_date_types, memory_leak_check):
     """
     query = "select A + Interval '180 Days' as output from table1"
     expected_output = pd.DataFrame(
-        {"output": bodosql_date_types["table1"]["A"] + pd.Timedelta(days=180)}
+        {"OUTPUT": bodosql_date_types["table1"]["A"] + pd.Timedelta(days=180)}
     )
     check_query(
         query,

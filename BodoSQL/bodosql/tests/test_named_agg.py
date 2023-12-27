@@ -8,7 +8,7 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_named_agg(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_named_agg(bodosql_numeric_types, memory_leak_check):
     """
     Tests Named Aggregation by performing a groupby with columns in a different
     order than the list syntax allows.
@@ -18,7 +18,16 @@ def test_named_agg(bodosql_numeric_types, spark_info, memory_leak_check):
             from table1
             GROUP BY B
             """
-    check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
+    py_output = (
+        bodosql_numeric_types["table1"]
+        .groupby("B")
+        .agg({"A": ["sum", "mean"], "C": "sum"})
+    )
+    py_output.columns = ["A1", "C1", "B1"]
+    py_output = py_output[["A1", "B1", "C1"]]
+    check_query(
+        query, bodosql_numeric_types, None, check_dtype=False, expected_output=py_output
+    )
 
 
 @pytest.mark.slow

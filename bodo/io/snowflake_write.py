@@ -358,7 +358,12 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
         try:
             cursor.execute("BEGIN /* io.snowflake_write.begin_write_transaction() */")
             bodo.io.snowflake.create_table_handle_exists(
-                cursor, location, sf_schema, if_exists, table_type
+                cursor,
+                location,
+                sf_schema,
+                if_exists,
+                table_type,
+                always_escape_col_names=True,
             )
         except Exception as e:
             err = RuntimeError(str(e))
@@ -813,6 +818,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                         synchronous=False,
                         stage_dir=copy_into_dir,
                         flatten_table=flatten_table,
+                        always_escape_col_names=True,
                     )
                 writer["copy_into_prev_sfqid"] = copy_into_new_sfqid
                 writer["flatten_sql"] = flatten_sql

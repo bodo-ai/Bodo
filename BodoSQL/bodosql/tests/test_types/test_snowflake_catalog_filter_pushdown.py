@@ -150,6 +150,7 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         query,
         get_snowflake_connection_string("TEST_DB", "PUBLIC"),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     # make sure filter pushdown worked
     stream = io.StringIO()
@@ -166,10 +167,6 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 @pytest.mark.parametrize(
     "func_args",
     [
@@ -218,7 +215,7 @@ def test_no_arg_string_transform_functions(
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             expected_output = df[getattr(df.A.str, pd_func_name)() == test_str_val]
-            expected_output.columns = [x.lower() for x in expected_output.columns]
+            expected_output.columns = expected_output.columns.str.upper()
             check_func(
                 impl,
                 (bc, query),
@@ -235,10 +232,6 @@ def test_no_arg_string_transform_functions(
             )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_coalesce_lower_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -259,7 +252,7 @@ def test_snowflake_coalesce_lower_pushdown(
         }
     )
 
-    expected_output = pd.DataFrame({"b": [11, 10] * 10})
+    expected_output = pd.DataFrame({"B": [11, 10] * 10})
 
     with create_snowflake_table(
         new_df, "coalesce_lower_pushdown_table", db, schema
@@ -281,17 +274,12 @@ def test_snowflake_coalesce_lower_pushdown(
             check_logger_msg(stream, "Columns loaded ['b']")
             # Pushdown happens in the planner. Check the timer message instead.
             # Note this optimized in the planner
-            # TODO(njriasan) [BS-1231]: Determine how to say LOWER(A) IS NULL -> A IS NULL
             check_logger_msg(
                 stream,
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") = $$macedonia$$ OR "A" IS NULL',
             )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_upper_coalesce_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -312,7 +300,7 @@ def test_snowflake_upper_coalesce_pushdown(
         }
     )
 
-    expected_output = pd.DataFrame({"b": [100, 10000, 11, 1321, 10] * 10})
+    expected_output = pd.DataFrame({"B": [100, 10000, 11, 1321, 10] * 10})
 
     with create_snowflake_table(
         new_df, "upper_coalesce_pushdown_table", db, schema
@@ -339,10 +327,6 @@ def test_snowflake_upper_coalesce_pushdown(
             )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
     """
     Make sure coalesce with two column input is not pushed down since not supported yet
@@ -368,6 +352,7 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         query,
         get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "PUBLIC"),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     # make sure filter pushdown was not performed
     stream = io.StringIO()
@@ -396,6 +381,7 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
         f"select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED WHERE mycol = 'A' LIMIT 5",
         get_snowflake_connection_string("TEST_DB", "PUBLIC"),
     )
+    py_output.columns = py_output.columns.str.upper()
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
@@ -450,12 +436,13 @@ def test_snowflake_like_pushdown_equality(test_db_snowflake_catalog, memory_leak
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a like 'hello'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hello"]
+            expected_output = py_output[py_output.A == "hello"]
             check_func(
                 impl,
                 (bc, query1),
@@ -493,12 +480,13 @@ def test_snowflake_like_pushdown_startswith(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # startswith test
         query2 = f"Select a from {table_name} where a like 'he%'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.startswith("he")]
+            expected_output = py_output[py_output.A.str.startswith("he")]
             check_func(
                 impl,
                 (bc, query2),
@@ -533,12 +521,13 @@ def test_snowflake_like_pushdown_endswith(test_db_snowflake_catalog, memory_leak
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # endswith test
         query3 = f"Select a from {table_name} where a like '%lo'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.endswith("lo")]
+            expected_output = py_output[py_output.A.str.endswith("lo")]
             check_func(
                 impl,
                 (bc, query3),
@@ -573,12 +562,13 @@ def test_snowflake_like_pushdown_contains(test_db_snowflake_catalog, memory_leak
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # contains test
         query4 = f"Select a from {table_name} where a like '%e%'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.contains("e")]
+            expected_output = py_output[py_output.A.str.contains("e")]
             check_func(
                 impl,
                 (bc, query4),
@@ -615,12 +605,13 @@ def test_snowflake_like_pushdown_equality_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # Equality with escape test
         query5 = f"Select a from {table_name} where a like 'b^%bf' escape '^'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%bf"]
+            expected_output = py_output[py_output.A == "b%bf"]
             check_func(
                 impl,
                 (bc, query5),
@@ -657,12 +648,13 @@ def test_snowflake_like_pushdown_startswith_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # startswith with escape test
         query6 = f"Select a from {table_name} where a like 'b^%%' escape '^'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.startswith("b%")]
+            expected_output = py_output[py_output.A.str.startswith("b%")]
             check_func(
                 impl,
                 (bc, query6),
@@ -699,12 +691,13 @@ def test_snowflake_like_pushdown_endswith_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # endswith with escape test
         query7 = f"Select a from {table_name} where a like '%^%bf' escape '^'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.endswith("%bf")]
+            expected_output = py_output[py_output.A.str.endswith("%bf")]
             check_func(
                 impl,
                 (bc, query7),
@@ -741,12 +734,13 @@ def test_snowflake_like_pushdown_contains_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # contains with escape test
         query8 = f"Select a from {table_name} where a like '%^%%' escape '^'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.contains("%")]
+            expected_output = py_output[py_output.A.str.contains("%")]
             check_func(
                 impl,
                 (bc, query8),
@@ -784,6 +778,7 @@ def test_snowflake_like_always_true_optimized(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # Always true test
         query9 = f"Select a from {table_name} where a like '%'"
         stream = io.StringIO()
@@ -827,12 +822,13 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a ilike 'hello'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower() == "hello"]
+            expected_output = py_output[py_output.A.str.lower() == "hello"]
             check_func(
                 impl,
                 (bc, query1),
@@ -851,7 +847,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.startswith("he")]
+            expected_output = py_output[py_output.A.str.lower().str.startswith("he")]
             check_func(
                 impl,
                 (bc, query2),
@@ -870,7 +866,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.endswith("lo")]
+            expected_output = py_output[py_output.A.str.lower().str.endswith("lo")]
             check_func(
                 impl,
                 (bc, query3),
@@ -889,7 +885,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.contains("e")]
+            expected_output = py_output[py_output.A.str.lower().str.contains("e")]
             check_func(
                 impl,
                 (bc, query4),
@@ -908,7 +904,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower() == "b%bf"]
+            expected_output = py_output[py_output.A.str.lower() == "b%bf"]
             check_func(
                 impl,
                 (bc, query5),
@@ -927,7 +923,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.startswith("b%")]
+            expected_output = py_output[py_output.A.str.lower().str.startswith("b%")]
             check_func(
                 impl,
                 (bc, query6),
@@ -946,7 +942,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.endswith("%bf")]
+            expected_output = py_output[py_output.A.str.lower().str.endswith("%bf")]
             check_func(
                 impl,
                 (bc, query7),
@@ -965,7 +961,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower().str.contains("%b")]
+            expected_output = py_output[py_output.A.str.lower().str.contains("%b")]
             check_func(
                 impl,
                 (bc, query8),
@@ -1002,12 +998,13 @@ def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_ch
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a like 'hE_lO'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hELlO"]
+            expected_output = py_output[py_output.A == "hELlO"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1025,7 +1022,7 @@ def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_ch
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%Bf"]
+            expected_output = py_output[py_output.A == "b%Bf"]
             check_func(
                 impl,
                 (bc, query2),
@@ -1062,12 +1059,13 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a ilike 'he_lo'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hELlO"]
+            expected_output = py_output[py_output.A == "hELlO"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1085,7 +1083,7 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%Bf"]
+            expected_output = py_output[py_output.A == "b%Bf"]
             check_func(
                 impl,
                 (bc, query2),
@@ -1127,12 +1125,13 @@ def test_snowflake_like_non_constant_pushdown_no_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a like 'hE_l' || 'O'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hELlO"]
+            expected_output = py_output[py_output.A == "hELlO"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1168,13 +1167,14 @@ def test_snowflake_like_non_constant_pushdown_with_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query2 = (
             f"Select a from {table_name} where a like 'b' || '^%_f' escape upper('^')"
         )
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%Bf"]
+            expected_output = py_output[py_output.A == "b%Bf"]
             check_func(
                 impl,
                 (bc, query2),
@@ -1213,12 +1213,13 @@ def test_snowflake_ilike_non_constant_pushdown_no_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a ilike 'he' || '_lo'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hELlO"]
+            expected_output = py_output[py_output.A == "hELlO"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1255,13 +1256,14 @@ def test_snowflake_ilike_non_constant_pushdown_escape(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query2 = (
             f"Select a from {table_name} where a ilike 'b^' || '%_F' escape lower('^')"
         )
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%Bf"]
+            expected_output = py_output[py_output.A == "b%Bf"]
             check_func(
                 impl,
                 (bc, query2),
@@ -1276,10 +1278,6 @@ def test_snowflake_ilike_non_constant_pushdown_escape(
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with WHERE using a boolean column supports
@@ -1303,11 +1301,12 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query1 = f"Select a from {table_name} where b"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.b][["a"]]
+            expected_output = py_output[py_output.B][["A"]]
             check_func(
                 impl,
                 (bc, query1),
@@ -1325,7 +1324,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.b | py_output.c][["a"]]
+            expected_output = py_output[py_output.B | py_output.C][["A"]]
             check_func(
                 impl,
                 (bc, query2),
@@ -1343,7 +1342,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.b & py_output.c][["a"]]
+            expected_output = py_output[py_output.B & py_output.C][["A"]]
             check_func(
                 impl,
                 (bc, query3),
@@ -1359,10 +1358,6 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with WHERE using NOT with a boolean column support
@@ -1388,11 +1383,12 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query1 = f"Select a from {table_name} where not b"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.b][["a"]]
+            expected_output = py_output[~py_output.B][["A"]]
             check_func(
                 impl,
                 (bc, query1),
@@ -1410,7 +1406,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b | py_output.c)][["a"]]
+            expected_output = py_output[~(py_output.B | py_output.C)][["A"]]
             check_func(
                 impl,
                 (bc, query2),
@@ -1428,7 +1424,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b & py_output.c)][["a"]]
+            expected_output = py_output[~(py_output.B & py_output.C)][["A"]]
             check_func(
                 impl,
                 (bc, query3),
@@ -1446,7 +1442,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.b | py_output.c][["a"]]
+            expected_output = py_output[~py_output.B | py_output.C][["A"]]
             check_func(
                 impl,
                 (bc, query4),
@@ -1464,7 +1460,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.b & py_output.c][["a"]]
+            expected_output = py_output[~py_output.B & py_output.C][["A"]]
             check_func(
                 impl,
                 (bc, query5),
@@ -1480,10 +1476,6 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_comparison_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -1511,11 +1503,12 @@ def test_snowflake_not_comparison_pushdown(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query1 = f"Select a from {table_name} where not (b <> 3)"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b != 3)][["a"]]
+            expected_output = py_output[~(py_output.B != 3)][["A"]]
             check_func(
                 impl,
                 (bc, query1),
@@ -1532,7 +1525,7 @@ def test_snowflake_not_comparison_pushdown(
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b <= 3)][["a"]]
+            expected_output = py_output[~(py_output.B <= 3)][["A"]]
             check_func(
                 impl,
                 (bc, query2),
@@ -1550,7 +1543,7 @@ def test_snowflake_not_comparison_pushdown(
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b < 3)][["a"]]
+            expected_output = py_output[~(py_output.B < 3)][["A"]]
             check_func(
                 impl,
                 (bc, query3),
@@ -1568,7 +1561,7 @@ def test_snowflake_not_comparison_pushdown(
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b >= 3)][["a"]]
+            expected_output = py_output[~(py_output.B >= 3)][["A"]]
             check_func(
                 impl,
                 (bc, query4),
@@ -1586,7 +1579,7 @@ def test_snowflake_not_comparison_pushdown(
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b > 3)][["a"]]
+            expected_output = py_output[~(py_output.B > 3)][["A"]]
             check_func(
                 impl,
                 (bc, query5),
@@ -1605,8 +1598,8 @@ def test_snowflake_not_comparison_pushdown(
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             expected_output = py_output[
-                ~(((py_output.b > 3) | (py_output.b < 2)) & py_output.c)
-            ][["a"]]
+                ~(((py_output.B > 3) | (py_output.B < 2)) & py_output.C)
+            ][["A"]]
             check_func(
                 impl,
                 (bc, query6),
@@ -1622,10 +1615,6 @@ def test_snowflake_not_comparison_pushdown(
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests filter pushdown queries using NOT with IS NULL
@@ -1650,11 +1639,12 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query1 = f"Select a from {table_name} where not (b is NULL)"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b.isna())][["a"]]
+            expected_output = py_output[~(py_output.B.isna())][["A"]]
             check_func(
                 impl,
                 (bc, query1),
@@ -1672,7 +1662,7 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~(py_output.b.notna())][["a"]]
+            expected_output = py_output[~(py_output.B.notna())][["A"]]
             check_func(
                 impl,
                 (bc, query2),
@@ -1687,10 +1677,6 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests filter pushdown queries using NOT IN.
@@ -1712,13 +1698,14 @@ def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check)
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         query = f"Select a from {table_name} where b not in (1, 3)"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             expected_output = py_output[
-                (~py_output.b.isin([1, 3])) & py_output.b.notna()
-            ][["a"]]
+                (~py_output.B.isin([1, 3])) & py_output.B.notna()
+            ][["A"]]
             check_func(
                 impl,
                 (bc, query),
@@ -1734,10 +1721,6 @@ def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check)
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with not like perform filter pushdown for all the
@@ -1759,12 +1742,13 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a not like 'hello'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a != "hello"]
+            expected_output = py_output[py_output.A != "hello"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1783,7 +1767,7 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.startswith("he")]
+            expected_output = py_output[~py_output.A.str.startswith("he")]
             check_func(
                 impl,
                 (bc, query2),
@@ -1802,7 +1786,7 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.endswith("lo")]
+            expected_output = py_output[~py_output.A.str.endswith("lo")]
             check_func(
                 impl,
                 (bc, query3),
@@ -1821,7 +1805,7 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.contains("e")]
+            expected_output = py_output[~py_output.A.str.contains("e")]
             check_func(
                 impl,
                 (bc, query4),
@@ -1837,10 +1821,6 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with not ilike perform filter pushdown for all the
@@ -1862,12 +1842,13 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query1 = f"Select a from {table_name} where a not ilike 'hello'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower() != "hello"]
+            expected_output = py_output[py_output.A.str.lower() != "hello"]
             check_func(
                 impl,
                 (bc, query1),
@@ -1886,7 +1867,7 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.lower().str.startswith("he")]
+            expected_output = py_output[~py_output.A.str.lower().str.startswith("he")]
             check_func(
                 impl,
                 (bc, query2),
@@ -1905,7 +1886,7 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.lower().str.endswith("lo")]
+            expected_output = py_output[~py_output.A.str.lower().str.endswith("lo")]
             check_func(
                 impl,
                 (bc, query3),
@@ -1924,7 +1905,7 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[~py_output.a.str.lower().str.contains("e")]
+            expected_output = py_output[~py_output.A.str.lower().str.contains("e")]
             check_func(
                 impl,
                 (bc, query4),
@@ -1940,10 +1921,6 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_not_like_regex_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -1965,12 +1942,13 @@ def test_snowflake_not_like_regex_pushdown(
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        py_output.columns = py_output.columns.str.upper()
         # equality test
         query = f"Select a from {table_name} where a not like 'hE_lO'"
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a != "hELlO"]
+            expected_output = py_output[py_output.A != "hELlO"]
             check_func(
                 impl,
                 (bc, query),
@@ -1986,10 +1964,6 @@ def test_snowflake_not_like_regex_pushdown(
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that the aliases of LENGTH which are valid in snowflake are pushed
@@ -2009,7 +1983,8 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
-        expected_output = py_output[py_output.a.str.len() == 4]
+        py_output.columns = py_output.columns.str.upper()
+        expected_output = py_output[py_output.A.str.len() == 4]
 
         # Test for the aliases of LENGTH which are valid in snowflake
         for func_name in ("LENGTH", "LEN", "CHAR_LENGTH", "CHARACTER_LENGTH"):
@@ -2036,10 +2011,6 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
                 check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_reverse_filter_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -2072,7 +2043,6 @@ def test_snowflake_reverse_filter_pushdown(
         # Load the whole table in pandas.
         shipmode_col = df.L_SHIPMODE.apply(lambda x: x[::-1])
         expected_output = df[shipmode_col == "PIHS"][["L_ORDERKEY"]]
-        expected_output.columns = [x.lower() for x in expected_output.columns]
 
         test_query = f"""
             select l_orderkey from {table_name}
@@ -2111,15 +2081,11 @@ num_to_pd_func = {
 @pytest.mark.parametrize(
     "func_args",
     [
-        pytest.param(("abs", "int_col", 3), id="abs_int"),
-        pytest.param(("abs", "float_col", 3.2), id="abs_float"),
-        pytest.param(("sign", "int_col", 0), id="sign_int"),
-        pytest.param(("sign", "float_col", -1), id="sign_float"),
+        pytest.param(("abs", "INT_COL", 3), id="abs_int"),
+        pytest.param(("abs", "FLOAT_COL", 3.2), id="abs_float"),
+        pytest.param(("sign", "INT_COL", 0), id="sign_int"),
+        pytest.param(("sign", "FLOAT_COL", -1), id="sign_float"),
     ],
-)
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
 )
 def test_no_arg_numeric_functions(
     test_db_snowflake_catalog, func_args, memory_leak_check
@@ -2140,6 +2106,7 @@ def test_no_arg_numeric_functions(
 
     conn_str = get_snowflake_connection_string(db, schema)
     df = pd.read_sql(f"select {num_col} from {table_name}", conn_str)
+    df.columns = df.columns.str.upper()
     expected_output = df[pd_func(df[num_col]) == test_val]
     query = (
         f"select {num_col} from {table_name} where {sql_func}({num_col}) = '{test_val}'"
@@ -2158,7 +2125,7 @@ def test_no_arg_numeric_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['{num_col}']")
+        check_logger_msg(stream, f"Columns loaded ['{num_col.lower()}']")
         check_logger_msg(
             stream,
             f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("{num_col.upper()}") = {test_val}""",
@@ -2168,13 +2135,9 @@ def test_no_arg_numeric_functions(
 @pytest.mark.parametrize(
     "func_args",
     [
-        pytest.param(("ceil", "float_col", -4), id="ceil_float"),
-        pytest.param(("floor", "float_col", 3), id="floor_float"),
+        pytest.param(("ceil", "FLOAT_COL", -4), id="ceil_float"),
+        pytest.param(("floor", "FLOAT_COL", 3), id="floor_float"),
     ],
-)
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
 )
 def test_optional_arg_numeric_functions(
     test_db_snowflake_catalog, func_args, memory_leak_check
@@ -2196,6 +2159,7 @@ def test_optional_arg_numeric_functions(
 
     conn_str = get_snowflake_connection_string(db, schema)
     df = pd.read_sql(f"select {num_col} from {table_name}", conn_str)
+    df.columns = df.columns.str.upper()
     expected_output = df[pd_func(df[num_col]) == test_val]
     query = (
         f"select {num_col} from {table_name} where {sql_func}({num_col}) = '{test_val}'"
@@ -2214,7 +2178,7 @@ def test_optional_arg_numeric_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['{num_col}']")
+        check_logger_msg(stream, f"Columns loaded ['{num_col.lower()}']")
         check_logger_msg(
             stream,
             f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("{num_col.upper()}") = {test_val}""",
@@ -2238,10 +2202,6 @@ def test_optional_arg_numeric_functions(
         pytest.param(("month", False, 6), id="month"),
         pytest.param(("quarter", False, 0), id="quarter"),
     ],
-)
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
 )
 def test_no_arg_datetime_functions(
     test_db_snowflake_catalog, test_cases, memory_leak_check
@@ -2290,6 +2250,7 @@ def test_no_arg_datetime_functions(
             datetime_test_col = datetime_test_col.dt.date
 
         expected_output = datetime_test_col[computed_col == test_val].to_frame()
+        expected_output.columns = expected_output.columns.str.upper()
 
         query = f"select {test_col} from {table_name} where {sql_func}({test_col}) = '{test_val}'"
 
@@ -2374,10 +2335,6 @@ string_transform_func = {
         pytest.param(("TRIM(A, 'h')", "TRIM", "i"), id="trim-opt-char"),
     ],
 )
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_with_arg_string_transform_functions(
     test_db_snowflake_catalog, test_cases, request, memory_leak_check
 ):
@@ -2391,12 +2348,12 @@ def test_with_arg_string_transform_functions(
         test_db_snowflake_catalog.connection_params["schema"],
     )
     df = pd.read_sql(f"select a from {table_name}", conn_str)
+    df.columns = df.columns.str.upper()
 
     test_case = request.node.callspec.id[request.node.callspec.id.find("-") + 1 :]
     pd_func = string_transform_func[test_case]
 
-    expected_output = df[df["a"].apply(pd_func) == answer].dropna()
-    expected_output.columns = [x.lower() for x in expected_output.columns]
+    expected_output = df[df["A"].apply(pd_func) == answer].dropna()
 
     query = f"select a from {table_name} where {sql_filter}"
 
@@ -2482,10 +2439,6 @@ nonregex_string_match_func = {
         ),
     ],
 )
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_nonregex_string_match_functions(
     test_db_snowflake_catalog, test_cases, request, memory_leak_check
 ):
@@ -2502,12 +2455,12 @@ def test_nonregex_string_match_functions(
         test_db_snowflake_catalog.connection_params["schema"],
     )
     df = pd.read_sql(f"select a from {table_name}", conn_str)
+    df.columns = df.columns.str.upper()
 
     test_case = request.node.callspec.id[request.node.callspec.id.find("-") + 1 :]
     pd_func = nonregex_string_match_func[test_case]
 
-    expected_output = df[df["a"].apply(pd_func) == answer].dropna()
-    expected_output.columns = [x.lower() for x in expected_output.columns]
+    expected_output = df[df["A"].apply(pd_func) == answer].dropna()
 
     query = f"select a from {table_name} where {sql_filter}"
 
@@ -2609,10 +2562,6 @@ def test_nonregex_string_match_functions(
         ),
     ],
 )
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_regex_string_match_functions(
     test_db_snowflake_catalog, test_cases, request, memory_leak_check
 ):
@@ -2624,6 +2573,7 @@ def test_regex_string_match_functions(
         test_db_snowflake_catalog.connection_params["schema"],
     )
     df = pd.read_sql(f"select a from {table_name}", conn_str)
+    df.columns = df.columns.str.upper()
 
     if "regexp_instr" in request.node.name:
         func = (
@@ -2646,8 +2596,7 @@ def test_regex_string_match_functions(
     else:
         raise ValueError("Unknown Test Name")
 
-    expected_output = df[df["a"].apply(func) == answer].dropna()
-    expected_output.columns = [x.lower() for x in expected_output.columns]
+    expected_output = df[df["A"].apply(func) == answer].dropna()
 
     query = f"select a from {table_name} where {sql_filter}"
 
@@ -2720,7 +2669,6 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 ),
             }
         )
-        expected_output.columns = [x.lower() for x in expected_output.columns]
 
         # Explicit type specification is needed on the constant, otherwise casting ends up blocking filter pushdown
         query = f"select l_quantity from {table_name} where coalesce(L_COMMITDATE, TIMESTAMP '2023-06-20') >= TIMESTAMP '2023-01-20'"
@@ -2751,12 +2699,12 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
     [
         pytest.param(
             "LEAST",
-            pd.DataFrame({"float_col": [3.2, 3.1, 1.26, 2.99, 2.6]}),
+            pd.DataFrame({"FLOAT_COL": [3.2, 3.1, 1.26, 2.99, 2.6]}),
             id="least",
         ),
         pytest.param(
             "GREATEST",
-            pd.DataFrame({"float_col": [-3.2, -4.51, -4.49, -5.25, 0, 0]}),
+            pd.DataFrame({"FLOAT_COL": [-3.2, -4.51, -4.49, -5.25, 0, 0]}),
             id="greatest",
         ),
     ],
@@ -2870,6 +2818,7 @@ def test_separate_database_read(test_db_snowflake_catalog, memory_leak_check):
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     # make sure filter pushdown worked
     stream = io.StringIO()
@@ -2914,6 +2863,7 @@ def test_inline_view_filter_pushdown(test_db_snowflake_catalog, memory_leak_chec
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -2962,6 +2912,7 @@ def test_inline_filter_view_filter_pushdown(
             test_db_snowflake_catalog.connection_params["schema"],
         ),
     )
+    py_output.columns = py_output.columns.str.upper()
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)

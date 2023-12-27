@@ -19,12 +19,12 @@ from bodosql.tests.utils import check_query
         ),
         # tests max aggregation function
         pytest.param(
-            "SELECT Max(t3.B) as m, t3.A from (SELECT t1.A, t2.B from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+            "SELECT Max(t3.B) as M, t3.A from (SELECT t1.A, t2.B from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
             id="query2",
         ),
         # tests that distinct doesn't cause any issues (It should simply cause the rule to not be applied)
         pytest.param(
-            "SELECT DISTINCT Max(t3.B) as m, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
+            "SELECT DISTINCT Max(t3.B) as M, t3.A from (SELECT t2.B, t1.A from (SELECT table1.A from table1) as t1, (SELECT table2.B from table2) as t2) as t3 GROUP BY t3.A",
             id="query3",
         ),
     ]

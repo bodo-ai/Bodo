@@ -21,9 +21,6 @@ import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
-import org.apache.calcite.rel.type.RelDataType
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl
-import org.apache.calcite.rel.type.RelRecordType
 import org.apache.calcite.rex.RexInputRef
 import java.lang.RuntimeException
 
@@ -88,26 +85,6 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         // IO and memory are related to the number of bytes returned.
         val io = dataSize / parallelism
         return planner.makeCost(rows = rows, io = io, mem = io)
-    }
-
-    /**
-     * While snowflake has its own casing convention, the pandas code will
-     * convert these names to another casing to match with existing conventions
-     * within sqlalchemy.
-     *
-     * We modify that casing here by changing the field names of the derived type.
-     */
-    override fun deriveRowType(): RelDataType {
-        return RelRecordType(
-            super.deriveRowType().fieldList.map { field ->
-                val name = if (field.name.equals(field.name.uppercase())) {
-                    field.name.lowercase()
-                } else {
-                    field.name
-                }
-                RelDataTypeFieldImpl(name, field.index, field.type)
-            },
-        )
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable =

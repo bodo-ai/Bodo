@@ -42,7 +42,7 @@ def test_float_arith(
     Tests that arithmetic operators work with numeric data and float named parameters
     """
     query = f"""
-        SELECT @a {arith_ops} A as col from table1
+        SELECT @a {arith_ops} A as COL from table1
         """
     check_query(
         query,
@@ -50,7 +50,7 @@ def test_float_arith(
         spark_info,
         named_params=float_named_params,
         check_dtype=False,
-        convert_columns_decimal=["col"],
+        convert_columns_decimal=["COL"],
     )
 
 

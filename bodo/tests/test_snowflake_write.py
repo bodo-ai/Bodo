@@ -1896,7 +1896,7 @@ def test_batched_write_nested_array(
 
     conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
     kept_cols = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
-    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
+    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns.str.upper()))
     batch_size = 3
 
     with ensure_clean_snowflake_table(conn, "NESTED_ARRAY_WRITE_TEST") as table_name:

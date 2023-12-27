@@ -7,8 +7,10 @@ be seen in the TPC-H document,
 http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we set most
 of these variables according to the reference query.
 """
+import datetime
 import io
 
+import pandas as pd
 import pytest
 
 import bodo
@@ -22,7 +24,7 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q1(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_returnflag,
                       l_linestatus,
@@ -48,8 +50,53 @@ def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=pd.DataFrame(
+            {
+                "L_RETURNFLAG": ["A", "N", "N", "R"],
+                "L_LINESTATUS": ["F", "F", "O", "F"],
+                "SUM_QTY": [754903.0, 18528.0, 1547191.0, 756206.0],
+                "SUM_BASE_PRICE": [
+                    1057903302.66,
+                    25562558.470000003,
+                    2168783476.210001,
+                    1059849272.5500004,
+                ],
+                "SUM_DISC_PRICE": [
+                    1004953720.6289998,
+                    24328272.68109999,
+                    2060497575.354499,
+                    1006781563.809,
+                ],
+                "SUM_CHARGE": [
+                    1045349326.7462609,
+                    25293278.719270002,
+                    2143008061.0654063,
+                    1047214071.436704,
+                ],
+                "AVG_QTY": [
+                    25.559607245640766,
+                    26.16949152542373,
+                    25.48872341477076,
+                    25.572554191606642,
+                ],
+                "AVG_PRICE": [
+                    35818.6322214322,
+                    36105.30857344633,
+                    35728.95794484442,
+                    35840.83299685504,
+                ],
+                "AVG_DISC": [
+                    0.05011647198239391,
+                    0.048644067796610166,
+                    0.049992916096934154,
+                    0.050270197152615874,
+                ],
+                "COUNT_ORDER": [29535, 708, 60701, 29571],
+            }
+        ),
     )
 
 
@@ -57,7 +104,7 @@ def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
 # multiple processes
 @pytest.mark.timeout(900)
 @pytest.mark.slow
-def test_tpch_q2(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q2(tpch_data, memory_leak_check):
     SIZE = 15
     TYPE = "BRASS"
     REGION = "EUROPE"
@@ -103,16 +150,65 @@ def test_tpch_q2(tpch_data, spark_info, memory_leak_check):
                        s_name,
                        p_partkey
     """
+    py_output = pd.DataFrame(
+        {
+            "S_ACCTBAL": [8561.72, 8271.39, 4186.95, 2972.26, 1687.81, 1596.44],
+            "S_NAME": [
+                "Supplier#000000151",
+                "Supplier#000000146",
+                "Supplier#000000077",
+                "Supplier#000000016",
+                "Supplier#000000017",
+                "Supplier#000000158",
+            ],
+            "N_NAME": ["RUSSIA", "RUSSIA", "GERMANY", "RUSSIA", "ROMANIA", "GERMANY"],
+            "P_PARTKEY": [1634, 3080, 323, 1015, 2156, 2037],
+            "P_MFGR": [
+                "Manufacturer#2",
+                "Manufacturer#2",
+                "Manufacturer#4",
+                "Manufacturer#4",
+                "Manufacturer#5",
+                "Manufacturer#1",
+            ],
+            "S_ADDRESS": [
+                "2hd,3OAKPb39IY7 XuptY",
+                "rBDNgCr04x0sfdzD5,gFOutCiG2",
+                "wVtcr0uH3CyrSiWMLsqnB09Syo,UuZxPMeBghlY",
+                "YjP5C55zHDXL7LalK27zfQnwejdpin4AMpvh",
+                "c2d,ESHRSkK3WYnxpgw6aOqN0q",
+                " fkjbx7,DYi",
+            ],
+            "S_PHONE": [
+                "32-960-568-5148",
+                "32-792-619-3155",
+                "17-281-345-4863",
+                "32-822-502-4215",
+                "29-601-884-9219",
+                "17-873-902-6175",
+            ],
+            "S_COMMENT": [
+                "hely final packages. ironic pinto beans haggle qu",
+                "s cajole quickly special requests. quickly enticing theodolites h",
+                "the slyly final asymptotes. blithely pending theodoli",
+                "ously express ideas haggle quickly dugouts? fu",
+                "eep against the furiously bold ideas. fluffily bold packa",
+                "cuses sleep after the pending, final ",
+            ],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.slow
-def test_tpch_q3(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q3(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_orderkey,
                       sum(l_extendedprice * (1 - l_discount)) as revenue,
@@ -138,11 +234,54 @@ def test_tpch_q3(tpch_data, spark_info, memory_leak_check):
                       l_orderkey
                     limit 10
     """
+    py_output = pd.DataFrame(
+        {
+            "L_ORDERKEY": [
+                22276,
+                93382,
+                29095,
+                47525,
+                23270,
+                94432,
+                74016,
+                86566,
+                20641,
+                109188,
+            ],
+            "REVENUE": [
+                275673.9548,
+                264970.7683,
+                248090.49339999998,
+                238091.1183,
+                235409.15840000001,
+                232498.77,
+                215325.5636,
+                210468.1248,
+                206330.73539999998,
+                200755.77349999998,
+            ],
+            "O_ORDERDATE": [
+                datetime.date(1995, 1, 29),
+                datetime.date(1995, 1, 21),
+                datetime.date(1995, 3, 9),
+                datetime.date(1995, 3, 4),
+                datetime.date(1995, 3, 14),
+                datetime.date(1995, 1, 19),
+                datetime.date(1995, 3, 11),
+                datetime.date(1995, 3, 9),
+                datetime.date(1995, 2, 20),
+                datetime.date(1995, 3, 14),
+            ],
+            "O_SHIPPRIORITY": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
@@ -202,7 +341,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q4(tpch_data, memory_leak_check):
     DATE = "1993-07-01"
     tpch_query = f"""select
                        o_orderpriority,
@@ -227,17 +366,31 @@ def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
                        o_orderpriority
 
     """
+    py_output = pd.DataFrame(
+        {
+            "O_ORDERPRIORITY": [
+                "1-URGENT",
+                "2-HIGH",
+                "3-MEDIUM",
+                "4-NOT SPECIFIED",
+                "5-LOW",
+            ],
+            "ORDER_COUNT": [172, 216, 204, 202, 223],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
-def test_tpch_q5(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q5(tpch_data, memory_leak_check):
     tpch_query = """select
                       n_name,
                       sum(l_extendedprice * (1 - l_discount)) as revenue
@@ -263,16 +416,30 @@ def test_tpch_q5(tpch_data, spark_info, memory_leak_check):
                     order by
                       revenue desc
     """
+    py_output = pd.DataFrame(
+        {
+            "N_NAME": ["JAPAN", "INDONESIA", "INDIA", "VIETNAM", "CHINA"],
+            "REVENUE": [
+                1646669.3695,
+                1448212.9797999999,
+                1096228.0677999996,
+                507624.05040000007,
+                456508.70560000004,
+            ],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.slow
-def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q6(tpch_data, memory_leak_check):
     tpch_query = """select
                       sum(l_extendedprice * l_discount) as revenue
                     from
@@ -283,18 +450,21 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
                       and l_discount between 0.05 and 0.07
                       and l_quantity < 24
     """
+    py_output = pd.DataFrame({"REVENUE": [2317732.5497]})
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         is_out_distributed=False,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
-def test_tpch_q7(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q7(tpch_data, memory_leak_check):
     NATION1 = "FRANCE"
     NATION2 = "GERMANY"
     tpch_query = f"""select
@@ -335,17 +505,32 @@ def test_tpch_q7(tpch_data, spark_info, memory_leak_check):
                        cust_nation,
                        l_year
     """
+    py_output = pd.DataFrame(
+        {
+            "SUPP_NATION": ["FRANCE", "FRANCE", "GERMANY", "GERMANY"],
+            "CUST_NATION": ["GERMANY", "GERMANY", "FRANCE", "FRANCE"],
+            "L_YEAR": [1995, 1996, 1995, 1996],
+            "REVENUE": [
+                823153.0747000001,
+                1322563.2609999997,
+                946232.9485000003,
+                1289011.5261,
+            ],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
-def test_tpch_q8(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q8(tpch_data, memory_leak_check):
     NATION = "BRAZIL"
     REGION = "AMERICA"
     TYPE = "ECONOMY ANODIZED STEEL"
@@ -387,11 +572,19 @@ def test_tpch_q8(tpch_data, spark_info, memory_leak_check):
                      order by
                        o_year
     """
+    py_output = pd.DataFrame(
+        {
+            "O_YEAR": [1995, 1996],
+            "MKT_SHARE": [0.129271, 0.066993],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
@@ -399,9 +592,9 @@ def test_tpch_q8(tpch_data, spark_info, memory_leak_check):
 def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
     COLOR = "green"
     tpch_query = f"""select
-                       nation,
-                       o_year,
-                       sum(amount) as sum_profit
+                       NATION,
+                       O_YEAR,
+                       sum(amount) as SUM_PROFIT
                      from (
                        select
                          n_name as nation,
@@ -430,17 +623,19 @@ def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
                        nation,
                        o_year desc
     """
+    # Note: There are 175 rows so its hard to hardcode this answer without a file.
     check_query(
         tpch_query,
         tpch_data,
         spark_info,
         check_dtype=False,
+        sort_output=False,
     )
 
 
 @pytest.mark.timeout(700)
 @pytest.mark.slow
-def test_tpch_q10(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q10(tpch_data, memory_leak_check):
     tpch_query = """select
                       c_custkey,
                       c_name,
@@ -475,11 +670,193 @@ def test_tpch_q10(tpch_data, spark_info, memory_leak_check):
                       c_custkey
                     limit 20
     """
+    py_output = pd.DataFrame(
+        {
+            "C_CUSTKEY": [
+                394,
+                529,
+                2236,
+                1744,
+                955,
+                871,
+                844,
+                2321,
+                226,
+                1297,
+                1706,
+                2956,
+                1474,
+                2060,
+                1984,
+                2143,
+                1543,
+                349,
+                1999,
+                421,
+            ],
+            "C_NAME": [
+                "Customer#000000394",
+                "Customer#000000529",
+                "Customer#000002236",
+                "Customer#000001744",
+                "Customer#000000955",
+                "Customer#000000871",
+                "Customer#000000844",
+                "Customer#000002321",
+                "Customer#000000226",
+                "Customer#000001297",
+                "Customer#000001706",
+                "Customer#000002956",
+                "Customer#000001474",
+                "Customer#000002060",
+                "Customer#000001984",
+                "Customer#000002143",
+                "Customer#000001543",
+                "Customer#000000349",
+                "Customer#000001999",
+                "Customer#000000421",
+            ],
+            "REVENUE": [
+                481779.4893,
+                459834.41670000006,
+                431506.03510000004,
+                425876.6368,
+                417901.13420000003,
+                414347.1318,
+                381894.047,
+                375562.0412999999,
+                372249.6906,
+                371166.3517,
+                370668.8651,
+                367425.16359999997,
+                345538.07719999994,
+                344127.32920000004,
+                343200.4994,
+                337188.2567,
+                333879.1647,
+                333827.6899,
+                323406.6697,
+                317531.0798,
+            ],
+            "C_ACCTBAL": [
+                5200.96,
+                9647.58,
+                -968.87,
+                1436.96,
+                138.31,
+                -395.89,
+                2954.9,
+                -721.89,
+                9008.61,
+                6074.01,
+                455.15,
+                7048.48,
+                2961.79,
+                3995.46,
+                8661.08,
+                5373.42,
+                5653.73,
+                -565.35,
+                -117.85,
+                7073.17,
+            ],
+            "N_NAME": [
+                "UNITED KINGDOM",
+                "MOROCCO",
+                "ROMANIA",
+                "PERU",
+                "ALGERIA",
+                "SAUDI ARABIA",
+                "IRAQ",
+                "KENYA",
+                "CANADA",
+                "VIETNAM",
+                "BRAZIL",
+                "MOROCCO",
+                "MOZAMBIQUE",
+                "MOROCCO",
+                "JORDAN",
+                "INDONESIA",
+                "CHINA",
+                "UNITED KINGDOM",
+                "BRAZIL",
+                "JORDAN",
+            ],
+            "C_ADDRESS": [
+                "nxW1jt,MQvImdr z72gAt1bslnfEipCh,bKZN",
+                "oGKgweC odpyORKPJ9oxTqzzdlYyFOwXm2F97C",
+                "x8 7D8xSxqIGoVOlqVCEBflsLXwKewpGMv,V",
+                "cUBf1 YMJEgbt2XDeQWD4WinTu4iFIF",
+                "FIis0dJhR5DwVCLy",
+                "KcLmBKitbx7NvU7bpu9clIyccxWG",
+                "1nUzjsH9HS1sPAGLwDIom9IESivLeEh1BvyynjU",
+                "2nRj1CdoD3W0sJww2OZ21xh",
+                "ToEmqB90fM TkLqyEgX8MJ8T8NkK",
+                "4QnYEe0KXOP3yridKldXROs7jQdMu9tE",
+                "FBx04exFTAFFRA3G,UR9Q2XSM1c8Uopaal2rEFv",
+                "cTaJAqxDF,SJqSk2l6dAY5VTilR",
+                "KB83CaaM8DRjvAmEMg1fw",
+                " kY6weQvh3EKcZCH6N4,WaV11Ma8js",
+                "MAqwYLxOBbMoyAWwvjEZK9QYgRMbhtFkdHbiR",
+                "iSIlVncg,sc sQBHnywt4",
+                "IKgaPQRsONfY1vAsPP",
+                "vjJBjxjW9uoRZP02nS p6XY5wU6Ic,6xHpxUKA",
+                "y8mRnn6pJ0V",
+                "it3mUlkZAe9J8gmy",
+            ],
+            "C_PHONE": [
+                "33-422-600-6936",
+                "25-383-240-7326",
+                "29-962-402-1321",
+                "27-864-312-2867",
+                "10-918-863-8880",
+                "30-933-714-8982",
+                "21-285-410-4046",
+                "24-470-393-1146",
+                "13-452-318-7709",
+                "31-579-682-9907",
+                "12-442-364-1024",
+                "25-286-818-7068",
+                "26-609-226-4269",
+                "25-635-470-2363",
+                "23-768-636-1831",
+                "19-861-895-7214",
+                "28-327-662-8527",
+                "33-818-229-3473",
+                "12-967-439-5391",
+                "23-918-228-2560",
+            ],
+            "C_COMMENT": [
+                " instructions. carefully special ideas after the fluffily unusual r",
+                " deposits after the fluffily special foxes integrate carefully blithely dogged dolphins. enticingly bold d",
+                "totes. quickly even instructions boost blithely regular packages? carefully final foxes haggle slyly against the s",
+                "egularly bold, ironic packages. even theodolites nag. unusual theodolites would sleep furiously express",
+                "ts cajole quickly according to the pending, unusual dolphins. special, ironic c",
+                "ts. blithely silent courts doze. regular atta",
+                "ymptotes. ironic, unusual notornis wake after the ironic, special deposits. blithely fina",
+                "ow furiously fluffily daring deposits. regular, regular accounts haggle blithely acro",
+                "ic packages. ideas cajole furiously slyly special theodolites: carefully express pinto beans acco",
+                " pinto beans! furiously regular courts ea",
+                " beans after the ironically pending accounts affix furiously quick pla",
+                "s about the theodolites sleep furiously quickly regular instructions. f",
+                "kages above the requests sleep furiously packages-- deposits detect fluffily. pending th",
+                "ely. ironic, ironic asymptotes alongside of the even packages are furiously regular asymptotes; regular e",
+                "y unusual requests. furiously ironic deposits haggle quickly a",
+                "ver the unusual accounts. sile",
+                "ckages haggle. idly even deposits according to the regularly even ideas haggle blithely re",
+                "y. bold, ironic instructions after the theodolites sleep blithely ironic packages. ideas c",
+                "heodolites. furiously ironic excuses boost along the carefully f",
+                "lithely final deposits haggle furiously above the",
+            ],
+        }
+    )
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
     )
 
 
@@ -489,8 +866,8 @@ def test_tpch_q11(tpch_data, spark_info, memory_leak_check):
     FRACTION = 0.0001
     tpch_query = f"""
                   select
-                    ps_partkey,
-                    sum(ps_supplycost * ps_availqty) as val
+                    PS_PARTKEY,
+                    sum(ps_supplycost * ps_availqty) as VAL
                   from
                     partsupp,
                     supplier,
@@ -516,9 +893,11 @@ def test_tpch_q11(tpch_data, spark_info, memory_leak_check):
                   order by
                     val desc
     """
+    # Note: There are > 700 rows so its hard to hardcode this answer without a file.
     check_query(
         tpch_query,
         tpch_data,
         spark_info,
         check_dtype=False,
+        sort_output=False,
     )

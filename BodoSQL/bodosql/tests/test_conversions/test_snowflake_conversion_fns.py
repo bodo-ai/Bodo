@@ -867,7 +867,7 @@ def test_try_to_double_scalars(spark_info):
     )
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "fn_name",
     [
@@ -900,7 +900,7 @@ def test_to_boolean_optional_invalid_str(fn_name):
     )
     expected_output = pd.DataFrame(
         {
-            "origin_zip_type": [
+            "ORIGIN_ZIP_TYPE": [
                 "USA",
                 "USA",
                 "USA",
@@ -931,7 +931,7 @@ def test_to_boolean_optional_invalid_str(fn_name):
             bc.sql(query)
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "fn_name",
     [
@@ -960,7 +960,7 @@ def test_to_double_optional_invalid_str(fn_name):
     )
     expected_output = pd.DataFrame(
         {
-            "origin_zip_type": [
+            "ORIGIN_ZIP_TYPE": [
                 "USA",
                 "USA",
                 "USA",

@@ -83,32 +83,6 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   }
 
   /**
-   * This is used to facilitate the indirection required for getting the correct casing.
-   *
-   * <p>Calcite needs to pretend that the case is lowercase for the purposes of expanding the star
-   * for selects and also to fit in with the pandas convention.
-   *
-   * <p>At the same time, Calcite needs to know the original name of the columns for SQL generation.
-   *
-   * <p>Until we have conventions in place and have overridden the default behavior of star (which
-   * uses the real names instead of normalized lowercase names), we need to have this little hack.
-   *
-   * @param name column index.
-   * @return the column name.
-   */
-  public String getPreservedColumnName(String name) {
-    for (BodoSQLColumn column : columns) {
-      if (column.getColumnName().equals(name)) {
-        // We found the original column so return
-        // the write name as that's the original.
-        return column.getWriteColumnName();
-      }
-    }
-    // Just return the original name.
-    return name;
-  }
-
-  /**
    * Generate the code needed to write the given variable to storage. This table type generates code
    * common to all tables in the catalog.
    *

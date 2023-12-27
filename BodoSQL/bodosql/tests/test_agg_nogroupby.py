@@ -385,7 +385,7 @@ def test_max_interval_types(bodosql_interval_types, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_max_literal(basic_df, spark_info, memory_leak_check):
+def test_max_literal(basic_df, memory_leak_check):
     """tests that max works on a scalar value"""
     # This query does not get optimized, by manual check
     query = "Select A, scalar_max from table1, (Select Max(1) as scalar_max)"
@@ -393,9 +393,10 @@ def test_max_literal(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         # Max outputs a nullable output by default to handle empty Series values
         check_dtype=False,
+        expected_output=pd.DataFrame({"A": basic_df["table1"]["A"], "SCALAR_MAX": 1}),
     )
 
 
@@ -513,7 +514,7 @@ def test_agg_replicated(datapath, memory_leak_check):
     filename = datapath("sample-parquet-data/no_index.pq")
     read_df = pd.read_parquet(filename)
     count = read_df.B.count()
-    expected_output = pd.DataFrame({"cnt": count}, index=pd.Index([0]))
+    expected_output = pd.DataFrame({"CNT": count}, index=pd.Index([0]))
     check_func(impl, (filename,), py_output=expected_output, is_out_distributed=False)
     # Check that the function returns replicated data.
     bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(impl)
@@ -596,7 +597,7 @@ def test_max_min_tz_aware(memory_leak_check):
     )
     ctx = {"table1": df}
     py_output = pd.DataFrame(
-        {"output1": S.max(), "output2": S.min()}, index=pd.RangeIndex(0, 1, 1)
+        {"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1)
     )
     query = "Select max(A) as output1, min(A) as output2 from table1"
     check_query(
@@ -624,7 +625,7 @@ def test_count_tz_aware(memory_leak_check):
     )
     ctx = {"table1": df}
     py_output = pd.DataFrame(
-        {"output1": S.count(), "output2": len(S)}, index=pd.RangeIndex(0, 1, 1)
+        {"OUTPUT1": S.count(), "OUTPUT2": len(S)}, index=pd.RangeIndex(0, 1, 1)
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1"
     check_query(
@@ -651,7 +652,7 @@ def test_any_value_tz_aware(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"output1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
+    py_output = pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
     # Note: We also output the first value although this is not strictly defined.
     query = "Select ANY_VALUE(A) as output1 from table1"
     check_query(
@@ -691,7 +692,7 @@ def test_tz_aware_having(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"output1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
+    py_output = pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
     query = "Select MIN(A) as output1 from table1 HAVING MAX(A) > min(B)"
     check_query(
         query,

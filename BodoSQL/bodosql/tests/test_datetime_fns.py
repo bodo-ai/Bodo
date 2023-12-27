@@ -605,10 +605,10 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "date_trunc_res": current_time.normalize(),
-            "is_valid_day": True,
-            "is_valid_hour": True,
-            "is_valid_minute": True,
+            "DATE_TRUNC_RES": current_time.normalize(),
+            "IS_VALID_DAY": True,
+            "IS_VALID_HOUR": True,
+            "IS_VALID_MINUTE": True,
         }
     )
     # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
@@ -647,10 +647,10 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": df.A,
-            "date_trunc_res": D,
-            "is_valid_day": S,
-            "is_valid_hour": S,
-            "is_valid_minute": S,
+            "DATE_TRUNC_RES": D,
+            "IS_VALID_DAY": S,
+            "IS_VALID_HOUR": S,
+            "IS_VALID_MINUTE": S,
         }
     )
     # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
@@ -690,8 +690,8 @@ def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_c
     py_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "is_valid_hour": True,
-            "is_valid_minute": True,
+            "IS_VALID_HOUR": True,
+            "IS_VALID_MINUTE": True,
         }
     )
 
@@ -727,8 +727,8 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": df.A,
-            "is_valid_hour": S,
-            "is_valid_minute": S,
+            "IS_VALID_HOUR": S,
+            "IS_VALID_MINUTE": S,
         }
     )
     # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
@@ -773,10 +773,10 @@ def test_sysdate_equivalents_cols(
     py_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "date_trunc_res": current_time.normalize(),
-            "is_valid_day": True,
-            "is_valid_hour": True,
-            "is_valid_minute": True,
+            "DATE_TRUNC_RES": current_time.normalize(),
+            "IS_VALID_DAY": True,
+            "IS_VALID_HOUR": True,
+            "IS_VALID_MINUTE": True,
         }
     )
 
@@ -818,10 +818,10 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     py_output = pd.DataFrame(
         {
             "A": df.A,
-            "date_trunc_res": D,
-            "is_valid_day": S,
-            "is_valid_hour": S,
-            "is_valid_minute": S,
+            "DATE_TRUNC_RES": D,
+            "IS_VALID_DAY": S,
+            "IS_VALID_HOUR": S,
+            "IS_VALID_MINUTE": S,
         }
     )
 
@@ -952,20 +952,19 @@ def test_date_format_date(date_df, python_mysql_dt_format_strings, memory_leak_c
     )
 
 
-def test_microseconds(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_microseconds(dt_fn_dataframe, memory_leak_check):
     """spark has no equivalent MICROSECOND function, so we need to test it manually"""
 
     query1 = "SELECT MICROSECOND(timestamps) as microsec_time from table1"
-    query2 = "SELECT CASE WHEN MICROSECOND(timestamps) > 1 THEN MICROSECOND(timestamps) ELSE -1 END as microsec_time from table1"
 
     expected_output = pd.DataFrame(
-        {"microsec_time": dt_fn_dataframe["table1"]["timestamps"].dt.microsecond}
+        {"MICROSEC_TIME": dt_fn_dataframe["table1"]["timestamps"].dt.microsecond}
     )
 
     check_query(
         query1,
         dt_fn_dataframe,
-        spark_info,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
@@ -976,7 +975,7 @@ def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
     """simplest test for microsecond on timezone aware data"""
     query = "SELECT MICROSECOND(A) as microsec_time from table1"
     expected_output = pd.DataFrame(
-        {"microsec_time": tz_aware_df["table1"]["A"].dt.microsecond}
+        {"MICROSEC_TIME": tz_aware_df["table1"]["A"].dt.microsecond}
     )
 
     check_query(
@@ -996,7 +995,7 @@ def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     micro_series = tz_aware_df["table1"]["A"].dt.microsecond
     micro_series[micro_series <= 1] = -1
 
-    expected_output = pd.DataFrame({"microsec_time": micro_series})
+    expected_output = pd.DataFrame({"MICROSEC_TIME": micro_series})
 
     check_query(
         query,
@@ -3244,7 +3243,7 @@ def test_date_trunc_timestamp(
         query = f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     py_output = pd.DataFrame(
-        {"output": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
+        {"OUTPUT": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
     )
     check_query(query, dt_fn_dataframe, None, expected_output=py_output)
 
@@ -3549,7 +3548,7 @@ def test_next_previous_day_scalars(
 def test_tz_aware_day(tz_aware_df, memory_leak_check):
     query = "SELECT DAY(A) as m from table1"
     df = tz_aware_df["table1"]
-    py_output = pd.DataFrame({"m": df.A.dt.day})
+    py_output = pd.DataFrame({"M": df.A.dt.day})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3568,7 +3567,7 @@ def test_tz_aware_day_case(memory_leak_check):
 
     day_series = df.A.dt.day
     day_series[~df.B] = None
-    py_output = pd.DataFrame({"m": day_series})
+    py_output = pd.DataFrame({"M": day_series})
 
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
@@ -3581,10 +3580,10 @@ def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame(
         {
-            "my_yr": df.A.dt.year,
-            "h": df.A.dt.hour,
-            "m": df.A.dt.minute,
-            "s": df.A.dt.second,
+            "MY_YR": df.A.dt.year,
+            "H": df.A.dt.hour,
+            "M": df.A.dt.minute,
+            "S": df.A.dt.second,
         }
     )
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
@@ -3596,10 +3595,10 @@ def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame(
         {
-            "my_yr": df.A.dt.year,
-            "h": df.A.dt.hour,
-            "m": df.A.dt.minute,
-            "s": df.A.dt.second,
+            "MY_YR": df.A.dt.year,
+            "H": df.A.dt.hour,
+            "M": df.A.dt.minute,
+            "S": df.A.dt.second,
         }
     )
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
@@ -3609,7 +3608,7 @@ def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
 def test_tz_aware_month(tz_aware_df, memory_leak_check):
     query = "SELECT MONTH(A) as m from table1"
     df = tz_aware_df["table1"]
-    py_output = pd.DataFrame({"m": df.A.dt.month})
+    py_output = pd.DataFrame({"M": df.A.dt.month})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3628,7 +3627,7 @@ def test_tz_aware_month_case(memory_leak_check):
     ctx = {"table1": df}
     month_series = df.A.dt.month
     month_series[~df.B] = None
-    py_output = pd.DataFrame({"m": month_series})
+    py_output = pd.DataFrame({"M": month_series})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3787,7 +3786,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"m": df.A.dt.isocalendar().week})
+    py_output = pd.DataFrame({"M": df.A.dt.isocalendar().week})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3805,7 +3804,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     ctx = {"table1": df}
     week_series = df.A.dt.isocalendar().week
     week_series[~df.B] = None
-    py_output = pd.DataFrame({"m": week_series})
+    py_output = pd.DataFrame({"M": week_series})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3829,7 +3828,7 @@ def test_tz_aware_next_day(memory_leak_check):
         ).tz_localize(None),
         axis=1,
     )
-    py_output = pd.DataFrame({"m": out_series.dt.date})
+    py_output = pd.DataFrame({"M": out_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3856,7 +3855,7 @@ def test_tz_aware_next_day_case(
         axis=1,
     )
     week_series[~df.C] = None
-    py_output = pd.DataFrame({"m": week_series.dt.date})
+    py_output = pd.DataFrame({"M": week_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3880,7 +3879,7 @@ def test_tz_aware_previous_day(memory_leak_check):
         ).tz_localize(None),
         axis=1,
     )
-    py_output = pd.DataFrame({"m": out_series.dt.date})
+    py_output = pd.DataFrame({"M": out_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3907,7 +3906,7 @@ def test_tz_aware_previous_day_case(
         axis=1,
     )
     week_series[~df.C] = None
-    py_output = pd.DataFrame({"m": week_series.dt.date})
+    py_output = pd.DataFrame({"M": week_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3927,7 +3926,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
     )
     ctx = {"table1": df}
     scalar_func = generate_date_trunc_func(date_trunc_literal)
-    py_output = pd.DataFrame({"output": df["A"].map(scalar_func)})
+    py_output = pd.DataFrame({"OUTPUT": df["A"].map(scalar_func)})
     check_query(query, ctx, None, expected_output=py_output)
 
 
@@ -3950,7 +3949,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     S = df["A"].map(scalar_func)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query, ctx, None, expected_output=py_output)
 
 
@@ -3973,9 +3972,9 @@ def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
     ctx = {"table1": df}
     query1 = "SELECT A + Interval 1 Year as output from table1"
     query2 = "SELECT A - Interval 2 Year as output from table1"
-    py_output = pd.DataFrame({"output": df.A + pd.DateOffset(years=1)})
+    py_output = pd.DataFrame({"OUTPUT": df.A + pd.DateOffset(years=1)})
     check_query(query1, ctx, None, expected_output=py_output)
-    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(years=2)})
+    py_output = pd.DataFrame({"OUTPUT": df.A - pd.DateOffset(years=2)})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4000,11 +3999,11 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Year END as output from table1"
     S = df.A + pd.DateOffset(years=1)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     S = df.A - pd.DateOffset(years=2)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4026,9 +4025,9 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
     ctx = {"table1": df}
     query1 = "SELECT A + Interval 1 Month as output from table1"
     query2 = "SELECT A - Interval 2 Month as output from table1"
-    py_output = pd.DataFrame({"output": df.A + pd.DateOffset(months=1)})
+    py_output = pd.DataFrame({"OUTPUT": df.A + pd.DateOffset(months=1)})
     check_query(query1, ctx, None, expected_output=py_output)
-    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(months=2)})
+    py_output = pd.DataFrame({"OUTPUT": df.A - pd.DateOffset(months=2)})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4054,11 +4053,11 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Month END as output from table1"
     S = df.A + pd.DateOffset(months=1)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     S = df.A - pd.DateOffset(months=2)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4084,9 +4083,9 @@ def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
     scalar_add_func = interval_day_add_func(1)
     # Function used to simulate the result of subtracting 2 days
     scalar_sub_func = interval_day_add_func(-2)
-    py_output = pd.DataFrame({"output": df.A.map(scalar_add_func)})
+    py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_add_func)})
     check_query(query1, ctx, None, expected_output=py_output)
-    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4115,11 +4114,11 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
     scalar_sub_func = interval_day_add_func(-2)
     S = df.A.map(scalar_add_func)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query2, ctx, None, expected_output=py_output)
 
 
@@ -4145,7 +4144,7 @@ def test_tz_aware_subdate_integer(memory_leak_check):
 
     # Function used to simulate the result of subtracting 3 days
     scalar_sub_func = interval_day_add_func(-3)
-    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 
@@ -4174,7 +4173,7 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
     scalar_sub_func = interval_day_add_func(-3)
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 
@@ -4201,7 +4200,7 @@ def test_tz_aware_subdate_interval_day(memory_leak_check):
     # Function used to simulate the result of subtracting 2 days
     scalar_sub_func = interval_day_add_func(-2)
 
-    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 
@@ -4234,7 +4233,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
     scalar_sub_func = interval_day_add_func(-2)
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 
@@ -4258,7 +4257,7 @@ def test_tz_aware_subdate_interval_month(memory_leak_check):
     query1 = "SELECT SUBDATE(A, Interval 4 Months) as output from table1"
     query2 = "SELECT DATE_SUB(A, Interval 4 Months) as output from table1"
 
-    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(months=4)})
+    py_output = pd.DataFrame({"OUTPUT": df.A - pd.DateOffset(months=4)})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 
@@ -4285,7 +4284,7 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
 
     S = df.A - pd.DateOffset(months=1)
     S[~df.B] = None
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output)
     check_query(query2, ctx, None, expected_output=py_output)
 

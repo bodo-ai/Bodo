@@ -109,15 +109,15 @@ def test_boolean_literal_case(basic_df, spark_info, memory_leak_check):
     """
     Tests the behavior of case when the possible results are boolean literals.
     """
-    query1 = "Select B, Case WHEN A >= 2 THEN True ELSE True END as CaseRes FROM table1"
+    query1 = "Select B, Case WHEN A >= 2 THEN True ELSE True END as CASERES FROM table1"
     query2 = (
-        "Select B, Case WHEN A >= 2 THEN True ELSE False END as CaseRes FROM table1"
+        "Select B, Case WHEN A >= 2 THEN True ELSE False END as CASERES FROM table1"
     )
     query3 = (
-        "Select B, Case WHEN A >= 2 THEN False ELSE True END as CaseRes FROM table1"
+        "Select B, Case WHEN A >= 2 THEN False ELSE True END as CASERES FROM table1"
     )
     query4 = (
-        "Select B, Case WHEN A >= 2 THEN False ELSE False END as CaseRes FROM table1"
+        "Select B, Case WHEN A >= 2 THEN False ELSE False END as CASERES FROM table1"
     )
     check_query(query1, basic_df, spark_info, check_dtype=False)
     check_query(query2, basic_df, spark_info, check_dtype=False)
@@ -129,13 +129,13 @@ def test_case_literals(basic_df, case_literals, spark_info, memory_leak_check):
     """
     Test a case statement with each possible literal return type.
     """
-    query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CaseRes FROM table1"
+    query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CASERES FROM table1"
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
@@ -147,13 +147,13 @@ def test_case_literals_multiple_when(
     Test a case statement with multiple whens and each possible literal return type.
     """
 
-    query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1"
+    query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CASERES FROM table1"
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
@@ -162,13 +162,13 @@ def test_case_literals_groupby(basic_df, case_literals, spark_info, memory_leak_
     """
     Test a case statement with each possible literal return type in a groupby.
     """
-    query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CaseRes FROM table1 Group By A, B"
+    query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CASERES FROM table1 Group By A, B"
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
@@ -180,14 +180,14 @@ def test_case_literals_multiple_when_groupby(
     Test a case statement with each possible literal return type in a groupby.
     """
 
-    query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1 Group By A, B"
+    query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CASERES FROM table1 Group By A, B"
 
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
@@ -197,14 +197,14 @@ def test_case_literals_nonascii(basic_df, spark_info, memory_leak_check):
     """
     case_literals = gen_nonascii_list(4)
 
-    query = f"Select B, Case WHEN A = 1 THEN '{case_literals[0]}' WHEN A = 2 THEN '{case_literals[1]}' WHEN B > 6 THEN '{case_literals[2]}' ELSE '{case_literals[3]}' END as CaseRes FROM table1 Group By A, B"
+    query = f"Select B, Case WHEN A = 1 THEN '{case_literals[0]}' WHEN A = 2 THEN '{case_literals[1]}' WHEN B > 6 THEN '{case_literals[2]}' ELSE '{case_literals[3]}' END as CASERES FROM table1 Group By A, B"
 
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
@@ -213,8 +213,8 @@ def test_case_agg_groupby(basic_df, spark_info, memory_leak_check):
     """
     Test a case statement with an aggregate function applied to each group.
     """
-    query1 = f"Select Case WHEN A >= 2 THEN Sum(B) ELSE 0 END as CaseRes FROM table1 Group By A"
-    query2 = f"Select Case WHEN A >= 2 THEN Count(B) ELSE 0 END as CaseRes FROM table1 Group By A"
+    query1 = f"Select Case WHEN A >= 2 THEN Sum(B) ELSE 0 END as CASERES FROM table1 Group By A"
+    query2 = f"Select Case WHEN A >= 2 THEN Count(B) ELSE 0 END as CASERES FROM table1 Group By A"
     check_query(query1, basic_df, spark_info, check_dtype=False)
     check_query(query2, basic_df, spark_info, check_dtype=False)
 
@@ -224,22 +224,22 @@ def test_case_no_else_clause_literals(
     basic_df, case_literals, spark_info, memory_leak_check
 ):
     """
-    Test a case statement that doesn't have an else clause whoose values are scalars
+    Test a case statement that doesn't have an else clause whose values are scalars
     """
-    query = f"Select Case WHEN A >= 2 THEN {case_literals[0]} WHEN A = 1 THEN {case_literals[1]} END as CaseRes FROM table1"
+    query = f"Select Case WHEN A >= 2 THEN {case_literals[0]} WHEN A = 1 THEN {case_literals[1]} END as CASERES FROM table1"
     check_query(
         query,
         basic_df,
         spark_info,
         check_dtype=False,
         check_names=False,
-        convert_columns_decimal=["CaseRes"],
+        convert_columns_decimal=["CASERES"],
     )
 
 
 def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):
     """
-    Test a case statement that doesn't have an else clause whoose values are columns
+    Test a case statement that doesn't have an else clause whose values are columns
     """
     query = f"Select Case WHEN A >= 2 THEN A WHEN A < 0 THEN B END FROM table1"
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
@@ -261,7 +261,7 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     )
     query = "Select Case WHEN B THEN A END as output FROM table1"
     ctx = {"table1": df}
-    expected_output = pd.DataFrame({"output": df["A"].copy()})
+    expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
     expected_output[~df.B] = None
     check_query(query, ctx, None, expected_output=expected_output)
 
@@ -275,7 +275,7 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
         # is not inlined.
         old_threshold = bodo.COMPLEX_CASE_THRESHOLD
         bodo.COMPLEX_CASE_THRESHOLD = 1
-        query = f"Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CaseRes FROM table1"
+        query = f"Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CASERES FROM table1"
         check_query(
             query,
             basic_df,
@@ -421,7 +421,7 @@ def test_case_indent_limit(memory_leak_check):
     """
     df = pd.DataFrame({"A": ["er ", "a ", " el2    ", " f2 "] * 5})
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"sensitive_word": ["er", "a", "el2", "f2"] * 5})
+    py_output = pd.DataFrame({"SENSITIVE_WORD": ["er", "a", "el2", "f2"] * 5})
     check_query(query, ctx, None, expected_output=py_output)
 
 
@@ -451,7 +451,7 @@ def test_nested_case(memory_leak_check):
         {"A": [3, 3, 3, 3, 4] * 3, "B": [1, 6, 1, 6, 1] * 3, "C": [2, 4, 4, 2, 4] * 3}
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"res": [1, 1, 0, 2, -1] * 3})
+    py_output = pd.DataFrame({"RES": [1, 1, 0, 2, -1] * 3})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 

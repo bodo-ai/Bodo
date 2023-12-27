@@ -118,6 +118,7 @@ def test_zero_columns_pruning(memory_leak_check):
         f"select COUNT(*) as cnt from {table_name} ORDER BY L_SUPPKEY LIMIT 70",
         conn_str,
     )
+    py_output.columns = py_output.columns.str.upper()
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
