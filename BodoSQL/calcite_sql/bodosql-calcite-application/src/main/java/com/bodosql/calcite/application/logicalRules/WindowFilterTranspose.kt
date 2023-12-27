@@ -50,7 +50,7 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
 
         /** Determine if a RexNode contains a RexOver.  */
         @JvmStatic
-        private fun containsRexOver(node: RexNode): Boolean {
+        fun containsRexOver(node: RexNode): Boolean {
             val visitor = object : RexVisitorImpl<Unit>(true) {
                 override fun visitOver(over: RexOver) {
                     throw Util.FoundOne.NULL
