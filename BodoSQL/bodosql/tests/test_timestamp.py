@@ -377,6 +377,17 @@ def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output)
 
 
+def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
+    """
+    Checks that to_timestamp_ntz works with a UTC offset
+    """
+    value = pd.Timestamp(timestamp_literal).tz_localize(None)
+    query = f"SELECT TO_TIMESTAMP_NTZ('{timestamp_literal}') AS ts"
+    ctx = {}
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)
+
+
 @pytest.mark.parametrize(
     "table, answer",
     [
