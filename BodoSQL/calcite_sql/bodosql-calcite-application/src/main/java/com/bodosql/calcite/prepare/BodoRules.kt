@@ -5,9 +5,13 @@ import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeLimitLockRule
+import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
+import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
+import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
+import com.bodosql.calcite.application.logicalRules.ExtractPushableExpressionsJoin
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
 import com.bodosql.calcite.application.logicalRules.FilterFlattenTranspose
@@ -24,13 +28,14 @@ import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
+import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_BOTH_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_LEFT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_RIGHT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.PROJECT_MULTI_JOIN_MERGE
-import com.bodosql.calcite.rel.core.BodoLogicalRelFactories
+import com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
@@ -43,6 +48,7 @@ import org.apache.calcite.plan.RelRule.OperandBuilder
 import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.JoinRelType
+import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
@@ -50,16 +56,17 @@ import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.CoreRules
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
-import org.apache.calcite.rel.rules.JoinProjectTransposeRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
+import org.apache.calcite.rel.rules.ProjectJoinTransposeRule
 import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 import org.apache.calcite.rel.rules.PruneEmptyRules
 import org.apache.calcite.rel.rules.SortProjectTransposeRule
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rel.rules.UnionMergeRule
+import org.apache.calcite.rex.RexNode
 
 object BodoRules {
     // INDIVIDUAL RULES
@@ -71,7 +78,7 @@ object BodoRules {
     @JvmField
     val PROJECT_REMOVE_RULE: RelOptRule =
         ProjectRemoveRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -80,7 +87,7 @@ object BodoRules {
     @JvmField
     val FILTER_MERGE_RULE: RelOptRule =
         FilterMergeRuleNoWindow.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -90,7 +97,23 @@ object BodoRules {
     @JvmField
     val PROJECT_MERGE_RULE: RelOptRule =
         ProjectMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Planner rule that merges a Project into another Project,
+     * provided the projects aren't projecting identical sets of input references.
+     */
+    @JvmField
+    val PROJECT_MERGE_ALLOW_NO_BLOAT_RULE: RelOptRule =
+        ProjectMergeRule.Config.DEFAULT
+            .withBloat(0)
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(BodoLogicalProject::class.java).oneInput(
+                    OperandTransform { b1: OperandBuilder -> b1.operand(BodoLogicalProject::class.java).anyInputs() },
+                )
+            }
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -99,13 +122,13 @@ object BodoRules {
     @JvmField
     val FILTER_AGGREGATE_TRANSPOSE_RULE: RelOptRule =
         FilterAggregateTransposeRuleNoWindow.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val FILTER_SETOP_TRANSPOSE_RULE: RelOptRule =
         FilterSetOpTransposeRuleNoWindow.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -131,7 +154,7 @@ object BodoRules {
     val AGGREGATE_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -141,7 +164,7 @@ object BodoRules {
     val AGGREGATE_JOIN_TRANSPOSE_RULE: RelOptRule =
         BodoAggregateJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java, true)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -150,7 +173,7 @@ object BodoRules {
     @JvmField
     val FILTER_INTO_JOIN_RULE: RelOptRule =
         FilterJoinRuleNoWindow.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -160,18 +183,28 @@ object BodoRules {
     @JvmField
     val FILTER_JOIN_RULE: RelOptRule =
         FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
      * Filters tables for unused columns before join.
      */
     @JvmField
-    val PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
+    val TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
         TrivialProjectJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
+
+    /**
+     * Pushes full projects past joins when possible.
+     */
+    @JvmField
+    val FULL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule = ProjectJoinTransposeRule.Config.DEFAULT
+        .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
+        .withPreserveExprCondition { expr: RexNode -> !WindowFilterTranspose.containsRexOver(expr) }
+        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+        .toRule()
 
     /**
      * Push only field references past a filter.
@@ -180,7 +213,7 @@ object BodoRules {
     val TRIVIAL_PROJECT_FILTER_TRANSPOSE: RelOptRule =
         ProjectFilterTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -191,7 +224,7 @@ object BodoRules {
     val FILTER_REDUCE_EXPRESSIONS_RULE: RelOptRule =
         BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT
             .withOperandFor(BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -202,7 +235,7 @@ object BodoRules {
     val PROJECT_REDUCE_EXPRESSIONS_RULE: RelOptRule =
         BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -232,7 +265,7 @@ object BodoRules {
     @JvmField
     val JOIN_PUSH_TRANSITIVE_PREDICATES: RelOptRule =
         BodoJoinPushTransitivePredicatesRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -245,7 +278,7 @@ object BodoRules {
     val AGGREGATE_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -277,7 +310,7 @@ object BodoRules {
     val AGGREGATE_JOIN_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -286,7 +319,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_PROJECT_MERGE_RULE: RelOptRule =
         AggregateProjectMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -295,7 +328,7 @@ object BodoRules {
     @JvmField
     val PROJECT_AGGREGATE_MERGE_RULE: RelOptRule =
         ProjectAggregateMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -305,7 +338,17 @@ object BodoRules {
     @JvmField
     val FILTER_PROJECT_TRANSPOSE_RULE: RelOptRule =
         FilterProjectTransposeNoCaseRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withOperandSupplier(
+                OperandTransform { b0: OperandBuilder ->
+                    b0.operand(BodoLogicalFilter::class.java)
+                        .oneInput(
+                            OperandTransform { b1: OperandBuilder ->
+                                b1.operand(BodoLogicalProject::class.java).anyInputs()
+                            },
+                        )
+                },
+            )
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -317,19 +360,19 @@ object BodoRules {
     @JvmField
     val FILTER_FLATTEN_TRANSPOSE_RULE: RelOptRule =
         FilterFlattenTranspose.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val LEFT_JOIN_REMOVE_RULE: RelOptRule =
         PruneEmptyRules.JoinLeftEmptyRuleConfig.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val RIGHT_JOIN_REMOVE_RULE: RelOptRule =
         PruneEmptyRules.JoinLeftEmptyRuleConfig.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Rewrite filters in either Filter or Join to convert OR with shared subexpression
@@ -342,14 +385,14 @@ object BodoRules {
     @JvmField
     val JOIN_REORDER_CONDITION_RULE: RelOptRule =
         JoinReorderConditionRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val FILTER_REORDER_CONDITION_RULE: RelOptRule =
         LogicalFilterReorderConditionRule.Config.DEFAULT
             .withOperandFor(BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Push a limit before a project (e.g. select col as alias from table limit 10)
@@ -357,7 +400,7 @@ object BodoRules {
     val LIMIT_PROJECT_TRANSPOSE_RULE: RelOptRule =
         LimitProjectTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalSort::class.java, BodoLogicalProject::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Pushes a sort before a project
@@ -365,14 +408,50 @@ object BodoRules {
     val SORT_PROJECT_TRANSPOSE_RULE: RelOptRule =
         SortProjectTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalSort::class.java, BodoLogicalProject::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
-    // Pulls projects above joins when possible
+    // Rules that handle Pulling projects above joins when possible
+    // Because of the rule configuration limitations, I need 2 separate rules to match
+    // All possible cases
+
+    // JOIN
+    //   Project
+    //   Any (Including another project, which will NOT be handled by this rule)
+    //
     @JvmField
-    val JOIN_PROJECT_BOTH_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
-        JoinProjectTransposeRule.Config.OUTER
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+    val JOIN_PROJECT_LEFT_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
+        com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
+            .withIncludeOuter(true)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(BodoLogicalJoin::class.java).inputs(
+                    OperandTransform { b1: OperandBuilder -> b1.operand(BodoLogicalProject::class.java).anyInputs() },
+                )
+            }
+            .toRule()
+
+    // JOIN
+    //   Any (Including another project, which will be pulled above the join by this rule if possible)
+    //   Project
+    //
+    @JvmField
+    val JOIN_PROJECT_RIGHT_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
+        com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
+            .withIncludeOuter(true)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(BodoLogicalJoin::class.java).inputs(
+                    OperandTransform { b1: OperandBuilder ->
+                        b1.operand(RelNode::class.java)
+                            // Can't allow snowflakeRels here. If we do, it may allow snowflake project that we've locked
+                            // in to be pulled up.
+                            .predicate { node -> node !is SnowflakeRel }
+                            .anyInputs()
+                    },
+                    OperandTransform { b2: OperandBuilder -> b2.operand(BodoLogicalProject::class.java).anyInputs() },
+                )
+            }
             .toRule()
 
     // If a column has been repeated or rewritten as a part of another column, possibly
@@ -386,7 +465,7 @@ object BodoRules {
     @JvmField
     val PROJECTION_SUBCOLUMN_ELIMINATION_RULE: RelOptRule =
         ProjectionSubcolumnEliminationRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Remove any case expressions from filters because we cannot use them in filter
@@ -394,7 +473,7 @@ object BodoRules {
     @JvmField
     val FILTER_EXTRACT_CASE_RULE: RelOptRule =
         FilterExtractCaseRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     // For two projections separated by a filter, determine if any computation in
@@ -403,13 +482,13 @@ object BodoRules {
     @JvmField
     val PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE: RelOptRule =
         ProjectFilterProjectColumnEliminationRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val MIN_ROW_NUMBER_FILTER_RULE: RelOptRule =
         MinRowNumberFilterRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -419,7 +498,7 @@ object BodoRules {
     @JvmField
     val JOIN_CONDITION_TO_FILTER_RULE: RelOptRule =
         JoinConditionToFilterRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -429,7 +508,7 @@ object BodoRules {
     @JvmField
     val FILTER_WINDOW_SPLIT_RULE: RelOptRule =
         FilterWindowSplitRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -444,7 +523,7 @@ object BodoRules {
                     else -> true
                 }
             }
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -457,7 +536,7 @@ object BodoRules {
         JoinCommuteRule.Config.DEFAULT
             .withOperandFor(BodoLogicalJoin::class.java)
             .withSwapOuter(true)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -469,7 +548,7 @@ object BodoRules {
     @JvmField
     val LOPT_OPTIMIZE_JOIN_RULE: RelOptRule =
         LoptOptimizeJoinRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -478,7 +557,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = AggregateProjectPullUpConstantsRule.Config.DEFAULT
         .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
-        .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
         .toRule()
 
     /**
@@ -498,7 +577,7 @@ object BodoRules {
                     )
             }.anyInputs()
         }
-        .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
         .toRule()
 
     /**
@@ -507,7 +586,14 @@ object BodoRules {
      */
     @JvmField
     val SNOWFLAKE_FILTER_LOCK_RULE: RelOptRule =
-        SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
+        SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
+    /**
+     * Converts a BodoLogicalProject to a SnowflakeProject if it is located directly on top of a
+     * SnowflakeRel.
+     */
+    val SNOWFLAKE_PROJECT_LOCK_RULE: RelOptRule =
+        SnowflakeProjectLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
      * Converts a BodoLogicalSort with only limit to a SnowflakeFilter if it is located directly on top of a
@@ -515,7 +601,7 @@ object BodoRules {
      */
     @JvmField
     val SNOWFLAKE_LIMIT_LOCK_RULE: RelOptRule =
-        SnowflakeLimitLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
+        SnowflakeLimitLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
      * Merge two UNION operators together into a single UNION operator.
@@ -526,7 +612,7 @@ object BodoRules {
      */
     @JvmField
     val UNION_MERGE_RULE: RelOptRule =
-        UnionMergeRule.Config.DEFAULT.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).withOperandSupplier { b0: OperandBuilder ->
+        UnionMergeRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).withOperandSupplier { b0: OperandBuilder ->
             b0.operand(BodoLogicalUnion::class.java).inputs(
                 OperandTransform { b1: OperandBuilder -> b1.operand(RelNode::class.java).anyInputs() },
                 OperandTransform { b2: OperandBuilder -> b2.operand(RelNode::class.java).anyInputs() },
@@ -534,7 +620,46 @@ object BodoRules {
         }.withDescription("BodoUnionMergeRule").toRule()
 
     @JvmField
-    val CSE_IN_FILTERS_RULE: RelOptRule = InClauseCommonSubexpressionEliminationRule.Config.DEFAULT.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
+    val CSE_IN_FILTERS_RULE: RelOptRule = InClauseCommonSubexpressionEliminationRule.Config.DEFAULT.withRelBuilderFactory(
+        BODO_LOGICAL_BUILDER,
+    ).toRule()
+
+    @JvmField
+    val EXTRACT_PUSHABLE_JOIN_CONDITIONS: RelOptRule = ExtractPushableExpressionsJoin.Config.DEFAULT.withRelBuilderFactory(
+        BODO_LOGICAL_BUILDER,
+    ).withOperandSupplier {
+            b0: OperandBuilder ->
+        b0.operand(BodoLogicalJoin::class.java).anyInputs()
+    }.toRule()
+
+    @JvmField
+    val PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS: RelOptRule = com.bodosql.calcite.application.logicalRules.ProjectFilterTransposePushableExpressionsRule.Config.DEFAULT
+        .withRelBuilderFactory(BODO_LOGICAL_BUILDER).withOperandSupplier {
+                b0: OperandBuilder ->
+            b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
+                b1.operand(
+                    BodoLogicalFilter::class.java,
+                ).anyInputs()
+            }
+        }.toRule()
+
+    @JvmField
+    val PROJECT_SET_OP_TRANSPOSE: RelOptRule = com.bodosql.calcite.application.logicalRules.BodoProjectSetOpTransposeRule.Config.DEFAULT
+        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+        .withOperandSupplier {
+                b0: OperandBuilder ->
+            b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
+                b1.operand(
+                    SetOp::class.java,
+                ).anyInputs()
+            }
+        }.toRule()
+
+    /**
+     * Lock in SnowflakeProjects a top SnowflakeToPandasConverter
+     */
+    @JvmStatic
+    val SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE: RelOptRule = SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()
 
     // RULE GROUPINGS
 
@@ -548,6 +673,31 @@ object BodoRules {
     )
 
     /**
+     * Rules that handle generic projection pushdown. Currently, this just consists
+     * of the available rules in Calcite. All of these rules run during FieldPushdown,
+     * and some run in other locations.
+     */
+    val ProjectionPushdownRules: List<RelOptRule> = listOf(
+        PROJECT_SET_OP_TRANSPOSE,
+        FULL_PROJECT_JOIN_TRANSPOSE_RULE,
+        AGGREGATE_PROJECT_MERGE_RULE,
+        PROJECT_MERGE_RULE,
+        FILTER_MERGE_RULE,
+        PROJECT_REMOVE_RULE,
+    )
+
+    /**
+     * Specialized rules that specifically handles field pushdown.
+     */
+    val FieldPushdownRules: List<RelOptRule> = listOf(
+        EXTRACT_PUSHABLE_JOIN_CONDITIONS,
+        PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS,
+        // rules necessary to lock in pushed projects
+        SNOWFLAKE_PROJECT_LOCK_RULE,
+        SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE,
+    )
+
+    /**
      * These are all the rules that allow for pulling a project closer to the root
      * of the RelTree.
      *
@@ -557,7 +707,10 @@ object BodoRules {
         FILTER_PROJECT_TRANSPOSE_RULE,
         LIMIT_PROJECT_TRANSPOSE_RULE,
         SORT_PROJECT_TRANSPOSE_RULE,
-        JOIN_PROJECT_BOTH_TRANSPOSE_INCLUDE_OUTER,
+        JOIN_PROJECT_LEFT_TRANSPOSE_INCLUDE_OUTER,
+        JOIN_PROJECT_RIGHT_TRANSPOSE_INCLUDE_OUTER,
+        PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
+        PROJECT_REMOVE_RULE,
     )
 
     /**
@@ -672,8 +825,8 @@ object BodoRules {
     /**
      * Rules that use a Project to remove another operator.
      */
-    private val PROJECT_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
-        PROJECT_MERGE_RULE,
+    val PROJECT_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
+        PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
         PROJECT_AGGREGATE_MERGE_RULE,
         PROJECT_REMOVE_RULE,
     )
@@ -716,7 +869,7 @@ object BodoRules {
         LEFT_JOIN_REMOVE_RULE,
         RIGHT_JOIN_REMOVE_RULE,
         // Should be handled by RelFieldTrimmer now. Needs join fully supported.
-        PROJECT_JOIN_TRANSPOSE_RULE,
+        TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
 
     )
 
@@ -740,7 +893,7 @@ object BodoRules {
         FILTER_AGGREGATE_TRANSPOSE_RULE,
         AGGREGATE_JOIN_REMOVE_RULE,
         AGGREGATE_JOIN_TRANSPOSE_RULE,
-        PROJECT_JOIN_TRANSPOSE_RULE,
+        TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
         FILTER_REDUCE_EXPRESSIONS_RULE,
         PROJECT_REDUCE_EXPRESSIONS_RULE,
         JOIN_PUSH_TRANSITIVE_PREDICATES,
