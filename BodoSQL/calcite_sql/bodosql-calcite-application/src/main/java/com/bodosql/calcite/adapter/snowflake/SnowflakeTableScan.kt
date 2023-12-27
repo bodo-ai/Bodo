@@ -11,7 +11,6 @@ import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeField
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
 import org.apache.calcite.util.ImmutableBitSet
 
@@ -25,12 +24,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
     override fun deriveRowType(): RelDataType {
         val fieldList = table.getRowType().fieldList
         val fields: MutableList<RelDataTypeField> = ArrayList()
-        keptColumns.iterator().forEach {
-                i ->
-            val field = fieldList[i]
-            val name = catalogTable.getPreservedColumnName(field.name)
-            fields.add(RelDataTypeFieldImpl(name, field.index, field.type))
-        }
+        keptColumns.iterator().forEach { i -> fields.add(fieldList[i]) }
         return RelRecordType(fields)
     }
 
