@@ -328,6 +328,29 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlBasicFunction TO_TIME =
+      SqlBasicFunction.create(
+          "TO_TIME",
+          BodoReturnTypes.TIME_DEFAULT_PRECISION_NULLABLE,
+          OperandTypes.DATETIME
+              .or(OperandTypes.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER))
+              .or(BodoOperandTypes.VARIANT),
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIME = TO_TIME.withName("TIME");
+
+  public static final SqlFunction TRY_TO_TIME =
+      SqlBasicFunction.create(
+          "TRY_TO_TIME",
+          // What Value should the return type be
+          BodoReturnTypes.TIME_DEFAULT_PRECISION_FORCE_NULLABLE,
+          OperandTypes.DATETIME
+              .or(OperandTypes.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlOperator INFIX_CAST = SqlLibraryOperators.INFIX_CAST;
 
   private List<SqlOperator> functionList =
@@ -344,6 +367,8 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TO_TIMESTAMP_NTZ,
           TO_TIMESTAMP_TZ,
           TO_VARCHAR,
+          TO_TIME,
+          TIME,
           TRY_TO_BINARY,
           TRY_TO_BOOLEAN,
           TRY_TO_DATE,
@@ -352,6 +377,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TRY_TO_TIMESTAMP_LTZ,
           TRY_TO_TIMESTAMP_NTZ,
           TRY_TO_TIMESTAMP_TZ,
+          TRY_TO_TIME,
           TO_VARIANT,
           TO_OBJECT);
 
