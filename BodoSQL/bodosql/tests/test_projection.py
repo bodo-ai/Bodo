@@ -13,7 +13,7 @@ pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.slow
-def test_literal_project(basic_df, spark_info, memory_leak_check):
+def test_literal_project(basic_df, memory_leak_check):
     """test that simply selecting literal values without any associated tables works as intended"""
     # Note we provide basic df because JIT code cannot handle an empty dict.
     query1 = "select 12"
@@ -21,9 +21,10 @@ def test_literal_project(basic_df, spark_info, memory_leak_check):
     check_query(
         query1,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        expected_output=pd.DataFrame({"A": [12]}),
     )
 
     query2 = "select .23 as mycol"
@@ -31,47 +32,59 @@ def test_literal_project(basic_df, spark_info, memory_leak_check):
     check_query(
         query2,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_decimal=["mycol"],
+        expected_output=pd.DataFrame({"MYCOL": [0.23]}),
     )
 
     query3 = "select 'hello'"
     check_query(
         query3,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        expected_output=pd.DataFrame({"A": ["hello"]}),
     )
 
     query4 = "select true"
     check_query(
         query4,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        expected_output=pd.DataFrame({"A": [True]}),
     )
 
     query5 = "Select true, 1, false, 0, 'hello world', 13"
     check_query(
         query5,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        expected_output=pd.DataFrame(
+            {
+                "A": [True],
+                "B": [1],
+                "C": [False],
+                "D": [0],
+                "E": ["hello world"],
+                "F": [13],
+            }
+        ),
     )
 
-    # TODO: "[BE-957] Support Bytes.fromhex"
-    # query6 = "Select X'{b'1313'.hex()}'"
-    # check_query(
-    #     query6,
-    #     basic_df,
-    #     spark_info,
-    #     check_dtype=False,
-    #     check_names=False,
-    # )
+    query6 = "Select X'1313'"
+    check_query(
+        query6,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({"A": [b"1313"]}),
+    )
 
 
 def test_project_numeric(bodosql_numeric_types, spark_info, memory_leak_check):

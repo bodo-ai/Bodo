@@ -475,11 +475,11 @@ def test_qualify_tz_aware(memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": df["A"],
-            "x": x_list,
+            "X": x_list,
         }
     )
     # Now apply the qualify filter
-    filter = py_output["x"] > py_output["A"]
+    filter = py_output["X"] > py_output["A"]
     py_output = py_output[filter]
     check_query(
         query,

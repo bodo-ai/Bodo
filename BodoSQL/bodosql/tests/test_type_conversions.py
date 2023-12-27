@@ -100,9 +100,7 @@ def test_varchar_to_numeric_cast(
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
-def test_numeric_to_varchar_nullable(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Checks that casting strings to numeric values behaves as expected
     """
@@ -112,15 +110,15 @@ def test_numeric_to_varchar_nullable(
     FROM
         table1
     """
-    spark_query = f"""
-    SELECT
-        CAST(A AS STRING) as col
-    FROM
-        table1
-    """
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
+        expected_output=pd.DataFrame(
+            {
+                "COL": bodosql_nullable_numeric_types["table1"]["A"].map(
+                    lambda x: None if pd.isna(x) else str(x)
+                )
+            }
+        ),
     )

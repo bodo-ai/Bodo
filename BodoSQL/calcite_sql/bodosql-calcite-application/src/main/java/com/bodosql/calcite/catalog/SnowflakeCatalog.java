@@ -438,9 +438,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // TODO: Can we leverage additional type information (e.g. max string size).
         String writeName = tableInfo.getString(1);
         String readName = writeName;
-        if (readName.equals(readName.toUpperCase())) {
-          readName = readName.toLowerCase();
-        }
         String dataType = tableInfo.getString(2);
         // Parse the given type for the column type and precision information.
         SnowflakeTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType);

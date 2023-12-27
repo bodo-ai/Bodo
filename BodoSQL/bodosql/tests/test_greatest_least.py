@@ -187,7 +187,7 @@ def test_greatest_binary_columns(
 
     expected_output = pd.DataFrame(
         {
-            "out_col": df.apply(
+            "OUT_COL": df.apply(
                 greatest_least_output_func, axis=1, args=(greatest_or_least,)
             )
         }
@@ -210,7 +210,7 @@ def test_greatest_bool_columns(
     df = bodosql_boolean_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "out_col": df.apply(
+            "OUT_COL": df.apply(
                 greatest_least_output_func, axis=1, args=(greatest_or_least,)
             )
         }
@@ -244,7 +244,7 @@ def test_greatest_date_columns(
     df = bodosql_date_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "out_col": df.apply(
+            "OUT_COL": df.apply(
                 greatest_least_output_func, axis=1, args=(greatest_or_least,)
             )
         }
@@ -284,7 +284,7 @@ def test_greatest_timestamp_columns(
     df = bodosql_datetime_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "out_col": df.apply(
+            "OUT_COL": df.apply(
                 greatest_least_output_func, axis=1, args=(greatest_or_least,)
             )
         }
@@ -322,7 +322,7 @@ def test_greatest_tz_aware_columns(
         S = df.max(axis=1)
     else:
         S = df.min(axis=1)
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query, ctx, None, expected_output=py_output)
 
 
@@ -348,7 +348,7 @@ def test_least_datetime_strings(memory_leak_check):
         .min(axis=1, skipna=False)
         .map(lambda s: pd.NA if pd.isna(s) else str(s))
     )
-    py_output = pd.DataFrame({"output": S})
+    py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query, ctx, None, expected_output=py_output)
 
 
@@ -362,7 +362,7 @@ def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
     ctx = {"table1": df}
 
     query = f"SELECT {greatest_or_least}(A) as output FROM table1"
-    py_output = pd.DataFrame({"output": df.A})
+    py_output = pd.DataFrame({"OUTPUT": df.A})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -403,7 +403,7 @@ def test_greatest_time_columns(
     df = bodosql_time_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "out_col": df.apply(
+            "OUT_COL": df.apply(
                 greatest_least_output_func, axis=1, args=(greatest_or_least,)
             )
         }

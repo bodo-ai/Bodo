@@ -2143,6 +2143,7 @@ def create_table_handle_exists(
     sf_schema,
     if_exists: str,
     table_type: str,
+    always_escape_col_names=False,
 ):  # pragma: no cover
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
@@ -2158,6 +2159,8 @@ def create_table_handle_exists(
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
         table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
+        always_escape_col_names: True if we are in BodoSQL table write, which allows always escaping
+            column names since BodoSQL handles casing.
 
     """
     ev = tracing.Event("create_table_if_not_exists", is_parallel=False)
@@ -2202,12 +2205,10 @@ def create_table_handle_exists(
 
     # Wrap column names in quotes if they don't match Snowflake's unquoted identifier
     # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
-    # This is a workaround since BodoSQL doesn't follow Snowflake identifier rules yet.
-    # Otherwise, we should always escape assuming BodoSQL has made unquoted identifiers
-    # uppercase. See [BSE-2331].
+    # BodoSQL matches Snowflake rules so we can always escape column names.
     create_table_col_lst = []
     for col_name, typ in sf_schema.items():
-        if not matches_unquoted_id_rules(col_name):
+        if always_escape_col_names or not matches_unquoted_id_rules(col_name):
             col_name = escape_col_name(col_name)
         create_table_col_lst.append(f"{col_name} {typ}")
     create_table_columns = ", ".join(create_table_col_lst)
@@ -2225,7 +2226,7 @@ def gen_flatten_sql(
     cursor: "SnowflakeCursor",
     sf_schema: dict,
     column_datatypes: dict,
-    columns: list,
+    columns: str,
     flatten_table: str,
     location: str,
 ):  # pragma: no cover
@@ -2236,7 +2237,7 @@ def gen_flatten_sql(
     cursor: Snowflake connection cursor
     sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
     column_datatypes (dict): key: dataframe column names, value: dataframe column bodo datatypes
-    columns (list): list of column names
+    columns (str): comma-separated column names
     flatten_table (optional(string)): Optionally, specify an existing table to use for flattening
     location (string): desired final location of the data
     """
@@ -2278,6 +2279,7 @@ def gen_flatten_sql(
             temp_schema,
             "fail",  # This table should never exist
             "TEMPORARY",  # Only persist for this session
+            always_escape_col_names=True,
         )
 
     # Create a subquery to flatten each required column
@@ -2320,7 +2322,7 @@ def gen_flatten_sql(
         (
             f"INSERT INTO {location} ({columns}) "
             f"WITH table_with_rn as"
-            f"  (SELECT ROW_NUMBER() OVER (ORDER BY {columns[0]}) rn, * FROM {flatten_table})"
+            f"  (SELECT ROW_NUMBER() OVER (ORDER BY {columns.split(',')[0]}) rn, * FROM {flatten_table})"
             f"SELECT {','.join(column_get)} FROM {subqueries_joined}"
         )
         if needs_flatten
@@ -2338,6 +2340,7 @@ def execute_copy_into(
     synchronous=True,
     stage_dir=None,
     flatten_table="",
+    always_escape_col_names=False,
 ):  # pragma: no cover
     """Execute a COPY_INTO command from all files in stage to a table location.
     Note: This is intended to be called only from Rank 0.
@@ -2351,6 +2354,8 @@ def execute_copy_into(
         stage_dir (str or None): Optionally, specify a directory within internal stage
         synchronous (bool): Whether to execute a synchronous COPY INTO command
         flatten_table (optional(string)): Optionally, specify an existing table to use for flattening
+        always_escape_col_names (bool): True if we are in BodoSQL table write, which allows always escaping
+            column names since BodoSQL handles casing.
 
     Returns: If synchronous, returns (nsuccess, nchunks, nrows, output) as
         described in `decode_copy_into`. If async, returns COPY INTO Snowflake
@@ -2362,11 +2367,9 @@ def execute_copy_into(
     cols_list = []
     # Wrap column names in quotes if they don't match Snowflake's unquoted identifier
     # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
-    # This is a workaround since BodoSQL doesn't follow Snowflake identifier rules yet.
-    # Otherwise, we should always escape assuming BodoSQL has made unquoted identifiers
-    # uppercase. See [BSE-2331].
+    # BodoSQL matches Snowflake rules so we can always escape column names.
     for col_name in sf_schema.keys():
-        if not matches_unquoted_id_rules(col_name):
+        if always_escape_col_names or not matches_unquoted_id_rules(col_name):
             col_name = escape_col_name(col_name)
         cols_list.append(f"{col_name}")
     columns = ",".join(cols_list)

@@ -14,13 +14,21 @@ from bodosql.tests.named_params_common import int_named_params  # noqa
 from bodosql.tests.utils import check_query
 
 
-def test_limit_unsigned(basic_df, spark_info, int_named_params, memory_leak_check):
+def test_limit_unsigned(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside a limit clause.
     """
     query = "select a from table1 limit @a"
-    check_query(query, basic_df, spark_info, named_params=int_named_params)
+    check_query(
+        query,
+        basic_df,
+        None,
+        named_params=int_named_params,
+        expected_output=pd.DataFrame(
+            {"A": basic_df["table1"].A.head(int_named_params["a"])}
+        ),
+    )
 
 
 def test_limit_offset(basic_df, spark_info, int_named_params, memory_leak_check):
@@ -74,7 +82,7 @@ def test_limit_named_param_constant(basic_df, spark_info, memory_leak_check):
         return bc.sql("select a from table1 limit @a", {"a": 10})
 
     df = basic_df["table1"]
-    py_output = pd.DataFrame({"a": df.A.head(10)})
+    py_output = pd.DataFrame({"A": df.A.head(10)})
     if bodo.get_rank() == 0:
         # The warning is only produced on rank 0
         warning_prefix = re.escape(

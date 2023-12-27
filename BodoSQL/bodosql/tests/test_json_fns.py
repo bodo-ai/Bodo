@@ -714,20 +714,20 @@ def test_to_object(query, answer, memory_leak_check):
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) FROM (SELECT I as col_1, I_N as COL_2, S as cOl_3, S_N as Col_4 FROM table1)",
             pd.Series(
                 [
-                    {"col_1": 1, "COL_2": 1, "cOl_3": "A", "Col_4": "Alpha"},
-                    {"col_1": 2, "COL_2": None, "cOl_3": "BC", "Col_4": None},
-                    {"col_1": 4, "COL_2": 16, "cOl_3": "DEF", "Col_4": "Beta"},
-                    {"col_1": 8, "COL_2": None, "cOl_3": "GHIJ", "Col_4": None},
-                    {"col_1": 16, "COL_2": 256, "cOl_3": "KLMNO", "Col_4": "Gamma"},
+                    {"COL_1": 1, "COL_2": 1, "COL_3": "A", "COL_4": "Alpha"},
+                    {"COL_1": 2, "COL_2": None, "COL_3": "BC", "COL_4": None},
+                    {"COL_1": 4, "COL_2": 16, "COL_3": "DEF", "COL_4": "Beta"},
+                    {"COL_1": 8, "COL_2": None, "COL_3": "GHIJ", "COL_4": None},
+                    {"COL_1": 16, "COL_2": 256, "COL_3": "KLMNO", "COL_4": "Gamma"},
                 ]
                 * 3,
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("col_1", pa.int32()),
+                            pa.field("COL_1", pa.int32()),
                             pa.field("COL_2", pa.int32()),
-                            pa.field("cOl_3", pa.string()),
-                            pa.field("Col_4", pa.string()),
+                            pa.field("COL_3", pa.string()),
+                            pa.field("COL_4", pa.string()),
                         ]
                     )
                 ),

@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
+import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlCall
@@ -222,6 +223,11 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         val DEFAULT_CONTEXT: Context = org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT
             .withLiteralQuoteString("$$")
             .withLiteralEscapedQuoteString("\\$\\$")
+            // TODO: Switch to True
+            // https://bodo.atlassian.net/browse/BSE-2348
+            .withCaseSensitive(false)
+            .withQuotedCasing(Casing.UNCHANGED)
+            .withUnquotedCasing(Casing.TO_UPPER)
 
         @JvmField
         val DEFAULT = BodoSnowflakeSqlDialect(DEFAULT_CONTEXT)

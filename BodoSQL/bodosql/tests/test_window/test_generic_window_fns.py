@@ -437,7 +437,7 @@ def test_all_null():
     )
     answer = pd.DataFrame(
         {
-            "idx": list(range(10)),
+            "IDX": list(range(10)),
             "RN": list(range(1, 11)),
             "R": [1] * 10,
             "DR": [1] * 10,

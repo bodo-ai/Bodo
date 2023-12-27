@@ -11,8 +11,8 @@ def test_basic_pivot(basic_df, spark_info, memory_leak_check):
     query = """
     SELECT * FROM table1
     PIVOT (
-        SUM(A) AS sum_a, AVG(C) AS avg_c
-        FOR A IN (1 as single, 3 as triple)
+        SUM(A) AS SUM_A, AVG(C) AS AVG_C
+        FOR A IN (1 as SINGLE, 3 as TRIPLE)
     )
     """
     check_query(query, basic_df, spark_info, check_dtype=False)
@@ -27,8 +27,8 @@ def test_multicol_pivot(basic_df, spark_info, memory_leak_check):
     query = """
     SELECT * FROM table1
     PIVOT (
-        SUM(A) AS sum_a, AVG(C) AS avg_c
-        FOR (A, B) IN ((1, 4) as col1, (2, 5) as col2)
+        SUM(A) AS SUM_A, AVG(C) AS AVG_C
+        FOR (A, B) IN ((1, 4) as COL1, (2, 5) as COL2)
     )
     """
     check_query(
@@ -44,8 +44,8 @@ def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
     query = """
     SELECT * FROM table1
     PIVOT (
-        SUM(A) AS sum_a, AVG(C) AS avg_c
-        FOR A IN (1 as single, 7 as triple)
+        SUM(A) AS SUM_A, AVG(C) AS AVG_C
+        FOR A IN (1 as SINGLE, 7 as TRIPLE)
     )
     """
     # set check_dtype=False because of int64 vs Int64 difference
@@ -60,8 +60,8 @@ def test_multicol_null_pivot(basic_df, spark_info, memory_leak_check):
     query = """
     SELECT * FROM table1
     PIVOT (
-        SUM(A) AS sum_a, AVG(C) AS avg_c
-        FOR (A, B) IN ((1, 4) as col1, (2, 15) as col2)
+        SUM(A) AS SUM_A, AVG(C) AS AVG_C
+        FOR (A, B) IN ((1, 4) as COL1, (2, 15) as COL2)
     )
     """
     # set check_dtype=False because of int64 vs Int64 difference
@@ -117,10 +117,10 @@ def test_tz_aware_pivot(memory_leak_check):
     mike_max = mike_series.max()
     py_output = pd.DataFrame(
         {
-            "john_max_val": john_max,
-            "john_count_val": john_count,
-            "mike_max_val": mike_max,
-            "mike_count_val": mike_count,
+            "JOHN_MAX_VAL": john_max,
+            "JOHN_COUNT_VAL": john_count,
+            "MIKE_MAX_VAL": mike_max,
+            "MIKE_COUNT_VAL": mike_count,
         },
         index=pd.RangeIndex(0, 1, 1),
     )

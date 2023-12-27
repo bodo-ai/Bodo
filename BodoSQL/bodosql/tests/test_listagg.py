@@ -28,12 +28,12 @@ FROM table1\n"""
 
     expected = pd.DataFrame(
         {
-            "agg_output_col1": ["aaaaaaœœœœœœeeeeee"],
-            "agg_output_col2": ["į,į,į,į,į,į,ë,ë,ë,ë,ë,ë,₠,₠,₠,₠,₠,₠"],
-            "agg_output_col3": ["a*a*a*a*a*a*œ*œ*œ*œ*œ*œ*e*e*e*e*e*e"],
-            "agg_output_col4": ["B, B, B, D, D, D, F, F, F, A, C, E, A, C, E, A, C, E"],
-            "agg_output_col5": ["FFFDDDBBBAAACCCEEE"],
-            "agg_output_col6": ["BBBDDDFFFAAACCCEEE"],
+            "AGG_OUTPUT_COL1": ["aaaaaaœœœœœœeeeeee"],
+            "AGG_OUTPUT_COL2": ["į,į,į,į,į,į,ë,ë,ë,ë,ë,ë,₠,₠,₠,₠,₠,₠"],
+            "AGG_OUTPUT_COL3": ["a*a*a*a*a*a*œ*œ*œ*œ*œ*œ*e*e*e*e*e*e"],
+            "AGG_OUTPUT_COL4": ["B, B, B, D, D, D, F, F, F, A, C, E, A, C, E, A, C, E"],
+            "AGG_OUTPUT_COL5": ["FFFDDDBBBAAACCCEEE"],
+            "AGG_OUTPUT_COL6": ["BBBDDDFFFAAACCCEEE"],
         }
     )
 
@@ -135,23 +135,23 @@ GROUP BY key_col"""
         # Slightly different expected in having case
         expected = pd.DataFrame(
             {
-                "agg_output_col1": ["aaaaaa", "eeeeee"],
-                "agg_output_col2": ["į,į,į,į,į,į", "₠,₠,₠,₠,₠,₠"],
-                "agg_output_col3": ["a*a*a*a*a*a", "e*e*e*e*e*e"],
-                "agg_output_col4": ["B, D, F, A, C, E"] * 2,
-                "agg_output_col5": ["FDBACE"] * 2,
-                "agg_output_col6": ["BDFACE"] * 2,
+                "AGG_OUTPUT_COL1": ["aaaaaa", "eeeeee"],
+                "AGG_OUTPUT_COL2": ["į,į,į,į,į,į", "₠,₠,₠,₠,₠,₠"],
+                "AGG_OUTPUT_COL3": ["a*a*a*a*a*a", "e*e*e*e*e*e"],
+                "AGG_OUTPUT_COL4": ["B, D, F, A, C, E"] * 2,
+                "AGG_OUTPUT_COL5": ["FDBACE"] * 2,
+                "AGG_OUTPUT_COL6": ["BDFACE"] * 2,
             }
         )
     else:
         expected = pd.DataFrame(
             {
-                "agg_output_col1": ["aaaaaa", "œœœœœœ", "eeeeee"],
-                "agg_output_col2": ["į,į,į,į,į,į", "ë,ë,ë,ë,ë,ë", "₠,₠,₠,₠,₠,₠"],
-                "agg_output_col3": ["a*a*a*a*a*a", "œ*œ*œ*œ*œ*œ", "e*e*e*e*e*e"],
-                "agg_output_col4": ["B, D, F, A, C, E"] * 3,
-                "agg_output_col5": ["FDBACE"] * 3,
-                "agg_output_col6": ["BDFACE"] * 3,
+                "AGG_OUTPUT_COL1": ["aaaaaa", "œœœœœœ", "eeeeee"],
+                "AGG_OUTPUT_COL2": ["į,į,į,į,į,į", "ë,ë,ë,ë,ë,ë", "₠,₠,₠,₠,₠,₠"],
+                "AGG_OUTPUT_COL3": ["a*a*a*a*a*a", "œ*œ*œ*œ*œ*œ", "e*e*e*e*e*e"],
+                "AGG_OUTPUT_COL4": ["B, D, F, A, C, E"] * 3,
+                "AGG_OUTPUT_COL5": ["FDBACE"] * 3,
+                "AGG_OUTPUT_COL6": ["BDFACE"] * 3,
             }
         )
 

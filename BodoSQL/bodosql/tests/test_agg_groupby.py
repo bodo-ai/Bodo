@@ -409,7 +409,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         .max()
         .to_frame()
         .reset_index(drop=True)
-        .rename(columns={"B": "output"}),
+        .rename(columns={"B": "OUTPUT"}),
     )
 
 
@@ -554,20 +554,6 @@ def test_repeat_columns(basic_df, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
-
-
-@pytest.mark.slow
-def test_no_rename(basic_df, spark_info, memory_leak_check):
-    """
-    Tests that a columns with legal Python identifiers aren't renamed
-    in simple queries (no intermediate names).
-    """
-    query = "Select sum(A) as col1, max(A) as col2 from table1 group by B"
-    result = check_query(
-        query, basic_df, spark_info, check_dtype=False, return_codegen=True
-    )
-    pandas_code = result["pandas_code"]
-    assert "rename" not in pandas_code
 
 
 @pytest.fixture
@@ -1172,7 +1158,7 @@ def test_boolor_agg_output_type(memory_leak_check):
     }
     expected_output = pd.DataFrame(
         {
-            "totals": pd.Series([2], dtype="Int64"),
+            "TOTALS": pd.Series([2], dtype="Int64"),
         }
     )
     check_query(
@@ -1197,7 +1183,7 @@ def test_max_min_tz_aware(memory_leak_check):
     df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
     ctx = {"table1": df}
     py_output = pd.DataFrame(
-        {"output1": df.groupby("id").max()["A"], "output2": df.groupby("id").min()["A"]}
+        {"OUTPUT1": df.groupby("id").max()["A"], "OUTPUT2": df.groupby("id").min()["A"]}
     )
     query = "Select max(A) as output1, min(A) as output2 from table1 group by id"
     check_query(
@@ -1220,7 +1206,7 @@ def test_count_tz_aware(memory_leak_check):
     df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
     ctx = {"table1": df}
     py_output = pd.DataFrame(
-        {"output1": df.groupby("id").count()["A"], "output2": df.groupby("id").size()}
+        {"OUTPUT1": df.groupby("id").count()["A"], "OUTPUT2": df.groupby("id").size()}
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1 group by id"
     check_query(
@@ -1252,7 +1238,7 @@ def test_any_value_tz_aware(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"output1": df.groupby("id").head(1)["A"]})
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("id").head(1)["A"]})
     query = "Select ANY_VALUE(A) as output1 from table1 group by id"
     check_query(
         query,
@@ -1281,7 +1267,7 @@ def test_tz_aware_key(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({"output1": df.groupby("A").sum()["val"]})
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("A").sum()["val"]})
     query = "Select SUM(val) as output1 from table1 group by A"
     check_query(
         query,
@@ -1330,9 +1316,9 @@ def test_tz_aware_having(memory_leak_check):
 
     py_output = df.groupby("C", as_index=False).apply(groupby_func)
     # Rename the columns
-    py_output.columns = ["C", "output1"]
+    py_output.columns = ["C", "OUTPUT1"]
     # Remove the rows having would remove
-    py_output = py_output[py_output.output1.notna()]
+    py_output = py_output[py_output.OUTPUT1.notna()]
     query = "Select C, MIN(A) as output1 from table1 group by C HAVING max(A) > min(B)"
     check_query(
         query,
@@ -1357,14 +1343,14 @@ def test_all_nulls_1(memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": [1, 2, 3, 4, 5],
-            "out1": pd.Series([1, None, None, None, None], dtype="Int64"),
-            "out2": pd.Series([1, None, None, None, None], dtype="Int64"),
-            "out3": pd.Series([1, None, None, None, None], dtype="Int64"),
-            "out4": pd.Series([1, 0, 0, 0, 0], dtype="int64"),
-            "out5": pd.Series([1.0, None, None, None, None], dtype="Float64"),
-            "out6": pd.Series([None, None, None, None, None], dtype="Float64"),
-            "out7": pd.Series([None, None, None, None, None], dtype="Float64"),
-            "out8": pd.Series([False, None, None, None, None], dtype="boolean"),
+            "OUT1": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "OUT2": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "OUT3": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "OUT4": pd.Series([1, 0, 0, 0, 0], dtype="int64"),
+            "OUT5": pd.Series([1.0, None, None, None, None], dtype="Float64"),
+            "OUT6": pd.Series([None, None, None, None, None], dtype="Float64"),
+            "OUT7": pd.Series([None, None, None, None, None], dtype="Float64"),
+            "OUT8": pd.Series([False, None, None, None, None], dtype="boolean"),
         }
     )
     ctx = {"table1": df}

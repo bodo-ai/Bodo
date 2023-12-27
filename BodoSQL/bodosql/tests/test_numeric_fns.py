@@ -961,7 +961,7 @@ def test_to_number_optional(fn_name):
     df = pd.DataFrame({"A": [str(i) for i in (1, 22, 3, 99, 44, 5, 0)]})
     expected_output = pd.DataFrame(
         {
-            "origin_zip_type": [
+            "ORIGIN_ZIP_TYPE": [
                 "USA",
                 "international",
                 "USA",
@@ -998,7 +998,7 @@ def test_to_number_optional_invalid_str(fn_name):
     df = pd.DataFrame({"A": [str(i) for i in (1, "$$", 3, 99, 44, 5, "-4#")]})
     expected_output = pd.DataFrame(
         {
-            "origin_zip_type": [
+            "ORIGIN_ZIP_TYPE": [
                 "USA",
                 "international",
                 "USA",

@@ -380,9 +380,9 @@ def test_date_arithmetic(bodosql_date_types, memory_leak_check):
     table1 = bodosql_date_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "col1": table1.A + pd.Timedelta(days=7),
-            "col2": table1.B - pd.Timedelta(days=2),
-            "col3": pd.Timedelta(days=1) + table1.C,
+            "COL1": table1.A + pd.Timedelta(days=7),
+            "COL2": table1.B - pd.Timedelta(days=2),
+            "COL3": pd.Timedelta(days=1) + table1.C,
         }
     )
     check_query(
@@ -407,13 +407,13 @@ def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
     table1 = bodosql_date_types["table1"]
     S1 = table1.A + pd.Timedelta(days=7)
     S2 = table1.B - pd.Timedelta(days=2)
-    expected_output = pd.DataFrame({"col1": S1})
+    expected_output = pd.DataFrame({"COL1": S1})
     # Replace S1 with S2 when not A > B
     filter1 = ~(table1.A > table1.B)
-    expected_output["col1"][filter1] = S2
+    expected_output["COL1"][filter1] = S2
     # Insert null for the else condition
     filter2 = filter1 & ~(table1.B > table1.C)
-    expected_output["col1"][filter2] = None
+    expected_output["COL1"][filter2] = None
     check_query(
         query,
         bodosql_date_types,
@@ -431,7 +431,7 @@ def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
     table1 = bodosql_date_types["table1"]
     expected_output = pd.DataFrame(
         {
-            "col1": (table1.A - table1.B).map(
+            "COL1": (table1.A - table1.B).map(
                 lambda a: pd.NA if pd.isna(a) else a.days
             ),
         }
@@ -453,10 +453,10 @@ def test_subtraction_between_dates_case(bodosql_date_types, memory_leak_check):
     table1 = bodosql_date_types["table1"]
     S1 = (table1.A - table1.B).map(lambda a: pd.NA if pd.isna(a) else a.days)
     S2 = (table1.B - table1.A).map(lambda a: pd.NA if pd.isna(a) else a.days)
-    expected_output = pd.DataFrame({"col1": S1})
+    expected_output = pd.DataFrame({"COL1": S1})
     # Replace S1 with S2 when not A > B
     filter1 = ~(table1.A > table1.B)
-    expected_output["col1"][filter1] = S2
+    expected_output["COL1"][filter1] = S2
     check_query(
         query,
         bodosql_date_types,

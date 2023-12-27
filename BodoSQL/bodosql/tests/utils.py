@@ -1454,9 +1454,7 @@ def get_pyspark_literal(value, use_interval):
         # Generate an interval string in Spark with only years and months
         return f"INTERVAL {getattr(value, 'years', 0)} YEARS {getattr(value, 'months', 0)} MONTHS"
     else:
-        raise ValueError(
-            "Named Parameter converstion to Pyspark Literal not supported."
-        )
+        raise ValueError("Named Parameter conversion to Pyspark Literal not supported.")
 
 
 def shrink_data(ctx, n, keys_to_shrink=None, keys_to_not_shrink=None):

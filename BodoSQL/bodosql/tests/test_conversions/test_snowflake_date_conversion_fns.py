@@ -129,7 +129,7 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     )
     ctx = {"table1": df}
     query = f"SELECT {test_fn}(timestamps) as dates from table1"
-    expected_output = pd.DataFrame({"dates": df["timestamps"].dt.date})
+    expected_output = pd.DataFrame({"DATES": df["timestamps"].dt.date})
 
     check_query(
         query,
@@ -140,7 +140,7 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
 
 
 def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
-    """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statment"""
+    """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statement"""
     df = pd.DataFrame(
         {
             "timestamps": pd.date_range(
@@ -155,7 +155,7 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     )
     to_date_series = df["timestamps"].dt.normalize().apply(lambda t: t.date())
     to_date_series[~df.B] = None
-    expected_output = pd.DataFrame({"timestamps": to_date_series})
+    expected_output = pd.DataFrame({"TIMESTAMPS": to_date_series})
 
     check_query(
         query,
@@ -198,7 +198,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     valid_answers = valid_datetimes.dt.date
     invalid_answers = pd.Series([None] * len(invalid_str_datetimes))
     expected_output = pd.DataFrame(
-        {"dates": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
+        {"DATES": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
     )
 
     ctx = {"table1": df}
