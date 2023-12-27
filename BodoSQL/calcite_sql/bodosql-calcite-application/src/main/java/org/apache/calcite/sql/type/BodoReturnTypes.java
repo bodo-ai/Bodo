@@ -26,6 +26,7 @@ import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getComponentTypeOrThrow;
 import static org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE;
+import static org.apache.calcite.sql.type.ReturnTypes.explicit;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
@@ -227,7 +228,7 @@ public class BodoReturnTypes {
     /**
      * Type-inference strategy for returning a VARCHAR with precision 1
      */
-    public static final SqlReturnTypeInference VARCHAR_1 = ReturnTypes.explicit(SqlTypeName.VARCHAR, 1);
+    public static final SqlReturnTypeInference VARCHAR_1 = explicit(SqlTypeName.VARCHAR, 1);
 
     /**
      * Type-inference strategy for returning a VARCHAR with precision 1
@@ -238,7 +239,7 @@ public class BodoReturnTypes {
     /**
      * Type-inference strategy for returning a VARCHAR with precision 3
      */
-    public static final SqlReturnTypeInference VARCHAR_3 = ReturnTypes.explicit(SqlTypeName.VARCHAR, 3);
+    public static final SqlReturnTypeInference VARCHAR_3 = explicit(SqlTypeName.VARCHAR, 3);
 
     /**
      * Type-inference strategy for returning a VARCHAR with precision 3
@@ -249,7 +250,7 @@ public class BodoReturnTypes {
     /**
      * Type-inference strategy for returning a VARCHAR with precision 32
      */
-    public static final SqlReturnTypeInference VARCHAR_32 = ReturnTypes.explicit(SqlTypeName.VARCHAR, 32);
+    public static final SqlReturnTypeInference VARCHAR_32 = explicit(SqlTypeName.VARCHAR, 32);
 
     /**
      * Type-inference strategy for returning a VARCHAR with precision 32
@@ -260,7 +261,7 @@ public class BodoReturnTypes {
     /**
      * Type-inference strategy for returning a VARCHAR with precision 128
      */
-    public static final SqlReturnTypeInference VARCHAR_128 = ReturnTypes.explicit(SqlTypeName.VARCHAR, 128);
+    public static final SqlReturnTypeInference VARCHAR_128 = explicit(SqlTypeName.VARCHAR, 128);
 
     /**
      * Type-inference strategy for returning a VARCHAR with precision 128
@@ -271,7 +272,7 @@ public class BodoReturnTypes {
     /**
      * Type-inference strategy for returning a VARCHAR with an unknown precision
      */
-    public static final SqlReturnTypeInference VARCHAR_UNKNOWN_PRECISION = ReturnTypes.explicit(SqlTypeName.VARCHAR, RelDataType.PRECISION_NOT_SPECIFIED);
+    public static final SqlReturnTypeInference VARCHAR_UNKNOWN_PRECISION = explicit(SqlTypeName.VARCHAR, RelDataType.PRECISION_NOT_SPECIFIED);
 
     /**
      * Type-inference strategy whereby the output type is a VARCHAR with an unknown
@@ -582,13 +583,13 @@ public class BodoReturnTypes {
      */
     public static final SqlReturnTypeInference ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(TO_UNDEFINED_PRECISION);
 
-    public static final SqlReturnTypeInference SMALLINT = ReturnTypes.explicit(SqlTypeName.SMALLINT);
+    public static final SqlReturnTypeInference SMALLINT = explicit(SqlTypeName.SMALLINT);
 
     public static final SqlReturnTypeInference SMALLINT_NULLABLE = SMALLINT.andThen(SqlTypeTransforms.TO_NULLABLE);
 
-    public static final SqlReturnTypeInference VARBINARY_NULLABLE = ReturnTypes.explicit(SqlTypeName.VARBINARY, RelDataType.PRECISION_NOT_SPECIFIED).andThen(SqlTypeTransforms.TO_NULLABLE);
+    public static final SqlReturnTypeInference VARBINARY_NULLABLE = explicit(SqlTypeName.VARBINARY, RelDataType.PRECISION_NOT_SPECIFIED).andThen(SqlTypeTransforms.TO_NULLABLE);
 
-    public static final SqlReturnTypeInference VARBINARY_FORCE_NULLABLE= ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.FORCE_NULLABLE);
+    public static final SqlReturnTypeInference VARBINARY_FORCE_NULLABLE= explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     public static final SqlReturnTypeInference VARBINARY_NULLABLE_UNKNOWN_PRECISION = VARBINARY_NULLABLE.andThen(TO_UNDEFINED_PRECISION);
 
@@ -603,7 +604,11 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference INTEGER_FORCE_NULLABLE = ReturnTypes.INTEGER.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
-    public static final SqlReturnTypeInference TIME_FORCE_NULLABLE = ReturnTypes.TIME.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+    public static final SqlReturnTypeInference TIME_DEFAULT_PRECISION = explicit(SqlTypeName.TIME, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
+
+    public static final SqlReturnTypeInference TIME_DEFAULT_PRECISION_NULLABLE = TIME_DEFAULT_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    public static final SqlReturnTypeInference TIME_DEFAULT_PRECISION_FORCE_NULLABLE = TIME_DEFAULT_PRECISION.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
 
     public static final SqlReturnTypeInference TO_NULLABLE_VARYING_ARRAY = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(SqlTypeTransforms.TO_ARRAY);

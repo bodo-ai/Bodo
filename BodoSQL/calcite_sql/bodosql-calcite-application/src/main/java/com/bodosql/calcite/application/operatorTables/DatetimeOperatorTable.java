@@ -23,7 +23,6 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlDatePartFunction;
-import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -194,34 +193,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
-
-  public static final SqlBasicFunction TO_TIME =
-      SqlBasicFunction.create(
-          "TO_TIME",
-          ReturnTypes.TIME_NULLABLE,
-          OperandTypes.DATETIME
-              .or(OperandTypes.CHARACTER)
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER))
-              .or(BodoOperandTypes.VARIANT),
-          SqlFunctionCategory.TIMEDATE);
-
-  public static final SqlFunction TIME = TO_TIME.withName("TIME");
-
-  public static final SqlFunction TRY_TO_TIME =
-      SqlBasicFunction.create(
-          "TRY_TO_TIME",
-          // What Value should the return type be
-          BodoReturnTypes.TIME_FORCE_NULLABLE,
-          OperandTypes.DATETIME
-              .or(OperandTypes.CHARACTER)
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
-
   public static final SqlBasicFunction TIMEFROMPARTS =
       SqlBasicFunction.create(
           "TIMEFROMPARTS",
-          ReturnTypes.TIME_NULLABLE,
+          BodoReturnTypes.TIME_DEFAULT_PRECISION_NULLABLE,
           argumentRange(
               3,
               SqlTypeFamily.NUMERIC,
@@ -790,12 +765,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SUBDATE,
           YEARWEEK,
           WEEKDAY,
-          TO_TIME,
-          TRY_TO_TIME,
           TIMEFROMPARTS,
           TIME_FROM_PARTS,
           TIME_SLICE,
-          TIME,
           TIMEADD,
           TRUNC,
           DATE_TRUNC,
