@@ -669,12 +669,42 @@ public class RexToLixTranslator implements RexVisitor<RexToLixTranslator.Result>
     }
   }
 
+  public static int snowflakeStringToDate(String s) {
+    if (s.contains("-")) {
+      // Default Calcite path
+      return DateTimeUtils.dateStringToUnixDate(s);
+    } else {
+      // Integer path matching Snowflake. These are offsets
+      // from UTC time.
+      // https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes
+      long value = Long.valueOf(s);
+      final long additionalDivisor;
+      if (value < 31536000000L) {
+        // Treat as seconds
+        additionalDivisor = 1;
+      } else if (value < 31536000000000L) {
+        // Treat as milliseconds
+        additionalDivisor = 1000;
+      } else if (value < 31536000000000000L) {
+        // treat as microseconds
+        additionalDivisor = 1000 * 1000;
+      } else {
+        // treat as nanoseconds
+        additionalDivisor = 1000 * 1000 * 1000;
+      }
+      // Use two division steps to avoid overflow issues.
+      return Math.toIntExact(Math.floorDiv(Math.floorDiv(value, additionalDivisor), 60 * 60 * 24));
+    }
+  }
+
   private Expression translateCastToDate(RelDataType sourceType,
       Expression operand, Supplier<Expression> defaultExpression) {
     switch (sourceType.getSqlTypeName()) {
     case CHAR:
     case VARCHAR:
-      return Expressions.call(BuiltInMethod.STRING_TO_DATE.method, operand);
+      // Bodo Change: Snowflake simplifies date literals that are string integers as an offset from UTC
+      Method converter = Types.lookupMethod(RexToLixTranslator.class, "snowflakeStringToDate", String.class);
+      return Expressions.call(converter, operand);
 
     case TIMESTAMP:
       return Expressions.convert_(
