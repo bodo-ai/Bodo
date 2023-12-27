@@ -1105,7 +1105,10 @@ def pd_to_datetime_error_checked(
         if pd.isna(tmp):
             success_flag = False
         else:
-            ret_val = tmp
+            if tmp.tz is not None:
+                ret_val = tmp.tz_localize(None)
+            else:
+                ret_val = tmp
 
     return (success_flag, ret_val)
 
