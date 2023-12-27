@@ -550,7 +550,7 @@ public class AggCodeGen {
    */
   static Expr.Tuple getAdditionalArgs(AggregateCall agg, List<String> inputColumnNames) {
     SqlKind kind = agg.getAggregation().getKind();
-    assert equivalentExtendedNamedAggAggregates.containsKey(kind.name());
+    assert equivalentExtendedNamedAggAggregates.containsKey(agg.getAggregation().getName());
     List<Integer> argsList = agg.getArgList();
     List<Expr> additionalArgsList = new ArrayList<>();
     RelFieldCollation curCollation;
