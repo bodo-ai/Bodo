@@ -244,7 +244,7 @@ public class ProjectionSubcolumnEliminationRule
         }
       }
     }
-    // If we have a RexOver we can only check paritition and order by columns
+    // If we have a RexOver we can only check partition and order by columns
     if (node instanceof RexOver) {
       RexOver overNode = ((RexOver) node);
       RexWindow window = overNode.getWindow();

@@ -157,17 +157,66 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
     }
 
     private fun extractNodes(call: RelOptRuleCall): Pair<Project, SnowflakeRel> {
-        // Inputs are:
-        // Project ->
-        //   SnowflakeToPandasConverter ->
-        //      SnowflakeRel
-        return Pair(call.rel(0), call.rel(2))
+        return when (call.rels.size) {
+            // Inputs are:
+            // Project ->
+            //     SnowflakeToPandasConverter ->
+            //         SnowflakeRel
+            3 -> Pair(call.rel(0), call.rel(2))
+            // Inputs are:
+            // Project ->
+            //     SnowflakeRel
+            else -> Pair(call.rel(0), call.rel(1))
+        }
     }
 
     companion object {
         private val SUPPORTED_CALLS = setOf(
-            SqlKind.CAST,
+            "CAST",
+            "GET_PATH",
         )
+
+        // Returns whether a rex node can be pushed into Snowflake.
+        fun isPushableNode(node: RexNode): Boolean {
+            if (node is RexInputRef) return true
+            if (node is RexCall) {
+                return isSupportedCall(node)
+            }
+            return false
+        }
+
+        /** Calls that can be projected by Snowflake.
+         * Currently only
+         *  CAST(Variant) (from variant to any datatype)
+         * @param call
+         * @return true/false based on whether it's a supported operation or not.
+         */
+        private fun isSupportedCall(call: RexCall): Boolean {
+            return SUPPORTED_CALLS.contains(call.operator.name) && checkOperandsPushable(call)
+        }
+
+        /** For a given rexCall, checks the operands that are needed to check if the call can be pushed
+         * @param call: Operator call
+         * @return Boolean true/false if the operands allow for the call to be pushed
+         */
+        private fun checkOperandsPushable(call: RexCall): Boolean {
+            if (call.kind == SqlKind.CAST) {
+                return isVariantPushableNode(call.operands[0])
+            } else if (call.operator.name == "GET_PATH") {
+                return isPushableNode(call.operands[0])
+            } else {
+                return call.operands.all { node -> isPushableNode(node) }
+            }
+        }
+
+        /** Check whether node can be pushed or not
+         * Node must be variant and is itself a pushable node
+         * @param call: Operator call
+         * @return true/false
+         */
+        private fun isVariantPushableNode(node: RexNode): Boolean {
+            return (node.type is VariantSqlType && isPushableNode(node))
+        }
 
         /**
          * Class to detect all nodes that can be pushed into a SnowflakeProject.
@@ -183,50 +232,6 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
                 pushableNodes.add(inputRef)
             }
 
-            // Returns whether a rex node can be pushed into Snowflake.
-            fun isPushableNode(node: RexNode): Boolean {
-                if (node is RexInputRef) return true
-                if (node is RexCall) {
-                    return (node.operator.name == "GET_PATH" && isPushableNode(node.operands[0])) or isSupportedCall(node)
-                }
-                return false
-            }
-
-            /** Calls that can be projected by Snowflake.
-             * Currently only
-             *  CAST(Variant) (from variant to any datatype)
-             * @param node
-             * @return true/false based on whether it's a supported operation or not.
-             */
-            private fun isSupportedCall(node: RexNode): Boolean {
-                if (node is RexCall && SUPPORTED_CALLS.contains(node.kind)) {
-                    return getOperandsToCheck(node).all { child -> isVariantPushableNode(child as RexNode) }
-                } else {
-                    return false
-                }
-            }
-
-            /** Return operands that are needed to check if the call can be pushed
-             * @param call: Operator call
-             * @return list of operands
-             */
-            private fun getOperandsToCheck(call: RexCall): List<RexNode> {
-                if (call.kind == SqlKind.CAST) {
-                    return listOf(call.operands[0])
-                } else {
-                    return call.operands
-                }
-            }
-
-            /** Check whether node can be pushed or not
-             * Node must be variant and is itself a pushable node
-             * @param call: Operator call
-             * @return true/false
-             */
-            private fun isVariantPushableNode(node: RexNode): Boolean {
-                return (node.type is VariantSqlType && isPushableNode(node))
-            }
-
             override fun visitCall(call: RexCall) {
                 if (isPushableNode(call)) {
                     pushableNodes.add(call)
@@ -240,11 +245,19 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
          * Determine the input columns that are directly referenced by a projection.
          */
         @JvmStatic
-        private fun getPushableNodes(project: Project): Set<RexNode> {
+        fun getPushableNodes(project: Project): Set<RexNode> {
+            return getPushableNodes(project.projects)
+        }
+
+        /**
+         * Determine if any of the nodes passed in are pushable
+         */
+        @JvmStatic
+        fun getPushableNodes(nodes: Iterable<RexNode>): Set<RexNode> {
             val mutableSet = HashSet<RexNode>()
             val visitor = PushableDetectionVisitor(mutableSet)
-            for (column in project.projects) {
-                column.accept(visitor)
+            for (node in nodes) {
+                node.accept(visitor)
             }
             return mutableSet
         }
@@ -259,6 +272,13 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
         fun isPushableProject(project: Project): Boolean {
             val pushableNodes = getPushableNodes(project)
             return pushableNodes.isNotEmpty()
+        }
+
+        @JvmStatic
+        fun canPushNonTrivialSnowflakeProjectAndProjectNotAlreadySnowflake(project: Project): Boolean {
+            if (project is SnowflakeProject) return false
+            val pushableNodes = getPushableNodes(project)
+            return pushableNodes.filter { node -> node !is RexInputRef }.isNotEmpty()
         }
     }
 

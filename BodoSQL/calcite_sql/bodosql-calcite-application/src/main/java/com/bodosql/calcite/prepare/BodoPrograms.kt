@@ -1,13 +1,15 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasRules
-import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
+import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
+import com.bodosql.calcite.prepare.BodoRules.SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
@@ -86,23 +88,37 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
-
         // Simplification & filter push down step.
         if (optimize) {
             HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES))
         } else {
             NoopProgram
         },
-
         // We eliminate common subexpressions in filters only after all filters have been pushed down.
         if (optimize) {
             HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
         } else {
             NoopProgram
         },
+        // Field pushdown step
+        // This includes generic projection pushdown code,
+        // and some specialized rules to handle semi-structure field accesses
+        if (optimize) {
+            FieldPushdownPass()
+        } else {
+            NoopProgram
+        },
         // Projection pull up pass
         if (optimize) {
             ProjectionPullUpPass()
+        } else {
+            NoopProgram
+        },
+        // TODO(Keaton): Add a description for why this is needed.
+        // https://bodo.atlassian.net/browse/BSE-2353
+        // Also: https://bodo.atlassian.net/browse/BSE-2308
+        if (optimize) {
+            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
         } else {
             NoopProgram
         },
@@ -590,14 +606,16 @@ object BodoPrograms {
         }
     }
 
-    private class ProjectionPullUpPass : Program by Programs.hep(
+    private class ProjectionPullUpPass : Program by HepOptimizerProgram(
         PROJECTION_PULL_UP_RULES,
-        true,
-        DefaultRelMetadataProvider.INSTANCE,
+    )
+
+    private class FieldPushdownPass : Program by HepOptimizerProgram(
+        ProjectionPushdownRules.plus(FieldPushdownRules),
     )
 
     private class SnowflakeColumnPruning : Program by Programs.hep(
-        listOf(SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()),
+        listOf(SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE),
         true,
         DefaultRelMetadataProvider.INSTANCE,
     )
@@ -658,7 +676,7 @@ object BodoPrograms {
      * Simple program that does nothing but dump the output to stdout.
      * Should only be used for debugging
      */
-    class PrintDebugProgram : Program {
+    class PrintDebugProgram(val prefixMessage: String = "") : Program {
         override fun run(
             planner: RelOptPlanner?,
             rel: RelNode,
@@ -666,7 +684,7 @@ object BodoPrograms {
             materializations: MutableList<RelOptMaterialization>?,
             lattices: MutableList<RelOptLattice>?,
         ): RelNode {
-            println(RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
+            println(RelOptUtil.dumpPlan(prefixMessage, rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
             return rel
         }
     }
