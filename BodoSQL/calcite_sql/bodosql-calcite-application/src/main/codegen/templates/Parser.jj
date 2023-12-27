@@ -3921,9 +3921,11 @@ void AddExpression(List<SqlNode> list, ExprContext exprContext) :
 SqlNode Expression(ExprContext exprContext) :
 {
     final List<Object> list;
+    SqlNode e;
 }
 {
-    list = Expression2(exprContext) { return SqlParserUtil.toTree(list); }
+    list = Expression2(exprContext) { e = SqlParserUtil.toTree(list); }
+    [ <COLON> e = NestedAccess(e) ] { return e; }
 }
 
 void AddExpression2b(List<Object> list, ExprContext exprContext) :
