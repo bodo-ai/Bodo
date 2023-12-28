@@ -984,7 +984,10 @@ public class RexSimplify {
         if (!a.getType().isNullable() && isSafeExpression(a)) {
             return rexBuilder.makeLiteral(true);
         }
-        if (RexUtil.isLosslessCast(a)) {
+        // Bodo Change: Remove is not null for all casts since the standard doesn't
+        // require we throw an error. An exception exists for variant because variant
+        // null gets cast to regular null
+        if (a.getKind() == SqlKind.CAST && !(((RexCall) a).getOperands().get(0).getType() instanceof VariantSqlType)) {
             if (!a.getType().isNullable()) {
                 return rexBuilder.makeLiteral(true);
             }
@@ -1058,7 +1061,10 @@ public class RexSimplify {
         if (!a.getType().isNullable() && isSafeExpression(a)) {
             return rexBuilder.makeLiteral(false);
         }
-        if (RexUtil.isLosslessCast(a)) {
+        // Bodo Change: Remove is null for all casts since the standard doesn't
+        // require we throw an error. An exception exists for variant because variant
+        // null gets cast to regular null
+        if (a.getKind() == SqlKind.CAST && !(((RexCall) a).getOperands().get(0).getType() instanceof VariantSqlType)) {
             if (!a.getType().isNullable()) {
                 return rexBuilder.makeLiteral(false);
             }
