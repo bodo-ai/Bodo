@@ -5,7 +5,6 @@ import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
-import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
@@ -187,8 +186,7 @@ class BodoRexSimplify(
     private fun isDateConversion(e: RexNode): Boolean {
         return e is RexCall && (
             e.operator.name == CastingOperatorTable.TO_DATE.name ||
-                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name ||
-                e.operator.name == SqlBodoOperatorTable.DATE.name
+                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
             )
     }
 

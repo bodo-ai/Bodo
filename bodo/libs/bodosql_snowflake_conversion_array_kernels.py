@@ -127,12 +127,6 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
     )
 
 
-def date(
-    conversionVal, format_str, dict_encoding_state=None, func_id=-1
-):  # pragma: no cover
-    return
-
-
 def to_date(
     conversionVal, format_str, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
@@ -141,12 +135,6 @@ def to_date(
 
 def try_to_date(
     conversionVal, format_str, dict_encoding_state=None, func_id=-1
-):  # pragma: no cover
-    return
-
-
-def date_util(
-    conversionVal, format_str, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
@@ -164,7 +152,7 @@ def try_to_date_util(
 
 
 def create_date_cast_util(func, error_on_fail):
-    """Creates an overload for a dedicated kernel for DATE/TO_DATE/TRY_TO_DATE
+    """Creates an overload for a dedicated kernel for TO_DATE/TRY_TO_DATE
     Takes in 2 arguments: the name of the kernel being created and whether it should
     have an error when it has a failure (as opposed to outputting null),
 
@@ -295,7 +283,7 @@ def create_date_cast_util(func, error_on_fail):
 
 
 def create_date_cast_func(func_name):
-    """Takes in a function name (either DATE, TO_DATE or TRY_TO_DATE) and generates
+    """Takes in a function name (either TO_DATE or TRY_TO_DATE) and generates
     the wrapper function for the corresponding kernel.
     """
 
@@ -324,7 +312,6 @@ def create_date_cast_func(func_name):
 
 def _install_date_cast_overloads():
     date_cast_fns = [
-        ("DATE", date, date_util, True),
         ("TO_DATE", to_date, to_date_util, True),
         ("TRY_TO_DATE", try_to_date, try_to_date_util, False),
     ]

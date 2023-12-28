@@ -123,29 +123,6 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
   /** The <code>TIMESTAMPDIFF</code> function. */
   public static final SqlFunction TIMESTAMP_DIFF = new BodoSqlTimestampDiffFunction();
 
-  /**
-   * The Snowflake <code>DATE</code> function. The SQL syntaxs are
-   *
-   * <p>DATE(string_expr [, format]) DATE(timestamp_expr) DATE('integer') DATE(variant_expr) For
-   * conversion to date, snowflake allows a string, datetime, or integer. If the first argument is
-   * string, an optional format string is allowed as a second argument.
-   */
-  public static final SqlFunction DATE =
-      new SqlFunction(
-          "DATE",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DATE,
-          null,
-          OperandTypes.or(
-              OperandTypes.or(
-                  OperandTypes.STRING,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATE,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.INTEGER),
-              OperandTypes.STRING_STRING),
-          SqlFunctionCategory.TIMEDATE);
-
   public static final SqlFunction LAST_DAY =
       SqlBasicFunction.create(
           "LAST_DAY",

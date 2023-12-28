@@ -64,10 +64,10 @@ class CoalesceTypeCastingUtils {
             Pair(SF_TYPE.VARCHAR, SF_TYPE.TIMESTAMP_NTZ) to Pair(SF_TYPE.TIMESTAMP_NTZ, CastingOperatorTable.TO_TIMESTAMP_NTZ),
             Pair(SF_TYPE.VARCHAR, SF_TYPE.DATE) to Pair(SF_TYPE.DATE, CastingOperatorTable.TO_DATE),
             // NOTE: Based on the explain from snowflake, this should be using BOOLEAN_TO_TEXT. However, empirically, this is the same as calling TO_CHAR
-            Pair(SF_TYPE.VARCHAR, SF_TYPE.BOOLEAN) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_CHAR),
+            Pair(SF_TYPE.VARCHAR, SF_TYPE.BOOLEAN) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_VARCHAR),
             Pair(SF_TYPE.VARCHAR, SF_TYPE.TIME) to Pair(SF_TYPE.TIME, CastingOperatorTable.TO_TIME),
             Pair(SF_TYPE.VARCHAR, SF_TYPE.FLOAT) to Pair(SF_TYPE.FLOAT, CastingOperatorTable.TO_DOUBLE),
-            Pair(SF_TYPE.VARCHAR, SF_TYPE.NUMBER) to Pair(SF_TYPE.NUMBER, NumericOperatorTable.TO_NUMBER),
+            Pair(SF_TYPE.VARCHAR, SF_TYPE.NUMBER) to Pair(SF_TYPE.NUMBER, CastingOperatorTable.TO_NUMBER),
 
             Pair(SF_TYPE.BINARY, SF_TYPE.TIMESTAMP_NTZ) to null,
             Pair(SF_TYPE.BINARY, SF_TYPE.DATE) to null,
@@ -104,7 +104,7 @@ class CoalesceTypeCastingUtils {
             Pair(SF_TYPE.BOOLEAN, SF_TYPE.VARCHAR) to Pair(SF_TYPE.BOOLEAN, CastingOperatorTable.TO_BOOLEAN),
             Pair(SF_TYPE.TIME, SF_TYPE.VARCHAR) to Pair(SF_TYPE.TIME, CastingOperatorTable.TO_TIME),
             Pair(SF_TYPE.FLOAT, SF_TYPE.VARCHAR) to Pair(SF_TYPE.FLOAT, CastingOperatorTable.TO_DOUBLE),
-            Pair(SF_TYPE.NUMBER, SF_TYPE.VARCHAR) to Pair(SF_TYPE.NUMBER, NumericOperatorTable.TO_NUMBER),
+            Pair(SF_TYPE.NUMBER, SF_TYPE.VARCHAR) to Pair(SF_TYPE.NUMBER, CastingOperatorTable.TO_NUMBER),
 
             Pair(SF_TYPE.TIMESTAMP_NTZ, SF_TYPE.BINARY) to null,
             Pair(SF_TYPE.DATE, SF_TYPE.BINARY) to null,
@@ -178,7 +178,7 @@ class CoalesceTypeCastingUtils {
             // note that several of the variant types will throw a runtime error
             // if the cast is invalid
 
-            Pair(SF_TYPE.VARCHAR, SF_TYPE.VARIANT) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_CHAR),
+            Pair(SF_TYPE.VARCHAR, SF_TYPE.VARIANT) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_VARCHAR),
             Pair(SF_TYPE.VARCHAR, SF_TYPE.OBJECT) to null,
             Pair(SF_TYPE.VARCHAR, SF_TYPE.ARRAY) to null,
             Pair(SF_TYPE.BINARY, SF_TYPE.VARIANT) to null,
@@ -208,7 +208,7 @@ class CoalesceTypeCastingUtils {
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.VARIANT) to Pair(SF_TYPE.TIMESTAMP_TZ, CastingOperatorTable.TO_TIMESTAMP_TZ),
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.OBJECT) to null,
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.ARRAY) to null,
-            Pair(SF_TYPE.VARIANT, SF_TYPE.VARCHAR) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_CHAR),
+            Pair(SF_TYPE.VARIANT, SF_TYPE.VARCHAR) to Pair(SF_TYPE.VARCHAR, CastingOperatorTable.TO_VARCHAR),
             Pair(SF_TYPE.VARIANT, SF_TYPE.BINARY) to null,
             Pair(SF_TYPE.VARIANT, SF_TYPE.TIMESTAMP_NTZ) to Pair(SF_TYPE.TIMESTAMP_NTZ, CastingOperatorTable.TO_TIMESTAMP_NTZ),
             Pair(SF_TYPE.VARIANT, SF_TYPE.DATE) to Pair(SF_TYPE.DATE, CastingOperatorTable.TO_DATE),

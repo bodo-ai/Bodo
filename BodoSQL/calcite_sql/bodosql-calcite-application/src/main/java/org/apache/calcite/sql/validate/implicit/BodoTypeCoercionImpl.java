@@ -40,7 +40,7 @@ import java.util.Map;
 
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_LTZ;
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_TZ;
-import static com.bodosql.calcite.application.operatorTables.NumericOperatorTable.TO_NUMBER;
+import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
