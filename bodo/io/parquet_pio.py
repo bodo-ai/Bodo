@@ -662,6 +662,10 @@ def get_parquet_dataset(
 
     if get_row_counts and tot_rows_to_read == 0:
         get_row_counts = validate_schema = False
+
+    total_rows_chunk = 0
+    total_row_groups_chunk = 0
+    total_row_groups_size_chunk = 0
     if get_row_counts or validate_schema:
         # getting row counts and validating schema requires reading
         # the file metadata from the parquet files and is very expensive
@@ -674,9 +678,7 @@ def get_parquet_dataset(
         num_pieces = len(dataset.pieces)
         start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
         end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
-        total_rows_chunk = 0
-        total_row_groups_chunk = 0
-        total_row_groups_size_chunk = 0
+
         valid = True  # True if schema of all parquet files match
         if expr_filters is not None:
             import random
@@ -852,8 +854,9 @@ def get_parquet_dataset(
         error = None
 
         try:
-            dataset.schema = comm.allreduce(
-                dataset.schema, bodo.io.helpers.pa_schema_unify_mpi_op
+            dataset.schema, _ = comm.allreduce(
+                (dataset.schema, total_rows_chunk),
+                bodo.io.helpers.pa_schema_unify_mpi_op,
             )
         except Exception as e:
             error = e

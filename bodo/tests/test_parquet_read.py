@@ -348,11 +348,15 @@ def test_pq_arrow_array_random():
     def process_df(df):
         fname = "test_pq_nested_tmp.pq"
         with ensure_clean(fname):
-            if bodo.get_rank() == 0:
-                # Using Bodo to write since Pandas as of 2.0.3 doesn't read/write
-                # Arrow arrays properly
-                bodo.jit(lambda df: df.to_parquet(fname))(df)
-            bodo.barrier()
+            # Using Bodo to write since Pandas as of 2.0.3 doesn't read/write
+            # Arrow arrays properly
+            @bodo.jit
+            def write_file(df):
+                if bodo.get_rank() == 0:
+                    df.to_parquet(fname)
+                bodo.barrier()
+
+            write_file(df)
             check_func(test_impl, (fname,), check_dtype=False)
 
     for df in [df_work1, df_work2, df_work3, df_work4, df_work5, df_work6, df_work7]:
