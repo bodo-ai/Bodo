@@ -7,7 +7,6 @@ import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter.Companion.create
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.RelRule
@@ -174,7 +173,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlStdOperatorTable.LOWER.name,
             StringOperatorTable.REVERSE.name,
             StringOperatorTable.CONTAINS.name,
-            CastingOperatorTable.TO_CHAR.name,
+            CastingOperatorTable.TO_VARCHAR.name,
             SqlStdOperatorTable.SUBSTRING.name,
             StringOperatorTable.SUBSTR.name,
             SqlStdOperatorTable.CHARACTER_LENGTH.name,

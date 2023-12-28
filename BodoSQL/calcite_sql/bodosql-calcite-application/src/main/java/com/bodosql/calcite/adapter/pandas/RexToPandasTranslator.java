@@ -1043,7 +1043,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     switch (fnName) {
       case "TIMESTAMP":
         return generateTimestampFnCode(operands, streamingNamedArgs);
-      case "DATE":
       case "TO_DATE":
       case "TRY_TO_DATE":
         return generateToDateFnCode(operands, fnName, streamingNamedArgs);
@@ -1068,21 +1067,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TRY_TO_BINARY":
       case "TO_BINARY":
         return generateToBinaryFnCode(operands, fnName, streamingNamedArgs);
-      case "TO_CHAR":
       case "TO_VARCHAR":
         return generateToCharFnCode(operands, argScalars);
       case "TO_NUMBER":
-      case "TO_NUMERIC":
-      case "TO_DECIMAL":
         return generateToNumberCode(fnOperation.operands, false, streamingNamedArgs, this);
       case "TRY_TO_NUMBER":
-      case "TRY_TO_NUMERIC":
-      case "TRY_TO_DECIMAL":
         return generateToNumberCode(fnOperation.operands, true, streamingNamedArgs, this);
       case "TO_DOUBLE":
       case "TRY_TO_DOUBLE":
         return generateToDoubleFnCode(operands, fnName, streamingNamedArgs);
-      case "TIME":
       case "TO_TIME":
       case "TRY_TO_TIME":
         return generateToTimeCode(operands, fnName, streamingNamedArgs);
@@ -1700,18 +1693,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 operands.get(0), isScalar(fnOperation.operands.get(0)), operands.get(1).emit());
           case "TIME_SLICE":
             return generateTimeSliceFnCode(operands, 0);
-          case "DATE":
-          case "TIME":
           case "TIMESTAMP":
           case "TO_ARRAY":
           case "TO_BINARY":
           case "TO_BOOLEAN":
-          case "TO_CHAR":
           case "TO_DATE":
-          case "TO_DECIMAL":
           case "TO_DOUBLE":
           case "TO_NUMBER":
-          case "TO_NUMERIC":
           case "TO_OBJECT":
           case "TO_TIME":
           case "TO_TIMESTAMP":
@@ -1723,10 +1711,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TRY_TO_BINARY":
           case "TRY_TO_BOOLEAN":
           case "TRY_TO_DATE":
-          case "TRY_TO_DECIMAL":
           case "TRY_TO_DOUBLE":
           case "TRY_TO_NUMBER":
-          case "TRY_TO_NUMERIC":
           case "TRY_TO_TIME":
           case "TRY_TO_TIMESTAMP":
           case "TRY_TO_TIMESTAMP_LTZ":

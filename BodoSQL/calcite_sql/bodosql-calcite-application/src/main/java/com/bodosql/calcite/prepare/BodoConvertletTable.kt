@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
@@ -31,6 +32,13 @@ import java.lang.RuntimeException
 class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
     init {
         registerOp(SqlNamedParameterOperator.INSTANCE, this::convertNamedParam)
+        addAlias(CastingOperatorTable.TO_NUMERIC, CastingOperatorTable.TO_NUMBER)
+        addAlias(CastingOperatorTable.TO_DECIMAL, CastingOperatorTable.TO_NUMBER)
+        addAlias(CastingOperatorTable.TRY_TO_NUMERIC, CastingOperatorTable.TRY_TO_NUMBER)
+        addAlias(CastingOperatorTable.TRY_TO_DECIMAL, CastingOperatorTable.TRY_TO_NUMBER)
+        addAlias(CastingOperatorTable.DATE, CastingOperatorTable.TO_DATE)
+        addAlias(CastingOperatorTable.TIME, CastingOperatorTable.TO_TIME)
+        addAlias(CastingOperatorTable.TO_CHAR, CastingOperatorTable.TO_VARCHAR)
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
