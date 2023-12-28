@@ -384,7 +384,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
     value = pd.Timestamp(timestamp_literal).tz_localize(None)
     query = f"SELECT TO_TIMESTAMP_NTZ('{timestamp_literal}') AS ts"
     ctx = {}
-    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    expected_output = pd.DataFrame({"TS": value}, index=np.arange(1))
     check_query(query, ctx, None, expected_output=expected_output)
 
 
