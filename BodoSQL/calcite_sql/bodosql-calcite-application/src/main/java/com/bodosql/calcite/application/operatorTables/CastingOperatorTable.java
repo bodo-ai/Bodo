@@ -109,24 +109,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction TO_CHAR =
-      SqlBasicFunction.create(
-          "TO_CHAR",
-          // TO_CHAR only converts nullable types to NULL
-          // and has unknown precision
-          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // For conversion to string, snowflake any expresison type. If the first argument is
-          // numeric,
-          // datetime/timestamp, or binary, then an optional format string is allowed as a second
-          // argument.
-          OperandTypes.ANY
-              .or(OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.CHARACTER))
-              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER))
-              .or(OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
-  public static final SqlFunction TO_VARCHAR =
+  public static final SqlBasicFunction TO_VARCHAR =
       SqlBasicFunction.create(
           "TO_VARCHAR",
           // TO_VARCHAR only converts nullable types to NULL
@@ -143,12 +126,12 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction TO_DATE =
-      new SqlFunction(
+  public static final SqlFunction TO_CHAR = TO_VARCHAR.withName("TO_CHAR");
+
+  public static final SqlBasicFunction TO_DATE =
+      SqlBasicFunction.create(
           "TO_DATE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.DATE_NULLABLE,
-          null,
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
           // as a second argument.
@@ -158,6 +141,8 @@ public class CastingOperatorTable implements SqlOperatorTable {
               .or(BodoOperandTypes.VARIANT)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction DATE = TO_DATE.withName("DATE");
 
   public static final SqlFunction TRY_TO_DATE =
       SqlBasicFunction.create(
@@ -351,6 +336,25 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlBasicFunction TO_NUMBER =
+      SqlBasicFunction.create(
+          "TO_NUMBER",
+          BodoReturnTypes.TO_NUMBER_RET_TYPE,
+          BodoOperandTypes.TO_NUMBER_OPERAND_TYPE_CHECKER,
+          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction TO_NUMERIC = TO_NUMBER.withName("TO_NUMERIC");
+  public static final SqlFunction TO_DECIMAL = TO_NUMBER.withName("TO_DECIMAL");
+
+  public static final SqlBasicFunction TRY_TO_NUMBER =
+      SqlBasicFunction.create(
+          "TRY_TO_NUMBER",
+          BodoReturnTypes.TRY_TO_NUMBER_RET_TYPE,
+          BodoOperandTypes.TRY_TO_NUMBER_OPERAND_TYPE_CHECKER,
+          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction TRY_TO_NUMERIC = TRY_TO_NUMBER.withName("TRY_TO_NUMERIC");
+
+  public static final SqlFunction TRY_TO_DECIMAL = TRY_TO_NUMBER.withName("TRY_TO_DECIMAL");
+
   public static final SqlOperator INFIX_CAST = SqlLibraryOperators.INFIX_CAST;
 
   private List<SqlOperator> functionList =
@@ -361,6 +365,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TO_BOOLEAN,
           TO_CHAR,
           TO_DATE,
+          DATE,
           TO_DOUBLE,
           TO_TIMESTAMP,
           TO_TIMESTAMP_LTZ,
@@ -369,6 +374,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TO_VARCHAR,
           TO_TIME,
           TIME,
+          TO_NUMBER,
+          TO_DECIMAL,
+          TO_NUMERIC,
           TRY_TO_BINARY,
           TRY_TO_BOOLEAN,
           TRY_TO_DATE,
@@ -378,6 +386,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TRY_TO_TIMESTAMP_NTZ,
           TRY_TO_TIMESTAMP_TZ,
           TRY_TO_TIME,
+          TRY_TO_NUMBER,
+          TRY_TO_DECIMAL,
+          TRY_TO_NUMERIC,
           TO_VARIANT,
           TO_OBJECT);
 

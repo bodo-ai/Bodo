@@ -22,7 +22,6 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
-import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -294,27 +293,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
-  public static final SqlBasicFunction TO_NUMBER =
-      SqlBasicFunction.create(
-              SqlKind.OTHER_FUNCTION,
-              BodoReturnTypes.TO_NUMBER_RET_TYPE,
-              BodoOperandTypes.TO_NUMBER_OPERAND_TYPE_CHECKER)
-          .withName("TO_NUMBER");
-
-  public static final SqlFunction TO_NUMERIC = TO_NUMBER.withName("TO_NUMERIC");
-  public static final SqlFunction TO_DECIMAL = TO_NUMBER.withName("TO_DECIMAL");
-
-  public static final SqlBasicFunction TRY_TO_NUMBER =
-      SqlBasicFunction.create(
-              SqlKind.OTHER_FUNCTION,
-              BodoReturnTypes.TRY_TO_NUMBER_RET_TYPE,
-              BodoOperandTypes.TRY_TO_NUMBER_OPERAND_TYPE_CHECKER)
-          .withName("TRY_TO_NUMBER");
-
-  public static final SqlFunction TRY_TO_NUMERIC = TRY_TO_NUMBER.withName("TRY_TO_NUMERIC");
-
-  public static final SqlFunction TRY_TO_DECIMAL = TRY_TO_NUMBER.withName("TRY_TO_DECIMAL");
-
   public static final SqlFunction RANDOM = new SqlRandomOperator();
 
   private List<SqlOperator> functionList =
@@ -358,13 +336,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           GREATEST,
           LEAST,
           VARIANCE_POP,
-          VARIANCE_SAMP,
-          TO_NUMBER,
-          TO_NUMERIC,
-          TO_DECIMAL,
-          TRY_TO_NUMBER,
-          TRY_TO_NUMERIC,
-          TRY_TO_DECIMAL);
+          VARIANCE_SAMP);
 
   @Override
   public void lookupOperatorOverloads(

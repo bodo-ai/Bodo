@@ -102,7 +102,6 @@ broadcasted_fixed_arg_functions = {
     "cosh",
     "cot",
     "create_timestamp",
-    "date",
     "date_format",
     "date_from_parts",
     "date_trunc",
