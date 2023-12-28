@@ -5,10 +5,13 @@ Tests that bodoSQL correctly interprets literal values
 For MySql reference used, see https://dev.mysql.com/doc/refman/8.0/en/literals.html
 """
 
+import datetime
+
 import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -133,23 +136,48 @@ def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_date_literal(basic_df, spark_info, memory_leak_check):
+def test_date_literal(basic_df, memory_leak_check):
     """
-    tests that the date keyword is correctly parsed/converted to timestamp by BodoSQL
+    tests that the date literal is correctly output by BodoSQL
     """
     query1 = """
     SELECT
-        A, DATE '2015-07-21'
+        A, DATE '2015-07-21' as LIT
     FROM
         table1
     """
+    py_output = pd.DataFrame(
+        {"A": basic_df["table1"]["A"], "LIT": datetime.date(2015, 7, 21)}
+    )
 
     check_query(
         query1,
         basic_df,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
+        None,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.slow
+def test_time_literal(basic_df, memory_leak_check):
+    """
+    tests that the time literal is correctly output by BodoSQL
+    """
+    query1 = """
+    SELECT
+        A, time '10:03:56' as LIT
+    FROM
+        table1
+    """
+    py_output = pd.DataFrame(
+        {"A": basic_df["table1"]["A"], "LIT": bodo.Time(10, 3, 56)}
+    )
+
+    check_query(
+        query1,
+        basic_df,
+        None,
+        expected_output=py_output,
     )
 
 

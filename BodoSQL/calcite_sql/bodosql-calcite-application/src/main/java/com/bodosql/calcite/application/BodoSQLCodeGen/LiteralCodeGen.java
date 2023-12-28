@@ -121,6 +121,19 @@ public class LiteralCodeGen {
               long nanoseconds = calendar.getTimeInMillis() * 1000 * 1000;
               return new Expr.Raw(String.format("pd.Timestamp(%d)", nanoseconds));
             }
+          case TIME:
+            {
+              // TODO: How do we represent microseconds and nanoseconds?
+              int totalMilliseconds = node.getValueAs(Integer.class);
+              int hour = (totalMilliseconds / (1000 * 60 * 60)) % 24;
+              int minute = (totalMilliseconds / (1000 * 60)) % 60;
+              int second = (totalMilliseconds / 1000) % 60;
+              int millisecond = totalMilliseconds % 1000;
+              return new Expr.Raw(
+                  String.format(
+                      "bodo.Time(%d, %d, %d, %d, 0, 0, %d)",
+                      hour, minute, second, millisecond, node.getType().getPrecision()));
+            }
           case BOOLEAN:
             String boolName = node.toString();
             return new Expr.Raw(boolName.substring(0, 1).toUpperCase() + boolName.substring(1));
