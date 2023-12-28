@@ -2819,8 +2819,8 @@ def test_local_spill_file(tmp_path: Path):
     paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
     assert len(paths) == 1
     inner_path = paths[0]
-    # Block File should be in {size_class}/{block_id}
-    block_file = inner_path / str(4 * 1024 * 1024) / "0"
+    # Block File should be in {size_class_bytes} folder
+    block_file = inner_path / str(4 * 1024 * 1024)
     assert block_file.is_file()
 
     # Check file contents
@@ -3031,8 +3031,8 @@ def test_spill_on_unpin(tmp_path: Path):
     paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
     assert len(paths) == 1
     inner_path = paths[0]
-    # Block File should be in {size_class}/{block_id}
-    block_file = inner_path / str(4 * 1024 * 1024) / "0"
+    # Block File should be in {size_class_bytes} folder
+    block_file = inner_path / str(4 * 1024 * 1024)
     assert block_file.is_file()
 
     # Check file contents
@@ -3193,8 +3193,8 @@ def test_move_on_unpin_spill_case(tmp_path: Path):
     paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
     assert len(paths) == 1
     inner_path = paths[0]
-    # Block File should be in {size_class}/{block_id}
-    block_file = inner_path / str(8 * 1024 * 1024) / "0"
+    # Block File should be in {size_class_bytes} folder
+    block_file = inner_path / str(8 * 1024 * 1024)
     assert block_file.is_file()
 
     # Check file contents
@@ -3298,6 +3298,100 @@ def test_malloc_trim():
     del pool
 
 
+def test_sparse_file_spill_cleanup_overload(tmp_path, capfd):
+    """
+    Test that deletes for sparse file storage managers
+    are only called when we need to spill more data
+    than what is openly available
+    """
+
+    # Allocate 1MiB in Pool, 3MiB in storage for testing
+    local_opt = StorageOptions(
+        usable_size=3 * 1024 * 1024, tracing_mode=True, location=bytes(tmp_path)
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=1,
+        min_size_class=512,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
+        spill_on_unpin=True,
+        trace_level=2,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate 3 1MiB frames and immediately spill
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    pool.unpin(allocation_1)
+    allocation_2: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    pool.unpin(allocation_2)
+    allocation_3: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    pool.unpin(allocation_3)
+
+    # Free all 3
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+
+    # Allocate and spill a 512KiB frame
+    # Expect a delete operation to occur to make space
+    allocation_4: BufferPoolAllocation = pool.allocate(512 * 1024)
+    pool.unpin(allocation_4)
+
+    pool.cleanup()
+    del pool
+
+    # Check if delete action occured
+    _, err = capfd.readouterr()
+    errlines: list[str] = err.split("\n")
+    errlines = [" ".join(e.split()) for e in errlines]
+    assert "Total Num Delete Calls │ 1" in errlines
+
+
+def test_sparse_file_spill_cleanup_threshold(tmp_path, capfd):
+    """
+    Test that deletes for sparse file storage managers
+    are only called when the threshold is reached
+    """
+
+    # Allocate 1MiB in Pool, 3MiB in storage for testing
+    local_opt = StorageOptions(
+        usable_size=3 * 1024 * 1024, tracing_mode=True, location=bytes(tmp_path)
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=1,
+        min_size_class=1024,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
+        spill_on_unpin=True,
+        trace_level=2,
+        storage_options=[local_opt],
+    )
+
+    # Delete leftover blocks if # per size class >= 2
+    with temp_env_override({"BODO_BUFFER_POOL_SPARSE_DELETE_THRESHOLD": "4"}):
+        pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate 2 1MiB frames and immediately spill
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    pool.unpin(allocation_1)
+    allocation_2: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    pool.unpin(allocation_2)
+
+    # Free both
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+
+    pool.cleanup()
+    del pool
+
+    # Check if delete action occurred
+    _, err = capfd.readouterr()
+    errlines: list[str] = err.split("\n")
+    errlines = [" ".join(e.split()) for e in errlines]
+    assert "Total Num Delete Calls │ 1" in errlines
+
+
 @pytest.mark.s3
 def test_spill_to_s3(tmp_s3_path: str):
     """
@@ -3339,7 +3433,7 @@ def test_spill_to_s3(tmp_s3_path: str):
     paths = fs.glob(tmp_s3_path + str(bodo.get_rank()) + "-*")
     assert len(paths) == 1
     inner_path: str = paths[0]  # type: ignore
-    # Block File should be in {size_class}/{block_id}
+    # Block File should be in {size_class_bytes} folder
     file_path = inner_path + "/" + str(4 * 1024 * 1024) + "/" + "0"
 
     # Check file contents
@@ -3357,6 +3451,28 @@ def test_spill_to_s3(tmp_s3_path: str):
     assert contents_after_pin_back == write_bytes
 
     pool.free(allocation_1)
+    pool.cleanup()
+    del pool
+
+
+@pytest.mark.s3
+def test_spill_to_s3_empty(tmp_s3_path: str):
+    """
+    Ensure that cleaning / deleting an unused S3 storage location
+    does not fail
+    """
+
+    s3_opt = StorageOptions(
+        usable_size=-1, storage_type=1, location=tmp_s3_path.encode()
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[s3_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
     pool.cleanup()
     del pool
 
@@ -3472,15 +3588,17 @@ def test_print_spilling_metrics(capfd, tmp_path: Path, tmp_s3_path: str):
     assert total_blocks_spilled == "Total Blocks Spilled │ 2 │ 2"
     total_blocks_read: str = next(l for l in errlines if "Total Blocks Read" in l)
     assert total_blocks_read == "Total Blocks Read │ 0 │ 2"
-    total_blocks_deleted: str = next(l for l in errlines if "Total Blocks Deleted" in l)
-    assert total_blocks_deleted == "Total Blocks Deleted │ 1 │ 2"
+    total_blocks_deleted: str = next(
+        l for l in errlines if "Total Num Delete Calls" in l
+    )
+    assert total_blocks_deleted == "Total Num Delete Calls │ 0 │ 2"
 
     total_bytes_spilled: str = next(l for l in errlines if "Total Bytes Spilled" in l)
     assert total_bytes_spilled == "Total Bytes Spilled │ 8.0MiB │ 8.0MiB"
     total_bytes_read: str = next(l for l in errlines if "Total Bytes Read" in l)
     assert total_bytes_read == "Total Bytes Read │ 0 bytes │ 8.0MiB"
     total_bytes_deleted: str = next(l for l in errlines if "Total Bytes Deleted" in l)
-    assert total_bytes_deleted == "Total Bytes Deleted │ 4.0MiB │ 8.0MiB"
+    assert total_bytes_deleted == "Total Bytes Deleted │ 0 bytes │ 8.0MiB"
 
     max_spilled_bytes: str = next(l for l in errlines if "Max Spilled Bytes" in l)
     assert max_spilled_bytes == "Max Spilled Bytes │ 4.0MiB │ 8.0MiB"

@@ -332,10 +332,10 @@ class SizeClass final {
      * @param frame_idx Index of frame to write block to
      * @param block_idx Index of block to read into memory
      * @param manager_idx Index of manager that is handling the block
-     * @return OK or potentially raised filesystem error
+     * @throw A potential filesystem error from the storage manager
      */
-    arrow::Status ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
-                                  uint64_t block_idx, uint8_t manager_idx);
+    void ReadbackToFrame(OwningSwip swip, uint64_t frame_idx, int64_t block_id,
+                         uint8_t manager_idx);
 
     /// @brief Get size of each frame (in bytes)
     inline uint64_t getBlockSize() const { return this->block_size_; }
