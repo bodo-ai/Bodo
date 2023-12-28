@@ -4,7 +4,7 @@
 #include <chrono>
 #include <span>
 
-#include <arrow/result.h>
+#include <arrow/status.h>
 
 // TODO Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                                      \
@@ -67,8 +67,10 @@ struct StorageManagerStats {
     /// @brief Total # of blocks ever read from storage
     uint64_t total_num_blocks_read = 0;
 
-    /// @brief Total # of blocks ever deleted from storage
-    uint64_t total_num_blocks_del = 0;
+    /// @brief Total # of calls to delete from storage
+    /// Managers can choose to batch deletes, so this
+    /// may not be equal to total_num_blocks_read
+    uint64_t total_num_del_calls = 0;
 
     /// @brief Total # of bytes spilled to storage
     uint64_t total_spilled_bytes = 0;
@@ -77,6 +79,8 @@ struct StorageManagerStats {
     uint64_t total_read_bytes = 0;
 
     /// @brief Total # of bytes deleted from storage
+    /// Managers can choose to batch deletes, so this
+    /// may not be equal to total_read_bytes
     uint64_t total_bytes_del = 0;
 
     /// @brief Max # of bytes spilled to storage
@@ -114,20 +118,6 @@ class StorageManager {
     inline int64_t usable_size() const { return options->usable_size; }
 
     /**
-     * @brief Is there space available in this storage location for
-     * allocations to be spilled to it
-     *
-     * @param amount Bytes to potentially be spilled
-     * @return true If allocation can be spilled to it
-     * @return false If allocation can not be spilled here
-     */
-    bool CanSpillTo(uint64_t amount) const {
-        return options->usable_size < 0 ||
-               (stats_.curr_spilled_bytes + amount) <=
-                   static_cast<uint64_t>(options->usable_size);
-    }
-
-    /**
      * @brief Update the current number of spilled bytes to this
      * storage location by diff
      *
@@ -137,9 +127,19 @@ class StorageManager {
     void UpdateSpilledBytes(int64_t diff);
 
     /// @brief Get the next available block id for this storage location
-    uint64_t GetNewBlockID() { return this->block_id_counter++; }
+    int64_t GetNewBlockID() { return this->block_id_counter++; }
 
     // ------------------------- Virtual Functions ------------------------- //
+
+    /**
+     * @brief Is there space available in this storage location for
+     * allocations to be spilled to it
+     *
+     * @param size_class_idx Idx of size class to spill
+     * @return true If allocation can be spilled to it
+     * @return false If allocation can not be spilled here
+     */
+    virtual bool CanSpillTo(uint8_t size_class_idx) = 0;
 
     /**
      * @brief Read a block with id block_id and size of n_bytes
@@ -147,25 +147,26 @@ class StorageManager {
      * block from storage.
      *
      * @param[in] block_id Index of block to read from storage
-     * @param[in] n_bytes Size of block in bytes
+     * @param[in] size_class_idx Idx of size class of block
      * @param[out] out_ptr Location to write contents to
-     * @return arrow::Status Ok if success, otherwise a potential
-     * filesystem error raised during read.
+     * @throws Potential filesystem error raised during read.
+     * Exception is used because we stop execution on failure
      */
-    virtual arrow::Status ReadBlock(uint64_t block_id, int64_t n_bytes,
-                                    uint8_t* out_ptr) = 0;
+    virtual void ReadBlock(int64_t block_id, uint8_t size_class_idx,
+                           uint8_t* out_ptr) = 0;
 
     /**
      * @brief Write the contents of a frame located at in_ptr
      * and size frame_size to storage, and return the new block id.
      *
      * @param in_ptr Location of frame to write
-     * @param frame_size Size of frame in bytes
-     * @return arrow::Result<uint64_t> Block ID of contents if success.
-     * Otherwise a potential filesystem error raised during write
+     * @param size_class_idx Idx of size class of frame
+     * @return int64_t Block ID of contents if success.
+     *  or -1 if we can't spill to frame
+     * @throws std::runtime_error For filesystem error during write
+     * Exception is used because we stop execution on failure
      */
-    virtual arrow::Result<uint64_t> WriteBlock(uint8_t* in_ptr,
-                                               uint64_t frame_size) = 0;
+    virtual int64_t WriteBlock(uint8_t* in_ptr, uint8_t size_class_idx) = 0;
 
     /**
      * @brief Delete a block with id block_id and size of n_bytes from
@@ -175,8 +176,10 @@ class StorageManager {
      * @param n_bytes Size of block in bytes
      * @return arrow::Status Ok if success, otherwise a potential
      * filesystem error raised during delete.
+     * arrow::Status is used because we often ignore failures
      */
-    virtual arrow::Status DeleteBlock(uint64_t block_id, int64_t n_bytes) = 0;
+    virtual arrow::Status DeleteBlock(int64_t block_id,
+                                      uint8_t size_class_idx) = 0;
 
     /// @brief Cleanup any leftover spill files
     /// Expected to run during program exit and can throw
@@ -200,13 +203,13 @@ class StorageManager {
 
    private:
     /// @brief Increment every time we write a block to disk
-    uint64_t block_id_counter = 0;
+    int64_t block_id_counter = 0;
 };
 
 /// @brief Factory Function to Create StorageManager based on StorageOptions
 std::unique_ptr<StorageManager> MakeStorageManager(
     const std::shared_ptr<StorageOptions>& options,
-    const std::span<const uint64_t> size_class_bytes_);
+    const std::span<const uint64_t> size_class_bytes);
 
 /// @brief Print Storage Manager Statistics for All Managers
 /// in an easy-to-read table format

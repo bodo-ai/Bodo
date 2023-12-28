@@ -57,7 +57,7 @@ inline bool is_unswizzled(Swip ptr) {
  *   - uint8_t  for storage class index
  *   - uint64_t for block id
  */
-std::optional<std::tuple<uint8_t, uint8_t, uint64_t>> extract_swip_ptr(
+std::optional<std::tuple<uint8_t, uint8_t, int64_t>> extract_swip_ptr(
     Swip ptr) {
     if (!is_unswizzled(ptr)) {
         return {};
@@ -66,7 +66,8 @@ std::optional<std::tuple<uint8_t, uint8_t, uint64_t>> extract_swip_ptr(
     uint64_t ptr_val = reinterpret_cast<uint64_t>(ptr);
     uint8_t size_class = (ptr_val >> 57) & 0b111111ull;
     uint8_t storage_class = (ptr_val >> 55) & 0b11ull;
-    uint64_t block_id = ptr_val & (0x7F'FF'FF'FF'FF'FF'FFull);
+    int64_t block_id =
+        static_cast<int64_t>(ptr_val & (0x7F'FF'FF'FF'FF'FF'FFull));
     return std::make_tuple(size_class, storage_class, block_id);
 }
 
@@ -79,10 +80,11 @@ std::optional<std::tuple<uint8_t, uint8_t, uint64_t>> extract_swip_ptr(
  * @return Swip Unswizzled swip pointer
  */
 Swip construct_unswizzled_swip(uint8_t size_class_idx,
-                               uint8_t storage_class_idx, uint64_t block_id) {
+                               uint8_t storage_class_idx, int64_t block_id) {
+    uint64_t bid = static_cast<uint64_t>(block_id);
     uint64_t size_class_enc = static_cast<uint64_t>(size_class_idx) << 57;
     uint64_t storage_class_enc = static_cast<uint64_t>(storage_class_idx) << 55;
-    return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | block_id);
+    return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | bid);
 }
 
 //// SizeClass
@@ -457,27 +459,26 @@ arrow::Status SizeClass::EvictFrame(uint64_t idx) {
 
     auto start = start_now(tracing_mode_);
     auto ptr = this->getFrameAddress(idx);
-    int64_t size = static_cast<int64_t>(this->getBlockSize());
+    int64_t block_id = -1;
 
-    arrow::Result<uint64_t> block_id = arrow::Status::OutOfMemory(
-        "No storage locations provided to evict to.");
     uint8_t manager_id;
     for (manager_id = 0; manager_id < this->storage_managers_.size();
          manager_id++) {
-        block_id = this->storage_managers_[manager_id]->WriteBlock(ptr, size);
-        if (block_id.ok()) {
+        auto& sm = this->storage_managers_[manager_id];
+        block_id = sm->WriteBlock(ptr, this->idx_);
+        if (block_id != -1) {
             break;
         }
     }
 
-    if (!block_id.ok()) {
-        return block_id.status();
+    if (block_id == -1) {
+        return arrow::Status::OutOfMemory(
+            "Not enough spill space is available in any storage location.");
     }
 
     // Construct the Swip
     OwningSwip swip = this->swips_[idx];
-    *swip = construct_unswizzled_swip(this->idx_, manager_id,
-                                      block_id.ValueOrDie());
+    *swip = construct_unswizzled_swip(this->idx_, manager_id, block_id);
     this->swips_[idx] = nullptr;
 
     // Mark the frame as unmapped
@@ -493,17 +494,12 @@ arrow::Status SizeClass::EvictFrame(uint64_t idx) {
     return arrow::Status::OK();
 }
 
-arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
-                                         uint64_t block_idx,
-                                         uint8_t manager_idx) {
+void SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
+                                int64_t block_id, uint8_t manager_idx) {
     auto start = start_now(this->tracing_mode_);
-    int64_t size = static_cast<int64_t>(this->getBlockSize());
 
     auto ptr = this->getFrameAddress(frame_idx);
-    CHECK_ARROW_MEM_RET(
-        this->storage_managers_[manager_idx]->ReadBlock(block_idx, size, ptr),
-        "SizeClass::ReadbackToFrame: Failed to Read Spill Block from Storage "
-        "-");
+    this->storage_managers_[manager_idx]->ReadBlock(block_id, this->idx_, ptr);
 
     // Mark the frame as mapped
     this->markFrameAsMapped(frame_idx);
@@ -518,7 +514,6 @@ arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
         milli_double dur = steady_clock::now() - start.value();
         this->stats_.total_readback_time += dur;
     }
-    return arrow::Status::OK();
 }
 
 void BufferPoolStats::Print(FILE* out) const {
@@ -1396,7 +1391,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         auto [size_class_idx, storage_manager_idx, block_id] =
             swip_info.value();
         auto status = this->storage_managers_[storage_manager_idx]->DeleteBlock(
-            block_id, this->size_class_bytes_[size_class_idx]);
+            block_id, size_class_idx);
 
         // For simplicity of free, we will print failures as warnings for now
         if (status.ok()) {
@@ -1644,10 +1639,8 @@ int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
         }
 
         // Load Block from Storage into Frame
-        CHECK_ARROW_MEM_RET(
-            size_class->ReadbackToFrame(ptr, frame_idx, block_id,
-                                        storage_manager_idx),
-            "Pin failed. Error when reading back block from storage:");
+        size_class->ReadbackToFrame(ptr, frame_idx, block_id,
+                                    storage_manager_idx);
 
         this->stats_.AddPinnedBytes(block_bytes);
         this->stats_.AddInMemoryBytes(block_bytes);
