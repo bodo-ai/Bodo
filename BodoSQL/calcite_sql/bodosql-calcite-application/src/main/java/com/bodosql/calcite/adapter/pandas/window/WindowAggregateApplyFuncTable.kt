@@ -72,6 +72,7 @@ internal object WindowAggregateApplyFuncTable {
         CondOperatorTable.BOOLAND_AGG to ::boolandAgg,
         CondOperatorTable.BOOLXOR_AGG to ::boolxorAgg,
         CondOperatorTable.CONDITIONAL_TRUE_EVENT to ::conditionalTrueEvent,
+        NumericOperatorTable.APPROX_PERCENTILE to ::approxPercentile,
         NumericOperatorTable.BITOR_AGG to ::bitorAgg,
         NumericOperatorTable.BITAND_AGG to ::bitandAgg,
         NumericOperatorTable.BITXOR_AGG to ::bitxorAgg,
@@ -204,6 +205,9 @@ internal object WindowAggregateApplyFuncTable {
             ),
         )
     }
+
+    private fun approxPercentile(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
+        BodoSQLKernel("windowed_approx_percentile", operands)
 
     private fun percentRank(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
         // TODO(jsternberg): https://bodo.atlassian.net/browse/BSE-690

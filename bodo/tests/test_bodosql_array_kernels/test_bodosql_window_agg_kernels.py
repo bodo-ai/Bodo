@@ -1280,6 +1280,64 @@ def test_windowed_kernels_two_arg(
     )
 
 
+@pytest.mark.parametrize(
+    "arr, q, answer",
+    [
+        pytest.param(
+            pd.Series([10, 20, 30, 40, 50] * 100, dtype=pd.Float64Dtype()),
+            0.5,
+            pd.Series([30.0] * 500, dtype=pd.Float64Dtype()),
+            id="0.5-no_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [30, 20, 10, None, 300, None, None, None] * 100, dtype=pd.Float64Dtype()
+            ),
+            0.5,
+            pd.Series([25.0] * 800, dtype=pd.Float64Dtype()),
+            id="0.5-some_null",
+        ),
+        pytest.param(
+            pd.Series([None] * 5000, dtype=pd.Float64Dtype()),
+            0.5,
+            pd.Series([None] * 5000, dtype=pd.Float64Dtype()),
+            id="0.5-all_null",
+        ),
+        pytest.param(
+            pd.Series(list(range(1000)), dtype=pd.Float64Dtype()),
+            0.01,
+            pd.Series([10.0] * 1000, dtype=pd.Float64Dtype()),
+            id="0.01-no_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if i % 2 == 0 else i**2 for i in range(500)],
+                dtype=pd.Float64Dtype(),
+            ),
+            0.79,
+            pd.Series([140251.96] * 500, dtype=pd.Float64Dtype()),
+            id="0.79-some_null",
+        ),
+    ],
+)
+def test_windowed_approx_percentile(arr, q, answer, memory_leak_check):
+    def impl(arr, q):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_approx_percentile(arr, q)
+        )
+
+    check_func(
+        impl,
+        (arr, q),
+        py_output=answer,
+        only_seq=True,
+        check_dtype=False,
+        reset_index=True,
+        atol=0.01,
+        rtol=0.4,
+    )
+
+
 def test_window_dict_min_max(memory_leak_check):
     """Tests windowed_min and windowed_max on dictionary encoded arrays"""
 

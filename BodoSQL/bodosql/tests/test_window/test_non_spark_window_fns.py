@@ -292,6 +292,53 @@ def test_ratio_to_report(data_info, dtype, memory_leak_check):
     )
 
 
+@pytest.mark.slow
+def test_approx_percentile(memory_leak_check):
+    """Tests APPROX_PERCENTILE as a window function"""
+    scale = 11
+    partitions = [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1]
+    df = pd.DataFrame(
+        {
+            "P": partitions * scale,
+            "O": list(range(len(partitions) * scale)),
+            "I": [
+                None
+                if i % len(partitions) in (5, 10, 12)
+                else 10 * (2 ** (i / 10 + partitions[i % len(partitions)]))
+                for i in range(len(partitions) * scale)
+            ],
+        }
+    )
+
+    selects = []
+    for i, q in enumerate([0.5, 0.01, 0.9]):
+        selects.append(f"APPROX_PERCENTILE(I, {q}) OVER (PARTITION BY P) as R{i}")
+
+    query = f"SELECT P, {', '.join(selects)} FROM table1"
+
+    answer = pd.DataFrame(
+        {
+            "P": ([1] * 7 + [2] * 5 + [3] * 3 + [4]) * scale,
+            "R0": ([6755.880503] * 7 + [16634.929077] * 5 + [43899.841025] * 3 + [None])
+            * scale,
+            "R1": ([21.090957] * 7 + [52.038257] * 5 + [137.329783] * 3 + [None])
+            * scale,
+            "R2": ([9.732837e05] * 7 + [2.106636e06] * 5 + [4.148289e06] * 3 + [None])
+            * scale,
+        }
+    )
+
+    pandas_code = check_query(
+        query,
+        {"table1": df},
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=answer,
+        rtol=0.3,
+    )
+
+
 # In cases with multiple correct answers, the answer returned by our mode implementation
 # is the value that was encountered first in the overall array
 # due to the semantics of how Python iterates over hashmaps
