@@ -833,6 +833,42 @@ def windowed_corr(Y, X, lower_bound, upper_bound):
     )
 
 
+def windowed_approx_percentile(data, q):  # pragma: no cover
+    pass
+
+
+@overload(windowed_approx_percentile)
+def overload_windowed_approx_percentile(data, q):
+    """
+    Returns the result of calling APPROX_PERCENTILE as a window
+    function on the partition represented by data with percentile q.
+
+    Only allowed without an order/frame:
+    https://docs.snowflake.com/en/sql-reference/functions-analytic
+
+    Args:
+        data (numeric series/array) the data to get the approximate
+        percentile of.
+        q (float) the percentile to seek.
+
+    Returns
+        (float array) The approximate value of the qth percentile
+        of the data (or null if data is all null/empty) used to fill
+        an array the same size as data.
+    """
+    arr_type = bodo.FloatingArrayType(types.float64)
+
+    def impl(data, q):  # pragma: no cover
+        data = bodo.utils.conversion.coerce_to_array(data)
+        n = len(data)
+        approx = bodo.libs.array_kernels.approx_percentile(data, q)
+        if approx is None:
+            return bodo.utils.conversion.coerce_scalar_to_array(None, n, arr_type)
+        return bodo.utils.conversion.coerce_scalar_to_array(approx, n, arr_type)
+
+    return impl
+
+
 def str_arr_max(arr):  # pragma: no cover
     return ""
 

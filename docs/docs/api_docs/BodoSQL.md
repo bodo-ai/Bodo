@@ -1366,104 +1366,155 @@ BodoSQL Currently supports the following data generaiton functions:
     rows have the same `gen` value they will produce the same output value.
 
 
-### Aggregation Functions
+### Aggregation & Window Functions
 
-BodoSQL Currently supports the following Aggregation Functions on
-all types:
+An aggregation function can be used to combine data across many
+rows to form a single answer. Aggregations can be done with a
+`#!sql GROUP BY` clause, in which case the combined value is
+calculated once per unique combination of groupbing keys. Aggregations
+can also be done without the `#!sql GROUP BY` clause, in which case
+a single value is outputted by calculating the aggregation across
+all rows.
 
+For example:
 
-#### COUNT
--   `#!sql COUNT`
+```sql
+SELECT AVG(A) FROM table1 GROUP BY B
 
-    Count the number of elements in a column or group.
+SELECT COUNT(Distinct A) FROM table1
+```
+
+Window functions can be used to compute an aggregation across a
+row and its surrounding rows. Most window functions have the
+following syntax:
+
+```sql
+SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
+```
+The `#!sql ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
+section is used to specify the window over which to compute the
+function. A bound can can come before the current row, using `#!sql PRECEDING` or after the current row, using
+`#!sql FOLLOWING`. The bounds can be relative (i.e.
+`#!sql N PRECEDING` or `#!sql N FOLLOWING`), where `N` is a positive integer,
+or they can be absolute (i.e. `#!sql UNBOUNDED PRECEDING` or
+`#!sql UNBOUNDED FOLLOWING`).
+
+For example:
+
+```sql
+SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
+```
+This query computes the sum of every 3 rows, i.e. the sum of a row of interest, its preceding row, and its following row.
+
+In contrast:
+
+```sql
+SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
+```
+This query computes the cumulative sum over a row and all of its preceding rows.
+
+!!! note
+    For most window functions, BodoSQL returns `NULL` if the specified window frame
+    is empty or all `NULL`. Exceptions to this behavior are noted.
+
+Window functions perform a series of steps as followed:
+
+1.  Partition the data by `#!sql PARTITION_COLUMN`. This is effectively a groupby operation on `#!sql PARTITION_COLUMN`.
+2.  Sort each group as specified by the `#!sql ORDER BY` clause.
+3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
+4.  Shuffle the data back to the original ordering.
+
+For BodoSQL, `#!sql PARTITION BY` is required, but
+`#!sql ORDER BY` is optional for most functions and
+`#!sql ROWS BETWEEN` is optional for all of them. If
+`#!sql ROWS BETWEEN` is not specified then it defaults to either
+computing the result over the entire window (if no `#!sql ORDER BY`
+clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURRENT ROW`
+(if there is an `#!sql ORDER BY` clause).
+!!! note
+    `#!sql RANGE BETWEEN` is not currently supported.
+
+!!!note
+    If a window frame contains `NaN` values, the output may diverge from Snowflake's
+    behavior. When a `NaN` value enters a window, any window function that combines
+    the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
+    `NaN` until the `NaN` value has exited the window.
+
+BodoSQL Currently supports the following Aggregation & Window functions:
+
+| Function | Supported with GROUP BY? | Supported without GROUP BY? | Supported as window function? | (WINDOW) Allows ORDER BY? | (WINDOW) Requires ORDER BY? | (WINDOW) Allows frame? |
+|---|---|---|---|---|---|---|
+| `#!sql ANY_VALUE` | Y | Y | Y | Y | N | Y |
+| `#!sql APPROX_PERCENTILE` | N | Y | Y | N | N | N |
+| `#!sql ARRAY_AGG` | Y | N | N | N/A | N/A | N/A |
+| `#!sql ARRAY_UNIQUE_AGG` | Y | N | N | N/A | N/A | N/A |
+| `#!sql AVG` | Y | Y | Y | Y | N | Y |
+| `#!sql BITAND_AGG` | Y | Y | Y | N | N | N |
+| `#!sql BITOR_AGG` | Y | Y | Y | N | N | N |
+| `#!sql BITXOR_AGG` | Y | Y | Y | N | N | N |
+| `#!sql BOOLAND_AGG` | Y | Y | Y | N | N | N |
+| `#!sql BOOLOR_AGG` | Y | Y | Y | N | N | N |
+| `#!sql BOOLXOR_AGG` | Y | Y | Y | N | N | N |
+| `#!sql CONDITIONAL_CHANGE_EVENT` | N | N | Y | Y | Y | N |
+| `#!sql CONDITIONAL_TRUE_EVENT` | N | N | Y | Y | Y | N |
+| `#!sql CORR` | N | N | Y | N | N | N |
+| `#!sql COUNT` | Y | Y | Y | Y | N | Y |
+| `#!sql COUNT(*)` | Y | Y | Y | Y | N | Y |
+| `#!sql COUNT_IF` | Y | Y | Y | Y | N | Y |
+| `#!sql COVAR_POP` | N | N | Y | N | N | N |
+| `#!sql COVAR_SAMP` | N | N | Y | N | N | N |
+| `#!sql CUME_DIST` | N | N | Y | Y | Y | N |
+| `#!sql DENSE_RANK` | N | N | Y | Y | Y | N |
+| `#!sql FIRST_VALUE` | N | N | Y | Y | N | Y |
+| `#!sql KURTOSIS` | Y | Y | Y | N | N | N |
+| `#!sql LEAD` | N | N | Y | Y | Y | N |
+| `#!sql LAST_VALUE` | N | N | Y | Y | N | Y |
+| `#!sql LAG` | N | N | Y | Y | Y | N |
+| `#!sql LISTAGG` | Y | Y | N | N/A | N/A | N/A |
+| `#!sql MAX` | Y | Y | Y | Y | N | Y |
+| `#!sql MEDIAN` | Y | Y | Y | N | N | N |
+| `#!sql MIN` | Y | Y | Y | Y | N | Y |
+| `#!sql MODE` | N | Y | Y | Y | N | N |
+| `#!sql NTH_VALUE` | N | N | Y | Y | N | Y |
+| `#!sql NTILE` | N | N | Y | Y | Y | N |
+| `#!sql OBJECT_AGG` | N | Y | N | N/A | N/A | N/A |
+| `#!sql PERCENTILE_CONT` | Y | Y | N | N/A | N/A | N/A |
+| `#!sql PERCENTILE_DISC` | Y | Y | N | N/A | N/A | N/A |
+| `#!sql PERCENT_RANK` | N | N | Y | Y | Y | N |
+| `#!sql RANK` | N | N | Y | Y | Y | N |
+| `#!sql RATIO_TO_REPORT` | N | N | Y | Y | N | N |
+| `#!sql ROW_NUMBER` | N | N | Y | Y | Y | N |
+| `#!sql SKEW` | Y | Y | Y | Y | N | N |
+| `#!sql STDDEV` | Y | Y | Y | Y | N | Y |
+| `#!sql STDDEV_POP` | Y | Y | Y | Y | N | Y |
+| `#!sql STDDEV_SAMP` | Y | Y | Y | Y | N | Y |
+| `#!sql SUM` | Y | Y | Y | Y | N | Y |
+| `#!sql VARIANCE` | Y | Y | Y | Y | N | Y |
+| `#!sql VARIANCE_POP` | Y | Y | Y | Y | N | Y |
+| `#!sql VARIANCE_SAMP` | Y | Y | Y | Y | N | Y |
+| `#!sql VAR_POP` | Y | Y | Y | Y | N | Y |
+| `#!sql VAR_SAMP` | Y | Y | Y | Y | N | Y |
 
 
 #### ANY_VALUE
 -   `#!sql ANY_VALUE`
 
-    Select an arbitrary value.
+    Select an arbitrary value from the column/group/window.
+    Supported on all types.
 
     !!! note
         Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
 
-In addition, BodoSQL also supports the following functions on
-numeric types
+#### APPROX_PERCENTILE
+-   `#!sql APPROX_PERCENTILE(A, q)`
 
+    Returns the approximate value of the `q`-th percentile of column `A` (e.g.
+    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
+    and `q` can be any scalar float between zero and one.
 
-#### AVG
--   `#!sql AVG`
+    The approximation is calculated using the t-digest algorithm.
 
-    Compute the mean for a column.
-
-#### MAX
--   `#!sql MAX`
-
-    Compute the max value for a column.
-
-#### MIN
--   `#!sql MIN`
-
-    Compute the min value for a column.
-
-#### STDDEV
--   `#!sql STDDEV`
-
-    Compute the standard deviation for a column with N - 1
-    degrees of freedom.
-
-#### STDDEV_SAMP
--   `#!sql STDDEV_SAMP`
-
-    Compute the standard deviation for a column with N - 1
-    degrees of freedom.
-
-#### STDDEV_POP
--   `#!sql STDDEV_POP`
-
-    Compute the standard deviation for a column with N degrees
-    of freedom.
-
-#### SUM
--   `#!sql SUM`
-
-    Compute the sum for a column.
-
-#### COUNT_IF
--   `#!sql COUNT_IF`
-
-    Compute the total number of occurrences of `#!sql true` in a column
-    of booleans. For example:
-
-    ```sql
-    SELECT COUNT_IF(A) FROM table1
-    ```
-
-    Is equivalent to
-    ```sql
-    SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
-    `#!sql ``
-
-
-#### LISTAGG
--   `LISTAGG(str_col[, delimeter]) [WITHIN GROUP (ORDER BY order_col)]`
-
-    Concatenates all of the strings in `str_col` within each group into a single
-    string seperated by the characters in the string `delimiter`. If no delimiter
-    is provided, an empty string is used by default.
-
-    Optionally allows using a `WITHIN GROUP` clause to specify how the strings should
-    be ordered before being concatenated. If no clause is specified, then the ordering
-    is unpredictable.
-
-
-#### MODE
--   `#!sql MODE`
-
-    Returns the most frequent element in a group, or `NULL` if the group is empty.
-
-    !!! note
-        This aggregation function is currently only supported with a `GROUP BY` clause.
 
 #### ARRAY_AGG
 -   `#!sql ARRAY_AGG([DISTINCT] A) [WITHIN GROUP(ORDER BY orderby_terms)]`
@@ -1478,8 +1529,270 @@ numeric types
     the arrays. However, if this keyword is provied and a `WITHIN GROUP` clause is also provided,
     then the `WITHIN GROUP` clause can only refer to the same column as the aggregation input.
 
+
+#### ARRAY_UNIQUE_AGG
+-   `#!sql ARRAY_UNIQUE_AGG(A)`
+
+    Equivalent to `#!sql ARRAY_AGG(DISTINCT A)`
+
+
+#### AVG
+-   `#!sql AVG`
+
+    Compute the mean of the the column/group/window. Supported
+    on all numeric types.
+
+
+#### BITAND_AGG
+-   `#!sql BITAND_AGG`
+
+    Compute the bitwise AND of every input
+    in a column/group/window, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+
+#### BITOR_AGG
+-   `#!sql BITOR_AGG`
+
+    Compute the bitwise OR of every input
+    in a column/group/window, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+
+#### BITXOR_AGG
+-   `#!sql BITXOR_AGG`
+
+    Compute the bitwise XOR of every input
+    in a column/group/window, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Compute the logical AND of the boolean value of every input
+    in a column/group/window, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for
+    numeric and boolean types.
+
+
+#### BOOLOR_AGG
+-   `#!sql BOOLOR_AGG`
+
+    Compute the logical OR of the boolean value of every input
+    in a column/group/window, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if there is at least 1 non-zero entry. This is supported for
+    numeric and boolean types.
+
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
+    counterintuitive to how the logical XOR is normally thought of). This is
+    supported for numeric and boolean types.
+
+
+#### CONDITIONAL_CHANGE_EVENT
+-   `#!sql CONDITIONAL_CHANGE_EVENT(COLUMN_EXPRESSION)`
+
+    Computes a counter within each partition that starts at zero and increases by 1 each
+    time the value inside the window changes. `NULL` does not count as a new/changed value.
+    `#!sql ORDER BY` is required for this function.
+    
+
+#### CONDITIONAL_TRUE_EVENT
+-   `#!sql CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
+
+    Computes a counter within each partition that starts at zero and increases by 1 each
+    time the boolean column's value is `true`. `#!sql ORDER BY` is required for this function.
+
+
+#### CORR
+-   `#!sql CORR(Y, X)`
+
+    Compute the correlation over the window of both inputs, or `NULL` if
+    the window is empty. Equivalent to `#!sql COVAR(Y, X) / (STDDEV_POP(Y) * STDDEV_POP(X))`
+
+
+#### COUNT
+-   `#!sql COUNT`
+
+    Count the number of non-null elements in the column/group/window.
+    Supported on all types. If used with the syntax `#!sql COUNT(*)`
+    returns the total number of rows instead of non-null rows.
+
+
+#### COUNT_IF
+-   `#!sql COUNT_IF`
+
+    Compute the total number of occurrences of `#!sql true` in a column/group/window
+    of booleans. For example:
+
+    ```sql
+    SELECT COUNT_IF(A) FROM table1
+    ```
+
+    Is equivalent to
+    ```sql
+    SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
+    ```
+
+
+#### COVAR_POP
+-   `#!sql COVAR_POP(Y, X)`
+
+    Compute the population covariance over the window of both inputs, or `NULL` if
+    the window is empty. Supported on all numeric types.
+
+
+#### COVAR_SAMP
+-   `#!sql COVAR_SAMP(Y, X)`
+
+    Compute the sample covariance over the window of both inputs, or `NULL` if
+    the window is empty. Supported on all numeric types.
+
+
+#### CUME_DIST
+-   `#!sql CUME_DIST()`
+
+    Compute the cumulative distribution of the value(s) in each row based on the value(s) relative to all value(s)
+    within the window partition. `#!sql ORDER BY` is required for this function.
+
+
+#### DENSE_RANK
+-   `#!sql DENSE_RANK()`
+
+    Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition
+    without producing gaps in the rank (compare with `#!sql RANK`). The rank begins with 1 and increments by one for each succeeding value.
+    Rows with the same value(s) produce the same rank. `#!sql ORDER BY` is required for this function.
+
+    !!!note
+        To compare `#!sql RANK` and `#!sql DENSE_RANK`, on input array `['a', 'b', 'b', 'c']`, `#!sql RANK` will output `[1, 2, 2, 4]` while `#!sql DENSE_RANK` outputs `[1, 2, 2, 3]`.
+
+
+#### FIRST_VALUE
+-   `#!sql FIRST_VALUE(COLUMN_EXPRESSION)`
+
+    Select the first value in the window or `NULL` if the window
+    is empty. Supported on all non-semi-structured types.
+
+
+#### KURTOSIS
+-   `#!sql KURTOSIS`
+
+    Compute the kurtosis of a column or `NULL` if the window contains fewer
+    than 4 non-`NULL` entries. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+    
+
+#### LAG
+-   `#!sql LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
+
+    Returns the row that precedes the current row by N. If N
+    is not specified, defaults to 1. If FILL_VALUE is not
+    specified, defaults to `NULL`. If
+    there are fewer than N rows the follow the current row in
+    the window, it returns FILL_VALUE. N must be a literal
+    integer if specified. FILL_VALUE must be a scalar if specified.
+    Supported on all non-semi-structured types.
+
+
+#### LAST_VALUE
+-   `#!sql LAST_VALUE(COLUMN_EXPRESSION)`
+
+    Select the last value in the window or `NULL` if the window
+    is empty. Supported on all non-semi-structured types.
+
+
+#### LEAD
+-   `#!sql LEAD(COLUMN_EXPRESSION, [, N[, FILL_VALUE]])`
+
+    Equivalent to  `#!sql LEAD(COLUMN_EXPRESSION, -N, FILL_VALUE)`,
+    in other words, returns the row following the current row by N.
+
+
+#### LISTAGG
+-   `LISTAGG(str_col[, delimeter]) [WITHIN GROUP (ORDER BY order_col)]`
+
+    Concatenates all of the strings in `str_col` within each group into a single
+    string seperated by the characters in the string `delimiter`. If no delimiter
+    is provided, an empty string is used by default.
+
+    Optionally allows using a `WITHIN GROUP` clause to specify how the strings should
+    be ordered before being concatenated. If no clause is specified, then the ordering
+    is unpredictable.
+
+    Returns `#!sql ''` if the input is all `#!sql NULL` or empty.
+
+
+#### MAX
+-   `#!sql MAX`
+
+    Compute the maximum value in the column/group/window.
+    Supported on all non-semi-structured types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### MEDIAN
+-   `#!sql MEDIAN(COLUMN_EXPRESSION)`
+
+    Compute the median over the  column/group/window. Supported on
+    all numeric types. 
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+    
+
+#### MIN
+-   `#!sql MIN`
+
+    Compute the minimum value in the column/group/window. Supported
+    on all types.
+    Supported on all non-semi-structured types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### MODE
+-   `#!sql MODE`
+
+    Returns the most frequent element in a column/group/window, including `#sql NULL` if that
+    is the element that appears the most. Supported on all non-semi-structured types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
     !!! note
-        This aggregation function is currently only supported with a `GROUP BY` clause.
+        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
+
+
+#### NTH_VALUE
+-   `#!sql NTH_VALUE(COLUMN_EXPRESSION, N)`
+
+    Select the last value in the window or `NULL` if the window
+    does not have `N` elements. Uses 1-indexing. Requires
+    `N` to be a positive integer literal.  Supported on all 
+    non-semi-structured types.
+
+
+#### NTILE
+-   `#!sql NTILE(N)`
+
+    Divides the partitioned groups into N buckets based on
+    ordering. For example if N=3 and there are 30 rows in a
+    partition, the first 10 are assigned 1, the next 10 are
+    assigned 2, and the final 10 are assigned 3. In cases where
+    the number of rows cannot be evenly divided by the number
+    of buckets, the first buckets will have one more value
+    than the last bucket. For example, if N=4 and there are
+    22 rows in a partition, the first 6 are assigned 1, the
+    next 6 are assigned 2, the next 5 are assigned 3, and
+    the last 5 are assigned 4.
 
 
 #### OBJECT_AGG
@@ -1490,18 +1803,6 @@ numeric types
     row where `K` or `V` is `NULL` is not included in the final object. If the group
     is empty or all the rows are not included, an empty object is returned.
 
-    !!! note
-        This aggregation function is currently only supported with a `GROUP BY` clause.
-
-
-#### APPROX_PERCENTILE
--   `#!sql APPROX_PERCENTILE(A, q)`
-
-    Returns the approximate value of the `q`-th percentile of column `A` (e.g.
-    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
-    and `q` can be any scalar float between zero and one.
-
-    The approximation is calculated using the t-digest algorithm.
 
 #### PERCENTILE_CONT
 -   `#!sql APPROX_PEPERCENTILE_CONTRCENTILE(q) WITHIN GROUP (ORDER BY A)`
@@ -1515,6 +1816,7 @@ numeric types
     If we sought the percentile `q=0.25` we would be looking for the value
     at index 0.75. There is no value at index 0.75, so we linearly interpolate
     between 2 and 8 to get 6.5.
+
 
 #### PERCENTILE_DISC
 -   `#!sql PERCENTILE_DISC(q) WITHIN GROUP (ORDER BY A)`
@@ -1531,83 +1833,130 @@ numeric types
     If we sought the percentile `q=0.6` we would output 8 since it has the
     smallest `CUME_DIST` that is `>=0.6`.
 
-#### VARIANCE
--   `#!sql VARIANCE`
 
-    Compute the variance for a column with N - 1 degrees of
-    freedom.
+#### PERCENT_RANK
+-   `#!sql PERCENT_RANK()`
 
-#### VAR_SAMP
--   `#!sql VAR_SAMP`
+    Compute the percentage ranking of the value(s) in each row based on the value(s) relative to all value(s)
+    within the window partition. Ranking calculated using `#!sql RANK()` divided by the number of rows in the window
+    partition minus one. Partitions with one row have `#!sql PERCENT_RANK()` of 0. `#!sql ORDER BY` is required for this function.
 
-    Compute the variance for a column with N - 1 degrees of
-    freedom.
+    
+#### RANK
+-   `#!sql RANK()`
 
-#### VAR_POP
--   `#!sql VAR_POP`
+    Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition.
+    The rank begins with 1 and increments by one for each succeeding value. Duplicate value(s) will produce
+    the same rank, producing gaps in the rank (compare with `#!sql DENSE_RANK`). `#!sql ORDER BY` is required for this function.
 
-    Compute the variance for a column with N degrees of freedom.
+
+#### RATIO_TO_REPORT
+-   `#!sql RATIO_TO_REPORT(COLUMN_EXPRESSION)`
+
+    Returns an element in the window frame divided by the sum of all elements in the
+    same window frame, or `NULL` if the window frame has a sum of zero. For example,
+    if calculating `#!sql RATIO_TO_REPORT` on `[2, 5, NULL, 10, 3]` where the window
+    is the entire partition, the answer is `[0.1, 0.25, NULL, 0.5, 0.15]`.
+
+
+#### ROW_NUMBER
+-   `#!sql ROW_NUMBER()`
+
+    Compute an increasing row number (starting at 1) for each
+    row. This function cannot be used with `#!sql ROWS BETWEEN`.
+
+    !!! note
+        This window function is supported without a partition.
+
 
 #### SKEW
 -   `#!sql SKEW`
 
-    Compute the skew of a column
+    Compute the skew of a column/group/window or `NULL` if the window contains fewer
+    than 3 non-`NULL` entries. Supported on numeric types.
 
-#### KURTOSIS
--   `#!sql KURTOSIS`
-
-    Compute the kurtosis of a column
-
-#### BITOR_AGG
--   `#!sql BITOR_AGG`
-
-    Compute the bitwise OR of every input
-    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
-    Accepts floating point values, integer values, and strings. Strings are interpreted
-    directly as numbers, converting to 64-bit floating point numbers.
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
 
 
-#### BOOLOR_AGG
--   `#!sql BOOLOR_AGG`
+#### STDDEV
+-   `#!sql STDDEV`
 
-    Compute the logical OR of the boolean value of every input
-    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
-    returning True if there is at least 1 non-zero entry. This is supported for
-    numeric and boolean types.
+    Compute the standard deviation of the column/group/window with N - 1
+    degrees of freedom. Supported on numeric types.
 
-#### BOOLAND_AGG
--   `#!sql BOOLAND_AGG`
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
 
-    Compute the logical AND of the boolean value of every input
-    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
-    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for
-    numeric and boolean types.
 
-#### BOOLXOR_AGG
--   `#!sql BOOLXOR_AGG`
+#### STDDEV_SAMP
+-   `#!sql STDDEV_SAMP`
 
-    Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
-    returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
-    counterintuitive to how the logical XOR is normally thought of). This is
-    supported for numeric and boolean types.
+    Compute the standard deviation of the column/group/window with N - 1
+    degrees of freedom. Supported on numeric types.
 
-All aggregate functions have the syntax:
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
 
-```sql
-SELECT AGGREGATE_FUNCTION(<COLUMN_EXPRESSION>)
-FROM <TABLE_NAME>
-GROUP BY <COLUMN_NAMES>
-```
 
-These functions can be used either in a groupby clause, where they
-will be computed for each group, or by itself on an entire column
-expression. For example:
+#### STDDEV_POP
+-   `#!sql STDDEV_POP`
 
-```sql
-SELECT AVG(A) FROM table1 GROUP BY B
+    Compute the standard deviation of the column/group/window with N degrees
+    of freedom. Supported on numeric types.
 
-SELECT COUNT(Distinct A) FROM table1
-```
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### SUM
+-   `#!sql SUM`
+
+    Compute the sum of the column/group/window. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### VARIANCE
+-   `#!sql VARIANCE`
+
+    Compute the variance for a column/group/window with N - 1 degrees of
+    freedom. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### VARIANCE_SAMP
+-   `#!sql VARIANCE_SAMP`
+
+    Compute the variance for a column/group/window with N - 1 degrees of
+    freedom. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### VARIANCE_POP
+-   `#!sql VARIANCE_POP`
+
+    Compute the variance for a column/group/window with N degrees of
+    freedom. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### VAR_SAMP
+-   `#!sql VAR_SAMP`
+
+    Compute the variance for a column/group/window with N - 1 degrees of
+    freedom. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
+
+#### VAR_POP
+-   `#!sql VAR_POP`
+
+    Compute the variance for a column/group/window with N degrees of
+    freedom. Supported on numeric types.
+
+    Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
+
 
 ### Timestamp Functions
 
@@ -3189,361 +3538,6 @@ Bodo currently supports the following functions that operate on columns of array
 
     Returns an array constructed from a specified subset of elements of the input array `arr[from:to]`.
     Returns `NULL` if one of `arr`, `from` and `to` is `NULL`.
-
-
-### Window Functions
-
-Window functions can be used to compute an aggregation across a
-row and its surrounding rows. Most window functions have the
-following syntax:
-
-```sql
-SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
-```
-The `#!sql ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
-section is used to specify the window over which to compute the
-function. A bound can can come before the current row, using `#!sql PRECEDING` or after the current row, using
-`#!sql FOLLOWING`. The bounds can be relative (i.e.
-`#!sql N PRECEDING` or `#!sql N FOLLOWING`), where `N` is a positive integer,
-or they can be absolute (i.e. `#!sql UNBOUNDED PRECEDING` or
-`#!sql UNBOUNDED FOLLOWING`).
-
-For example:
-
-```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
-```
-This query computes the sum of every 3 rows, i.e. the sum of a row of interest, its preceding row, and its following row.
-
-In contrast:
-
-```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
-```
-This query computes the cumulative sum over a row and all of its preceding rows.
-
-!!! note
-    For most window functions, BodoSQL returns `NULL` if the specified window frame
-    is empty or all `NULL`. Exceptions to this behavior are noted.
-
-Window functions perform a series of steps as followed:
-
-1.  Partition the data by `#!sql PARTITION_COLUMN`. This is effectively a groupby operation on `#!sql PARTITION_COLUMN`.
-2.  Sort each group as specified by the `#!sql ORDER BY` clause.
-3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
-4.  Shuffle the data back to the original ordering.
-
-For BodoSQL, `#!sql PARTITION BY` is required, but
-`#!sql ORDER BY` is optional for most functions and
-`#!sql ROWS BETWEEN` is optional for all of them. If
-`#!sql ROWS BETWEEN` is not specified then it defaults to either
-computing the result over the entire window (if no `#!sql ORDER BY`
-clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURRENT ROW`
-(if there is an `#!sql ORDER BY` clause).
-!!! note
-    `#!sql RANGE BETWEEN` is not currently supported.
-
-Currently, BodoSQL supports the following Window functions:
-
-!!!note
-    If a window frame contains `NaN` values, the output may diverge from Snowflake's
-    behavior. When a `NaN` value enters a window, any window function that combines
-    the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
-    `NaN` until the `NaN` value has exited the window.
-
-
-#### COUNT
--   `#!sql COUNT(*)`
-
-    Compute the number of entries in a window, including `NULL`.
-
-#### SUM
--   `#!sql SUM(COLUMN_EXPRESSION)`
-
-    Compute the sum over the window or `NULL` if the window is
-    empty.
-
-#### AVG
--   `#!sql AVG(COLUMN_EXPRESSION)`
-
-    Compute the average over the window or `NULL` if the window
-    is empty.
-
-
-#### STDDEV
--   `#!sql STDDEV(COLUMN_EXPRESSION)`
-
-    Compute the standard deviation for a sample over the
-    window or `NULL` if the window is empty.
-
-#### STDDEV_POP
--   `#!sql STDDEV_POP(COLUMN_EXPRESSION)`
-
-    Compute the standard deviation for a population over the
-    window or `NULL` if the window is empty.
-
-#### VARIANCE
--   `#!sql VARIANCE(COLUMN_EXPRESSION)`
-
-    Compute the variance for a sample over the window or `NULL`
-    if the window is empty.
-
-#### VAR_POP
--   `#!sql VAR_POP(COLUMN_EXPRESSION)`
-
-    Compute the variance for a population over the window or
-    `NULL` if the window is empty.
-
-
-#### COVAR_SAMP
--   `#!sql COVAR_SAMP(Y, X)`
-
-    Compute the sample covariance over the window of both inputs, or `NULL` if
-    the window is empty.
-
-
-#### COVAR_POP
--   `#!sql COVAR_POP(Y, X)`
-
-    Compute the population covariance over the window of both inputs, or `NULL` if
-    the window is empty.
-
-
-#### CORR
--   `#!sql CORR(Y, X)`
-
-    Compute the correlation over the window of both inputs, or `NULL` if
-    the window is empty. Equivalent to `#!sql COVAR(Y, X) / (STDDEV_POP(Y) * STDDEV_POP(X))`
-
-
-#### MAX
--   `#!sql MAX(COLUMN_EXPRESSION)`
-
-    Compute the maximum value over the window or `NULL` if the
-    window is empty.
-
-#### MIN
--   `#!sql MIN(COLUMN_EXPRESSION)`
-
-    Compute the minimum value over the window or `NULL` if the
-    window is empty.
-
-#### COUNT
-
--   `#!sql COUNT(COLUMN_EXPRESSION)`
-
-    Compute the number of non-`NULL` entries in a window, or zero if the window
-    is empty.
-
-#### COUNT_IF
-
--   `#!sql COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
-
-    Compute the number of `true` entries in a boolean column, or zero if the window
-    is empty.
-
-
-#### MEDIAN
--   `#!sql MEDIAN(COLUMN_EXPRESSION)`
-
-    Compute the median over the window, or `NULL` if the window is empty.
-
-
-#### MODE
--   `MODE(COLUMN_EXPRESSION)`
-
-    Returns the most frequent element in the window, or `NULL` if the window is
-    empty.
-
-    !!! note
-        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
-
-#### SKEW
--   `#!sql SKEW(COLUMN_EXPRESSION)`
-
-    Compute the skew over the window, or `NULL` if the window contains fewer
-    than 3 non-`NULL` entries.
-
-
-#### KURTOSIS
--   `#!sql KURTOSIS(COLUMN_EXPRESSION)`
-
-    Compute the skew over the window, or `NULL` if the window contains fewer
-    than 4 non-`NULL` entries.
-
-#### BITOR_AGG
--   `#!sql BITOR_AGG`
-
-    Outputs the bitwise OR of every input
-    in the window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
-    Accepts floating point values, integer values, and strings. Strings are interpreted
-    directly as numbers, converting to 64-bit floating point numbers.
-
-#### BOOLOR_AGG
--   `#!sql BOOLOR_AGG`
-
-    Outputs `#!sql true` if there is at least 1 non-zero` element in the
-    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
-
-
-#### BOOLAND_AGG
--   `#!sql BOOLAND_AGG`
-
-    Outputs `#!sql true` if every element in the window that is non-`#!sql NULL`
-    is also non-zero, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
-
-
-#### BOOLXOR_AGG
--   `#!sql BOOLXOR_AGG`
-
-    Outputs `#!sql true` if there is at exactly 1 non-zero element in the
-    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
-
-
-#### LEAD
--   `#!sql LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
-
-    Returns the row that follows the current row by N. If N
-    is not specified, defaults to 1. If FILL_VALUE is not
-    specified, defaults to `NULL`. If
-    there are fewer than N rows the follow the current row in
-    the window, it returns FILL_VALUE. N must be a literal
-    non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified.
-
-    !!!note
-        - At this time Bodo does not support the `#!sql IGNORE NULLS` keyword.
-        - This function cannot be used with `#!sql ROWS BETWEEN`.
-
-#### LAG
--   `#!sql LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
-
-    Returns the row that precedes the current row by N. If N
-    is not specified, defaults to 1. If FILL_VALUE is not
-    specified, defaults to `NULL`. If
-    there are fewer than N rows that precede the current row in
-    the window, it returns FILL_VALUE. N must be a literal
-    non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified.
-
-    !!! note
-        - At this time BodoSQL does not support the `#!sql IGNORE NULLS` keyword.
-        - This function cannot be used with `#!sql ROWS BETWEEN`.
-
-#### FIRST_VALUE
--   `#!sql FIRST_VALUE(COLUMN_EXPRESSION)`
-
-    Select the first value in the window or `NULL` if the window
-    is empty.
-    Select the first value in the window.
-
-#### LAST_VALUE
--   `#!sql LAST_VALUE(COLUMN_EXPRESSION)`
-
-    Select the last value in the window or `NULL` if the window
-    is empty.
-    Select the last value in the window.
-
-#### NTH_VALUE
--   `#!sql NTH_VALUE(COLUMN_EXPRESSION, N)`
-
-    Select the Nth value in the window (1-indexed) or `NULL` if
-    the window is empty. If N is greater or than the window
-    size, this returns `NULL`.
-    Select the Nth value in the window (1-indexed). If N is greater or than the
-    window size, this returns `NULL`.
-
-
-#### ANY_VALUE
--   `#!sql ANY_VALUE(COLUMN_EXPRESSION)`
-
-    Select an arbitrary value in the window or `NULL` if the window
-    is empty.
-
-    !!! note
-        Currently, BodoSQL always selects the first value, but this is subject to change at any time.
-
-
-#### NTILE
--   `#!sql NTILE(N)`
-
-    Divides the partitioned groups into N buckets based on
-    ordering. For example if N=3 and there are 30 rows in a
-    partition, the first 10 are assigned 1, the next 10 are
-    assigned 2, and the final 10 are assigned 3. In cases where
-    the number of rows cannot be evenly divided by the number
-    of buckets, the first buckets will have one more value
-    than the last bucket. For example, if N=4 and there are
-    22 rows in a partition, the first 6 are assigned 1, the
-    next 6 are assigned 2, the next 5 are assigned 3, and
-    the last 5 are assigned 4.
-
-
-#### RANK
--   `#!sql RANK()`
-
-    Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition.
-    The rank begins with 1 and increments by one for each succeeding value. Duplicate value(s) will produce
-    the same rank, producing gaps in the rank (compare with `#!sql DENSE_RANK`). `#!sql ORDER BY` is required for this function.
-
-
-#### DENSE_RANK
--   `#!sql DENSE_RANK()`
-
-    Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition
-    without producing gaps in the rank (compare with `#!sql RANK`). The rank begins with 1 and increments by one for each succeeding value.
-    Rows with the same value(s) produce the same rank. `#!sql ORDER BY` is required for this function.
-
-!!!note
-    To compare `#!sql RANK` and `#!sql DENSE_RANK`, on input array `['a', 'b', 'b', 'c']`, `#!sql RANK` will output `[1, 2, 2, 4]` while `#!sql DENSE_RANK` outputs `[1, 2, 2, 3]`.
-
-#### PERCENT_RANK
--   `#!sql PERCENT_RANK()`
-
-    Compute the percentage ranking of the value(s) in each row based on the value(s) relative to all value(s)
-    within the window partition. Ranking calculated using `#!sql RANK()` divided by the number of rows in the window
-    partition minus one. Partitions with one row have `#!sql PERCENT_RANK()` of 0. `#!sql ORDER BY` is required for this function.
-
-
-#### CUME_DIST
--   `#!sql CUME_DIST()`
-
-    Compute the cumulative distribution of the value(s) in each row based on the value(s) relative to all value(s)
-    within the window partition. `#!sql ORDER BY` is required for this function.
-
-
-#### ROW_NUMBER
--   `#!sql ROW_NUMBER()`
-
-    Compute an increasing row number (starting at 1) for each
-    row. This function cannot be used with `#!sql ROWS BETWEEN`.
-
-!!! note
-    This window function is supported without a partition.
-
-
-#### CONDITIONAL_TRUE_EVENT
--   `#!sql CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
-
-    Computes a counter within each partition that starts at zero and increases by 1 each
-    time the boolean column's value is `true`. `#!sql ORDER BY` is required for this function.
-
-
-#### CONDITIONAL_CHANGE_EVENT
--   `#!sql CONDITIONAL_CHANGE_EVENT(COLUMN_EXPRESSION)`
-
-    Computes a counter within each partition that starts at zero and increases by 1 each
-    time the value inside the window changes. `NULL` does not count as a new/changed value.
-    `#!sql ORDER BY` is required for this function.
-
-
-#### RATIO_TO_REPORT
--   `#!sql RATIO_TO_REPORT(COLUMN_EXPRESSION)`
-
-    Returns an element in the window frame divided by the sum of all elements in the
-    same window frame, or `NULL` if the window frame has a sum of zero. For example,
-    if calculating `#!sql RATIO_TO_REPORT` on `[2, 5, NULL, 10, 3]` where the window
-    is the entire partition, the answer is `[0.1, 0.25, NULL, 0.5, 0.15]`.
 
 
 ### Casting / Conversion Functions
