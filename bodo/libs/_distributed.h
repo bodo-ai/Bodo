@@ -111,6 +111,20 @@ static void bodo_alltoallv(const void* sendbuf,
                            const std::vector<int64_t>& recv_disp,
                            MPI_Datatype recvtype, MPI_Comm comm);
 
+/**
+ * @brief Performs the communication step of distributed 2D array transpose
+ * (alltoallv)
+ *
+ * @param output output buffer of alltoallv
+ * @param input input data buffer with data of target ranks laid out in
+ * contiguous chunks
+ * @param typ_enum type of data elements (e.g. Bodo_CTypes::FLOAT32)
+ * @param n_loc_rows number of local rows in input array
+ * @param n_cols number of global columns in input array
+ */
+void _dist_transpose_comm(char* output, char* input, int typ_enum,
+                          int64_t n_loc_rows, int64_t n_cols) __UNUSED__;
+
 static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t new_dim0_global_len,
                                  int64_t old_dim0_local_len,

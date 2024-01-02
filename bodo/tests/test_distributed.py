@@ -1188,6 +1188,21 @@ def test_arr_reshape(dtype, memory_leak_check):
     check_func(impl8, (np.arange(12, dtype=dtype), 12), convert_to_nullable_float=False)
 
 
+@pytest.mark.parametrize(
+    "nrows, ncols",
+    [(1, 1), (1, 10), (3, 4), (10, 11), (1111, 33), (4321, 5432)],
+)
+def test_array_transpose(nrows, ncols, memory_leak_check):
+    """test distributed array transpose"""
+
+    def impl(A):
+        return A.T
+
+    np.random.seed(1)
+    A = np.random.ranf((nrows, ncols))
+    check_func(impl, (A,), convert_to_nullable_float=False)
+
+
 def test_np_dot(is_slow_run, memory_leak_check):
     """test np.dot() distribute transform"""
 
