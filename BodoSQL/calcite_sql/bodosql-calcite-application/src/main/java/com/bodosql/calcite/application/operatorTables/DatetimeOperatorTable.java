@@ -1,20 +1,16 @@
 package com.bodosql.calcite.application.operatorTables;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
 
-import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
-import com.google.common.collect.Sets;
 import java.util.*;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlBasicFunction;
-import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -30,7 +26,6 @@ import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -47,97 +42,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     boolean nullable = isOutputNullableCompile(operandTypes);
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
     return typeFactory.createTypeWithNullability(operandTypes.get(1), nullable);
-  }
-
-  /**
-   * Call the corresponding return type function for the DATEADD function
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type of the function
-   */
-  public static RelDataType dateaddReturnType(SqlOperatorBinding binding) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    if (operandTypes.size() == 2) return mySqlDateaddReturnType(binding);
-    return snowflakeDateaddReturnType(binding, "DATEADD");
-  }
-
-  /**
-   * Determine the return type of the Snowflake DATEADD function
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type of the function
-   */
-  public static RelDataType snowflakeDateaddReturnType(SqlOperatorBinding binding, String fnName) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    // Determine if the output is nullable.
-    boolean nullable = isOutputNullableCompile(operandTypes);
-    RelDataTypeFactory typeFactory = binding.getTypeFactory();
-    RelDataType datetimeType = operandTypes.get(2);
-    String unit;
-    RelDataType typeArg0 = operandTypes.get(0);
-    if (typeArg0.getSqlTypeName().equals(SqlTypeName.SYMBOL)
-        || SqlTypeFamily.INTERVAL_YEAR_MONTH.contains(typeArg0)
-        || SqlTypeFamily.INTERVAL_DAY_TIME.contains(typeArg0)) {
-      unit = ((SqlCallBinding) binding).operand(0).toString();
-    } else {
-      unit = binding.getOperandLiteralValue(0, String.class);
-    }
-    unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
-    // TODO: refactor standardizeTimeUnit function to change the third argument to
-    // SqlTypeName
-    RelDataType returnType;
-    if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
-      Set<String> DATE_UNITS =
-          new HashSet<>(Arrays.asList("year", "quarter", "month", "week", "day"));
-      if (DATE_UNITS.contains(unit))
-        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-      else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-    } else {
-      // If the input is tzAware/tzNaive/time the output is as well.
-      returnType = datetimeType;
-    }
-    return typeFactory.createTypeWithNullability(returnType, nullable);
-  }
-
-  /**
-   * Determine the return type of the MySQL DATEADD, DATE_ADD, ADDDATE, DATE_SUB, SUBDATE function
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type of the function
-   */
-  public static RelDataType mySqlDateaddReturnType(SqlOperatorBinding binding) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    // Determine if the output is nullable.
-    boolean nullable = isOutputNullableCompile(operandTypes);
-    RelDataTypeFactory typeFactory = binding.getTypeFactory();
-    RelDataType datetimeType = operandTypes.get(0);
-    RelDataType returnType;
-
-    if (operandTypes.get(1).getSqlTypeName().equals(SqlTypeName.INTEGER)) {
-      // when the second argument is integer, it is equivalent to adding day interval
-      if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE))
-        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-      else if (datetimeType instanceof TZAwareSqlType) returnType = datetimeType;
-      else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-    } else {
-      // if the first argument is date, the return type depends on the interval type
-      if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
-        Set<SqlTypeName> DATE_INTERVAL_TYPES =
-            Sets.immutableEnumSet(
-                SqlTypeName.INTERVAL_YEAR_MONTH,
-                SqlTypeName.INTERVAL_YEAR,
-                SqlTypeName.INTERVAL_MONTH,
-                SqlTypeName.INTERVAL_DAY);
-        if (DATE_INTERVAL_TYPES.contains(operandTypes.get(1).getSqlTypeName()))
-          returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-        else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-      } else if (datetimeType instanceof TZAwareSqlType) {
-        returnType = datetimeType;
-      } else {
-        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-      }
-    }
-    return typeFactory.createTypeWithNullability(returnType, nullable);
   }
 
   private static @Nullable DatetimeOperatorTable instance;
@@ -158,7 +62,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DATEADD =
       SqlBasicFunction.create(
           "DATEADD",
-          opBinding -> dateaddReturnType(opBinding),
+          BodoReturnTypes.dateAddReturnType("DATEADD"),
           OperandTypes.sequence(
                   "DATEADD(UNIT, VALUE, DATETIME)",
                   OperandTypes.ANY,
@@ -173,7 +77,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMEADD =
       SqlBasicFunction.create(
           "TIMEADD",
-          opBinding -> snowflakeDateaddReturnType(opBinding, "TIMEADD"),
+          BodoReturnTypes.dateAddReturnType("TIMEADD"),
           OperandTypes.sequence(
               "TIMEADD(UNIT, VALUE, TIME)",
               OperandTypes.ANY,
@@ -185,8 +89,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DATE_ADD =
       SqlBasicFunction.create(
           "DATE_ADD",
-          // What Value should the return type be
-          opBinding -> mySqlDateaddReturnType(opBinding),
+          BodoReturnTypes.dateAddReturnType("DATE_ADD"),
           OperandTypes.DATETIME_INTERVAL
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
               .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
@@ -208,8 +111,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIME_FROM_PARTS = TIMEFROMPARTS.withName("TIME_FROM_PARTS");
 
   /**
-   * Generate the return type for TO_TIMESTAMP_TZ, TRY_TO_TIMESTAMP_TZ, TO_TIMESTAMP_LTZ and
-   * TRY_TO_TIMESTAMP_LTZ
+   * Generate the return type for TIMESTAMP_FROM_PARTS, TIMESTAMP_NTZ_FROM_PARTS,
+   * TIMESTAMP_LTZ_FROM_PARTS and TIMESTAMP_TZ_FROM_PARTS.
    *
    * @param binding The Operand inputs
    * @param defaultToNaive If there is no timezone provided, default to no timezone. If false,
@@ -316,7 +219,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlBasicFunction TIMESTAMP_TZ_FROM_PARTS =
       SqlBasicFunction.create(
           "TIMESTAMP_TZ_FROM_PARTS",
-          // What Value should the return type be
           opBinding -> timestampConstructionOutputType(opBinding, false),
           argumentRange(
               6,
@@ -337,7 +239,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlBasicFunction DATE_SUB =
       SqlBasicFunction.create(
           "DATE_SUB",
-          opBinding -> mySqlDateaddReturnType(opBinding),
+          BodoReturnTypes.dateAddReturnType("DATE_SUB"),
           OperandTypes.DATETIME_INTERVAL
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
               .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
@@ -348,8 +250,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction ADDDATE =
       SqlBasicFunction.create(
           "ADDDATE",
-          // What Value should the return type be
-          opBinding -> mySqlDateaddReturnType(opBinding),
+          BodoReturnTypes.dateAddReturnType("ADDDATE"),
           // What Input Types does the function accept. This function accepts either
           // (Datetime, Interval) or (Datetime, Integer)
           OperandTypes.DATETIME_INTERVAL
