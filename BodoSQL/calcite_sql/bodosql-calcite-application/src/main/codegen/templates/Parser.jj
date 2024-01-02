@@ -2190,16 +2190,46 @@ void AddSelectItem(List<SqlNode> list) :
     )
 }
 
+// Special modifiers to a "SELECT *" term, such as "SELECT * EXCLUDING (A, B, C)"
+SqlNode StarRestriction(SqlNode inputExpr) :
+{
+    final Span s;
+    final SqlNodeList excludingList;
+    final SqlNode excludingSingleton;
+}
+{
+    { s = span(); }
+    <EXCLUDE>
+    (
+        excludingList = ParenthesizedSimpleIdentifierList() {}
+    |   (excludingSingleton = SimpleIdentifier() {
+            final List<SqlNode> list = new ArrayList<SqlNode>();
+            list.add(excludingSingleton);
+            excludingList = new SqlNodeList(list, s.end(this));
+            }
+        )
+    )
+    {
+        if (!(inputExpr instanceof SqlIdentifier && ((SqlIdentifier)inputExpr).isStar())) {
+            throw new RuntimeException("Cannot have EXCLUDE term following non-star term");
+        }
+        return SelectOperatorTable.STAR_EXCLUDING.createCall(s.end(this), inputExpr, excludingList);
+    }
+}
+
 /**
  * Parses one unaliased expression in a select list.
  */
 SqlNode SelectExpression() :
 {
     SqlNode e;
+    SqlNode result;
 }
 {
-    <STAR> {
-        return SqlIdentifier.star(getPos());
+    <STAR> { result = SqlIdentifier.star(getPos()); }
+    [ result = StarRestriction(result) ]
+    {
+        return result;
     }
 |
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) {
@@ -4595,7 +4625,10 @@ SqlNode AtomicRowExpression() :
     |
         e = ContextVariable()
     |
-        e = CompoundIdentifier()
+        (
+            e = CompoundIdentifier()
+            [ e = StarRestriction(e) ]
+        )
     |
         e = NewSpecification()
     |
@@ -5536,6 +5569,7 @@ SqlNode IntervalLiteralOrExpression() :
             e = UnsignedNumericLiteral()
         |
             e = CompoundIdentifier()
+            [ e = StarRestriction(e) ]
         )
         (
             // Bodo change: Support parsing all unquoted snowflake interval literals:

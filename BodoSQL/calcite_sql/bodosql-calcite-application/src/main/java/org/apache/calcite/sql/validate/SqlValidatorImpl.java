@@ -782,7 +782,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * @param scope The scope containing all tables that a "*" term could refer to
    * @param starNode The node being expanded
    */
-  private void expandStarTermWithoutTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
+  protected void expandStarTermWithoutTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
     final SqlParserPos startPosition = starNode.getParserPosition();
     for (int c = 0; c < scope.children.size(); c++) {
       final SqlValidatorNamespace fromNs = scope.getChildren().get(c);
@@ -806,7 +806,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * @param scope The scope containing all tables that a "*" term could refer to
    * @param starNode The node being expanded
    */
-  private void expandStarTermWithTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
+  protected void expandStarTermWithTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
     final SqlParserPos startPosition = starNode.getParserPosition();
     final SqlIdentifier prefixId = starNode.skipLast(1);
     final SqlValidatorScope.ResolvedImpl resolved = new SqlValidatorScope.ResolvedImpl();
@@ -831,6 +831,42 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
   }
 
+  /**
+   * @brief Expands a list of nodes so any "*" or "t.*" which are syntactic sugar
+   * to refer to multiple columns are replaced with all of said columns.
+   * @param nodesToExpand The sequence of SqlNodes that may or may not be star terms.
+   * @param scope The scope that is used to look up what column names the * refers to.
+   * @param newNodes Where all the expanded SqlNodes are stored.
+   * @param newNames Where all the expanded column names are stored.
+   */
+  protected void expandStarNodes(List<SqlNode> nodesToExpand, SqlValidatorScope scope, List<SqlNode> newNodes, List<String> newNames) {
+    while (!(scope instanceof ListScope)) {
+      if (scope instanceof DelegatingScope && ((DelegatingScope)scope).parent != null) {
+        scope = ((DelegatingScope)scope).parent;
+      } else {
+        throw new RuntimeException("Error: Call to function with * arguments must happen inside of a scope whose operand scope is a ListScope or whose ancestry contains a ListScope.");
+      }
+    }
+    ListScope trueScope = (ListScope) scope;
+    for (SqlNode operand : nodesToExpand) {
+      if ((operand instanceof SqlIdentifier) && ((SqlIdentifier) operand).isStar()) {
+        SqlIdentifier starNode = (SqlIdentifier)operand;
+        switch (starNode.names.size()) {
+          case 1: {
+            expandStarTermWithoutTable(newNodes, newNames, trueScope, starNode);
+            break;
+          }
+          default: {
+            expandStarTermWithTable(newNodes, newNames, trueScope, starNode);
+            break;
+          }
+        }
+      } else {
+        newNodes.add(operand);
+      }
+    }
+  }
+
 
   /**
    * @brief Expands the operands to a SqlCall that can use "*" or "t.*"
@@ -840,33 +876,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * @return The call transformed to have any "*" or "t.*" terms expanded.
    */
   private SqlCall starExpansion(SqlCall call, SqlValidatorScope scope) {
-    while (!(scope instanceof ListScope)) {
-      if (scope instanceof DelegatingScope && ((DelegatingScope)scope).parent != null) {
-        scope = ((DelegatingScope)scope).parent;
-      } else {
-        throw new RuntimeException("Error: Call to function with * arguments must happen inside of a scope whose operand scope is a ListScope or whose ancestry contains a ListScope.");
-      }
-    }
-    ListScope trueScope = (ListScope) scope;
     List<SqlNode> newArguments = new ArrayList<SqlNode>();
     List<String> newColumnNames = new ArrayList<>();
-    for (SqlNode operand : call.getOperandList()) {
-      if ((operand instanceof SqlIdentifier) && ((SqlIdentifier) operand).isStar()) {
-        SqlIdentifier starNode = (SqlIdentifier)operand;
-        switch (starNode.names.size()) {
-          case 1: {
-            expandStarTermWithoutTable(newArguments, newColumnNames, trueScope, starNode);
-            break;
-          }
-          default: {
-            expandStarTermWithTable(newArguments, newColumnNames, trueScope, starNode);
-            break;
-          }
-        }
-      } else {
-        newArguments.add(operand);
-      }
-    }
+    expandStarNodes(call.getOperandList(), scope, newArguments, newColumnNames);
     return rewriteStarCall(call, newArguments, newColumnNames);
   }
 
