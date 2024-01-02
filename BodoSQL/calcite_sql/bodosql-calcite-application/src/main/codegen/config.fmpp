@@ -287,6 +287,8 @@ data: {
         "DAYS",
         "HOUR",
         "HOURS",
+        "MAX",
+        "MIN",
         "MINUTE",
         "MINUTES",
         "SECOND",
