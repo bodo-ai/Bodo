@@ -1308,3 +1308,34 @@ SqlNode BodoArrayLiteral() :
        return ArrayOperatorTable.ARRAY_CONSTRUCT.createCall(s.end(this), list);
     }
 }
+
+
+SqlNode BodoObjectLiteral() :
+{
+final List<SqlNode> list;
+SqlNode k;
+SqlNode v;
+final Span s;
+}
+{
+    <LBRACE> { s = span(); }
+    (
+        k = StringLiteral()
+        <COLON>
+        v = Expression(ExprContext.ACCEPT_SUB_QUERY)
+        { list = startList(k); list.add(v); }
+        (
+            <COMMA>
+            k = StringLiteral()
+            <COLON>
+            v = Expression(ExprContext.ACCEPT_SUB_QUERY)
+            { list.add(k); list.add(v); }
+        )*
+    |
+        { list = Collections.emptyList(); }
+    )
+    <RBRACE>
+    {
+        return JsonOperatorTable.OBJECT_CONSTRUCT.createCall(s.end(this), list);
+    }
+}

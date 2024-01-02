@@ -4123,6 +4123,7 @@ BodoSQL supports the following literal types:
 -   `#!sql float_literal`
 -   `#!sql integer_literal`
 -   `#!sql interval_literal`
+-   `#!sql object_literal`
 -   `#!sql string_literal`
 
 ### Array Literal {#array_literal}
@@ -4198,6 +4199,21 @@ DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S]
 In addition, we also have limited support for `#!sql YEAR[S]` and `#!sql MONTH[S]`.
 These literals cannot be stored in columns and currently are only
 supported for operations involving add and sub.
+
+
+### Object Literal {#object_literal}
+
+**Syntax**:
+
+```sql
+{['k1': `v1`[, 'k2': `v2`, ...]]}
+```
+
+Where each `ki` is a unique string literal, and each `vi` is an expression.
+Obeys the same semantics as the function `#!sql OBJECT_CONSTRUCT` , so any pair
+where the key or value is null is omitted, and for now BodoSQL only supports
+when all values are the same type.
+
 
 ### String Literal {#string_literal}
 

@@ -418,6 +418,7 @@ data: {
         "LastDayFunctionCall()",
         "TimestampAddFunctionCall()",
         "BodoArrayLiteral()",
+        "BodoObjectLiteral()",
     ]
 
     # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
