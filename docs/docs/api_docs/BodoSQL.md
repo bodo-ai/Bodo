@@ -143,6 +143,28 @@ SELECT A FROM customers
 9      Darryl Rosales
 ```
 
+The `#!sql SELECT` also has some special syntactic forms. The `#!sql *` term is
+used as a shortcut for specifying all columns. The clause `#!sql * EXCLUDING col`
+or `#!sql * EXCLUDING (col1, col2, col3...)` is a shortcut for specifying every
+column except the ones after the excluding keyword.
+
+For example, suppose we have a table The `#!sql T` with columns named The `#!sql A`, `#!sql B`,
+`#!sql C`, `#!sql D`, `#!sql E`. Consider the following queries
+
+```sql
+SELECT * FROM T
+
+SELECT A, B, C, D, E FROM T
+```
+
+These two are syntactic sugar for the following:
+
+```sql
+SELECT A, B, C, D, E FROM T
+
+SELECT B, C, D FROM T
+```
+
 ### SELECT DISTINCT
 
 The `#!sql SELECT DISTINCT` statement is used to return only distinct
