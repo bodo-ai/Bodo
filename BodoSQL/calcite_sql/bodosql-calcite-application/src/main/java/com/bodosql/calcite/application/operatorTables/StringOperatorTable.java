@@ -175,29 +175,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction REVERSE = UCASE.withName("REVERSE");
 
-  public static final SqlFunction LEN =
-      new SqlFunction(
-          "LEN",
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.BIGINT_NULLABLE,
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.STRING,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlBasicFunction LENGTH =
+      SqlBasicFunction.create(
+          "LENGTH", ReturnTypes.BIGINT_NULLABLE, OperandTypes.STRING, SqlFunctionCategory.STRING);
 
-  public static final SqlFunction LENGTH =
-      new SqlFunction(
-          "LENGTH",
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.BIGINT_NULLABLE,
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.STRING,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction LEN = LENGTH.withName("LEN");
 
   public static final SqlFunction ORD =
       SqlNullPolicyFunction.createAnyPolicy(
@@ -587,8 +569,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           INITCAP,
           LTRIM,
           RTRIM,
-          LEN,
           LENGTH,
+          LEN,
           SqlLibraryOperators.RLIKE,
           SqlLibraryOperators.NOT_RLIKE,
           SqlLibraryOperators.ILIKE,

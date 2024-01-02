@@ -28,8 +28,6 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast = new HashMap<>();
     equivalentFnMapBroadcast.put("CHAR_LENGTH", "length");
     equivalentFnMapBroadcast.put("LENGTH", "length");
-    equivalentFnMapBroadcast.put("LEN", "length");
-    equivalentFnMapBroadcast.put("CHARACTER_LENGTH", "length");
     equivalentFnMapBroadcast.put("LCASE", "lower");
     equivalentFnMapBroadcast.put("LOWER", "lower");
     equivalentFnMapBroadcast.put("UCASE", "upper");
