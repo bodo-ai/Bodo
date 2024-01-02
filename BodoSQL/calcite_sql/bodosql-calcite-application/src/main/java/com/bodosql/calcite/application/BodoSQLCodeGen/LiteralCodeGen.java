@@ -11,13 +11,51 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Sarg;
+import org.apache.calcite.util.TimeString;
+import org.apache.calcite.util.TimestampString;
 
 /** Class that returns the generated code for Literal Code after all inputs have been visited. */
 public class LiteralCodeGen {
+
+  /**
+   * Extract the total number of nanoseconds in a Time or Timestamp node that represent the total
+   * amount of sub-millisecond time. e.g. given a node containg a time value of 01:02:03.004005006,
+   * this method would output 5006.
+   *
+   * @param valueType The type to use to get the value of the node. Must be either TimeString or
+   *     TimestampString
+   * @param node
+   * @return int
+   */
+  private static <T> int getSubMillisecondTimeComponent(Class<T> valueType, RexLiteral node) {
+    assert valueType == TimeString.class || valueType == TimestampString.class;
+    // Neither TimeString nor TimestampString provide a way to access the sub-milliseconds
+    // components of their value, so we need to parse the underlying string.
+
+    int total_nanoseconds = 0;
+    String rawTimeString = Objects.requireNonNull(node.getValueAs(valueType)).toString();
+    // Extract the sub-second component
+    String[] parts = rawTimeString.split("\\.");
+    if (parts.length == 2) {
+      String subSeconds = parts[1];
+      if (subSeconds.length() > 3) {
+        // If there's anything sub nanosecond, trim it
+        StringBuilder nsecString =
+            new StringBuilder(subSeconds.substring(3, Math.min(9, subSeconds.length())));
+        while (nsecString.length() < 6) {
+          // Pad the string with 0s so that it represents the number of nanoseconds present
+          nsecString.append("0");
+        }
+        total_nanoseconds = Integer.parseInt(nsecString.toString());
+      }
+    }
+    return total_nanoseconds;
+  }
   /**
    * Function that return the necessary generated code for Literals.
    *
@@ -117,22 +155,32 @@ public class LiteralCodeGen {
           case TIMESTAMP:
             {
               GregorianCalendar calendar = (GregorianCalendar) node.getValue();
-              // TODO: How do we represent microseconds and nanoseconds?
               long nanoseconds = calendar.getTimeInMillis() * 1000 * 1000;
+              nanoseconds += getSubMillisecondTimeComponent(TimestampString.class, node);
               return new Expr.Raw(String.format("pd.Timestamp(%d)", nanoseconds));
             }
           case TIME:
             {
-              // TODO: How do we represent microseconds and nanoseconds?
               int totalMilliseconds = node.getValueAs(Integer.class);
               int hour = (totalMilliseconds / (1000 * 60 * 60)) % 24;
               int minute = (totalMilliseconds / (1000 * 60)) % 60;
               int second = (totalMilliseconds / 1000) % 60;
               int millisecond = totalMilliseconds % 1000;
+
+              int total_nanoseconds = getSubMillisecondTimeComponent(TimeString.class, node);
+              int microsecond = total_nanoseconds / 1000;
+              int nanosecond = total_nanoseconds % 1000;
+
               return new Expr.Raw(
                   String.format(
-                      "bodo.Time(%d, %d, %d, %d, 0, 0, %d)",
-                      hour, minute, second, millisecond, node.getType().getPrecision()));
+                      "bodo.Time(%d, %d, %d, %d, %d, %d, %d)",
+                      hour,
+                      minute,
+                      second,
+                      millisecond,
+                      microsecond,
+                      nanosecond,
+                      node.getType().getPrecision()));
             }
           case BOOLEAN:
             String boolName = node.toString();
