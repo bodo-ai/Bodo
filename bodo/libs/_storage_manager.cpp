@@ -82,19 +82,10 @@ std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
     }
 
     if (std::string_view(location_env_).starts_with("s3://")) {
-        const char* enable_s3_spilling_env_ =
-            std::getenv("BODO_BUFFER_POOL_ENABLE_REMOTE_SPILLING");
-        if (enable_s3_spilling_env_ == nullptr) {
-            int rank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-            if (rank == 0) {
-                std::cerr << "StorageOptions::Defaults: Spilling to S3 is "
-                             "disabled by default. Please set "
-                             "BODO_BUFFER_POOL_ENABLE_REMOTE_SPILLING to "
-                             "enable."
-                          << std::endl;
-            }
+        const char* disable_remote_spilling_env_ =
+            std::getenv("BODO_BUFFER_POOL_DISABLE_REMOTE_SPILLING");
+        if (disable_remote_spilling_env_ &&
+            !std::strcmp(disable_remote_spilling_env_, "1")) {
             return nullptr;
         }
         type = StorageType::S3;
