@@ -211,48 +211,42 @@ public class CastingOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TO_TIMESTAMP =
       SqlBasicFunction.create(
           "TO_TIMESTAMP",
-          ReturnTypes.TIMESTAMP_NULLABLE,
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TO_TIMESTAMP", false, false),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP =
       SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP",
-          BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TRY_TO_TIMESTAMP", false, true),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_TIMESTAMP_NTZ =
       SqlBasicFunction.create(
           "TO_TIMESTAMP_NTZ",
-          ReturnTypes.TIMESTAMP_NULLABLE,
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TO_TIMESTAMP_NTZ", false, false),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP_NTZ =
       SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_NTZ",
-          BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TRY_TO_TIMESTAMP_NTZ", false, true),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_TIMESTAMP_LTZ =
       SqlBasicFunction.create(
           "TO_TIMESTAMP_LTZ",
-          opBinding -> toTimestampTZReturnType(opBinding, false, false),
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TO_TIMESTAMP_LTZ", true, false),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP_LTZ =
       SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_LTZ",
-          opBinding -> toTimestampTZReturnType(opBinding, true, false),
-          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          BodoReturnTypes.toTimestampReturnType("TRY_TO_TIMESTAMP_LTZ", true, true),
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 

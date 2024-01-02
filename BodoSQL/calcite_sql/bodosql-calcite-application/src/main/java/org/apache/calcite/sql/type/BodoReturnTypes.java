@@ -1,23 +1,34 @@
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.runtime.CalciteContextException;
+import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlCollation;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.tools.ValidationException;
+import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem.getMinIntegerSize;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
@@ -631,6 +642,153 @@ public class BodoReturnTypes {
         }
     }
 
+    /**
+     * Determine the base return type for all TO_TIMESTAMP functions, including
+     * the TZ_AWARE and TZ_NAIVE.
+     */
+    public static SqlReturnTypeInference toTimestampReturnType(String fnName, boolean isTzAware, boolean forceNullable) {
+        SqlReturnTypeInference retType = opBinding -> {
+            // Determine the return precision. If we have a timestamp input of any type
+            // then we reuse that precision. Otherwise, if we have a two argument input with a string
+            // input then the integer literal should specify the precision. Finally, if none of these apply
+            // the default precision is 9;
+            // TODO: Support inferring scale from Decimal inputs
+            RelDataType arg0Type = opBinding.getOperandType(0);
+            int precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+            if (arg0Type instanceof TZAwareSqlType || arg0Type.getSqlTypeName() == SqlTypeName.TIMESTAMP) {
+                precision = arg0Type.getPrecision();
+            } else if (SqlTypeFamily.INTEGER.contains(arg0Type)) {
+                if (opBinding.getOperandCount() == 2) {
+                    // Try load the scale as a literal.
+                    RelDataType arg1Type = opBinding.getOperandType(1);
+                    // Add a defensive check
+                    if (SqlTypeFamily.INTEGER.contains(arg1Type)) {
+                        precision = opBinding.getOperandLiteralValue(1, Integer.class);
+                        if (precision > BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION || precision < 0) {
+                            throw new RuntimeException(String.format(Locale.ROOT, "%s() requires a scale between 0 and %d if provided. Found %d.", fnName, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION, precision));
+                        }
+                    }
+                }
+            }
+            // Create the return type.
+            if (isTzAware) {
+                return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null, precision);
+            } else {
+                return opBinding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP, precision);
+            }
+        };
+        // Force Nullable if necessary. Otherwise, use TO_NULLABLE.
+        if (forceNullable) {
+            return retType.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+        } else {
+            return retType.andThen(SqlTypeTransforms.TO_NULLABLE);
+        }
+    }
+
+    /**
+     * Determine the return type of the Snowflake DATEADD function
+     * without considering nullability.
+     *
+     * @param binding The operand bindings for the function signature.
+     * @return The return type of the function
+     */
+    private static RelDataType snowflakeDateaddReturnType(SqlOperatorBinding binding, String fnName) {
+        List<RelDataType> operandTypes = binding.collectOperandTypes();
+        RelDataType datetimeType = operandTypes.get(2);
+        String unit;
+        RelDataType typeArg0 = operandTypes.get(0);
+        if (typeArg0.getSqlTypeName().equals(SqlTypeName.SYMBOL)
+                || SqlTypeFamily.INTERVAL_YEAR_MONTH.contains(typeArg0)
+                || SqlTypeFamily.INTERVAL_DAY_TIME.contains(typeArg0)) {
+            unit = ((SqlCallBinding) binding).operand(0).toString();
+        } else {
+            unit = binding.getOperandLiteralValue(0, String.class);
+        }
+        unit = standardizeTimeUnit(fnName, unit, DatetimeFnCodeGen.DateTimeType.TIMESTAMP);
+        // TODO: refactor standardizeTimeUnit function to change the third argument to
+        // SqlTypeName
+        final RelDataType returnType;
+        // The output always needs to be cast to precision 9
+        final int precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+        final RelDataTypeFactory typeFactory = binding.getTypeFactory();
+        if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
+            Set<String> DATE_UNITS =
+                    new HashSet<>(Arrays.asList("year", "quarter", "month", "week", "day"));
+            if (DATE_UNITS.contains(unit)) {
+                returnType = typeFactory.createSqlType(SqlTypeName.DATE);
+            } else {
+                // Date always gets upcast to precision 9, even if we only add 1 hour.
+                returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision);
+            }
+        } else {
+            // The output always needs to be cast to precision 9, so we cannot just return
+            // the same return type.
+            if (datetimeType instanceof TZAwareSqlType) {
+                final BodoTZInfo tzInfo = ((TZAwareSqlType) datetimeType).getTZInfo();
+                returnType = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo, precision);
+            } else {
+                returnType = typeFactory.createSqlType(datetimeType.getSqlTypeName(), precision);
+            }
+        }
+        return returnType;
+    }
+
+    /**
+     * Determine the return type of the MySQL DATEADD, DATE_ADD, ADDDATE, DATE_SUB, SUBDATE function
+     * without considering nullability.
+     *
+     * @param binding The operand bindings for the function signature.
+     * @return The return type of the function
+     */
+    private static RelDataType mySqlDateaddReturnType(SqlOperatorBinding binding) {
+        List<RelDataType> operandTypes = binding.collectOperandTypes();
+        // Determine if the output is nullable.
+        RelDataType datetimeType = operandTypes.get(0);
+        final RelDataType returnType;
+
+        if (operandTypes.get(1).getSqlTypeName().equals(SqlTypeName.INTEGER)) {
+            // when the second argument is integer, it is equivalent to adding day interval
+            if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
+                returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
+            } else if (datetimeType instanceof TZAwareSqlType) {
+                returnType = datetimeType;
+            } else {
+                returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+            }
+        } else {
+            // if the first argument is date, the return type depends on the interval type
+            if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
+                Set<SqlTypeName> DATE_INTERVAL_TYPES =
+                        Sets.immutableEnumSet(
+                                SqlTypeName.INTERVAL_YEAR_MONTH,
+                                SqlTypeName.INTERVAL_YEAR,
+                                SqlTypeName.INTERVAL_MONTH,
+                                SqlTypeName.INTERVAL_DAY);
+                if (DATE_INTERVAL_TYPES.contains(operandTypes.get(1).getSqlTypeName())) {
+                    returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
+                } else {
+                    returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+                }
+            } else if (datetimeType instanceof TZAwareSqlType) {
+                returnType = datetimeType;
+            } else {
+                returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+            }
+        }
+        return returnType;
+    }
+
+    public static SqlReturnTypeInference dateAddReturnType(String fnName) {
+        SqlReturnTypeInference returnTypeInference = opBinding -> {
+            List<RelDataType> operandTypes = opBinding.collectOperandTypes();
+            if (operandTypes.size() == 2) {
+                return mySqlDateaddReturnType(opBinding);
+            } else {
+                return snowflakeDateaddReturnType(opBinding, fnName);
+            }
+        };
+        return returnTypeInference.andThen(SqlTypeTransforms.TO_NULLABLE);
+    }
 
 
     public static SqlReturnTypeInference ARRAY_MAP_GETITEM = opBinding -> inferReturnTypeArrayMapGetItem(opBinding);

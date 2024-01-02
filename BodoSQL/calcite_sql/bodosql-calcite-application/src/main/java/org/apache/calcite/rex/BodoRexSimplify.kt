@@ -1,6 +1,7 @@
 package org.apache.calcite.rex
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
@@ -795,7 +796,7 @@ class BodoRexSimplify(
         val subsecond = newNs % NANOSEC_PER_SECOND
         // Use the components to construct the new time
         var newTime = TimeString(hour.toInt(), minute.toInt(), second.toInt()).withNanos(subsecond.toInt())
-        return rexBuilder.makeTimeLiteral(newTime, 9)
+        return rexBuilder.makeTimeLiteral(newTime, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
     }
 
     /**
@@ -823,7 +824,7 @@ class BodoRexSimplify(
             // Reconstruct the timestamp by replacing the subsecond components with the
             // subsecond components of the original timestamp
             val ts = TimestampString.fromCalendarFields(date).withNanos(ns)
-            return rexBuilder.makeTimestampLiteral(ts, 9)
+            return rexBuilder.makeTimestampLiteral(ts, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
         } else {
             val multiplier: Long = getTimeUnitAsMultiplier(unit) ?: return original
             // Calculate the total number of nanoseconds since the unix epoch
@@ -836,7 +837,7 @@ class BodoRexSimplify(
             // Reconstruct the timestamp using the milliseconds since the unix epoch,
             // then replace the subsecond components with the correct subsecond amounts
             val ts = TimestampString.fromMillisSinceEpoch(newMsEpoch).withNanos(newSubsecond.toInt())
-            return rexBuilder.makeTimestampLiteral(ts, 9)
+            return rexBuilder.makeTimestampLiteral(ts, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION)
         }
     }
 
