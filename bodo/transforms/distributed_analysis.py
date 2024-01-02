@@ -271,7 +271,6 @@ class DistributedAnalysis:
         """initialize data structures for distribution analysis"""
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self._parallel_accesses = set()
-        self._T_arrs = set()
         self.second_pass = False
         self.in_parallel_parfor = -1
         self._concat_reduce_vars = set()
@@ -642,12 +641,14 @@ class DistributedAnalysis:
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
         attr = rhs.attr
-        if attr == "T" and is_array_typ(lhs_typ):
+        if (
+            attr == "T"
+            and is_array_typ(lhs_typ)
+            and (not isinstance(lhs_typ, types.Array) or lhs_typ.ndim <= 2)
+        ):
             # array and its transpose have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
-            # keep lhs in table for dot() handling
-            self._T_arrs.add(lhs)
             return
         elif (
             isinstance(rhs_typ, MultiIndexType)
@@ -4107,9 +4108,8 @@ class DistributedAnalysis:
         arg1 = args[1].name
         ndim0 = self.typemap[arg0].ndim
         ndim1 = self.typemap[arg1].ndim
-        # Fortran layout is caused by X.T and means transpose
-        t0 = arg0 in self._T_arrs
-        t1 = arg1 in self._T_arrs
+        t0 = guard(_is_transposed_array, self.func_ir, arg0)
+        t1 = guard(_is_transposed_array, self.func_ir, arg1)
         if ndim0 == 1 and ndim1 == 1:
             # vector dot, both vectors should have same layout
             new_dist = Distribution(
@@ -5117,3 +5117,13 @@ def propagate_assign(array_dists: Dict[str, Distribution], nodes: List[ir.Stmt])
             elif rhs in array_dists and lhs not in array_dists:
                 array_dists[lhs] = array_dists[rhs]
     return
+
+
+def _is_transposed_array(func_ir, arr):
+    """Return True if input is a transposed array using arr.T expression.
+    Returns False or raises GuardException if not.
+    """
+    arr_def = get_definition(func_ir, arr)
+    require(is_expr(arr_def, "getattr"))
+    # TODO[BSE-2376]: support other transpose forms (np.transpose, arr.transpose)
+    return arr_def.attr == "T"

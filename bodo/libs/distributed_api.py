@@ -95,6 +95,7 @@ ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
 ll.add_symbol("c_recv", hdist.dist_recv)
 ll.add_symbol("c_send", hdist.dist_send)
+ll.add_symbol("_dist_transpose_comm", hdist._dist_transpose_comm)
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
 mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
@@ -124,6 +125,10 @@ class Reduce_Type(Enum):
 _get_rank = types.ExternalFunction("c_get_rank", types.int32())
 _get_size = types.ExternalFunction("c_get_size", types.int32())
 _barrier = types.ExternalFunction("c_barrier", types.int32())
+_dist_transpose_comm = types.ExternalFunction(
+    "_dist_transpose_comm",
+    types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
+)
 
 
 @numba.njit
@@ -1459,6 +1464,58 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return impl_table_path
 
     raise BodoError("gatherv() not available for {}".format(data))  # pragma: no cover
+
+
+def distributed_transpose(arr):  # pragma: no cover
+    pass
+
+
+@overload(distributed_transpose)
+def overload_distributed_transpose(arr):
+    """Implements distributed array transpose. First lays out data in contiguous chunks
+    and calls alltoallv, and then transposes the output of alltoallv.
+    See here for example code with similar algorithm:
+    https://docs.oracle.com/cd/E19061-01/hpc.cluster5/817-0090-10/1-sided.html
+    """
+    assert (
+        isinstance(arr, types.Array) and arr.ndim == 2
+    ), "distributed_transpose: 2D array expected"
+    c_type = numba_to_c_type(arr.dtype)
+
+    def impl(arr):  # pragma: no cover
+        n_loc_rows, n_cols = arr.shape
+        n_rows = bodo.libs.distributed_api.dist_reduce(
+            n_loc_rows, np.int32(Reduce_Type.Sum.value)
+        )
+        n_out_cols = n_rows
+
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
+        n_out_loc_rows = bodo.libs.distributed_api.get_node_portion(n_cols, n_pes, rank)
+
+        # Output of alltoallv is transpose of final output
+        out_arr = np.empty((n_out_cols, n_out_loc_rows), arr.dtype)
+
+        # Fill send buffer with contiguous data chunks for target ranks
+        send_buff = np.empty(arr.size, arr.dtype)
+        curr_ind = 0
+        for p in range(n_pes):
+            start = bodo.libs.distributed_api.get_start(n_cols, n_pes, p)
+            count = bodo.libs.distributed_api.get_node_portion(n_cols, n_pes, p)
+            for i in range(n_loc_rows):
+                for j in range(start, start + count):
+                    send_buff[curr_ind] = arr[i, j]
+                    curr_ind += 1
+
+        _dist_transpose_comm(
+            out_arr.ctypes, send_buff.ctypes, np.int32(c_type), n_loc_rows, n_cols
+        )
+
+        # Keep the output in Fortran layout to match output Numba type of original
+        # transpose IR statement being replaced in distributed pass.
+        return out_arr.T
+
+    return impl
 
 
 @numba.generated_jit(nopython=True)
