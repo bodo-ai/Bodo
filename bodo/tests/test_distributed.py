@@ -964,7 +964,6 @@ def test_getitem_slice(A, s, memory_leak_check):
     check_func(impl1, (A, s), check_typing_issues=False)
 
 
-# TODO: np.arange(33).reshape(11, 3)
 @pytest.mark.parametrize(
     "A", [pd.Series(np.arange(11)), pd.Series(["aafa", "bbac", "cff"] * 4)]
 )
@@ -983,7 +982,6 @@ def test_getitem_int_1D(A, s, memory_leak_check):
     assert count_array_OneDs() > 0
 
 
-# TODO: np.arange(33).reshape(11, 3)
 @pytest.mark.parametrize("A", [pd.Series(np.arange(11))])
 #    pd.Series(['aafa', 'bbac', 'cff']*4)])
 @pytest.mark.parametrize("s", [0, 1, 3, -1, -2])
@@ -1002,6 +1000,23 @@ def test_getitem_int_1D_Var(A, s, memory_leak_check):
         np.testing.assert_array_equal(
             bodo_func(A[start:end], B[start:end], s), impl1(A, B, s)
         )
+    assert count_array_OneD_Vars() > 0
+
+
+def test_getitem_int_multi_dim(memory_leak_check):
+    """Test distributed int getitem on multi-dimensional array"""
+
+    def impl1(A, ind):
+        return A[ind, 1]
+
+    A = np.arange(33).reshape(11, 3)
+    ind = 5
+    start, end = get_start_end(len(A))
+    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    assert bodo_func(A[start:end], ind) == A[ind, 1]
+    assert count_array_OneDs() > 0
+    bodo_func = bodo.jit(distributed={"A"})(impl1)
+    assert bodo_func(A[start:end], ind) == A[ind, 1]
     assert count_array_OneD_Vars() > 0
 
 
@@ -3007,3 +3022,17 @@ def test_dist_scalar_map_to_arr(memory_leak_check):
     n = 10
     out = pd.Series([a] * n, dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int32())))
     check_func(impl, (a, n), py_output=out)
+
+
+def test_complex_arr_attr(memory_leak_check):
+    """Test accessing a complex array's component"""
+
+    def impl(A):
+        n = A.shape[0]
+        B = np.empty((n, A.shape[1]), np.float64)
+        for i in bodo.prange(n):
+            B[i, :] = A.real[i, :]
+        return B
+
+    A = np.arange(6).reshape((2, 3)) + 1j
+    check_func(impl, (A,))
