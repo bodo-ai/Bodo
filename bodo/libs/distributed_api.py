@@ -3168,9 +3168,49 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
     np_dtype = arr.dtype
 
-    def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
-        # TODO: multi-dim array support
+    if isinstance(ind, types.BaseTuple):
+        assert isinstance(
+            arr, types.Array
+        ), "int_getitem_overload: Numpy array expected"
+        assert all(
+            isinstance(a, types.Integer) for a in ind.types
+        ), "int_getitem_overload: only integer indices supported"
+        # TODO[BSE-2374]: support non-integer indices
 
+        def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+            ind_0 = ind[0]
+
+            if ind_0 >= total_len:
+                raise IndexError("index out of bounds")
+
+            # normalize negative slice
+            ind_0 = ind_0 % total_len
+            # TODO: avoid sending to root in case of 1D since position can be
+            # calculated
+
+            # send data to rank 0 and broadcast
+            root = np.int32(0)
+            tag = np.int32(11)
+            send_arr = np.zeros(1, np_dtype)
+            if arr_start <= ind_0 < (arr_start + len(arr)):
+                data = arr[(ind_0 - arr_start,) + ind[1:]]
+                send_arr = np.full(1, data)
+                isend(send_arr, np.int32(1), root, tag, True)
+
+            rank = bodo.libs.distributed_api.get_rank()
+            val = np.zeros(1, np_dtype)[0]  # TODO: better way to get zero of type
+            if rank == root:
+                val = recv(np_dtype, ANY_SOURCE, tag)
+
+            dummy_use(send_arr)
+            val = bcast_scalar(val)
+            return val
+
+        return getitem_impl
+
+    assert isinstance(ind, types.Integer), "int_getitem_overload: int index expected"
+
+    def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         if ind >= total_len:
             raise IndexError("index out of bounds")
 

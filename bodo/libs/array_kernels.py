@@ -4218,7 +4218,7 @@ def interp_bin_search(x, xp, fp, parallel=False):
         return impl
 
 
-@overload(np.interp, inline="always", no_unliteral=True)
+@overload(np.interp, no_unliteral=True)
 def np_interp(x, xp, fp, left=None, right=None, period=None):
     if not (
         bodo.utils.utils.is_array_typ(x, False)

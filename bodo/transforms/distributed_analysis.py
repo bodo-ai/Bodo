@@ -650,6 +650,11 @@ class DistributedAnalysis:
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
             return
+        elif attr in ("real", "imag") and is_array_typ(lhs_typ, False):
+            # complex array and its real/imag parts have same distributions
+            arr = rhs.value.name
+            self._meet_array_dists(lhs, arr, array_dists)
+            return
         elif (
             isinstance(rhs_typ, MultiIndexType)
             and len(rhs_typ.array_types) > 0
@@ -4290,14 +4295,6 @@ class DistributedAnalysis:
 
         # int index of dist array
         if isinstance(index_typ, types.Integer):
-            # multi-dim not supported yet, TODO: support
-            if is_np_array_typ(in_typ) and in_typ.ndim > 1:
-                self._set_REP(
-                    inst.list_vars(),
-                    array_dists,
-                    "distributed getitem of multi-dimensional array with int index not supported yet",
-                    rhs_loc,
-                )
             if is_distributable_typ(self.typemap[lhs]):
                 self._set_REP(
                     lhs,
