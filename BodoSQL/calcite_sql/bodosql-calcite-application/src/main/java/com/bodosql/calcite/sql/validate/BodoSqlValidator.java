@@ -18,6 +18,7 @@ package com.bodosql.calcite.sql.validate;
 
 import static org.apache.calcite.util.Static.RESOURCE;
 
+import com.bodosql.calcite.application.operatorTables.SelectOperatorTable;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,7 @@ import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlJoin;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlUpdate;
@@ -41,6 +43,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoSqlTypeCoercionRule;
 import org.apache.calcite.sql.type.SqlTypeMappingRule;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorImpl;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
@@ -103,6 +106,118 @@ public class BodoSqlValidator extends SqlValidatorImpl {
     // parameters.
     // It does not handle named parameters.
     handleFetchOffset(select);
+  }
+
+  /**
+   * Helper function for advancedStarExpansion: takes in the current list of columns & their names,
+   * the list of names to remove, and destructively removes the corresponding indices from the
+   * argument & names lists.
+   *
+   * @param node The node that originally caused the star expansion to take place.
+   * @param arguments The list of identifiers representing the columns expanded from a *.
+   * @param excludingNames The list of column names for each of the arguments.
+   * @param excludingNames The list of columns to exclude when expanding the star.
+   */
+  public void pruneExclusionColumns(
+      SqlNode node,
+      List<SqlNode> arguments,
+      List<String> argumentNames,
+      List<SqlIdentifier> excludingNames) {
+    SqlNameMatcher matcher = getCatalogReader().nameMatcher();
+    // For every column to be excluded, verify that it is part of the columns that were
+    // created from expanding the star term, then remove that index from said lists.
+    for (SqlIdentifier colToExclude : excludingNames) {
+      String nameToExclude = colToExclude.toString();
+      int idxToExclude = matcher.indexOf(argumentNames, nameToExclude);
+      if (idxToExclude == -1) {
+        throw newValidationError(node, RESOURCE.unknownIdentifier(nameToExclude));
+      }
+      arguments.remove(idxToExclude);
+      argumentNames.remove(idxToExclude);
+      // Verify that the column to exclude does not appear more than once in the names
+      int secondIdx = matcher.indexOf(argumentNames, nameToExclude);
+      if (secondIdx != -1) {
+        throw newValidationError(node, RESOURCE.columnAmbiguous(nameToExclude));
+      }
+    }
+  }
+
+  /**
+   * @param expandedSelectItems List to append any expanded arguments to.
+   * @param expansionNode The node that is to be expanded if it is a star or special select star
+   *     modifier.
+   * @param scope The original scope of the select having its terms expanded.
+   * @param excludingNames The list of column names to exclude when expanding the star.
+   */
+  private void advancedStarExpansion(
+      List<SqlNode> expandedSelectItems,
+      SqlNode expansionNode,
+      SqlValidatorScope scope,
+      List<SqlIdentifier> excludingNames) {
+    if (expansionNode instanceof SqlCall) {
+      SqlNameMatcher matcher = getCatalogReader().nameMatcher();
+      SqlCall selectCall = (SqlCall) expansionNode;
+      // If the node is a SELECT * EXCLUDING (cols), extract the column names and
+      // recursively expand the * but with the columns to exclude noted in the excluding
+      // names list.
+      if (selectCall.getOperator().getName().equals(SelectOperatorTable.STAR_EXCLUDING.getName())) {
+        assert selectCall.operandCount() == 2;
+        SqlNode source = selectCall.getOperandList().get(0);
+        SqlNodeList excluding = (SqlNodeList) (selectCall.getOperandList().get(1));
+        for (SqlNode node : excluding.getList()) {
+          excludingNames.add((SqlIdentifier) node);
+        }
+        // Verify that none of the names appeared more than once:
+        for (int i = 0; i < excludingNames.size(); i++) {
+          String excludeName = excludingNames.get(i).toString();
+          for (int j = i + 1; j < excludingNames.size(); j++) {
+            String otherName = excludingNames.get(j).toString();
+            if (matcher.matches(excludeName, otherName)) {
+              throw newValidationError(expansionNode, RESOURCE.duplicateColumnName(excludeName));
+            }
+          }
+        }
+        advancedStarExpansion(expandedSelectItems, source, scope, excludingNames);
+        return;
+      }
+    } else if (expansionNode instanceof SqlIdentifier && ((SqlIdentifier) expansionNode).isStar()) {
+      // Base case for when the node is a star. Ignore if there are no modifiers like
+      // columns to ignore, as regular star expansion can deal with it.
+      if (excludingNames.size() > 0) {
+        // Expand the star term
+        List<SqlNode> newArguments = new ArrayList<SqlNode>();
+        List<String> newColumnNames = new ArrayList<>();
+        SqlIdentifier starNode = (SqlIdentifier) expansionNode;
+        expandStarNodes(List.of(starNode), scope, newArguments, newColumnNames);
+
+        // Prune the EXCLUDE columns
+        pruneExclusionColumns(expansionNode, newArguments, newColumnNames, excludingNames);
+
+        // Add every argument from the star expansion that was not removed during exclusion
+        expandedSelectItems.addAll(newArguments);
+        return;
+      }
+    }
+    // For everything else, add the term un-modified so regular expansion can deal with it.
+    expandedSelectItems.add(expansionNode);
+  }
+
+  @Override
+  protected RelDataType validateSelectList(
+      final SqlNodeList selectItems, SqlSelect select, RelDataType targetRowType) {
+    final SqlValidatorScope selectScope = getSelectScope(select);
+    final List<SqlNode> expandedSelectItems = new ArrayList<>();
+
+    // Apply the specialized star expansion procedure to each argument, appending any
+    // regular or expanded terms to a list as we go along
+    for (int i = 0; i < selectItems.size(); i++) {
+      SqlNode selectItem = selectItems.get(i);
+      advancedStarExpansion(
+          expandedSelectItems, selectItem, selectScope, new ArrayList<SqlIdentifier>());
+    }
+    // Invoke regular select validation on the list of appended terms
+    return super.validateSelectList(
+        new SqlNodeList(expandedSelectItems, SqlParserPos.ZERO), select, targetRowType);
   }
 
   private void handleFetchOffset(SqlSelect select) {

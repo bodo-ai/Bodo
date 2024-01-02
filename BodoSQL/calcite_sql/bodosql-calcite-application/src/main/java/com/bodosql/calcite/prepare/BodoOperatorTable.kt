@@ -19,6 +19,8 @@ import org.apache.calcite.sql.util.ChainedSqlOperatorTable
 
 object BodoOperatorTable : ChainedSqlOperatorTable(
     ImmutableList.of(
+        // NOTE: SelectOperatorTable is not included since all of those
+        // operators should be expanded during validation
         SqlBodoOperatorTable.instance(),
         DatetimeOperatorTable.instance(),
         NumericOperatorTable.instance(),
