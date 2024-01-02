@@ -493,13 +493,11 @@ def test_default_storage_options(tmp_path: Path):
 def test_default_s3_storage_options(tmp_s3_path: str):
     """
     Test that StorageOptions detection for S3 locations works
-    as expected
+    as expected.
     """
 
     with temp_env_override(
         {
-            # Flag necessary to enable S3 storage
-            "BODO_BUFFER_POOL_ENABLE_REMOTE_SPILLING": "1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_s3_path,
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
@@ -508,6 +506,19 @@ def test_default_s3_storage_options(tmp_s3_path: str):
         options = StorageOptions.defaults(1)
         assert options.location == bytes(tmp_s3_path, "utf-8")
         assert options.usable_size == -1
+
+    # Check that when we explicitly disable remote spilling, we don't
+    # use the provided S3 config.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_DISABLE_REMOTE_SPILLING": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_s3_path,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = StorageOptions.defaults(1)
+        assert options is None
 
 
 def test_malloc_allocation():
