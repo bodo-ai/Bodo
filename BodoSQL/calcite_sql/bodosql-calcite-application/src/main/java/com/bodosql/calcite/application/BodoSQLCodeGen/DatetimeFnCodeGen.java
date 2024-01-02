@@ -313,15 +313,12 @@ public class DatetimeFnCodeGen {
 
     switch (fnName) {
       case "TIME_FROM_PARTS":
-      case "TIMEFROMPARTS":
         time_mode = true;
         break;
       case "DATE_FROM_PARTS":
-      case "DATEFROMPARTS":
         date_mode = true;
         break;
       case "TIMESTAMP_LTZ_FROM_PARTS":
-      case "TIMESTAMPLTZFROMPARTS":
         // the LTZ versions cannot use the two argument constructor which always
         // produces NTZ values.
         timestamp_mode = true;
@@ -361,7 +358,7 @@ public class DatetimeFnCodeGen {
   }
 
   public static ArrayList<String> TIME_PART_UNITS =
-      new ArrayList<String>(
+      new ArrayList<>(
           Arrays.asList("hour", "minute", "second", "millisecond", "microsecond", "nanosecond"));
 
   public enum DateTimeType {

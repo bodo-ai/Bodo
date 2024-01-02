@@ -878,7 +878,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
     Expr result;
     switch (fnName) {
-      case "IF":
       case "IFF":
       case "BOOLNOT":
       case "BOOLAND":
@@ -893,7 +892,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "COALESCE":
       case "ZEROIFNULL":
       case "IFNULL":
-      case "NVL":
       case "DECODE":
         result = visitVariadic(fnName, codeExprs, streamingNamedArgs);
         break;
@@ -1199,8 +1197,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "ORD":
       case "ASCII":
       case "CHAR_LENGTH":
-      case "CHARACTER_LENGTH":
-      case "LEN":
       case "LENGTH":
       case "REVERSE":
       case "LCASE":
@@ -1244,10 +1240,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "REPLACE":
         return generateReplace(operands, streamingNamedArgs);
       case "SHA2":
-      case "SHA2_HEX":
         return generateSHA2(operands, streamingNamedArgs);
       case "MD5":
-      case "MD5_HEX":
         return ExprKt.BodoSQLKernel("md5", operands, streamingNamedArgs);
       case "HEX_ENCODE":
         return generateHexEncode(operands, streamingNamedArgs);
@@ -1871,19 +1865,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "FROM_DAYS":
             return generateFromDaysCode(operands.get(0));
           case "DATE_FROM_PARTS":
-          case "DATEFROMPARTS":
             assert operands.size() == 3;
             return generateDateTimeTypeFromPartsCode(fnName, operands, None.INSTANCE);
-          case "TIMEFROMPARTS":
           case "TIME_FROM_PARTS":
           case "TIMESTAMP_FROM_PARTS":
-          case "TIMESTAMPFROMPARTS":
           case "TIMESTAMP_NTZ_FROM_PARTS":
-          case "TIMESTAMPNTZFROMPARTS":
           case "TIMESTAMP_LTZ_FROM_PARTS":
-          case "TIMESTAMPLTZFROMPARTS":
           case "TIMESTAMP_TZ_FROM_PARTS":
-          case "TIMESTAMPTZFROMPARTS":
             Expr tzExpr = None.INSTANCE;
             if (fnOperation.getType() instanceof TZAwareSqlType) {
               tzExpr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getZoneExpr();
@@ -1917,8 +1905,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "CHAR":
           case "CHR":
           case "CHAR_LENGTH":
-          case "CHARACTER_LENGTH":
-          case "LEN":
           case "LENGTH":
           case "REVERSE":
           case "LCASE":
@@ -1954,9 +1940,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "JAROWINKLER_SIMILARITY":
           case "INITCAP":
           case "SHA2":
-          case "SHA2_HEX":
           case "MD5":
-          case "MD5_HEX":
           case "HEX_ENCODE":
           case "HEX_DECODE_STRING":
           case "HEX_DECODE_BINARY":

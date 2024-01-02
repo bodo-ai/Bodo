@@ -209,7 +209,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
                     "SUBSTR" -> unParseSubstring(writer, call, leftPrec, rightPrec)
                     "SUBSTRING" -> unParseSubstring(writer, call, leftPrec, rightPrec)
                     "CHAR_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
-                    "CHARACTER_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
                     "NANOSECOND" -> unParseNanosecond(writer, call, leftPrec, rightPrec)
                     else -> super.unparseCall(writer, call, leftPrec, rightPrec)
                 }

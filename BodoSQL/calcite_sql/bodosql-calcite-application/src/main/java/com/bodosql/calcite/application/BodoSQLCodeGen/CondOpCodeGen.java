@@ -25,12 +25,10 @@ public class CondOpCodeGen {
     equivalentFnMap.put("BOOLXOR", "boolxor");
     equivalentFnMap.put("BOOLNOT", "boolnot");
     equivalentFnMap.put("EQUAL_NULL", "equal_null");
-    equivalentFnMap.put("IF", "cond");
     equivalentFnMap.put("IFF", "cond");
     equivalentFnMap.put("DECODE", "decode");
     equivalentFnMap.put("HASH", "sql_hash");
     equivalentFnMap.put("COALESCE", "coalesce");
-    equivalentFnMap.put("NVL", "coalesce");
     equivalentFnMap.put("NVL2", "nvl2");
     equivalentFnMap.put("IFNULL", "coalesce");
     equivalentFnMap.put("ZEROIFNULL", "coalesce");
