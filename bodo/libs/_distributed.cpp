@@ -481,6 +481,35 @@ static int num_days_till_license_expiration(int exp_year, int exp_month,
 
 #endif  // CHECK_LICENSE_EXPIRED) || CHECK_LICENSE_CORE_COUNT
 
+void _dist_transpose_comm(char *output, char *input, int typ_enum,
+                          int64_t n_loc_rows, int64_t n_cols) {
+    int myrank, n_pes;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+    // Calculate send counts for each target rank, which is number of local rows
+    // multiplied by number of columns that will become the target rank's rows
+    // after transpose
+    std::vector<int64_t> send_counts(n_pes);
+    for (int i = 0; i < n_pes; i++) {
+        int64_t n_target_cols = dist_get_node_portion(n_cols, n_pes, i);
+        send_counts[i] = n_loc_rows * n_target_cols;
+    }
+
+    std::vector<int64_t> recv_counts(n_pes);
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT64_T, recv_counts.data(), 1,
+                 MPI_INT64_T, MPI_COMM_WORLD);
+
+    std::vector<int64_t> send_disp(n_pes);
+    std::vector<int64_t> recv_disp(n_pes);
+    calc_disp(send_disp, send_counts);
+    calc_disp(recv_disp, recv_counts);
+
+    MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    bodo_alltoallv(input, send_counts, send_disp, mpi_typ, output, recv_counts,
+                   recv_disp, mpi_typ, MPI_COMM_WORLD);
+}
+
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
     MOD_DEF(m, "hdist", "No docs", NULL);
@@ -630,6 +659,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
     SetAttrStringFromVoidPtr(m, permutation_int);
     SetAttrStringFromVoidPtr(m, permutation_array_index);
+    SetAttrStringFromVoidPtr(m, _dist_transpose_comm);
 
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",

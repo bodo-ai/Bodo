@@ -197,6 +197,7 @@ no_side_effect_call_tuples = {
     ("_sem_handle_nan", "series_kernels", "hiframes", bodo),
     ("dist_return", "distributed_api", "libs", bodo),
     ("rep_return", "distributed_api", "libs", bodo),
+    ("distributed_transpose", "distributed_api", "libs", bodo),
     # DataFrame
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
