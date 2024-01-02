@@ -46,7 +46,7 @@ def error_to_string(e: Exception) -> str:
     elif isinstance(e, py4j.protocol.Py4JError):
         message = "Unexpected Py4J Error: " + str(e)
     else:
-        message = "Unexpected Internal Error:" + str(e)
+        message = "Unexpected Internal Error: " + str(e)
     return message
 
 

@@ -75,6 +75,23 @@ def timestamp_named_params(request):
 
 @pytest.fixture(
     params=[
+        (
+            pd.Timestamp(year=2022, month=1, day=31, second=15, tz="utc"),
+            pd.Timestamp(year=2000, month=1, day=1, hour=3, tz="US/Pacific"),
+        ),
+    ]
+)
+def tzaware_timestamp_named_params(request):
+    """
+    Fixture for Timestamp named params. These always contain 2 values:
+    @a, and @b, which refer to elements 0 and 1 of the tuple.
+    """
+    params_tuple = request.param
+    return {"a": params_tuple[0], "b": params_tuple[1]}
+
+
+@pytest.fixture(
+    params=[
         # Check positive values
         (pd.Timedelta(days=1), pd.Timedelta(hours=5)),
         pytest.param(
