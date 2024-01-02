@@ -114,9 +114,10 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
-        // TODO(Keaton): Add a description for why this is needed.
-        // https://bodo.atlassian.net/browse/BSE-2353
-        // Also: https://bodo.atlassian.net/browse/BSE-2308
+        // Even when set to 0 bloat, several rules in the pushdown/pull up pass sometimes break CSE incorrectly,
+        // the reason for this is not immediately clear.
+        // Therefore, we perform a second CSE pass after the pushdown/pull up rules run in order to
+        // re-introduce CSE wherever possible
         if (optimize) {
             HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
         } else {
