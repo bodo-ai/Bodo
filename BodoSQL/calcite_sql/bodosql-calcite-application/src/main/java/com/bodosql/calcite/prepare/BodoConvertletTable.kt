@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
@@ -39,6 +40,18 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         addAlias(CastingOperatorTable.DATE, CastingOperatorTable.TO_DATE)
         addAlias(CastingOperatorTable.TIME, CastingOperatorTable.TO_TIME)
         addAlias(CastingOperatorTable.TO_CHAR, CastingOperatorTable.TO_VARCHAR)
+        addAlias(DatetimeOperatorTable.DATEFROMPARTS, DatetimeOperatorTable.DATE_FROM_PARTS)
+        addAlias(DatetimeOperatorTable.TIMEFROMPARTS, DatetimeOperatorTable.TIME_FROM_PARTS)
+        addAlias(DatetimeOperatorTable.TIMESTAMPFROMPARTS, DatetimeOperatorTable.TIMESTAMP_FROM_PARTS)
+        addAlias(DatetimeOperatorTable.TIMESTAMPNTZFROMPARTS, DatetimeOperatorTable.TIMESTAMP_NTZ_FROM_PARTS)
+        addAlias(DatetimeOperatorTable.TIMESTAMPLTZFROMPARTS, DatetimeOperatorTable.TIMESTAMP_LTZ_FROM_PARTS)
+        addAlias(DatetimeOperatorTable.TIMESTAMPTZFROMPARTS, DatetimeOperatorTable.TIMESTAMP_TZ_FROM_PARTS)
+        addAlias(StringOperatorTable.LEN, StringOperatorTable.LENGTH)
+        addAlias(StringOperatorTable.SHA2_HEX, StringOperatorTable.SHA2)
+        addAlias(StringOperatorTable.MD5_HEX, StringOperatorTable.MD5)
+        addAlias(CondOperatorTable.IF_FUNC, CondOperatorTable.IFF_FUNC)
+        addAlias(CondOperatorTable.NVL, SqlStdOperatorTable.COALESCE)
+        registerOp(StringOperatorTable.LENGTH, this::simpleConversion)
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
@@ -48,6 +61,15 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             .trimStart('$', '@')
         val returnType = cx.validator.getValidatedNodeType(call)
         return RexNamedParam(returnType, name)
+    }
+
+    /**
+     * Convert an operator from Sql To Rex direclty. This is used in case our convertlet
+     * conflicts with Calcite.
+     */
+    private fun simpleConversion(cx: SqlRexContext, call: SqlCall): RexNode {
+        val operands = call.operandList.map { op -> cx.convertExpression(op) }
+        return cx.rexBuilder.makeCall(call.operator, operands)
     }
 
     override fun get(call: SqlCall): SqlRexConvertlet? {

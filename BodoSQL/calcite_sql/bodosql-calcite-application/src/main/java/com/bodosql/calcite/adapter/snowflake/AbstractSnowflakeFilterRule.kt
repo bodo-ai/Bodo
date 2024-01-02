@@ -165,7 +165,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             StringOperatorTable.REGEXP_COUNT.name,
             StringOperatorTable.STRTOK.name,
             StringOperatorTable.LENGTH.name,
-            StringOperatorTable.LEN.name,
             ThreeOperatorStringTable.LPAD.name,
             ThreeOperatorStringTable.RPAD.name,
             SqlStdOperatorTable.TRUNCATE.name,
@@ -176,7 +175,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             CastingOperatorTable.TO_VARCHAR.name,
             SqlStdOperatorTable.SUBSTRING.name,
             StringOperatorTable.SUBSTR.name,
-            SqlStdOperatorTable.CHARACTER_LENGTH.name,
             SqlStdOperatorTable.CHAR_LENGTH.name,
 
             // This handles ||

@@ -42,6 +42,8 @@ public class BodoSqlTypeUtil {
           RelDataType type2) {
     if (SqlTypeFamily.CHARACTER.contains(type1) && SqlTypeFamily.CHARACTER.contains(type2)) {
       return true;
+    } else if (SqlTypeFamily.INTEGER.contains(type1) && SqlTypeFamily.INTEGER.contains(type2)) {
+      return true;
     } else {
       return SqlTypeUtil.equalSansNullability(factory, type1, type2);
     }

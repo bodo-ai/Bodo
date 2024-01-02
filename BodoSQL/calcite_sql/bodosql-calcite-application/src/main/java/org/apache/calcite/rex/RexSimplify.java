@@ -608,7 +608,7 @@ public class RexSimplify {
         if (o0.isA(SqlKind.LITERAL)
                 && o1.isA(SqlKind.LITERAL)
                 // Bodo Change: Handle if two character types are not equal as these
-                // should still be compared.
+                // should still be compared or integers of different size.
                 && BodoSqlTypeUtil.literalEqualSansNullability(rexBuilder.getTypeFactory(),
                 o0.getType(), o1.getType())) {
             final C v0 = ((RexLiteral) o0).getValueAs(clazz);
