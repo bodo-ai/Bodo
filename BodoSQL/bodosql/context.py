@@ -294,16 +294,19 @@ def get_sql_param_type(param_type, param_name):
     # Optional types or None types yet. As a result this is always
     # non-null.
     nullable = False
-    is_literal = unliteral_type != param_type
+    is_literal: bool = unliteral_type != param_type
     if (
         isinstance(unliteral_type, bodo.PandasTimestampType)
         and unliteral_type.tz != None
     ):
         # Timezone-aware Timestamps have their own special handling.
-        return construct_tz_aware_column_type(param_type, param_name, nullable)
+        return (
+            construct_tz_aware_column_type(param_type, param_name, nullable),
+            is_literal,
+        )
     elif isinstance(unliteral_type, bodo.TimeType):
         # Time array types have their own special handling for precision
-        return construct_time_column_type(param_type, param_name, nullable)
+        return construct_time_column_type(param_type, param_name, nullable), is_literal
     elif unliteral_type in _numba_to_sql_param_type_map:
         return (
             ColumnClass(

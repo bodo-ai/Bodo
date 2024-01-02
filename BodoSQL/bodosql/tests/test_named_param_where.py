@@ -118,6 +118,29 @@ def test_datetime_compare(
     )
 
 
+def test_tzaware_timestamp_compare(
+    bodosql_datetime_types, spark_info, tzaware_timestamp_named_params
+):
+    """
+    Tests that comparison operators work with datetime data and timestamp named parameters
+    """
+    query = f"""
+        SELECT
+            A
+        FROM
+            table1
+        WHERE
+            @b = C
+        """
+    check_query(
+        query,
+        bodosql_datetime_types,
+        spark_info,
+        named_params=tzaware_timestamp_named_params,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.slow
 def test_interval_compare(
     bodosql_interval_types,
