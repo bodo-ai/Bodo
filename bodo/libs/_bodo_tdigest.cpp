@@ -421,10 +421,13 @@ class TDigest::TDigestImpl {
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         tracing::Event ev("TDigestImpl_Quantile", parallel);
         double res = 0.0;
-        if (myrank == 0)
+        if (myrank == 0 || !parallel) {
             res = QuantileHelper(q);
-        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::FLOAT64);
-        MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD);
+        }
+        if (parallel) {
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::FLOAT64);
+            MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD);
+        }
         return res;
     }
 
@@ -479,7 +482,7 @@ void TDigest::Merge(const std::vector<TDigest>& others) {
     impl_->Merge(other_impls);
 }
 
-// Bodo change: Validate method removed as it is uncessary and relies on
+// Bodo change: Validate method removed as it is unnecessary and relies on
 // other PyArrow internals
 
 // Bodo change: new method
