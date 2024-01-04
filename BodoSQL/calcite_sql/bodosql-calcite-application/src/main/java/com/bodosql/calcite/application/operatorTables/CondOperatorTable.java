@@ -1,27 +1,20 @@
 package com.bodosql.calcite.application.operatorTables;
 
-import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
-
 import java.util.Arrays;
 import java.util.List;
-import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
-import org.apache.calcite.sql.SqlRankFunction;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
-import org.apache.calcite.util.Optionality;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class CondOperatorTable implements SqlOperatorTable {
@@ -162,16 +155,6 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.NUMERIC,
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
-  // TODO: Move aggregate function to their own operator table.
-
-  public static final SqlBasicAggFunction CONDITIONAL_TRUE_EVENT =
-      SqlBasicAggFunction.create(
-          "CONDITIONAL_TRUE_EVENT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER,
-          OperandTypes.BOOLEAN);
-
   public static final SqlFunction DECODE =
       SqlBasicFunction.create(
           "DECODE",
@@ -189,73 +172,8 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.VARIADIC,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlBasicAggFunction CONDITIONAL_CHANGE_EVENT =
-      SqlBasicAggFunction.create(
-          "CONDITIONAL_CHANGE_EVENT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER,
-          OperandTypes.ANY);
-
-  public static final SqlBasicAggFunction COUNT_IF =
-      SqlBasicAggFunction.create(
-          "COUNT_IF", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.BOOLEAN);
-
-  // MIN_ROW_NUMBER_FILTER is an internal function created as an optimization
-  // on ROW_NUMBER = 1
-  public static final SqlRankFunction MIN_ROW_NUMBER_FILTER =
-      // NOTE: There's a ReturnTypes.BOOLEAN_NOT_NULL and a ReturnTypes.BOOLEAN.
-      // No other type has an equivalent _NOT_NULL return type.
-      // Through reading of the code, we've confirmed that both are functionally equivalent.
-      // I'm going to use ReturnTypes.BOOLEAN_NOT_NULL for maximum safety, and better readability,
-      // but either would be fine here.
-      new SqlRankFunction(SqlKind.MIN_ROW_NUMBER_FILTER, ReturnTypes.BOOLEAN_NOT_NULL, true);
-
-  //  Returns the logical (boolean) OR value of all non-NULL boolean records in a group.
-  //  BOOLOR_AGG returns ‘true’ if at least one record in the group evaluates to ‘true’.
-  //  Numeric values, Decimal, and floating point values are converted to ‘true’ if they are
-  // different from zero.
-  //  Character/text types are not supported as they cannot be converted to Boolean.
-  public static final SqlAggFunction BOOLOR_AGG =
-      SqlBasicAggFunction.create(
-              "BOOLOR_AGG",
-              SqlKind.OTHER,
-              // Spec (https://docs.snowflake.com/en/sql-reference/functions/boolor_agg) says
-              // ...if the group is empty, the function returns NULL.
-              BOOL_AGG_RET_TYPE,
-              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  // The same as BOOLAND_AGG except that it returns true if all of the inputs are true
-  public static final SqlAggFunction BOOLAND_AGG =
-      SqlBasicAggFunction.create(
-              "BOOLAND_AGG",
-              SqlKind.OTHER,
-              // see BOOLOR_AGG for nullability note
-              BOOL_AGG_RET_TYPE,
-              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  // The same as BOOLAND_AGG except that it returns true if exactly one of the inputs  is are true
-  public static final SqlAggFunction BOOLXOR_AGG =
-      SqlBasicAggFunction.create(
-              "BOOLXOR_AGG",
-              SqlKind.OTHER,
-              // see BOOLXOR_AGG for nullability note
-              BOOL_AGG_RET_TYPE,
-              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
   private List<SqlOperator> functionList =
       Arrays.asList(
-          BOOLOR_AGG,
-          BOOLAND_AGG,
-          BOOLXOR_AGG,
-          CONDITIONAL_TRUE_EVENT,
-          COUNT_IF,
-          CONDITIONAL_CHANGE_EVENT,
           REGR_VALX,
           REGR_VALY,
           IF_FUNC,
@@ -271,8 +189,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           NVL2,
           ZEROIFNULL,
           DECODE,
-          HASH,
-          MIN_ROW_NUMBER_FILTER);
+          HASH);
 
   @Override
   public void lookupOperatorOverloads(

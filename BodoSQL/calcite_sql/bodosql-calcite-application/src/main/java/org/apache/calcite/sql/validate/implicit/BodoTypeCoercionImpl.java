@@ -1,12 +1,9 @@
 package org.apache.calcite.sql.validate.implicit;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
-import com.bodosql.calcite.application.operatorTables.JsonOperatorTable;
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable;
 import kotlin.Pair;
-import kotlin.jvm.functions.Function3;
 import kotlin.jvm.functions.Function4;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
@@ -230,7 +227,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return CastingOperatorTable.TO_OBJECT.createCall(SqlParserPos.ZERO, node);
     } else if (type instanceof ArraySqlType) {
       // When casting to an array, call TO_ARRAY
-      return ArrayOperatorTable.TO_ARRAY.createCall(SqlParserPos.ZERO, node);
+      return CastingOperatorTable.TO_ARRAY.createCall(SqlParserPos.ZERO, node);
     } else {
       // Utilize our own version of convertTypeToSpec.
       return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,

@@ -4662,7 +4662,7 @@ SqlNode NestedAccess(SqlNode lhs) :
     )*
     {
         operands.add(SqlLiteral.createCharString(accessNames.toString(), getPos()));
-        return JsonOperatorTable.GET_PATH.createCall(getPos(), operands);
+        return ObjectOperatorTable.GET_PATH.createCall(getPos(), operands);
     }
 }
 

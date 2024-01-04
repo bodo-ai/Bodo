@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas.window
 
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable
-import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.application.utils.BodoArrayHelpers
 import com.bodosql.calcite.ir.BodoSQLKernel
 import com.bodosql.calcite.ir.Doc
@@ -60,22 +59,22 @@ internal object WindowAggregateApplyFuncTable {
      * code generation.
      */
     private val nameMapping = mapOf(
-        CondOperatorTable.COUNT_IF to ::countIf,
-        NumericOperatorTable.RATIO_TO_REPORT to ::ratioToReport,
-        NumericOperatorTable.CORR to ::corr,
-        CondOperatorTable.CONDITIONAL_CHANGE_EVENT to ::conditionalChangeEvent,
-        NumericOperatorTable.SKEW to ::skew,
-        NumericOperatorTable.KURTOSIS to ::kurtosis,
-        NumericOperatorTable.VARIANCE_SAMP to ::varianceSamp,
-        NumericOperatorTable.VARIANCE_POP to ::variancePop,
-        CondOperatorTable.BOOLOR_AGG to ::boolorAgg,
-        CondOperatorTable.BOOLAND_AGG to ::boolandAgg,
-        CondOperatorTable.BOOLXOR_AGG to ::boolxorAgg,
-        CondOperatorTable.CONDITIONAL_TRUE_EVENT to ::conditionalTrueEvent,
-        NumericOperatorTable.APPROX_PERCENTILE to ::approxPercentile,
-        NumericOperatorTable.BITOR_AGG to ::bitorAgg,
-        NumericOperatorTable.BITAND_AGG to ::bitandAgg,
-        NumericOperatorTable.BITXOR_AGG to ::bitxorAgg,
+        AggOperatorTable.COUNT_IF to ::countIf,
+        AggOperatorTable.RATIO_TO_REPORT to ::ratioToReport,
+        AggOperatorTable.CORR to ::corr,
+        AggOperatorTable.CONDITIONAL_CHANGE_EVENT to ::conditionalChangeEvent,
+        AggOperatorTable.SKEW to ::skew,
+        AggOperatorTable.KURTOSIS to ::kurtosis,
+        AggOperatorTable.VARIANCE_SAMP to ::varianceSamp,
+        AggOperatorTable.VARIANCE_POP to ::variancePop,
+        AggOperatorTable.BOOLOR_AGG to ::boolorAgg,
+        AggOperatorTable.BOOLAND_AGG to ::boolandAgg,
+        AggOperatorTable.BOOLXOR_AGG to ::boolxorAgg,
+        AggOperatorTable.CONDITIONAL_TRUE_EVENT to ::conditionalTrueEvent,
+        AggOperatorTable.APPROX_PERCENTILE to ::approxPercentile,
+        AggOperatorTable.BITOR_AGG to ::bitorAgg,
+        AggOperatorTable.BITAND_AGG to ::bitandAgg,
+        AggOperatorTable.BITXOR_AGG to ::bitxorAgg,
     ).mapKeys { it.key.name }
 
     fun get(op: SqlOperator): WindowAggregateApplyFunc? =

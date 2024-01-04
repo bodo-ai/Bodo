@@ -32,7 +32,7 @@ data: {
       "com.bodosql.calcite.application.operatorTables.ContextOperatorTable"
       "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable"
       "com.bodosql.calcite.application.operatorTables.NumericOperatorTable"
-      "com.bodosql.calcite.application.operatorTables.JsonOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.ObjectOperatorTable"
       "com.bodosql.calcite.application.operatorTables.SelectOperatorTable",
       "com.bodosql.calcite.application.operatorTables.StringOperatorTable"
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable"

@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas.window
 
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable
-import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.SqlKind
@@ -44,13 +43,13 @@ internal object WindowAggregateFuncTable {
      * code generation.
      */
     private val nameMapping = mapOf(
-        CondOperatorTable.MIN_ROW_NUMBER_FILTER to define("min_row_number_filter"),
-        NumericOperatorTable.RATIO_TO_REPORT to define("ratio_to_report", ExprType.SERIES),
-        CondOperatorTable.CONDITIONAL_TRUE_EVENT to define("conditional_true_event", ExprType.SERIES),
-        CondOperatorTable.CONDITIONAL_CHANGE_EVENT to define("conditional_change_event", ExprType.SERIES),
-        CondOperatorTable.COUNT_IF to defineBounded("count_if", ExprType.SERIES),
-        NumericOperatorTable.VARIANCE_POP to defineBounded("var_pop", ExprType.SERIES),
-        NumericOperatorTable.VARIANCE_SAMP to defineBounded("var", ExprType.SERIES),
+        AggOperatorTable.MIN_ROW_NUMBER_FILTER to define("min_row_number_filter"),
+        AggOperatorTable.RATIO_TO_REPORT to define("ratio_to_report", ExprType.SERIES),
+        AggOperatorTable.CONDITIONAL_TRUE_EVENT to define("conditional_true_event", ExprType.SERIES),
+        AggOperatorTable.CONDITIONAL_CHANGE_EVENT to define("conditional_change_event", ExprType.SERIES),
+        AggOperatorTable.COUNT_IF to defineBounded("count_if", ExprType.SERIES),
+        AggOperatorTable.VARIANCE_POP to defineBounded("var_pop", ExprType.SERIES),
+        AggOperatorTable.VARIANCE_SAMP to defineBounded("var", ExprType.SERIES),
     ).mapKeys { it.key.name }
 
     /**
