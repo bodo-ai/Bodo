@@ -472,7 +472,8 @@ def _gen_pd_func_text_and_lowered_globals(
                 func_text_or_error_msg = f"Failure in compiling or validating SQL Query. Error message: {error_to_string(e)}"
                 failed = True
             if not failed:
-                args = ",".join(("bodo_sql_context",) + param_keys)
+                params_names = ["_PARAM_" + x for x in param_keys]
+                args = ",".join(["bodo_sql_context"] + params_names)
                 func_text_or_error_msg = f"def impl({args}):\n"
                 func_text_or_error_msg += f"{pd_code}\n"
 

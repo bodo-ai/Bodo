@@ -19,7 +19,7 @@ pytestmark = pytest_slow_unless_codegen
     params=[
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": pd.Series(
                             [1, -2, 3, 0, 0, 0, None, None, None], dtype=pd.Int32Dtype()
@@ -34,7 +34,7 @@ pytestmark = pytest_slow_unless_codegen
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": pd.Series([42.0] * 3 + [0.0] * 3 + [None] * 3),
                         "B": pd.Series([-13.1, 0.0, None] * 3),
@@ -364,7 +364,7 @@ def test_equal_null(dtype, val1, val2, use_case, use_symbol, memory_leak_check):
             query = "SELECT A <=> B AS are_equal FROM TABLE1"
         else:
             query = "SELECT EQUAL_NULL(A, B) AS are_equal FROM TABLE1"
-    ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+    ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     check_query(
         query,
         ctx,

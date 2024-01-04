@@ -6,7 +6,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
-BASE_NAME = "primitives_table"
+BASE_NAME = "PRIMITIVES_TABLE"
 PARTITION_SPEC = [
     PartitionField("A", "years", -1),
     PartitionField("C", "identity", -1),
@@ -19,7 +19,7 @@ SORT_ORDER = [
 ]
 
 
-def create_table(table_name=f"partsort_{BASE_NAME}", spark=None):
+def create_table(table_name=f"PARTSORT_{BASE_NAME}", spark=None):
     if spark is None:
         spark = get_spark()
 

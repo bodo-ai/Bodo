@@ -48,9 +48,9 @@ def test_fn(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("datetime_strings", id="valid_datetime_strings"),
-        pytest.param("digit_strings", id="valid_digit_strings"),
-        pytest.param("timestamps", id="valid_timestamps"),
+        pytest.param("DATETIME_STRINGS", id="valid_datetime_strings"),
+        pytest.param("DIGIT_STRINGS", id="valid_digit_strings"),
+        pytest.param("TIMESTAMPS", id="valid_timestamps"),
     ]
 )
 def date_casting_input_type(request):
@@ -68,7 +68,7 @@ def test_date_casting_functions(
 
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe["table1"][date_casting_input_type].apply(
+            "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
                 lambda val: None
                 if scalar_to_date_equiv_fn(val) is None
                 else scalar_to_date_equiv_fn(val)
@@ -101,7 +101,7 @@ def test_date_casting_functions_case(
     dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe_nullable["table1"][date_casting_input_type].apply(
+            "FOO": dt_fn_dataframe_nullable["TABLE1"][date_casting_input_type].apply(
                 lambda val: scalar_to_date_equiv_fn(val)
                 if not (scalar_to_date_equiv_fn(val) is None)
                 and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
@@ -122,14 +122,14 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid timestamp with timezone values"""
     df = pd.DataFrame(
         {
-            "timestamps": pd.date_range(
+            "TIMESTAMPS": pd.date_range(
                 "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
             )
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT {test_fn}(timestamps) as dates from table1"
-    expected_output = pd.DataFrame({"DATES": df["timestamps"].dt.date})
+    expected_output = pd.DataFrame({"DATES": df["TIMESTAMPS"].dt.date})
 
     check_query(
         query,
@@ -143,17 +143,17 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statement"""
     df = pd.DataFrame(
         {
-            "timestamps": pd.date_range(
+            "TIMESTAMPS": pd.date_range(
                 "1/18/2022", periods=30, freq="10D5H", tz="US/PACIFIC"
             ),
             "B": [True, False, True, False, True] * 6,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = (
         f"SELECT CASE WHEN B THEN {test_fn}(timestamps) END as timestamps from table1"
     )
-    to_date_series = df["timestamps"].dt.normalize().apply(lambda t: t.date())
+    to_date_series = df["TIMESTAMPS"].dt.normalize().apply(lambda t: t.date())
     to_date_series[~df.B] = None
     expected_output = pd.DataFrame({"TIMESTAMPS": to_date_series})
 
@@ -169,7 +169,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     """tests try_to_date on valid and invalid datetime values"""
 
     # Construct input dataframe of both valid and invalid datetime strings
-    valid_datetimes = tz_aware_df["table1"]["A"]
+    valid_datetimes = tz_aware_df["TABLE1"]["A"]
 
     invalid_str_datetimes = pd.Series(
         [
@@ -188,7 +188,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     )
     df = pd.DataFrame(
         {
-            "timestamps": pd.concat(
+            "TIMESTAMPS": pd.concat(
                 [valid_datetimes.astype(str), invalid_str_datetimes]
             ).reset_index(drop=True)
         }
@@ -201,7 +201,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
         {"DATES": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT TRY_TO_DATE(timestamps) as dates from table1"
 
     check_query(
@@ -222,7 +222,7 @@ def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
 
     if test_fn == "TRY_TO_DATE":
         expected_output = pd.DataFrame(
-            {"foo": pd.Series([None] * len(dt_fn_dataframe["table1"]))}
+            {"FOO": pd.Series([None] * len(dt_fn_dataframe["TABLE1"]))}
         )
         dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
         check_query(
@@ -247,7 +247,7 @@ def format_input_string_df():
     for use in testing, including None object.
     """
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -330,7 +330,7 @@ def test_date_casting_functions_with_valid_format(
     query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
     expected_output = pd.DataFrame(
         {
-            "foo": pd.Series(
+            "FOO": pd.Series(
                 [
                     datetime.date(2017, 3, 26),
                     datetime.date(2000, 12, 31),
@@ -376,7 +376,7 @@ def test_date_casting_functions_with_invalid_format(
     query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
 
     if test_fn == "TRY_TO_DATE":
-        expected_output = pd.DataFrame({"foo": pd.Series([None] * 24)})
+        expected_output = pd.DataFrame({"FOO": pd.Series([None] * 24)})
         check_query(
             query,
             format_input_string_df,
@@ -400,7 +400,7 @@ def test_date_casting_with_colon(
 
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe["table1"][date_casting_input_type].apply(
+            "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
                 lambda val: None
                 if scalar_to_date_equiv_fn(val) is None
                 else scalar_to_date_equiv_fn(val)
@@ -422,14 +422,14 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
     """tests ::DATE on valid datetime values in a case statment"""
     df = pd.DataFrame(
         {
-            "timestamps": pd.date_range(
+            "TIMESTAMPS": pd.date_range(
                 "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
             )
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = "SELECT (timestamps)::DATE from table1"
-    expected_output = pd.DataFrame({"foo": df["timestamps"].dt.date})
+    expected_output = pd.DataFrame({"FOO": df["TIMESTAMPS"].dt.date})
 
     check_query(
         query,
@@ -664,13 +664,13 @@ def test_to_timestamp_non_numeric(
     else:
         query = f"SELECT {to_timestamp_fn}(t) FROM table1"
     ctx = {
-        "table1": pd.DataFrame({"t": data, "b": [i % 5 == 4 for i in range(len(data))]})
+        "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 4 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
         {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
     )
     if use_case:
-        expected_output[0][ctx["table1"]["b"]] = None
+        expected_output[0][ctx["TABLE1"]["B"]] = None
 
     check_query(
         query,
@@ -787,13 +787,13 @@ def test_to_timestamp_numeric(
     else:
         query = f"SELECT {to_timestamp_fn}(t{scale_str}) FROM table1"
     ctx = {
-        "table1": pd.DataFrame({"t": data, "b": [i % 5 == 2 for i in range(len(data))]})
+        "TABLE1": pd.DataFrame({"T": data, "B": [i % 5 == 2 for i in range(len(data))]})
     }
     expected_output = pd.DataFrame(
         {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
     )
     if use_case:
-        expected_output[0][ctx["table1"]["b"]] = None
+        expected_output[0][ctx["TABLE1"]["B"]] = None
     check_query(
         query,
         ctx,
@@ -872,7 +872,7 @@ def test_to_timestamp_format_str(
     data, format_str, answer = to_timestamp_string_data_format_str
     query = f"SELECT {to_timestamp_fn}(t, '{format_str}') FROM table1"
 
-    ctx = {"table1": pd.DataFrame({"t": data})}
+    ctx = {"TABLE1": pd.DataFrame({"T": data})}
     expected_output = pd.DataFrame({0: answer})
     check_query(
         query,
@@ -896,7 +896,7 @@ def test_to_timestamp_format_str(
 )
 def test_convert_timezone(tz_aware_df, tz_naive_df, memory_leak_check):
     query1 = "SELECT CONVERT_TIMEZONE('Poland', A) from table1"
-    expected_output1 = tz_aware_df["table1"]["A"].dt.tz_convert("Poland").to_frame()
+    expected_output1 = tz_aware_df["TABLE1"]["A"].dt.tz_convert("Poland").to_frame()
 
     check_query(
         query1,
@@ -921,7 +921,7 @@ def test_convert_timezone(tz_aware_df, tz_naive_df, memory_leak_check):
 
     check_query(
         query2,
-        {"table1": tz_naive_df},
+        {"TABLE1": tz_naive_df},
         None,
         check_names=False,
         check_dtype=False,

@@ -211,7 +211,7 @@ def test_blended_fusion(memory_leak_check):
     This allows window functions that are not tested together to have one
     test that checks that they can all be fused into the same closure."""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [None, None, 2, 3, None, 5, None, 7, None, None],
@@ -429,7 +429,7 @@ def test_all_null():
     query = f"SELECT {', '.join(selects)} FROM table1"
     df = pd.DataFrame(
         {
-            "idx": list(range(10)),
+            "IDX": list(range(10)),
             "P": [0] * 10,
             "O": pd.array([None] * 10, dtype=pd.Int32Dtype()),
             "B": pd.array([None] * 10, dtype=pd.BooleanDtype()),
@@ -476,7 +476,7 @@ def test_all_null():
     )
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=answer,
         sort_output=True,

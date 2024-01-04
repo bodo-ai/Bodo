@@ -406,7 +406,7 @@ def test_tpcxbb_q15(tpcxbb_data, spark_info, memory_leak_check):
         ORDER BY cat
     """
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,

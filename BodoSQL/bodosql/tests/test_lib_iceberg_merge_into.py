@@ -118,33 +118,33 @@ delete_everything_and_insert_some_stuff_df_string = pd.DataFrame(
 np.random.seed(42)
 stress_test_base_df = pd.DataFrame(
     {
-        "int_col": np.random.randint(-1000000, 1000000, size=100),
-        "str_col": gen_random_string_binary_array(100, is_binary=False),
-        "non_ascii_str_col": gen_nonascii_list(100),
-        "bytes_col": gen_random_string_binary_array(100, is_binary=True),
-        "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
-        "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
+        "INT_COL": np.random.randint(-1000000, 1000000, size=100),
+        "STR_COL": gen_random_string_binary_array(100, is_binary=False),
+        "NON_ASCII_STR_COL": gen_nonascii_list(100),
+        "BYTES_COL": gen_random_string_binary_array(100, is_binary=True),
+        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
+        "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
             "timedelta64[ns]"
         ),
-        "bool_col": np.random.randint(0, 2, size=100).astype(bool),
-        "float_col": np.random.uniform(-1000000, 1000000, size=100),
+        "BOOL_COL": np.random.randint(0, 2, size=100).astype(bool),
+        "FLOAT_COL": np.random.uniform(-1000000, 1000000, size=100),
     }
 )
 
 stress_test_delta_df = pd.DataFrame(
     {
-        "int_col": np.random.randint(-1000000, 1000000, size=75),
+        "INT_COL": np.random.randint(-1000000, 1000000, size=75),
         # Flip the values for str and non-ascii, so we can be sure that we can
         # insert/update non-ascii string into normal str array, and visa versa
-        "str_col": gen_nonascii_list(75),
-        "non_ascii_str_col": gen_random_string_binary_array(75, is_binary=False),
-        "bytes_col": gen_random_string_binary_array(75, is_binary=True),
-        "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
-        "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
+        "STR_COL": gen_nonascii_list(75),
+        "NON_ASCII_STR_COL": gen_random_string_binary_array(75, is_binary=False),
+        "BYTES_COL": gen_random_string_binary_array(75, is_binary=True),
+        "TS_COL": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
+        "TD_COL": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
             "timedelta64[ns]"
         ),
-        "bool_col": np.random.randint(0, 2, size=75).astype(bool),
-        "float_col": np.random.uniform(-1000000, 1000000, size=75),
+        "BOOL_COL": np.random.randint(0, 2, size=75).astype(bool),
+        "FLOAT_COL": np.random.uniform(-1000000, 1000000, size=75),
     }
 )
 
@@ -170,10 +170,10 @@ def delta_merge_equiv(orig_base_df, delta_df):
     test_do_delta_merge_with_target
 
     Args:
-        base_df (dataframe): The original/target dataframe, to apply the changes to.
+        base_df (DataFrame): The original/target DataFrame, to apply the changes to.
                              must have a row id column with name ROW_ID_COL_NAME.
-        delta_df (dataframe): The delta dataframe, containing the changes to apply to
-                              the target dataframe. Must have a row id column with
+        delta_df (DataFrame): The delta DataFrame, containing the changes to apply to
+                              the target DataFrame. Must have a row id column with
                               name ROW_ID_COL_NAME, and a action enum colum with name
                               MERGE_ACTION_ENUM_COL_NAME.
     """
@@ -185,7 +185,7 @@ def delta_merge_equiv(orig_base_df, delta_df):
     delta_df_delete = delta_df[delta_df[MERGE_ACTION_ENUM_COL_NAME] == DELETE_ENUM]
 
     base_df = base_df.set_index(ROW_ID_COL_NAME, drop=True)
-    for _idx, row in delta_df_update.iterrows():
+    for _, row in delta_df_update.iterrows():
         cur_update_id = row[ROW_ID_COL_NAME]
         base_df.loc[cur_update_id] = row
 
@@ -347,7 +347,7 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
     #TODO: Add a more extensive E2E test consisting of actual BodoSQL IR once we have codegen working
     """
 
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -371,6 +371,6 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
     with set_logging_stream(logger, 1):
         bodo.jit(impl)(table_name, conn, db_schema)
     check_logger_msg(
-        stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_bodo_row_id']"
+        stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_BODO_ROW_ID']"
     )
     check_logger_msg(stream, "Filter pushdown successfully performed")

@@ -18,8 +18,8 @@ DELETE_ENUM = 0
 INSERT_ENUM = 1
 UPDATE_ENUM = 2
 
-ROW_ID_COL_NAME = "_bodo_row_id"
-MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change"
+ROW_ID_COL_NAME = "_BODO_ROW_ID"
+MERGE_ACTION_ENUM_COL_NAME = "_MERGE_INTO_CHANGE"
 
 
 # We can't have this function be inlined, as it would break our filter pushdown,

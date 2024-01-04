@@ -30,7 +30,7 @@ def get_expected_output_with_null_col_b(s_info, ctx, query, typestr):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["hello", "world", "how"] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="string"),
@@ -47,7 +47,7 @@ def bodosql_null_string_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [True, False, True] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="boolean"),
@@ -64,7 +64,7 @@ def bodosql_null_bool_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         pd.Timestamp(2021, 5, 19),
@@ -94,7 +94,7 @@ def bodosql_null_timestamp_df(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [1, 2, 3] * 4,
                     "B": pd.Series([None, None, None] * 4, dtype="Int32"),
@@ -246,7 +246,7 @@ def test_is_not_null_bool_scalar(bodosql_null_bool_df, spark_info, memory_leak_c
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 def test_is_null_timestamp_cols(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
 ):
@@ -265,7 +265,7 @@ def test_is_null_timestamp_cols(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 @pytest.mark.slow
 def test_is_not_null_timestamp_cols(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
@@ -285,11 +285,11 @@ def test_is_not_null_timestamp_cols(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 def test_is_null_timestamp_scalar(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
 ):
-    """tests is_null on timestampean normal/nullscalars"""
+    """tests is_null on timestamp normal/nullscalars"""
     query = "Select (CASE WHEN B is Null THEN True ELSE false) from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_timestamp_df, query, "timestamp"
@@ -304,7 +304,7 @@ def test_is_null_timestamp_scalar(
     )
 
 
-@pytest.mark.skip("TODO: issue with Spark infering the type")
+@pytest.mark.skip("TODO: issue with Spark inferring the type")
 @pytest.mark.slow
 def test_is_not_null_timestamp_scalar(
     bodosql_null_timestamp_df, spark_info, memory_leak_check
@@ -442,7 +442,7 @@ def test_is_false_scalar(bodosql_null_bool_df, spark_info, memory_leak_check):
 
 
 def test_is_null_integer_cols(bodosql_null_integer_df, spark_info, memory_leak_check):
-    """tests is null on interger columns"""
+    """tests is null on integer columns"""
     query = "Select A is null, B is null from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"
@@ -462,7 +462,7 @@ def test_is_null_integer_cols(bodosql_null_integer_df, spark_info, memory_leak_c
 def test_is_not_null_integer_cols(
     bodosql_null_integer_df, spark_info, memory_leak_check
 ):
-    """tests is not null on interger columns"""
+    """tests is not null on integer columns"""
     query = "Select A, A is not null from table1"
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_integer_df, query, "Int"

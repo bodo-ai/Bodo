@@ -277,7 +277,7 @@ def test_null_literal_then_else(major_types_nullable, memory_leak_check):
     """
     then_list = []
     else_list = []
-    orig_df = major_types_nullable["table1"]
+    orig_df = major_types_nullable["TABLE1"]
     for i, val in enumerate(orig_df["COND_COL"]):
         if val is None or pd.isnull(val):
             then_list.append(None)
@@ -320,7 +320,7 @@ def test_null_literal_cond(major_types_nullable, memory_leak_check):
     """
     null_list = []
     not_null_list = []
-    orig_df = major_types_nullable["table1"]
+    orig_df = major_types_nullable["TABLE1"]
     for i, val in enumerate(orig_df["A"]):
         if val is None or pd.isnull(val):
             null_list.append(orig_df.loc[i, "B"])

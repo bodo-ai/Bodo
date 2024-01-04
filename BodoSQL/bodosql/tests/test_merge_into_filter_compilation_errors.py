@@ -20,7 +20,7 @@ def test_requires_transform(iceberg_database, iceberg_table_conn, memory_leak_ch
     a transformation in filter pushdown.
     """
     # We need a real table to ensure we reach filter pushdown.
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     bc = BodoSQLContext()

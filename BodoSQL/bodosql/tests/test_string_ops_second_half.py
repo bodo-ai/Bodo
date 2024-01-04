@@ -59,7 +59,7 @@ def test_contains(args, spark_info, memory_leak_check):
     query, expected_output = args
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         spark_info,
         check_names=False,
         expected_output=expected_output,
@@ -277,7 +277,7 @@ def mk_broadcasted_string_queries():
     the second element is the name of the test case, and the third element
     is a boolean indicated whether the test is slow.
 
-    Also, each query type is tagged with a skipif attatched to the corresponding
+    Also, each query type is tagged with a skipif attached to the corresponding
     Bodo mini-release version required for the array kernel to exist. The
     query types are inferred by the naming scheme of the ids: "TYPE_other_info"
     """
@@ -590,7 +590,7 @@ def test_rtrimmed_length(query, spark_info, memory_leak_check):
     # Generate a column of strings with every combination of 8 characters
     # being space vs non-space
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "".join(
@@ -765,7 +765,7 @@ def test_format(args, spark_info, bodosql_string_fn_testing_df, memory_leak_chec
 def test_substring(query, spark_info, memory_leak_check):
     subst_df = pd.DataFrame(
         {
-            "source": pd.Series(
+            "SOURCE": pd.Series(
                 pd.array(
                     [
                         "a bc def ghij",
@@ -783,16 +783,16 @@ def test_substring(query, spark_info, memory_leak_check):
                     ]
                 )
             ),
-            "start_pos": pd.Series(pd.array([-8, -4, -2, 0, 2, 4, 8, 16])),
-            "length": pd.Series(pd.array([3, 7, 2, 1, -1, 1, 0, None])),
-            "delim": pd.Series(pd.array([" ", " ", "", "a", "a", "a", "--", "--"])),
-            "occur": pd.Series(pd.array([2, 0, 2, 4, 2, -1, 0, None])),
+            "START_POS": pd.Series(pd.array([-8, -4, -2, 0, 2, 4, 8, 16])),
+            "LENGTH": pd.Series(pd.array([3, 7, 2, 1, -1, 1, 0, None])),
+            "DELIM": pd.Series(pd.array([" ", " ", "", "a", "a", "a", "--", "--"])),
+            "OCCUR": pd.Series(pd.array([2, 0, 2, 4, 2, -1, 0, None])),
         }
     )
     spark_query = query.replace("MID", "SUBSTR")
     check_query(
         query,
-        {"table1": subst_df},
+        {"TABLE1": subst_df},
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -806,7 +806,7 @@ def test_substring_suffix(func, spark_info, memory_leak_check):
     """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""
     query = f"SELECT {func}(S, I) FROM table1"
     df = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "S": pd.Series(
                     [
@@ -1032,20 +1032,20 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
     [
         pytest.param(
             True,
-            "str_table",
+            "STR_TABLE",
             pd.DataFrame({0: [False] * 3 + [True] * 6}),
             id="startswith-strings",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             True,
-            "bin_table",
+            "BIN_TABLE",
             pd.DataFrame({0: [False] * 3 + [True] * 6}),
             id="startswith-binary",
         ),
         pytest.param(
             False,
-            "str_table",
+            "STR_TABLE",
             pd.DataFrame(
                 {0: [False, True, False, True, False, True, True, False, False]}
             ),
@@ -1053,7 +1053,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
         ),
         pytest.param(
             False,
-            "bin_table",
+            "BIN_TABLE",
             pd.DataFrame(
                 {0: [False, True, False, True, False, True, True, False, False]}
             ),
@@ -1073,13 +1073,13 @@ def test_startswith_endswith(
             f"SELECT {'STARTSWITH' if startswith else 'ENDSWITH'}(A, B) FROM {table}"
         )
     ctx = {
-        "str_table": pd.DataFrame(
+        "STR_TABLE": pd.DataFrame(
             {
                 "A": ["alpha", "alphabet", "alpha beta"] * 3,
                 "B": ["bet"] * 3 + ["a"] * 3 + ["alpha"] * 3,
             }
         ),
-        "bin_table": pd.DataFrame(
+        "BIN_TABLE": pd.DataFrame(
             {
                 "A": [b"alpha", b"alphabet", b"alpha beta"] * 3,
                 "B": [b"bet"] * 3 + [b"a"] * 3 + [b"alpha"] * 3,
@@ -1109,7 +1109,7 @@ def test_startswith_endswith(
     [
         pytest.param(
             "INSERT(A, B, C, D)",
-            "str_table",
+            "STR_TABLE",
             pd.DataFrame(
                 {
                     0: [
@@ -1126,7 +1126,7 @@ def test_startswith_endswith(
         ),
         pytest.param(
             "INSERT(A, E, F, G)",
-            "str_table",
+            "STR_TABLE",
             pd.DataFrame(
                 {
                     0: [
@@ -1148,7 +1148,7 @@ def test_startswith_endswith(
         ),
         pytest.param(
             "INSERT(A, B, C, D)",
-            "bin_table",
+            "BIN_TABLE",
             pd.DataFrame(
                 {
                     0: [
@@ -1166,7 +1166,7 @@ def test_startswith_endswith(
         ),
         pytest.param(
             "INSERT(A, E, F, G)",
-            "bin_table",
+            "BIN_TABLE",
             pd.DataFrame(
                 {
                     0: [
@@ -1196,7 +1196,7 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
     else:
         query = f"SELECT {calculation} FROM {table}"
     ctx = {
-        "str_table": pd.DataFrame(
+        "STR_TABLE": pd.DataFrame(
             {
                 "A": ["the red fox"] * 10,
                 "B": [5, 5, 5, 9, 5] * 2,
@@ -1222,7 +1222,7 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
                 ],
             }
         ),
-        "bin_table": pd.DataFrame(
+        "BIN_TABLE": pd.DataFrame(
             {
                 "A": [b"the red fox"] * 10,
                 "B": [5, 5, 5, 9, 5] * 2,
@@ -1323,7 +1323,7 @@ def test_position(calculation, table, case, spark_info, memory_leak_check):
     )
 
     ctx = {
-        "str_table": pd.DataFrame(
+        "STR_TABLE": pd.DataFrame(
             {
                 "A": [None] + (["a "] * 3 + [" "] * 3 + ["t"] * 3) * 3,
                 "B": [None]
@@ -1333,7 +1333,7 @@ def test_position(calculation, table, case, spark_info, memory_leak_check):
                 "C": pd.Series([None] + [1, 5, 9] * 9, dtype=pd.Int32Dtype()),
             }
         ),
-        "bin_table": pd.DataFrame(
+        "BIN_TABLE": pd.DataFrame(
             {
                 "A": [None] + ([b"a "] * 3 + [b" "] * 3 + [b"t"] * 3) * 3,
                 "B": [None]
@@ -1375,7 +1375,7 @@ def test_replace_two_args_column(memory_leak_check):
     """Test REPLACE works correctly with two column inputs"""
     query = "SELECT REPLACE(A, B) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": ["abcabcabc", None, "kbykujdt", "no replace", "zzyyxxxzy"] * 4,
                 "B": ["abc", "oiu", None, "none", "zy"] * 4,
@@ -1455,7 +1455,7 @@ def test_sha2_scalars(query, output, memory_leak_check):
 def test_sha2_columns(query, memory_leak_check):
     """Test SHA2 and SHA2_HEX work correctly with column inputs"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": ["abcabcabc", None, "kbykujdt", "no replace", "zzyyxxxzy"] * 4,
                 "B": [b"abcabcabc", None, b"kbykujdt", b"no replace", b"zzyyxxxzy"] * 4,
@@ -1532,7 +1532,7 @@ def test_md5_scalars(query, output, memory_leak_check):
 def test_md5_columns(query, memory_leak_check):
     """Test MD5 and MD5_HEX work correctly with column inputs"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": ["bcdbcdbcd", "CVMDKAJDS", None, "no replace", ":@#E?><"] * 4,
                 "B": [b"bcdbcdbcd", b"CVMDKAJDS", None, b"no replace", b":@#E?><"] * 4,
@@ -1609,7 +1609,7 @@ def test_hex_encode_decode(query_fmt, uppercase, col_fmt, memory_leak_check):
     if uppercase:
         h = h.upper()
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "D": [True] * 14,
                 "S": [None if i % 5 == 2 else s[:i] for i in range(14)],
@@ -1623,21 +1623,21 @@ def test_hex_encode_decode(query_fmt, uppercase, col_fmt, memory_leak_check):
         ctx,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({0: ctx["table1"]["H"]}),
+        expected_output=pd.DataFrame({0: ctx["TABLE1"]["H"]}),
     )
     check_query(
         dec_str_query,
         ctx,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({0: ctx["table1"]["S"]}),
+        expected_output=pd.DataFrame({0: ctx["TABLE1"]["S"]}),
     )
     check_query(
         dec_bin_query,
         ctx,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({0: ctx["table1"]["B"]}),
+        expected_output=pd.DataFrame({0: ctx["TABLE1"]["B"]}),
     )
 
 
@@ -1659,7 +1659,7 @@ def test_hex_decode_error(func):
     how well they handle decoding errors"""
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "S": pd.Series(
                     [
@@ -1876,7 +1876,7 @@ def test_base64_encode_decode(query_fmt, answer, col_fmt, memory_leak_check):
     # Note: "AB?CD>EF/GH<" is important as it forces the usage of the 62 & 63 characters
     query = query_fmt.format(col_fmt)
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "S": [
                     "S",
@@ -1936,7 +1936,7 @@ def test_base64_decode_error(func):
     how well they handle decoding errors"""
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "S": pd.Series(
                     [
@@ -2085,10 +2085,10 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
 
     query = f"SELECT {func}(A, len) FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": np.array([b"abc", b"c", None, b"ccdefg"] * 3, dtype=object),
-                "len": pd.Series(
+                "LEN": pd.Series(
                     [None, -1, 10, 0] * 3,
                     dtype=pd.Int32Dtype(),
                 ),
@@ -2135,7 +2135,7 @@ def test_jarowinkler_similarity(datapath, memory_leak_check):
     """
 
     jw_data = pd.read_csv(datapath("jaro_winkler_data.csv"))
-    ctx = {"table1": jw_data[["A", "B"]]}
+    ctx = {"TABLE1": jw_data[["A", "B"]]}
     query = "SELECT A, B, JAROWINKLER_SIMILARITY(A, B) FROM table1"
 
     check_query(

@@ -212,7 +212,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
     else:
         query = f"SELECT {test_fn_type}(D) AS U FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "D": pd.Series(
                     [
@@ -356,13 +356,13 @@ def test_datediff_date_columns_time_units(
     query = f"SELECT {fn_name}('{time_part_strings}', A, B) as output from table1"
     output = pd.DataFrame(
         {
-            "output": [
+            "OUTPUT": [
                 diff_fn(
                     time_part_strings,
-                    date_df["table1"]["A"][i],
-                    date_df["table1"]["B"][i],
+                    date_df["TABLE1"]["A"][i],
+                    date_df["TABLE1"]["B"][i],
                 )
-                for i in range(len(date_df["table1"]["A"]))
+                for i in range(len(date_df["TABLE1"]["A"]))
             ]
         }
     )
@@ -370,7 +370,6 @@ def test_datediff_date_columns_time_units(
         query,
         date_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=output,
     )
@@ -394,13 +393,13 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
     query = f"SELECT {fn_name}('{day_part_strings}', A, B) as output from table1"
     output = pd.DataFrame(
         {
-            "output": [
+            "OUTPUT": [
                 diff_fn(
                     day_part_strings,
-                    date_df["table1"]["A"][i],
-                    date_df["table1"]["B"][i],
+                    date_df["TABLE1"]["A"][i],
+                    date_df["TABLE1"]["B"][i],
                 )
-                for i in range(len(date_df["table1"]["A"]))
+                for i in range(len(date_df["TABLE1"]["A"]))
             ]
         }
     )
@@ -408,7 +407,6 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
         query,
         date_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=output,
     )
@@ -442,9 +440,9 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with a mix of DATE and
     TIMESTAMP values works as expected
     """
-    query = f"SELECT {func}({unit}, A, B) FROM table1"
+    query = f"SELECT {func}({unit}, A, B) as OUTPUT FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -477,9 +475,8 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
         query,
         ctx,
         None,
-        check_names=False,
         check_dtype=False,
-        expected_output=pd.DataFrame({0: answer}),
+        expected_output=pd.DataFrame({"OUTPUT": answer}),
     )
 
 
@@ -501,13 +498,12 @@ def test_max_date(date_df, memory_leak_check):
     """
     Test that max is working for date type columns
     """
-    query = "SELECT MAX(A) FROM table1"
+    query = "SELECT MAX(A) as OUTPUT FROM table1"
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
-        expected_output=pd.DataFrame({"A": [datetime.date(2024, 1, 1)]}),
+        expected_output=pd.DataFrame({"OUTPUT": [datetime.date(2024, 1, 1)]}),
         is_out_distributed=False,
     )
 
@@ -516,13 +512,12 @@ def test_min_date(date_df, memory_leak_check):
     """
     Test that min is working for date type columns
     """
-    query = "SELECT MIN(B) FROM table1"
+    query = "SELECT MIN(B) as OUTPUT FROM table1"
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
-        expected_output=pd.DataFrame({"B": [datetime.date(1700, 2, 4)]}),
+        expected_output=pd.DataFrame({"OUTPUT": [datetime.date(1700, 2, 4)]}),
         is_out_distributed=False,
     )
 
@@ -573,7 +568,7 @@ def test_str_to_date_columns(memory_leak_check):
     Checks that calling STR_TO_DATE on columns behaves as expected
     """
     ctx = {
-        "table1": pd.DataFrame({"A": ["2003-02-01", "2013-02-11", "2011-11-01"] * 4})
+        "TABLE1": pd.DataFrame({"A": ["2003-02-01", "2013-02-11", "2011-11-01"] * 4})
     }
     query = "SELECT STR_TO_DATE(A, '%Y-%m-%d') from table1"
     check_query(
@@ -602,7 +597,7 @@ def test_str_to_date_columns_format(memory_leak_check):
     possible conversions.
     """
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4}
         )
     }

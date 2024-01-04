@@ -31,5 +31,5 @@ def test_select(memory_leak_check):
         }
     )
     expected_output = df[["B"]]
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(query, ctx, None, expected_output=expected_output)

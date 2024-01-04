@@ -16,16 +16,16 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [1] * 12,
                     "B": [False, None, True, False] * 3,
                 }
             )
         },
-        {"table1": pd.DataFrame({"A": ["a"] * 12, "B": [1, 2, 3, 4, 5, 6] * 2})},
+        {"TABLE1": pd.DataFrame({"A": ["a"] * 12, "B": [1, 2, 3, 4, 5, 6] * 2})},
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": [0] * 12, "B": ["a", "aa", "aaa", "ab", "b", "hello"] * 2}
             )
         },
@@ -40,7 +40,7 @@ def col_a_identical_tables(request):
 
 @pytest.mark.slow
 def test_orderby_numeric_scalar(bodosql_numeric_types, spark_info, memory_leak_check):
-    """tests that orderby works with scalar values in the Select statment"""
+    """tests that orderby works with scalar values in the Select statement"""
     query = "SELECT A, 1, 2, 3, 4 as Y FROM table1 ORDER BY Y"
     check_query(
         query,
@@ -101,7 +101,7 @@ def test_orderby_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_ch
         ORDER BY
             A DESC
         """
-    output1 = bodosql_nullable_numeric_types["table1"].sort_values(
+    output1 = bodosql_nullable_numeric_types["TABLE1"].sort_values(
         by=["A"], ascending=True, na_position="last"
     )
     check_query(
@@ -112,7 +112,7 @@ def test_orderby_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_ch
         sort_output=False,
         expected_output=output1,
     )
-    output2 = bodosql_nullable_numeric_types["table1"].sort_values(
+    output2 = bodosql_nullable_numeric_types["TABLE1"].sort_values(
         by=["A"], ascending=False, na_position="first"
     )
     check_query(
@@ -145,7 +145,7 @@ def test_orderby_bool(bodosql_boolean_types, memory_leak_check):
         ORDER BY
             A, B, C DESC
         """
-    output1 = bodosql_boolean_types["table1"].sort_values(
+    output1 = bodosql_boolean_types["TABLE1"].sort_values(
         by=["A", "B", "C"], ascending=True, na_position="last"
     )
     check_query(
@@ -158,7 +158,7 @@ def test_orderby_bool(bodosql_boolean_types, memory_leak_check):
     )
     # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
     # to write manual code to handle this case.
-    output2 = bodosql_boolean_types["table1"].sort_values(
+    output2 = bodosql_boolean_types["TABLE1"].sort_values(
         by=["A", "B", "C"], ascending=[True, True, False], na_position="last"
     )
     output2["C"] = output2.groupby(["A", "B"], dropna=False).transform(
@@ -214,7 +214,7 @@ def test_orderby_binary(bodosql_binary_types, memory_leak_check):
         """
     # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
     # to write manual code to handle this case.
-    output = bodosql_binary_types["table1"].drop_duplicates()
+    output = bodosql_binary_types["TABLE1"].drop_duplicates()
     output = output.sort_values(
         by=["B", "A"], ascending=[True, False], na_position="last"
     )
@@ -250,7 +250,7 @@ def test_orderby_datetime(bodosql_datetime_types, memory_leak_check):
         ORDER BY
             A, B, C DESC
         """
-    base_output = bodosql_datetime_types["table1"].drop_duplicates()
+    base_output = bodosql_datetime_types["TABLE1"].drop_duplicates()
     output1 = base_output.sort_values(
         by=["A", "B", "C"], ascending=True, na_position="last"
     )
@@ -294,7 +294,7 @@ def test_orderby_interval(bodosql_interval_types, memory_leak_check):
         query1,
         bodosql_interval_types,
         None,
-        expected_output=bodosql_interval_types["table1"]
+        expected_output=bodosql_interval_types["TABLE1"]
         .drop_duplicates()
         .sort_values(by="A", na_position="last"),
     )
@@ -302,7 +302,7 @@ def test_orderby_interval(bodosql_interval_types, memory_leak_check):
         query2,
         bodosql_interval_types,
         None,
-        expected_output=bodosql_interval_types["table1"]
+        expected_output=bodosql_interval_types["TABLE1"]
         .drop_duplicates()
         .sort_values(by="A", ascending=False, na_position="last"),
     )
@@ -339,7 +339,7 @@ def test_orderby_multiple_cols(col_a_identical_tables, memory_leak_check):
         ORDER BY
             A, B
         """
-    output = col_a_identical_tables["table1"].sort_values(
+    output = col_a_identical_tables["TABLE1"].sort_values(
         by=["A", "B"], ascending=True, na_position="last"
     )
     check_query(
@@ -355,7 +355,7 @@ def test_orderby_multiple_cols(col_a_identical_tables, memory_leak_check):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": [1, 2, None] * 8, "B": [1, 2, 3, None] * 6}, dtype="Int64"
             )
         },
@@ -380,7 +380,7 @@ def test_orderby_nulls_defaults(null_ordering_table, spark_info):
         ORDER BY
             A, B
         """
-    output = null_ordering_table["table1"].sort_values(
+    output = null_ordering_table["TABLE1"].sort_values(
         by=["A", "B"], na_position="last"
     )
     check_query(
@@ -406,7 +406,7 @@ def test_orderby_nulls_defaults_asc(null_ordering_table, memory_leak_check):
         ORDER BY
             A ASC, B
         """
-    output = null_ordering_table["table1"].sort_values(
+    output = null_ordering_table["TABLE1"].sort_values(
         by=["A", "B"], na_position="last"
     )
     check_query(
@@ -434,7 +434,7 @@ def test_orderby_nulls_defaults_desc(null_ordering_table, memory_leak_check):
     """
     # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
     # to write manual code to handle this case.
-    output = null_ordering_table["table1"].sort_values(
+    output = null_ordering_table["TABLE1"].sort_values(
         by=["A", "B"], ascending=[False, True], na_position="first"
     )
     output["B"] = (
@@ -552,7 +552,7 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
             ),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     # NOTE: Pandas doesn't support using different NULLS FIRST or NULLS LAST
     # per column, so we will manually convert NULL to a different type.
     large_timestamp = pd.Timestamp("2050-1-1", tz=representative_tz)

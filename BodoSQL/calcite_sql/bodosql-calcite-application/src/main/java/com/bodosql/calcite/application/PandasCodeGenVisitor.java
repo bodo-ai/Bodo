@@ -120,8 +120,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private final StreamingOptions streamingOptions;
 
-  private static final String ROW_ID_COL_NAME = "_bodo_row_id";
-  private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
+  private static final String ROW_ID_COL_NAME = "_BODO_ROW_ID";
+  private static final String MERGE_ACTION_ENUM_COL_NAME = "_MERGE_INTO_CHANGE";
 
   /*
    * Hashmap containing globals that need to be lowered into the output func_text.
@@ -2484,14 +2484,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numCols);
       Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
       Expr dfData = new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", df);
-      Expr tablExpr =
+      Expr tableExpr =
           new Expr.Call(
               "bodo.hiframes.table.logical_table_to_table",
               dfData,
               new Expr.Tuple(),
               buildColNums,
               new Expr.IntegerLiteral(numCols));
-      generatedCode.add(new Op.Assign(outVar, tablExpr));
+      generatedCode.add(new Op.Assign(outVar, tableExpr));
       return new BodoEngineTable(outVar.emit(), node);
     }
 

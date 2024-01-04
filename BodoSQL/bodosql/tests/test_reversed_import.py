@@ -13,5 +13,5 @@ import bodo  # noqa
 
 @pytest.mark.slow
 def test_simple(spark_info, memory_leak_check):
-    dataframe_dict = {"table1": pd.DataFrame({"A": [1, 2, 3]})}
+    dataframe_dict = {"TABLE1": pd.DataFrame({"A": [1, 2, 3]})}
     check_query("select * from table1", dataframe_dict, spark_info)

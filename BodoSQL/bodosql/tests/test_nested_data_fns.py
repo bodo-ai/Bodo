@@ -10,7 +10,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
@@ -207,13 +206,13 @@ def test_to_array_scalars(basic_df, memory_leak_check):
     query = f"SELECT {', '.join(selects)}"
     py_output = pd.DataFrame(
         {
-            "int": pd.Series([pd.array([123])]),
-            "float": pd.Series([pd.array([456.789])]),
-            "string": pd.Series([pd.array(["asdafa"], "string[pyarrow]")]),
-            "bool": pd.Series([pd.array([True])]),
-            "time": pd.Series([pd.array([bodo.Time(5, 34, 51)])]),
-            "date": pd.Series([pd.array([datetime.date(2023, 5, 18)])]),
-            "timestamp": pd.Series([pd.array([pd.Timestamp("2024-06-29 17:00:00")])]),
+            "INT": pd.Series([pd.array([123])]),
+            "FLOAT": pd.Series([pd.array([456.789])]),
+            "STRING": pd.Series([pd.array(["asdafa"], "string[pyarrow]")]),
+            "BOOL": pd.Series([pd.array([True])]),
+            "TIME": pd.Series([pd.array([bodo.Time(5, 34, 51)])]),
+            "DATE": pd.Series([pd.array([datetime.date(2023, 5, 18)])]),
+            "TIMESTAMP": pd.Series([pd.array([pd.Timestamp("2024-06-29 17:00:00")])]),
         }
     )
     check_query(
@@ -471,7 +470,7 @@ def test_to_array_columns(to_array_columns_data, memory_leak_check):
     query = "SELECT TO_ARRAY(A) FROM TABLE1"
     data, answer = to_array_columns_data
     py_output = pd.DataFrame({"A": answer})
-    ctx = {"table1": pd.DataFrame({"A": data})}
+    ctx = {"TABLE1": pd.DataFrame({"A": data})}
     check_query(
         query,
         ctx,
@@ -493,7 +492,7 @@ def test_to_array_arrays(to_array_columns_data, memory_leak_check):
     query = "SELECT TO_ARRAY(TO_ARRAY(A)) FROM TABLE1"
     data, answer = to_array_columns_data
     py_output = pd.DataFrame({"A": answer})
-    ctx = {"table1": pd.DataFrame({"A": data})}
+    ctx = {"TABLE1": pd.DataFrame({"A": data})}
     check_query(
         query,
         ctx,
@@ -538,12 +537,12 @@ def test_to_array_arrays(to_array_columns_data, memory_leak_check):
 def test_to_array_case(query, expected, memory_leak_check):
     """tests TO_ARRAY works correctly in a case statement"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "int_col": pd.array(
+                "INT_COL": pd.array(
                     [1, 2, 3, 4] * 3 + [None] + [5, 6, 7] * 2, pd.Int64Dtype()
                 ),
-                "string_col": pd.array(
+                "STRING_COL": pd.array(
                     ["1", "2", "3", "4"] * 3 + [None] + ["5", "6", "7"] * 2,
                     pd.StringDtype(),
                 ),
@@ -564,10 +563,10 @@ def test_to_array_case(query, expected, memory_leak_check):
 @pytest.fixture
 def array_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "idx_col": pd.Series(range(20)),
-                "int_col": pd.Series(
+                "IDX_COL": pd.Series(range(20)),
+                "INT_COL": pd.Series(
                     [
                         pd.array([4234, -123, 0]),
                         [],
@@ -577,7 +576,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "float_col": pd.Series(
+                "FLOAT_COL": pd.Series(
                     [
                         [],
                         [42.34, -1.23, 0.0],
@@ -587,7 +586,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "bool_col": pd.Series(
+                "BOOL_COL": pd.Series(
                     [
                         [True, False, False, True, True, True],
                         [],
@@ -597,7 +596,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "string_col": pd.Series(
+                "STRING_COL": pd.Series(
                     [
                         ["True", "False", "and", "or", "not", "xor"],
                         ["kgspoas", "0q3e0j", ";.2qe"],
@@ -607,7 +606,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "date_col": pd.Series(
+                "DATE_COL": pd.Series(
                     [
                         [
                             datetime.date(2018, 1, 24),
@@ -630,7 +629,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "time_col": pd.Series(
+                "TIME_COL": pd.Series(
                     [
                         None,
                         [
@@ -661,7 +660,7 @@ def array_df():
                     ]
                     * 4
                 ),
-                "timestamp_col": pd.Series(
+                "TIMESTAMP_COL": pd.Series(
                     [
                         [],
                         [
@@ -685,7 +684,7 @@ def array_df():
                     * 4,
                     dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns"))),
                 ),
-                "nested_array_col": pd.Series(
+                "NESTED_ARRAY_COL": pd.Series(
                     [
                         [[], [], None],
                         [[1, 2, 3], None, [4, 5, 6]],
@@ -704,20 +703,20 @@ def array_df():
 @pytest.mark.parametrize(
     "col_name",
     [
-        "int_col",
-        "float_col",
-        "bool_col",
-        "string_col",
-        "date_col",
-        "time_col",
-        "timestamp_col",
-        "nested_array_col",
+        "INT_COL",
+        "FLOAT_COL",
+        "BOOL_COL",
+        "STRING_COL",
+        "DATE_COL",
+        "TIME_COL",
+        "TIMESTAMP_COL",
+        "NESTED_ARRAY_COL",
     ],
 )
 def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
     """Test reading ArrayItemArray"""
     query = "SELECT " + col_name + " from table1"
-    py_output = pd.DataFrame({"A": array_df["table1"][col_name]})
+    py_output = pd.DataFrame({"A": array_df["TABLE1"][col_name]})
 
     check_query(
         query,
@@ -733,21 +732,21 @@ def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
 @pytest.mark.parametrize(
     "col_name",
     [
-        "int_col",
-        "float_col",
-        "bool_col",
-        "string_col",
-        "date_col",
-        "time_col",
-        "timestamp_col",
-        "nested_array_col",
+        "INT_COL",
+        "FLOAT_COL",
+        "BOOL_COL",
+        "STRING_COL",
+        "DATE_COL",
+        "TIME_COL",
+        "TIMESTAMP_COL",
+        "NESTED_ARRAY_COL",
     ],
 )
 @pytest.mark.slow
 def test_array_column_type(array_df, col_name, memory_leak_check):
     """Test BodoSQL can infer ARRAY column type correctly"""
     query = "SELECT TO_ARRAY(" + col_name + ") from table1"
-    py_output = pd.DataFrame({"A": array_df["table1"][col_name]})
+    py_output = pd.DataFrame({"A": array_df["TABLE1"][col_name]})
 
     check_query(
         query,
@@ -788,7 +787,7 @@ def test_array_construct(data_values, use_case, memory_leak_check):
     vals_b = make_vals(pattern_b)
     answer = [make_vals(row) for row in pattern_answer]
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(vals_a, dtype=dtype),
                 "B": pd.Series(vals_b, dtype=dtype),
@@ -844,7 +843,7 @@ def test_array_construct_compact(data_values, use_case, memory_leak_check):
     vals_b = make_vals(pattern_b)
     answer = [make_vals(row) for row in pattern_answer]
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(vals_a, dtype=dtype),
                 "B": pd.Series(vals_b, dtype=dtype),
@@ -1091,7 +1090,7 @@ def test_arrays_overlap(array_values, use_case, memory_leak_check):
         [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": list(range(len(vals_a))),
                 "A": vals_a,
@@ -1147,7 +1146,7 @@ def test_array_contains(array_values, use_case, memory_leak_check):
         [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"I": list(range(len(vals_a))), "A": vals_a, "B": vals_b}
         )
     }
@@ -1205,7 +1204,7 @@ def test_array_position(array_values, use_case, memory_leak_check):
         [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": list(range(len(vals_a))),
                 "A": vals_a,
@@ -1305,7 +1304,7 @@ def test_array_except(array_values, use_case, memory_leak_check):
             dtype=pd.ArrowDtype(pa.large_list(dtype)),
         )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": list(range(len(vals_a))),
                 "A": vals_a,
@@ -1376,7 +1375,7 @@ def test_array_remove(array_values, use_case, memory_leak_check):
         dtype=pd.ArrowDtype(pa.large_list(dtype)),
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": vals_a,
                 "B": vals_b,
@@ -1446,7 +1445,7 @@ def test_array_remove_at(array_values, use_case, memory_leak_check):
         dtype=pd.ArrowDtype(pa.large_list(dtype)),
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": vals_a,
                 "B": vals_b,
@@ -1527,7 +1526,7 @@ def test_array_intersection(array_values, use_case, memory_leak_check):
             dtype=pd.ArrowDtype(pa.large_list(dtype)),
         )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": list(range(len(vals_a))),
                 "A": vals_a,
@@ -1619,7 +1618,7 @@ def test_array_cat(array_values, use_case, memory_leak_check):
             dtype=pd.ArrowDtype(pa.large_list(dtype)),
         )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": list(range(len(vals_a))),
                 "A": vals_a,
@@ -1671,7 +1670,7 @@ def test_array_compact(array_values, use_case, memory_leak_check):
     # using a function like array_size to ensure the return type is different.
     if use_case:
         expected = [-1 if row is None else len(row) for row in expected]
-    ctx = {"table1": pd.DataFrame({"A": data})}
+    ctx = {"TABLE1": pd.DataFrame({"A": data})}
     check_query(
         query,
         ctx,
@@ -1737,7 +1736,7 @@ def test_array_slice(array_values, use_case, memory_leak_check):
         dtype=pd.ArrowDtype(pa.large_list(dtype)),
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": data,
             }
@@ -1992,8 +1991,8 @@ def test_array_index_scalar(args, syntax, memory_leak_check):
     idx_call = f"{arr_expr}[0]" if syntax else f"GET({arr_expr}, 0)"
 
     query = f"SELECT CASE WHEN {idx_call} = {expr} THEN {idx_call} ELSE NULL END as out_col FROM TABLE1"
-    ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
-    py_output = pd.DataFrame({"out_col": [args[1]] * 10})
+    ctx = {"TABLE1": pd.DataFrame({"UNUSED_COL": list(range(10))})}
+    py_output = pd.DataFrame({"OUT_COL": [args[1]] * 10})
 
     check_query(
         query,
@@ -2031,8 +2030,8 @@ def test_array_index_column(args, syntax, memory_leak_check):
     expr = args[0]
     idx_call = "arr_col[0]" if syntax else "GET(arr_col, 0)"
     query = f"SELECT {idx_call} as out_col from (SELECT ARRAY_CONSTRUCT({expr}) as arr_col FROM TABLE1)"
-    ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
-    py_output = pd.DataFrame({"out_col": [args[1]] * 10})
+    ctx = {"TABLE1": pd.DataFrame({"UNUSED_COL": list(range(10))})}
+    py_output = pd.DataFrame({"OUT_COL": [args[1]] * 10})
 
     check_query(
         query,
@@ -2061,20 +2060,20 @@ def test_array_index_stress_test(memory_leak_check):
     """
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "int_col_0": [0] * 12,
-                "int_col_1": list(range(12)),
-                "int_col_2": list(range(12)),
+                "INT_COL_0": [0] * 12,
+                "INT_COL_1": list(range(12)),
+                "INT_COL_2": list(range(12)),
             }
         )
     }
 
     py_output = pd.DataFrame(
         {
-            "out_col_1": [0] * 12,
-            "out_col_2": list(range(12)),
-            "out_col_3": list(range(12)),
+            "OUT_COL_1": [0] * 12,
+            "OUT_COL_2": list(range(12)),
+            "OUT_COL_3": list(range(12)),
         }
     )
 
@@ -2082,7 +2081,6 @@ def test_array_index_stress_test(memory_leak_check):
         query,
         ctx,
         None,
-        check_names=False,
         check_dtype=False,
         sort_output=False,
         expected_output=py_output,
@@ -2104,16 +2102,16 @@ def test_array_index_empty(memory_leak_check):
     """
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "input_col": list(range(12)),
+                "INPUT_COL": list(range(12)),
             }
         )
     }
 
     py_output = pd.DataFrame(
         {
-            "out_col": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
+            "OUT_COL": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
         }
     )
 
@@ -2142,16 +2140,16 @@ def test_array_index_out_of_bounds(memory_leak_check):
     """
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "input_col": list(range(12)),
+                "INPUT_COL": list(range(12)),
             }
         )
     }
 
     py_output = pd.DataFrame(
         {
-            "out_col": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
+            "OUT_COL": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
         }
     )
 

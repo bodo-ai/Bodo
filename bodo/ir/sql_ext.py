@@ -1598,8 +1598,8 @@ def _gen_sql_reader_py(
         )
 
         merge_into_row_id_col_idx = -1
-        if is_merge_into and col_names.index("_bodo_row_id") in out_used_cols:
-            merge_into_row_id_col_idx = col_names.index("_bodo_row_id")
+        if is_merge_into and col_names.index("_BODO_ROW_ID") in out_used_cols:
+            merge_into_row_id_col_idx = col_names.index("_BODO_ROW_ID")
 
         # Determine selected C++ columns (and thus nullable) from original Iceberg
         # table / schema, assuming that Iceberg and Parquet field ordering is the same

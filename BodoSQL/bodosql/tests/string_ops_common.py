@@ -9,9 +9,9 @@ from bodo.tests.utils import gen_nonascii_list
 def bodosql_string_fn_testing_df():
     """fixture used for testing string functions that have a variety of different inputs for each argument"""
     data = {
-        "positive_ints": pd.Series([0, 1, 2, 3, 4, 5, 6, 7] * 2, dtype=np.int8),
-        "mixed_ints": pd.Series([0, -7, 8, -9, 10, -11, 12, 13] * 2),
-        "mixed_floats": pd.Series(
+        "POSITIVE_INTS": pd.Series([0, 1, 2, 3, 4, 5, 6, 7] * 2, dtype=np.int8),
+        "MIXED_INTS": pd.Series([0, -7, 8, -9, 10, -11, 12, 13] * 2),
+        "MIXED_FLOATS": pd.Series(
             [
                 0.0,
                 0.01232,
@@ -24,7 +24,7 @@ def bodosql_string_fn_testing_df():
             ]
             * 2
         ),
-        "strings": pd.Series(
+        "STRINGS": pd.Series(
             [
                 "\n\t     hello world     \n\t",
                 "h e l l o w o r l d",
@@ -44,7 +44,7 @@ def bodosql_string_fn_testing_df():
                 "\t HELLO WORLD\t ",
             ],
         ),
-        "strings_null_1": pd.Series(
+        "STRINGS_NULL_1": pd.Series(
             [
                 "alpha",
                 "beta",
@@ -64,7 +64,7 @@ def bodosql_string_fn_testing_df():
                 None,
             ]
         ),
-        "strings_null_2": pd.Series(
+        "STRINGS_NULL_2": pd.Series(
             [
                 " ",
                 " ",
@@ -84,8 +84,8 @@ def bodosql_string_fn_testing_df():
                 None,
             ]
         ),
-        "strings_nonascii_1": pd.Series(gen_nonascii_list(16)),
-        "mixed_ints_null": pd.Series(
+        "STRINGS_NONASCII_1": pd.Series(gen_nonascii_list(16)),
+        "MIXED_INTS_NULL": pd.Series(
             pd.array(
                 [
                     4,
@@ -109,7 +109,7 @@ def bodosql_string_fn_testing_df():
             )
         ),
     }
-    return {"table1": pd.DataFrame(data)}
+    return {"TABLE1": pd.DataFrame(data)}
 
 
 BODOSQL_TO_PYSPARK_FN_MAP = {

@@ -16,7 +16,7 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture
 def regexp_strings_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "She opened up her third bottle of wine of the night.",

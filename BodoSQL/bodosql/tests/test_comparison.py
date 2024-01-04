@@ -173,7 +173,7 @@ def comparison_df(request):
     for elem in data:
         b += [elem] * len(data)
     B = pd.Series(b, dtype=dtype)
-    return {"table1": pd.DataFrame({"A": A, "B": B})}
+    return {"TABLE1": pd.DataFrame({"A": A, "B": B})}
 
 
 @pytest.fixture(
@@ -214,7 +214,7 @@ def test_comparison_operators_within_table(
                                 ELSE 'F' END FROM table1"
     else:
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
-    is_binary = type(comparison_df["table1"]["A"].iloc[-1]) == bytes
+    is_binary = type(comparison_df["TABLE1"]["A"].iloc[-1]) == bytes
     convert_columns_bytearray = ["A", "B"] if is_binary else []
     check_query(
         query,
@@ -245,7 +245,7 @@ def time_comparison_args(comparison_query_args):
     for elem in data:
         b += [elem] * 9
     B = pd.Series(b)
-    ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+    ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] == x[1],
         "<>": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] != x[1],
@@ -258,7 +258,7 @@ def time_comparison_args(comparison_query_args):
         if pd.isna(x[0]) and pd.isna(x[1])
         else (False if pd.isna(x[1]) or pd.isna(x[1]) else x[0] == x[1]),
     }
-    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
     return cmp_op, use_case, ctx, answer
 
 
@@ -278,12 +278,12 @@ def test_time_comparison_operators_within_table(
                                 ELSE 'F' END FROM table1"
         answer = answer.apply(lambda x: "N" if pd.isna(x) else ("T" if x else "F"))
         expected_output = pd.DataFrame(
-            {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
+            {"A": ctx["TABLE1"].A, "B": ctx["TABLE1"].B, "C": answer}
         )
     else:
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
         expected_output = pd.DataFrame(
-            {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
+            {"A": ctx["TABLE1"].A, "B": ctx["TABLE1"].B, "C": answer}
         )
     check_query(
         query,
@@ -317,7 +317,7 @@ def test_comparison_operators_interval_within_table(
         if comparison_ops == "<>"
         else comparison_ops
     )
-    expected_output = bodosql_interval_types["table1"].query(f"A {pd_op} C")[["A", "C"]]
+    expected_output = bodosql_interval_types["TABLE1"].query(f"A {pd_op} C")[["A", "C"]]
     check_query(
         query,
         bodosql_interval_types,
@@ -346,8 +346,8 @@ def test_comparison_operators_between_tables(
             table1.A {comparison_ops} table2.B
         """
     new_context = {
-        "table1": bodosql_numeric_types["table1"],
-        "table2": bodosql_numeric_types["table1"],
+        "TABLE1": bodosql_numeric_types["TABLE1"],
+        "TABLE2": bodosql_numeric_types["TABLE1"],
     }
     check_query(query, new_context, spark_info, check_dtype=False)
 
@@ -358,22 +358,22 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
     """
     # For join DataFrames, A and B must share a common type across both tables
 
-    if isinstance(join_dataframes["table1"]["A"].values[0], bytes):
+    if isinstance(join_dataframes["TABLE1"]["A"].values[0], bytes):
         pytest.skip(
             "No support for binary literals: https://bodo.atlassian.net/browse/BE-3304"
         )
 
-    elif isinstance(join_dataframes["table1"]["A"].values[0], str):
-        assert isinstance(join_dataframes["table2"]["A"].values[0], str)
-        scalar_val1 = "'" + join_dataframes["table1"]["A"].values[0] + "'"
-        scalar_val2 = "'" + join_dataframes["table2"]["A"].values[0] + "'"
+    elif isinstance(join_dataframes["TABLE1"]["A"].values[0], str):
+        assert isinstance(join_dataframes["TABLE2"]["A"].values[0], str)
+        scalar_val1 = "'" + join_dataframes["TABLE1"]["A"].values[0] + "'"
+        scalar_val2 = "'" + join_dataframes["TABLE2"]["A"].values[0] + "'"
     else:
         scalar_val1, scalar_val2 = (3, 4)
 
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -403,21 +403,21 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
     Tests an or expression within a where clause.
     """
     # For join DataFrames, A and B must share a common type across both tables
-    if isinstance(join_dataframes["table1"]["A"].values[0], bytes):
+    if isinstance(join_dataframes["TABLE1"]["A"].values[0], bytes):
         pytest.skip(
             "No support for binary literals: https://bodo.atlassian.net/browse/BE-3304"
         )
-    elif isinstance(join_dataframes["table1"]["A"].values[0], str):
-        assert isinstance(join_dataframes["table2"]["A"].values[0], str)
-        scalar_val1 = "'" + join_dataframes["table1"]["A"].values[0] + "'"
-        scalar_val2 = "'" + join_dataframes["table2"]["A"].values[-1] + "'"
+    elif isinstance(join_dataframes["TABLE1"]["A"].values[0], str):
+        assert isinstance(join_dataframes["TABLE2"]["A"].values[0], str)
+        scalar_val1 = "'" + join_dataframes["TABLE1"]["A"].values[0] + "'"
+        scalar_val2 = "'" + join_dataframes["TABLE2"]["A"].values[-1] + "'"
     else:
         scalar_val1, scalar_val2 = (3, 4)
 
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -442,7 +442,7 @@ def test_between_date(spark_info, between_clause, memory_leak_check):
     query = f"""SELECT A {between_clause} DATE '1995-01-01'
                  AND DATE '1996-12-31' FROM table1"""
     dataframe_dict = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     np.datetime64("1996-12-31"),
@@ -482,7 +482,7 @@ def test_between_interval(bodosql_interval_types, between_clause, memory_leak_ch
         WHERE
             table1.A {between_clause} Interval 1 SECOND AND Interval 1 DAY
     """
-    df = bodosql_interval_types["table1"]
+    df = bodosql_interval_types["TABLE1"]
     filter_rows = (df.A > datetime.timedelta(seconds=1)) & (
         df.A < datetime.timedelta(days=1)
     )
@@ -581,9 +581,9 @@ def date_datetime64_comparison_args(comparison_query_args):
         b += [np.datetime64(elem)] * 6
     B = pd.Series(b)
     if use_case:
-        ctx = {"table1": pd.DataFrame({"B": B, "A": A})}
+        ctx = {"TABLE1": pd.DataFrame({"B": B, "A": A})}
     else:
-        ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+        ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None
         if pd.isna(x[0]) or pd.isna(x[1])
@@ -614,7 +614,7 @@ def date_datetime64_comparison_args(comparison_query_args):
             else pd.Timestamp(x[0]) == pd.Timestamp(x[1])
         ),
     }
-    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
     return cmp_op, use_case, ctx, answer
 
 
@@ -628,15 +628,14 @@ def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_ch
         # <=> operator requires that both sides must be of the same type
         return
     if use_case:
-        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END from table1"
+        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END as OUTPUT from table1"
     else:
-        query = f"SELECT A {cmp_op} B from table1"
+        query = f"SELECT A {cmp_op} B as OUTPUT from table1"
     check_query(
         query,
         ctx,
         None,
-        check_names=False,
-        expected_output=pd.DataFrame({"output": answer}),
+        expected_output=pd.DataFrame({"OUTPUT": answer}),
     )
 
 
@@ -657,9 +656,9 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
         b += [pd.Timestamp(elem).tz_localize(None)] * 6
     B = pd.Series(b)
     if use_case:
-        ctx = {"table1": pd.DataFrame({"B": B, "A": A})}
+        ctx = {"TABLE1": pd.DataFrame({"B": B, "A": A})}
     else:
-        ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+        ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None
         if pd.isna(x[0]) or pd.isna(x[1])
@@ -690,7 +689,7 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
             else x[0].tz_localize(None) == x[1].tz_localize(None)
         ),
     }
-    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
     return cmp_op, use_case, ctx, answer
 
 
@@ -706,13 +705,12 @@ def test_tz_aware_compare_tz_naive(
         # <=> operator requires that both sides must be of the same type
         return
     if use_case:
-        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END from table1"
+        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END as OUTPUT from table1"
     else:
-        query = f"SELECT A {cmp_op} B from table1"
+        query = f"SELECT A {cmp_op} B as OUTPUT from table1"
     check_query(
         query,
         ctx,
         None,
-        check_names=False,
-        expected_output=pd.DataFrame({"output": answer}),
+        expected_output=pd.DataFrame({"OUTPUT": answer}),
     )

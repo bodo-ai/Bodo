@@ -18,7 +18,7 @@ pytestmark = pytest_slow_unless_groupby
 def percentile_df_data():
     return pd.DataFrame(
         {
-            "keys": ["singleton"] * 3
+            "KEYS": ["singleton"] * 3
             + ["all_null"] * 3
             + ["four"] * 4
             + ["hundred"] * 100
@@ -50,14 +50,14 @@ def percentile_df_data():
                 "I",
                 pd.DataFrame(
                     {
-                        "keys": ["singleton", "all_null", "four", "hundred", "five"],
-                        "q0": [42.0, None, 10.0, 0.0, 1.0],
-                        "q10": [42.0, None, 13.0, 98.1, 4.6],
-                        "q25": [42.0, None, 17.5, 612.75, 10.0],
-                        "q50": [42.0, None, 30.0, 2450.5, 100.0],
-                        "q75": [42.0, None, 50.0, 5513.25, 1000.0],
-                        "q90": [42.0, None, 68.0, 7938.9, 6399.999],
-                        "q100": [42.0, None, 80.0, 9801.0, 10000.0],
+                        "KEYS": ["singleton", "all_null", "four", "hundred", "five"],
+                        "Q0": [42.0, None, 10.0, 0.0, 1.0],
+                        "Q10": [42.0, None, 13.0, 98.1, 4.6],
+                        "Q25": [42.0, None, 17.5, 612.75, 10.0],
+                        "Q50": [42.0, None, 30.0, 2450.5, 100.0],
+                        "Q75": [42.0, None, 50.0, 5513.25, 1000.0],
+                        "Q90": [42.0, None, 68.0, 7938.9, 6399.999],
+                        "Q100": [42.0, None, 80.0, 9801.0, 10000.0],
                     }
                 ),
             ),
@@ -68,14 +68,14 @@ def percentile_df_data():
                 "F",
                 pd.DataFrame(
                     {
-                        "keys": ["singleton", "all_null", "four", "hundred", "five"],
-                        "q0": [3.141592, None, -10.0, 0.0, -100.0],
-                        "q10": [3.141592, None, -8.65, 9.9, -64.0],
-                        "q25": [3.141592, None, -6.625, 24.75, -10.0],
-                        "q50": [3.141592, None, -2.75, 49.5, 0.0],
-                        "q75": [3.141592, None, 25, 74.25, 10.0],
-                        "q90": [3.141592, None, 70, 89.1, 64.0],
-                        "q100": [3.141592, None, 100, 99.0, 100.0],
+                        "KEYS": ["singleton", "all_null", "four", "hundred", "five"],
+                        "Q0": [3.141592, None, -10.0, 0.0, -100.0],
+                        "Q10": [3.141592, None, -8.65, 9.9, -64.0],
+                        "Q25": [3.141592, None, -6.625, 24.75, -10.0],
+                        "Q50": [3.141592, None, -2.75, 49.5, 0.0],
+                        "Q75": [3.141592, None, 25, 74.25, 10.0],
+                        "Q90": [3.141592, None, 70, 89.1, 64.0],
+                        "Q100": [3.141592, None, 100, 99.0, 100.0],
                     }
                 ),
             ),
@@ -100,7 +100,7 @@ def percentile_cont_args(request):
                 "I",
                 pd.DataFrame(
                     {
-                        "keys": ["singleton", "all_null", "four", "hundred", "five"],
+                        "KEYS": ["singleton", "all_null", "four", "hundred", "five"],
                         "0.00": [42.0, None, 10.0, 0.0, 1.0],
                         "0.10": [42.0, None, 10.0, 81.0, 1.0],
                         "0.25": [42.0, None, 10.0, 576.0, 10.0],
@@ -118,7 +118,7 @@ def percentile_cont_args(request):
                 "F",
                 pd.DataFrame(
                     {
-                        "keys": ["singleton", "all_null", "four", "hundred", "five"],
+                        "KEYS": ["singleton", "all_null", "four", "hundred", "five"],
                         "0.00": [3.141592, None, -10.0, 0.0, -100.0],
                         "0.10": [3.141592, None, -10.0, 9.0, -100.0],
                         "0.25": [3.141592, None, -10.0, 24.0, -10.0],
@@ -149,13 +149,13 @@ def test_percentile_cont_groupby(
     """Full E2E test for listagg with groupby and with different sorting options"""
     col, answer = percentile_cont_args
     query = """
-SELECT 
+SELECT
     keys,
-    PERCENTILE_CONT(0.0) WITHIN GROUP (ORDER BY {0}) AS q0, 
-    PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY {0}) AS q10, 
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY {0}) AS q25, 
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {0}) AS q50, 
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY {0}) AS q75, 
+    PERCENTILE_CONT(0.0) WITHIN GROUP (ORDER BY {0}) AS q0,
+    PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY {0}) AS q10,
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY {0}) AS q25,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {0}) AS q50,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY {0}) AS q75,
     PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
     PERCENTILE_CONT(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
 FROM table1
@@ -165,7 +165,7 @@ GROUP BY keys""".format(
 
     check_query(
         query,
-        {"table1": percentile_df_data},
+        {"TABLE1": percentile_df_data},
         None,
         expected_output=answer,
         check_dtype=False,
@@ -179,13 +179,13 @@ def test_percentile_disc_groupby(
     """Full E2E test for listagg with groupby and with different sorting options"""
     col, answer = percentile_disc_args
     query = """
-SELECT 
+SELECT
     keys,
-    PERCENTILE_DISC(0.0) WITHIN GROUP (ORDER BY {0}) AS q0, 
-    PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY {0}) AS q10, 
-    PERCENTILE_DISC(0.25) WITHIN GROUP (ORDER BY {0}) AS q25, 
-    PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY {0}) AS q50, 
-    PERCENTILE_DISC(0.75) WITHIN GROUP (ORDER BY {0}) AS q75, 
+    PERCENTILE_DISC(0.0) WITHIN GROUP (ORDER BY {0}) AS q0,
+    PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY {0}) AS q10,
+    PERCENTILE_DISC(0.25) WITHIN GROUP (ORDER BY {0}) AS q25,
+    PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY {0}) AS q50,
+    PERCENTILE_DISC(0.75) WITHIN GROUP (ORDER BY {0}) AS q75,
     PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
     PERCENTILE_DISC(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
 FROM table1
@@ -195,7 +195,7 @@ GROUP BY keys""".format(
 
     check_query(
         query,
-        {"table1": percentile_df_data},
+        {"TABLE1": percentile_df_data},
         None,
         expected_output=answer,
         check_dtype=False,
@@ -230,7 +230,7 @@ def test_percentile_cont_no_groupby(percentile_df_data, memory_leak_check):
     )
     check_query(
         query,
-        {"table1": percentile_df_data},
+        {"TABLE1": percentile_df_data},
         None,
         expected_output=answer,
         check_dtype=False,
@@ -266,7 +266,7 @@ def test_percentile_disc_no_groupby(percentile_df_data, memory_leak_check):
     )
     check_query(
         query,
-        {"table1": percentile_df_data},
+        {"TABLE1": percentile_df_data},
         None,
         expected_output=answer,
         check_dtype=False,

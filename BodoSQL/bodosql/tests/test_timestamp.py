@@ -16,7 +16,7 @@ pytestmark = pytest_slow_unless_codegen
 def test_datetime_condition(spark_info, memory_leak_check):
     """test selecting column satisfying condition on timestamp type column"""
     dataframe_dict = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     np.datetime64("2011-01-01"),
@@ -37,7 +37,7 @@ def test_datetime_condition(spark_info, memory_leak_check):
 def test_extract_date(spark_info, memory_leak_check):
     query = "SELECT EXTRACT(YEAR FROM A) FROM table1"
     dataframe_dict = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     np.datetime64("2011-01-01"),
@@ -293,7 +293,7 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
             ),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     # Note this was verified against Snowflake by running with each scalar directly
     py_output = pd.DataFrame(
         {
@@ -313,7 +313,7 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
     This test checks that a case with a string and timestamp output behaves reasonably.
     """
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "C": [0, 1, 13] * 4,
                 "B": [
@@ -557,7 +557,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
 )
 def test_date_part_epoch(table, answer, memory_leak_check):
     query = f"SELECT DATE_PART(EPOCH_SECONDS, A) AS out1, DATE_PART(EPOCH_MILLISECONDS, A) AS out2, DATE_PART(EPOCH_MICROSECONDS, A) AS out3, DATE_PART(EPOCH_NANOSECONDS, A) AS out4 from table1"
-    ctx = {"table1": table}
+    ctx = {"TABLE1": table}
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
 
@@ -584,7 +584,7 @@ def test_date_part_epoch_case(memory_leak_check):
         }
     )
     query = f"SELECT CASE WHEN B THEN DATE_PART(EPOCH_SECONDS, A) ELSE -1 END AS out1 from table1"
-    ctx = {"table1": table}
+    ctx = {"TABLE1": table}
     answer = pd.DataFrame(
         {
             "OUT1": pd.array(
@@ -659,7 +659,7 @@ def test_date_part_epoch_case(memory_leak_check):
 )
 def test_date_part_timezone_unit(table, answer, memory_leak_check):
     query = "SELECT DATE_PART(TIMEZONE_HOUR, A) AS out1, DATE_PART(TIMEZONE_MINUTE, A) AS out2 from table1"
-    ctx = {"table1": table}
+    ctx = {"TABLE1": table}
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
 
@@ -683,7 +683,7 @@ def test_date_part_timezone_unit_case(memory_leak_check):
         }
     )
     query = "SELECT CASE WHEN B THEN DATE_PART(TIMEZONE_HOUR, A) ELSE -1 END AS out1 from table1"
-    ctx = {"table1": table}
+    ctx = {"TABLE1": table}
     answer = pd.DataFrame(
         {
             "OUT1": pd.array([-8, -1, None, -7, -1] * 3, dtype="Int32"),
@@ -705,7 +705,7 @@ def test_current_date_timestamp_tz_to_char_fmt(memory_leak_check):
     """
     table = pd.DataFrame({"I": list(range(5))})
     query = "SELECT I, TO_CHAR(CURRENT_DATE::TIMESTAMP WITH TIME ZONE, 'YYYYMMDD'::text) as S from table1"
-    ctx = {"table1": table}
+    ctx = {"TABLE1": table}
     ts = pd.Timestamp.now()
     as_str = "{:04}{:02}{:02}".format(ts.year, ts.month, ts.day)
     answer = pd.DataFrame({"I": list(range(5)), "S": [as_str] * 5})

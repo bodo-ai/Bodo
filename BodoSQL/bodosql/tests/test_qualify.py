@@ -78,7 +78,7 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
     spark_subquery = f"SELECT P, O, I, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
     spark_query = f"SELECT P, O, I from ({spark_subquery}) where window_val {cmp}"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
                 "O": [15, 0, 14, 1, 13, 2, 12, 3, 11, 4, 10, 5, 9, 6, 8, 7],
@@ -164,7 +164,7 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
     spark_subquery = f"SELECT P, O, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
     spark_query = f"SELECT P, O from ({spark_subquery}) where window_val {cmp}"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
                 "O": [15, 0, 14, 1, 13, 2, 12, 3, 11, 4, 10, 5, 9, 6, 8, 7],
@@ -207,7 +207,7 @@ def test_qualify_timedelta(
             "TD": [np.timedelta64(2**i, "h") for i in range(16)],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     answer = df.iloc[[6, 11, 12, 13], [0, 1]]
 
     check_query(
@@ -248,7 +248,7 @@ def test_QUALIFY_eval_order_WHERE(spark_info, memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     # If QUALIFY is evaluated first, MAX(A) OVER (PARTITION BY B) = 3 everywhere,
     # as B is one group. If evaluated after where, MAX(A) OVER (PARTITION BY B)
@@ -281,7 +281,7 @@ def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     # If QUALIFY is evaluated first, MAX(A) OVER (PARTITION BY B) = 3 everywhere,
     # as B is one group. If evaluated after HAVING/GROUP BY, MAX(A) OVER (PARTITION BY B)
@@ -317,7 +317,7 @@ def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     """
     If distinct is evaluated before QUALIFY, the dataframe will look something like:
@@ -358,9 +358,9 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
-    """If limit is evalued first, we expect:
+    """If limit is evaluated first, we expect:
      df = pd.DataFrame({
         "A" : [1] * 3,
         "B" : [1] * 3,
@@ -402,7 +402,7 @@ def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
         }
     )
 
-    ctx = {"table1": table1}
+    ctx = {"TABLE1": table1}
 
     bodosql_query1 = f"SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1 QUALIFY w < 10"
     bodosql_query2 = f"SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 QUALIFY x in ({bodosql_query1})"
@@ -443,7 +443,7 @@ def test_qualify_tz_aware(memory_leak_check):
             "C": ["left", "right", "left", "left"] * 5,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     # Compute the expected output of the max. To do this we leverage
     # that the window is the current previous and next value and the
     # Order by keeps the DataFrame in order.

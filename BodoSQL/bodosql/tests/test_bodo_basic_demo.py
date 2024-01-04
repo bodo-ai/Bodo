@@ -17,9 +17,9 @@ def test_demo1(datapath, memory_leak_check):
         # However, we run out of memory on the CI machine, so we limit the number of rows
         df1 = pd.read_parquet(ss_file).head(100000)
         df2 = pd.read_parquet(i_file)
-        bc = bodosql.BodoSQLContext({"store_sales": df1, "item": df2})
+        bc = bodosql.BodoSQLContext({"STORE_SALES": df1, "ITEM": df2})
         sale_items = bc.sql(
-            "select * from store_sales join item on store_sales.ss_item_sk=item.i_item_sk"
+            'select * from store_sales join item on store_sales."ss_item_sk"=item."i_item_sk"'
         )
         count = sale_items.groupby("ss_customer_sk")["i_class_id"].agg(
             lambda x: (x == 1).sum()
@@ -39,10 +39,10 @@ def test_df_type_error():
 
     @bodo.jit()
     def small_reproducer(df):
-        df["test"] = pd.Series([123] * 10)
-        bc = bodosql.BodoSQLContext({"df1": df})
+        df["TEST"] = pd.Series([123] * 10)
+        bc = bodosql.BodoSQLContext({"DF1": df})
         df2 = bc.sql("""select test from df1""")
 
-    df = pd.DataFrame({"a": [1] * 10})
+    df = pd.DataFrame({"A": [1] * 10})
 
     small_reproducer(df)

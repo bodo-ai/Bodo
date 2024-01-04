@@ -60,7 +60,7 @@ def test_coalesce_128_int(spark_info, memory_leak_check):
         )
         return pd.DataFrame({"A": A})
 
-    ctx = {"table1": make_d128_df()}
+    ctx = {"TABLE1": make_d128_df()}
 
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
@@ -88,7 +88,7 @@ def test_coalesce_128_float(memory_leak_check):
         )
         return pd.DataFrame({"A": A})
 
-    ctx = {"table1": make_d128_df()}
+    ctx = {"TABLE1": make_d128_df()}
     expected_out = pd.DataFrame(
         {"A": [0.0, -0.1, 2.0, -0.1, 660764199.307692, -0.1, -0.25, -0.1, -0.01, -0.1]}
     )
@@ -107,7 +107,7 @@ def test_coalesce_timestamp_date(memory_leak_check):
     """Tests the coalesce function on a timestamp column and the current date"""
     query = f"select COALESCE(A, current_date()) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -147,7 +147,7 @@ def test_coalesce_time(use_case, memory_leak_check):
     else:
         query = "select COALESCE(A, B) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -249,25 +249,25 @@ def test_coalesce_scalars(spark_info, memory_leak_check):
     query = "select CASE WHEN ColD = 1 THEN COALESCE(ColA, ColB, ColC) ELSE ColA * 10 END from table1"
     df = pd.DataFrame(
         {
-            "ColA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),
-            "ColB": pd.Series(pd.array([None, None, 5, 6, None, None, 7, 8])),
-            "ColC": pd.Series(pd.array([None, 9, None, 10, None, 11, None, 12])),
-            "ColD": pd.Series(pd.array([1, 1, 1, 1, 1, 1, 1, 2])),
+            "COLA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),
+            "COLB": pd.Series(pd.array([None, None, 5, 6, None, None, 7, 8])),
+            "COLC": pd.Series(pd.array([None, 9, None, 10, None, 11, None, 12])),
+            "COLD": pd.Series(pd.array([1, 1, 1, 1, 1, 1, 1, 2])),
         }
     )
-    check_query(query, {"table1": df}, spark_info, check_dtype=False, check_names=False)
+    check_query(query, {"TABLE1": df}, spark_info, check_dtype=False, check_names=False)
 
 
-def test_coalesce_nested_expresions(spark_info, memory_leak_check):
+def test_coalesce_nested_expressions(spark_info, memory_leak_check):
     df = pd.DataFrame(
         {
-            "ColA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),
-            "ColB": pd.Series(pd.array([None, None, 5, 6, None, None, 7, 8])),
-            "ColC": pd.Series(pd.array([None, 9, None, 10, None, 11, None, 12])),
-            "ColD": pd.Series(pd.array([1] * 8)),
+            "COLA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),
+            "COLB": pd.Series(pd.array([None, None, 5, 6, None, None, 7, 8])),
+            "COLC": pd.Series(pd.array([None, 9, None, 10, None, 11, None, 12])),
+            "COLD": pd.Series(pd.array([1] * 8)),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     query = "Select CASE WHEN ColD = 1 THEN COALESCE(ColA + ColB, ColB + ColC, ColC * 2) ELSE -1 END from table1"
 
@@ -295,7 +295,7 @@ def test_coalesce_variable_type_cols(
     some common type. For our purposes this behavior is undefined.
     """
     new_ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": bodosql_datetime_types["table1"]["A"],
                 "B": bodosql_string_types["table1"]["B"],
@@ -323,7 +323,7 @@ def test_coalesce_variable_type_scalars(
     some common type. For our purposes this behavior is undefined.
     """
     new_ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": bodosql_datetime_types["table1"]["A"],
                 "B": bodosql_string_types["table1"]["B"],
@@ -341,7 +341,7 @@ def test_nvl2(spark_info, memory_leak_check):
     query = "SELECT NVL2(A+B, B+C, C+A) from table1"
     spark_query = "SELECT IF((A+B) IS NOT NULL, B+C, C+A) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.array([None, 2345, 3456, 4567, None, 6789]),
                 "B": pd.array([7891, None, 9123, 1234, 2345, None]),
@@ -364,7 +364,7 @@ def test_zeroifnull(spark_info, memory_leak_check):
     query = "SELECT ZEROIFNULL(A) from table1"
     spark_query = "SELECT COALESCE(A, 0) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.array([None, 2, 3, 4, None, 6], dtype=pd.Int32Dtype()),
             }
@@ -444,7 +444,7 @@ def test_zeroifnull(spark_info, memory_leak_check):
 )
 def test_regr_valx_regr_valy(args, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "X": [1.0, None, 3.0, 4.0, None, 6.0, 7.0, 8.0],
                 "Y": [1.0, 4.0, 9.0, 16.0, None, None, None, 64.0],
@@ -489,7 +489,7 @@ def test_if_dt(spark_info, memory_leak_check):
         "Select IF(YEAR(A) < 2010, make_date(2010, 1, 1), A) FROM table1"
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -557,7 +557,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
     query = f"Select {func_name}(B < C, B, C) from table1"
     expected_output = pd.DataFrame(
         {
-            "output": pd.Series(
+            "OUTPUT": pd.Series(
                 [
                     None,
                     bodo.Time(13, 37, 45),
@@ -578,7 +578,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_if_multitable(join_dataframes, spark_info, memory_leak_check):
+def test_if_multi_table(join_dataframes, spark_info, memory_leak_check):
     """Checks if function with columns from multiple tables"""
     query = "Select IF(table2.B > table1.B, table1.A, table2.A) from table1, table2"
     check_query(
@@ -623,7 +623,7 @@ def test_ifnull_scalar(basic_df, spark_info, ifnull_equivalent_fn, memory_leak_c
 def test_ifnull_mixed(
     bodosql_nullable_numeric_types, spark_info, ifnull_equivalent_fn, memory_leak_check
 ):
-    if bodosql_nullable_numeric_types["table1"].A.dtype.name == "UInt64":
+    if bodosql_nullable_numeric_types["TABLE1"].A.dtype.name == "UInt64":
         pytest.skip("Currently a bug in fillna for Uint64, see BE-1380")
 
     """Checks ifnull function with a mix of scalar and column values"""
@@ -672,7 +672,7 @@ def test_ifnull_multitable(
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -697,8 +697,8 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
 
     # making a minor change, to ensure that we have an index where A == B to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["table1"]["A"][0] = bodosql_nullable_numeric_types[
-        "table1"
+    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
+        "TABLE1"
     ]["B"][0]
 
     query = "Select NULLIF(A, B) from table1"
@@ -746,7 +746,7 @@ def test_nullif_time(memory_leak_check):
     """Checks nullif function with two time columns"""
     query = "Select NULLIF(A, B) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -807,8 +807,8 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 
     # making a minor change, to ensure that we have an index where A == C to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
-    bodosql_nullable_numeric_types["table1"]["A"][0] = bodosql_nullable_numeric_types[
-        "table1"
+    bodosql_nullable_numeric_types["TABLE1"]["A"][0] = bodosql_nullable_numeric_types[
+        "TABLE1"
     ]["C"][0]
 
     query = "Select CASE WHEN A > B THEN NULLIF(A, C) ELSE B END from table1"
@@ -822,7 +822,7 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
-def test_nullif_multitable(join_dataframes, spark_info, memory_leak_check):
+def test_nullif_multi_table(join_dataframes, spark_info, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
     if any(
         [
@@ -834,7 +834,7 @@ def test_nullif_multitable(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -842,8 +842,8 @@ def test_nullif_multitable(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["X"]
@@ -865,7 +865,7 @@ def test_nullifzero_cols(spark_info, memory_leak_check):
     query = "SELECT NULLIFZERO(A) from table1"
     spark_query = "SELECT NULLIF(A, 0) from table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.array(
                     [None, 2, 0, 3, 4, None, 6, 0, 0, 1], dtype=pd.Int32Dtype()
@@ -989,7 +989,7 @@ def test_nullifzero_cols(spark_info, memory_leak_check):
 def test_decode(args, spark_info, memory_leak_check):
     """Checks if function with all column values"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": list("AaEaAeIeAaEiOiEaAeIoUiEa") + [None],
                 "B": (list("AEIO") + [None]) * 5,
@@ -1039,7 +1039,7 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
     )
     answer = pd.DataFrame(
         {
-            "output": pd.Series(
+            "OUTPUT": pd.Series(
                 [
                     bodo.Time(5, 13, 29),
                     bodo.Time(13, 37, 45),

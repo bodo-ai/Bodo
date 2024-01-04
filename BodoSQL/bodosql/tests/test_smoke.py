@@ -39,15 +39,15 @@ def smoke_ctx():
     )
     t3 = pd.DataFrame(
         {
-            "y": t.dt.year,
-            "m": t.dt.month,
-            "d": t.dt.day,
-            "delta": pd.Series([int(0.5 + np.tan(i)) for i in range(1461)]),
+            "Y": t.dt.year,
+            "M": t.dt.month,
+            "D": t.dt.day,
+            "DELTA": pd.Series([int(0.5 + np.tan(i)) for i in range(1461)]),
         }
     )
     seasons = ["winter"] * 3 + ["spring"] * 3 + ["summer"] * 3 + ["fall"] * 3
-    t3["s"] = t3["m"].apply(lambda m: seasons[m % 12])
-    return {"table1": t1, "table2": t2, "table3": t3}
+    t3["S"] = t3["M"].apply(lambda m: seasons[m % 12])
+    return {"TABLE1": t1, "TABLE2": t2, "TABLE3": t3}
 
 
 @pytest.mark.smoke

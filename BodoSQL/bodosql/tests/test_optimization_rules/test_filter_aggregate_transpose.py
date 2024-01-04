@@ -35,7 +35,7 @@ def filter_aggregate_transpose_queries(request):
 
     For example, assume a filter, "A" is on top of a aggregation "B". A has two conditions,
     one of which can be pushed, and the other can't. The end result after this optimization will
-    be one filter, "A0" with the unpused condition on top of aggregation "B" whose input is filtered
+    be one filter, "A0" with the unpushed condition on top of aggregation "B" whose input is filtered
     by "A1", the filter with the pushed condition.
 
 
@@ -49,7 +49,7 @@ def filter_aggregate_transpose_queries(request):
 def test_filter_aggregate_transpose(
     basic_df, spark_info, filter_aggregate_transpose_queries
 ):
-    """checks for bugs with filter agregate transpose"""
+    """checks for bugs with filter aggregate transpose"""
     check_query(
         filter_aggregate_transpose_queries,
         basic_df,

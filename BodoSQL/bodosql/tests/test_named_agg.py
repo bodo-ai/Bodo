@@ -19,7 +19,7 @@ def test_named_agg(bodosql_numeric_types, memory_leak_check):
             GROUP BY B
             """
     py_output = (
-        bodosql_numeric_types["table1"]
+        bodosql_numeric_types["TABLE1"]
         .groupby("B")
         .agg({"A": ["sum", "mean"], "C": "sum"})
     )

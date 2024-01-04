@@ -1229,14 +1229,6 @@ def _test_equal_guard(
     return passed
 
 
-def check_efficient_join(pandas_code):
-    """
-    Checks that given pandas_code doesn't contain any joins that required
-    merging the whole table on a dummy column.
-    """
-    assert "$__bodo_dummy__" not in pandas_code
-
-
 def convert_spark_bool(df, columns):
     """
     Converts Spark Boolean object columns to boolean type to match BodoSQL.

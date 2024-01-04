@@ -52,21 +52,21 @@ def test_from_days_scalar(spark_info, basic_df, memory_leak_check):
 
 def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
     """tests to_seconds function on column values"""
-    query = "SELECT TO_SECONDS(A), TO_SECONDS(B), TO_SECONDS(C) from table1"
+    query = "SELECT TO_SECONDS(A) AS A_OUT, TO_SECONDS(B) AS B_OUT, TO_SECONDS(C) AS C_OUT from table1"
 
     # Since spark has no equivalent function, we need to manually set the expected output
     expected_output = pd.DataFrame(
         {
-            "a": (
-                bodosql_datetime_types["table1"]["A"] - pd.Timestamp("1970-1-1")
+            "A_OUT": (
+                bodosql_datetime_types["TABLE1"]["A"] - pd.Timestamp("1970-1-1")
             ).dt.total_seconds()
             + secondDeltaUnixY0,
-            "b": (
-                bodosql_datetime_types["table1"]["B"] - pd.Timestamp("1970-1-1")
+            "B_OUT": (
+                bodosql_datetime_types["TABLE1"]["B"] - pd.Timestamp("1970-1-1")
             ).dt.total_seconds()
             + secondDeltaUnixY0,
-            "c": (
-                bodosql_datetime_types["table1"]["C"] - pd.Timestamp("1970-1-1")
+            "C_OUT": (
+                bodosql_datetime_types["TABLE1"]["C"] - pd.Timestamp("1970-1-1")
             ).dt.total_seconds()
             + secondDeltaUnixY0,
         }
@@ -76,7 +76,6 @@ def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
         query,
         bodosql_datetime_types,
         spark_info,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -84,15 +83,13 @@ def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
 
 def test_to_seconds_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
     """tests to_seconds function on scalar values"""
-    query = (
-        "SELECT CASE WHEN TO_SECONDS(A) = 1 THEN -1 ELSE TO_SECONDS(A) END from table1"
-    )
+    query = "SELECT CASE WHEN TO_SECONDS(A) = 1 THEN -1 ELSE TO_SECONDS(A) END AS A_OUT from table1"
 
     # Since spark has no equivalent function, we need to manually set the expected output
     expected_output = pd.DataFrame(
         {
-            "a": (
-                bodosql_datetime_types["table1"]["A"] - pd.Timestamp("1970-1-1")
+            "A_OUT": (
+                bodosql_datetime_types["TABLE1"]["A"] - pd.Timestamp("1970-1-1")
             ).dt.total_seconds()
             + secondDeltaUnixY0,
         }
@@ -102,7 +99,6 @@ def test_to_seconds_scalars(spark_info, bodosql_datetime_types, memory_leak_chec
         query,
         bodosql_datetime_types,
         spark_info,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -116,15 +112,15 @@ def test_to_days_cols(spark_info, bodosql_datetime_types, memory_leak_check):
     expected_output = pd.DataFrame(
         {
             "a": (
-                bodosql_datetime_types["table1"]["A"] - pd.Timestamp("1970-1-1")
+                bodosql_datetime_types["TABLE1"]["A"] - pd.Timestamp("1970-1-1")
             ).dt.days
             + dayDeltaUnixY0,
             "b": (
-                bodosql_datetime_types["table1"]["B"] - pd.Timestamp("1970-1-1")
+                bodosql_datetime_types["TABLE1"]["B"] - pd.Timestamp("1970-1-1")
             ).dt.days
             + dayDeltaUnixY0,
             "c": (
-                bodosql_datetime_types["table1"]["C"] - pd.Timestamp("1970-1-1")
+                bodosql_datetime_types["TABLE1"]["C"] - pd.Timestamp("1970-1-1")
             ).dt.days
             + dayDeltaUnixY0,
         }
@@ -148,7 +144,7 @@ def test_to_days_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
     expected_output = pd.DataFrame(
         {
             "a": (
-                bodosql_datetime_types["table1"]["A"] - pd.Timestamp("1970-1-1")
+                bodosql_datetime_types["TABLE1"]["A"] - pd.Timestamp("1970-1-1")
             ).dt.days
             + dayDeltaUnixY0,
         }
@@ -173,7 +169,7 @@ def test_unix_timestamp(basic_df, memory_leak_check):
     query = "SELECT A, Floor(UNIX_TIMESTAMP() / 10000) as output from table1"
     expected_output = pd.DataFrame(
         {
-            "A": basic_df["table1"]["A"],
+            "A": basic_df["TABLE1"]["A"],
             "OUTPUT": np.float64(pd.Timestamp.now().value // (10000 * 1000000000)),
         }
     )

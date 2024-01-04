@@ -115,7 +115,7 @@ public class TableIdentifierWithIDNamespace extends AbstractNamespace {
     BasicSqlType int_typ = new BasicSqlType(new BodoSQLRelDataTypeSystem(), SqlTypeName.BIGINT);
     // NOTE: we don't use this index anywhere, so we just default it to a random value
     int newIdx = 999;
-    RelDataTypeField rowIdFieldType = new RelDataTypeFieldImpl("_bodo_row_id",
+    RelDataTypeField rowIdFieldType = new RelDataTypeFieldImpl("_BODO_ROW_ID",
         newIdx, int_typ);
     List<RelDataTypeField> extensionFields = new ArrayList<>();
     extensionFields.add(rowIdFieldType);

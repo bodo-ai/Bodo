@@ -100,7 +100,7 @@ def test_distinct_interval(bodosql_interval_types, memory_leak_check):
         bodosql_interval_types,
         None,
         expected_output=pd.DataFrame(
-            {"A": bodosql_interval_types["table1"]["A"].unique()}
+            {"A": bodosql_interval_types["TABLE1"]["A"].unique()}
         ),
     )
 
@@ -121,7 +121,7 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -129,8 +129,8 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "B", "C"]
@@ -215,7 +215,7 @@ def test_is_distinct_from_nulls(
     Test that IS DISTINCT FROM works with null columns/scalars
     """
     query = f"SELECT A IS DISTINCT FROM B FROM table1"
-    ctx = {"table1": is_distinct_from_null_dfs}
+    ctx = {"TABLE1": is_distinct_from_null_dfs}
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
@@ -268,7 +268,7 @@ def test_is_distinct_from_interval(bodosql_interval_types, memory_leak_check):
     Test IS DISTINCT FROM for interval types
     """
     query = f"SELECT A IS DISTINCT FROM B FROM table1"
-    df = bodosql_interval_types["table1"]
+    df = bodosql_interval_types["TABLE1"]
     check_query(
         query,
         bodosql_interval_types,

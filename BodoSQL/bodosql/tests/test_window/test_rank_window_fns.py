@@ -32,22 +32,22 @@ def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_column
     # is entirely determined by last_seen
     # TODO: Verify the C++ path is used (this is tested as a Codegen unit test)
     if orderby_multiple_columns:
-        orderby_cols = "in_stock ASC, last_seen DESC"
+        orderby_cols = '"in_stock" ASC, "last_seen" DESC'
     else:
-        orderby_cols = "last_seen DESC"
+        orderby_cols = '"last_seen" DESC'
 
-    query = f"select uuid, ROW_NUMBER() OVER(PARTITION BY store_id, ret_product_id ORDER BY {orderby_cols}) as row_num from table1"
+    query = f'select "uuid", ROW_NUMBER() OVER(PARTITION BY "store_id", "ret_product_id" ORDER BY {orderby_cols}) as row_num from table1'
 
     parquet_path = datapath("sample-parquet-data/rphd_sample.pq")
 
     ctx = {
-        "table1": pd.read_parquet(parquet_path)[
+        "TABLE1": pd.read_parquet(parquet_path)[
             ["uuid", "store_id", "ret_product_id", "in_stock", "last_seen"]
         ]
     }
     py_output = pd.DataFrame(
         {
-            "UUID": [
+            "uuid": [
                 "67cd102b-e12f-49cb-88f5-c71d6be6642f",
                 "ce4d3aa7-476b-4772-94b4-18224490c7a1",
                 "bb9fb6cd-477d-4923-be3b-95615bbec5a5",
@@ -82,9 +82,9 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     where the input dtype and different combinatons of asc/desc & nulls
     first/last are parametrized so that each test can have total
     fusion into a single closure"""
-    is_binary = type(all_types_window_df["table1"]["A"].iloc[0]) == bytes
+    is_binary = type(all_types_window_df["TABLE1"]["A"].iloc[0]) == bytes
     is_tz_aware = (
-        getattr(all_types_window_df["table1"]["A"].dtype, "tz", None) is not None
+        getattr(all_types_window_df["TABLE1"]["A"].dtype, "tz", None) is not None
     )
     selects = []
     funcs = [
@@ -181,7 +181,7 @@ def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
         )
     WHERE rn = 1
     """
-    ctx = {"table1": input_df}
+    ctx = {"TABLE1": input_df}
     if ascending:
         if nulls_last:
             py_output = pd.DataFrame({"A": [0, 3, 2]})
@@ -422,7 +422,7 @@ def test_row_number_filter_multicolumn(input_arrs, memory_leak_check):
         }
     )
 
-    ctx = {"table1": input_df}
+    ctx = {"TABLE1": input_df}
     py_output = pd.DataFrame(
         {"F": [1, 2, 5, 6, 8, 11, 12, 15, 16, 19, 20, 23, 24, 27, 29, 30]}
     )

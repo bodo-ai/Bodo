@@ -159,10 +159,10 @@ def test_join_filter_rule(spark_info, query_info, memory_leak_check):
     query, booland_count, boolor_count = query_info
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": [1, 2, 3] * 4, "B": [4, 5, 6, 7] * 3, "C": [7, 8, 9, 10, 11, 12] * 2}
         ),
-        "table2": pd.DataFrame(
+        "TABLE2": pd.DataFrame(
             {"A": [1, 2, 3] * 4, "B": [4, 5, 6, 7] * 3, "C": [7, 8, 9, 10, 11, 12] * 2}
         ),
     }

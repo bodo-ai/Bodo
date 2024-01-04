@@ -157,7 +157,7 @@ def test_filter_null_interval(bodosql_interval_types, memory_leak_check):
     """test is null on Interval columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
-    df = bodosql_interval_types["table1"]
+    df = bodosql_interval_types["TABLE1"]
     check_query(
         query1,
         bodosql_interval_types,

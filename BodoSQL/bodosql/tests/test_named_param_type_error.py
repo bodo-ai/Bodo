@@ -22,13 +22,13 @@ def test_string_limit(basic_df, spark_info, memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select A from table1 limit @a", {"a": a})
 
     with pytest.raises(
         BodoError, match=r"Failure in compiling or validating SQL Query"
     ):
-        impl(basic_df["table1"], "no limit")
+        impl(basic_df["TABLE1"], "no limit")
 
 
 @pytest.mark.slow
@@ -39,13 +39,13 @@ def test_string_offset(basic_df, spark_info, memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select A from table1 limit @a, 4", {"a": a})
 
     with pytest.raises(
         BodoError, match=r"Failure in compiling or validating SQL Query"
     ):
-        impl(basic_df["table1"], "no limit")
+        impl(basic_df["TABLE1"], "no limit")
 
 
 @pytest.mark.slow
@@ -58,7 +58,7 @@ def test_string_cast(
     """
     query = "select CONCAT(A, @a) from table1"
     expected_output = pd.DataFrame(
-        {"Result": bodosql_string_types["table1"]["A"] + str(int_named_params["a"])}
+        {"Result": bodosql_string_types["TABLE1"]["A"] + str(int_named_params["a"])}
     )
     check_query(
         query,

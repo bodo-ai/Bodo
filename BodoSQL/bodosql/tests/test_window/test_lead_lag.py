@@ -22,7 +22,7 @@ def test_lead_lag(spark_info, memory_leak_check):
     ]
     query = f"SELECT I, P, O, {', '.join(selects)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": pd.Series(
                     [None if (i**2) % 6 < 2 else i for i in range(500)],

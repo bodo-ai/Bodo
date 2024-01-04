@@ -30,7 +30,7 @@ pytestmark = pytest_slow_unless_codegen
 )
 def bodosql_negative_numeric_types(request):
     """
-    Fixture for dataframes with negative numeric BodoSQL types:
+    Fixture for DataFrames with negative numeric BodoSQL types:
 
 
     """
@@ -38,26 +38,26 @@ def bodosql_negative_numeric_types(request):
     float_dtype = request.param[1]
 
     numeric_data = {
-        "positive_ints": pd.Series([1, 2, 3, 4, 5, 6] * 2, dtype=int_dtype),
-        "unsigned_int32s": pd.Series([1, 3, 7, 14, 0, 11] * 2, dtype=np.uint32),
-        "unsigned_int64s": pd.Series([12, 2**50, 0, 78, 390] * 2, dtype=np.uint64),
-        "mixed_ints": pd.Series([-7, 8, -9, 10, -11, 12] * 2, dtype=int_dtype),
-        "negative_ints": pd.Series([-13, -14, -15] * 4, dtype=int_dtype),
-        "positive_floats": pd.Series(
+        "POSITIVE_INTS": pd.Series([1, 2, 3, 4, 5, 6] * 2, dtype=int_dtype),
+        "UNSIGNED_INT32S": pd.Series([1, 3, 7, 14, 0, 11] * 2, dtype=np.uint32),
+        "UNSIGNED_INT64S": pd.Series([12, 2**50, 0, 78, 390] * 2, dtype=np.uint64),
+        "MIXED_INTS": pd.Series([-7, 8, -9, 10, -11, 12] * 2, dtype=int_dtype),
+        "NEGATIVE_INTS": pd.Series([-13, -14, -15] * 4, dtype=int_dtype),
+        "POSITIVE_FLOATS": pd.Series(
             [1.2, 0.2, 0.03, 4.0, 0.001, 0.666] * 2, dtype=float_dtype
         ),
-        "mixed_floats": pd.Series(
+        "MIXED_FLOATS": pd.Series(
             [-0.7, 0.0, -9.223, 1.0, -0.11, 12.12] * 2, dtype=float_dtype
         ),
-        "negative_floats": pd.Series([-13.0, -14.022, -1.5] * 4, dtype=float_dtype),
+        "NEGATIVE_FLOATS": pd.Series([-13.0, -14.022, -1.5] * 4, dtype=float_dtype),
     }
-    return {"table1": pd.DataFrame(numeric_data)}
+    return {"TABLE1": pd.DataFrame(numeric_data)}
 
 
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["0", "1", "10", "01011", "111011", "1101011011"],
                     "B": ["0", "1", "10", "72121", "72121", "101101"],
@@ -69,7 +69,7 @@ def bodosql_negative_numeric_types(request):
     ]
 )
 def bodosql_conv_df(request):
-    """returns datframes used for testing conv
+    """returns DataFrames used for testing conv
     A is in binary,
     B is in octal,
     C is in decimal,
@@ -80,22 +80,22 @@ def bodosql_conv_df(request):
 
 @pytest.fixture(
     params=[
-        pytest.param(("ABS", "ABS", "mixed_ints"), marks=pytest.mark.slow),
-        ("ABS", "ABS", "mixed_floats"),
-        pytest.param(("CBRT", "CBRT", "mixed_floats"), marks=pytest.mark.slow),
-        ("CBRT", "CBRT", "mixed_ints"),
+        pytest.param(("ABS", "ABS", "MIXED_INTS"), marks=pytest.mark.slow),
+        ("ABS", "ABS", "MIXED_FLOATS"),
+        pytest.param(("CBRT", "CBRT", "MIXED_FLOATS"), marks=pytest.mark.slow),
+        ("CBRT", "CBRT", "MIXED_INTS"),
         pytest.param(
-            ("FACTORIAL", "FACTORIAL", "positive_ints"), marks=pytest.mark.slow
+            ("FACTORIAL", "FACTORIAL", "POSITIVE_INTS"), marks=pytest.mark.slow
         ),
-        pytest.param(("SIGN", "SIGN", "mixed_floats"), marks=pytest.mark.slow),
-        ("SIGN", "SIGN", "mixed_ints"),
+        pytest.param(("SIGN", "SIGN", "MIXED_FLOATS"), marks=pytest.mark.slow),
+        ("SIGN", "SIGN", "MIXED_INTS"),
         # the second argument to POW for SQUARE (2) is provided below
-        pytest.param(("SQUARE", "POW", "mixed_floats"), marks=pytest.mark.slow),
-        ("SQUARE", "POW", "mixed_ints"),
+        pytest.param(("SQUARE", "POW", "MIXED_FLOATS"), marks=pytest.mark.slow),
+        ("SQUARE", "POW", "MIXED_INTS"),
     ]
-    + [(x, x, "positive_floats") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
+    + [(x, x, "POSITIVE_FLOATS") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
     + [
-        pytest.param(("LOG", "LOG10", "positive_floats"), marks=pytest.mark.slow),
+        pytest.param(("LOG", "LOG10", "POSITIVE_FLOATS"), marks=pytest.mark.slow),
     ]
     # currently, behavior for log(0) differs from sparks behavior, see BS-374
     # + [(x, x, "negative_floats") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
@@ -110,29 +110,29 @@ def single_op_numeric_fn_info(request):
 
 @pytest.fixture(
     params=[
-        ("MOD", "MOD", "mixed_floats", "mixed_floats"),
+        ("MOD", "MOD", "MIXED_FLOATS", "MIXED_FLOATS"),
         pytest.param(
-            ("MOD", "MOD", "mixed_ints", "mixed_ints"), marks=pytest.mark.slow
+            ("MOD", "MOD", "MIXED_INTS", "MIXED_INTS"), marks=pytest.mark.slow
         ),
-        ("MOD", "MOD", "mixed_ints", "mixed_floats"),
+        ("MOD", "MOD", "MIXED_INTS", "MIXED_FLOATS"),
         pytest.param(
-            ("MOD", "MOD", "unsigned_int64s", "unsigned_int32s"), marks=pytest.mark.slow
+            ("MOD", "MOD", "UNSIGNED_INT64S", "UNSIGNED_INT32S"), marks=pytest.mark.slow
         ),
-        ("POW", "POW", "positive_floats", "mixed_floats"),
+        ("POW", "POW", "POSITIVE_FLOATS", "MIXED_FLOATS"),
         pytest.param(
-            ("POWER", "POWER", "positive_floats", "mixed_floats"),
+            ("POWER", "POWER", "POSITIVE_FLOATS", "MIXED_FLOATS"),
             marks=pytest.mark.slow,
         ),
-        ("POW", "POW", "mixed_floats", "mixed_ints"),
+        ("POW", "POW", "MIXED_FLOATS", "MIXED_INTS"),
         pytest.param(
-            ("POW", "POW", "mixed_floats", "mixed_floats"), marks=pytest.mark.slow
+            ("POW", "POW", "MIXED_FLOATS", "MIXED_FLOATS"), marks=pytest.mark.slow
         ),
     ]
 )
 def double_op_numeric_fn_info(request):
     """fixture that returns information to test a double operand function call that uses the
     bodosql_negative_numeric_types fixture.
-    parameters are a tuple consisting ofthe string function name, the equivalent function name in Spark,
+    parameters are a tuple consisting of the string function name, the equivalent function name in Spark,
     and what two columns/scalars to use as its arguments"""
     return request.param
 
@@ -149,8 +149,8 @@ def test_single_op_numeric_fns_cols(
     arg1 = single_op_numeric_fn_info[2]
     query = f"SELECT {fn_name}({arg1}) from table1"
     if fn_name == "SQUARE":
-        if arg1[-5:] == "_ints" and any(
-            bodosql_negative_numeric_types["table1"].dtypes == np.int8
+        if arg1[-5:] == "_INTS" and any(
+            bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
             spark_query = (
                 f"SELECT CAST({spark_fn_name}({arg1}, 2) AS TINYINT) from table1"
@@ -177,7 +177,6 @@ def test_double_op_numeric_fns_cols(
 ):
     """tests the behavior of numeric functions with two arguments on columns"""
     fn_name = double_op_numeric_fn_info[0]
-    spark_fn_name = double_op_numeric_fn_info[1]
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT {fn_name}({arg1}, {arg2}) from table1"
@@ -218,7 +217,7 @@ def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
             "D": pd.Series([2, None, 2, 2, 4, 5, 10, 20, 5, 20], dtype="Int32"),
         }
     )
-    ctx = {"table0": t0}
+    ctx = {"TABLE0": t0}
     A, B, C, D = query_args
     query = f"SELECT WIDTH_BUCKET({A}, {B}, {C}, {D}) from table0"
     check_query(
@@ -239,7 +238,7 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
             "D": pd.Series([2, None, 2, 2, 4, 5, 10, 20, 5, 20], dtype="Int32"),
         }
     )
-    ctx = {"table0": t0}
+    ctx = {"TABLE0": t0}
     query = f"SELECT CASE WHEN A <= 0.0 THEN WIDTH_BUCKET(-A, B, C, D) ELSE WIDTH_BUCKET(A, B, C, 2*D) END FROM table0"
     check_query(
         query,
@@ -272,7 +271,7 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
 )
 def test_haversine_cols(query_args, spark_info, memory_leak_check):
     ctx = {
-        "table0": pd.DataFrame(
+        "TABLE0": pd.DataFrame(
             {
                 "A": [
                     7.7784067526128275,
@@ -341,7 +340,7 @@ def test_haversine_cols(query_args, spark_info, memory_leak_check):
 @pytest.mark.slow
 def test_haversine_scalars(spark_info, memory_leak_check):
     ctx = {
-        "table0": pd.DataFrame(
+        "TABLE0": pd.DataFrame(
             {
                 "A": [
                     7.7784067526128275,
@@ -410,7 +409,7 @@ def test_haversine_scalars(spark_info, memory_leak_check):
 
 def test_haversine_calc(spark_info, memory_leak_check):
     ctx = {
-        "table0": pd.DataFrame(
+        "TABLE0": pd.DataFrame(
             {
                 "A": [
                     7.7784067526128275,
@@ -487,8 +486,8 @@ def test_single_op_numeric_fns_scalars(
     spark_fn_name = single_op_numeric_fn_info[1]
     arg1 = single_op_numeric_fn_info[2]
     if fn_name == "SQUARE":
-        if arg1[-5:] == "_ints" and any(
-            bodosql_negative_numeric_types["table1"].dtypes == np.int8
+        if arg1[-5:] == "_INTS" and any(
+            bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
             spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS TINYINT) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS TINYINT) END FROM table1"
         else:
@@ -541,7 +540,7 @@ def test_double_op_numeric_fns_scalars(
 def test_rand(basic_df, spark_info, memory_leak_check):
     """tests the behavior of rand"""
     query = "Select (A >= 0.0 AND A < 1.0) as cond, B from (select RAND() as A, B from table1)"
-    # Currenly having an issue when running as distributed, see BS-383
+    # Currently having an issue when running as distributed, see BS-383
     check_query(
         query,
         basic_df,
@@ -588,7 +587,7 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
         FROM table2
     """
     n = 10**6
-    ctx = {"table1": pd.DataFrame({"A": np.arange(n)})}
+    ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
     if is_integer:
         expected_distinct = 100
         expected_min = 0
@@ -599,12 +598,12 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
         expected_max = 99.0
     answer = pd.DataFrame(
         {
-            "min": expected_min,
-            "max": expected_max,
-            "distinct": expected_distinct,
-            "mean": 49.5,
-            "stdv": 28.5788,
-            "skew": 0.0,
+            "MIN": expected_min,
+            "MAX": expected_max,
+            "DISTINCT": expected_distinct,
+            "MEAN": 49.5,
+            "STDV": 28.5788,
+            "SKEW": 0.0,
         },
         index=np.arange(1),
     )
@@ -632,7 +631,7 @@ def test_uniform_determinism(memory_leak_check):
     """
     query = "SELECT UNIFORM(0, 100, A) FROM table1"
     n = 10**6
-    ctx = {"table1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
+    ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
     answer = pd.DataFrame({0: [37, 40, 24, 51] * 10})
     check_query(
         query,
@@ -687,7 +686,7 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
 def test_log_hybrid(query, spark_info, memory_leak_check):
     """Testing log seperately since it reverses the order of the arguments"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": [1.0, 2.0, 0.5, 64.0, 100.0], "B": [2.0, 3.0, 4.0, 5.0, 10.0]}
         )
     }
@@ -718,7 +717,7 @@ def test_log_hybrid(query, spark_info, memory_leak_check):
 )
 def test_div0_cols(args, spark_info, memory_leak_check):
     ctx = {}
-    ctx["table1"] = pd.DataFrame(
+    ctx["TABLE1"] = pd.DataFrame(
         {
             "A": [10.0, 12, np.nan, 32, 24, np.nan, 8, np.nan, 14, 28],
             "B": [1.0, 0, 4, 0, 2, 0, 3, 0, np.nan, 0],
@@ -747,7 +746,7 @@ def test_div0_scalars(spark_info):
             "B": [1.0, -12, 4, 0, 2, 0, -8, 0, np.nan, 0],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     def _py_output(df):
         a, b = df["A"], df["B"]
@@ -757,7 +756,7 @@ def test_div0_scalars(spark_info):
         ret[b > a] = ((b - a) / sum_)[b > a]
         ret[pd.isna(a) | pd.isna(b)] = np.nan
         ret[sum_ == 0] = 0
-        return pd.DataFrame({"out": ret})
+        return pd.DataFrame({"OUT": ret})
 
     output = _py_output(df)
     query = (
@@ -845,7 +844,7 @@ def test_to_number_columns(fn_name):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -927,7 +926,7 @@ def test_to_number_columns_with_scale(fn_name):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -973,7 +972,7 @@ def test_to_number_optional(fn_name):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -1009,7 +1008,7 @@ def test_to_number_optional_invalid_str(fn_name):
             ]
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     if "TRY" in fn_name:
         check_query(
             query,
@@ -1019,7 +1018,7 @@ def test_to_number_optional_invalid_str(fn_name):
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
-            bc = bodosql.BodoSQLContext({"table1": df})
+            bc = bodosql.BodoSQLContext({"TABLE1": df})
 
             @bodo.jit
             def impl(bc):
@@ -1226,7 +1225,7 @@ def round_data(request):
     """Tests the behavior of the ROUND function. Hardcoded answers obtained
     from Snowflake to ensure that the correct rounding behavior is achieved"""
     data, scale, answer = request.param
-    ctx = {"table1": pd.DataFrame({"A": data, "S": scale})}
+    ctx = {"TABLE1": pd.DataFrame({"A": data, "S": scale})}
     scale_str = "" if isinstance(scale, int) and scale == 0 else ", S"
     return ctx, scale_str, answer
 
@@ -1262,7 +1261,7 @@ def test_floor_ceil(memory_leak_check):
     """
     query = "SELECT FLOOR(X), CEIL(X), FLOOR(X, P), CEIL(X, P) FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"X": [2.71828] * 3 + [123.456] * 3, "P": [1, -1, 3] * 2}
         )
     }
@@ -1316,15 +1315,15 @@ def test_random(use_case, memory_leak_check):
             SKEW(R)
         FROM table2
     """
-    ctx = {"table1": pd.DataFrame({"A": np.arange(n)})}
+    ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
     answer = pd.DataFrame(
         {
-            "min": True,
-            "max": True,
-            "distinct": True,
-            "mean_hi": True,
-            "mean_lo": True,
-            "skew": 0.0,
+            "MIN": True,
+            "MAX": True,
+            "DISTINCT": True,
+            "MEAN_HI": True,
+            "MEAN_LO": True,
+            "SKEW": 0.0,
         },
         index=np.arange(1),
     )
@@ -1345,12 +1344,12 @@ def test_trunc_truncate_single_arg(memory_leak_check):
     Tests TRUNC and TRUNCATE on numeric values with a single argument
     """
     t0 = pd.DataFrame({"A": [100, 100.123, 100.5, -100.5, -100.123, -100]})
-    ctx = {"table0": t0}
+    ctx = {"TABLE0": t0}
     query = "SELECT TRUNC(A) as trunc_out, TRUNCATE(A) as truncate_out from table0"
     expected_output = pd.DataFrame(
         {
-            "trunc_out": [100, 100, 100, -100, -100, -100],
-            "truncate_out": [100, 100, 100, -100, -100, -100],
+            "TRUNC_OUT": [100, 100, 100, -100, -100, -100],
+            "TRUNCATE_OUT": [100, 100, 100, -100, -100, -100],
         }
     )
     check_query(

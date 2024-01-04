@@ -18,8 +18,8 @@ def test_cross_join_simpl(basic_df, spark_info, broadcast: bool, memory_leak_che
     Tests a simple cross join on small tables
     """
     ctx = {
-        "table1": basic_df["table1"],
-        "table2": basic_df["table1"],
+        "TABLE1": basic_df["TABLE1"],
+        "TABLE2": basic_df["TABLE1"],
     }
     query = "Select table1.C, table2.B from table1 cross join table2"
     # Set BODO_BCAST_JOIN_THRESHOLD to 0 to force non-broadcast (fully-parallel) case,
@@ -43,8 +43,8 @@ def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["T1", "T2", "T3"]
@@ -79,8 +79,8 @@ def test_cross_join_select_star(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         # Have to skip, as we can't cast the columns without explicitly providing the names
@@ -103,15 +103,15 @@ def test_cross_join_select_filter(join_dataframes, spark_info, memory_leak_check
 
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
-        convert_columns_bytearray = ["c1", "c2"]
+        convert_columns_bytearray = ["C1", "C2"]
     else:
         convert_columns_bytearray = None
 
-    query = "Select table1.B as c1, table3.Y as c2 from table1 cross join table3 where table1.A = table3.Y"
+    query = "Select table1.B as C1, table3.Y as C2 from table1 cross join table3 where table1.A = table3.Y"
     check_query(
         query,
         join_dataframes,
@@ -131,8 +131,8 @@ def test_nested_cross_join_with_filter_select_star(
 
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["T1", "T2"]
@@ -162,8 +162,8 @@ def test_cross_join_error(basic_df, spark_info, memory_leak_check):
     Tests that we throw a reasonable error if the cross join syntax is wrong
     """
     ctx = {
-        "table1": basic_df["table1"],
-        "table2": basic_df["table1"],
+        "TABLE1": basic_df["TABLE1"],
+        "TABLE2": basic_df["TABLE1"],
     }
     query = "select table1.a from table1 cross join on table1.A = table2.B table2"
     bc = bodosql.BodoSQLContext(ctx)

@@ -122,7 +122,7 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
     else:
         query = "SELECT I, JSON_EXTRACT_PATH_TEXT(D, P) FROM TABLE1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": range(len(data)),
                 "D": data,
@@ -133,7 +133,7 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["table1"].B] = None
+        expected_output[1][ctx["TABLE1"].B] = None
     check_query(
         query,
         ctx,
@@ -266,7 +266,7 @@ def test_get_path(
     else:
         query = f"SELECT I, {get_path_call} FROM TABLE1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": range(len(data)),
                 "D": data,
@@ -276,7 +276,7 @@ def test_get_path(
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["table1"].B] = None
+        expected_output[1][ctx["TABLE1"].B] = None
     check_query(
         query,
         ctx,
@@ -342,7 +342,7 @@ def test_get_path_on_incorrect_variant_types(
     else:
         query = f"SELECT I, {get_path_call} FROM TABLE1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": range(len(data)),
                 "D": data,
@@ -352,7 +352,7 @@ def test_get_path_on_incorrect_variant_types(
     }
     expected_output = pd.DataFrame({0: range(len(data)), 1: answer})
     if use_case:
-        expected_output[1][ctx["table1"].B] = None
+        expected_output[1][ctx["TABLE1"].B] = None
     check_query(
         query,
         ctx,
@@ -442,7 +442,7 @@ def test_object_keys(data, use_case, answer, memory_leak_check):
         query = "SELECT OBJECT_KEYS(J) FROM table1"
     check_query(
         query,
-        {"table1": pd.DataFrame({"J": data, "J_COPY": data, "B": [True] * len(data)})},
+        {"TABLE1": pd.DataFrame({"J": data, "J_COPY": data, "B": [True] * len(data)})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
@@ -543,7 +543,7 @@ def test_to_object(query, answer, memory_leak_check):
             ),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -768,7 +768,7 @@ def test_to_object(query, answer, memory_leak_check):
 )
 def test_object_construct_keep_null(query, answer, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "DUMMY": [True] * 15,
                 "I": [1, 2, 4, 8, 16] * 3,
@@ -892,11 +892,11 @@ def test_object_construct_keep_null(query, answer, memory_leak_check):
 )
 def test_object_construct(query, answer, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "DUMMY": [True] * 8,
-                "names": [["Golden Gate Bridge", "Taj Mahal", "Eiffel Tower"]] * 8,
-                "idx": [0, 1, 2, 3] * 2,
+                "NAMES": [["Golden Gate Bridge", "Taj Mahal", "Eiffel Tower"]] * 8,
+                "IDX": [0, 1, 2, 3] * 2,
                 "I": pd.Series(
                     [0, None, None, 3, None, None, 6, 7], dtype=pd.Int8Dtype()
                 ),
@@ -1060,7 +1060,7 @@ def test_object_construct(query, answer, memory_leak_check):
 def test_object_pick(query, df, answer, memory_leak_check):
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
@@ -1206,7 +1206,7 @@ def test_object_pick(query, df, answer, memory_leak_check):
 def test_object_delete(query, df, answer, memory_leak_check):
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
@@ -1361,7 +1361,7 @@ def test_object_insert_constant_key_value(df, answer, memory_leak_check):
     query = "SELECT OBJECT_INSERT(A, 'newprop', 0) from table1"
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
@@ -1396,7 +1396,7 @@ def test_object_insert_conflicting_key_struct(memory_leak_check):
     with pytest.raises(TypingError):
         check_query(
             query,
-            {"table1": df},
+            {"TABLE1": df},
             None,
             expected_output=pd.DataFrame({}),
         )
@@ -1426,7 +1426,7 @@ def test_object_insert_conflicting_key_map():
     ):
         check_query(
             query,
-            {"table1": df},
+            {"TABLE1": df},
             None,
             expected_output=pd.DataFrame({0: []}),
         )
@@ -1589,7 +1589,7 @@ def test_object_insert_update_key(
     query = f"SELECT OBJECT_INSERT(A, '{key_to_update}', {value_to_update_expr}, true) from table1"
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=pd.DataFrame({0: answer}),
         use_dict_encoded_strings=False,  # TODO(aneesh): remove this as per BSE-2121
@@ -1662,7 +1662,7 @@ def test_object_insert_update_key(
 def test_object_insert(query, df, answer, memory_leak_check):
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
@@ -1700,9 +1700,9 @@ def test_object_insert(query, df, answer, memory_leak_check):
 )
 def test_object_insert_case(df, answer, memory_leak_check):
     query = "SELECT CASE WHEN B THEN NULL ELSE OBJECT_INSERT(D, 'b', V) END FROM TABLE1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({0: answer})
-    expected_output[0][ctx["table1"].B] = None
+    expected_output[0][ctx["TABLE1"].B] = None
     check_query(
         query,
         ctx,

@@ -189,12 +189,12 @@ def test_tz_aware_partition_by(spark_info):
                 None,
             ]
             * 5,
-            "SORT_COl": np.arange(30),
+            "SORT_COL": np.arange(30),
             "SUM_COL": -np.arange(30, 60),
         }
     )
-    ctx = {"table1": df}
-    query = "SELECT SORT_COl, SUM(SUM_COL) OVER (PARTITION BY TZ ORDER BY SORT_COl ROWS 2 PRECEDING) FROM TABLE1"
+    ctx = {"TABLE1": df}
+    query = "SELECT SORT_COL, SUM(SUM_COL) OVER (PARTITION BY TZ ORDER BY SORT_COL ROWS 2 PRECEDING) FROM TABLE1"
     check_query(
         query,
         ctx,
@@ -267,7 +267,7 @@ def test_row_number_without_partition(orders, spark_info, memory_leak_check):
     """Test using ROW_NUMBER without a partition"""
     query = f"SELECT I32, {', '.join(f'ROW_NUMBER() OVER ({o}) AS C{i}' for i,o in enumerate(orders))} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I32": pd.Series(list(range(20)), dtype=pd.Int32Dtype()),
                 "STR": (

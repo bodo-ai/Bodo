@@ -18,7 +18,7 @@ def test_basic_pivot(basic_df, spark_info, memory_leak_check):
     check_query(query, basic_df, spark_info, check_dtype=False)
 
 
-def test_multicol_pivot(basic_df, spark_info, memory_leak_check):
+def test_multi_col_pivot(basic_df, spark_info, memory_leak_check):
     """
     Basic test for PIVOT with multiple
 
@@ -53,7 +53,7 @@ def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_multicol_null_pivot(basic_df, spark_info, memory_leak_check):
+def test_multi_col_null_pivot(basic_df, spark_info, memory_leak_check):
     """
     Basic test for PIVOT with multiple columns without a match somewhere.
     """
@@ -93,7 +93,7 @@ def test_tz_aware_pivot(memory_leak_check):
     """
     df = pd.DataFrame(
         {
-            "name": ["John", "mike", "Luke", "Matthew", None] * 8,
+            "NAME": ["John", "mike", "Luke", "Matthew", None] * 8,
             "TZ": [
                 None,
                 None,
@@ -107,12 +107,12 @@ def test_tz_aware_pivot(memory_leak_check):
             * 5,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     # Compute the expected output
-    john_series = df["TZ"][df["name"] == "John"]
+    john_series = df["TZ"][df["NAME"] == "John"]
     john_count = john_series.count()
     john_max = john_series.max()
-    mike_series = df["TZ"][df["name"] == "mike"]
+    mike_series = df["TZ"][df["NAME"] == "mike"]
     mike_count = mike_series.count()
     mike_max = mike_series.max()
     py_output = pd.DataFrame(
@@ -146,11 +146,11 @@ def test_float_pivot(spark_info, memory_leak_check):
     """
     df = pd.DataFrame(
         {
-            "id": [1, 2, 2, 3] * 5,
-            "amount": [0.5, 0.1, 2.3, 11.1, 23] * 4,
+            "ID": [1, 2, 2, 3] * 5,
+            "AMOUNT": [0.5, 0.1, 2.3, 11.1, 23] * 4,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     # set check_dtype=False because of int64 vs Int64 difference
     check_query(
         query,

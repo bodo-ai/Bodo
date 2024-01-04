@@ -25,18 +25,18 @@ def bodosql_trig_values(request):
     """certain Trig functions are only valid for a given range of inputs."""
     dtype = request.param
     trig_data = {
-        "abs_lteq_1": [0, 1, -1, 0.5, -0.5, 0.3212, -0.78, None],
-        "any_numeric": pd.Series(
+        "ABS_LTEQ_1": [0, 1, -1, 0.5, -0.5, 0.3212, -0.78, None],
+        "ANY_NUMERIC": pd.Series(
             [0, 1, -1, 10000, -100000, 10, -15, None], dtype="Int64"
         ),
-        "any_non_zero": [1, -1, 0.1, -0.1, 1234, -4321, 3, None],
+        "ANY_NON_ZERO": [1, -1, 0.1, -0.1, 1234, -4321, 3, None],
     }
-    return {"table1": pd.DataFrame(data=trig_data, dtype=dtype)}
+    return {"TABLE1": pd.DataFrame(data=trig_data, dtype=dtype)}
 
 
 @pytest.fixture(
     params=[
-        (x, "any_numeric")
+        (x, "ANY_NUMERIC")
         for x in [
             "ACOS",
             "ACOSH",
@@ -64,7 +64,7 @@ def single_op_trig_fn_info(request):
     return request.param
 
 
-@pytest.fixture(params=[("ATAN2", "any_numeric", "any_numeric")])
+@pytest.fixture(params=[("ATAN2", "ANY_NUMERIC", "ANY_NUMERIC")])
 def double_op_trig_fn_info(request):
     """fixture that returns information to test a two operand function call that uses the
     bodosql_trig_values fixture.

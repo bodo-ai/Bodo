@@ -94,7 +94,7 @@ def basic_df():
     df = pd.DataFrame(
         {"A": [1, 2, 3] * 4, "B": [4, 5, 6, 7] * 3, "C": [7, 8, 9, 10, 11, 12] * 2}
     )
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture
@@ -104,7 +104,7 @@ def zeros_df():
     to check issues with dividing by zero
     """
     df = pd.DataFrame({"A": np.arange(12), "B": [0, 1, -2, 1] * 3})
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture(
@@ -123,7 +123,7 @@ def zeros_df():
 )
 def bodosql_numeric_types(request):
     """
-    Fixture for dataframes with numeric BodoSQL types:
+    Fixture for DataFrames with numeric BodoSQL types:
         - int8
         - uint8
         - int16
@@ -135,26 +135,26 @@ def bodosql_numeric_types(request):
         - float32
         - float64
 
-    For each datatable, it provides a dictionary mapping table1 -> DataFrame.
-    All dataframes have the same column names so the queries can be applied to
+    For each data table, it provides a dictionary mapping table1 -> DataFrame.
+    All DataFrames have the same column names so the queries can be applied to
     each table.
     """
     dtype = request.param
     int_data = {"A": [1, 2, 3] * 4, "B": [4, 5, 6] * 4, "C": [7, 8, 9] * 4}
-    return {"table1": pd.DataFrame(data=int_data, dtype=dtype)}
+    return {"TABLE1": pd.DataFrame(data=int_data, dtype=dtype)}
 
 
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [4, 1, 2, 3] * 4,
                     "B": pd.array([1.0, 2.0, 3.0, 4.0] * 4, "Float64"),
                     "C": ["bird", "dog", "flamingo", "cat"] * 4,
                 }
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {
                     "A": [3, 1, 2, 4] * 4,
                     "B": pd.array([1.0, 2.0, 4.0, 3.0] * 4, "Float64"),
@@ -167,30 +167,30 @@ def bodosql_numeric_types(request):
                     * 4,
                 }
             ),
-            "table3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
+            "TABLE3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
         },
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": pd.array([1, 1, 3, 3, 5, 7] * 2, dtype="Int64"),
                     "B": pd.array([1.0, 2.0, 4.0, 3.0] * 3, dtype="Int64"),
                     "C": ["T1_1", "T1_2", "T1_3", "T1_4", "T1_5", "T1_6"] * 2,
                 }
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {
                     "A": pd.array([2, 4, 6, 6, 1, 1] * 2, dtype="Int64"),
                     "B": pd.array([1.0, 2.0, 4.0, 3.0] * 3, dtype="Int64"),
                     "D": ["T2_1", "T2_2", "T2_3", "T2_4", "T2_5", "T2_6"] * 2,
                 }
             ),
-            "table3": pd.DataFrame(
+            "TABLE3": pd.DataFrame(
                 {"Y": pd.array([1, 2, 3, 4, 5, 6] * 2, dtype="Int64")}
             ),
         },
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": np.array([b"abc", b"c", None, b"ccdefg"] * 3, object),
                         "B": np.array(
@@ -201,7 +201,7 @@ def bodosql_numeric_types(request):
                         ),
                     }
                 ),
-                "table2": pd.DataFrame(
+                "TABLE2": pd.DataFrame(
                     {
                         "A": np.array([b"cew", b"abc", b"r2r", None] * 3, object),
                         "B": np.array(
@@ -210,7 +210,7 @@ def bodosql_numeric_types(request):
                         "D": np.array([b"r32r2", b"poiu", b"3r32", b"3f3"] * 3, object),
                     }
                 ),
-                "table3": pd.DataFrame(
+                "TABLE3": pd.DataFrame(
                     {"Y": [b"abc", b"c", b"cew", b"ce2r", b"r2r", None] * 2}
                 ),
             },
@@ -218,41 +218,41 @@ def bodosql_numeric_types(request):
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Int64"),
                         "B": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
                         "C": ["T1_1", "T1_2", "T1_3", "T1_4", "T1_5", "T1_6"] * 2,
                     }
                 ),
-                "table2": pd.DataFrame(
+                "TABLE2": pd.DataFrame(
                     {
                         "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Int64"),
                         "B": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
                         "D": ["T2_1", "T2_2", "T2_3", "T2_4", "T2_5", "T2_6"] * 2,
                     }
                 ),
-                "table3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
+                "TABLE3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
             },
             marks=pytest.mark.slow,
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": (gen_nonascii_list(2) + ["A", "B"]) * 3,
                         "B": gen_nonascii_list(3) * 4,
                         "C": gen_nonascii_list(6)[3:] * 4,
                     }
                 ),
-                "table2": pd.DataFrame(
+                "TABLE2": pd.DataFrame(
                     {
                         "A": ["a", "b", "c", None, "e", "aa"] * 2,
                         "B": gen_nonascii_list(6)[3:] * 4,
                         "D": gen_nonascii_list(9)[6:] * 4,
                     }
                 ),
-                "table3": pd.DataFrame({"Y": ["Z", "Y", "X", "W", "V", "U"] * 2}),
+                "TABLE3": pd.DataFrame({"Y": ["Z", "Y", "X", "W", "V", "U"] * 2}),
             },
             marks=pytest.mark.slow,
         ),
@@ -260,7 +260,7 @@ def bodosql_numeric_types(request):
 )
 def join_dataframes(request):
     """
-    Fixture with similar dataframes to use for join queries.
+    Fixture with similar DataFrames to use for join queries.
 
     table1 has columns A, B, C
     table2 has columns A, B, D
@@ -271,8 +271,8 @@ def join_dataframes(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame({"A": [1, 2, 3], "D": [4, 5, 6]}),
-            "table2": pd.DataFrame({"B": [1, 2, 3], "C": [4, 5, 6]}),
+            "TABLE1": pd.DataFrame({"A": [1, 2, 3], "D": [4, 5, 6]}),
+            "TABLE2": pd.DataFrame({"B": [1, 2, 3], "C": [4, 5, 6]}),
         },
     ]
 )
@@ -287,7 +287,7 @@ def simple_join_fixture(request):
     params=[
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     data={
                         "E": [2**63, 2**62, 2**61] * 4,
                         "F": [2**60, 2**59, 2**58] * 4,
@@ -299,7 +299,7 @@ def simple_join_fixture(request):
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     data={
                         "E": [(-2) ** 61, (-2) ** 60, (-2) ** 59] * 4,
                         "F": [(-2) ** 58, (-2) ** 57, (-2) ** 56] * 4,
@@ -311,7 +311,7 @@ def simple_join_fixture(request):
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     data={
                         "E": [2**31, 2**30, 2**29] * 4,
                         "F": [2**28, 2**27, 2**26] * 4,
@@ -323,7 +323,7 @@ def simple_join_fixture(request):
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     data={
                         "E": [(-2) ** 30, (-2) ** 29, (-2) ** 28] * 4,
                         "F": [(-2) ** 27, (-2) ** 26, (-2) ** 25] * 4,
@@ -345,7 +345,7 @@ def bodosql_large_numeric_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         np.datetime64("2011-01-01"),
@@ -378,7 +378,7 @@ def bodosql_datetime_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         bodo.Time(19, 53, 6, 15),
@@ -414,7 +414,7 @@ def bodosql_time_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         pd.NaT,
@@ -424,7 +424,7 @@ def bodosql_time_types(request):
                     ]
                 }
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {
                     "B": [
                         pd.Timestamp("2013-01-16 05:25:32.145547"),
@@ -444,7 +444,7 @@ def bodosql_datetime_types_small(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         datetime.date(2011, 4, 24),
@@ -478,7 +478,7 @@ def bodosql_date_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [
                         np.timedelta64(10, "Y"),
@@ -510,7 +510,7 @@ def bodosql_interval_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": [True, False, False, None] * 3,
                     "B": [False, None, True, False] * 3,
@@ -543,7 +543,7 @@ def timestamp_literal_strings(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["hElLo", "GoOdByE", "SpEaK", "WeIrD"] * 3,
                     "B": ["hello", "world", "how"] * 4,
@@ -553,7 +553,7 @@ def timestamp_literal_strings(request):
         },
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": ["HELLO", "HeLlLllo", "heyO", "HI"] * 3,
                         "B": ["hi", "HaPpY", "how"] * 4,
@@ -565,7 +565,7 @@ def timestamp_literal_strings(request):
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": (gen_nonascii_list(2) + ["A", "B"]) * 3,
                         "B": gen_nonascii_list(3) * 4,
@@ -584,7 +584,7 @@ def bodosql_string_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["hElLo GoOdByE", "GoOdByE SpEaK", "SpEaK", "hElLo WeIrD"] * 3,
                     "B": ["hello world how", "how how how how world", "how"] * 4,
@@ -594,7 +594,7 @@ def bodosql_string_types(request):
         },
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": ["John Ddoe", "Joe Doe", "John_down", "Joe down"] * 3,
                         "B": ["Tome Doe", "Tim down"] * 6,
@@ -613,7 +613,7 @@ def bodosql_multiple_string_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["0", "1", "24", "27"] * 3,
                     "B": ["43", "121", "43"] * 4,
@@ -631,7 +631,7 @@ def bodosql_integers_string_types(request):
 @pytest.fixture(
     params=[
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": ["2011-01-01", "1971-02-02", "2021-03-03", "2004-12-07"] * 3,
                     "B": ["2021-11-09", "2019-08-25", "2017-05-04"] * 4,
@@ -660,7 +660,7 @@ def bodosql_date_string_types(request):
 )
 def bodosql_nullable_numeric_types(request):
     """
-    Fixture for dataframes nullable numeric BodoSQL types:
+    Fixture for DataFrames nullable numeric BodoSQL types:
         - Int8
         - UInt8
         - Int16
@@ -670,8 +670,8 @@ def bodosql_nullable_numeric_types(request):
         - Int64
         - UInt64
 
-    For each datatable, it provides a dictionary mapping table1 -> DataFrame.
-    All dataframes have the same column names so the queries can be applied to
+    For each data table, it provides a dictionary mapping table1 -> DataFrame.
+    All DataFrames have the same column names so the queries can be applied to
     each table.
     """
     dtype = request.param
@@ -680,7 +680,7 @@ def bodosql_nullable_numeric_types(request):
         "B": [4, None, 5, 6] * 3,
         "C": [7, 8, None, 9] * 3,
     }
-    return {"table1": pd.DataFrame(data=int_data, dtype=dtype)}
+    return {"TABLE1": pd.DataFrame(data=int_data, dtype=dtype)}
 
 
 @pytest.fixture(
@@ -914,7 +914,7 @@ def major_types_nullable(request):
     ), "Appending a boolean column requires the DataFrame to be divisible by 3"
     df["COND_COL"] = pd.Series([True, False, None] * (len(df) // 3))
     df["ORDERBY_COl"] = np.arange(len(df))
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture(
@@ -937,7 +937,7 @@ def bodosql_binary_types(request):
     Fixture for dataframe of binary array types in BodoSQL.
     Binary arrays are nullable.
     """
-    return {"table1": request.param}
+    return {"TABLE1": request.param}
 
 
 @pytest.fixture(
@@ -1015,7 +1015,7 @@ def sql_numeric_typestrings(request):
 
 @pytest.fixture(params=["-", "+", "*", "/"])
 def arith_ops(request):
-    """fixture that returns arithmatic operators"""
+    """fixture that returns arithmetic operators"""
     return request.param
 
 
@@ -1050,7 +1050,7 @@ def sql_datetime_typestrings(request):
 )
 def numeric_values(request):
     """
-    Collection of numeric values used for testing, all the integer values should fit within a bytee
+    Collection of numeric values used for testing, all the integer values should fit within a byte
     """
     return request.param
 
@@ -1104,7 +1104,7 @@ def tz_aware_df():
         }
     )
 
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture
@@ -1120,7 +1120,7 @@ def trim_df():
             ),
         }
     )
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture(scope="module")
@@ -1143,21 +1143,21 @@ def tpch_data_helper(datapath):
         partsupp_df,
     ) = load_tpch_data(datapath("tpch-test-data/parquet"))
     dataframe_dict = {
-        "customer": customer_df,
-        "orders": orders_df,
-        "lineitem": lineitem_df,
-        "nation": nation_df,
-        "region": region_df,
-        "supplier": supplier_df,
-        "part": part_df,
-        "partsupp": partsupp_df,
+        "CUSTOMER": customer_df,
+        "ORDERS": orders_df,
+        "LINEITEM": lineitem_df,
+        "NATION": nation_df,
+        "REGION": region_df,
+        "SUPPLIER": supplier_df,
+        "PART": part_df,
+        "PARTSUPP": partsupp_df,
     }
     return dataframe_dict
 
 
 @bodo.jit(returns_maybe_distributed=False, cache=True)
 def load_tpch_data(dir_name):
-    """Load the necessary TPCH dataframes given a root directory.
+    """Load the necessary TPCH DataFrames given a root directory.
     We use bodo.jit so we can read easily from a directory.
 
     If rows is not None, only fetches that many rows from each table"""
@@ -1211,32 +1211,32 @@ def tpcxbb_data(datapath):
     ) = load_tpcxbb_data(datapath("tpcxbb-test-data"))
     # Some end dates are all null values, so its unclear its type.
     # Convert to string.
-    item_df["i_rec_end_date"] = item_df["i_rec_end_date"].astype(pd.StringDtype())
-    store_df["s_rec_end_date"] = store_df["s_rec_end_date"].astype(pd.StringDtype())
-    web_page_df["wp_rec_end_date"] = web_page_df["wp_rec_end_date"].astype(
+    item_df["I_REC_END_DATE"] = item_df["I_REC_END_DATE"].astype(pd.StringDtype())
+    store_df["S_REC_END_DATE"] = store_df["S_REC_END_DATE"].astype(pd.StringDtype())
+    web_page_df["WP_REC_END_DATE"] = web_page_df["WP_REC_END_DATE"].astype(
         pd.StringDtype()
     )
-    time_dim_df["t_meal_time"] = time_dim_df["t_meal_time"].astype(pd.StringDtype())
+    time_dim_df["T_MEAL_TIME"] = time_dim_df["T_MEAL_TIME"].astype(pd.StringDtype())
     dataframe_dict = {
-        "store_sales": store_sales_df,
-        "item": item_df,
-        "customer": customer_df,
-        "customer_address": customer_address_df,
-        "customer_demographics": customer_demographics_df,
-        "date_dim": date_dim_df,
-        "product_reviews": product_reviews_df,
-        "store": store_df,
-        "web_clickstreams": web_clickstreams_df,
-        "web_sales": web_sales_df,
-        "household_demographics": household_demographics_df,
-        "inventory": inventory_df,
-        "item_marketprices": item_marketprices_df,
-        "promotion": promotion_df,
-        "store_returns": store_returns_df,
-        "time_dim": time_dim_df,
-        "warehouse": warehouse_df,
-        "web_page": web_page_df,
-        "web_returns": web_returns_df,
+        "STORE_SALES": store_sales_df,
+        "ITEM": item_df,
+        "CUSTOMER": customer_df,
+        "CUSTOMER_ADDRESS": customer_address_df,
+        "CUSTOMER_DEMOGRAPHICS": customer_demographics_df,
+        "DATE_DIM": date_dim_df,
+        "PRODUCT_REVIEWS": product_reviews_df,
+        "STORE": store_df,
+        "WEB_CLICKSTREAMS": web_clickstreams_df,
+        "WEB_SALES": web_sales_df,
+        "HOUSEHOLD_DEMOGRAPHICS": household_demographics_df,
+        "INVENTORY": inventory_df,
+        "ITEM_MARKETPRICES": item_marketprices_df,
+        "PROMOTION": promotion_df,
+        "STORE_RETURNS": store_returns_df,
+        "TIME_DIM": time_dim_df,
+        "WAREHOUSE": warehouse_df,
+        "WEB_PAGE": web_page_df,
+        "WEB_RETURNS": web_returns_df,
     }
     pyspark_schemas = {
         "store_sales": StructType(
@@ -1813,7 +1813,7 @@ def timeadd_dataframe():
         (18, 1, 44, 38416),
     ]
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "T": [
                     None
@@ -1829,19 +1829,19 @@ def timeadd_dataframe():
 
 @pytest.fixture(
     params=[
-        "hour",
-        pytest.param("minute", marks=pytest.mark.slow),
-        "second",
-        "millisecond",
-        pytest.param("microsecond", marks=pytest.mark.slow),
-        "nanosecond",
+        "HOUR",
+        pytest.param("MINUTE", marks=pytest.mark.slow),
+        "SECOND",
+        "MILLISECOND",
+        pytest.param("MICROSECOND", marks=pytest.mark.slow),
+        "NANOSECOND",
     ]
 )
 def timeadd_arguments(request, timeadd_dataframe):
     """For each time unit, returns the answer column created by using timeadd
     on the columns created in timeadd_dataframe with the specified unit"""
     time_args_lists = {
-        "hour": [
+        "HOUR": [
             (22, 0, 0, 0),
             (8, 1, 1, 1),
             (4, 4, 8, 16),
@@ -1850,7 +1850,7 @@ def timeadd_arguments(request, timeadd_dataframe):
             (23, 25, 37, 28561),
             (20, 1, 44, 38416),
         ],
-        "minute": [
+        "MINUTE": [
             (23, 10, 0, 0),
             (1, 8, 1, 1),
             (1, 42, 8, 16),
@@ -1859,7 +1859,7 @@ def timeadd_arguments(request, timeadd_dataframe):
             (16, 8, 37, 28561),
             (20, 3, 44, 38416),
         ],
-        "second": [
+        "SECOND": [
             (23, 59, 10, 0),
             (1, 1, 8, 1),
             (2, 3, 46, 16),
@@ -1868,7 +1868,7 @@ def timeadd_arguments(request, timeadd_dataframe):
             (16, 25, 20, 28561),
             (18, 3, 46, 38416),
         ],
-        "millisecond": [
+        "MILLISECOND": [
             (23, 59, 59, 950000000),
             (1, 1, 1, 7000001),
             (2, 4, 7, 978000016),
@@ -1877,7 +1877,7 @@ def timeadd_arguments(request, timeadd_dataframe):
             (16, 25, 36, 983028561),
             (18, 1, 44, 122038416),
         ],
-        "microsecond": [
+        "MICROSECOND": [
             (23, 59, 59, 999950000),
             (1, 1, 1, 7001),
             (2, 4, 7, 999978016),
@@ -1886,7 +1886,7 @@ def timeadd_arguments(request, timeadd_dataframe):
             (16, 25, 37, 11561),
             (18, 1, 44, 160416),
         ],
-        "nanosecond": [
+        "NANOSECOND": [
             (23, 59, 59, 999999950),
             (1, 1, 1, 8),
             (2, 4, 7, 999999994),
@@ -1898,7 +1898,7 @@ def timeadd_arguments(request, timeadd_dataframe):
     }
     answer = pd.DataFrame(
         {
-            0: timeadd_dataframe["table1"]["T"],
+            0: timeadd_dataframe["TABLE1"]["T"],
             1: [
                 None
                 if t is None
@@ -1918,18 +1918,18 @@ def listagg_data():
     value is always the same per group.
     """
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "key_col": [1] * 6 + [2] * 6 + [3] * 6,
-                "group_constant_str_col": ["a"] * 6 + ["œ"] * 6 + ["e"] * 6,
-                "group_constant_str_col2": ["į"] * 6 + ["ë"] * 6 + ["₠"] * 6,
-                "non_constant_str_col": list(string.ascii_uppercase[:6]) * 3,
-                "order_col_1": [None, 1, None, 2, None, 3] * 3,
-                "order_col_2": [1, None, 2, None, 3, None] * 3,
-                "order_col_3": np.arange(18),
+                "KEY_COL": [1] * 6 + [2] * 6 + [3] * 6,
+                "GROUP_CONSTANT_STR_COL": ["a"] * 6 + ["œ"] * 6 + ["e"] * 6,
+                "GROUP_CONSTANT_STR_COL2": ["į"] * 6 + ["ë"] * 6 + ["₠"] * 6,
+                "NON_CONSTANT_STR_COL": list(string.ascii_uppercase[:6]) * 3,
+                "ORDER_COL_1": [None, 1, None, 2, None, 3] * 3,
+                "ORDER_COL_2": [1, None, 2, None, 3, None] * 3,
+                "ORDER_COL_3": np.arange(18),
                 # Group 1 will pass the HAVING check, group 2 will not
                 # Group 3 will pass
-                "having_len_str": [""] * 6 + ["aaaa"] * 6 + ["a"] * 6,
+                "HAVING_LEN_STR": [""] * 6 + ["aaaa"] * 6 + ["a"] * 6,
             }
         )
     }

@@ -16,9 +16,9 @@ from bodosql.tests.utils import check_query
 def test_lateral_split_to_table(memory_leak_check):
     query = "SELECT lat.value, COUNT(*) FROM table1, LATERAL SPLIT_TO_TABLE(str_col, ';') lat GROUP BY 1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "str_col": [
+                "STR_COL": [
                     "red;orange;yellow",
                     "red",
                     None,
@@ -188,9 +188,9 @@ def test_lateral_split_to_table(memory_leak_check):
 )
 def test_lateral_flatten_arrays(query, answer, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "arr_col": [
+                "ARR_COL": [
                     [1],
                     [],
                     [2, 3],
@@ -202,8 +202,8 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
                     None,
                     [14],
                 ],
-                "str_col": ["a b c", "d e f", "GHI", "we attack at dawn", ""] * 2,
-                "int_col": list(range(10)),
+                "STR_COL": ["a b c", "d e f", "GHI", "we attack at dawn", ""] * 2,
+                "INT_COL": list(range(10)),
             }
         )
     }
@@ -261,7 +261,7 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
     ],
 )
 def test_generator(query, answer, is_out_distributed, memory_leak_check):
-    ctx = {"table1": pd.DataFrame({"I": [0, 0, 1, 0, 0, 1, 2, 1, 0]})}
+    ctx = {"TABLE1": pd.DataFrame({"I": [0, 0, 1, 0, 0, 1, 2, 1, 0]})}
     check_query(
         query,
         ctx,
@@ -503,7 +503,7 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
     ],
 )
 def test_lateral_flatten_json(query, df, answer, memory_leak_check):
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,

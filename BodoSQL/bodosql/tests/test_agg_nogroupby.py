@@ -106,7 +106,7 @@ def test_median(args, spark_info, memory_leak_check):
 
     check_query(
         query,
-        {"table1": df1},
+        {"TABLE1": df1},
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -123,7 +123,7 @@ def test_aliasing_agg_numeric(
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
-        if not np.issubdtype(bodosql_numeric_types["table1"]["A"].dtype, np.integer):
+        if not np.issubdtype(bodosql_numeric_types["TABLE1"]["A"].dtype, np.integer):
             return
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1"
@@ -231,7 +231,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         check_dtype=False,
         is_out_distributed=False,
         expected_output=pd.DataFrame(
-            {"B": [bodosql_interval_types["table1"]["B"].nunique()]}
+            {"B": [bodosql_interval_types["TABLE1"]["B"].nunique()]}
         ),
     )
     check_query(
@@ -241,7 +241,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({"B": [len(bodosql_interval_types["table1"])]}),
+        expected_output=pd.DataFrame({"B": [len(bodosql_interval_types["TABLE1"])]}),
     )
 
 
@@ -376,10 +376,9 @@ def test_max_interval_types(bodosql_interval_types, memory_leak_check):
         query,
         bodosql_interval_types,
         None,
-        check_names=False,
         is_out_distributed=False,
         expected_output=pd.DataFrame(
-            {"output": [bodosql_interval_types["table1"]["A"].max()]}
+            {"OUTPUT": [bodosql_interval_types["TABLE1"]["A"].max()]}
         ),
     )
 
@@ -396,7 +395,7 @@ def test_max_literal(basic_df, memory_leak_check):
         None,
         # Max outputs a nullable output by default to handle empty Series values
         check_dtype=False,
-        expected_output=pd.DataFrame({"A": basic_df["table1"]["A"], "SCALAR_MAX": 1}),
+        expected_output=pd.DataFrame({"A": basic_df["TABLE1"]["A"], "SCALAR_MAX": 1}),
     )
 
 
@@ -414,7 +413,7 @@ def test_max_literal(basic_df, memory_leak_check):
 )
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [True, False, None, True, True, None, False, True] * 5,
@@ -508,7 +507,7 @@ def test_agg_replicated(datapath, memory_leak_check):
     """
 
     def impl(filename):
-        bc = bodosql.BodoSQLContext({"t1": bodosql.TablePath(filename, "parquet")})
+        bc = bodosql.BodoSQLContext({"T1": bodosql.TablePath(filename, "parquet")})
         return bc.sql("select count(B) as cnt from t1")
 
     filename = datapath("sample-parquet-data/no_index.pq")
@@ -553,7 +552,7 @@ def test_any_value(query, spark_info, memory_leak_check):
     implemented in a way that is reproducible (by always returning the first
     value)"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [5, 3, 1, 10, 30, -1, 0, None, 3, 1, 5, 4, -1, None, 10] * 2,
@@ -595,7 +594,7 @@ def test_max_min_tz_aware(memory_leak_check):
             "A": S,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
         {"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1)
     )
@@ -623,7 +622,7 @@ def test_count_tz_aware(memory_leak_check):
             "A": S,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
         {"OUTPUT1": S.count(), "OUTPUT2": len(S)}, index=pd.RangeIndex(0, 1, 1)
     )
@@ -651,7 +650,7 @@ def test_any_value_tz_aware(memory_leak_check):
             "A": S,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
     # Note: We also output the first value although this is not strictly defined.
     query = "Select ANY_VALUE(A) as output1 from table1"
@@ -691,7 +690,7 @@ def test_tz_aware_having(memory_leak_check):
             * 5,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
     query = "Select MIN(A) as output1 from table1 HAVING MAX(A) > min(B)"
     check_query(
@@ -725,7 +724,7 @@ def test_single_value(spark_info, memory_leak_check):
 
     check_query(
         query,
-        {"t1": df1, "t2": df2},
+        {"T1": df1, "T2": df2},
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -746,7 +745,7 @@ def test_single_value2(spark_info, memory_leak_check):
 
     check_query(
         query,
-        {"t1": df1},
+        {"T1": df1},
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -777,7 +776,7 @@ def test_single_value_error():
         with pytest.raises(ValueError, match=r"Expected single value in column"):
             check_query(
                 query,
-                {"t1": df1, "t2": df2},
+                {"T1": df1, "T2": df2},
                 None,
                 check_names=False,
                 check_dtype=False,
@@ -822,7 +821,7 @@ def test_approx_percentile(data, quantiles, memory_leak_check):
     # observations of the test data outputs.
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=expected_output,
         check_names=False,
@@ -852,7 +851,7 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
     # Datasets designed to exhibit different distributions, thus producing myriad
     # cases of kurtosis and skew calculations
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [int(np.log2(i**2 + 10)) for i in range(100)],
@@ -889,9 +888,9 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         result = pd.DataFrame({"A0": [0]})
         i = 0
         for col in cols:
-            result[f"A{i}"] = ctx["table1"][col].skew()
+            result[f"A{i}"] = ctx["TABLE1"][col].skew()
             i += 1
-            result[f"A{i}"] = ctx["table1"][col].kurtosis()
+            result[f"A{i}"] = ctx["TABLE1"][col].kurtosis()
             i += 1
         return result
 
@@ -929,7 +928,7 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
     # Datasets designed to exhibit different distributions, thus producing myriad
     # cases of kurtosis and skew calculations
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 # All null (int32)
                 "A": pd.Series([None] * 5, dtype=pd.Int32Dtype()),
@@ -1032,10 +1031,8 @@ def test_bit_agg(col, expected, memory_leak_check):
         expected (int): Expected output
         memory_leak_check (): Fixture, see `conftest.py`.
     """
-    bit_agg_funcs = ["BITOR_AGG", "BITAND_AGG", "BITXOR_AGG"]
-
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": col,
             }
@@ -1142,7 +1139,7 @@ def test_all_null(memory_leak_check):
 
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=expected,
         check_dtype=False,

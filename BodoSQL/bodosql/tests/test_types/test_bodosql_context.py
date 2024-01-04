@@ -67,47 +67,47 @@ def test_add_or_replace_view(memory_leak_check):
     df3 = pd.DataFrame({"B": [1, 2, 3]})
     bc_orig = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "TABLE1": df1,
+            "TABLE2": df2,
         }
     )
     bc = bc_orig
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False
     )
-    bc = bc_orig.add_or_replace_view("t3", df3)
+    bc = bc_orig.add_or_replace_view("TABLE3", df3)
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t1"), df1, check_column_type=False
-    )
-    pd.testing.assert_frame_equal(
-        bc.sql("select * from t2"), df2, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t3"), df3, check_column_type=False
-    )
-    bc = bc.add_or_replace_view("t1", df3)
-    pd.testing.assert_frame_equal(
-        bc.sql("select * from t1"), df3, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t2"), df2, check_column_type=False
+        bc.sql("select * from TABLE3"), df3, check_column_type=False
+    )
+    bc = bc.add_or_replace_view("TABLE1", df3)
+    pd.testing.assert_frame_equal(
+        bc.sql("select * from TABLE1"), df3, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t3"), df3, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False
+    )
+    pd.testing.assert_frame_equal(
+        bc.sql("select * from TABLE3"), df3, check_column_type=False
     )
 
     # The original context should be unchanged.
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from t1"), df1, check_column_type=False
+        bc_orig.sql("select * from TABLE1"), df1, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from t2"), df2, check_column_type=False
+        bc_orig.sql("select * from TABLE2"), df2, check_column_type=False
     )
     with pytest.raises(BodoError):
-        bc_orig.sql("select * from t3")
+        bc_orig.sql("select * from TABLE3")
 
 
 def test_remove_view(memory_leak_check):
@@ -115,37 +115,37 @@ def test_remove_view(memory_leak_check):
     df2 = pd.DataFrame({"B": [1, 2, 3]})
     bc_orig = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "TABLE1": df1,
+            "TABLE2": df2,
         }
     )
     bc = bc_orig
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False
     )
-    bc = bc.remove_view("t2")
+    bc = bc.remove_view("TABLE2")
     pd.testing.assert_frame_equal(
-        bc.sql("select * from t1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False
     )
     with pytest.raises(BodoError):
-        bc.sql("select * from t2")
+        bc.sql("select * from TABLE2")
     with pytest.raises(BodoError, match="'name' must refer to a registered view"):
-        bc.remove_view("t2")
-    bc = bc.remove_view("t1")
+        bc.remove_view("TABLE2")
+    bc = bc.remove_view("TABLE1")
     with pytest.raises(BodoError):
-        bc.sql("select * from t1")
+        bc.sql("select * from TABLE1")
     with pytest.raises(BodoError):
-        bc.sql("select * from t2")
+        bc.sql("select * from TABLE2")
 
     # The original context should be unchanged.
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from t1"), df1, check_column_type=False
+        bc_orig.sql("select * from TABLE1"), df1, check_column_type=False
     )
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from t2"), df2, check_column_type=False
+        bc_orig.sql("select * from TABLE2"), df2, check_column_type=False
     )
 
 
@@ -156,11 +156,11 @@ def test_bodosql_context_boxing_no_catalog(datapath, memory_leak_check):
 
     bc = BodoSQLContext(
         {
-            "t1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
             ),
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-            "t3": TablePath(
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE3": TablePath(
                 datapath("sample-parquet-data/partitioned"),
                 "parquet",
             ),
@@ -179,11 +179,11 @@ def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
     """
     bc = BodoSQLContext(
         {
-            "t1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
             ),
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-            "t3": TablePath(
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE3": TablePath(
                 datapath("sample-parquet-data/partitioned"),
                 "parquet",
             ),
@@ -210,10 +210,10 @@ def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
         pytest.param(
             BodoSQLContext(
                 {
-                    "t1": pd.DataFrame(
+                    "TABLE1": pd.DataFrame(
                         {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
                     ),
-                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                    "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
                 },
             ),
             id="no-catalog",
@@ -221,10 +221,10 @@ def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
         pytest.param(
             BodoSQLContext(
                 {
-                    "t1": pd.DataFrame(
+                    "TABLE1": pd.DataFrame(
                         {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
                     ),
-                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                    "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
                 },
                 SnowflakeCatalog(
                     os.environ.get("SF_USERNAME", ""),
@@ -246,9 +246,9 @@ def test_bodosql_context_boxed_sql(bc, memory_leak_check):
     """
 
     def impl(bc):
-        return bc.sql("select * from __bodolocal__.t1")
+        return bc.sql("select * from __bodolocal__.TABLE1")
 
-    py_output = bc.tables["t1"]
+    py_output = bc.tables["TABLE1"]
     check_func(impl, (bc,), py_output=py_output)
 
 
@@ -261,7 +261,7 @@ def test_bodosql_context_boxed_sql_table_path(
     """
 
     def impl(bc):
-        return bc.sql("select * from t1")
+        return bc.sql("select * from TABLE1")
 
     py_out = pd.DataFrame(
         {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
@@ -269,9 +269,9 @@ def test_bodosql_context_boxed_sql_table_path(
 
     bc = BodoSQLContext(
         {
-            "t1": py_out,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-            "t3": TablePath(datapath("sample-parquet-data/partitioned"), "parquet"),
+            "TABLE1": py_out,
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE3": TablePath(datapath("sample-parquet-data/partitioned"), "parquet"),
         }
     )
     check_func(impl, (bc,), py_output=py_out)
@@ -279,19 +279,19 @@ def test_bodosql_context_boxed_sql_table_path(
 
 def test_add_or_replace_view_jit(memory_leak_check):
     def impl1(bc, df):
-        bc = bc.add_or_replace_view("t1", df)
-        return bc.sql("select * from t1")
+        bc = bc.add_or_replace_view("TABLE1", df)
+        return bc.sql("select * from TABLE1")
 
     def impl2(bc):
-        return bc.sql("select * from t1")
+        return bc.sql("select * from TABLE1")
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
     df3 = pd.DataFrame({"B": [1, 2, 3]})
     bc = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "TABLE1": df1,
+            "TABLE2": df2,
         }
     )
     # check adding a table
@@ -302,18 +302,18 @@ def test_add_or_replace_view_jit(memory_leak_check):
 
 def test_remove_view_jit(memory_leak_check):
     def impl1(bc):
-        bc = bc.remove_view("t1")
-        return bc.sql("select * from t1")
+        bc = bc.remove_view("TABLE1")
+        return bc.sql("select * from TABLE1")
 
     def impl2(bc):
-        return bc.sql("select * from t1")
+        return bc.sql("select * from TABLE1")
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
     bc = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "TABLE1": df1,
+            "TABLE2": df2,
         }
     )
     # check removing a table
@@ -329,20 +329,20 @@ def test_add_or_replace_view_table_path(datapath, memory_leak_check):
     """
 
     def impl1(bc, path):
-        bc = bc.add_or_replace_view("t3", path)
-        return bc.sql("select * from t1")
+        bc = bc.add_or_replace_view("TABLE3", path)
+        return bc.sql("select * from TABLE1")
 
     def impl2(bc):
-        return bc.sql("select * from t1")
+        return bc.sql("select * from TABLE1")
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
     path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
-            "t4": path,
+            "TABLE1": df1,
+            "TABLE2": df2,
+            "TABLE4": path,
         }
     )
     # check adding a table
@@ -356,21 +356,21 @@ def test_remove_view_table_path(datapath, memory_leak_check):
     """
 
     def impl1(bc):
-        bc = bc.remove_view("t4")
-        return bc.sql("select * from t1")
+        bc = bc.remove_view("TABLE4")
+        return bc.sql("select * from TABLE1")
 
     def impl2(bc):
-        bc = bc.remove_view("t2")
-        return bc.sql("select * from t1")
+        bc = bc.remove_view("TABLE2")
+        return bc.sql("select * from TABLE1")
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
     path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
-            "t4": path,
+            "TABLE1": df1,
+            "TABLE2": df2,
+            "TABLE4": path,
         }
     )
     # check adding a table
@@ -382,8 +382,8 @@ def test_bodosql_context_global_import(memory_leak_check):
     """Tests that BodoSQLContext works as a global relative import in JIT"""
 
     def impl(df):
-        bc = BodoSQLContext({"t1": df})
-        return bc.sql("select * from t1")
+        bc = BodoSQLContext({"TABLE1": df})
+        return bc.sql("select * from TABLE1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     check_func(impl, (df,), py_output=df)
@@ -394,8 +394,8 @@ def test_bodosql_context_closure_import(memory_leak_check):
     from bodosql import BodoSQLContext
 
     def impl(df):
-        bc = BodoSQLContext({"t1": df})
-        return bc.sql("select * from t1")
+        bc = BodoSQLContext({"TABLE1": df})
+        return bc.sql("select * from TABLE1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     check_func(impl, (df,), py_output=df)
@@ -416,7 +416,7 @@ def test_add_or_replace_catalog(dummy_snowflake_catalogs, memory_leak_check):
     # TODO: Update with real catalogs
     catalog1, catalog2 = dummy_snowflake_catalogs
 
-    bc = BodoSQLContext({"catalog_table": local_df})
+    bc = BodoSQLContext({"CATALOG_TABLE": local_df})
     check_func(impl, (bc,), py_output=local_df)
     bc2 = bc.add_or_replace_catalog(catalog1)
     # TODO: Update the expected output
@@ -445,7 +445,7 @@ def test_remove_catalog(dummy_snowflake_catalogs, memory_leak_check):
     local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     # TODO: Update with a real catalog
     catalog = dummy_snowflake_catalogs[0]
-    bc = BodoSQLContext({"catalog_table": local_df}, catalog)
+    bc = BodoSQLContext({"CATALOG_TABLE": local_df}, catalog)
     # TODO: Update the expected output
     check_func(impl, (bc,), py_output=local_df)
     bc2 = bc.remove_catalog()
@@ -483,7 +483,7 @@ def test_add_or_replace_catalog_jit(
     # TODO: Update with real catalogs
     catalog1, catalog2 = dummy_snowflake_catalogs
 
-    bc = BodoSQLContext({"catalog_table": local_df, "t2": table_path})
+    bc = BodoSQLContext({"CATALOG_TABLE": local_df, "TABLE2": table_path})
     check_func(impl, (bc, catalog1))
     bc = bc.add_or_replace_catalog(catalog1)
     check_func(impl, (bc, catalog2))
@@ -511,7 +511,7 @@ def test_remove_catalog_jit(datapath, dummy_snowflake_catalogs, memory_leak_chec
     # TODO: Update with a real catalog
     catalog = dummy_snowflake_catalogs[0]
 
-    bc = BodoSQLContext({"catalog_table": local_df, "t2": table_path}, catalog)
+    bc = BodoSQLContext({"CATALOG_TABLE": local_df, "TABLE2": table_path}, catalog)
     check_func(impl, (bc,))
     bc = bc.remove_catalog()
     with pytest.raises(
@@ -540,9 +540,9 @@ def test_bodosql_context_arg_dist(memory_leak_check):
     # 1D vs. 1D_Var issues
     n = 25949 if rank == 0 else 26315
     action_df = pd.DataFrame(
-        {"num_impressions_1w": np.zeros(n), "num_clicks_1w": np.zeros(n)}
+        {"NUM_IMPRESSIONS_1W": np.zeros(n), "NUM_CLICKS_1W": np.zeros(n)}
     )
-    bc = BodoSQLContext({"_action_counts": action_df})
+    bc = BodoSQLContext({"_ACTION_COUNTS": action_df})
     run_query2(bc, outermost_QUERY)
 
     # all arrays should be 1D_Var, not 1D
@@ -561,17 +561,16 @@ def test_bodosql_context_loop_unrolling(memory_leak_check):
         output.columns = [str(col).upper() for col in output.columns]
         return output
 
-    query = "select * from t1"
-    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
-    py_output = df.rename(columns={"a": "A", "b": "B"})
+    query = "select * from TABLE1"
+    df = pd.DataFrame({"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25})
 
     bc = BodoSQLContext(
         {
-            "t1": df,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE1": df,
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
         }
     )
-    check_func(impl, (bc, query), py_output=py_output)
+    check_func(impl, (bc, query), py_output=df)
 
 
 def test_bodosql_context_generate_plan(memory_leak_check):
@@ -583,8 +582,8 @@ def test_bodosql_context_generate_plan(memory_leak_check):
     from bodosql import BodoSQLContext
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
-    bc = BodoSQLContext({"t1": df})
-    query = "select * from t1"
+    bc = BodoSQLContext({"TABLE1": df})
+    query = "select * from TABLE1"
 
     # Don't perform a detailed check on the output,
     # since it's a string that can change.
@@ -600,19 +599,19 @@ def test_bodosql_context_generate_plan(memory_leak_check):
 @pytest.mark.parametrize(
     "query",
     [
-        pytest.param("select * from t1", id="valid-query"),
-        pytest.param("select * from table1", id="invalid-query"),
+        pytest.param("select * from TABLE1", id="valid-query"),
+        pytest.param('select * from "table1"', id="invalid-query"),
     ],
 )
 def test_validate_query(query, request, memory_leak_check):
     """
     Make sure validate query fails on a bad query.
     """
-    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    df = pd.DataFrame({"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25})
     bc = BodoSQLContext(
         {
-            "t1": df,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE1": df,
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
         }
     )
 
@@ -625,19 +624,19 @@ def test_validate_query(query, request, memory_leak_check):
 @pytest.mark.parametrize(
     "query",
     [
-        pytest.param("select * from t1", id="valid-query"),
-        pytest.param("select * from table1", id="invalid-query"),
+        pytest.param("select * from TABLE1", id="valid-query"),
+        pytest.param('select * from "table1"', id="invalid-query"),
     ],
 )
 def test_fail_validate_also_fails_compile(query, request, memory_leak_check):
     """
     All queries that don't validate also shouldn't compile.
     """
-    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    df = pd.DataFrame({"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25})
     bc = BodoSQLContext(
         {
-            "t1": df,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE1": df,
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
         }
     )
 
@@ -652,12 +651,12 @@ def test_fail_validate_also_fails_compile(query, request, memory_leak_check):
     "query_text",
     [
         """
-def impl(t1, t2):
+def impl(TABLE1, TABLE2):
     return 'hello' + True
 """,
         """
-def impl(t1, t2):
-    return t1[t2]
+def impl(TABLE1, TABLE2):
+    return TABLE1[TABLE2]
 """,
     ],
 )
@@ -668,11 +667,11 @@ def test_fails_compile(query_text):
     generating a query that fails to compile.
     """
 
-    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    df = pd.DataFrame({"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25})
     bc = BodoSQLContext(
         {
-            "t1": df,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "TABLE1": df,
+            "TABLE2": pd.DataFrame({"C": [b"345253"] * 100}),
         }
     )
 
@@ -735,7 +734,7 @@ def test_bodosql_inline_control_flow(memory_leak_check, test_fn_and_expected):
 
     @bodo.jit
     def impl(df, n):
-        bc = BodoSQLContext({"t1": df})
+        bc = BodoSQLContext({"TABLE1": df})
         return bc.__gen_control_flow_fn((test_fn, n))
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})

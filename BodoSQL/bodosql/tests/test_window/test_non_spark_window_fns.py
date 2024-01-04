@@ -20,7 +20,7 @@ def test_conditional_event_pure(memory_leak_check):
     (thus ensuring that groupby.window can be used)
     """
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "P": ["A"] * 10,
                 "O": pd.Series(list(range(10))),
@@ -68,7 +68,7 @@ def test_conditional_event_pure(memory_leak_check):
     }
     window = " partition by P order by O"
     selects = []
-    for col in ctx["table1"].columns[2:]:
+    for col in ctx["TABLE1"].columns[2:]:
         selects.append(f"CONDITIONAL_CHANGE_EVENT({col}) OVER ({window})")
     selects.append(f"CONDITIONAL_TRUE_EVENT(BOOL_NULLABLE) OVER ({window})")
     selects.append(f"CONDITIONAL_TRUE_EVENT(BOOL_NUMPY) OVER ({window})")
@@ -111,7 +111,7 @@ def test_conditional_event_pure(memory_leak_check):
 
 def test_conditional_event_mixed(memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "P": ["A"] * 10,
                 "O": pd.Series(list(range(10))),
@@ -210,7 +210,7 @@ def test_median(data_col, partition_col, window_frame, answer):
     assert len(data_col) == len(partition_col)
     query = f"SELECT A, B, C, MEDIAN(A) OVER (PARTITION BY B ORDER BY C {window_frame}) FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": data_col, "B": partition_col, "C": list(range(len(data_col)))}
         )
     }
@@ -280,7 +280,7 @@ def test_ratio_to_report(data_info, dtype, memory_leak_check):
     answer["A"] = answers
     # Shuffle the rows of the input dataframe
     ordering = np.random.default_rng(42).permutation(np.arange(len(data)))
-    ctx = {"table1": df.iloc[ordering]}
+    ctx = {"TABLE1": df.iloc[ordering]}
     check_query(
         query,
         ctx,
@@ -548,7 +548,7 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
 
     assert len(data_col) == 10
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": data_col,
                 "B": ["A"] * 5 + ["B"] * 5,
@@ -585,7 +585,7 @@ def test_variance_stddev_nan(memory_leak_check):
         )
     query = f"SELECT O, {', '.join(calculations)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "P": [1] * 10,
                 "O": range(10),
@@ -636,7 +636,7 @@ def test_kurtosis_skew(memory_leak_check):
         )
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [1, None, 2, None]
@@ -697,7 +697,7 @@ def test_bool_agg(memory_leak_check):
         )
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [None, 1, 0, None, 2, 3, 0, None], dtype=pd.Int32Dtype()
@@ -789,7 +789,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
     bit_agg_funcs = ["BITOR_AGG", "BITAND_AGG", "BITXOR_AGG"]
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series([1, 1, 1, 2, 2, 2, 3, 3, 3, 4], dtype=pd.Int32Dtype()),
                 "B": pd.Series(data, dtype=dtype),

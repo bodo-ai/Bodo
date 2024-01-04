@@ -28,7 +28,7 @@ def test_snowflake_read_sql_unused(memory_leak_check):
 
     def test_impl(query, conn):
         df = pd.read_sql(query, conn)
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select usedcol from table1")
 
     db = "TEST_DB"
@@ -77,7 +77,7 @@ def test_snowflake_table_path_unused(memory_leak_check):
 
     def test_impl(conn):
         bc = bodosql.BodoSQLContext(
-            {"table1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
+            {"TABLE1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
         )
         return bc.sql("select usedcol from table1")
 
@@ -119,7 +119,7 @@ def test_snowflake_table_path_unused_subquery(memory_leak_check):
 
     def test_impl(conn):
         bc = bodosql.BodoSQLContext(
-            {"table1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
+            {"TABLE1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
         )
         return bc.sql("select usedcol from (select * from table1 where usedcol = 1)")
 

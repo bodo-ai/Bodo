@@ -26,9 +26,9 @@ def test_trim(trim_df, memory_leak_check):
         "SELECT TRIM(C, LEFT(C, 1)) FROM table1",
     )
     answers = (
-        pd.DataFrame({0: trim_df["table1"]["A"].str.strip()}),
-        pd.DataFrame({0: trim_df["table1"]["B"].str.strip("*")}),
-        pd.DataFrame({0: trim_df["table1"]["C"].str.strip("asd")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["A"].str.strip()}),
+        pd.DataFrame({0: trim_df["TABLE1"]["B"].str.strip("*")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["C"].str.strip("asd")}),
         pd.DataFrame(
             {0: pd.Series(["sdafzcvdf", "sasdaads", None, "cvxcbxasd", "akjhkjhs"] * 4)}
         ),
@@ -58,10 +58,10 @@ def test_ltrim(trim_df, memory_leak_check):
         "SELECT LTRIM(C, LEFT(C, 1)) FROM table1",
     )
     answers = (
-        pd.DataFrame({0: trim_df["table1"]["A"].str.lstrip()}),
-        pd.DataFrame({0: trim_df["table1"]["B"].str.lstrip("*")}),
-        pd.DataFrame({0: trim_df["table1"]["C"].str.lstrip("asd")}),
-        pd.DataFrame({0: trim_df["table1"]["C"].str[1:]}),
+        pd.DataFrame({0: trim_df["TABLE1"]["A"].str.lstrip()}),
+        pd.DataFrame({0: trim_df["TABLE1"]["B"].str.lstrip("*")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["C"].str.lstrip("asd")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["C"].str[1:]}),
     )
 
     for query, answer in zip(queries, answers):
@@ -87,10 +87,10 @@ def test_rtrim(trim_df, memory_leak_check):
         "SELECT RTRIM(C, RIGHT(C, 1)) FROM table1",
     )
     answers = (
-        pd.DataFrame({0: trim_df["table1"]["A"].str.rstrip()}),
-        pd.DataFrame({0: trim_df["table1"]["B"].str.rstrip("*")}),
-        pd.DataFrame({0: trim_df["table1"]["C"].str.rstrip("asd")}),
-        pd.DataFrame({0: trim_df["table1"]["C"].str[:-1]}),
+        pd.DataFrame({0: trim_df["TABLE1"]["A"].str.rstrip()}),
+        pd.DataFrame({0: trim_df["TABLE1"]["B"].str.rstrip("*")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["C"].str.rstrip("asd")}),
+        pd.DataFrame({0: trim_df["TABLE1"]["C"].str[:-1]}),
     )
 
     for query, answer in zip(queries, answers):

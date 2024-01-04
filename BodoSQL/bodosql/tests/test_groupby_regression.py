@@ -28,11 +28,11 @@ def test_groupby_regression_all_unique():
 
     try:
         bodo.bodosql_use_streaming_plan = True
-        t1 = pd.DataFrame({"a": range(data_size), "b": range(data_size)})
-        _, streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"t1": t1}))
+        t1 = pd.DataFrame({"A": range(data_size), "B": range(data_size)})
+        _, streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"T1": t1}))
 
         bodo.bodosql_use_streaming_plan = False
-        _, non_streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"t1": t1}))
+        _, non_streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"T1": t1}))
     finally:
         bodo.bodosql_use_streaming_plan = prev_streaming
 
@@ -53,14 +53,14 @@ def test_groupby_regression_few_unique():
         bodo.bodosql_use_streaming_plan = True
         t1 = pd.DataFrame(
             {
-                "a": list(range(few_unique_nkeys)) * (data_size // few_unique_nkeys),
-                "b": range(data_size),
+                "A": list(range(few_unique_nkeys)) * (data_size // few_unique_nkeys),
+                "B": range(data_size),
             }
         )
-        _, streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"t1": t1}))
+        _, streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"T1": t1}))
 
         bodo.bodosql_use_streaming_plan = False
-        _, non_streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"t1": t1}))
+        _, non_streaming_time = bodo.jit(impl)(bodosql.BodoSQLContext({"T1": t1}))
     finally:
         bodo.bodosql_use_streaming_plan = prev_streaming
     print("streaming_time_few_unique: ", streaming_time)

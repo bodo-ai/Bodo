@@ -76,35 +76,35 @@ from bodo.utils.typing import BodoError
 pytestmark = pytest.mark.iceberg
 
 WRITE_TABLES = [
-    "bool_binary_table",
-    "dt_tsz_table",
-    "tz_aware_table",
-    "dtype_list_table",
-    "numeric_table",
-    "string_table",
-    "list_table",
-    "struct_table",
-    "optional_table",
+    "BOOL_BINARY_TABLE",
+    "DT_TSZ_TABLE",
+    "TZ_AWARE_TABLE",
+    "DTYPE_LIST_TABLE",
+    "NUMERIC_TABLE",
+    "STRING_TABLE",
+    "LIST_TABLE",
+    "STRUCT_TABLE",
+    "OPTIONAL_TABLE",
     # TODO Needs investigation.
     pytest.param(
-        "map_table",
+        "MAP_TABLE",
         marks=pytest.mark.skip(
             reason="Results in runtime error that's consistent with to_parquet."
         ),
     ),
     pytest.param(
-        "decimals_table",
+        "DECIMALS_TABLE",
         marks=pytest.mark.skip(
             reason="We don't support custom precisions and scale at the moment."
         ),
     ),
     pytest.param(
-        "decimals_list_table",
+        "DECIMALS_LIST_TABLE",
         marks=pytest.mark.skip(
             reason="We don't support custom precisions and scale at the moment."
         ),
     ),
-    "dict_encoded_string_table",
+    "DICT_ENCODED_STRING_TABLE",
 ]
 
 
@@ -112,7 +112,7 @@ WRITE_TABLES = [
 def simple_dataframe(request):
     return (
         request.param,
-        f"simple_{request.param}",
+        f"SIMPLE_{request.param}",
         SIMPLE_TABLES_MAP[request.param][0],
     )
 
@@ -123,13 +123,13 @@ def simple_dataframe(request):
     [
         # TODO: BE-2831 Reading maps from parquet not supported yet
         pytest.param(
-            "simple_map_table",
+            "SIMPLE_MAP_TABLE",
             marks=pytest.mark.skip(reason="Need to support reading maps from parquet."),
         ),
-        "simple_string_table",
-        "partitions_dt_table",
-        "simple_dt_tsz_table",
-        "simple_decimals_table",
+        "SIMPLE_STRING_TABLE",
+        "PARTITIONS_DT_TABLE",
+        "SIMPLE_DT_TSZ_TABLE",
+        "SIMPLE_DECIMALS_TABLE",
     ],
 )
 def test_simple_table_read(
@@ -166,13 +166,13 @@ def test_simple_table_read(
     [
         # TODO: BE-2831 Reading maps from parquet not supported yet
         pytest.param(
-            "simple_map_table",
+            "SIMPLE_MAP_TABLE",
             marks=pytest.mark.skip(reason="Need to support reading maps from parquet."),
         ),
-        "simple_string_table",
-        "partitions_dt_table",
-        "simple_dt_tsz_table",
-        "simple_decimals_table",
+        "SIMPLE_STRING_TABLE",
+        "PARTITIONS_DT_TABLE",
+        "SIMPLE_DT_TSZ_TABLE",
+        "SIMPLE_DECIMALS_TABLE",
     ],
 )
 def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
@@ -209,7 +209,7 @@ def test_simple_tz_aware_table_read(
     # memory_leak_check,
 ):
     """
-    Test simple read operation on simple_tz_aware_table.
+    Test simple read operation on SIMPLE_TZ_AWARE_TABLE.
     Needs to be separate since there's a type mismatch between
     original and what's read from Iceberg (written by Spark).
     When Spark reads it and converts it to Pandas, the datatype
@@ -222,7 +222,7 @@ def test_simple_tz_aware_table_read(
     which causes the mismatch.
     """
 
-    table_name = "simple_tz_aware_table"
+    table_name = "SIMPLE_TZ_AWARE_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -249,11 +249,11 @@ def test_simple_numeric_table_read(
     # memory_leak_check,
 ):
     """
-    Test simple read operation on test table simple_numeric_table
+    Test simple read operation on test table SIMPLE_NUMERIC_TABLE
     with column pruning.
     """
 
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -277,7 +277,7 @@ def test_simple_numeric_table_read(
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "table_name", ["simple_list_table", "simple_decimals_list_table"]
+    "table_name", ["SIMPLE_LIST_TABLE", "SIMPLE_DECIMALS_LIST_TABLE"]
 )
 def test_simple_list_table_read(
     iceberg_database,
@@ -287,7 +287,7 @@ def test_simple_list_table_read(
     # memory_leak_check,
 ):
     """
-    Test reading simple_list_table which consists of columns of lists.
+    Test reading SIMPLE_LIST_TABLE which consists of columns of lists.
     Need to compare Bodo and PySpark results without sorting them.
     """
     db_schema, warehouse_loc = iceberg_database
@@ -316,11 +316,11 @@ def test_simple_bool_binary_table_read(
     # memory_leak_check,
 ):
     """
-    Test reading simple_bool_binary_table which consists of boolean
+    Test reading SIMPLE_BOOL_BINARY_TABLE which consists of boolean
     and binary types (bytes). Needs special handling to compare
     with PySpark.
     """
-    table_name = "simple_bool_binary_table"
+    table_name = "SIMPLE_BOOL_BINARY_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -355,10 +355,10 @@ def test_simple_struct_table_read(
     # memory_leak_check,
 ):
     """
-    Test reading simple_struct_table which consists of columns of structs.
+    Test reading SIMPLE_STRUCT_TABLE which consists of columns of structs.
     Needs special handling since PySpark returns nested structs as tuples.
     """
-    table_name = "simple_struct_table"
+    table_name = "SIMPLE_STRUCT_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -383,11 +383,11 @@ def test_simple_struct_table_read(
 @pytest.mark.slow
 def test_column_pruning(iceberg_database, iceberg_table_conn):
     """
-    Test simple read operation on test table simple_numeric_table
+    Test simple read operation on test table SIMPLE_NUMERIC_TABLE
     with column pruning.
     """
 
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -422,7 +422,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     determined from properties of table data.
     """
 
-    table_name = "simple_dict_encoded_string"
+    table_name = "SIMPLE_DICT_ENCODED_STRING"
 
     db_schema, warehouse_loc = iceberg_database
     spark = get_spark()
@@ -532,7 +532,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
     # create a new table since CachingCatalog inside Bodo can't see schema changes done
     # by Spark code below
-    table_name = "simple_dict_encoded_string2"
+    table_name = "SIMPLE_DICT_ENCODED_STRING2"
     if bodo.get_rank() == 0:
         create_iceberg_table(df, sql_schema, table_name, spark)
     bodo.barrier()
@@ -609,7 +609,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     protection against regressions.
     """
 
-    table_name = "test_dict_encoding_sync_determination"
+    table_name = "TEST_DICT_ENCODING_SYNC_DETERMINATION"
 
     db_schema, warehouse_loc = iceberg_database
     spark = get_spark()
@@ -665,7 +665,7 @@ def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
     determined from properties of table data.
     """
 
-    table_name = "dont_dict_encode_table"
+    table_name = "DONT_DICT_ENCODE_TABLE"
 
     db_schema, warehouse_loc = iceberg_database
     spark = get_spark()
@@ -721,10 +721,10 @@ def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
     """
     Test the use case where Iceberg filters out all files
     based on the provided filters. We need to load an empty
-    dataframe with the right schema in this case.
+    DataFrame with the right schema in this case.
     """
 
-    table_name = "filter_pushdown_test_table"
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -754,7 +754,7 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
     """
     comm = MPI.COMM_WORLD
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     # Format the connection string since we don't go through pd.read_sql_table
@@ -784,11 +784,11 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
 def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
     """
     Test that reading from an Iceberg table in MERGE INTO COW mode
-    returns a dataframe with an additional row id column
+    returns a DataFrame with an additional row id column
     """
 
     comm = MPI.COMM_WORLD
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -807,11 +807,11 @@ def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
     if isinstance(err, Exception):
         raise err
 
-    # _bodo_row_id is always loaded in MERGE INTO COW Mode, see sql_ext.py
+    # _BODO_ROW_ID is always loaded in MERGE INTO COW Mode, see sql_ext.py
     # Since Iceberg output is unordered, not guarantee that the row id values
     # are assigned to the same row. Thus, need to check them separately
     check_func(
-        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0]["_bodo_row_id"],  # type: ignore
+        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0]["_BODO_ROW_ID"],  # type: ignore
         (table_name, conn, db_schema),
         py_output=np.arange(out_len),
     )
@@ -833,7 +833,7 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     Test that simple date based partitions can be read as expected.
     """
 
-    table_name = "partitions_dt_table"
+    table_name = "PARTITIONS_DT_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -866,7 +866,7 @@ def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
     Test that simple filter pushdown works inside the parquet file.
     """
 
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -907,7 +907,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     """
 
     comm = MPI.COMM_WORLD
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -920,7 +920,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         # returning tuples.
         df, _, _ = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)  # type: ignore
         df = df[df.B == 2]
-        return df.drop(columns=["_bodo_row_id"])
+        return df.drop(columns=["_BODO_ROW_ID"])
 
     file_list_type = types.List(types.unicode_type)
 
@@ -968,7 +968,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         with set_logging_stream(logger, 1):
             bodo.jit(impl1)(table_name, conn, db_schema)
             check_logger_msg(
-                stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_bodo_row_id']"
+                stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_BODO_ROW_ID']"
             )
             check_logger_msg(stream, "Filter pushdown successfully performed")
     # Load the tracing results
@@ -1035,7 +1035,7 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
 @pytest.mark.slow
 def test_limit_pushdown(iceberg_database, iceberg_table_conn):
     """Test that Limit Pushdown is successfully enabled"""
-    table_name = "simple_string_table"
+    table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -1068,7 +1068,7 @@ def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
     we add support for it.
     """
 
-    table_name = "filter_pushdown_test_table"
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -1089,7 +1089,7 @@ def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
 
-    table_name = "no_table"
+    table_name = "NO_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1105,7 +1105,7 @@ def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
 def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
     """Tests error raised when invalid path is provided."""
 
-    table_name = "filter_pushdown_test_table"
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     db_schema += "not"
@@ -1133,7 +1133,7 @@ def test_write_existing_fail(
         df.to_sql(table_name, conn, db_schema, if_exists="fail")
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    if base_name == "dict_encoded_string_table":
+    if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
     try:
@@ -1179,7 +1179,7 @@ def test_basic_write_replace(
         df.to_sql(table_name, conn, db_schema, if_exists="replace")
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    if base_name == "dict_encoded_string_table":
+    if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
     try:
@@ -1191,7 +1191,7 @@ def test_basic_write_replace(
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
     # Read using PySpark or Bodo, and then check that it's what's expected
 
-    if table_name == "simple_struct_table" and read_behavior == "spark":
+    if table_name == "SIMPLE_STRUCT_TABLE" and read_behavior == "spark":
         # There's an issue where Spark is unable to read structs that we
         # write through Iceberg. It's able to read the parquet file
         # when using `spark.read.format("parquet").load(fname)`
@@ -1206,7 +1206,7 @@ def test_basic_write_replace(
         # Spark doesn't handle null timestamps properly. It converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
         # dataframes to match Spark.
-        if base_name == "dt_tsz_table":
+        if base_name == "DT_TSZ_TABLE":
             df["B"] = df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
             py_out["B"] = py_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
     else:
@@ -1217,7 +1217,7 @@ def test_basic_write_replace(
         py_out = _gather_output(py_out)
 
     # Uncomment if we get Spark to be able to read this table (see comment above)
-    # if table_name == "simple_struct_table":
+    # if table_name == "SIMPLE_STRUCT_TABLE":
     #     py_out["A"] = py_out["A"].map(lambda x: {"a": x["a"], "b": x["b"]})
     #     py_out["B"] = py_out["B"].map(lambda x: {"a": x["a"], "b": x["b"], "c": x["c"]})
 
@@ -1279,7 +1279,7 @@ def test_basic_write_new_append(
     base_name, table_name, df = simple_dataframe
 
     if (
-        table_name == "simple_list_table"
+        table_name == "SIMPLE_LIST_TABLE"
         and initial_write == "spark"
         and behavior == "append"
     ):
@@ -1296,7 +1296,7 @@ def test_basic_write_new_append(
         df.to_sql(table_name, conn, db_schema, if_exists="append")
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    if base_name == "dict_encoded_string_table":
+    if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
     try:
@@ -1344,7 +1344,7 @@ def test_basic_write_new_append(
     passed = None
     comm = MPI.COMM_WORLD
     if bodo.get_rank() == 0:
-        if base_name == "dt_tsz_table":
+        if base_name == "DT_TSZ_TABLE":
             expected_df["B"] = expected_df["B"].fillna(
                 pd.Timestamp(1970, 1, 1, tz="UTC")
             )
@@ -1365,7 +1365,7 @@ def test_basic_write_new_append(
     passed = comm.bcast(passed)
     assert passed == 1
 
-    if table_name.startswith("simple_struct_table"):
+    if table_name.startswith("SIMPLE_STRUCT_TABLE"):
         # There's an issue where Spark is unable to read structs that we
         # write through Iceberg. It's able to read the parquet file
         # when using `spark.read.format("parquet").load(fname)`
@@ -1386,7 +1386,7 @@ def test_basic_write_new_append(
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
 
         # Uncomment if we get Spark to be able to read this table (see comment above)
-        # if table_name == "simple_struct_table":
+        # if table_name == "SIMPLE_STRUCT_TABLE":
         #     spark_out["A"] = spark_out["A"].map(lambda x: {"a": x["a"], "b": x["b"]})
         #     spark_out["B"] = spark_out["B"].map(
         #         lambda x: {"a": x["a"], "b": x["b"], "c": x["c"]}
@@ -1395,7 +1395,7 @@ def test_basic_write_new_append(
         # Spark doesn't handle null timestamps properly. It converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
         # dataframes to match Spark.
-        if base_name == "dt_tsz_table":
+        if base_name == "DT_TSZ_TABLE":
             expected_df["B"] = expected_df["B"].fillna(
                 pd.Timestamp(1970, 1, 1, tz="UTC")
             )
@@ -1424,10 +1424,10 @@ def test_basic_write_runtime_cols_fail(
 ):
     """
     Test that Iceberg writes throw an error at compile-time when
-    writing a Dataframe with runtime columns (created using a pivot)
+    writing a DataFrame with runtime columns (created using a pivot)
     """
 
-    table_name = "simple_numeric_table"
+    table_name = "SIMPLE_NUMERIC_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -1486,7 +1486,7 @@ def test_basic_write_append_not_null_arrays(
 
     sql_schema = [("A", "float", True), ("B", "double", True), ("C", "timestamp", True)]
 
-    table_name = "nullable_table_append_spark"
+    table_name = "NULLABLE_TABLE_APPEND_SPARK"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1517,7 +1517,7 @@ def test_basic_write_append_not_null_arrays(
     "name,sql_schema,df,df_write",
     [
         pytest.param(
-            "null",
+            "NULL",
             [("A", "int", True), ("B", "long", True)],
             pd.DataFrame(
                 {
@@ -1556,7 +1556,7 @@ def test_basic_write_upcasting(
     comm = MPI.COMM_WORLD
     n_pes = comm.Get_size()
 
-    table_name = name + "_upcasting_test"
+    table_name = name + "_UPCASTING_TEST"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1617,7 +1617,7 @@ TYPE_ERR = "to_parquet: Column A is type int64 but is expected to be type int32"
 OTHER_ERR = "See other ranks for runtime error"
 DOWNCAST_INFO = [
     (
-        "null",
+        "NULL",
         [("A", "int", False), ("B", "long", False)],
         pd.DataFrame(
             {
@@ -1640,7 +1640,7 @@ DOWNCAST_INFO = [
         [NULL_ERR, OTHER_ERR],
     ),
     (
-        "type",
+        "TYPE",
         [("A", "int", False), ("B", "float", False)],
         pd.DataFrame(
             {
@@ -1663,7 +1663,7 @@ DOWNCAST_INFO = [
         [TYPE_ERR, OTHER_ERR],
     ),
     (
-        "null_and_type",
+        "NULL_AND_TYPE",
         [("A", "int", False)],
         pd.DataFrame({"A": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int32")}),
         pd.DataFrame({"A": pd.Series([6, 7, 8, 9, 10], dtype="Int64")}),
@@ -1692,7 +1692,7 @@ def test_basic_write_downcasting_fail(
     """
 
     id, sql_schema, df, df_write, _, _ = downcasting_table_info
-    table_name = id + "_downcasting_fail_test"
+    table_name = id + "_DOWNCASTING_FAIL_TEST"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1732,7 +1732,7 @@ def test_basic_write_downcasting(
     n_pes = comm.Get_size()
 
     id, sql_schema, df, df_write, df_fail, err_msgs = downcasting_table_info
-    table_name = id + "_downcasting_test"
+    table_name = id + "_DOWNCASTING_TEST"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1809,7 +1809,7 @@ def test_basic_write_downcasting_copy(
     """
 
     _, sql_schema, df, df_write, _, _ = DOWNCAST_INFO[1]
-    table_name = "downcasting_copy_table"
+    table_name = "DOWNCASTING_COPY_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1842,10 +1842,10 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
     """
     Tests for known errors thrown when writing an Iceberg table.
     """
-    table_name = "simple_bool_binary_table"
+    table_name = "SIMPLE_BOOL_BINARY_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    df = SIMPLE_TABLES_MAP["bool_binary_table"][0]
+    df = SIMPLE_TABLES_MAP["BOOL_BINARY_TABLE"][0]
 
     # Check that error is raised when schema is not provided
     def impl1(df, table_name, conn):
@@ -1888,11 +1888,11 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
     """
 
     # The exact table to use doesn't matter, so picking one at random.
-    df = SIMPLE_TABLES_MAP["numeric_table"][0]
+    df = SIMPLE_TABLES_MAP["NUMERIC_TABLE"][0]
     fname = "test_read_pq_write_iceberg_ds.pq"
 
     # Give it a unique name so there's no conflicts.
-    table_name = "test_read_pq_write_iceberg_table"
+    table_name = "TEST_READ_PQ_WRITE_ICEBERG_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1923,7 +1923,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     is missing an optional column.
     The entire column should be filled with nulls instead of failing.
     """
-    table_name = "simple_optional_table"
+    table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1966,7 +1966,7 @@ def test_iceberg_missing_optional_column_missing_error(
     Test that the correct error is thrown when a dataframe is missing a required
     column.
     """
-    table_name = "simple_optional_table"
+    table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -1995,7 +1995,7 @@ def test_iceberg_missing_optional_column_extra_error(
     Test support for adding a dataframe to an iceberg table where the dataframe
     has an additional column that is not in the Iceberg table schema.
     """
-    table_name = "simple_optional_table"
+    table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -2026,7 +2026,7 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     """
     Test that the correct error is thrown when a dataframe columns in incorrect order.
     """
-    table_name = "simple_optional_table"
+    table_name = "SIMPLE_OPTIONAL_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -2214,7 +2214,7 @@ def test_write_partitioned(
         df.to_sql(table_name, conn, db_schema, if_exists="append")
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    if base_name == "dict_encoded_string_table":
+    if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
     # TODO Add repl test when supported
@@ -2247,7 +2247,7 @@ def test_write_partitioned(
     # contents are as expected
     expected_df = pd.concat([df, df]).reset_index(drop=True)
 
-    if base_name == "bool_binary_table":
+    if base_name == "BOOL_BINARY_TABLE":
         # [BE-3585] Bodo write binary columns as string when partitioned,
         # so validating by reading the table back would fail.
         return
@@ -2255,7 +2255,7 @@ def test_write_partitioned(
     # Spark doesn't handle null timestamps properly. It converts them to
     # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
     # df to match Spark.
-    if base_name == "dt_tsz_table":
+    if base_name == "DT_TSZ_TABLE":
         expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
     # Validate Bodo read output:
@@ -2266,7 +2266,7 @@ def test_write_partitioned(
     # Spark can have inconsistent behavior when reading/writing null
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
-    if base_name == "dt_tsz_table":
+    if base_name == "DT_TSZ_TABLE":
         bodo_out["B"] = bodo_out["B"].fillna(
             pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
         )
@@ -2298,7 +2298,7 @@ def test_write_partitioned(
         # Spark doesn't handle null timestamps consistently. It converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
         # dataframe to match Spark.
-        if base_name == "dt_tsz_table":
+        if base_name == "DT_TSZ_TABLE":
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -2342,7 +2342,7 @@ def test_write_sorted(
         df.to_sql(table_name, conn, db_schema, if_exists="append")
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
-    if base_name == "dict_encoded_string_table":
+    if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
     df = SIMPLE_TABLES_MAP[base_name][0]
@@ -2380,10 +2380,10 @@ def test_write_sorted(
     # Spark can have inconsistent behavior when reading/writing null
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
-    if base_name == "dt_tsz_table":
+    if base_name == "DT_TSZ_TABLE":
         expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
-    if base_name == "bool_binary_table":
+    if base_name == "BOOL_BINARY_TABLE":
         # [BE-3585] Bodo write binary columns as string when partitioned,
         # so validating by reading the table back would fail.
         return
@@ -2395,7 +2395,7 @@ def test_write_sorted(
     # Spark can have inconsistent behavior when reading/writing null
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
-    if base_name == "dt_tsz_table":
+    if base_name == "DT_TSZ_TABLE":
         bodo_out["B"] = bodo_out["B"].fillna(
             pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
         )
@@ -2426,7 +2426,7 @@ def test_write_sorted(
         # Spark doesn't handle null timestamps consistently. It sometimes converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
-        if base_name == "dt_tsz_table":
+        if base_name == "DT_TSZ_TABLE":
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -2455,10 +2455,10 @@ def test_write_part_sort(
     Then read the table using Spark and Bodo and validate that the
     output is as expected.
     """
-    table_name = f"partsort_{PART_SORT_TABLE_BASE_NAME}"
+    table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}"
     df, sql_schema = SIMPLE_TABLES_MAP[PART_SORT_TABLE_BASE_NAME]
     if use_dict_encoding_boxing:
-        table_name += "_dict_encoding"
+        table_name += "_DICT_ENCODING"
         spark = get_spark()
         if bodo.get_rank() == 0:
             create_iceberg_table(
@@ -2626,10 +2626,10 @@ def test_write_part_sort_return_orig(
     """
 
     comm = MPI.COMM_WORLD
-    table_name = f"test_write_sorted_return_orig_table"
+    table_name = f"TEST_WRITE_SORTED_RETURN_ORIG_TABLE"
     df, sql_schema = SIMPLE_TABLES_MAP[PART_SORT_TABLE_BASE_NAME]
     if use_dict_encoding_boxing:
-        table_name += "_dict_encoding"
+        table_name += "_DICT_ENCODING"
 
     if bodo.get_rank() == 0:
         spark = get_spark()
@@ -2699,7 +2699,7 @@ def test_merge_into_cow_write_api(
     passed = True
     try:
         # Create a table to work off of
-        table_name = "merge_into_cow_write_api"
+        table_name = "MERGE_INTO_COW_WRITE_API"
         if bodo.get_rank() == 0:
             df = pd.DataFrame({"A": [1, 2, 3, 4]})
             create_iceberg_table(df, [("A", "long", True)], table_name)
@@ -2781,8 +2781,8 @@ def test_merge_into_cow_write_api_partitioned(
     passed = True
     try:
         # Create a table to work off of
-        table_name = "merge_into_cow_write_api_partitioned"
-        df, sql_schema = SIMPLE_TABLES_MAP["primitives_table"]
+        table_name = "MERGE_INTO_COW_WRITE_API_PARTITIONED"
+        df, sql_schema = SIMPLE_TABLES_MAP["PRIMITIVES_TABLE"]
         create_iceberg_table(
             df,
             sql_schema,
@@ -2874,7 +2874,7 @@ def test_merge_into_cow_write_api_snapshot_check(
     passed = True
     try:
         # Create a table to work off of
-        table_name = "merge_into_cow_write_api_snapshot_check"
+        table_name = "MERGE_INTO_COW_WRITE_API_SNAPSHOT_CHECK"
         df = pd.DataFrame({"A": [1, 2, 3, 4]})
         create_iceberg_table(df, [("A", "long", True)], table_name)
 
@@ -2939,7 +2939,7 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
     comm = MPI.COMM_WORLD
 
     # Create a table to work off of
-    table_name = "merge_into_cow_write_simple_e2e"
+    table_name = "MERGE_INTO_COW_WRITE_SIMPLE_E2E"
     if bodo.get_rank() == 0:
         df = pd.DataFrame({"A": np.arange(10)})
         create_iceberg_table(df, [("A", "long", True)], table_name)
@@ -2955,10 +2955,10 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
         df_update = df[df.A > 5]
         df_update["A"] = df_update["A"] * -10
 
-        df = df.merge(df_update, on="_bodo_row_id", how="left")
+        df = df.merge(df_update, on="_BODO_ROW_ID", how="left")
         df["A"] = df["A_y"].fillna(df["A_x"])
 
-        df = df.drop(columns=["_bodo_row_id", "A_y", "A_x"])
+        df = df.drop(columns=["_BODO_ROW_ID", "A_y", "A_x"])
         bodo.io.iceberg.iceberg_merge_cow_py(
             table_name, conn, db_schema, df, old_snapshot_id, old_fnames
         )
@@ -3019,7 +3019,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
     comm = MPI.COMM_WORLD
 
     # Create a table to work off of
-    table_name = "merge_into_cow_write_simple_e2e_partitions"
+    table_name = "MERGE_INTO_COW_WRITE_SIMPLE_E2E_PARTITIONS"
 
     orig_df = pd.DataFrame(
         {
@@ -3055,10 +3055,10 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
             table_name, conn, db_schema, _bodo_merge_into=True
         )  # type: ignore
         # df is partitioned on int column A and the date column D
-        df_update = df[df.A > 4][["_bodo_row_id", "A"]]
+        df_update = df[df.A > 4][["_BODO_ROW_ID", "A"]]
         df_update["A"] = df_update["A"] * -10
 
-        df = df.merge(df_update, on="_bodo_row_id", how="left")
+        df = df.merge(df_update, on="_BODO_ROW_ID", how="left")
         df["A"] = df["A_y"].fillna(df["A_x"])
 
         df = df[["A", "B", "C", "D"]]
@@ -3218,12 +3218,12 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         assert n_passed == bodo.get_size()
 
     # Test regular write
-    table_name = "test_iceberg_write_nulls_in_dict_table"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE"
     test_output(impl, S, A, table_name)
     test_output(impl_table_format, S, A, f"{table_name}_table_format")
 
     # Test append to a table with partition on S (dict-encoded column)
-    table_name = "test_iceberg_write_nulls_in_dict_table_part_S"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_S"
     if bodo.get_rank() == 0:
         create_iceberg_table(
             empty_df,
@@ -3234,7 +3234,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         )
     test_output(impl, S, A, table_name, "append")
 
-    table_name = "test_iceberg_write_nulls_in_dict_table_part_S_table_format"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_S_TABLE_FORMAT"
     if bodo.get_rank() == 0:
         create_iceberg_table(
             empty_df,
@@ -3246,7 +3246,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     test_output(impl_table_format, S, A, table_name, "append")
 
     # Test append to a table with partition on A (non dict-encoded column)
-    table_name = "test_iceberg_write_nulls_in_dict_table_part_A"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_A"
     if bodo.get_rank() == 0:
         create_iceberg_table(
             empty_df,
@@ -3257,7 +3257,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
         )
     test_output(impl, S, A, table_name, "append")
 
-    table_name = "test_iceberg_write_nulls_in_dict_table_part_A_table_format"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_A_TABLE_FORMAT"
     if bodo.get_rank() == 0:
         create_iceberg_table(
             empty_df,
@@ -3272,7 +3272,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     # partition on one of it (should catch any refcount bugs)
     sql_schema = [("S", "string", True), ("A", "string", True)]
 
-    table_name = "test_iceberg_write_nulls_in_dict_table_part_SS"
+    table_name = "TEST_ICEBERG_WRITE_NULLS_IN_DICT_TABLE_PART_SS"
     if bodo.get_rank() == 0:
         create_iceberg_table(
             empty_df,
@@ -3325,7 +3325,7 @@ def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_chec
         arrow_reader_del(reader)
         return total_max
 
-    table_name = "simple_primitives_table"
+    table_name = "SIMPLE_PRIMITIVES_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -3378,7 +3378,7 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
         arrow_reader_del(reader)
         return total_len
 
-    table_name = "simple_primitives_table"
+    table_name = "SIMPLE_PRIMITIVES_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 

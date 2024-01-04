@@ -133,14 +133,14 @@ def to_time_fn(request):
 )
 def to_time_valid_data(request):
     data, result = request.param
-    ctx = {"table1": pd.DataFrame({"S": data, "B": [True] * len(data)})}
+    ctx = {"TABLE1": pd.DataFrame({"S": data, "B": [True] * len(data)})}
     return ctx, result
 
 
 @pytest.fixture
 def to_time_invalid_data():
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "S": pd.Series(
                     [
@@ -255,7 +255,7 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
 )
 def test_to_time_format_str(to_time_fn, arr, format_str, answer, memory_leak_check):
     query = f"SELECT {to_time_fn}(S, '{format_str}') as A FROM table1"
-    ctx = {"table1": pd.DataFrame({"S": arr})}
+    ctx = {"TABLE1": pd.DataFrame({"S": arr})}
     expected_output = pd.DataFrame({"A": answer})
 
     check_query(query, ctx, None, expected_output=expected_output)
@@ -305,7 +305,7 @@ def time_from_parts_fn(request):
         pytest.param(
             (
                 {
-                    "table1": pd.DataFrame(
+                    "TABLE1": pd.DataFrame(
                         {
                             "H": pd.Series(
                                 [0, 10, None, 20, 30, 40, -1], dtype=pd.Int32Dtype()
@@ -342,7 +342,7 @@ def time_from_parts_fn(request):
         pytest.param(
             (
                 {
-                    "table1": pd.DataFrame(
+                    "TABLE1": pd.DataFrame(
                         {
                             "H": pd.Series(
                                 [0, 12, 25, 23, 24, 0, 0, 0, 0, 12, 0],
@@ -403,7 +403,7 @@ def time_from_parts_fn(request):
         pytest.param(
             (
                 {
-                    "table1": pd.DataFrame(
+                    "TABLE1": pd.DataFrame(
                         {
                             "H": pd.Series(
                                 [0.1, 12.2, 25.3, 23.4, 23.5, 0.1, 0.3, 0, 0, 11.8, 0],
@@ -489,7 +489,7 @@ def time_from_parts_fn(request):
 )
 def time_from_parts_data(request):
     ctx, answer, args = request.param
-    ctx["table1"]["B"] = [True] * len(ctx["table1"])
+    ctx["TABLE1"]["B"] = [True] * len(ctx["TABLE1"])
     return ctx, answer, args
 
 

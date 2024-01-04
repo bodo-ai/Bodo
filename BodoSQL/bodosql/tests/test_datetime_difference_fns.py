@@ -585,9 +585,9 @@ def test_timestampdiff_cols(
         unit
     ](has_tz)
     if has_case:
-        query = f"SELECT A, B, CASE WHEN C THEN NULL ELSE TIMESTAMPDIFF({unit}, A, B) END FROM table1"
+        query = f"SELECT A, B, CASE WHEN C THEN NULL ELSE TIMESTAMPDIFF({unit}, A, B) END AS RES FROM table1"
     else:
-        query = f"SELECT A, B, TIMESTAMPDIFF({unit}, A, B) FROM table1"
+        query = f"SELECT A, B, TIMESTAMPDIFF({unit}, A, B) AS RES FROM table1"
     table1 = pd.DataFrame(
         {
             "A": pd.Series(
@@ -606,15 +606,14 @@ def test_timestampdiff_cols(
         }
     )
     expected_output = pd.DataFrame(
-        {"A": table1.A, "B": table1.B, "res": pd.Series(answers, dtype=pd.Int64Dtype())}
+        {"A": table1.A, "B": table1.B, "RES": pd.Series(answers, dtype=pd.Int64Dtype())}
     )
     if has_case:
-        expected_output["res"][table1.C] = None
+        expected_output["RES"][table1.C] = None
     check_query(
         query,
-        {"table1": table1},
+        {"TABLE1": table1},
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )

@@ -58,7 +58,7 @@ def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
             "B": ["%Lo", "%Lo", None, "%d", "%s", "bar"] * 4,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = f"select A from table1 where A like B"
     query2 = f"select A from table1 where A ilike B"
     check_query(
@@ -97,7 +97,7 @@ def test_like_ilike_basic_escape(spark_info, memory_leak_check):
             * 5
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "select A from table1 where A like '%w^%%' escape '^'"
     query2 = "select A from table1 where A ilike '%w^_%' escape '^'"
     # Spark doesn't support ilike
@@ -139,7 +139,7 @@ def test_like_ilike_non_constant_basic_escape(memory_leak_check):
     Note: Spark doesn't support non-literal escape values.
     """
     df = pd.DataFrame({"A": ["afe_fe", "rewrew%rew", "%", "A_", "_", None, None] * 5})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "select A from table1 where A like '%^%%' escape upper('^')"
     query2 = "select A from table1 where A ilike '%a^_%' escape lower('^')"
 
@@ -171,7 +171,7 @@ def test_like_ilike_arr_escape(memory_leak_check):
             "C": ["", "", "^", "^", "*", None] * 4,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = df[["A"]]
     query1 = f"select A from table1 where A like B escape C"
     query2 = f"select A from table1 where A ilike B escape C"
@@ -305,7 +305,7 @@ def test_upper_lower_scalars(basic_df, string_constants, spark_info, memory_leak
     """
     """
     "select A, upper('{string_constants}'), lower('{string_constants}') from table1" causes an issue, so for now,
-    I'm just doing it as two seperate queries
+    I'm just doing it as two separate queries
     """
     query = f"select A, upper('{string_constants}') from table1"
 
@@ -641,7 +641,7 @@ def test_utf_scalar(spark_info):
 def test_translate(args, spark_info, memory_leak_check):
     query, answer = args
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "",
@@ -733,7 +733,7 @@ def test_translate(args, spark_info, memory_leak_check):
 def test_initcap(args, spark_info, memory_leak_check):
     query, answer = args
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "",
@@ -801,7 +801,7 @@ def test_initcap(args, spark_info, memory_leak_check):
 )
 def test_editdistance(args, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": ["blackjack", None, "poker", "procedure", "disgrace", "poker face"]}
         )
     }
@@ -919,7 +919,7 @@ def test_editdistance(args, spark_info, memory_leak_check):
 )
 def test_split_part(args, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "alphabet soup is delicious",
@@ -1003,7 +1003,7 @@ def test_split_part(args, spark_info, memory_leak_check):
 )
 def test_strtok(args, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "alphabet soup is delicious",
@@ -1172,7 +1172,7 @@ def test_strtok(args, spark_info, memory_leak_check):
 )
 def test_strtok_to_array(query, expected, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "alphabet soup is delicious",
@@ -1361,7 +1361,7 @@ def test_strtok_to_array(query, expected, memory_leak_check):
 )
 def test_split(args, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [
                     "alphabet soup is delicious",

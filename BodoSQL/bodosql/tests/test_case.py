@@ -260,7 +260,7 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
         }
     )
     query = "Select Case WHEN B THEN A END as output FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
     expected_output[~df.B] = None
     check_query(query, ctx, None, expected_output=expected_output)
@@ -420,7 +420,7 @@ def test_case_indent_limit(memory_leak_check):
     from table1
     """
     df = pd.DataFrame({"A": ["er ", "a ", " el2    ", " f2 "] * 5})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({"SENSITIVE_WORD": ["er", "a", "el2", "f2"] * 5})
     check_query(query, ctx, None, expected_output=py_output)
 
@@ -450,15 +450,15 @@ def test_nested_case(memory_leak_check):
     df = pd.DataFrame(
         {"A": [3, 3, 3, 3, 4] * 3, "B": [1, 6, 1, 6, 1] * 3, "C": [2, 4, 4, 2, 4] * 3}
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({"RES": [1, 1, 0, 2, -1] * 3})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-def test_nullarray_to_timezone_aware(memory_leak_check):
+def test_null_array_to_timezone_aware(memory_leak_check):
     """Test CASE + casting NULL to Timezone-aware type"""
     df = pd.DataFrame({"A": [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     query = """
         select case when t is not null then t else A end as out1

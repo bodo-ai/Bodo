@@ -26,9 +26,9 @@ def project_merge_queries(request):
     This rule matches on any project, whose input is a exactly one other project.
 
     This rule will do nothing to projections that are simply an identity,
-    as it expects ProjectRemoveRule (another optimizaton(the one we replaced)) to remove those projections.
+    as it expects ProjectRemoveRule (another optimization (the one we replaced)) to remove those projections.
 
-    This runs by default, as even in the unoptimized case we still seem to see this optimization occur. So, the only way
+    This runs by default, as even in the un-optimized case we still seem to see this optimization occur. So, the only way
     to get this optimization to occur is in conjunction with project join transpose
 
     Source code here:

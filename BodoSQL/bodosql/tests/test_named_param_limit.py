@@ -26,7 +26,7 @@ def test_limit_unsigned(basic_df, int_named_params, memory_leak_check):
         None,
         named_params=int_named_params,
         expected_output=pd.DataFrame(
-            {"A": basic_df["table1"].A.head(int_named_params["a"])}
+            {"A": basic_df["TABLE1"].A.head(int_named_params["a"])}
         ),
     )
 
@@ -40,7 +40,7 @@ def test_limit_offset(basic_df, spark_info, int_named_params, memory_leak_check)
     # Spark doesn't support offset so use an expected output
     a = int_named_params["a"]
     b = int_named_params["b"]
-    expected_output = basic_df["table1"].iloc[a : a + b, [0]]
+    expected_output = basic_df["TABLE1"].iloc[a : a + b, [0]]
     check_query(
         query,
         basic_df,
@@ -61,7 +61,7 @@ def test_limit_offset_keyword(
     # Spark doesn't support offset so use an expected output
     a = int_named_params["a"]
     b = int_named_params["b"]
-    expected_output = basic_df["table1"].iloc[a : a + b, [0]]
+    expected_output = basic_df["TABLE1"].iloc[a : a + b, [0]]
     check_query(
         query,
         basic_df,
@@ -78,10 +78,10 @@ def test_limit_named_param_constant(basic_df, spark_info, memory_leak_check):
 
     @bodo.jit
     def f(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select a from table1 limit @a", {"a": 10})
 
-    df = basic_df["table1"]
+    df = basic_df["TABLE1"]
     py_output = pd.DataFrame({"A": df.A.head(10)})
     if bodo.get_rank() == 0:
         # The warning is only produced on rank 0

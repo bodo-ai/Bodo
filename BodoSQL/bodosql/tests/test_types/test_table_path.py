@@ -35,7 +35,7 @@ from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 )
 def dummy_table_paths(request):
     """
-    List of table paths that should be suppported.
+    List of table paths that should be supported.
     None of these actually point to valid data
     """
     return request.param
@@ -108,7 +108,7 @@ def test_table_path_pq_bodosqlContext_python(
     def impl(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(
+                "PARQUET_TABLE": bodosql.TablePath(
                     filename, "parquet", reorder_io=reorder_io
                 )
             }
@@ -144,7 +144,7 @@ def test_table_path_pq_bodosqlContext_jit(
     def impl(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(
+                "PARQUET_TABLE": bodosql.TablePath(
                     filename, "parquet", reorder_io=reorder_io
                 )
             }
@@ -163,13 +163,13 @@ def test_table_path_pq_bodosqlContext_jit(
 def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
         )
         return bc.sql(
-            "select L_SUPPKEY from sql_table ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+            "select L_SUPPKEY from SQL_TABLE ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
         )
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
@@ -196,19 +196,18 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
 def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     def impl(table_name):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)}
         )
         return bc.sql("select L_SUPPKEY from sql_table ORDER BY L_SUPPKEY LIMIT 70")
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
     py_output = pd.read_sql(
         f"select L_SUPPKEY from {table_name} ORDER BY L_SUPPKEY LIMIT 70", conn_str
     )
-    # Names won't match because BodoSQL keep names uppercase.
-    py_output.columns = ["L_SUPPKEY"]
+    py_output.columns = py_output.columns.str.upper()
     # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
     check_func(
         impl,
@@ -232,8 +231,8 @@ def test_table_path_avoid_unused_table_jit(
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -261,8 +260,8 @@ def test_table_path_avoid_unused_table_python(
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -297,8 +296,8 @@ def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -325,8 +324,8 @@ def test_table_path_categorical_unused_table_python(datapath, memory_leak_check)
     def impl(f1, f2):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
-                "unused_table": bodosql.TablePath(f2, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+                "UNUSED_TABLE": bodosql.TablePath(f2, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")
@@ -364,7 +363,7 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
     def impl(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "parquet_table": bodosql.TablePath(f1, "parquet"),
+                "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("select * from parquet_table")

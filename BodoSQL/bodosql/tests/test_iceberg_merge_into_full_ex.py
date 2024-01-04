@@ -30,45 +30,45 @@ def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
 
     initial_table = pd.DataFrame(
         {
-            "id": pd.Series([1, 2, 3, 4, 5], dtype="int64"),
-            "data": ["a", "b", "c", "d", "e"],
+            "ID": pd.Series([1, 2, 3, 4, 5], dtype="int64"),
+            "DATA": ["a", "b", "c", "d", "e"],
         }
     )
 
     append_source = pd.DataFrame(
         {
-            "id": pd.Series([6, 7, 8, 9, 10], dtype="int64"),
-            "data": ["f", "g", "h", "i", "j"],
+            "ID": pd.Series([6, 7, 8, 9, 10], dtype="int64"),
+            "DATA": ["f", "g", "h", "i", "j"],
         }
     )
 
     update_source = pd.DataFrame(
         {
-            "id": pd.Series([1, 2, 3, 4, 5], dtype="int64"),
-            "data": ["h", "i", "j", "k", "l"],
+            "ID": pd.Series([1, 2, 3, 4, 5], dtype="int64"),
+            "DATA": ["h", "i", "j", "k", "l"],
         }
     )
 
     delete_source = pd.DataFrame(
         {
-            "id": pd.Series([1, 3, 5, 7, 9], dtype="int64"),
-            "data": ["m", "n", "o", "p", "q"],
+            "ID": pd.Series([1, 3, 5, 7, 9], dtype="int64"),
+            "DATA": ["m", "n", "o", "p", "q"],
         }
     )
 
     expected = pd.DataFrame(
         {
-            "id": pd.Series([2, 4, 6, 8, 10], dtype="int64"),
-            "data": ["i", "k", "f", "h", "j"],
+            "ID": pd.Series([2, 4, 6, 8, 10], dtype="int64"),
+            "DATA": ["i", "k", "f", "h", "j"],
         }
     )
 
     # Create initial table
-    table_name = "merge_into_e2e"
+    table_name = "MERGE_INTO_E2E"
     db_schema, warehouse_loc = iceberg_database
 
     if bodo.get_rank() == 0:
-        sql_schema = [("id", "long", True), ("data", "string", True)]
+        sql_schema = [("ID", "long", True), ("DATA", "string", True)]
         create_iceberg_table(
             initial_table,
             sql_schema,
@@ -81,12 +81,12 @@ def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
 
     bc = bodosql.BodoSQLContext(
         {
-            "target_table": bodosql.TablePath(
+            "TARGET_TABLE": bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "append_source": append_source,
-            "update_source": update_source,
-            "delete_source": delete_source,
+            "APPEND_SOURCE": append_source,
+            "UPDATE_SOURCE": update_source,
+            "DELETE_SOURCE": delete_source,
         }
     )
 
