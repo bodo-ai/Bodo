@@ -30,7 +30,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - boost-cpp =1.82
-    - fmt =10
+    - fmt =10.2
     - libcurl <=8.4
     - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_* # [not win]
     - h5py
