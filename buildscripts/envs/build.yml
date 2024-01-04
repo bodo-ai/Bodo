@@ -12,7 +12,7 @@ dependencies:
   - setuptools_scm >=8
   - cython >=3.0,<3.1
   - boost-cpp =1.82
-  - fmt =10.2
+  - fmt =10.1
 
   # C++
   - clang_osx-arm64 =16    #[arm64]
