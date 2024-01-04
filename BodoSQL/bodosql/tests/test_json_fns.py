@@ -145,6 +145,35 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
     )
 
 
+def test_parse_json_pec(json_senator_data, memory_leak_check):
+    """
+    Tests usage of PARSE_JSON that can be rewritten as JSON_EXTRACT_PATH_TEXT.
+    """
+    # Should be rewritten to JSON_EXTRACT_PATH_TEXT(S, '["objects"][' || I::varchar || ']["person"]["' || F || '"]')
+    query = "SELECT TO_OBJECT(TO_OBJECT(TO_ARRAY(PARSE_JSON(S):objects)[I]):person)[F]::varchar FROM TABLE1"
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "S": [json_senator_data] * 5,
+                "I": [0, 10, 20, 30, 40],
+                "F": ["firstname", "lastname", "namemod", "NA", "youtubeid"],
+            }
+        )
+    }
+    expected_output = pd.DataFrame(
+        {0: ["Maria", "Wicker", "III", None, "SenatorJamesRisch"]}
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
 @pytest.mark.parametrize(
     "use_case",
     [

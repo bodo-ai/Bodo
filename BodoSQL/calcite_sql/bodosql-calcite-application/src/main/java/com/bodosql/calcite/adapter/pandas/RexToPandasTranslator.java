@@ -2012,6 +2012,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ARRAY_SLICE":
           case "ARRAY_TO_STRING":
             return visitNestedArrayFunc(fnName, operands, argScalars);
+          case "PARSE_JSON":
+            throw new BodoSQLCodegenException(
+                "Internal Error: PARSE_JSON currently only supported when it can be rewritten as"
+                    + " ParseExtractCast sequence.");
         }
       default:
         throw new BodoSQLCodegenException(

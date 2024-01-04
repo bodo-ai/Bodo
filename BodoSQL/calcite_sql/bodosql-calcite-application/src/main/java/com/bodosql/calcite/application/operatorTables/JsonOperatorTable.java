@@ -133,6 +133,13 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
   public static final SqlFunction IS_OBJECT = IS_ARRAY.withName("IS_OBJECT");
 
+  public static final SqlBasicFunction PARSE_JSON =
+      SqlBasicFunction.create(
+          "PARSE_JSON",
+          BodoReturnTypes.VARIANT,
+          OperandTypes.STRING,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           GET_PATH,
@@ -144,6 +151,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OBJECT_CONSTRUCT_KEEP_NULL,
           OBJECT_CONSTRUCT,
           OBJECT_AGG,
+          PARSE_JSON,
           IS_ARRAY,
           IS_OBJECT);
 
