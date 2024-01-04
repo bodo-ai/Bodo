@@ -1138,8 +1138,9 @@ double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
             td.NanAdd(val_double);
         }
     }
-    if (parallel)
+    if (parallel) {
         td.MPI_Merge();
+    }
     return td.Quantile(percentile, parallel);
 }
 
