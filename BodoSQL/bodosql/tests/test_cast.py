@@ -623,7 +623,7 @@ def test_tz_aware_datetime_to_char_cast(
 
     spark_query = "SELECT CAST(A as VARCHAR) as A from table1"
 
-    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].astype(str)})
+    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
     check_query(
         query,
         tz_aware_df,
@@ -646,7 +646,7 @@ def test_tz_aware_datetime_to_timestamp_cast(
         query1 = "SELECT CAST(A as Timestamp) as A from table1"
     spark_query1 = "SELECT CAST(A as Timestamp) as A from table1"
     expected_output1 = pd.DataFrame(
-        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None)}
+        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None)}
     )
     check_query(
         query1,
@@ -665,7 +665,7 @@ def test_tz_aware_datetime_to_timestamp_cast(
     spark_query2 = "SELECT CAST(A as Date) as A from table1"
 
     expected_output2 = pd.DataFrame(
-        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None).dt.normalize().dt.date}
+        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None).dt.normalize().dt.date}
     )
     check_query(
         query2,
@@ -681,9 +681,9 @@ def test_tz_aware_datetime_to_timestamp_cast(
 def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
     query = "SELECT * FROM table1 WHERE table1.A BETWEEN DATE '2020-1-1' AND DATE '2021-12-31'"
     expected_filter = (
-        pd.Timestamp("2020-1-1", tz="US/Pacific") <= tz_aware_df["table1"]["A"]
-    ) & (tz_aware_df["table1"]["A"] <= pd.Timestamp("2021-12-31", tz="US/Pacific"))
-    expected_output = tz_aware_df["table1"][expected_filter]
+        pd.Timestamp("2020-1-1", tz="US/Pacific") <= tz_aware_df["TABLE1"]["A"]
+    ) & (tz_aware_df["TABLE1"]["A"] <= pd.Timestamp("2021-12-31", tz="US/Pacific"))
+    expected_output = tz_aware_df["TABLE1"][expected_filter]
 
     check_query(
         query,
@@ -736,7 +736,7 @@ def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
 def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak_check):
     """tests casting date and string columns to timestamp_ntz"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "DATES": pd.Series(
                     [
@@ -768,8 +768,8 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
 
     expected_output = pd.DataFrame(
         {
-            "DATES": [pd.Timestamp(date) for date in ctx["table1"]["DATES"]],
-            "STRINGS": [pd.Timestamp(string) for string in ctx["table1"]["STRINGS"]],
+            "DATES": [pd.Timestamp(date) for date in ctx["TABLE1"]["DATES"]],
+            "STRINGS": [pd.Timestamp(string) for string in ctx["TABLE1"]["STRINGS"]],
         }
     )
     check_query(
@@ -905,7 +905,7 @@ def test_try_cast(try_cast_argument, memory_leak_check):
     """Tests TRY_CAST behaves as expected"""
     type, data, answer = try_cast_argument
     query = f"SELECT TRY_CAST(A AS {type}) from table1"
-    ctx = {"table1": pd.DataFrame({"A": data})}
+    ctx = {"TABLE1": pd.DataFrame({"A": data})}
     expected_output = pd.DataFrame({"A": answer})
     check_query(
         query,
@@ -926,7 +926,7 @@ def test_try_cast_error_handling(memory_leak_check):
         Exception,
         match="BINARY is not supported by TRY_CAST",
     ):
-        bc = bodosql.BodoSQLContext({"table1": pd.DataFrame({"A": ["a", "b", "c"]})})
+        bc = bodosql.BodoSQLContext({"TABLE1": pd.DataFrame({"A": ["a", "b", "c"]})})
         bc.sql(query1)
 
     query2 = "SELECT TRY_CAST(A AS DOUBLE) from table1"
@@ -934,7 +934,7 @@ def test_try_cast_error_handling(memory_leak_check):
         Exception,
         match="TRY_CAST only supports casting from strings",
     ):
-        bc = bodosql.BodoSQLContext({"table1": pd.DataFrame({"A": [1, 2, 3]})})
+        bc = bodosql.BodoSQLContext({"TABLE1": pd.DataFrame({"A": [1, 2, 3]})})
         bc.sql(query2)
 
 
@@ -969,7 +969,7 @@ def test_try_cast_error_handling(memory_leak_check):
 )
 def test_cast_to_variant(query, data):
     df = pd.DataFrame({"X": data})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({0: data})
     check_query(
         query,

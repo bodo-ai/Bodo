@@ -37,7 +37,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     def impl1(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select * from table1 where part = 'b'")
@@ -45,7 +45,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     def impl2(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select A from table1 where part = 'b'")
@@ -53,7 +53,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     def impl3(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(filename, "parquet"),
+                "TABLE1": bodosql.TablePath(filename, "parquet"),
             }
         )
         return bc.sql("Select A + 1 from table1 where part = 'b'")
@@ -61,7 +61,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     def impl4(filename):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(filename, "parquet"),
+                "TABLE1": bodosql.TablePath(filename, "parquet"),
             }
         )
         return bc.sql("Select A + 1 from table1 where part = 'b' and part is not null")
@@ -134,7 +134,7 @@ def test_like_filter_pushdown(datapath, memory_leak_check):
     filename = datapath("sample-parquet-data/rphd_sample.pq")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -241,7 +241,7 @@ def test_ilike_filter_pushdown(datapath, memory_leak_check):
     filename = datapath("sample-parquet-data/rphd_sample.pq")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -326,7 +326,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
     filename = datapath("date_coalesce.pq")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -380,7 +380,7 @@ def test_case_conversion_filter_pushdown(func_args, datapath, memory_leak_check)
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -412,7 +412,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -428,7 +428,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        # Note this is simplifed in the planner to:
+        # Note this is simplified in the planner to:
         # lower(A) = val OR A IS NULL
         check_logger_msg(
             stream,
@@ -447,7 +447,7 @@ def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -471,7 +471,7 @@ def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
 
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow
-def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
+def test_table_path_filter_pushdown_multi_table(datapath, memory_leak_check):
     """
     Tests basic filter with multiple tables.
     """
@@ -479,8 +479,8 @@ def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     def impl(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
-                "table2": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
+                "TABLE2": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -530,7 +530,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     def impl(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -547,7 +547,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     py_output = py_output_part1.merge(py_output, on="C")
     py_output = pd.DataFrame(
         {
-            "a1": py_output["A_x"],
+            "A1": py_output["A_x"],
         }
     )
     check_func(
@@ -588,7 +588,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting(
     def impl_simple_no_join_filter_partition(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -599,7 +599,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting(
     def impl_simple_no_join_filter_non_partition(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -677,8 +677,8 @@ def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
     def impl_should_load_B_C_D(f1, df):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": df,
-                "table2": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": df,
+                "TABLE2": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -689,8 +689,8 @@ def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
     def impl_should_load_A_E(f1, df):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": df,
-                "table2": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": df,
+                "TABLE2": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select table2.A from table1 JOIN table2 ON table1.E = table2.E")
@@ -699,8 +699,8 @@ def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
     def impl_should_load_None(f1, df):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": df,
-                "table2": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": df,
+                "TABLE2": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select table1.A from table1 where table1.B='c'")
@@ -790,7 +790,7 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     def impl_simple_only_A(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select table1.A from table1")
@@ -798,7 +798,7 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     def impl_simple_only_D(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select table1.D from table1")
@@ -858,7 +858,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     def impl1(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select A, B from table1 limit 5")
@@ -867,7 +867,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     def impl2(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql("Select * from table1 limit 5")
@@ -912,7 +912,7 @@ def test_named_param_filter_pushdown(datapath, memory_leak_check):
     def impl(f1, val):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -960,7 +960,7 @@ def test_table_path_limit_pushdown_complex(datapath, memory_leak_check):
     def impl(f1):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(f1, "parquet"),
+                "TABLE1": bodosql.TablePath(f1, "parquet"),
             }
         )
         return bc.sql(
@@ -1009,7 +1009,7 @@ def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
     def impl(filename, query):
         bc = bodosql.BodoSQLContext(
             {
-                "table1": bodosql.TablePath(filename, "parquet"),
+                "TABLE1": bodosql.TablePath(filename, "parquet"),
             }
         )
         return bc.sql(query)
@@ -1084,7 +1084,7 @@ def test_in_filter_pushdown(datapath):
     filepath = datapath("sample-parquet-data/partitioned")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filepath, "parquet"),
+            "TABLE1": bodosql.TablePath(filepath, "parquet"),
         }
     )
 
@@ -1252,7 +1252,7 @@ def test_not_in_filter_pushdown(datapath):
     filepath = datapath("sample-parquet-data/partitioned")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filepath, "parquet"),
+            "TABLE1": bodosql.TablePath(filepath, "parquet"),
         }
     )
 
@@ -1284,7 +1284,7 @@ def test_not_like_filter_pushdown(datapath, memory_leak_check):
     filename = datapath("sample-parquet-data/rphd_sample.pq")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -1374,7 +1374,7 @@ def test_not_ilike_filter_pushdown(datapath, memory_leak_check):
     filename = datapath("sample-parquet-data/rphd_sample.pq")
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -1483,7 +1483,7 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
     stream = io.StringIO()
@@ -1518,7 +1518,7 @@ def test_length_filter_pushdown(datapath, memory_leak_check):
     expected_output = read_df[read_df.L_SHIPMODE.str.len() == 4][["L_LINENUMBER"]]
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -1582,7 +1582,7 @@ def test_trim_filter_pushdown(func_args, datapath, memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 
@@ -1630,7 +1630,7 @@ def test_reverse_filter_pushdown(datapath, memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         {
-            "table1": bodosql.TablePath(filename, "parquet"),
+            "TABLE1": bodosql.TablePath(filename, "parquet"),
         }
     )
 

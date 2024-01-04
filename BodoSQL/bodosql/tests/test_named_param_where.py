@@ -174,5 +174,5 @@ def test_interval_compare(
         None,
         named_params=timedelta_named_params,
         check_dtype=False,
-        expected_output=bodosql_interval_types["table1"].query(f"@a {pd_op} C")[["A"]],
+        expected_output=bodosql_interval_types["TABLE1"].query(f"@a {pd_op} C")[["A"]],
     )

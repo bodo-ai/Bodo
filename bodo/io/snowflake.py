@@ -1658,6 +1658,7 @@ def get_schema(
     downcast_decimal_to_double: bool,
     orig_table: Optional[str] = None,
     orig_table_indices: Optional[tuple[int, ...]] = None,
+    convert_snowflake_column_names: bool = True,
 ):  # pragma: no cover
     """
     Args:
@@ -1669,6 +1670,9 @@ def get_schema(
         downcast_decimal_to_double: Passed to (and see) get_schema_from_metadata
         orig_table: Passed to (and see) get_schema_from_metadata
         orig_table_indices: Passed to (and see) get_schema_from_metadata
+        convert_snowflake_column_names (bool, default True): Should Snowflake column names be
+            converted to match SqlAlchemy. This is needed to ensure table path is consistent for
+            casing with the SnowflakeCatalog.
 
     Returns:
         A large tuple containing: (#TODO: document this)
@@ -1702,7 +1706,9 @@ def get_schema(
     # is used from Python. This is used for comparing with
     # _bodo_read_as_dict which will use Python's convention.
     snowflake_case_map = {
-        name.lower() if name.isupper() else name: name
+        name.lower()
+        if convert_snowflake_column_names and name.isupper()
+        else name: name
         for name in str_col_name_to_ind.keys()
     }
 
@@ -1774,7 +1780,7 @@ def get_schema(
     final_colnames: list[str] = []
     converted_colnames = set()
     for x in pa_fields:
-        if x.name.isupper():
+        if convert_snowflake_column_names and x.name.isupper():
             converted_colnames.add(x.name.lower())
             final_colnames.append(x.name.lower())
         else:

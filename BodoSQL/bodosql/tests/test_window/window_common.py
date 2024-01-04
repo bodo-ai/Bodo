@@ -140,7 +140,7 @@ def col_to_window_df(cols):
     partitioning / ordering"""
     n = len(list(cols.values())[0])
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "W1": [round(i * 8 / n) for i in range(n)],
                 "W2": [i % 7 for i in range(n)],

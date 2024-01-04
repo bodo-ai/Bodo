@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 
 import bodo
+import bodosql
+from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 
@@ -78,7 +80,7 @@ def test_sample_frac_numeric_cols(
     """
     Test that SAMPLE (frac) works for numeric columns
     """
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT A, B FROM table1 {sample_cmds} {sample_methods}({frac})"
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
@@ -116,7 +118,7 @@ def test_sample_rows_string_cols(
         # SYSTEM | BLOCK are not supported for fixed-size sampling:
         # https://docs.snowflake.com/en/sql-reference/constructs/sample
         def impl(df, query):
-            bc = bodosql.BodoSQLContext({"table1": df})
+            bc = bodosql.BodoSQLContext({"TABLE1": df})
             return bc.sql(query)
 
         with pytest.raises(
@@ -126,7 +128,7 @@ def test_sample_rows_string_cols(
             impl(df, query)
 
     else:
-        ctx = {"table1": df}
+        ctx = {"TABLE1": df}
         check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
@@ -146,7 +148,7 @@ def test_sample_frac_numeric_seed(
     """
     query = f"SELECT A FROM table1 {sample_cmds} ({frac}) {sample_seeds} ({seed})"
     df = pd.DataFrame({"A": np.arange(5000, dtype=np.int64)})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     @bodo.jit
     def sample_impl(df):

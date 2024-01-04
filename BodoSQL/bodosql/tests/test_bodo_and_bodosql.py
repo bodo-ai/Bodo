@@ -20,7 +20,7 @@ def test_count_head(datapath, memory_leak_check):
     """
 
     def impl(filename):
-        bc = bodosql.BodoSQLContext({"t1": bodosql.TablePath(filename, "parquet")})
+        bc = bodosql.BodoSQLContext({"T1": bodosql.TablePath(filename, "parquet")})
         df = bc.sql("select count(B) as cnt from t1")
         return df.head()
 

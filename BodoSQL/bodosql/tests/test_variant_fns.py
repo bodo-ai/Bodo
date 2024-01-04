@@ -40,7 +40,7 @@ def test_is_array(use_case, data, answer):
 
     check_query(
         query,
-        {"table1": pd.DataFrame({"A": data})},
+        {"TABLE1": pd.DataFrame({"A": data})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_names=False,
@@ -86,7 +86,7 @@ def test_is_object(use_case, data, answer):
 
     check_query(
         query,
-        {"table1": pd.DataFrame({"A": data})},
+        {"TABLE1": pd.DataFrame({"A": data})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_names=False,

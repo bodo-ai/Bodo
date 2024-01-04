@@ -138,7 +138,7 @@ def get_iceberg_type_info(
 
     # Special MERGE INTO COW Handling for Row ID Column
     if is_merge_into_cow:
-        col_names.append("_bodo_row_id")
+        col_names.append("_BODO_ROW_ID")
         bodo_types.append(types.Array(types.int64, 1, "C"))
 
     return (col_names, bodo_types, pyarrow_schema)

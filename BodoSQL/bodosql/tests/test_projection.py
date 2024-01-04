@@ -94,12 +94,12 @@ def test_project_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
 
 
-def test_select_multitable(join_dataframes, spark_info, memory_leak_check):
+def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):
     """test selecting columns from multiple tables"""
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["C", "D"]
@@ -114,12 +114,12 @@ def test_select_multitable(join_dataframes, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_select_multitable_order_by(join_dataframes, spark_info, memory_leak_check):
+def test_select_multi_table_order_by(join_dataframes, spark_info, memory_leak_check):
     """test selecting and sorting columns from multiple tables"""
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["C", "D"]
@@ -172,7 +172,7 @@ def test_select_all_interval(bodosql_interval_types, memory_leak_check):
         bodosql_interval_types,
         None,
         check_dtype=False,
-        expected_output=bodosql_interval_types["table1"],
+        expected_output=bodosql_interval_types["TABLE1"],
     )
 
 
@@ -235,7 +235,7 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -243,8 +243,8 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray1 = ["A", "B"]
@@ -288,7 +288,7 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -296,8 +296,8 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "C"]
@@ -329,7 +329,7 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -337,8 +337,8 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A"]

@@ -159,7 +159,7 @@ def test_snowflake_catalog_insert_into(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test1", db, schema
@@ -202,7 +202,7 @@ def test_snowflake_catalog_insert_into_read(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
     # Recreate the expected output with an append.
     py_output = pd.concat(
         (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
@@ -241,7 +241,7 @@ def test_snowflake_catalog_insert_into_null_literal(
         return bc.sql(read_query)
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test_nulls", db, schema
@@ -290,7 +290,7 @@ def test_snowflake_catalog_insert_into_date(
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     date_table = pd.DataFrame({"A": [datetime.date(2023, 12, 12)] * 12})
-    bc = bc.add_or_replace_view("table1", date_table)
+    bc = bc.add_or_replace_view("TABLE1", date_table)
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test_nulls", db, schema
@@ -663,7 +663,7 @@ def test_current_timestamp_case(
 
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
-    bc = bc.add_or_replace_view("table1", df)
+    bc = bc.add_or_replace_view("TABLE1", df)
     normalize_val = current_timestamp.normalize()
     S = pd.Series(normalize_val, index=np.arange(len(df)))
     S[~df.A] = None
@@ -726,7 +726,7 @@ def test_default_table_type(
         schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
 
     # Create the table
 
@@ -813,7 +813,7 @@ def test_snowflake_catalog_create_table_temporary(
     catalog = test_db_snowflake_catalog
     schema = test_db_snowflake_catalog.connection_params["schema"]
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
 
     def impl(bc, query):
         bc.sql(query)
@@ -905,7 +905,7 @@ def test_snowflake_catalog_week_policy_parameters(params, answers, memory_leak_c
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("week_policy_table1", extra_df)
+    bc = bc.add_or_replace_view("WEEK_POLICY_TABLE1", extra_df)
 
     def impl(bc, query):
         return bc.sql(query)
@@ -936,7 +936,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
     schema = "PUBLIC"
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
 
     def impl(bc, query):
         bc.sql(query)
@@ -1017,7 +1017,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     schema = test_db_snowflake_catalog.connection_params["schema"]
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
     # Create the table
 
     def impl(bc, query):
@@ -1099,7 +1099,7 @@ def test_snowflake_catalog_create_table_already_exists_error(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
 
     # Create the table
     with create_snowflake_table(
@@ -1142,7 +1142,7 @@ def test_snowflake_catalog_create_table_already_exists(
         return 5
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    bc = bc.add_or_replace_view("TABLE1", pd.DataFrame({"A": np.arange(10)}))
 
     # Create the table
     with create_snowflake_table(
@@ -1188,7 +1188,7 @@ def test_snowflake_catalog_simple_rewrite(
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     local_table = pd.DataFrame({"A": np.arange(10)})
-    bc = bc.add_or_replace_view("table1", local_table)
+    bc = bc.add_or_replace_view("TABLE1", local_table)
 
     comm = MPI.COMM_WORLD
     table_name = None
@@ -1274,7 +1274,7 @@ def test_snowflake_catalog_simple_rewrite_2(
     expected_output_col = expected_output_col.dropna()
     expected_output = pd.DataFrame({"OUTPUT_CASE": expected_output_col})
 
-    bc = bc.add_or_replace_view("table1", local_table)
+    bc = bc.add_or_replace_view("TABLE1", local_table)
 
     comm = MPI.COMM_WORLD
     table_name = None
@@ -1533,7 +1533,7 @@ def test_snowflake_catalog_fully_qualified(
 
 # The specified Snowflake catalog is TEST_DB.TEST_SCHEMA
 # The non-default Snowflake catalog is TEST_DB.PUBLIC
-# the local schema is __bodolocal__
+# the local schema is __BODOLOCAL__
 # These schemas/tables have been manually added to the bnsare snowflake account,
 # and should not be modified.
 #
@@ -1544,17 +1544,17 @@ def test_snowflake_catalog_fully_qualified(
 # Create TABLE *NAME* as SELECT 'TEST_DB.TEST_SCHEMA' as A from VALUES (1,2,3)
 #
 # For the local table, it's defined as:
-# pd.DataFrame({"a": ["local"]})
+# pd.DataFrame({"A": ["local"]})
 # The locations in which each table can be found are as follows:
-# tableScopingTest: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA, __bodolocal__
-# tableScopingTest2: TEST_DB.TEST_SCHEMA, __bodolocal__
-# tableScopingTest3: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA
-# tableScopingTest4: TEST_DB.PUBLIC, __bodolocal__
+# TABLESCOPINGTEST: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA, __bodolocal__
+# TABLESCOPINGTEST2: TEST_DB.TEST_SCHEMA, __bodolocal__
+# TABLESCOPINGTEST3: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA
+# TABLESCOPINGTEST4: TEST_DB.PUBLIC, __bodolocal__
 
-tableScopingTest1TableName = "tableScopingTest"
-tableScopingTest2TableName = "tableScopingTest2"
-tableScopingTest3TableName = "tableScopingTest3"
-tableScopingTest4TableName = "tableScopingTest4"
+tableScopingTest1TableName = "TABLESCOPINGTEST"
+tableScopingTest2TableName = "TABLESCOPINGTEST2"
+tableScopingTest3TableName = "TABLESCOPINGTEST3"
+tableScopingTest4TableName = "TABLESCOPINGTEST4"
 
 # Expected outputs, assuming we select the local/non-default catalog/default catalog schemas
 expected_out_local = pd.DataFrame({"A": ["local"]})
@@ -1603,10 +1603,10 @@ def test_snowflake_catalog_table_priority(args, memory_leak_check):
     The correct attempted order of resolution for an unqualified table name in BodoSQL should be
         default_database.specified_schema.(table_identifier)
         default_database.PUBLIC.(table_identifier)
-        __bodo_local__.(table_identifier)
+        __BODOLOCAL__.(table_identifier)
 
     To test this, we have several table names that are present across the different
-    locations (PUBLIC, TEST_DB, and __bodo_local__),
+    locations (PUBLIC, TEST_DB, and __BODOLOCAL__),
     and we test that the correct table is selected in each case.
     """
     default_db_name = "TEST_DB"
@@ -1655,7 +1655,7 @@ def test_snowflake_catalog_table_priority(args, memory_leak_check):
 @pytest.mark.parametrize(
     "args",
     [
-        pytest.param(("__bodolocal__", expected_out_local), id="__bodolocal__"),
+        pytest.param(("__BODOLOCAL__", expected_out_local), id="__bodolocal__"),
         pytest.param(("PUBLIC", expected_out_PUBLIC_catalog_schema), id="PUBLIC"),
     ],
 )
@@ -1664,7 +1664,7 @@ def test_snowflake_catalog_table_priority_override(args, memory_leak_check):
     not ambiguous. IE, if we explicitly specify the catalog/schema,
     we should select the table present in the specified catalog/schema, instead of a different
     table with the same name in a different catalog/schema.
-    IE If the user specifies "__bodolocal__.tablename", it should not resolve to the table
+    IE If the user specifies "__BODOLOCAL__.tablename", it should not resolve to the table
     found at "TEST_DB.PUBLIC.tablename", and visa versa.
     """
     default_db_name = "TEST_DB"
@@ -2651,8 +2651,8 @@ def test_stream_unification_opt(test_db_snowflake_catalog, memory_leak_check):
             "D": ["T2_1", "T2_2", "T2_3", "T2_4", "T2_5", "T2_6"] * 2,
         }
     )
-    bc = bc.add_or_replace_view("table1", df1)
-    bc = bc.add_or_replace_view("table2", df2)
+    bc = bc.add_or_replace_view("TABLE1", df1)
+    bc = bc.add_or_replace_view("TABLE2", df2)
 
     def impl(bc, query):
         bc.sql(query)

@@ -17,21 +17,21 @@ from bodo.tests.utils import check_func
 pytestmark = pytest.mark.iceberg
 
 bodo_datatype_cols = {
-    "int_col": pd.Series([np.int32(i) for i in range(10)], dtype=np.int32),
-    "float_col": pd.Series([np.float32(i) for i in range(10)], dtype=np.float32),
-    "str_col": pd.Series([str(i) for i in range(10)], dtype="string[pyarrow]"),
-    "bool_col": pd.Series([bool(i % 2) for i in range(10)], dtype=bool),
+    "INT_COL": pd.Series([np.int32(i) for i in range(10)], dtype=np.int32),
+    "FLOAT_COL": pd.Series([np.float32(i) for i in range(10)], dtype=np.float32),
+    "STR_COL": pd.Series([str(i) for i in range(10)], dtype="string[pyarrow]"),
+    "BOOL_COL": pd.Series([bool(i % 2) for i in range(10)], dtype=bool),
     # TODO: resolve this issue: https://bodo.atlassian.net/browse/BE-4072
-    # "ts_col": pd.Series(
+    # "TS_COL": pd.Series(
     #     [pd.Timestamp("2020-01-01", tz="UTC") + pd.Timedelta(days=i) for i in range(10)],
     # ),
-    "non_ascii_col": pd.Series(
+    "NON_ASCII_COL": pd.Series(
         [str(i) + "é" for i in range(10)], dtype="string[pyarrow]"
     ),
-    "byte_col": pd.Series([bytes(str(i), "utf8") for i in range(10)], dtype="bytes"),
-    "long_col": pd.Series([np.int64(i) for i in range(10)], dtype=np.int64),
-    "double_col": pd.Series([np.float64(i) for i in range(10)], dtype=np.float64),
-    "date_col": pd.Series(
+    "BYTE_COL": pd.Series([bytes(str(i), "utf8") for i in range(10)], dtype="bytes"),
+    "LONG_COL": pd.Series([np.int64(i) for i in range(10)], dtype=np.int64),
+    "DOUBLE_COL": pd.Series([np.float64(i) for i in range(10)], dtype=np.float64),
+    "DATE_COL": pd.Series(
         [
             date(2018, 11, 12),
             date(2019, 11, 12),
@@ -47,17 +47,17 @@ bodo_datatype_cols = {
     ),
 }
 bodo_datatype_expected_sql_types = {
-    "int_col": "int",
-    "float_col": "float",
-    "str_col": "string",
-    "bool_col": "boolean",
+    "INT_COL": "int",
+    "FLOAT_COL": "float",
+    "STR_COL": "string",
+    "BOOL_COL": "boolean",
     # TODO: resolve this issue: https://bodo.atlassian.net/browse/BE-4072
-    # "ts_col": "timestamp",  # Spark writes timestamps with UTC timezone
-    "non_ascii_col": "string",
-    "byte_col": "binary",
-    "long_col": "bigint",
-    "double_col": "double",
-    "date_col": "date",
+    # "TS_COL": "timestamp",  # Spark writes timestamps with UTC timezone
+    "NON_ASCII_COL": "string",
+    "BYTE_COL": "binary",
+    "LONG_COL": "bigint",
+    "DOUBLE_COL": "double",
+    "DATE_COL": "date",
 }
 
 
@@ -73,13 +73,13 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     # create table data
     target_table = pd.DataFrame(
         {
-            "id": pd.Series([i for i in range(10)], dtype=np.int32),
+            "ID": pd.Series([i for i in range(10)], dtype=np.int32),
         }
         | bodo_datatype_cols
     )
 
     source = target_table.copy()
-    source.id = source.id + 10
+    source.ID = source.ID + 10
     expected = pd.concat((target_table, source), ignore_index=True)
 
     # create query
@@ -94,8 +94,8 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     # create BodoSQL context
     spark = get_spark()
     db_schema, warehouse_loc = iceberg_database
-    table_name = "target_table_merge_into_bodo_datatypes_as_values"
-    sql_schema = [("id", "int", False)] + [
+    table_name = "TARGET_TABLE_MERGE_INTO_BODO_DATATYPES_AS_VALUES"
+    sql_schema = [("ID", "int", False)] + [
         (col, bodo_datatype_expected_sql_types[col], False)
         for col in bodo_datatype_cols.keys()
     ]
@@ -110,10 +110,10 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     bc = bodosql.BodoSQLContext(
         {
-            "target_table": bodosql.TablePath(
+            "TARGET_TABLE": bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source": source,
+            "SOURCE": source,
         }
     )
 
@@ -151,20 +151,20 @@ def test_merge_into_bodo_datatypes_as_expr(
     # create table data
     target_table = pd.DataFrame(
         {
-            "expr": expr[:7],
+            "EXPR": expr[:7],
         }
     )
 
     source = pd.DataFrame(
         {
-            "expr": expr[3:],
+            "EXPR": expr[3:],
         }
     )
 
-    if col_name == "bool_col":
+    if col_name == "BOOL_COL":
         expected = target_table.copy()
     else:
-        expected = target_table.merge(source, on="expr", how="outer")
+        expected = target_table.merge(source, on="EXPR", how="outer")
 
     # create query
     query = (
@@ -177,8 +177,8 @@ def test_merge_into_bodo_datatypes_as_expr(
     # create BodoSQL context
     spark = get_spark()
     db_schema, warehouse_loc = iceberg_database
-    table_name = "target_table_merge_into_bodo_datatypes_as_exprs_" + col_name
-    sql_schema = [("expr", sql_type, False)]
+    table_name = "TARGET_TABLE_MERGE_INTO_BODO_DATATYPES_AS_EXPRS_" + col_name
+    sql_schema = [("EXPR", sql_type, False)]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             target_table,
@@ -190,10 +190,10 @@ def test_merge_into_bodo_datatypes_as_expr(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     bc = bodosql.BodoSQLContext(
         {
-            "target_table": bodosql.TablePath(
+            "TARGET_TABLE": bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source": source,
+            "SOURCE": source,
         }
     )
 

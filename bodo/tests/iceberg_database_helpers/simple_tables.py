@@ -21,7 +21,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 # - Decimal: Bodo / Python doesn't support custom precisions and scale. It works
 #   reads, but not for writes, which is why we have separate tables.
 BASE_MAP: Dict[str, Tuple[Dict, List]] = {
-    "bool_binary_table": (
+    "BOOL_BINARY_TABLE": (
         {
             "A": np.array([True, False, True, True] * 25, dtype=np.bool_),
             "B": pd.Series([False, None, True, False, None] * 20, dtype="boolean"),
@@ -33,7 +33,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "binary", True),
         ],
     ),
-    "dt_tsz_table": (
+    "DT_TSZ_TABLE": (
         {
             "A": pd.Series(
                 [
@@ -68,7 +68,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "int", False),
         ],
     ),
-    "dtype_list_table": (
+    "DTYPE_LIST_TABLE": (
         {
             "A": pd.Series([[0, 1, 2], [3, 4]] * 25, dtype=object),
             "B": pd.Series([["abc", "rtf"], ["def", "xyz", "typ"]] * 25, dtype=object),
@@ -80,7 +80,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("C", "ARRAY<double>", True),
         ],
     ),
-    "list_table": (
+    "LIST_TABLE": (
         {
             "A": pd.Series([[0, 1, 2], [3, 4]] * 25, dtype=object),
             "B": pd.Series([["abc", "rtf"], ["def", "xyz", "typ"]] * 25, dtype=object),
@@ -96,7 +96,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("E", "ARRAY<double>", True),
         ],
     ),
-    "map_table": (
+    "MAP_TABLE": (
         {
             "A": pd.Series([{"a": 10}, {"c": 13}] * 25, dtype=object),
             "B": pd.Series([{"ERT": 10.0}, {"ASD": 23.87}] * 25, dtype=object),
@@ -114,7 +114,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("D", "MAP<decimal(5,2), int>", True),
         ],
     ),
-    "numeric_table": (
+    "NUMERIC_TABLE": (
         {
             "A": pd.Series([1, 2, 3, 4, 5] * 10, dtype="int32"),
             "B": pd.Series([1, 2, 3, 4, 5] * 10, dtype="int64"),
@@ -132,7 +132,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("F", "long", True),
         ],
     ),
-    "string_table": (
+    "STRING_TABLE": (
         {
             "A": np.array(["A", "B", "C", "D"] * 25),
             "B": np.array(["lorem", "ipsum", "loden", "ion"] * 25),
@@ -156,7 +156,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("D", "string", True),
         ],
     ),
-    "dict_encoded_string_table": (
+    "DICT_ENCODED_STRING_TABLE": (
         {
             "A": pa.array(
                 ["abc", "b", "c", "abc", "peach", "b", "cde"] * 20,
@@ -172,7 +172,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "string", True),
         ],
     ),
-    "struct_table": (
+    "STRUCT_TABLE": (
         {
             "A": pd.Series([{"a": 1, "b": 3}, {"a": 2, "b": 666}] * 25, dtype=object),
             "B": pd.Series(
@@ -186,7 +186,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "STRUCT<a: double, b: long, c: double>", True),
         ],
     ),
-    "struct_dtype_table": (
+    "STRUCT_DTYPE_TABLE": (
         {
             "A": pd.Series(
                 [{"a": 1, "b": "one"}, {"a": 2, "b": "two"}] * 25, dtype=object
@@ -205,11 +205,11 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "STRUCT<a: boolean, b: date, c: double>", True),
         ],
     ),
-    "decimals_table": (
+    "DECIMALS_TABLE": (
         {"A": np.array([Decimal(1.0), Decimal(2.0)] * 25)},
         [("A", "decimal(10,5)", True)],
     ),
-    "decimals_list_table": (
+    "DECIMALS_LIST_TABLE": (
         {
             "A": pd.Series(
                 [
@@ -222,7 +222,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
         },
         [("A", "ARRAY<decimal(5,2)>", True)],
     ),
-    "tz_aware_table": (
+    "TZ_AWARE_TABLE": (
         {
             "A": pd.arrays.DatetimeArray(
                 pd.Series(
@@ -246,7 +246,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "timestamp", True),
         ],
     ),
-    "primitives_table": (
+    "PRIMITIVES_TABLE": (
         {
             "A": pd.date_range(
                 start="1/1/2019", periods=200, freq="10D", tz="US/Eastern"
@@ -278,7 +278,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("D", "string", True),
         ],
     ),
-    "optional_table": (
+    "OPTIONAL_TABLE": (
         {
             "A": np.array([1, 2] * 25, np.int32),
             "B": np.array(["a", "b"] * 25),
@@ -310,7 +310,7 @@ def create_table(base_name: str, spark=None):
 
     assert base_name in TABLE_MAP, f"Didn't find table definition for {base_name}."
     df, sql_schema = TABLE_MAP[base_name]
-    create_iceberg_table(df, sql_schema, f"simple_{base_name}", spark)
+    create_iceberg_table(df, sql_schema, f"SIMPLE_{base_name}", spark)
 
 
 def create_all_simple_tables(spark=None):

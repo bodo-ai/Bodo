@@ -11,7 +11,7 @@ from bodosql.tests.utils import check_query
 @pytest.mark.slow
 def test_with(basic_df, spark_info, memory_leak_check):
     """
-    Test that verifies that WITH works in the simple case for tablenames
+    Test that verifies that WITH works in the simple case for table names
     """
     query = "WITH FOO as (SELECT A FROM table1) SELECT FOO.A from FOO"
     check_query(query, basic_df, spark_info)
@@ -20,7 +20,7 @@ def test_with(basic_df, spark_info, memory_leak_check):
 @pytest.mark.slow
 def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
     """
-    Test that verifies that WITH works for multiple tablenames
+    Test that verifies that WITH works for multiple table names
     """
     if any(
         [
@@ -32,7 +32,7 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -40,8 +40,8 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "D"]
@@ -72,7 +72,7 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -80,8 +80,8 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "Y", "Z"]
@@ -123,7 +123,7 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -131,8 +131,8 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "Y"]

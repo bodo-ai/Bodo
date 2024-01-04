@@ -33,25 +33,25 @@ pytestmark = pytest.mark.iceberg
     [
         # TODO: BE-2831 Reading maps from parquet not supported yet
         pytest.param(
-            "simple_map_table",
+            "SIMPLE_MAP_TABLE",
             marks=pytest.mark.skip(reason="Need to support reading maps from parquet."),
         ),
         pytest.param(
-            "simple_numeric_table",
+            "SIMPLE_NUMERIC_TABLE",
             marks=pytest.mark.skip("bodosql does not support decimal types"),
         ),
-        "simple_string_table",
-        "partitions_dt_table",
+        "SIMPLE_STRING_TABLE",
+        "PARTITIONS_DT_TABLE",
         # TODO: The results of Bodo and Spark implementation are different from original
         # but only in check_func
-        pytest.param("simple_dt_tsz_table", marks=pytest.mark.slow),
+        pytest.param("SIMPLE_DT_TSZ_TABLE", marks=pytest.mark.slow),
         pytest.param(
-            "simple_list_table",
+            "SIMPLE_LIST_TABLE",
             marks=pytest.mark.skip("bodosql does not support list array types"),
         ),
-        pytest.param("simple_bool_binary_table"),
+        pytest.param("SIMPLE_BOOL_BINARY_TABLE"),
         pytest.param(
-            "simple_struct_table",
+            "SIMPLE_STRUCT_TABLE",
             marks=pytest.mark.skip("bodosql does not support struct types"),
         ),
     ],
@@ -68,7 +68,7 @@ def test_simple_table_read(
     def impl(table_name, conn, db_schema):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     table_name, "sql", conn_str=conn, db_schema=db_schema
                 )
             }
@@ -78,7 +78,7 @@ def test_simple_table_read(
 
     py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
 
-    if table_name == "simple_bool_binary_table":
+    if table_name == "SIMPLE_BOOL_BINARY_TABLE":
         # Bodo outputs binary data as bytes while Spark does bytearray (which Bodo doesn't support),
         # so we convert Spark output.
         # This has been copied from BodoSQL. See `convert_spark_bytearray`
@@ -88,7 +88,7 @@ def test_simple_table_read(
             axis=1,
             result_type="expand",
         )
-    elif table_name == "simple_struct_table":
+    elif table_name == "SIMPLE_STRUCT_TABLE":
         # Needs special handling since PySpark returns nested structs as tuples.
         # Convert columns with nested structs from tuples to dictionaries with correct keys
         py_out["A"] = py_out["A"].map(lambda x: {"a": x[0], "b": x[1]})
@@ -99,7 +99,7 @@ def test_simple_table_read(
         (table_name, conn, db_schema),
         py_output=py_out,
         sort_output=(
-            table_name != "simple_list_table"
+            table_name != "SIMPLE_LIST_TABLE"
         ),  # No sorting in this case because lists are not hashable
         reset_index=True,
     )
@@ -108,18 +108,18 @@ def test_simple_table_read(
 @pytest.mark.slow
 def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
-    Test simple read operation on test table simple_string_table
+    Test simple read operation on test table SIMPLE_STRING_TABLE
     with column pruning.
     """
 
-    table_name = "simple_string_table"
+    table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema, bodo_read_as_dict):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     table_name,
                     "sql",
                     conn_str=conn,
@@ -158,14 +158,14 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     Test loading just a length from iceberg tables.
     """
 
-    table_name = "simple_string_table"
+    table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     table_name, "sql", conn_str=conn, db_schema=db_schema
                 )
             }
@@ -174,7 +174,7 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
         return df
 
     py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
-    py_out = pd.DataFrame({"cnt": len(py_out)}, index=pd.RangeIndex(0, 1, 1))
+    py_out = pd.DataFrame({"CNT": len(py_out)}, index=pd.RangeIndex(0, 1, 1))
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -192,18 +192,18 @@ def test_tablepath_dict_encoding(
     memory_leak_check, iceberg_database, iceberg_table_conn
 ):
     """
-    Test simple read operation on test table simple_string_table
+    Test simple read operation on test table SIMPLE_STRING_TABLE
     with column pruning and multiple columns being dictionary encoded.
     """
 
-    table_name = "simple_string_table"
+    table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema, bodo_read_as_dict):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     table_name,
                     "sql",
                     conn_str=conn,
@@ -234,15 +234,15 @@ def test_tablepath_dict_encoding(
 
 @pytest.mark.slow
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
-    table_name = "test_merge_into_simple_tbl"
+    table_name = "TEST_MERGE_INTO_SIMPLE_TBL"
     db_schema, warehouse_loc = iceberg_database
     sql_schema = [
-        ("id", "int", True),
-        ("dep", "string", True),
+        ("ID", "int", True),
+        ("DEP", "string", True),
     ]
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            pd.DataFrame({"id": [1], "dep": ["foo"]}), sql_schema, table_name
+            pd.DataFrame({"ID": [1], "DEP": ["foo"]}), sql_schema, table_name
         )
     bodo.barrier()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -251,10 +251,10 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
             table_name: bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source": pd.DataFrame(
+            "SOURCE": pd.DataFrame(
                 {
-                    "id": [1, 2, 3],
-                    "dep": ["emp-id-1", "emp-id-2", "emp-id-3"],
+                    "ID": [1, 2, 3],
+                    "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"],
                 }
             ),
         }
@@ -272,7 +272,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
         return bc.sql(f"SELECT * FROM {table_name}")
 
     expected_out = pd.DataFrame(
-        {"id": [1, 1, 1], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+        {"ID": [1, 1, 1], "DEP": ["foo", "emp-id-2", "emp-id-3"]}
     )
 
     check_func(
@@ -290,15 +290,15 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
 
 @pytest.mark.slow
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
-    table_name = "test_merge_into_simple_tbl2"
+    table_name = "TEST_MERGE_INTO_SIMPLE_TBL2"
     db_schema, warehouse_loc = iceberg_database
     sql_schema = [
-        ("id", "int", True),
-        ("dep", "string", True),
+        ("ID", "int", True),
+        ("DEP", "string", True),
     ]
     if bodo.get_rank() == 0:
         create_iceberg_table(
-            pd.DataFrame({"id": [1], "dep": ["foo"]}), sql_schema, table_name
+            pd.DataFrame({"ID": [1], "DEP": ["foo"]}), sql_schema, table_name
         )
     bodo.barrier()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -307,10 +307,10 @@ def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
             table_name: bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source": pd.DataFrame(
+            "SOURCE": pd.DataFrame(
                 {
-                    "id": [1, 2, 3],
-                    "dep": ["emp-id-1", "emp-id-2", "emp-id-3"],
+                    "ID": [1, 2, 3],
+                    "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"],
                 }
             ),
         }
@@ -328,7 +328,7 @@ def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
         return bc.sql(f"SELECT * FROM {table_name}")
 
     expected_out = pd.DataFrame(
-        {"id": [1, 2, 3], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+        {"ID": [1, 2, 3], "DEP": ["foo", "emp-id-2", "emp-id-3"]}
     )
 
     check_func(
@@ -353,14 +353,14 @@ def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_
     Test in pushdown with loading from a iceberg table.
     """
 
-    table_name = "simple_string_table"
+    table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     table_name,
                     "sql",
                     conn_str=conn,

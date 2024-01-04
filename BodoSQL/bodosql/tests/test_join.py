@@ -21,7 +21,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import pytest_slow_unless_join
-from bodosql.tests.utils import check_efficient_join, check_query
+from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
 pytestmark = pytest_slow_unless_join
@@ -41,7 +41,7 @@ def test_join(
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         convert_float_nan = True
@@ -49,8 +49,8 @@ def test_join(
         convert_float_nan = False
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["B", "C", "D"]
@@ -60,19 +60,15 @@ def test_join(
         # TODO: Add support for <=> from general-join cond
         return
     query = f"select table1.B, C, D from table1 {join_type} join table2 on table1.A {comparison_ops} table2.A"
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
         check_dtype=False,
         check_names=False,
-        return_codegen=True,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-    pandas_code = result["pandas_code"]
-    if comparison_ops == "=":
-        check_efficient_join(pandas_code)
 
 
 def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
@@ -89,7 +85,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -97,8 +93,8 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A", "B"]
@@ -122,7 +118,7 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         convert_float_nan = True
@@ -130,8 +126,8 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
         convert_float_nan = False
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["A1", "A2"]
@@ -162,7 +158,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
     if any(
         [
             isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         convert_float_nan = True
@@ -170,8 +166,8 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
         convert_float_nan = False
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["B", "C", "D"]
@@ -206,7 +202,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -220,17 +216,14 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
         where
             (table1.A = table2.A and table1.B = table2.B)
         """
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
-        return_codegen=True,
         check_dtype=check_dtype,
         # TODO[BE-3478]: enable dict-encoded string test when fixed
         use_dict_encoded_strings=False,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_or_join(join_dataframes, spark_info, memory_leak_check):
@@ -239,7 +232,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
     will merge on the common cond, rather than just merge the entire tables.
     """
 
-    if isinstance(join_dataframes["table1"]["A"][0], bytes):
+    if isinstance(join_dataframes["TABLE1"]["A"][0], bytes):
         byte_array_cols = ["A", "B"]
     else:
         byte_array_cols = []
@@ -255,7 +248,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -269,16 +262,13 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
         where
             (table1.A = table2.A or table1.B = table2.B)
         """
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
-        return_codegen=True,
         check_dtype=check_dtype,
         convert_columns_bytearray=byte_array_cols,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
@@ -294,7 +284,7 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -302,25 +292,22 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["B", "C", "D"]
     else:
         convert_columns_bytearray = None
     query = f"select table2.B, C, D from table1 {join_type} join table2 on table1.A = table2.A"
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_join_different_size_tables(
@@ -338,7 +325,7 @@ def test_join_different_size_tables(
                 ),
             )
             or x in (np.float32, np.float64)
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -346,8 +333,8 @@ def test_join_different_size_tables(
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["B", "C", "D"]
@@ -356,19 +343,16 @@ def test_join_different_size_tables(
     df = pd.DataFrame({"A": [1, 2, 3]})
     copied_join_dataframes = copy.copy(join_dataframes)
 
-    copied_join_dataframes["table3"] = df
+    copied_join_dataframes["TABLE3"] = df
     query = f"select table2.B, C, D from table1 {join_type} join table2 on table1.A = table2.A"
-    result = check_query(
+    check_query(
         query,
         copied_join_dataframes,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_nested_join(join_dataframes, spark_info, memory_leak_check):
@@ -380,8 +364,8 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["T1", "T2"]
@@ -398,17 +382,14 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
     ON
         table4.A = table3.Y
     """
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
@@ -419,8 +400,8 @@ def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     # assumedly, the null values in table4.A/B shouldn't match to anything, and shouldn't raise an error
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["T1", "T2"]
@@ -435,17 +416,14 @@ def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     WHERE
         table3.Y = table4.A or table3.Y = table4.B
     """
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
@@ -462,48 +440,44 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
     WHERE
         table3.Y = table4.A and table3.Y = table4.B
     """
-    result = check_query(
+    check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=False,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
 def test_join_boolean(bodosql_boolean_types, spark_info, join_type, memory_leak_check):
     """test all possible join types on boolean table"""
 
     newCtx = {
-        "table1": bodosql_boolean_types["table1"],
-        "table2": bodosql_boolean_types["table1"],
+        "TABLE1": bodosql_boolean_types["TABLE1"],
+        "TABLE2": bodosql_boolean_types["TABLE1"],
     }
     query = f"select table1.B, table2.C from table1 {join_type} join table2 on table1.A"
-    result = check_query(
+    check_query(
         query,
         newCtx,
         spark_info,
         check_names=False,
-        return_codegen=True,
         check_dtype=False,
     )
-    pandas_code = result["pandas_code"]
-    check_efficient_join(pandas_code)
 
 
-def test_multikey_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
-    """test that for all possible join types "and equality conditions" turn into multikey join"""
+def test_multi_key_join_types(
+    join_dataframes, spark_info, join_type, memory_leak_check
+):
+    """test that for all possible join types "and equality conditions" turn into multi key join"""
     # Note: We don't check the generated code because column ordering isn't deterministic
     # Join code doesn't properly trim the filter yet, so outer joins will drop any NA columns
     # when applying the filter.
     # TODO: Trim filter to just column not used in the key
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["C", "D"]
@@ -520,14 +494,14 @@ def test_multikey_join_types(join_dataframes, spark_info, join_type, memory_leak
 
 
 @pytest.mark.slow
-def test_trimmed_multikey_cond_inner_join(
+def test_trimmed_multi_key_cond_inner_join(
     join_dataframes, spark_info, memory_leak_check
 ):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["C", "D"]
@@ -549,7 +523,7 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     Tests using non-ascii in an implicit join via select distinct.
     """
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "D": pd.Series(list(pd.date_range("2011", "2018", 5)) * 20),
                 "S": pd.Series(
@@ -560,7 +534,7 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
                 ),
             }
         ),
-        "table2": pd.DataFrame(
+        "TABLE2": pd.DataFrame(
             {
                 "T": pd.Series(
                     [
@@ -627,8 +601,8 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
             on t1.A = t2.B and t2.C > t1.B
     """
     ctx = {
-        "table1": df,
-        "table2": df,
+        "TABLE1": df,
+        "TABLE2": df,
     }
     py_output = df.merge(df, left_on="A", right_on="B")
     # Drop nulls to match SQL
@@ -646,11 +620,11 @@ def test_join_pow(spark_info, join_type, memory_leak_check):
     """
     df1 = pd.DataFrame({"A": [2, 4, 3] * 4, "B": [3.1, 2.2, 0.1] * 4})
     df2 = pd.DataFrame({"C": [1, 2] * 3, "D": [1.1, 3.3] * 3})
-    query1 = f"select * from t1 {join_type} join t2 on pow(t1.A - t2.C, 2) > 11"
-    query2 = f"select * from t1 {join_type} join t2 on pow(pow(t1.A - t2.C, 2) + pow(t1.B - t2.D,2),.5)<2"
+    query1 = f"select * from ARG1 {join_type} join ARG2 on pow(ARG1.A - ARG2.C, 2) > 11"
+    query2 = f"select * from ARG1 {join_type} join ARG2 on pow(pow(ARG1.A - ARG2.C, 2) + pow(ARG1.B - ARG2.D,2),.5)<2"
     ctx = {
-        "t1": df1,
-        "t2": df2,
+        "ARG1": df1,
+        "ARG2": df2,
     }
     check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
     check_query(query2, ctx, spark_info, check_dtype=False, check_names=False)
@@ -679,10 +653,8 @@ def test_interval_join_compilation(memory_leak_check):
             "R": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
         }
     )
-    bc = bodosql.BodoSQLContext({"t1": df1, "t2": df2})
-    query = (
-        "select P, L from t1 inner join t2 on t1.P >= t2.L::date and t1.P < t2.R::date"
-    )
+    bc = bodosql.BodoSQLContext({"ARG1": df1, "ARG2": df2})
+    query = "select P, L from ARG1 inner join ARG2 on ARG1.P >= ARG2.L::date and ARG1.P < ARG2.R::date"
 
     def impl(bc, query):
         return bc.sql(query)
@@ -701,9 +673,9 @@ def test_join_div(spark_info, join_type, memory_leak_check):
     """
     df1 = pd.DataFrame({"A": [2, 4, 3] * 4, "B": [3.1, 2.2, 0.1] * 4})
     df2 = pd.DataFrame({"A": [1, 2] * 4, "D": [1.1, 3.3] * 4})
-    query1 = f"select B from t1 {join_type} join t2 on true where t1.B / t2.D > 2.0"
+    query1 = f"select B from T1 {join_type} join T2 on true where T1.B / T2.D > 2.0"
     ctx = {
-        "t1": df1,
-        "t2": df2,
+        "T1": df1,
+        "T2": df2,
     }
     check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)

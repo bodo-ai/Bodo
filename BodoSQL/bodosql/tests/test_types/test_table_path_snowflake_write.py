@@ -31,10 +31,10 @@ def test_insert_into(memory_leak_check):
         create_df.to_sql(table_name, conn_str, if_exists="replace", index=False)
         bc = bodosql.BodoSQLContext(
             {
-                "dest_table": bodosql.TablePath(
+                "DEST_TABLE": bodosql.TablePath(
                     table_name, "sql", conn_str=conn_str, db_schema=schema
                 ),
-                "t1": append_df,
+                "T1": append_df,
             }
         )
         bc.sql("INSERT INTO dest_table(B, C) SELECT B, C FROM T1 WHERE A > 5")
@@ -44,13 +44,13 @@ def test_insert_into(memory_leak_check):
 
     create_df = pd.DataFrame(
         {
-            "a": np.arange(5),
-            "b": ["a", "@42", "42", "@32", "12"],
-            "c": [23.1, 12.1, 11, 4242.2, 95],
+            "A": np.arange(5),
+            "B": ["a", "@42", "42", "@32", "12"],
+            "C": [23.1, 12.1, 11, 4242.2, 95],
         }
     )
     append_df = pd.DataFrame(
-        {"a": [1, 3, 5, 7, 9] * 10, "b": ["Afe", "fewfe"] * 25, "c": 1.1}
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
     )
     comm = MPI.COMM_WORLD
     schema = "PUBLIC"
@@ -63,10 +63,11 @@ def test_insert_into(memory_leak_check):
         py_output = None
         if bodo.get_rank() == 0:
             # Generate the reference answer
-            filtered_df = append_df[append_df.a > 5][["b", "c"]]
+            filtered_df = append_df[append_df.A > 5][["B", "C"]]
             py_output = pd.concat((create_df, filtered_df), ignore_index=True)
 
         py_output = comm.bcast(py_output)
+        py_output.columns = ["a", "b", "c"]
 
         # Since we separate read and write into different impl's,
         # we must do the 1D parallel work from check_func done
@@ -105,10 +106,10 @@ def test_insert_into_date(memory_leak_check):
         create_df.to_sql(table_name, conn_str, if_exists="replace", index=False)
         bc = bodosql.BodoSQLContext(
             {
-                "dest_table": bodosql.TablePath(
+                "DEST_TABLE": bodosql.TablePath(
                     table_name, "sql", conn_str=conn_str, db_schema=schema
                 ),
-                "t1": append_df,
+                "T1": append_df,
             }
         )
         bc.sql("INSERT INTO dest_table(A) SELECT A from t1 where C > 2")
@@ -118,14 +119,14 @@ def test_insert_into_date(memory_leak_check):
 
     create_df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 datetime.date(2022, 1, 1),
                 datetime.date(2022, 2, 1),
                 datetime.date(2022, 3, 1),
                 datetime.date(2022, 4, 1),
                 datetime.date(2022, 5, 1),
             ],
-            "b": [
+            "B": [
                 datetime.date(2022, 1, 1),
                 datetime.date(2022, 1, 2),
                 datetime.date(2022, 1, 3),
@@ -136,14 +137,14 @@ def test_insert_into_date(memory_leak_check):
     )
     append_df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 datetime.date(2022, 1, 1),
                 datetime.date(2021, 1, 1),
                 datetime.date(2020, 1, 1),
                 datetime.date(2019, 1, 1),
                 datetime.date(2018, 1, 1),
             ],
-            "c": np.arange(5),
+            "C": np.arange(5),
         }
     )
     comm = MPI.COMM_WORLD
@@ -158,10 +159,11 @@ def test_insert_into_date(memory_leak_check):
 
         if bodo.get_rank() == 0:
             # Generate reference answer
-            filtered_df = append_df[append_df.c > 2][["a"]]
+            filtered_df = append_df[append_df.C > 2][["A"]]
             py_output = pd.concat((create_df, filtered_df), ignore_index=True)
 
         py_output = comm.bcast(py_output)
+        py_output.columns = ["a", "b"]
 
         # Since we separate read and write into different impl's,
         # we must do the 1D parallel work from check_func done

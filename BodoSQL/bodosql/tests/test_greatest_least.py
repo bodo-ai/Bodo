@@ -183,7 +183,7 @@ def test_greatest_binary_columns(
     FROM
         table1
     """
-    df = bodosql_binary_types["table1"]
+    df = bodosql_binary_types["TABLE1"]
 
     expected_output = pd.DataFrame(
         {
@@ -207,7 +207,7 @@ def test_greatest_bool_columns(
     FROM
         table1
     """
-    df = bodosql_boolean_types["table1"]
+    df = bodosql_boolean_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "OUT_COL": df.apply(
@@ -241,7 +241,7 @@ def test_greatest_date_columns(
     FROM
         table1
     """
-    df = bodosql_date_types["table1"]
+    df = bodosql_date_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "OUT_COL": df.apply(
@@ -281,7 +281,7 @@ def test_greatest_timestamp_columns(
     FROM
         table1
     """
-    df = bodosql_datetime_types["table1"]
+    df = bodosql_datetime_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "OUT_COL": df.apply(
@@ -311,7 +311,7 @@ def test_greatest_tz_aware_columns(
             ),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"""
     SELECT
         {greatest_or_least}(A,B,C) as output
@@ -340,7 +340,7 @@ def test_least_datetime_strings(memory_leak_check):
             "C": pd.Series(["1999-09-17", "1999-09-17"] * 3),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     query = "SELECT LEAST(A,B,C) as output FROM table1"
     S = (
@@ -359,7 +359,7 @@ def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
     """
 
     df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     query = f"SELECT {greatest_or_least}(A) as output FROM table1"
     py_output = pd.DataFrame({"OUTPUT": df.A})
@@ -400,7 +400,7 @@ def test_greatest_time_columns(
     FROM
         table1
     """
-    df = bodosql_time_types["table1"]
+    df = bodosql_time_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "OUT_COL": df.apply(

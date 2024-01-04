@@ -21,7 +21,7 @@ pytestmark = pytest.mark.iceberg
 
 @pytest.fixture(scope="function")
 def table_name(request):
-    return request.node.name
+    return request.node.name.upper()
 
 
 def _create_and_init_table(table_name, types, df, source=None):
@@ -45,7 +45,7 @@ def _create_and_init_table(table_name, types, df, source=None):
                     table_name, "sql", conn_str=conn, db_schema=db_schema
                 )
             },
-            **({"source": source} if source is not None else {}),
+            **({"SOURCE": source} if source is not None else {}),
         }
     )
 
@@ -61,9 +61,9 @@ def test_merge_into_empty_target_insert_all_non_matching_rows(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
-        pd.DataFrame({"id": [], "dep": []}),
-        pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
+        [("ID", "int", False), ("DEP", "string", False)],
+        pd.DataFrame({"ID": [], "DEP": []}),
+        pd.DataFrame({"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
@@ -77,7 +77,7 @@ def test_merge_into_empty_target_insert_all_non_matching_rows(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_rows = pd.DataFrame(
-        {"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}
+        {"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}
     )
 
     check_func(
@@ -103,9 +103,9 @@ def test_merge_into_empty_target_insert_only_matching_rows(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(),
-        pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
+        pd.DataFrame({"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
@@ -118,7 +118,7 @@ def test_merge_into_empty_target_insert_only_matching_rows(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [2, 3], "dep": ["emp-id-2", "emp-id-3"]})
+    expected_rows = pd.DataFrame({"ID": [2, 3], "DEP": ["emp-id-2", "emp-id-3"]})
 
     check_func(
         impl,
@@ -140,8 +140,8 @@ def test_merge_into_non_existing_table(
 
     bc = bodosql.BodoSQLContext(
         {
-            "source": pd.DataFrame(
-                {"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}
+            "SOURCE": pd.DataFrame(
+                {"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}
             )
         }
     )
@@ -169,12 +169,12 @@ def test_merge_with_only_update_clause(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-six"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-six"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -188,7 +188,7 @@ def test_merge_with_only_update_clause(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 6], "dep": ["emp-id-1", "emp-id-six"]})
+    expected_rows = pd.DataFrame({"ID": [1, 6], "DEP": ["emp-id-1", "emp-id-six"]})
 
     check_func(
         impl,
@@ -211,12 +211,12 @@ def test_merge_with_only_delete_clause(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -230,7 +230,7 @@ def test_merge_with_only_delete_clause(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1], "dep": ["emp-id-one"]})
+    expected_rows = pd.DataFrame({"ID": [1], "DEP": ["emp-id-one"]})
 
     check_func(
         impl,
@@ -254,12 +254,12 @@ def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -277,7 +277,7 @@ def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "dep": ["emp-id-1", "emp-id-2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "DEP": ["emp-id-1", "emp-id-2"]})
 
     check_func(
         impl,
@@ -300,12 +300,12 @@ def test_merge_with_all_causes_with_explicit_column_specification(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -323,7 +323,7 @@ def test_merge_with_all_causes_with_explicit_column_specification(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "dep": ["emp-id-1", "emp-id-2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "DEP": ["emp-id-1", "emp-id-2"]})
 
     check_func(
         impl,
@@ -344,12 +344,12 @@ def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name)
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [2, 6], "dep": ["emp-id-two", "emp-id-6"]},
+            {"ID": [2, 6], "DEP": ["emp-id-two", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 5], "dep": ["emp-id-3", "emp-id-2", "emp-id-6"]},
+            {"ID": [2, 1, 5], "DEP": ["emp-id-3", "emp-id-2", "emp-id-6"]},
         ),
     )
 
@@ -368,7 +368,7 @@ def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name)
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [2, 3], "dep": ["emp-id-2", "emp-id-3"]})
+    expected_rows = pd.DataFrame({"ID": [2, 3], "DEP": ["emp-id-2", "emp-id-3"]})
 
     check_func(
         impl,
@@ -393,12 +393,12 @@ def test_merge_with_source_from_set_ops(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -416,7 +416,7 @@ def test_merge_with_source_from_set_ops(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "dep": ["emp-id-1", "emp-id-2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "DEP": ["emp-id-1", "emp-id-2"]})
 
     check_func(
         impl,
@@ -447,12 +447,12 @@ def test_merge_with_multiple_updates_for_target_row(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
-            {"id": [2, 1, 6], "dep": ["emp-id-2", "emp-id-1", "emp-id-6"]},
+            {"ID": [2, 1, 6], "DEP": ["emp-id-2", "emp-id-1", "emp-id-6"]},
         ),
     )
 
@@ -470,7 +470,7 @@ def test_merge_with_multiple_updates_for_target_row(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "dep": ["emp-id-1", "emp-id-2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "DEP": ["emp-id-1", "emp-id-2"]})
 
     check_func(
         impl,
@@ -495,14 +495,14 @@ def test_merge_with_unconditional_delete(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
             {
-                "id": [1, 1, 2, 6],
-                "dep": ["emp-id-1", "emp-id-1", "emp-id-2", "emp-id-6"],
+                "ID": [1, 1, 2, 6],
+                "DEP": ["emp-id-1", "emp-id-1", "emp-id-2", "emp-id-6"],
             },
         ),
     )
@@ -519,7 +519,7 @@ def test_merge_with_unconditional_delete(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [2], "dep": ["emp-id-2"]})
+    expected_rows = pd.DataFrame({"ID": [2], "DEP": ["emp-id-2"]})
 
     check_func(
         impl,
@@ -544,14 +544,14 @@ def test_merge_with_single_conditional_delete(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]},
+            {"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]},
         ),
         pd.DataFrame(
             {
-                "id": [1, 1, 2, 6],
-                "dep": ["emp-id-1", "emp-id-1", "emp-id-2", "emp-id-6"],
+                "ID": [1, 1, 2, 6],
+                "DEP": ["emp-id-1", "emp-id-1", "emp-id-2", "emp-id-6"],
             },
         ),
     )
@@ -568,7 +568,7 @@ def test_merge_with_single_conditional_delete(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 6], "dep": ["emp-id-one", "emp-id-6"]})
+    expected_rows = pd.DataFrame({"ID": [1, 6], "DEP": ["emp-id-one", "emp-id-6"]})
 
     check_func(
         impl,
@@ -593,9 +593,9 @@ def test_self_merge(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("ID", "int", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1", "v2"]},
+            {"ID": [1, 2], "V": ["v1", "v2"]},
         ),
     )
 
@@ -611,7 +611,7 @@ def test_self_merge(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "v": ["x", "v2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "V": ["x", "v2"]})
 
     check_func(
         impl,
@@ -635,12 +635,12 @@ def test_merge_with_source_as_self_subquery(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("ID", "int", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1", "v2"]},
+            {"ID": [1, 2], "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"temp_value": [1, None]},
+            {"TEMP_VALUE": [1, None]},
         ),
     )
 
@@ -656,7 +656,7 @@ def test_merge_with_source_as_self_subquery(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "v": ["x", "v2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "V": ["x", "v2"]})
 
     check_func(
         impl,
@@ -683,15 +683,15 @@ def test_merge_with_extra_columns_in_source(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("ID", "int", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1", "v2"]},
+            {"ID": [1, 2], "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
             {
-                "id": [1, 3, 4],
-                "extra_col": [-1, -1, -1],
-                "source_v": ["v1_1", "v3", "v4"],
+                "ID": [1, 3, 4],
+                "EXTRA_COL": [-1, -1, -1],
+                "SOURCE_V": ["v1_1", "v3", "v4"],
             },
         ),
     )
@@ -708,7 +708,7 @@ def test_merge_with_extra_columns_in_source(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2, 3, 4], "v": ["v1_1", "v2", "v3", "v4"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2, 3, 4], "V": ["v1_1", "v2", "v3", "v4"]})
 
     check_func(
         impl,
@@ -735,12 +735,12 @@ def test_merge_with_nulls_in_target_and_source(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", True), ("v", "string", True)],
+        [("ID", "int", True), ("V", "string", True)],
         pd.DataFrame(
-            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
+            {"ID": pd.Series([None, 2], dtype="Int64"), "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": pd.Series([None, 4], dtype="Int64"), "v": ["v1_1", "v4"]},
+            {"ID": pd.Series([None, 4], dtype="Int64"), "V": ["v1_1", "v4"]},
         ),
     )
 
@@ -757,7 +757,7 @@ def test_merge_with_nulls_in_target_and_source(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
     expected_rows = pd.DataFrame(
-        {"id": [None, None, 2, 4], "v": ["v1", "v1_1", "v2", "v4"]}
+        {"ID": [None, None, 2, 4], "V": ["v1", "v1_1", "v2", "v4"]}
     )
 
     check_func(
@@ -786,12 +786,12 @@ def test_merge_with_null_safe_equals(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", True), ("v", "string", True)],
+        [("ID", "int", True), ("V", "string", True)],
         pd.DataFrame(
-            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
+            {"ID": pd.Series([None, 2], dtype="Int64"), "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": pd.Series([None, 4], dtype="Int64"), "v": ["v1_1", "v4"]},
+            {"ID": pd.Series([None, 4], dtype="Int64"), "V": ["v1_1", "v4"]},
         ),
     )
 
@@ -807,7 +807,7 @@ def test_merge_with_null_safe_equals(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
-    expected_rows = pd.DataFrame({"id": [None, 2, 4], "v": ["v1_1", "v2", "v4"]})
+    expected_rows = pd.DataFrame({"ID": [None, 2, 4], "V": ["v1_1", "v2", "v4"]})
 
     check_func(
         impl,
@@ -832,12 +832,12 @@ def test_merge_with_null_condition(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", True), ("v", "string", True)],
+        [("ID", "int", True), ("V", "string", True)],
         pd.DataFrame(
-            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
+            {"ID": pd.Series([None, 2], dtype="Int64"), "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1_1", "v2_2"]},
+            {"ID": pd.Series([None, 2], dtype="Int64"), "V": ["v1_1", "v2_2"]},
         ),
     )
 
@@ -854,7 +854,7 @@ def test_merge_with_null_condition(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
     expected_rows = pd.DataFrame(
-        {"id": [None, None, 2, 2], "v": ["v1", "v1_1", "v2", "v2_2"]}
+        {"ID": [None, None, 2, 2], "V": ["v1", "v1_1", "v2", "v2_2"]}
     )
 
     check_func(
@@ -879,12 +879,12 @@ def test_merge_with_null_action_conditions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("ID", "int", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1", "v2"]},
+            {"ID": [1, 2], "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": [1, 2, 3], "v": ["v1_1", "v2_2", "v3_3"]},
+            {"ID": [1, 2, 3], "V": ["v1_1", "v2_2", "v3_3"]},
         ),
     )
 
@@ -916,8 +916,8 @@ def test_merge_with_null_action_conditions(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "v": ["v1", "v2"]}), pd.DataFrame(
-        {"id": [2], "v": ["v2"]}
+    expected_rows = pd.DataFrame({"ID": [1, 2], "V": ["v1", "v2"]}), pd.DataFrame(
+        {"ID": [2], "V": ["v2"]}
     )
     check_func(
         impl1,
@@ -953,12 +953,12 @@ def test_merge_with_multiple_matching_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("ID", "int", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1", "v2"]},
+            {"ID": [1, 2], "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": [1, 2], "v": ["v1_1", "v2_2"]},
+            {"ID": [1, 2], "V": ["v1_1", "v2_2"]},
         ),
     )
 
@@ -976,7 +976,7 @@ def test_merge_with_multiple_matching_actions(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "v": ["v1", "v2"]})
+    expected_rows = pd.DataFrame({"ID": [1, 2], "V": ["v1", "v2"]})
 
     check_func(
         impl,
@@ -1005,14 +1005,14 @@ def test_merge_insert_only(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "string", False), ("v", "string", False)],
+        [("ID", "string", False), ("V", "string", False)],
         pd.DataFrame(
-            {"id": ["a", "b"], "v": ["v1", "v2"]},
+            {"ID": ["a", "b"], "V": ["v1", "v2"]},
         ),
         pd.DataFrame(
             {
-                "id": ["a", "a", "c", "d", "d"],
-                "v": ["v1_1", "v1_2", "v3", "v4_1", "v4_2"],
+                "ID": ["a", "a", "c", "d", "d"],
+                "V": ["v1_1", "v1_2", "v3", "v4_1", "v4_2"],
             },
         ),
     )
@@ -1028,7 +1028,7 @@ def test_merge_insert_only(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_rows = pd.DataFrame(
-        {"id": ["a", "b", "c", "d", "d"], "v": ["v1", "v2", "v3", "v4_1", "v4_2"]}
+        {"ID": ["a", "b", "c", "d", "d"], "V": ["v1", "v2", "v3", "v4_1", "v4_2"]}
     )
 
     check_func(
@@ -1053,12 +1053,12 @@ def test_merge_insert_only_with_condition(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "int", False)],
+        [("ID", "int", False), ("V", "int", False)],
         pd.DataFrame(
-            {"id": [1], "v": [1]},
+            {"ID": [1], "V": [1]},
         ),
         pd.DataFrame(
-            {"id": [1, 2, 2], "v": [11, 21, 22], "is_new": [True, True, False]},
+            {"ID": [1, 2, 2], "V": [11, 21, 22], "IS_NEW": [True, True, False]},
         ),
     )
 
@@ -1074,8 +1074,8 @@ def test_merge_insert_only_with_condition(
 
     expected_rows = pd.DataFrame(
         {
-            "id": pd.Series([1, 2], dtype="int32"),
-            "v": pd.Series([1, 121], dtype="int32"),
+            "ID": pd.Series([1, 2], dtype="int32"),
+            "V": pd.Series([1, 121], dtype="int32"),
         }
     )
 
@@ -1104,12 +1104,12 @@ def test_merge_aligns_update_and_insert_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("a", "int", False), ("b", "string", False)],
+        [("ID", "int", False), ("A", "int", False), ("B", "string", False)],
         pd.DataFrame(
-            {"id": [1], "a": [2], "b": ["str"]},
+            {"ID": [1], "A": [2], "B": ["str"]},
         ),
         pd.DataFrame(
-            {"id": [1, 2], "c1": [-2, -20], "c2": ["new_str_1", "new_str_1"]},
+            {"ID": [1, 2], "C1": [-2, -20], "C2": ["new_str_1", "new_str_1"]},
         ),
     )
 
@@ -1126,7 +1126,7 @@ def test_merge_aligns_update_and_insert_actions(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_rows = pd.DataFrame(
-        {"id": [1, 2], "a": [-2, -20], "b": ["new_str_1", "new_str_2"]}
+        {"ID": [1, 2], "A": [-2, -20], "B": ["new_str_1", "new_str_2"]}
     )
 
     check_func(
@@ -1154,12 +1154,12 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("a", "int", False), ("b", "string", False)],
+        [("ID", "int", False), ("A", "int", False), ("B", "string", False)],
         pd.DataFrame(
-            {"id": [1], "a": [2], "b": ["str"]},
+            {"ID": [1], "A": [2], "B": ["str"]},
         ),
         pd.DataFrame(
-            {"id": [1, 2], "c1": [-2, -20], "c2": ["new_str_1", "new_str_1"]},
+            {"ID": [1, 2], "C1": [-2, -20], "C2": ["new_str_1", "new_str_1"]},
         ),
     )
 
@@ -1182,10 +1182,10 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
         return bc.sql(f"SELECT * FROM {table_name} WHERE b = 'new_str_2' ORDER BY id")
 
     expected_1 = pd.DataFrame(
-        {"id": [1, 2], "a": [-2, -20], "b": ["new_str_1", "new_str_2"]}
+        {"ID": [1, 2], "A": [-2, -20], "B": ["new_str_1", "new_str_2"]}
     )
-    expected_2 = pd.DataFrame({"id": [1], "a": [-2], "b": ["new_str_1"]})
-    expected_3 = pd.DataFrame({"id": [2], "a": [-20], "b": ["new_str_2"]})
+    expected_2 = pd.DataFrame({"ID": [1], "A": [-2], "B": ["new_str_1"]})
+    expected_3 = pd.DataFrame({"ID": [2], "A": [-20], "B": ["new_str_2"]})
 
     check_func(
         impl1,
@@ -1226,19 +1226,19 @@ def test_merge_multiple_match_ordering(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("a", "int", False), ("b", "string", False)],
+        [("ID", "int", False), ("A", "int", False), ("B", "string", False)],
         pd.DataFrame(
             {
-                "id": [1, 2, 3, 4, 5],
-                "a": [2, 4, 6, 8, 10],
-                "b": ["str1", "str2", "str3", "str4", "str5"],
+                "ID": [1, 2, 3, 4, 5],
+                "A": [2, 4, 6, 8, 10],
+                "B": ["str1", "str2", "str3", "str4", "str5"],
             },
         ),
         pd.DataFrame(
             {
-                "id": [1, 2, 3, 4, 5, -1, -2, -3, -4, -5],
-                "c1": [-2, -4, -6, -8, -10, -2, -4, -6, -8, -10],
-                "c2": [
+                "ID": [1, 2, 3, 4, 5, -1, -2, -3, -4, -5],
+                "C1": [-2, -4, -6, -8, -10, -2, -4, -6, -8, -10],
+                "C2": [
                     "new_str_1",
                     "new_str_2",
                     "new_str_3",
@@ -1280,9 +1280,9 @@ def test_merge_multiple_match_ordering(
 
     expected = pd.DataFrame(
         {
-            "id": [1, 2, 4, 5, -1, -2, -3, -4, -5],
-            "a": [-1, -3, -8, -10, -2, -4, -6, -8, -10],
-            "b": [
+            "ID": [1, 2, 4, 5, -1, -2, -3, -4, -5],
+            "A": [-1, -3, -8, -10, -2, -4, -6, -8, -10],
+            "B": [
                 "str1",
                 "str2",
                 "str4",
@@ -1294,7 +1294,7 @@ def test_merge_multiple_match_ordering(
                 "I am < -3!",
             ],
         }
-    ).sort_values(by="id")
+    ).sort_values(by="ID")
     check_func(
         impl,
         (bc,),
@@ -1317,9 +1317,9 @@ def test_merge_with_inferred_casts(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("s", "string", False)],
-        pd.DataFrame({"id": [1], "s": ["value"]}),
-        pd.DataFrame({"id": [1], "c1": [-2]}),
+        [("ID", "int", False), ("S", "string", False)],
+        pd.DataFrame({"ID": [1], "S": ["value"]}),
+        pd.DataFrame({"ID": [1], "C1": [-2]}),
     )
 
     def impl(bc):
@@ -1332,7 +1332,7 @@ def test_merge_with_inferred_casts(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_1 = pd.DataFrame({"id": [1], "s": ["-2"]})
+    expected_1 = pd.DataFrame({"ID": [1], "S": [-2]})
 
     check_func(
         impl,
@@ -1356,9 +1356,9 @@ def test_merge_with_multiple_not_matched_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
-        pd.DataFrame({"id": [0], "dep": ["emp-id-0"]}),
-        pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
+        [("ID", "int", False), ("DEP", "string", False)],
+        pd.DataFrame({"ID": [0], "DEP": ["emp-id-0"]}),
+        pd.DataFrame({"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
@@ -1374,7 +1374,7 @@ def test_merge_with_multiple_not_matched_actions(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_1 = pd.DataFrame(
-        {"id": [-1, 0, 2, 3], "s": ["emp-id-1", "emp-id-0", "emp-id-2", "emp-id-3"]}
+        {"ID": [-1, 0, 2, 3], "S": ["emp-id-1", "emp-id-0", "emp-id-2", "emp-id-3"]}
     )
 
     check_func(
@@ -1400,9 +1400,9 @@ def test_merge_with_multiple_conditional_not_matched_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
-        pd.DataFrame({"id": [0], "dep": ["emp-id-0"]}),
-        pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
+        [("ID", "int", False), ("DEP", "string", False)],
+        pd.DataFrame({"ID": [0], "DEP": ["emp-id-0"]}),
+        pd.DataFrame({"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
@@ -1418,7 +1418,7 @@ def test_merge_with_multiple_conditional_not_matched_actions(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_1 = pd.DataFrame(
-        {"id": [-1, 0, 2], "s": ["emp-id-1", "emp-id-0", "emp-id-2"]}
+        {"ID": [-1, 0, 2], "S": ["emp-id-1", "emp-id-0", "emp-id-2"]}
     )
 
     check_func(
@@ -1444,15 +1444,15 @@ def test_merge_resolves_columns_by_name(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("badge", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("BADGE", "int", False), ("DEP", "string", False)],
         pd.DataFrame(
-            {"id": [1, 6], "badge": [1000, 6000], "dep": ["emp-id-0", "emp-id-6"]}
+            {"ID": [1, 6], "BADGE": [1000, 6000], "DEP": ["emp-id-0", "emp-id-6"]}
         ),
         pd.DataFrame(
             {
-                "badge": [1001, 6006, 7007],
-                "id": [1, 6, 7],
-                "dep": ["emp-id-1", "emp-id-6", "emp-id-7"],
+                "BADGE": [1001, 6006, 7007],
+                "ID": [1, 6, 7],
+                "DEP": ["emp-id-1", "emp-id-6", "emp-id-7"],
             }
         ),
     )
@@ -1471,9 +1471,9 @@ def test_merge_resolves_columns_by_name(
 
     expected_1 = pd.DataFrame(
         {
-            "id": [1, 6, 7],
-            "badge": [1001, 6006, 7007],
-            "s": ["emp-id-1", "emp-id-6", "emp-id-7"],
+            "ID": [1, 6, 7],
+            "BADGE": [1001, 6006, 7007],
+            "S": ["emp-id-1", "emp-id-6", "emp-id-7"],
         }
     )
 
@@ -1500,9 +1500,9 @@ def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_column
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("dep", "string", False)],
+        [("ID", "int", False), ("DEP", "string", False)],
         pd.DataFrame(),
-        pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
+        pd.DataFrame({"ID": [1, 2, 3], "DEP": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
@@ -1518,7 +1518,7 @@ def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_column
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     expected_1 = pd.DataFrame(
-        {"id": [1, 2, 3], "s": ["emp-id-1", "emp-id-2", "emp-id-3"]}
+        {"ID": [1, 2, 3], "S": ["emp-id-1", "emp-id-2", "emp-id-3"]}
     )
 
     check_func(
@@ -1544,9 +1544,9 @@ def test_merge_with_non_existing_columns(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("c", "date", False)],
-        pd.DataFrame({"id": [], "c": []}),
-        pd.DataFrame({"c1": [1, 2, 3], "c2": [4, 5, 6]}),
+        [("ID", "int", False), ("C", "date", False)],
+        pd.DataFrame({"ID": [], "C": []}),
+        pd.DataFrame({"C1": [1, 2, 3], "C2": [4, 5, 6]}),
     )
 
     @bodo.jit
@@ -1561,7 +1561,7 @@ def test_merge_with_non_existing_columns(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
     with pytest.raises(BodoError, match="Unknown target column"):
-        out1 = impl(bc)
+        impl(bc)
 
 
 @pytest.mark.slow
@@ -1577,9 +1577,9 @@ def test_merge_with_invalid_columns_in_insert(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("c", "date", False)],
-        pd.DataFrame({"id": [], "c": []}),
-        pd.DataFrame({"c1": [-100], "c2": [-200]}),
+        [("ID", "int", False), ("C", "date", False)],
+        pd.DataFrame({"ID": [], "C": []}),
+        pd.DataFrame({"C1": [-100], "C2": [-200]}),
     )
 
     @bodo.jit
@@ -1599,9 +1599,9 @@ def test_merge_with_invalid_columns_in_insert(
             "WHEN NOT MATCHED THEN " + "  INSERT (id) VALUES (s.c1)",
         )
 
-    msg1 = "Target column 'id' is assigned more than once"
+    msg1 = "Target column 'ID' is assigned more than once"
     if bodo.get_rank() == 0:
-        msg2 = "Column c contains nulls but is expected to be non-nullable"
+        msg2 = "Column C contains nulls but is expected to be non-nullable"
     else:
         msg2 = "See other ranks for runtime error"
 
@@ -1626,13 +1626,13 @@ def test_merge_with_conflicting_updates(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("c", "int", False)],
-        pd.DataFrame({"id": [], "c": []}),
+        [("ID", "int", False), ("C", "int", False)],
+        pd.DataFrame({"ID": [], "C": []}),
         pd.DataFrame(
             {
-                "c1": [-100],
-                "c2": [-200],
-                "c3": ["hello world"],
+                "C1": [-100],
+                "C2": [-200],
+                "C3": ["hello world"],
             }
         ),
     )
@@ -1664,12 +1664,12 @@ def test_merge_with_invalid_assignments(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("s", "int", False)],
+        [("ID", "int", False), ("S", "int", False)],
         pd.DataFrame(
-            {"c1": [1], "s": [2]},
+            {"C1": [1], "S": [2]},
         ),
         pd.DataFrame(
-            {"c1": [1], "c2": [2]},
+            {"C1": [1], "C2": [2]},
         ),
     )
 
@@ -1702,12 +1702,12 @@ def gen_agg_subquery_bc():
     # It's in a helper fn to avoid code duplication
     return _create_and_init_table(
         table_name,
-        [("id", "int", False), ("c", "int", False)],
+        [("ID", "int", False), ("C", "int", False)],
         pd.DataFrame(
-            {"id": [1], "c": [1]},
+            {"ID": [1], "C": [1]},
         ),
         pd.DataFrame(
-            {"c1": [1, 2], "c2": [-1, -2]},
+            {"C1": [1, 2], "C2": [-1, -2]},
         ),
     )
 
@@ -1738,7 +1738,7 @@ def test_merge_with_aggregate_expressions_in_join(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [-1]})
+    expected = pd.DataFrame({"ID": [1], "C": [-1]})
     check_func(
         test_agg_in_join,
         (bc,),
@@ -1775,7 +1775,7 @@ def test_merge_matched_with_aggregate_expressions_in_update_cond(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [1]})
+    expected = pd.DataFrame({"ID": [1], "C": [1]})
     check_func(
         test_agg_in_update_cond,
         (bc,),
@@ -1810,7 +1810,7 @@ def test_merge_with_aggregate_expressions_in_delete_cond(
         )
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [], "c": []})
+    expected = pd.DataFrame({"ID": [], "C": []})
     check_func(
         test_agg_in_delete_cond,
         (bc,),
@@ -1846,7 +1846,7 @@ def test_merge_not_matched_with_aggregate_expressions_in_update_cond(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [1]})
+    expected = pd.DataFrame({"ID": [1], "C": [1]})
     check_func(
         test_agg_in_update_cond,
         (bc,),
@@ -1882,7 +1882,7 @@ def test_merge_with_subqueries_in_join_condition(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [1]})
+    expected = pd.DataFrame({"ID": [1], "C": [1]})
     check_func(
         test_agg_in_join,
         (bc,),
@@ -1915,7 +1915,7 @@ def test_merge_with_subqueries_in_update_condition(
         )
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [-1]})
+    expected = pd.DataFrame({"ID": [1], "C": [-1]})
     check_func(
         test_agg_in_update_cond,
         (bc,),
@@ -1950,7 +1950,7 @@ def test_merge_with_subqueries_in_delete_condition(
         )
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [1]})
+    expected = pd.DataFrame({"ID": [1], "C": [1]})
     check_func(
         test_agg_in_delete_cond,
         (bc,),
@@ -1985,7 +1985,7 @@ def test_merge_with_subqueries_in_insert_condition(
         )
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected = pd.DataFrame({"id": [1], "c": [1]})
+    expected = pd.DataFrame({"ID": [1], "C": [1]})
     check_func(
         test_agg_in_insert_cond,
         (bc,),
@@ -2006,9 +2006,9 @@ def test_merge_with_target_columns_in_insert_conditions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("c2", "int", False)],
-        pd.DataFrame({"id": [], "c2": []}),
-        pd.DataFrame({"id": [1], "dep": [11]}),
+        [("ID", "int", False), ("C2", "int", False)],
+        pd.DataFrame({"ID": [], "C2": []}),
+        pd.DataFrame({"ID": [1], "DEP": [11]}),
     )
 
     @bodo.jit
@@ -2039,10 +2039,10 @@ def test_merge_empty_table(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False)],
-        pd.DataFrame({"id": []}),
+        [("ID", "int", False)],
+        pd.DataFrame({"ID": []}),
         pd.DataFrame(
-            {"id": [0, 1, 2, 3, 4]},
+            {"ID": [0, 1, 2, 3, 4]},
         ),
     )
 
@@ -2055,7 +2055,7 @@ def test_merge_empty_table(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_1 = pd.DataFrame({"id": [0, 1, 2, 3, 4]})
+    expected_1 = pd.DataFrame({"ID": [0, 1, 2, 3, 4]})
     check_func(
         impl,
         (bc,),

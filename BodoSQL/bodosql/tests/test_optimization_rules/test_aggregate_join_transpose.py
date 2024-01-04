@@ -30,7 +30,7 @@ from bodosql.tests.utils import check_query
     ]
 )
 def aggregate_join_transpose_queries(request):
-    """fixture that supplies queriees for the aggregate join transpose rule
+    """fixture that supplies queries for the aggregate join transpose rule
 
     This rule matches on an Aggregation whose inputs consist of exactly one Join node. The aggregations must also
     be allowed to be transposed. In the default configuration (the one we are using on master), pushing down aggregation functions is

@@ -24,7 +24,7 @@ valid_bool_params = [
     pytest.param(
         pd.DataFrame(
             {
-                "a": [
+                "A": [
                     "y",
                     "yes",
                     "t",
@@ -47,7 +47,7 @@ valid_bool_params = [
     pytest.param(
         pd.DataFrame(
             {
-                "a": [
+                "A": [
                     "Y",
                     "yEs",
                     "T",
@@ -68,22 +68,22 @@ valid_bool_params = [
         id="valid_to_boolean_strings_mixed_case",
     ),
     pytest.param(
-        pd.DataFrame({"a": pd.Series([1, 0, 2, 0, None, -2, -400] * 3, dtype="Int64")}),
+        pd.DataFrame({"A": pd.Series([1, 0, 2, 0, None, -2, -400] * 3, dtype="Int64")}),
         id="valid_to_boolean_ints",
     ),
     pytest.param(
-        pd.DataFrame({"a": [1.1, 0.0, None, 0.1, 0, -2, -400] * 3}),
+        pd.DataFrame({"A": [1.1, 0.0, None, 0.1, 0, -2, -400] * 3}),
         id="valid_to_boolean_floats",
     ),
 ]
 
 invalid_bool_params = [
     pytest.param(
-        pd.DataFrame({"a": pd.Series(["t", "a", "b", "y", None, "f"] * 3)}),
+        pd.DataFrame({"A": pd.Series(["t", "a", "b", "y", None, "f"] * 3)}),
         id="invalid_to_boolean_strings",
     ),
     pytest.param(
-        pd.DataFrame({"a": [1.1, 0.0, np.inf, 0.1, np.nan, -2, -400] * 3}),
+        pd.DataFrame({"A": [1.1, 0.0, np.inf, 0.1, np.nan, -2, -400] * 3}),
         id="invalid_to_boolean_floats",
     ),
 ]
@@ -109,13 +109,13 @@ def test_to_boolean_valid_cols(
 ):
     df = to_boolean_valid_test_dfs
     query = f"SELECT TO_BOOLEAN(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     if arr.apply(type).eq(str).any():
         py_output = arr.apply(str_to_bool)
     else:
         py_output = arr.apply(lambda x: np.nan if pd.isna(x) else bool(x))
-    py_output = pd.DataFrame({"a": py_output.astype("boolean")})
+    py_output = pd.DataFrame({"A": py_output.astype("boolean")})
     check_query(
         query,
         ctx,
@@ -129,7 +129,7 @@ def test_to_boolean_valid_cols(
 def test_to_boolean_invalid_cols(spark_info, to_boolean_invalid_test_dfs):
     df = to_boolean_invalid_test_dfs
     query = f"SELECT TO_BOOLEAN(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
     bc = bodosql.BodoSQLContext(ctx)
@@ -153,7 +153,7 @@ def to_boolean_equiv(arr):
 def test_to_boolean_scalars(spark_info, memory_leak_check):
     df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 "y",
                 "yes",
                 "t",
@@ -168,14 +168,14 @@ def test_to_boolean_scalars(spark_info, memory_leak_check):
                 "0",
             ]
             * 3,
-            "b": [1.1, 0.0, 1.0, 0.1, 0, -2, -400, 1.1, 0.0, 1.0, 0.1, 0] * 3,
-            "c": np.tile([0, 1], 18),
+            "B": [1.1, 0.0, 1.0, 0.1, 0, -2, -400, 1.1, 0.0, 1.0, 0.1, 0] * 3,
+            "C": np.tile([0, 1], 18),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TO_BOOLEAN(c) THEN TO_BOOLEAN(a) ELSE TO_BOOLEAN(b) END FROM table1"
     py_output = (
-        df["a"].apply(str_to_bool).where(df["c"].astype(bool), df["b"].astype(bool))
+        df["A"].apply(str_to_bool).where(df["C"].astype(bool), df["B"].astype(bool))
     )
     check_query(
         query,
@@ -183,14 +183,14 @@ def test_to_boolean_scalars(spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"a": py_output}),
+        expected_output=pd.DataFrame({"A": py_output}),
     )
 
 
 def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
     query = f"SELECT TRY_TO_BOOLEAN(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
     if is_str:
@@ -199,7 +199,7 @@ def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_ch
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) or np.isinf(x) else bool(x)
         )
-    py_output = pd.DataFrame({"a": py_output})
+    py_output = pd.DataFrame({"A": py_output})
     check_query(
         query,
         ctx,
@@ -213,7 +213,7 @@ def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_ch
 def test_try_to_boolean_scalars(spark_info):
     df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 "y",
                 "yes",
                 "t",
@@ -228,14 +228,14 @@ def test_try_to_boolean_scalars(spark_info):
                 "0",
             ]
             * 3,
-            "b": [1.1, 0.0, 1.0, 0.1, 0, -2, -400, 1.1, 0.0, 1.0, 0.1, 0] * 3,
-            "c": np.tile([0, 1], 18),
+            "B": [1.1, 0.0, 1.0, 0.1, 0, -2, -400, 1.1, 0.0, 1.0, 0.1, 0] * 3,
+            "C": np.tile([0, 1], 18),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TRY_TO_BOOLEAN(c) THEN TRY_TO_BOOLEAN(a) ELSE TRY_TO_BOOLEAN(b) END FROM table1"
-    py_output = to_boolean_equiv(df["a"]).where(
-        df["c"].astype(bool), to_boolean_equiv(df["b"])
+    py_output = to_boolean_equiv(df["A"]).where(
+        df["C"].astype(bool), to_boolean_equiv(df["B"])
     )
     check_query(
         query,
@@ -243,52 +243,52 @@ def test_try_to_boolean_scalars(spark_info):
         spark_info,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"a": py_output}),
+        expected_output=pd.DataFrame({"A": py_output}),
     )
 
 
 @pytest.fixture(
     params=[
         pytest.param(
-            pd.DataFrame({"a": [1, 2, 3, 4, 5]}),
+            pd.DataFrame({"A": [1, 2, 3, 4, 5]}),
             id="int",
         ),
         pytest.param(
-            pd.DataFrame({"a": pd.Series([1, 2, None, 4, 5], dtype="Int64")}),
+            pd.DataFrame({"A": pd.Series([1, 2, None, 4, 5], dtype="Int64")}),
             id="int_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": [1.1, 2.2, 3.3, 4.4, 5.5]}),
+            pd.DataFrame({"A": [1.1, 2.2, 3.3, 4.4, 5.5]}),
             id="float",
         ),
         pytest.param(
-            pd.DataFrame({"a": [1.1, 2.2, None, 4.4, np.inf]}),
+            pd.DataFrame({"A": [1.1, 2.2, None, 4.4, np.inf]}),
             id="float_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": [True, False, True, False, True]}),
+            pd.DataFrame({"A": [True, False, True, False, True]}),
             id="bool",
         ),
         pytest.param(
             pd.DataFrame(
-                {"a": pd.Series([True, False, None, False, True], dtype="boolean")}
+                {"A": pd.Series([True, False, None, False, True], dtype="boolean")}
             ),
             id="bool_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": _dates[:]}),
+            pd.DataFrame({"A": _dates[:]}),
             id="date",
         ),
         pytest.param(
-            pd.DataFrame({"a": _dates_nans[:]}),
+            pd.DataFrame({"A": _dates_nans[:]}),
             id="date_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": _timestamps[:]}),
+            pd.DataFrame({"A": _timestamps[:]}),
             id="timestamp",
         ),
         pytest.param(
-            pd.DataFrame({"a": _timestamps_nans[:]}),
+            pd.DataFrame({"A": _timestamps_nans[:]}),
             id="timestamp_with_nulls",
         ),
     ]
@@ -307,8 +307,8 @@ def to_char_test_dfs(request):
 def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
     df = to_char_test_dfs
     query = f"SELECT {func}(a) FROM table1"
-    ctx = {"table1": df}
-    arr = df["a"]
+    ctx = {"TABLE1": df}
+    arr = df["A"]
     if is_float_dtype(arr):
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}"
@@ -319,7 +319,7 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
         )
     else:
         py_output = arr.apply(lambda x: np.nan if pd.isna(x) else str(x))
-    py_output = pd.DataFrame({"a": py_output})
+    py_output = pd.DataFrame({"A": py_output})
     check_query(
         query,
         ctx,
@@ -340,18 +340,18 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
 def test_to_char_scalars(spark_info, func):
     df = pd.DataFrame(
         {
-            "a": [1, 2, 3, 4, 5] * 3,
-            "b": [1.1, 2.2, np.nan, 4.4, 5.5] * 3,
-            "c": [True, False, True, False, True] * 3,
-            "d": pd.date_range("20130101", periods=15, freq="D"),
+            "A": [1, 2, 3, 4, 5] * 3,
+            "B": [1.1, 2.2, np.nan, 4.4, 5.5] * 3,
+            "C": [True, False, True, False, True] * 3,
+            "D": pd.date_range("20130101", periods=15, freq="D"),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT CASE WHEN c THEN {func}(a + b) ELSE {func}(d) END FROM table1"
     py_output = (
-        (df["a"] + df["b"])
+        (df["A"] + df["B"])
         .apply(lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}")
-        .where(df["c"], df["d"].apply(lambda x: np.nan if pd.isna(x) else str(x)))
+        .where(df["C"], df["D"].apply(lambda x: np.nan if pd.isna(x) else str(x)))
     )
     check_query(
         query,
@@ -359,7 +359,7 @@ def test_to_char_scalars(spark_info, func):
         spark_info,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"a": py_output}),
+        expected_output=pd.DataFrame({"A": py_output}),
     )
 
 
@@ -368,7 +368,7 @@ def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     """simplest test for TO_CHAR on timezone aware data"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].astype(str)})
+    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
     check_query(
         query,
         tz_aware_df,
@@ -387,7 +387,7 @@ def test_timestamp_to_char(memory_leak_check):
     df = pd.DataFrame({"A": dt_series})
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -421,7 +421,7 @@ def test_date_to_char(memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -454,7 +454,7 @@ def test_to_char_datetime_format_str(memory_leak_check):
         }
     )
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
@@ -498,7 +498,7 @@ def test_time_to_char(use_case, memory_leak_check):
     else:
         S = pd.Series(["x", None, "12:30:00", "01:45:59", "23:59:05"])
 
-    ctx = {"table1": pd.DataFrame({"T": T})}
+    ctx = {"TABLE1": pd.DataFrame({"T": T})}
     expected_output = pd.DataFrame({0: S})
 
     check_query(
@@ -565,7 +565,7 @@ def binary_cast_data(request):
 def test_to_binary(calculation, binary_cast_data, memory_leak_check):
     data, answer = binary_cast_data
     query = f"SELECT {calculation} AS B FROM table1"
-    ctx = {"table1": pd.DataFrame({"S": data})}
+    ctx = {"TABLE1": pd.DataFrame({"S": data})}
     expected_output = pd.DataFrame({"B": answer})
     check_query(
         query,
@@ -583,7 +583,7 @@ def test_try_to_binary_invalid(memory_leak_check):
     query = f"SELECT TRY_TO_BINARY(S) AS B FROM table1"
     data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
     answer = pd.Series([b"\xAB", None, b"\xAB\xCD", None, None, b"\x10", None, None])
-    ctx = {"table1": pd.DataFrame({"S": data})}
+    ctx = {"TABLE1": pd.DataFrame({"S": data})}
     expected_output = pd.DataFrame({"B": answer})
     check_query(
         query,
@@ -600,7 +600,7 @@ def test_to_binary_error():
     (non-hex characters or odd number of characters)"""
     query = f"SELECT TO_BINARY(S) FROM table1"
     data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
-    ctx = {"table1": pd.DataFrame({"S": data})}
+    ctx = {"TABLE1": pd.DataFrame({"S": data})}
     with pytest.raises(ValueError):
         bc = bodosql.BodoSQLContext(ctx)
         bc.sql(query)
@@ -610,7 +610,7 @@ valid_double_params = [
     pytest.param(
         pd.DataFrame(
             {
-                "a": [
+                "A": [
                     ".1",
                     ".1e5",
                     ".1e+5",
@@ -642,11 +642,11 @@ valid_double_params = [
         id="valid_to_double_strings",
     ),
     pytest.param(
-        pd.DataFrame({"a": pd.Series([1, 0, 2, 0, None, -2, -400], dtype="Int64")}),
+        pd.DataFrame({"A": pd.Series([1, 0, 2, 0, None, -2, -400], dtype="Int64")}),
         id="valid_to_double_ints",
     ),
     pytest.param(
-        pd.DataFrame({"a": [1.1, 0.0, None, 0.1, 0, -2, -400, np.inf, np.nan]}),
+        pd.DataFrame({"A": [1.1, 0.0, None, 0.1, 0, -2, -400, np.inf, np.nan]}),
         id="valid_to_double_floats",
     ),
 ]
@@ -656,7 +656,7 @@ invalid_double_params = [
     pytest.param(
         pd.DataFrame(
             {
-                "a": pd.Series(
+                "A": pd.Series(
                     [
                         "baked beans",
                         "nane",
@@ -709,9 +709,9 @@ def to_double_equiv(arr):
 def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
     query = f"SELECT TO_DOUBLE(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"a": to_double_equiv(arr).astype("float64")})
+    py_output = pd.DataFrame({"A": to_double_equiv(arr).astype("float64")})
     check_query(
         query,
         ctx,
@@ -725,7 +725,7 @@ def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_
 def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
     df = to_double_invalid_test_dfs
     query = f"SELECT TO_DOUBLE(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     bc = bodosql.BodoSQLContext(ctx)
     is_str = arr.apply(type).eq(str).any()
@@ -744,7 +744,7 @@ def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
 def test_to_double_scalars(spark_info, memory_leak_check):
     df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 ".1",
                 ".1e5",
                 ".1e+5",
@@ -761,7 +761,7 @@ def test_to_double_scalars(spark_info, memory_leak_check):
                 "-2.64e-07",
             ]
             * 3,
-            "b": [
+            "B": [
                 1.1,
                 0.0,
                 1.0,
@@ -778,13 +778,13 @@ def test_to_double_scalars(spark_info, memory_leak_check):
                 np.inf,
             ]
             * 3,
-            "c": np.tile([0, 1], 21),
+            "C": np.tile([0, 1], 21),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TO_DOUBLE(c) = 1.0 THEN TO_DOUBLE(a) ELSE TO_DOUBLE(b) END FROM table1"
-    py_output = to_double_equiv(df["a"]).where(
-        df["c"].astype(bool), to_double_equiv(df["b"])
+    py_output = to_double_equiv(df["A"]).where(
+        df["C"].astype(bool), to_double_equiv(df["B"])
     )
     check_query(
         query,
@@ -792,16 +792,16 @@ def test_to_double_scalars(spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"a": py_output}),
+        expected_output=pd.DataFrame({"A": py_output}),
     )
 
 
 def test_try_to_double_cols(spark_info, to_double_all_test_dfs, memory_leak_check):
     df = to_double_all_test_dfs
     query = f"SELECT TRY_TO_DOUBLE(a) FROM table1"
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"a": to_double_equiv(arr)})
+    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
     check_query(
         query,
         ctx,
@@ -815,7 +815,7 @@ def test_try_to_double_cols(spark_info, to_double_all_test_dfs, memory_leak_chec
 def test_try_to_double_scalars(spark_info):
     df = pd.DataFrame(
         {
-            "a": [
+            "A": [
                 ".1",
                 ".1e5",
                 ".1e+5",
@@ -832,7 +832,7 @@ def test_try_to_double_scalars(spark_info):
                 "-2.64e-07",
             ]
             * 3,
-            "b": [
+            "B": [
                 1.1,
                 0.0,
                 1.0,
@@ -849,13 +849,13 @@ def test_try_to_double_scalars(spark_info):
                 np.inf,
             ]
             * 3,
-            "c": np.tile([0, 1], 21),
+            "C": np.tile([0, 1], 21),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TRY_TO_DOUBLE(c) = 1.0 THEN TRY_TO_DOUBLE(a) ELSE TRY_TO_DOUBLE(b) END FROM table1"
-    py_output = to_double_equiv(df["a"]).where(
-        df["c"].astype(bool), to_double_equiv(df["b"])
+    py_output = to_double_equiv(df["A"]).where(
+        df["C"].astype(bool), to_double_equiv(df["B"])
     )
     check_query(
         query,
@@ -863,7 +863,7 @@ def test_try_to_double_scalars(spark_info):
         spark_info,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"a": py_output}),
+        expected_output=pd.DataFrame({"A": py_output}),
     )
 
 
@@ -916,7 +916,7 @@ def test_to_boolean_optional_invalid_str(fn_name):
             ]
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     if "TRY" in fn_name:
         check_query(
             query,
@@ -926,7 +926,7 @@ def test_to_boolean_optional_invalid_str(fn_name):
         )
     else:
         with pytest.raises(ValueError, match="invalid value for boolean conversion"):
-            bc = bodosql.BodoSQLContext({"table1": df})
+            bc = bodosql.BodoSQLContext({"TABLE1": df})
 
             bc.sql(query)
 
@@ -972,7 +972,7 @@ def test_to_double_optional_invalid_str(fn_name):
             ]
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     if "TRY" in fn_name:
         check_query(
             query,
@@ -982,6 +982,6 @@ def test_to_double_optional_invalid_str(fn_name):
         )
     else:
         with pytest.raises(ValueError, match="invalid value for double conversion"):
-            bc = bodosql.BodoSQLContext({"table1": df})
+            bc = bodosql.BodoSQLContext({"TABLE1": df})
 
             bc.sql(query)

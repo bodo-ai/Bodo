@@ -60,7 +60,7 @@ def test_string_in_scalar_literals(spark_info):
     df = pd.DataFrame(
         {"A": ["a", "A", None, "happy", '"happy"', "smile", '"smile"', 'smi"le'] * 3}
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     output = check_query(
         query,
         ctx,

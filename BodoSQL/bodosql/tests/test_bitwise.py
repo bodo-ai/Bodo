@@ -16,7 +16,7 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture
 def bitwise_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [0, 1, 42, 2147483647, -2147483648, None], dtype=pd.Int32Dtype()

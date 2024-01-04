@@ -90,7 +90,7 @@ def create_iceberg_table(
     # We create table using SQL syntax, because DataFrame API
     # doesn't write the nullability in Iceberg metadata correctly.
     spark.sql(
-        f""" 
+        f"""
         CREATE TABLE hadoop_prod.{DATABASE_NAME}.{table_name} (
             {sql_col_defs})
         USING iceberg {partition_str}
@@ -108,7 +108,7 @@ def create_iceberg_table(
             sort_defs.append(f"{trans_str} {asc_str} NULLS {null_str}")
         spark.sql(
             f"""
-            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} 
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
             WRITE ORDERED BY {', '.join(sort_defs)}
         """
         )

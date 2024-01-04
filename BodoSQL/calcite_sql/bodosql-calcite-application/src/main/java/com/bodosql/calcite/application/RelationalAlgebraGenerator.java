@@ -204,7 +204,7 @@ public class RelationalAlgebraGenerator {
               //     catalog_default_path1.(table_identifier)
               //     catalog_default_path2.(table_identifier)
               //     ...
-              //     __bodo_local__.(table_identifier)
+              //     __BODOLOCAL__.(table_identifier)
               //     (table_identifier) (Note: this case will never yield a match,
               //     as the root schema is currently always empty. This may change
               //     in the future)

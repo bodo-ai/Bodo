@@ -76,7 +76,7 @@ def set_ops_cmds(request) -> str:
     params=[
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": pd.Series([1, 2, 3, None] * 3),
                         "B": pd.Series([4, None, 2, 3] * 3),
@@ -89,7 +89,7 @@ def set_ops_cmds(request) -> str:
         ),
         pytest.param(
             {
-                "table1": pd.DataFrame(
+                "TABLE1": pd.DataFrame(
                     {
                         "A": pd.Series(["a", "b", "cc", None] * 3),
                         "B": pd.Series(["d", None, "bb", "c"] * 3),
@@ -111,13 +111,13 @@ def null_set_dfs(request):
         {
             # What Spark uses to demonstrate set operators:
             # https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-setops.html
-            "table1": pd.DataFrame({"A": [3, 1, 2, 2, 3, 4]}),
-            "table2": pd.DataFrame({"B": [5, 1, 2, 2]}),
+            "TABLE1": pd.DataFrame({"A": [3, 1, 2, 2, 3, 4]}),
+            "TABLE2": pd.DataFrame({"B": [5, 1, 2, 2]}),
         },
         {
             # Testing how duplicates are handled
-            "table1": pd.DataFrame({"A": [1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5]}),
-            "table2": pd.DataFrame({"B": [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 6]}),
+            "TABLE1": pd.DataFrame({"A": [1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5]}),
+            "TABLE2": pd.DataFrame({"B": [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 6]}),
         },
     ]
 )
@@ -127,7 +127,7 @@ def set_ops_dfs(request):
 
 def make_tz_aware_df(tz):
     """
-    Make a dataframe of tz-aware timestamps with the given timezone.
+    Make a DataFrame of tz-aware timestamps with the given timezone.
     """
     # Note: B's and A's will overlap.
     tz_aware_data = {
@@ -147,28 +147,28 @@ def make_tz_aware_df(tz):
     [
         # Integer
         {
-            "table1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
-            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
+            "TABLE1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
+            "TABLE2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
         },
         # Float
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {"B": pd.Series([5.0, 1.0, 2.0, 2.0], dtype="Float32")}
             ),
         },
         # Float <-> Integer
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
             ),
-            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int64")}),
+            "TABLE2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int64")}),
         },
         # Decimal
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": np.array(
                         [
@@ -184,7 +184,7 @@ def make_tz_aware_df(tz):
                     )
                 }
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {
                     "B": np.array(
                         [
@@ -201,10 +201,10 @@ def make_tz_aware_df(tz):
         },
         # Decimal <-> Float
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {
                     "B": np.array(
                         [
@@ -221,7 +221,7 @@ def make_tz_aware_df(tz):
         },
         # Decimal <-> Integer
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "A": np.array(
                         [
@@ -235,7 +235,7 @@ def make_tz_aware_df(tz):
                     )
                 }
             ),
-            "table2": pd.DataFrame(
+            "TABLE2": pd.DataFrame(
                 {"B": pd.Series([5, 1, 2, pd.NA, 2], dtype="Int64")}
             ),
         },
@@ -326,7 +326,7 @@ def test_set_ops_null_literals(query_cmd, py_output, memory_leak_check):
             "C": ["A", None, "c", "recall", None] * 3,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"(SELECT A, B, C from table1) {query_cmd} (SELECT null as A, null as B, null as C)"
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
@@ -434,7 +434,7 @@ def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
         # Drop duplicates for UNION [DISTINCT]
         py_output = py_output.drop_duplicates()
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table1"
     check_query(query, ctx, None, expected_output=py_output)
 
@@ -454,7 +454,7 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
         # Drop duplicates for INTERSECT [DISTINCT]
         py_output = py_output.drop_duplicates()
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
     check_query(query, ctx, None, expected_output=py_output)
 
@@ -475,7 +475,7 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
         # Drop duplicates for EXCEPT/MINUS
         py_output = py_output.drop_duplicates()
 
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
     check_query(query, ctx, None, expected_output=py_output)
 

@@ -60,7 +60,7 @@ def time_df():
 def test_time_partition(time_df, memory_leak_check):
     """Tests window functions where the PARTITION BY term is a time column"""
     query = "SELECT A, B, SUM(D) OVER (PARTITION BY A ORDER BY D ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
-    ctx = {"table1": time_df}
+    ctx = {"TABLE1": time_df}
     answer = [1, 11, 100, 1100, 11100, 100011, 1100011]
     expected_output = pd.DataFrame({"A": time_df.A, "B": time_df.B, "C": answer})
     check_query(
@@ -78,7 +78,7 @@ def test_time_partition(time_df, memory_leak_check):
 def test_time_order(time_df, memory_leak_check):
     """Tests window functions where the ORDER BY term is a time column"""
     query = "SELECT C, B, SUM(D) OVER (PARTITION BY C ORDER BY B ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
-    ctx = {"table1": time_df}
+    ctx = {"TABLE1": time_df}
     answer = [1, 10, 1010101, 101010, 10001, 100010, 1010001]
     expected_output = pd.DataFrame({"C": time_df.C, "B": time_df.B, "P": answer})
     check_query(
@@ -103,7 +103,7 @@ def test_time_min_max_count_lead_lag(time_df, memory_leak_check):
              LEAD(B) OVER (PARTITION BY C ORDER BY D), \
              LAG(B) OVER (PARTITION BY C ORDER BY D) \
              FROM table1"
-    ctx = {"table1": time_df}
+    ctx = {"TABLE1": time_df}
     mins = [
         Time(1, 0, 0),
         Time(3, 10, 4),

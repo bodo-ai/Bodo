@@ -41,7 +41,7 @@ def test_time_array_box_unbox(precision, memory_leak_check):
             "C": [bodo.Time(2, i, 2, precision=precision) for i in range(15)],
         },
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = df
     check_query(query, ctx, None, expected_output=expected_output)
 
@@ -64,7 +64,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "C": [bodo.Time(2, i, 2, precision=precision) for i in range(15)],
         },
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     expected_output = df[["B"]]
     check_query(query, ctx, None, expected_output=expected_output)
 
@@ -175,7 +175,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
     else:
         query = f"SELECT {test_fn_type}(T) AS U FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "T": pd.Series(
                     [
@@ -291,7 +291,7 @@ def test_time_plus_minus_intervals(query, answer, memory_leak_check):
             pd.Timedelta(seconds=3, milliseconds=500),
         ]
     )
-    ctx = {"table1": pd.DataFrame({"TI": TI, "TD": TD})}
+    ctx = {"TABLE1": pd.DataFrame({"TI": TI, "TD": TD})}
     expected_output = pd.DataFrame({0: answer})
     check_query(
         query,
@@ -318,12 +318,12 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
     unit, answer = timeadd_arguments
     # Decide which function to use based on the unit
     func = {
-        "hour": "DATEADD",
-        "minute": "TIMEADD",
-        "second": "DATEADD",
-        "millisecond": "TIMEADD",
-        "microsecond": "DATEADD",
-        "nanosecond": "TIMEADD",
+        "HOUR": "DATEADD",
+        "MINUTE": "TIMEADD",
+        "SECOND": "DATEADD",
+        "MILLISECOND": "TIMEADD",
+        "MICROSECOND": "DATEADD",
+        "NANOSECOND": "TIMEADD",
     }[unit]
     if use_case:
         query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE {func}('{unit}', N, T) END FROM TABLE1"
@@ -467,13 +467,13 @@ def test_datediff_time_columns(time_df, time_part_strings, memory_leak_check):
     query = f"SELECT {fn_name}('{time_part_strings}', A, B) as output from table1"
     output = pd.DataFrame(
         {
-            "output": [
+            "OUTPUT": [
                 diff_fn(
                     time_part_strings,
-                    time_df["table1"]["A"][i],
-                    time_df["table1"]["B"][i],
+                    time_df["TABLE1"]["A"][i],
+                    time_df["TABLE1"]["B"][i],
                 )
-                for i in range(len(time_df["table1"]["A"]))
+                for i in range(len(time_df["TABLE1"]["A"]))
             ]
         }
     )

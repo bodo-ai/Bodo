@@ -30,7 +30,7 @@ from bodosql.imported_java_classes import (
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Name for parameter table
-NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"
+NAMED_PARAM_TABLE_NAME = "__$BODO_NAMED_PARAM_TABLE__"
 
 
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
@@ -426,6 +426,7 @@ def compute_df_types(df_list, is_bodo_type):
                         False,
                         # downcast_decimal_to_double
                         False,
+                        convert_snowflake_column_names=False,
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
@@ -593,7 +594,7 @@ def _generate_table_read(
     elif from_jit:
         read_line = f"bodo_sql_context.dataframes[{table_num}]"
     else:
-        read_line = table_name
+        read_line = "_ARG_" + table_name
     return read_line
 
 
@@ -924,8 +925,9 @@ class BodoSQLContext:
 
                 # Remove the named Params table
                 self._remove_named_params()
-
-                args = ", ".join(list(self.tables.keys()) + list(params_dict.keys()))
+                table_names = ["_ARG_" + x for x in self.tables.keys()]
+                params_names = ["_PARAM_" + x for x in params_dict.keys()]
+                args = ", ".join(table_names + params_names)
                 func_text_or_err_msg += f"def impl({args}):\n"
                 func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
@@ -1333,7 +1335,7 @@ def initialize_schema(
 
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        schema = LocalSchemaClass("__bodolocal__")
+        schema = LocalSchemaClass("__BODOLOCAL__")
         if param_key_values is not None:
             (param_keys, param_values) = param_key_values
             add_param_table(NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values)

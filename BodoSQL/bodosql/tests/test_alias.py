@@ -11,7 +11,7 @@ from bodosql.tests.utils import check_query
 
 def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
     """test aliasing in queries"""
-    table1 = bodosql_numeric_types["table1"]
+    table1 = bodosql_numeric_types["TABLE1"]
     check_query(
         "select A as testCol, C from table1",
         bodosql_numeric_types,
@@ -70,7 +70,7 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -78,8 +78,8 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray1 = ["X"]
@@ -133,7 +133,7 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
 @pytest.mark.slow
 def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
     """
-    Tests that the as operator is working correctly for aliasing tablenames
+    Tests that the as operator is working correctly for aliasing table names
     """
     if any(
         [
@@ -145,7 +145,7 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -153,8 +153,8 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray1 = ["A"]
@@ -220,7 +220,7 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -228,8 +228,8 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["B", "C", "A"]
@@ -266,7 +266,7 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -274,8 +274,8 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["TABLE2", "TABLE1"]
@@ -311,7 +311,7 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -319,8 +319,8 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray = ["C", "A"]
@@ -341,7 +341,7 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
     )
 
 
-def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_check):
+def test_multi_table_renamed_projection(join_dataframes, spark_info, memory_leak_check):
     """
     Test that verifies that aliased projections from two different tables
     behave as expected.
@@ -356,7 +356,7 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -364,8 +364,8 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray1 = ["A", "Y"]
@@ -417,7 +417,7 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
-            for x in join_dataframes["table1"].dtypes
+            for x in join_dataframes["TABLE1"].dtypes
         ]
     ):
         check_dtype = False
@@ -425,8 +425,8 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
         check_dtype = True
     if any(
         [
-            isinstance(join_dataframes["table1"][colname].values[0], bytes)
-            for colname in join_dataframes["table1"].columns
+            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+            for colname in join_dataframes["TABLE1"].columns
         ]
     ):
         convert_columns_bytearray1 = ["A"]
@@ -459,7 +459,7 @@ def test_unreserved_kw(spark_info, memory_leak_check):
     check_query(
         query,
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "LANGUAGE": ["A", "B", "C", "D", "E"],
                     "LEAD": ["A", "B", "C", "D", "E"],
@@ -492,7 +492,7 @@ def test_unreserved_kw_pt2(spark_info, memory_leak_check):
     check_query(
         query,
         {
-            "table1": pd.DataFrame(
+            "TABLE1": pd.DataFrame(
                 {
                     "OUT": ["A", "B", "C", "D", "E"],
                     "FILTER": ["A", "B", "C", "D", "E"],

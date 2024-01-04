@@ -147,7 +147,7 @@ def test_date_literal(basic_df, memory_leak_check):
         table1
     """
     py_output = pd.DataFrame(
-        {"A": basic_df["table1"]["A"], "LIT": datetime.date(2015, 7, 21)}
+        {"A": basic_df["TABLE1"]["A"], "LIT": datetime.date(2015, 7, 21)}
     )
 
     check_query(
@@ -170,7 +170,7 @@ def test_time_literal(basic_df, memory_leak_check):
         table1
     """
     py_output = pd.DataFrame(
-        {"A": basic_df["table1"]["A"], "LIT": bodo.Time(10, 3, 56)}
+        {"A": basic_df["TABLE1"]["A"], "LIT": bodo.Time(10, 3, 56)}
     )
 
     check_query(
@@ -196,7 +196,7 @@ def test_interval_literals(
     """
 
     expected = pd.DataFrame(
-        {"A": basic_df["table1"]["A"], "time": timedelta_equivalent_values[1]}
+        {"A": basic_df["TABLE1"]["A"], "time": timedelta_equivalent_values[1]}
     )
 
     check_query(
@@ -454,7 +454,7 @@ def test_large_day_literals(bodosql_date_types, memory_leak_check):
     """
     query = "select A + Interval '180 Days' as output from table1"
     expected_output = pd.DataFrame(
-        {"OUTPUT": bodosql_date_types["table1"]["A"] + pd.Timedelta(days=180)}
+        {"OUTPUT": bodosql_date_types["TABLE1"]["A"] + pd.Timedelta(days=180)}
     )
     check_query(
         query,
@@ -514,7 +514,7 @@ def test_array_literals(args, answer, memory_leak_check):
     query = f"SELECT [{args}] FROM table1"
     check_query(
         query,
-        {"table1": pd.DataFrame({"A": [1] * 5})},
+        {"TABLE1": pd.DataFrame({"A": [1] * 5})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_names=False,
@@ -569,7 +569,7 @@ def test_array_literals_case(query, answer, memory_leak_check):
     """
     check_query(
         query,
-        {"table1": pd.DataFrame({"A": [1, 2, 1, 4]})},
+        {"TABLE1": pd.DataFrame({"A": [1, 2, 1, 4]})},
         None,
         expected_output=pd.DataFrame({0: answer}),
         check_names=False,

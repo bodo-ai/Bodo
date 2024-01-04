@@ -133,7 +133,7 @@ def test_interval_having(
             @a > B
         """
     expected_output = (
-        bodosql_interval_types["table1"].groupby("B", as_index=False)["A"].count()
+        bodosql_interval_types["TABLE1"].groupby("B", as_index=False)["A"].count()
     )
     expected_output = expected_output[
         expected_output.B < timedelta_named_params["a"]

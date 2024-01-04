@@ -58,8 +58,8 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
         return bc.sql("select * from target_table")
 
     # Create the Iceberg Table
-    table_name = "merge_into_numeric_table1"
-    expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
+    table_name = "MERGE_INTO_NUMERIC_TABLE1"
+    expected_output, sql_schema = SIMPLE_TABLES_MAP["NUMERIC_TABLE"]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             expected_output,
@@ -80,10 +80,10 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
     # Create the BodoSQL context.
     bc = BodoSQLContext(
         {
-            "target_table": TablePath(
+            "TARGET_TABLE": TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source_table": pd.DataFrame({"A": [-1, -7, -17, 1, 2, 3]}),
+            "SOURCE_TABLE": pd.DataFrame({"A": [-1, -7, -17, 1, 2, 3]}),
         }
     )
 
@@ -146,9 +146,9 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
         return bc.sql("select * from target_table")
 
     # Select the iceberg table
-    table_name = "merge_into_numeric_table2"
+    table_name = "MERGE_INTO_NUMERIC_TABLE2"
     # Create the table
-    expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
+    expected_output, sql_schema = SIMPLE_TABLES_MAP["NUMERIC_TABLE"]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             expected_output,
@@ -168,7 +168,7 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     expected_output = expected_output[~filter]
 
     # open connection and create source table
-    table_name = "source_table_merge_into_pushdown"
+    table_name = "SOURCE_TABLE_MERGE_INTO_PUSHDOWN"
     sql_schema = [("A", "bigint", False)]
     source_df = pd.DataFrame({"A": [-1, -7, -17, 1, 2, 3]})
     if bodo.get_rank() == 0:
@@ -185,8 +185,8 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     # Create the BodoSQL context.
     bc = BodoSQLContext(
         {
-            "target_table": target_table_path,
-            "source_table": source_table_path,
+            "TARGET_TABLE": target_table_path,
+            "SOURCE_TABLE": source_table_path,
         }
     )
 
@@ -262,7 +262,7 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
 
     # open connection and create source table
     db_schema, warehouse_loc = iceberg_database
-    table_name = "merge_into_unique_target"
+    table_name = "MERGE_INTO_UNIQUE_TARGET"
     sql_schema = [("A", "bigint", False), ("B", "bigint", False)]
     source_df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10)})
     if bodo.get_rank() == 0:
@@ -286,7 +286,7 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
     # Create the BodoSQL context.
     bc = BodoSQLContext(
         {
-            "target_table": target_table_path,
+            "TARGET_TABLE": target_table_path,
         }
     )
 

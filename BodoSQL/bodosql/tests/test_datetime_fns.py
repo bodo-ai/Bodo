@@ -82,9 +82,9 @@ def interval_day_add_func(num_days: int):
 
 @pytest.fixture(
     params=[
-        "timestamps",
-        pytest.param("timestamps_normalized", marks=pytest.mark.slow),
-        "datetime_strings",
+        "TIMESTAMPS",
+        pytest.param("TIMESTAMPS_NORMALIZED", marks=pytest.mark.slow),
+        "DATETIME_STRINGS",
     ]
 )
 def timestamp_date_string_cols(request):
@@ -190,7 +190,7 @@ def tz_aware_df():
         }
     )
 
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture
@@ -217,17 +217,17 @@ def dt_fn_dataframe():
     ]
     df = pd.DataFrame(
         {
-            "timestamps": timestamps,
-            "timestamps_normalized": normalized_ts,
-            "datetime_strings": dt_strings,
-            "invalid_dt_strings": invalid_dt_strings,
-            "positive_integers": pd.Series(
+            "TIMESTAMPS": timestamps,
+            "TIMESTAMPS_NORMALIZED": normalized_ts,
+            "DATETIME_STRINGS": dt_strings,
+            "INVALID_DT_STRINGS": invalid_dt_strings,
+            "POSITIVE_INTEGERS": pd.Series(
                 [1, 2, 31, 400, None, None, 123, 13, 7, 80], dtype=pd.Int64Dtype()
             ),
-            "small_positive_integers": pd.Series(
+            "SMALL_POSITIVE_INTEGERS": pd.Series(
                 [1, 2, 3, None, 4, 5, 6, None, 7, 8], dtype=pd.Int64Dtype()
             ),
-            "dt_format_strings": [
+            "DT_FORMAT_STRINGS": [
                 "%Y",
                 "%a, %b, %c",
                 "%D, %d, %f, %p, %S",
@@ -239,7 +239,7 @@ def dt_fn_dataframe():
                 "%j",
                 None,
             ],
-            "valid_year_integers": pd.Series(
+            "VALID_YEAR_INTEGERS": pd.Series(
                 [
                     2000,
                     None,
@@ -254,10 +254,10 @@ def dt_fn_dataframe():
                 ],
                 dtype=pd.Int64Dtype(),
             ),
-            "mixed_integers": pd.Series(
+            "MIXED_INTEGERS": pd.Series(
                 [None, 0, 1, -2, 3, -4, 5, -6, 7, None], dtype=pd.Int64Dtype()
             ),
-            "digit_strings": [
+            "DIGIT_STRINGS": [
                 None,
                 "-13",
                 "0",
@@ -269,7 +269,7 @@ def dt_fn_dataframe():
                 "1234",
                 None,
             ],
-            "days_of_week": [
+            "DAYS_OF_WEEK": [
                 "mo",
                 "tu",
                 "we",
@@ -283,7 +283,7 @@ def dt_fn_dataframe():
             ],
         }
     )
-    return {"table1": df}
+    return {"TABLE1": df}
 
 
 @pytest.fixture(
@@ -352,7 +352,7 @@ def dt_fn_dataframe():
     ]
 )
 def dt_fn_info(request):
-    """fixture that returns information used to test datatime functionss
+    """fixture that returns information used to test datetime functions
     First argument is function name,
     the second is a list of arguments to use with the function
     The third argument is tuple of two possible return values for the function, which
@@ -489,7 +489,7 @@ def test_getdate(query, spark_info, memory_leak_check):
     spark_query = query.replace("DATEFN", "CURRENT_DATE()")
     query = query.replace("DATEFN", "TO_DATE(GETDATE())")
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
         )
     }
@@ -513,7 +513,7 @@ def test_getdate_dist_len(spark_info, memory_leak_check):
     hang)
     """
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
         )
     }
@@ -590,7 +590,7 @@ def now_equiv_fns(request):
 def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the current timestamp,
     without timezone info from the Snowflake Catalog.
-    As the results depend on when the function was run, we precompute a list of valid times.
+    As the results depend on when the function was run, we pre compute a list of valid times.
     """
     current_time = pd.Timestamp.now(tz="UTC")
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
@@ -604,7 +604,7 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     )
     py_output = pd.DataFrame(
         {
-            "A": basic_df["table1"]["A"],
+            "A": basic_df["TABLE1"]["A"],
             "DATE_TRUNC_RES": current_time.normalize(),
             "IS_VALID_DAY": True,
             "IS_VALID_HOUR": True,
@@ -625,7 +625,7 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
 def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the current timestamp in case,
     without timezone info from the Snowflake Catalog.
-    As the results depend on when the function was run, we precompute a list of valid times.
+    As the results depend on when the function was run, we pre compute a list of valid times.
     """
     current_time = pd.Timestamp.now(tz="UTC")
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
@@ -639,7 +639,7 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     )
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
     D[~df.A] = None
     S = pd.Series(True, index=np.arange(len(df)))
@@ -677,7 +677,7 @@ def localtime_equiv_fns(request):
 def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the local time,
     without timezone info from the Snowflake Catalog.
-    As the results depend on when the function was run, we precompute a list of valid times.
+    As the results depend on when the function was run, we pre compute a list of valid times.
     """
     current_time = pd.Timestamp.now(tz="UTC")
     _, valid_hours, valid_minutes = compute_valid_times(current_time)
@@ -689,7 +689,7 @@ def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_c
     )
     py_output = pd.DataFrame(
         {
-            "A": basic_df["table1"]["A"],
+            "A": basic_df["TABLE1"]["A"],
             "IS_VALID_HOUR": True,
             "IS_VALID_MINUTE": True,
         }
@@ -721,7 +721,7 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
     )
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     S = pd.Series(True, index=np.arange(len(df)))
     S[~df.A] = None
     py_output = pd.DataFrame(
@@ -772,7 +772,7 @@ def test_sysdate_equivalents_cols(
     )
     py_output = pd.DataFrame(
         {
-            "A": basic_df["table1"]["A"],
+            "A": basic_df["TABLE1"]["A"],
             "DATE_TRUNC_RES": current_time.normalize(),
             "IS_VALID_DAY": True,
             "IS_VALID_HOUR": True,
@@ -810,7 +810,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     )
 
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
     D[~df.A] = None
     S = pd.Series(True, index=np.arange(len(df)))
@@ -843,7 +843,7 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
     query = f"SELECT A as A, UTC_DATE() as B from table1"
     expected_output = pd.DataFrame(
         {
-            "A": basic_df["table1"]["A"],
+            "A": basic_df["TABLE1"]["A"],
             "B": pd.Timestamp.now(tz="UTC").date(),
         }
     )
@@ -907,7 +907,7 @@ def test_date_format_timestamp(
     query = f"SELECT DATE_FORMAT(timestamps, '{mysql_format_str}') from table1"
     expected_output = pd.DataFrame(
         {
-            "output": dt_fn_dataframe["table1"]["timestamps"].dt.strftime(
+            "output": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.strftime(
                 python_format_str
             )
         }
@@ -937,7 +937,7 @@ def test_date_format_date(date_df, python_mysql_dt_format_strings, memory_leak_c
             "output": pd.Series(
                 [
                     None if date is None else date.strftime(python_format_str)
-                    for date in date_df["table1"]["A"]
+                    for date in date_df["TABLE1"]["A"]
                 ]
             )
         }
@@ -958,7 +958,7 @@ def test_microseconds(dt_fn_dataframe, memory_leak_check):
     query1 = "SELECT MICROSECOND(timestamps) as microsec_time from table1"
 
     expected_output = pd.DataFrame(
-        {"MICROSEC_TIME": dt_fn_dataframe["table1"]["timestamps"].dt.microsecond}
+        {"MICROSEC_TIME": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
     )
 
     check_query(
@@ -975,7 +975,7 @@ def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
     """simplest test for microsecond on timezone aware data"""
     query = "SELECT MICROSECOND(A) as microsec_time from table1"
     expected_output = pd.DataFrame(
-        {"MICROSEC_TIME": tz_aware_df["table1"]["A"].dt.microsecond}
+        {"MICROSEC_TIME": tz_aware_df["TABLE1"]["A"].dt.microsecond}
     )
 
     check_query(
@@ -992,7 +992,7 @@ def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     """test for microsecond within case statement on timezone aware data"""
     query = "SELECT CASE WHEN MICROSECOND(A) > 1 THEN MICROSECOND(A) ELSE -1 END as microsec_time from table1"
 
-    micro_series = tz_aware_df["table1"]["A"].dt.microsecond
+    micro_series = tz_aware_df["TABLE1"]["A"].dt.microsecond
     micro_series[micro_series <= 1] = -1
 
     expected_output = pd.DataFrame({"MICROSEC_TIME": micro_series})
@@ -1011,7 +1011,7 @@ def test_dayname_cols(dt_fn_dataframe, memory_leak_check):
     query = "SELECT DAYNAME(timestamps) as OUTPUT from table1"
     py_output = pd.DataFrame(
         {
-            "OUTPUT": dt_fn_dataframe["table1"]["timestamps"].map(
+            "OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].map(
                 lambda x: None if pd.isna(x) else x.day_name()[:3]
             ),
         }
@@ -1042,7 +1042,7 @@ def test_dayname_scalars(basic_df, date_literal_strings, memory_leak_check):
     scalar1, scalar2, scalar3 = date_literal_strings
     query = f"SELECT A, DAYNAME({scalar1}) as B, DAYNAME({scalar2}) as C, DAYNAME({scalar3}) as D from table1"
     py_output = pd.DataFrame(
-        {"A": basic_df["table1"]["A"], "B": "Wed", "C": "Sat", "D": "Mon"}
+        {"A": basic_df["TABLE1"]["A"], "B": "Wed", "C": "Sat", "D": "Mon"}
     )
 
     check_query(
@@ -1057,14 +1057,13 @@ def test_dayname_scalars(basic_df, date_literal_strings, memory_leak_check):
 
 def test_dayname_date_cols(date_df, memory_leak_check):
     """tests the dayname function on column inputs of date objects."""
-    query = "SELECT DAYNAME(A) from table1"
-    py_output = pd.DataFrame({"output": date_df["table1"]["A"].map(day_name_func)})
+    query = "SELECT DAYNAME(A) AS OUTPUT from table1"
+    py_output = pd.DataFrame({"OUTPUT": date_df["TABLE1"]["A"].map(day_name_func)})
 
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=py_output,
     )
@@ -1117,7 +1116,7 @@ def test_monthname_cols(fn_name, wrap_case, dt_fn_dataframe, memory_leak_check):
 
     py_output = pd.DataFrame(
         {
-            "output": dt_fn_dataframe["table1"]["timestamps"].map(
+            "output": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].map(
                 lambda x: None if pd.isna(x) else x.month_name()[:3]
             )
         }
@@ -1159,17 +1158,16 @@ def test_monthname_date_cols(fn_name, wrap_case, date_df, memory_leak_check):
     """tests the monthname function on column inputs of date objects."""
 
     if wrap_case:
-        query = f"SELECT CASE WHEN A IS NULL THEN {fn_name}(A) else {fn_name}(A) END FROM table1"
+        query = f"SELECT CASE WHEN A IS NULL THEN {fn_name}(A) else {fn_name}(A) END AS OUTPUT FROM table1"
     else:
-        query = f"SELECT {fn_name}(A) from table1"
+        query = f"SELECT {fn_name}(A) AS OUTPUT from table1"
 
-    outputs = pd.DataFrame({"output": date_df["table1"]["A"].map(month_name_func)})
+    outputs = pd.DataFrame({"OUTPUT": date_df["TABLE1"]["A"].map(month_name_func)})
 
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=outputs,
     )
@@ -1246,16 +1244,16 @@ def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
 def test_makedate_cols(dt_fn_dataframe, use_case, memory_leak_check):
     """tests makedate with case statement"""
     if use_case:
-        query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > DATE '2211-01-01' THEN DATE '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END from table1"
+        query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > DATE '2211-01-01' THEN DATE '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END as OUTPUT from table1"
     else:
-        query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
+        query = "SELECT makedate(valid_year_integers, positive_integers) as OUTPUT from table1"
 
     def makedate_fn(dt_fn_dataframe):
-        n = len(dt_fn_dataframe["table1"]["valid_year_integers"])
+        n = len(dt_fn_dataframe["TABLE1"]["VALID_YEAR_INTEGERS"])
         res = pd.Series([None] * n)
         for i in range(n):
-            year = dt_fn_dataframe["table1"]["valid_year_integers"][i]
-            day = dt_fn_dataframe["table1"]["positive_integers"][i]
+            year = dt_fn_dataframe["TABLE1"]["VALID_YEAR_INTEGERS"][i]
+            day = dt_fn_dataframe["TABLE1"]["POSITIVE_INTEGERS"][i]
             if pd.isna(year) or pd.isna(day):
                 res[i] = None
             else:
@@ -1265,12 +1263,11 @@ def test_makedate_cols(dt_fn_dataframe, use_case, memory_leak_check):
                 res[i] = date
         return res
 
-    output = pd.DataFrame({"output": makedate_fn(dt_fn_dataframe)})
+    output = pd.DataFrame({"OUTPUT": makedate_fn(dt_fn_dataframe)})
     check_query(
         query,
         dt_fn_dataframe,
         None,
-        check_names=False,
         expected_output=output,
     )
 
@@ -1283,8 +1280,8 @@ def test_makedate_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
     spark_query = "SELECT DATE_ADD(make_date(valid_year_integers, 1, 1), mixed_integers-1), DATE_ADD(make_date(positive_integers, 1, 1), positive_integers-1) from table1"
 
     # spark requires certain arguments of make_date to not
-    # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("positive_integers", "int"), ("mixed_integers", "int")]}
+    # be of type bigint, but all pandas integer types are currently interpreted as bigint.
+    cols_to_cast = {"TABLE1": [("POSITIVE_INTEGERS", "int"), ("MIXED_INTEGERS", "int")]}
 
     check_query(
         query,
@@ -1315,18 +1312,20 @@ def valid_extract_strings(request):
 def test_extract_cols(
     spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
 ):
-    query = f"SELECT EXTRACT({valid_extract_strings} from timestamps) from table1"
+    query = (
+        f"SELECT EXTRACT({valid_extract_strings} from timestamps) AS OUTPUT from table1"
+    )
 
     # spark does not allow the microsecond argument for extract, and to compensate, the
     # second argument returns a float. Therefore, in these cases we need to manually
     # generate the expected output
     if valid_extract_strings == "SECOND":
         expected_output = pd.DataFrame(
-            {"unkown_name": dt_fn_dataframe["table1"]["timestamps"].dt.second}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.second}
         )
     elif valid_extract_strings == "MICROSECOND":
         expected_output = pd.DataFrame(
-            {"unkown_name": dt_fn_dataframe["table1"]["timestamps"].dt.microsecond}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
         )
     else:
         expected_output = None
@@ -1335,7 +1334,6 @@ def test_extract_cols(
         query,
         dt_fn_dataframe,
         spark_info,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -1345,18 +1343,18 @@ def test_extract_cols(
 def test_extract_scalars(
     spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
 ):
-    query = f"SELECT CASE WHEN EXTRACT({valid_extract_strings} from timestamps) < 0 THEN -1 ELSE EXTRACT({valid_extract_strings} from timestamps) END from table1"
+    query = f"SELECT CASE WHEN EXTRACT({valid_extract_strings} from timestamps) < 0 THEN -1 ELSE EXTRACT({valid_extract_strings} from timestamps) END AS OUTPUT from table1"
 
     # spark does not allow the microsecond argument for extract, and to compensate, the
     # second argument returns a float. Therefore, in these cases we need to manually
     # generate the expected output
     if valid_extract_strings == "SECOND":
         expected_output = pd.DataFrame(
-            {"unkown_name": dt_fn_dataframe["table1"]["timestamps"].dt.second}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.second}
         )
     elif valid_extract_strings == "MICROSECOND":
         expected_output = pd.DataFrame(
-            {"unkown_name": dt_fn_dataframe["table1"]["timestamps"].dt.microsecond}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
         )
     else:
         expected_output = None
@@ -1417,9 +1415,9 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
     query = f"SELECT {', '.join(selects)} FROM table1"
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "col_dt": pd.Series(
+                "COL_DT": pd.Series(
                     [
                         None,
                         pd.Timestamp("2010-01-17"),
@@ -1457,17 +1455,17 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, spark_info, memory_leak_chec
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
-    df = tz_aware_df["table1"]
+    df = tz_aware_df["TABLE1"]
     py_output = pd.DataFrame(
         {
-            "my_year": df.A.dt.year,
-            "my_q": df.A.dt.quarter,
-            "my_mons": df.A.dt.month,
-            "my_wk": df.A.map(lambda t: t.weekofyear),
-            "my_dayofmonth": df.A.dt.day,
-            "my_hrs": df.A.dt.hour,
-            "my_min": df.A.dt.minute,
-            "my_s": df.A.dt.second,
+            "MY_YEAR": df.A.dt.year,
+            "MY_Q": df.A.dt.quarter,
+            "MY_MONS": df.A.dt.month,
+            "MY_WK": df.A.map(lambda t: t.weekofyear),
+            "MY_DAYOFMONTH": df.A.dt.day,
+            "MY_HRS": df.A.dt.hour,
+            "MY_MIN": df.A.dt.minute,
+            "MY_S": df.A.dt.second,
         }
     )
 
@@ -1501,7 +1499,7 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -1515,18 +1513,18 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
             }
         )
     }
-    df = ctx["table1"]
+    df = ctx["TABLE1"]
     py_output = pd.DataFrame(
         {
-            "my_year": df.A.dt.year,
-            "my_quarter": df.A.dt.quarter,
-            "my_month": df.A.dt.month,
-            "my_week": df.A.map(lambda t: t.weekofyear),
-            "my_day": df.A.dt.day,
-            "my_hour": df.A.dt.hour,
-            "my_minute": df.A.dt.minute,
-            "my_second": df.A.dt.second,
-            "my_dow": pd.Series([None, 0, 6, 3, 2]),
+            "MY_YEAR": df.A.dt.year,
+            "MY_QUARTER": df.A.dt.quarter,
+            "MY_MONTH": df.A.dt.month,
+            "MY_WEEK": df.A.map(lambda t: t.weekofyear),
+            "MY_DAY": df.A.dt.day,
+            "MY_HOUR": df.A.dt.hour,
+            "MY_MINUTE": df.A.dt.minute,
+            "MY_SECOND": df.A.dt.second,
+            "MY_DOW": pd.Series([None, 0, 6, 3, 2]),
         }
     )
 
@@ -1566,10 +1564,10 @@ def make_spark_interval(interval_str, value):
 def dateadd_df():
     """Returns the context used by test_snowflake_dateadd"""
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "col_int": pd.Series([10, 1, None, -10, 100], dtype=pd.Int32Dtype()),
-                "col_dt": pd.Series(
+                "COL_INT": pd.Series([10, 1, None, -10, 100], dtype=pd.Int32Dtype()),
+                "COL_DT": pd.Series(
                     [
                         None,
                         pd.Timestamp("2013-10-27"),
@@ -1587,12 +1585,12 @@ def dateadd_df():
 def dateadd_fractional_df():
     """Returns the context used by test_snowflake_dateadd_fractional"""
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "col_int": pd.Series(
+                "COL_INT": pd.Series(
                     [10.2, 0.5, None, -9.5, 99.8], dtype=pd.Float32Dtype()
                 ),
-                "col_dt": pd.Series(
+                "COL_DT": pd.Series(
                     [
                         None,
                         pd.Timestamp("2013-10-27"),
@@ -1611,31 +1609,31 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "DATEADD({!r}, col_int, col_dt)",
-                ["year", "month", "week", "day"],
+                ["YEAR", "MONTH", "WEEK", "DAY"],
                 pd.DataFrame(
                     {
-                        "year": [
+                        "YEAR": [
                             None,
                             pd.Timestamp("2014-10-27 00:00:00"),
                             None,
                             pd.Timestamp("2010-02-03 05:15:12.501000"),
                             pd.Timestamp("2121-12-13 23:15:06.025999500"),
                         ],
-                        "month": [
+                        "MONTH": [
                             None,
                             pd.Timestamp("2013-11-27 00:00:00"),
                             None,
                             pd.Timestamp("2019-04-03 05:15:12.501000"),
                             pd.Timestamp("2030-04-13 23:15:06.025999500"),
                         ],
-                        "week": [
+                        "WEEK": [
                             None,
                             pd.Timestamp("2013-11-03 00:00:00"),
                             None,
                             pd.Timestamp("2019-11-25 05:15:12.501000"),
                             pd.Timestamp("2023-11-13 23:15:06.025999500"),
                         ],
-                        "day": [
+                        "DAY": [
                             None,
                             pd.Timestamp("2013-10-28 00:00:00"),
                             None,
@@ -1650,24 +1648,24 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "TIMEADD({!s}, col_int, col_dt)",
-                ["hour", "minute", "second"],
+                ["HOUR", "MINUTE", "SECOND"],
                 pd.DataFrame(
                     {
-                        "hour": [
+                        "HOUR": [
                             None,
                             pd.Timestamp("2013-10-27 01:00:00"),
                             None,
                             pd.Timestamp("2020-02-02 19:15:12.501000"),
                             pd.Timestamp("2021-12-18 03:15:06.025999500"),
                         ],
-                        "minute": [
+                        "MINUTE": [
                             None,
                             pd.Timestamp("2013-10-27 00:01:00"),
                             None,
                             pd.Timestamp("2020-02-03 05:05:12.501000"),
                             pd.Timestamp("2021-12-14 00:55:06.025999500"),
                         ],
-                        "second": [
+                        "SECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:01"),
                             None,
@@ -1682,24 +1680,24 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "TIMESTAMPADD({!r}, col_int, col_dt)",
-                ["millisecond", "microsecond", "nanosecond"],
+                ["MILLISECOND", "MICROSECOND", "NANOSECOND"],
                 pd.DataFrame(
                     {
-                        "millisecond": [
+                        "MILLISECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.001000"),
                             None,
                             pd.Timestamp("2020-02-03 05:15:12.491000"),
                             pd.Timestamp("2021-12-13 23:15:06.125999500"),
                         ],
-                        "microsecond": [
+                        "MICROSECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.000001"),
                             None,
                             pd.Timestamp("2020-02-03 05:15:12.500990"),
                             pd.Timestamp("2021-12-13 23:15:06.026099500"),
                         ],
-                        "nanosecond": [
+                        "NANOSECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.000000001"),
                             None,
@@ -1714,31 +1712,31 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
-                ["year", "month", "week", "day"],
+                ["YEAR", "MONTH", "WEEK", "DAY"],
                 pd.DataFrame(
                     {
-                        "year": [
+                        "YEAR": [
                             None,
                             pd.Timestamp("1988-10-27 00:00:00"),
                             pd.Timestamp("1990-04-01 12:00:15"),
                             None,
                             pd.Timestamp("1996-12-13 23:15:06.025999500"),
                         ],
-                        "month": [
+                        "MONTH": [
                             None,
                             pd.Timestamp("2011-09-27 00:00:00"),
                             pd.Timestamp("2013-03-01 12:00:15"),
                             None,
                             pd.Timestamp("2019-11-13 23:15:06.025999500"),
                         ],
-                        "week": [
+                        "WEEK": [
                             None,
                             pd.Timestamp("2013-05-05 00:00:00"),
                             pd.Timestamp("2014-10-08 12:00:15"),
                             None,
                             pd.Timestamp("2021-06-21 23:15:06.025999500"),
                         ],
-                        "day": [
+                        "DAY": [
                             None,
                             pd.Timestamp("2013-10-02 00:00:00"),
                             pd.Timestamp("2015-03-07 12:00:15"),
@@ -1753,24 +1751,24 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN NULL else TIMESTAMPADD({!r}, -25, col_dt) END",
-                ["hour", "minute", "second"],
+                ["HOUR", "MINUTE", "SECOND"],
                 pd.DataFrame(
                     {
-                        "hour": [
+                        "HOUR": [
                             None,
                             pd.Timestamp("2013-10-25 23:00:00"),
                             pd.Timestamp("2015-03-31 11:00:15"),
                             None,
                             pd.Timestamp("2021-12-12 22:15:06.025999500"),
                         ],
-                        "minute": [
+                        "MINUTE": [
                             None,
                             pd.Timestamp("2013-10-26 23:35:00"),
                             pd.Timestamp("2015-04-01 11:35:15"),
                             None,
                             pd.Timestamp("2021-12-13 22:50:06.025999500"),
                         ],
-                        "second": [
+                        "SECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:35"),
                             pd.Timestamp("2015-04-01 11:59:50"),
@@ -1785,24 +1783,24 @@ def dateadd_fractional_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
-                ["millisecond", "microsecond", "nanosecond"],
+                ["MILLISECOND", "MICROSECOND", "NANOSECOND"],
                 pd.DataFrame(
                     {
-                        "millisecond": [
+                        "MILLISECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.975000"),
                             pd.Timestamp("2015-04-01 12:00:14.975000"),
                             None,
                             pd.Timestamp("2021-12-13 23:15:06.000999500"),
                         ],
-                        "microsecond": [
+                        "MICROSECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999975"),
                             pd.Timestamp("2015-04-01 12:00:14.999975"),
                             None,
                             pd.Timestamp("2021-12-13 23:15:06.025974500"),
                         ],
-                        "nanosecond": [
+                        "NANOSECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999999975"),
                             pd.Timestamp("2015-04-01 12:00:14.999999975"),
@@ -1875,10 +1873,10 @@ def test_snowflake_dateadd_fractional(
 def dateadd_date_df():
     """Returns the context used by test_snowflake_dateadd_date"""
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "col_int": pd.Series([10, 1, None, -10, 100], dtype=pd.Int32Dtype()),
-                "col_dt": pd.Series(
+                "COL_INT": pd.Series([10, 1, None, -10, 100], dtype=pd.Int32Dtype()),
+                "COL_DT": pd.Series(
                     [
                         None,
                         datetime.date(2013, 10, 27),
@@ -1897,38 +1895,38 @@ def dateadd_date_df():
         pytest.param(
             (
                 "DATEADD({!s}, col_int, col_dt)",
-                ["year", "quarter", "month", "week", "day"],
+                ["YEAR", "QUARTER", "MONTH", "WEEK", "DAY"],
                 pd.DataFrame(
                     {
-                        "year": [
+                        "YEAR": [
                             None,
                             datetime.date(2014, 10, 27),
                             None,
                             datetime.date(2010, 2, 3),
                             datetime.date(2121, 12, 13),
                         ],
-                        "quarter": [
+                        "QUARTER": [
                             None,
                             datetime.date(2014, 1, 27),
                             None,
                             datetime.date(2017, 8, 3),
                             datetime.date(2046, 12, 13),
                         ],
-                        "month": [
+                        "MONTH": [
                             None,
                             datetime.date(2013, 11, 27),
                             None,
                             datetime.date(2019, 4, 3),
                             datetime.date(2030, 4, 13),
                         ],
-                        "week": [
+                        "WEEK": [
                             None,
                             datetime.date(2013, 11, 3),
                             None,
                             datetime.date(2019, 11, 25),
                             datetime.date(2023, 11, 13),
                         ],
-                        "day": [
+                        "DAY": [
                             None,
                             datetime.date(2013, 10, 28),
                             None,
@@ -1943,24 +1941,24 @@ def dateadd_date_df():
         pytest.param(
             (
                 "TIMEADD({!r}, col_int, col_dt)",
-                ["hour", "minute", "second"],
+                ["HOUR", "MINUTE", "SECOND"],
                 pd.DataFrame(
                     {
-                        "hour": [
+                        "HOUR": [
                             None,
                             pd.Timestamp("2013-10-27 01:00:00"),
                             None,
                             pd.Timestamp("2020-02-02 14:00:00"),
                             pd.Timestamp("2021-12-17 04:00:00"),
                         ],
-                        "minute": [
+                        "MINUTE": [
                             None,
                             pd.Timestamp("2013-10-27 00:01:00"),
                             None,
                             pd.Timestamp("2020-02-02 23:50:00"),
                             pd.Timestamp("2021-12-13 01:40:00"),
                         ],
-                        "second": [
+                        "SECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:01"),
                             None,
@@ -1975,24 +1973,24 @@ def dateadd_date_df():
         pytest.param(
             (
                 "TIMESTAMPADD({!s}, col_int, col_dt)",
-                ["millisecond", "microsecond", "nanosecond"],
+                ["MILLISECOND", "MICROSECOND", "NANOSECOND"],
                 pd.DataFrame(
                     {
-                        "millisecond": [
+                        "MILLISECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.001"),
                             None,
                             pd.Timestamp("2020-02-02 23:59:59.990"),
                             pd.Timestamp("2021-12-13 00:00:00.100"),
                         ],
-                        "microsecond": [
+                        "MICROSECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.000001"),
                             None,
                             pd.Timestamp("2020-02-02 23:59:59.999990"),
                             pd.Timestamp("2021-12-13 00:00:00.000100"),
                         ],
-                        "nanosecond": [
+                        "NANOSECOND": [
                             None,
                             pd.Timestamp("2013-10-27 00:00:00.000000001"),
                             None,
@@ -2007,38 +2005,38 @@ def dateadd_date_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN DATE '1999-12-31' else DATEADD({!r}, -25, col_dt) END",
-                ["year", "quarter", "month", "week", "day"],
+                ["YEAR", "QUARTER", "MONTH", "WEEK", "DAY"],
                 pd.DataFrame(
                     {
-                        "year": [
+                        "YEAR": [
                             None,
                             datetime.date(1988, 10, 27),
                             datetime.date(1990, 4, 1),
                             datetime.date(1999, 12, 31),
                             datetime.date(1996, 12, 13),
                         ],
-                        "quarter": [
+                        "QUARTER": [
                             None,
                             datetime.date(2007, 7, 27),
                             datetime.date(2009, 1, 1),
                             datetime.date(1999, 12, 31),
                             datetime.date(2015, 9, 13),
                         ],
-                        "month": [
+                        "MONTH": [
                             None,
                             datetime.date(2011, 9, 27),
                             datetime.date(2013, 3, 1),
                             datetime.date(1999, 12, 31),
                             datetime.date(2019, 11, 13),
                         ],
-                        "week": [
+                        "WEEK": [
                             None,
                             datetime.date(2013, 5, 5),
                             datetime.date(2014, 10, 8),
                             datetime.date(1999, 12, 31),
                             datetime.date(2021, 6, 21),
                         ],
-                        "day": [
+                        "DAY": [
                             None,
                             datetime.date(2013, 10, 2),
                             datetime.date(2015, 3, 7),
@@ -2053,24 +2051,24 @@ def dateadd_date_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!s}, -25, col_dt) END",
-                ["hour", "minute", "second"],
+                ["HOUR", "MINUTE", "SECOND"],
                 pd.DataFrame(
                     {
-                        "hour": [
+                        "HOUR": [
                             None,
                             pd.Timestamp("2013-10-25 23:00:00"),
                             pd.Timestamp("2015-03-30 23:00:00"),
                             pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-11 23:00:00"),
                         ],
-                        "minute": [
+                        "MINUTE": [
                             None,
                             pd.Timestamp("2013-10-26 23:35:00"),
                             pd.Timestamp("2015-03-31 23:35:00"),
                             pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12 23:35:00"),
                         ],
-                        "second": [
+                        "SECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:35"),
                             pd.Timestamp("2015-03-31 23:59:35"),
@@ -2085,24 +2083,24 @@ def dateadd_date_df():
         pytest.param(
             (
                 "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else DATEADD({!r}, -25, col_dt) END",
-                ["millisecond", "microsecond", "nanosecond"],
+                ["MILLISECOND", "MICROSECOND", "NANOSECOND"],
                 pd.DataFrame(
                     {
-                        "millisecond": [
+                        "MILLISECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.975"),
                             pd.Timestamp("2015-03-31 23:59:59.975"),
                             pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12 23:59:59.975"),
                         ],
-                        "microsecond": [
+                        "MICROSECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999975"),
                             pd.Timestamp("2015-03-31T23:59:59.999975"),
                             pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12T23:59:59.999975"),
                         ],
-                        "nanosecond": [
+                        "NANOSECOND": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999999975"),
                             pd.Timestamp("2015-03-31 23:59:59.999999975"),
@@ -2215,7 +2213,7 @@ def test_snowflake_quarter_dateadd(time_zone, has_case, memory_leak_check):
 
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         check_names=False,
         check_dtype=False,
@@ -2269,14 +2267,14 @@ def tz_dateadd_data(request, tz_dateadd_args):
     jump across a switch."""
     unit, amt, springRes, fallRes = tz_dateadd_args
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "dt_col": pd.Series(
+                "DT_COL": pd.Series(
                     [pd.Timestamp("2022-3-12 20:30:00", tz=request.param)] * 3
                     + [None]
                     + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3
                 ),
-                "bool_col": pd.Series([True] * 7),
+                "BOOL_COL": pd.Series([True] * 7),
             }
         )
     }
@@ -2403,12 +2401,12 @@ def test_timestampadd_time(
 ):
     unit, answer = timeadd_arguments
     unit_str = {
-        "hour": unit,
-        "minute": f"'{unit}'",
-        "second": unit,
-        "millisecond": f"'{unit}'",
-        "microsecond": unit,
-        "nanosecond": f"'{unit}'",
+        "HOUR": unit,
+        "MINUTE": f"'{unit}'",
+        "SECOND": unit,
+        "MILLISECOND": f"'{unit}'",
+        "MICROSECOND": unit,
+        "NANOSECOND": f"'{unit}'",
     }[unit]
     if use_case:
         query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE TIMESTAMPADD({unit_str}, N, T) END FROM TABLE1"
@@ -2489,7 +2487,7 @@ def test_mysql_dateadd(
 
     # spark requires certain arguments of adddate to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("mixed_integers", "int")]}
+    cols_to_cast = {"TABLE1": [("MIXED_INTEGERS", "int")]}
 
     check_query(
         query,
@@ -2513,11 +2511,9 @@ def test_mysql_dateadd(
 def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
     """A minor extension of test_mysql_dateadd specifically for tz-aware data"""
     if case:
-        query = (
-            f"SELECT CASE WHEN N < 0 THEN NULL ELSE {dateadd_fn}(A, N) END from table1"
-        )
+        query = f"SELECT CASE WHEN N < 0 THEN NULL ELSE {dateadd_fn}(A, N) END AS RES from table1"
     else:
-        query = f"SELECT {dateadd_fn}(A, N) from table1"
+        query = f"SELECT {dateadd_fn}(A, N) AS RES from table1"
 
     timestamp_strings = [
         "2025-5-3",
@@ -2555,17 +2551,16 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
         ]
     )
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": tz_timestamps, "N": pd.Series(day_offsets, dtype=pd.Int32Dtype())}
         )
     }
-    expected_output = pd.DataFrame({"res": res})
+    expected_output = pd.DataFrame({"RES": res})
 
     check_query(
         query,
         ctx,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -2574,9 +2569,9 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
 @pytest.fixture
 def date_add_sub_date_df():
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
-                "start_dt": [
+                "START_DT": [
                     datetime.date(2020, 6, 26),
                     datetime.date(2025, 5, 3),
                     datetime.date(1987, 3, 15),
@@ -2597,7 +2592,7 @@ def date_add_sub_date_df():
                 #     pd.DateOffset(days=100),
                 #     pd.DateOffset(years=5),
                 # ],
-                "time_interval": [
+                "TIME_INTERVAL": [
                     pd.Timedelta(hours=10),
                     pd.Timedelta(minutes=4),
                     None,
@@ -2619,7 +2614,7 @@ def date_add_sub_date_df():
                 "SELECT DATE_ADD(start_dt, date_interval) FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             datetime.date(2020, 7, 6),
                             datetime.date(2025, 9, 3),
                             datetime.date(1987, 3, 15),
@@ -2640,7 +2635,7 @@ def date_add_sub_date_df():
                 "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE DATE_ADD(start_dt, INTERVAL 10 DAY) END FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             datetime.date(2020, 7, 6),
                             datetime.date(2025, 5, 13),
                             datetime.date(1987, 3, 25),
@@ -2658,7 +2653,7 @@ def date_add_sub_date_df():
         pytest.param(
             (
                 "SELECT DATE_ADD(TO_DATE('2020-10-13'), INTERVAL 40 HOURS)",
-                pd.DataFrame({"outputs": [pd.Timestamp("2020-10-14 16:00:00")]}),
+                pd.DataFrame({"OUTPUTS": [pd.Timestamp("2020-10-14 16:00:00")]}),
             ),
             id="DATE_ADD-scalar_time_interval",
         ),
@@ -2667,7 +2662,7 @@ def date_add_sub_date_df():
                 "SELECT CASE WHEN time_interval IS NULL THEN TIMESTAMP '1999-12-31' ELSE ADDDATE(start_dt, time_interval) END FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             pd.Timestamp("2020-06-26 10:00:00"),
                             pd.Timestamp("2025-05-03 00:04:00"),
                             pd.Timestamp("1999-12-31 00:00:00"),
@@ -2685,7 +2680,7 @@ def date_add_sub_date_df():
         pytest.param(
             (
                 "SELECT ADDDATE(TO_DATE('2022-3-5'), INTERVAL 8 MONTH)",
-                pd.DataFrame({"outputs": [datetime.date(2022, 11, 5)]}),
+                pd.DataFrame({"OUTPUTS": [datetime.date(2022, 11, 5)]}),
             ),
             id="ADDDATE-scalar_date_interval",
         ),
@@ -2694,7 +2689,7 @@ def date_add_sub_date_df():
                 "SELECT DATE_SUB(start_dt, date_interval) FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             datetime.date(2020, 7, 6),
                             datetime.date(2025, 9, 3),
                             datetime.date(1987, 3, 15),
@@ -2715,7 +2710,7 @@ def date_add_sub_date_df():
                 "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE DATE_SUB(start_dt, INTERVAL 5 MONTH) END FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             datetime.date(2020, 1, 26),
                             datetime.date(2024, 12, 3),
                             datetime.date(1986, 10, 15),
@@ -2733,7 +2728,7 @@ def date_add_sub_date_df():
         pytest.param(
             (
                 "SELECT DATE_SUB(TO_DATE('2011-1-18'), INTERVAL 80 MINUTES)",
-                pd.DataFrame({"outputs": [pd.Timestamp("2011-1-17 22:40:00")]}),
+                pd.DataFrame({"OUTPUTS": [pd.Timestamp("2011-1-17 22:40:00")]}),
             ),
             id="DATE_SUB-scalar_time_interval",
         ),
@@ -2742,7 +2737,7 @@ def date_add_sub_date_df():
                 "SELECT SUBDATE(start_dt, time_interval) FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             pd.Timestamp("2020-06-25 14:00:00"),
                             pd.Timestamp("2025-05-02 23:56:00"),
                             None,
@@ -2760,7 +2755,7 @@ def date_add_sub_date_df():
         pytest.param(
             (
                 "SELECT SUBDATE(TO_DATE('2000-1-5'), INTERVAL 2 WEEK)",
-                pd.DataFrame({"outputs": [datetime.date(1999, 12, 22)]}),
+                pd.DataFrame({"OUTPUTS": [datetime.date(1999, 12, 22)]}),
             ),
             id="SUBDATE-scalar_date_interval",
         ),
@@ -2769,7 +2764,7 @@ def date_add_sub_date_df():
                 "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE start_dt + INTERVAL 20 WEEK END FROM table1",
                 pd.DataFrame(
                     {
-                        "outputs": [
+                        "OUTPUTS": [
                             datetime.date(2020, 11, 13),
                             datetime.date(2025, 9, 20),
                             datetime.date(1987, 8, 2),
@@ -2787,14 +2782,14 @@ def date_add_sub_date_df():
         pytest.param(
             (
                 "SELECT TO_DATE('1990-11-3') - INTERVAL 10 DAY",
-                pd.DataFrame({"outputs": [datetime.date(1990, 10, 24)]}),
+                pd.DataFrame({"OUTPUTS": [datetime.date(1990, 10, 24)]}),
             ),
             id="date_minus_date_interval",
         ),
         pytest.param(
             (
                 "SELECT INTERVAL 10 YEAR + TO_DATE('2004-5-23')",
-                pd.DataFrame({"outputs": [datetime.date(2014, 5, 23)]}),
+                pd.DataFrame({"OUTPUTS": [datetime.date(2014, 5, 23)]}),
             ),
             id="date_interval_add_date",
         ),
@@ -2847,7 +2842,7 @@ def test_subdate_cols_int_arg1(
 
     # spark requires certain arguments of subdate to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    cols_to_cast = {"TABLE1": [("POSITIVE_INTEGERS", "int")]}
 
     check_query(
         query,
@@ -2876,7 +2871,7 @@ def test_subdate_scalar_int_arg1(
 
     # spark requires certain arguments of subdate to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    cols_to_cast = {"TABLE1": [("POSITIVE_INTEGERS", "int")]}
 
     check_query(
         query,
@@ -2896,12 +2891,12 @@ def test_subdate_cols_td_arg1(
     memory_leak_check,
 ):
     """tests that date_sub/subdate works on timedelta 2nd arguments, with column inputs"""
-    query = f"SELECT {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) from table1"
+    query = f"SELECT {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) AS OUTPUT from table1"
 
     # add interval column separately here since PySpark fails on timedelta nulls in
     # other tests
-    in_dfs = {"table1": dt_fn_dataframe["table1"].copy()}
-    in_dfs["table1"]["intervals"] = [
+    in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
+    in_dfs["TABLE1"]["INTERVALS"] = [
         np.timedelta64(10, "Y"),
         np.timedelta64(9, "M"),
         np.timedelta64(8, "W"),
@@ -2916,10 +2911,10 @@ def test_subdate_cols_td_arg1(
 
     expected_output = pd.DataFrame(
         {
-            "unknown_column_name": pd.to_datetime(
-                in_dfs["table1"][timestamp_date_string_cols], format="mixed"
+            "OUTPUT": pd.to_datetime(
+                in_dfs["TABLE1"][timestamp_date_string_cols], format="mixed"
             )
-            - in_dfs["table1"]["intervals"]
+            - in_dfs["TABLE1"]["INTERVALS"]
         }
     )
 
@@ -2927,7 +2922,6 @@ def test_subdate_cols_td_arg1(
         query,
         in_dfs,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -2941,12 +2935,12 @@ def test_subdate_td_scalars(
     memory_leak_check,
 ):
     """tests that subdate works on timedelta 2nd arguments, with scalar inputs"""
-    query = f"SELECT CASE WHEN {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) END from table1"
+    query = f"SELECT CASE WHEN {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) END as OUTPUT from table1"
 
     # add interval column separately here since PySpark fails on timedelta nulls in
     # other tests
-    in_dfs = {"table1": dt_fn_dataframe["table1"].copy()}
-    in_dfs["table1"]["intervals"] = [
+    in_dfs = {"TABLE1": dt_fn_dataframe["TABLE1"].copy()}
+    in_dfs["TABLE1"]["INTERVALS"] = [
         np.timedelta64(10, "Y"),
         np.timedelta64(9, "M"),
         np.timedelta64(8, "W"),
@@ -2961,10 +2955,10 @@ def test_subdate_td_scalars(
 
     expected_output = pd.DataFrame(
         {
-            "unknown_column_name": pd.to_datetime(
-                in_dfs["table1"][timestamp_date_string_cols], format="mixed"
+            "OUTPUT": pd.to_datetime(
+                in_dfs["TABLE1"][timestamp_date_string_cols], format="mixed"
             )
-            - in_dfs["table1"]["intervals"]
+            - in_dfs["TABLE1"]["INTERVALS"]
         }
     )
 
@@ -2972,7 +2966,6 @@ def test_subdate_td_scalars(
         query,
         in_dfs,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -3054,7 +3047,7 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
 
     check_query(
         query,
-        {"table1": table1},
+        {"TABLE1": table1},
         None,
         check_names=False,
         check_dtype=False,
@@ -3066,12 +3059,12 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
 def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
-    query = "SELECT YEARWEEK(timestamps) from table1"
+    query = "SELECT YEARWEEK(timestamps) AS OUTPUT from table1"
 
     expected_output = pd.DataFrame(
         {
-            "expected": dt_fn_dataframe["table1"]["timestamps"].dt.year * 100
-            + dt_fn_dataframe["table1"]["timestamps"].dt.isocalendar().week
+            "OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.year * 100
+            + dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week
         }
     )
 
@@ -3079,7 +3072,6 @@ def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
         query,
         dt_fn_dataframe,
         spark_info,
-        check_names=False,
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
@@ -3092,19 +3084,18 @@ def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
     YEARWEEK returns a 6-character string with the date's year
     and week (1-53) concatenated together"""
 
-    query = "SELECT YEARWEEK(A) from table1"
+    query = "SELECT YEARWEEK(A) AS OUTPUT from table1"
 
     expected_output = pd.DataFrame(
         {
-            "expected": tz_aware_df["table1"]["A"].dt.year * 100
-            + tz_aware_df["table1"]["A"].dt.isocalendar().week
+            "OUTPUT": tz_aware_df["TABLE1"]["A"].dt.year * 100
+            + tz_aware_df["TABLE1"]["A"].dt.isocalendar().week
         }
     )
     check_query(
         query,
         tz_aware_df,
         spark=None,
-        check_names=False,
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
@@ -3112,12 +3103,12 @@ def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
 
 
 def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
-    query = "SELECT CASE WHEN YEARWEEK(timestamps) = 0 THEN -1 ELSE YEARWEEK(timestamps) END from table1"
+    query = "SELECT CASE WHEN YEARWEEK(timestamps) = 0 THEN -1 ELSE YEARWEEK(timestamps) END AS OUTPUT from table1"
 
     expected_output = pd.DataFrame(
         {
-            "expected": dt_fn_dataframe["table1"]["timestamps"].dt.year * 100
-            + dt_fn_dataframe["table1"]["timestamps"].dt.isocalendar().week
+            "OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.year * 100
+            + dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week
         }
     )
 
@@ -3125,7 +3116,6 @@ def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
         query,
         dt_fn_dataframe,
         spark_info,
-        check_names=False,
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
@@ -3139,13 +3129,12 @@ def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
 def test_date_trunc_time_part(sql_func, time_df, time_part_strings, memory_leak_check):
     query = f"SELECT {sql_func}('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
-    output = pd.DataFrame({"output": time_df["table1"]["A"].map(scalar_func)})
+    output = pd.DataFrame({"OUTPUT": time_df["TABLE1"]["A"].map(scalar_func)})
     check_query(
         query,
         time_df,
         None,
         check_dtype=False,
-        check_names=False,
         expected_output=output,
     )
 
@@ -3155,7 +3144,7 @@ def test_date_trunc_day_part_handling(
     sql_func, time_df, day_part_strings, memory_leak_check
 ):
     query = f"SELECT {sql_func}('{day_part_strings}', A) as output from table1"
-    output = pd.DataFrame({"output": []})
+    output = pd.DataFrame({"OUTPUT": []})
     with pytest.raises(
         Exception,
         match=f'Unsupported unit for DATE_TRUNC with TIME input: "{day_part_strings}"',
@@ -3165,7 +3154,6 @@ def test_date_trunc_day_part_handling(
             time_df,
             None,
             check_dtype=False,
-            check_names=False,
             expected_output=output,
         )
 
@@ -3182,16 +3170,15 @@ def test_date_trunc_date(date_df, day_part_strings, use_case, memory_leak_check)
     test DATE_TRUNC works for datetime.date input
     """
     if use_case:
-        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{day_part_strings}', A) END from table1"
+        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{day_part_strings}', A) END as output from table1"
     else:
         query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_date_func(day_part_strings)
-    output = pd.DataFrame({"output": date_df["table1"]["A"].map(scalar_func)})
+    output = pd.DataFrame({"OUTPUT": date_df["TABLE1"]["A"].map(scalar_func)})
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
         expected_output=output,
     )
 
@@ -3211,15 +3198,14 @@ def test_date_trunc_time_part_handling(
     and date_or_time_part is smaller than day.
     """
     if use_case:
-        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{time_part_strings}', A) END from table1"
+        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{time_part_strings}', A) END AS OUTPUT from table1"
     else:
         query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
-    output = pd.DataFrame({"output": date_df["table1"]["A"]})
+    output = pd.DataFrame({"OUTPUT": date_df["TABLE1"]["A"]})
     check_query(
         query,
         date_df,
         None,
-        check_names=False,
         expected_output=output,
     )
 
@@ -3243,7 +3229,7 @@ def test_date_trunc_timestamp(
         query = f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     py_output = pd.DataFrame(
-        {"OUTPUT": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
+        {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].map(scalar_func)}
     )
     check_query(query, dt_fn_dataframe, None, expected_output=py_output)
 
@@ -3270,7 +3256,7 @@ def test_date_trunc_unquoted_timeunit(dt_fn_dataframe, memory_leak_check):
     ]:
         selects.append(query_fmt.format(unit, unit))
         scalar_func = generate_date_trunc_func(unit)
-        py_output[unit] = dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)
+        py_output[unit] = dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].map(scalar_func)
     query = f"SELECT {', '.join(selects)} FROM table1"
     check_query(
         query, dt_fn_dataframe, None, check_names=False, expected_output=py_output
@@ -3284,29 +3270,29 @@ def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     """
     query = f"SELECT YEAROFWEEKISO(A) as A from table1"
     # Use expected output because this function isn't in SparkSQL
-    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].dt.year})
+    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].dt.year})
     check_query(
         query,
         tz_aware_df,
-        spark=None,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
 
 
-def test_yearofweekiso(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_yearofweekiso(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on columns.
     """
     query = f"SELECT YEAROFWEEKISO(TIMESTAMPS) as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
-        {"A": dt_fn_dataframe["table1"]["timestamps"].dt.isocalendar().year}
+        {"A": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().year}
     )
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
@@ -3320,18 +3306,18 @@ def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     query = f"SELECT YEAROFWEEKISO(A) as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
-        {"A": tz_aware_df["table1"]["A"].dt.isocalendar().year}
+        {"A": tz_aware_df["TABLE1"]["A"].dt.isocalendar().year}
     )
     check_query(
         query,
         tz_aware_df,
-        spark=None,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
 
 
-def test_yearofweekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_yearofweekiso_scalar(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on scalars.
     """
@@ -3339,7 +3325,7 @@ def test_yearofweekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
         {
-            "A": dt_fn_dataframe["table1"]["timestamps"]
+            "A": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"]
             .dt.isocalendar()
             .year.apply(lambda x: 1 if pd.notna(x) and x > 2015 else 0)
         }
@@ -3347,7 +3333,7 @@ def test_yearofweekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
@@ -3364,7 +3350,7 @@ def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
         {
-            "A": tz_aware_df["table1"]["A"]
+            "A": tz_aware_df["TABLE1"]["A"]
             .dt.isocalendar()
             .year.apply(lambda x: 1 if pd.notna(x) and x > 2015 else 0)
         }
@@ -3372,47 +3358,41 @@ def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
     check_query(
         query,
         tz_aware_df,
-        spark=None,
+        None,
         expected_output=expected_output,
         check_dtype=False,
     )
 
 
-def test_weekiso(spark_info, dt_fn_dataframe, memory_leak_check):
-    query = "SELECT WEEKISO(timestamps) from table1"
-    spark_query = "SELECT WEEK(timestamps) from table1"
+def test_weekiso(dt_fn_dataframe, memory_leak_check):
+    query = "SELECT WEEKISO(timestamps) as expected from table1"
 
     expected_output = pd.DataFrame(
-        {"expected": dt_fn_dataframe["table1"]["timestamps"].dt.isocalendar().week}
+        {"EXPECTED": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week}
     )
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
-        check_names=False,
+        None,
         check_dtype=False,
         only_python=True,
-        equivalent_spark_query=spark_query,
         expected_output=expected_output,
     )
 
 
-def test_weekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
-    query = "SELECT CASE WHEN WEEKISO(timestamps) = 0 THEN -1 ELSE WEEKISO(timestamps) END from table1"
-    spark_query = "SELECT CASE WHEN WEEK(timestamps) = 0 THEN -1 ELSE WEEK(timestamps) END from table1"
+def test_weekiso_scalar(dt_fn_dataframe, memory_leak_check):
+    query = "SELECT CASE WHEN WEEKISO(timestamps) = 0 THEN -1 ELSE WEEKISO(timestamps) END as EXPECTED from table1"
 
     expected_output = pd.DataFrame(
-        {"expected": dt_fn_dataframe["table1"]["timestamps"].dt.isocalendar().week}
+        {"EXPECTED": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week}
     )
 
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
-        check_names=False,
+        None,
         check_dtype=False,
         only_python=True,
-        equivalent_spark_query=spark_query,
         expected_output=expected_output,
     )
 
@@ -3420,16 +3400,15 @@ def test_weekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
 @pytest.mark.tz_aware
 def test_tz_aware_weekiso(tz_aware_df, memory_leak_check):
     """simplest weekiso test on timezone aware data"""
-    query = "SELECT WEEKISO(A) from table1"
+    query = "SELECT WEEKISO(A) as EXPECTED from table1"
 
     expected_output = pd.DataFrame(
-        {"expected": tz_aware_df["table1"]["A"].dt.isocalendar().week}
+        {"EXPECTED": tz_aware_df["TABLE1"]["A"].dt.isocalendar().week}
     )
     check_query(
         query,
         tz_aware_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -3438,17 +3417,16 @@ def test_tz_aware_weekiso(tz_aware_df, memory_leak_check):
 @pytest.mark.tz_aware
 def test_tz_aware_weekiso_case(tz_aware_df, memory_leak_check):
     """weekiso test in case statement on timezone aware data"""
-    query = "SELECT CASE WHEN WEEKISO(A) > 2 THEN WEEKISO(A) ELSE 0 END from table1"
+    query = "SELECT CASE WHEN WEEKISO(A) > 2 THEN WEEKISO(A) ELSE 0 END as EXPECTED from table1"
 
-    weekiso_series = tz_aware_df["table1"]["A"].dt.isocalendar().week
+    weekiso_series = tz_aware_df["TABLE1"]["A"].dt.isocalendar().week
     weekiso_series[weekiso_series <= 2] = 0
 
-    expected_output = pd.DataFrame({"expected": weekiso_series})
+    expected_output = pd.DataFrame({"EXPECTED": weekiso_series})
     check_query(
         query,
         tz_aware_df,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
@@ -3463,9 +3441,13 @@ def test_next_previous_day_cols(
     dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
 ):
     if dow_str in dm.keys():
-        query = f"SELECT {next_or_prev}_DAY(timestamps, '{dow_str}') from table1"
+        query = (
+            f"SELECT {next_or_prev}_DAY(timestamps, '{dow_str}') AS OUTPUT from table1"
+        )
     else:
-        query = f"SELECT {next_or_prev}_DAY(timestamps, {dow_str}) from table1"
+        query = (
+            f"SELECT {next_or_prev}_DAY(timestamps, {dow_str}) AS OUTPUT from table1"
+        )
 
     mlt = 1 if next_or_prev == "NEXT" else -1
     next_prev_day = lambda ts, dow: (
@@ -3478,19 +3460,20 @@ def test_next_previous_day_cols(
     ).dt.normalize()
 
     dow_col = (
-        dt_fn_dataframe["table1"]["days_of_week"]
+        dt_fn_dataframe["TABLE1"]["DAYS_OF_WEEK"]
         if dow_str == "days_of_week"
         else np.array([dow_str])
     )
     py_output = pd.DataFrame(
-        {"A": next_prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
+        {"OUTPUT": next_prev_day(dt_fn_dataframe["TABLE1"]["TIMESTAMPS"], dow_col)}
     )
-    py_output = pd.DataFrame({"A": py_output.apply(lambda s: s.iloc[0].date(), axis=1)})
+    py_output = pd.DataFrame(
+        {"OUTPUT": py_output.apply(lambda s: s.iloc[0].date(), axis=1)}
+    )
     check_query(
         query,
         dt_fn_dataframe,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=py_output,
     )
@@ -3502,9 +3485,9 @@ def test_next_previous_day_scalars(
     dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
 ):
     if dow_str in dm.keys():
-        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, '{dow_str}')) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, '{dow_str}') END from table1"
+        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, '{dow_str}')) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, '{dow_str}') END AS OUTPUT from table1"
     else:
-        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, {dow_str})) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, {dow_str}) END from table1"
+        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, {dow_str})) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, {dow_str}) END AS OUTPUT from table1"
 
     mlt = 1 if next_or_prev == "NEXT" else -1
     next_prev_day = lambda ts, dow: (
@@ -3522,14 +3505,14 @@ def test_next_previous_day_scalars(
         return ret
 
     dow_col = (
-        dt_fn_dataframe["table1"]["days_of_week"]
+        dt_fn_dataframe["TABLE1"]["DAYS_OF_WEEK"]
         if dow_str == "days_of_week"
         else np.array([dow_str])
     )
     py_output = pd.DataFrame(
         {
-            "A": next_prev_day_case(
-                dt_fn_dataframe["table1"]["timestamps"], dow_col
+            "OUTPUT": next_prev_day_case(
+                dt_fn_dataframe["TABLE1"]["TIMESTAMPS"], dow_col
             ).dt.date
         }
     )
@@ -3537,7 +3520,6 @@ def test_next_previous_day_scalars(
         query,
         dt_fn_dataframe,
         None,
-        check_names=False,
         check_dtype=False,
         expected_output=py_output,
     )
@@ -3547,7 +3529,7 @@ def test_next_previous_day_scalars(
 @pytest.mark.slow
 def test_tz_aware_day(tz_aware_df, memory_leak_check):
     query = "SELECT DAY(A) as m from table1"
-    df = tz_aware_df["table1"]
+    df = tz_aware_df["TABLE1"]
     py_output = pd.DataFrame({"M": df.A.dt.day})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
@@ -3563,7 +3545,7 @@ def test_tz_aware_day_case(memory_leak_check):
             "B": [True, False] * 15,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     day_series = df.A.dt.day
     day_series[~df.B] = None
@@ -3577,7 +3559,7 @@ def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
     query = "SELECT EXTRACT(YEAR from A) as my_yr, EXTRACT(HOUR from A) as h, \
                     EXTRACT(MINUTE from A) as m, EXTRACT(SECOND from A) as s \
                     from table1"
-    df = tz_aware_df["table1"]
+    df = tz_aware_df["TABLE1"]
     py_output = pd.DataFrame(
         {
             "MY_YR": df.A.dt.year,
@@ -3592,7 +3574,7 @@ def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
 @pytest.mark.tz_aware
 def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
     query = "SELECT YEAR(A) as my_yr, HOUR(A) as h, MINUTE(A) as m, SECOND(A) as s from table1"
-    df = tz_aware_df["table1"]
+    df = tz_aware_df["TABLE1"]
     py_output = pd.DataFrame(
         {
             "MY_YR": df.A.dt.year,
@@ -3607,7 +3589,7 @@ def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
 @pytest.mark.tz_aware
 def test_tz_aware_month(tz_aware_df, memory_leak_check):
     query = "SELECT MONTH(A) as m from table1"
-    df = tz_aware_df["table1"]
+    df = tz_aware_df["TABLE1"]
     py_output = pd.DataFrame({"M": df.A.dt.month})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
@@ -3624,7 +3606,7 @@ def test_tz_aware_month_case(memory_leak_check):
             "B": [True, False] * 15,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     month_series = df.A.dt.month
     month_series[~df.B] = None
     py_output = pd.DataFrame({"M": month_series})
@@ -3682,7 +3664,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
             calculations.append(f"{func}(A)")
     query = f"SELECT A, {', '.join(calculations)} FROM table1"
 
-    ctx = {"table1": large_tz_df}
+    ctx = {"TABLE1": large_tz_df}
 
     py_output = pd.DataFrame(
         {
@@ -3749,7 +3731,7 @@ def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
             calculations.append(f"{func}(A)")
     query = f"SELECT A, {', '.join(calculations)} FROM table1"
 
-    ctx = {"table1": large_tz_df}
+    ctx = {"TABLE1": large_tz_df}
     py_output = pd.DataFrame(
         {
             "A": large_tz_df.A,
@@ -3785,7 +3767,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
             ).to_series()
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({"M": df.A.dt.isocalendar().week})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
@@ -3801,7 +3783,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
             "B": [True, False] * 15,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     week_series = df.A.dt.isocalendar().week
     week_series[~df.B] = None
     py_output = pd.DataFrame({"M": week_series})
@@ -3820,7 +3802,7 @@ def test_tz_aware_next_day(memory_leak_check):
             "B": ["Monday", "Tuesday"] * 15,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     out_series = df.apply(
         lambda row: (
             row["A"].normalize()
@@ -3846,7 +3828,7 @@ def test_tz_aware_next_day_case(
             "C": [True, False, True, True, False] * 6,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     week_series = df.apply(
         lambda row: (
             row["A"].normalize()
@@ -3871,7 +3853,7 @@ def test_tz_aware_previous_day(memory_leak_check):
             "B": ["Monday", "Tuesday"] * 15,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     out_series = df.apply(
         lambda row: (
             row["A"].normalize()
@@ -3897,7 +3879,7 @@ def test_tz_aware_previous_day_case(
             "C": [True, False, True, True, False] * 6,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     week_series = df.apply(
         lambda row: (
             row["A"].normalize()
@@ -3924,7 +3906,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     py_output = pd.DataFrame({"OUTPUT": df["A"].map(scalar_func)})
     check_query(query, ctx, None, expected_output=py_output)
@@ -3945,7 +3927,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     S = df["A"].map(scalar_func)
     S[~df.B] = None
@@ -3969,7 +3951,7 @@ def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT A + Interval 1 Year as output from table1"
     query2 = "SELECT A - Interval 2 Year as output from table1"
     py_output = pd.DataFrame({"OUTPUT": df.A + pd.DateOffset(years=1)})
@@ -3994,7 +3976,7 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT CASE WHEN B THEN A + Interval 1 Year END as output from table1"
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Year END as output from table1"
     S = df.A + pd.DateOffset(years=1)
@@ -4022,7 +4004,7 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT A + Interval 1 Month as output from table1"
     query2 = "SELECT A - Interval 2 Month as output from table1"
     py_output = pd.DataFrame({"OUTPUT": df.A + pd.DateOffset(months=1)})
@@ -4048,7 +4030,7 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT CASE WHEN B THEN A + Interval 1 Month END as output from table1"
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Month END as output from table1"
     S = df.A + pd.DateOffset(months=1)
@@ -4076,7 +4058,7 @@ def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT A + Interval 1 Day as output from table1"
     query2 = "SELECT A - Interval 2 Day as output from table1"
     # Function used to simulate the result of adding by a day
@@ -4105,7 +4087,7 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT CASE WHEN B THEN A + Interval 1 Day END as output from table1"
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Day END as output from table1"
     # Function used to simulate the result of adding by a day
@@ -4138,7 +4120,7 @@ def test_tz_aware_subdate_integer(memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT SUBDATE(A, 3) as output from table1"
     query2 = "SELECT DATE_SUB(A, 3) as output from table1"
 
@@ -4165,7 +4147,7 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT CASE WHEN B THEN SUBDATE(A, 3) END as output from table1"
     query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, 3) END as output from table1"
 
@@ -4193,7 +4175,7 @@ def test_tz_aware_subdate_interval_day(memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT SUBDATE(A, Interval 2 Days) as output from table1"
     query2 = "SELECT DATE_SUB(A, Interval 2 Days) as output from table1"
 
@@ -4221,7 +4203,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = (
         "SELECT CASE WHEN B THEN SUBDATE(A, Interval 2 Days) END as output from table1"
     )
@@ -4253,7 +4235,7 @@ def test_tz_aware_subdate_interval_month(memory_leak_check):
             + [None, None],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT SUBDATE(A, Interval 4 Months) as output from table1"
     query2 = "SELECT DATE_SUB(A, Interval 4 Months) as output from table1"
 
@@ -4278,7 +4260,7 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
             "B": [True, False, True, True] * 8,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 1 Months) END as output from table1"
     query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 1 Months) END as output from table1"
 
@@ -4328,7 +4310,7 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
             "DA": day,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
     check_query(
         query,
@@ -4382,7 +4364,7 @@ def test_date_from_float_parts(date_from_parts_float_data, use_case, memory_leak
             "DA": day,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
     check_query(
         query,
@@ -4553,7 +4535,7 @@ def test_timestamp_from_parts(
             "NS": nanosecond,
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame({0: pd.Series([pd.Timestamp(s, tz=tz) for s in answer])})
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
@@ -4582,25 +4564,25 @@ def test_timestamp_from_parts_datetime_overload(
         query = f"SELECT CASE WHEN {fn_call} > DATE '2211-01-01' THEN DATE '2211-01-01' ELSE {fn_call} END as t from table1"
     df = pd.DataFrame(
         {
-            "date": ["1999/1/12", "2000/2/1", "2010/5/4", "2011/3/1", "2023/8/3"],
-            "hours": [0, 1, 12, 6, 9],
-            "minutes": [0, 2, 30, 50, 10],
-            "seconds": [0, 3, 55, 20, 30],
-            "nanoseconds": [0, 40001003, 550001004, 1234, 1200300],
+            "DATE": ["1999/1/12", "2000/2/1", "2010/5/4", "2011/3/1", "2023/8/3"],
+            "HOURS": [0, 1, 12, 6, 9],
+            "MINUTES": [0, 2, 30, 50, 10],
+            "SECONDS": [0, 3, 55, 20, 30],
+            "NANOSECONDS": [0, 40001003, 550001004, 1234, 1200300],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     def row_to_timestamp(row):
-        return pd.Timestamp(row["date"]) + pd.Timedelta(
-            hours=row["hours"],
-            minutes=row["minutes"],
-            seconds=row["seconds"],
-            nanoseconds=row["nanoseconds"],
+        return pd.Timestamp(row["DATE"]) + pd.Timedelta(
+            hours=row["HOURS"],
+            minutes=row["MINUTES"],
+            seconds=row["SECONDS"],
+            nanoseconds=row["NANOSECONDS"],
         )
 
     py_output = pd.DataFrame(
-        {"t": pd.Series([row_to_timestamp(df.loc[i]) for i in range(len(df))])}
+        {"T": pd.Series([row_to_timestamp(df.loc[i]) for i in range(len(df))])}
     )
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
@@ -4624,7 +4606,7 @@ def date_only_single_arg_fns_time_input_handling(
     date_only_single_arg_fns, time_df, memory_leak_check
 ):
     query = f"SELECT {date_only_single_arg_fns}(A) as output from table1"
-    output = pd.DataFrame({"output": []})
+    output = pd.DataFrame({"OUTPUT": []})
     with pytest.raises(
         Exception, match=f"Time object is not supported by {date_only_single_arg_fns}"
     ):
@@ -4641,7 +4623,7 @@ def date_only_single_arg_fns_time_input_handling(
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_check):
     query = f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
-    output = pd.DataFrame({"output": []})
+    output = pd.DataFrame({"OUTPUT": []})
     with pytest.raises(
         Exception, match=f"Time object is not supported by {next_or_prev}_DAY"
     ):
@@ -4662,9 +4644,9 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
     query = "SELECT LAST_DAY(A) as output from table1"
     output = pd.DataFrame(
         {
-            "output": [
-                last_day_scalar_fn(date_df["table1"]["A"][i], "month")
-                for i in range(len(date_df["table1"]["A"]))
+            "OUTPUT": [
+                last_day_scalar_fn(date_df["TABLE1"]["A"][i], "month")
+                for i in range(len(date_df["TABLE1"]["A"]))
             ]
         }
     )
@@ -4672,7 +4654,6 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
         query,
         date_df,
         None,
-        check_names=False,
         expected_output=output,
     )
 
@@ -4687,9 +4668,9 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
     )
     output = pd.DataFrame(
         {
-            "output": [
-                last_day_scalar_fn(date_df["table1"]["B"][i], unit)
-                for i in range(len(date_df["table1"]["B"]))
+            "OUTPUT": [
+                last_day_scalar_fn(date_df["TABLE1"]["B"][i], unit)
+                for i in range(len(date_df["TABLE1"]["B"]))
             ]
         }
     )
@@ -4702,7 +4683,6 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
                 query,
                 date_df,
                 None,
-                check_names=False,
                 expected_output=pd.DataFrame({}),
             )
     else:
@@ -4710,7 +4690,6 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
             query,
             date_df,
             None,
-            check_names=False,
             expected_output=output,
         )
 
@@ -4738,13 +4717,12 @@ def test_current_date(fn_name, memory_leak_check):
     """
     Test CURRENT_DATE function and its alias CURDATE
     """
-    query = f"SELECT {fn_name}()"
+    query = f"SELECT {fn_name}() as output"
     check_query(
         query,
         {},
         None,
-        check_names=False,
-        expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
+        expected_output=pd.DataFrame({"OUTPUT": [datetime.date.today()]}),
     )
 
 
@@ -4757,7 +4735,6 @@ def test_months_between(spark_info, date_df, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=query,
     )
 
 
@@ -4770,14 +4747,13 @@ def test_add_months(spark_info, date_df, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=query,
     )
 
 
 def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
     df = pd.DataFrame({"A": pd.Series([ts] * 12)})
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     answer = pd.DataFrame(
         {

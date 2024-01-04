@@ -9,83 +9,83 @@ from bodo.tests.iceberg_database_helpers.utils import (
 
 PARTITION_MAP: List[Tuple[str, List[PartitionField]]] = [
     # Identity for Bools
-    ("bool_binary_table", [PartitionField("A", "identity", -1)]),  # bool not null
-    ("bool_binary_table", [PartitionField("B", "identity", -1)]),  # bool null
+    ("BOOL_BINARY_TABLE", [PartitionField("A", "identity", -1)]),  # bool not null
+    ("BOOL_BINARY_TABLE", [PartitionField("B", "identity", -1)]),  # bool null
     # Identity
-    ("numeric_table", [PartitionField("A", "identity", -1)]),  # int32 no nulls
-    ("numeric_table", [PartitionField("B", "identity", -1)]),  # int64 no nulls
-    ("numeric_table", [PartitionField("E", "identity", -1)]),  # int32
-    ("numeric_table", [PartitionField("F", "identity", -1)]),  # int64
-    ("string_table", [PartitionField("B", "identity", -1)]),  # string no nulls
-    ("dt_tsz_table", [PartitionField("A", "identity", -1)]),  # date with nulls
-    ("dt_tsz_table", [PartitionField("B", "identity", -1)]),  # datetime with NaTs
-    ("tz_aware_table", [PartitionField("A", "identity", -1)]),  # datetime no nulls
-    ("dict_encoded_string_table", [PartitionField("A", "identity", -1)]),  # w/o nulls
-    ("dict_encoded_string_table", [PartitionField("B", "identity", -1)]),  # w/ nulls
+    ("NUMERIC_TABLE", [PartitionField("A", "identity", -1)]),  # int32 no nulls
+    ("NUMERIC_TABLE", [PartitionField("B", "identity", -1)]),  # int64 no nulls
+    ("NUMERIC_TABLE", [PartitionField("E", "identity", -1)]),  # int32
+    ("NUMERIC_TABLE", [PartitionField("F", "identity", -1)]),  # int64
+    ("STRING_TABLE", [PartitionField("B", "identity", -1)]),  # string no nulls
+    ("DT_TSZ_TABLE", [PartitionField("A", "identity", -1)]),  # date with nulls
+    ("DT_TSZ_TABLE", [PartitionField("B", "identity", -1)]),  # datetime with NaTs
+    ("TZ_AWARE_TABLE", [PartitionField("A", "identity", -1)]),  # datetime no nulls
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("A", "identity", -1)]),  # w/o nulls
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("B", "identity", -1)]),  # w/ nulls
     # Date / Time Transformations
-    ("dt_tsz_table", [PartitionField("A", "years", -1)]),
-    ("dt_tsz_table", [PartitionField("A", "months", -1)]),
-    ("dt_tsz_table", [PartitionField("A", "days", -1)]),
-    ("dt_tsz_table", [PartitionField("B", "years", -1)]),  # datetime with NaTs
-    ("dt_tsz_table", [PartitionField("B", "months", -1)]),  # datetime with NaTs
-    ("dt_tsz_table", [PartitionField("B", "days", -1)]),  # datetime with NaTs
-    ("dt_tsz_table", [PartitionField("B", "hours", -1)]),  # datetime with NaTs
-    ("tz_aware_table", [PartitionField("A", "years", -1)]),  # datetime w/o NaTs
-    ("tz_aware_table", [PartitionField("A", "months", -1)]),  # datetime w/o NaTs
-    ("tz_aware_table", [PartitionField("A", "days", -1)]),  # datetime w/o NaTs
-    ("tz_aware_table", [PartitionField("A", "hours", -1)]),  # datetime w/o NaTs
-    # TODO: Include timestampz?
+    ("DT_TSZ_TABLE", [PartitionField("A", "years", -1)]),
+    ("DT_TSZ_TABLE", [PartitionField("A", "months", -1)]),
+    ("DT_TSZ_TABLE", [PartitionField("A", "days", -1)]),
+    ("DT_TSZ_TABLE", [PartitionField("B", "years", -1)]),  # datetime with NaTs
+    ("DT_TSZ_TABLE", [PartitionField("B", "months", -1)]),  # datetime with NaTs
+    ("DT_TSZ_TABLE", [PartitionField("B", "days", -1)]),  # datetime with NaTs
+    ("DT_TSZ_TABLE", [PartitionField("B", "hours", -1)]),  # datetime with NaTs
+    ("TZ_AWARE_TABLE", [PartitionField("A", "years", -1)]),  # datetime w/o NaTs
+    ("TZ_AWARE_TABLE", [PartitionField("A", "months", -1)]),  # datetime w/o NaTs
+    ("TZ_AWARE_TABLE", [PartitionField("A", "days", -1)]),  # datetime w/o NaTs
+    ("TZ_AWARE_TABLE", [PartitionField("A", "hours", -1)]),  # datetime w/o NaTs
+    # TODO: Include timestamps?
     # Truncate Transformation
-    ("numeric_table", [PartitionField("A", "truncate", 3)]),  # int
-    ("numeric_table", [PartitionField("B", "truncate", 3)]),  # long
-    ("numeric_table", [PartitionField("E", "truncate", 3)]),  # int nulls
-    ("numeric_table", [PartitionField("F", "truncate", 3)]),  # long nulls
-    ("string_table", [PartitionField("B", "truncate", 1)]),  # string
-    ("string_table", [PartitionField("D", "truncate", 2)]),  # string nulls
-    ("dict_encoded_string_table", [PartitionField("A", "truncate", 1)]),  # w/o nulls
-    ("dict_encoded_string_table", [PartitionField("B", "truncate", 2)]),  # w/ nulls
+    ("NUMERIC_TABLE", [PartitionField("A", "truncate", 3)]),  # int
+    ("NUMERIC_TABLE", [PartitionField("B", "truncate", 3)]),  # long
+    ("NUMERIC_TABLE", [PartitionField("E", "truncate", 3)]),  # int nulls
+    ("NUMERIC_TABLE", [PartitionField("F", "truncate", 3)]),  # long nulls
+    ("STRING_TABLE", [PartitionField("B", "truncate", 1)]),  # string
+    ("STRING_TABLE", [PartitionField("D", "truncate", 2)]),  # string nulls
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("A", "truncate", 1)]),  # w/o nulls
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("B", "truncate", 2)]),  # w/ nulls
     # Bucket Transformation
-    ("numeric_table", [PartitionField("A", "bucket", 4)]),  # int
-    ("numeric_table", [PartitionField("B", "bucket", 4)]),  # long
-    ("numeric_table", [PartitionField("E", "bucket", 4)]),  # int
-    ("numeric_table", [PartitionField("F", "bucket", 4)]),  # long
-    ("string_table", [PartitionField("A", "bucket", 4)]),  # string
-    ("dt_tsz_table", [PartitionField("A", "bucket", 4)]),  # date
-    ("dt_tsz_table", [PartitionField("B", "bucket", 4)]),  # datetime (w/ NaTs)
-    ("tz_aware_table", [PartitionField("A", "bucket", 4)]),  # timestamp
-    ("numeric_table", [PartitionField("A", "bucket", 50)]),  # int
-    ("numeric_table", [PartitionField("B", "bucket", 50)]),  # long
-    ("numeric_table", [PartitionField("E", "bucket", 50)]),  # int
-    ("numeric_table", [PartitionField("F", "bucket", 50)]),  # long
-    ("string_table", [PartitionField("A", "bucket", 50)]),  # string
-    ("dt_tsz_table", [PartitionField("A", "bucket", 50)]),  # date
-    ("dt_tsz_table", [PartitionField("B", "bucket", 50)]),  # datetime (w/ NaTs)
-    ("tz_aware_table", [PartitionField("A", "bucket", 50)]),  # timestamp
-    ("dict_encoded_string_table", [PartitionField("A", "bucket", 4)]),  # w/o nulls
-    ("dict_encoded_string_table", [PartitionField("A", "bucket", 50)]),  # w/ nulls
+    ("NUMERIC_TABLE", [PartitionField("A", "bucket", 4)]),  # int
+    ("NUMERIC_TABLE", [PartitionField("B", "bucket", 4)]),  # long
+    ("NUMERIC_TABLE", [PartitionField("E", "bucket", 4)]),  # int
+    ("NUMERIC_TABLE", [PartitionField("F", "bucket", 4)]),  # long
+    ("STRING_TABLE", [PartitionField("A", "bucket", 4)]),  # string
+    ("DT_TSZ_TABLE", [PartitionField("A", "bucket", 4)]),  # date
+    ("DT_TSZ_TABLE", [PartitionField("B", "bucket", 4)]),  # datetime (w/ NaTs)
+    ("TZ_AWARE_TABLE", [PartitionField("A", "bucket", 4)]),  # timestamp
+    ("NUMERIC_TABLE", [PartitionField("A", "bucket", 50)]),  # int
+    ("NUMERIC_TABLE", [PartitionField("B", "bucket", 50)]),  # long
+    ("NUMERIC_TABLE", [PartitionField("E", "bucket", 50)]),  # int
+    ("NUMERIC_TABLE", [PartitionField("F", "bucket", 50)]),  # long
+    ("STRING_TABLE", [PartitionField("A", "bucket", 50)]),  # string
+    ("DT_TSZ_TABLE", [PartitionField("A", "bucket", 50)]),  # date
+    ("DT_TSZ_TABLE", [PartitionField("B", "bucket", 50)]),  # datetime (w/ NaTs)
+    ("TZ_AWARE_TABLE", [PartitionField("A", "bucket", 50)]),  # timestamp
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("A", "bucket", 4)]),  # w/o nulls
+    ("DICT_ENCODED_STRING_TABLE", [PartitionField("A", "bucket", 50)]),  # w/ nulls
     # TODO: Try with another bucket modulus as well?
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [PartitionField("A", "months", -1), PartitionField("B", "truncate", 10)],
     ),
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [PartitionField("C", "identity", -1), PartitionField("A", "years", -1)],
     ),
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [PartitionField("B", "identity", -1), PartitionField("D", "truncate", 1)],
     ),
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [PartitionField("D", "bucket", 2), PartitionField("C", "identity", -1)],
     ),
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [PartitionField("B", "bucket", 4), PartitionField("A", "bucket", 3)],
     ),
     (
-        "primitives_table",
+        "PRIMITIVES_TABLE",
         [
             PartitionField("A", "years", -1),
             PartitionField("A", "bucket", 3),

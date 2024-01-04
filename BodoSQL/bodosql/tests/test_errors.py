@@ -23,7 +23,7 @@ def test_type_error(memory_leak_check):
 
     def impl(df):
         query = "Select A from table1 where A > date '2021-09-05'"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -43,7 +43,7 @@ def test_type_error_jit(memory_leak_check):
     @bodo.jit
     def impl(df):
         query = "Select A from table1 where A > date '2021-09-05'"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -62,7 +62,7 @@ def test_invalid_format_str(memory_leak_check):
 
     def impl(df):
         query = "SELECT STR_TO_DATE(A, '%Y-%n-%d:%h') from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4})
@@ -82,7 +82,7 @@ def test_invalid_format_str_jit(memory_leak_check):
     @bodo.jit
     def impl(df):
         query = "SELECT STR_TO_DATE(A, '%Y-%n-%d:%h') from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4})
@@ -101,7 +101,7 @@ def test_unsupported_format_str(memory_leak_check):
 
     def impl(df):
         query = "SELECT STR_TO_DATE(A, '%l') from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4})
@@ -121,7 +121,7 @@ def test_unsupported_format_str_jit(memory_leak_check):
     @bodo.jit
     def impl(df):
         query = "SELECT STR_TO_DATE(A, '%l') from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     df = pd.DataFrame({"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4})
@@ -139,7 +139,7 @@ def test_unsupported_decimal(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         # Bodo updates/finalizes schema types in between parsing and validation, which doesn't happen
         # unless we have a query
         return bc.sql("SELECT A from table1")
@@ -163,7 +163,7 @@ def test_unsupported_decimal_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         # Bodo doesn't try assign a type until there is a sql call
         return bc.sql("select * from table1")
 
@@ -185,7 +185,7 @@ def test_bad_bodosql_context(memory_leak_check):
     """
 
     def impl(filename):
-        bc = bodosql.BodoSQLContext({"table1": filename})
+        bc = bodosql.BodoSQLContext({"TABLE1": filename})
         return bc
 
     filename = "myfile.pq"
@@ -204,7 +204,7 @@ def test_bad_bodosql_context_jit(memory_leak_check):
 
     @bodo.jit
     def impl(filename):
-        bc = bodosql.BodoSQLContext({"table1": filename})
+        bc = bodosql.BodoSQLContext({"TABLE1": filename})
         # Bodo doesn't try assign a type until there is a sql call
         return bc.sql("select * from table1")
 
@@ -223,7 +223,7 @@ def test_query_syntax_error(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("selct * from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -242,7 +242,7 @@ def test_query_syntax_error_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("selct * from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -260,7 +260,7 @@ def test_missing_table(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select * from table_1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -279,7 +279,7 @@ def test_missing_table_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select * from table_1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -297,7 +297,7 @@ def test_missing_column(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select B from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -316,7 +316,7 @@ def test_missing_column_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select B from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -335,14 +335,14 @@ def test_empty_query_python(memory_leak_check):
         BodoError,
         match=msg,
     ):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         bc.sql("")
 
     with pytest.raises(
         BodoError,
         match=msg,
     ):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.convert_to_pandas("")
 
 
@@ -350,12 +350,12 @@ def test_empty_query_python(memory_leak_check):
 def test_empty_query_jit(memory_leak_check):
     @bodo.jit
     def impl1():
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         bc.sql("")
 
     @bodo.jit
     def impl2():
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         bc.convert_to_pandas("")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -395,7 +395,7 @@ def test_str_date_select_cond_fns(fn_name, memory_leak_check):
     )
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(f"select {fn_name}(B, A) from table1")
 
     # Does not explicitly check the types of the two arguments since changes to
@@ -429,7 +429,7 @@ def test_str_date_select_IF(memory_leak_check):
     )
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select IF(C, B, A) from table1")
 
     with pytest.raises(
@@ -448,7 +448,7 @@ def test_non_existant_fn(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select NON_EXISTANT_FN(A) from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -469,7 +469,7 @@ def test_non_existant_fn_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select NON_EXISTANT_FN(A) from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -489,7 +489,7 @@ def test_wrong_types_fn(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select LCASE(INTERVAL 10 DAYS) from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -510,7 +510,7 @@ def test_wrong_types_fn_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select LCASE(INTERVAL 10 DAYS) from table1")
 
     df = pd.DataFrame({"A": np.arange(100)})
@@ -530,14 +530,14 @@ def test_wrong_number_of_args(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
-        return bc.sql("select CIELING(A, 10) from table1")
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
+        return bc.sql("select LOWER(A, 10) from table1")
 
-    df = pd.DataFrame({"A": np.arange(100)})
+    df = pd.DataFrame({"A": ["A"] * 10})
     with pytest.raises(
         BodoError,
         match=re.escape(
-            "No match found for function signature CIELING(<NUMERIC>, <NUMERIC>)"
+            "Invalid number of arguments to function 'LOWER'. Was expecting 1 arguments"
         ),
     ):
         impl(df)
@@ -551,14 +551,14 @@ def test_wrong_number_of_args_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
-        return bc.sql("select CIELING(A, 10) from table1")
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
+        return bc.sql("select LOWER(A, 10) from table1")
 
-    df = pd.DataFrame({"A": np.arange(100)})
+    df = pd.DataFrame({"A": ["A"] * 10})
     with pytest.raises(
         BodoError,
         match=re.escape(
-            "No match found for function signature CIELING(<NUMERIC>, <NUMERIC>)"
+            "Invalid number of arguments to function 'LOWER'. Was expecting 1 arguments"
         ),
     ):
         impl(df)
@@ -571,7 +571,7 @@ def test_coalesece(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(
             "select COALESCE(0.23, INTERVAL 5 DAYS, 'hello world') from table1"
         )
@@ -592,7 +592,7 @@ def test_coalesece_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(
             "select COALESCE(0.23, INTERVAL 5 DAYS, 'hello world') from table1"
         )
@@ -608,11 +608,11 @@ def test_coalesece_jit(memory_leak_check):
 @pytest.mark.slow
 def test_row_fn(memory_leak_check):
     """
-    Checks that incorrectly formated windowed aggregations. Raise a JIT error
+    Checks that incorrectly formatted windowed aggregations. Raise a JIT error
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(
             "select LEAD(A, 1) over (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING and 1 FOLLOWING) from table1"
         )
@@ -628,12 +628,12 @@ def test_row_fn(memory_leak_check):
 @pytest.mark.slow
 def test_row_fn_jit(memory_leak_check):
     """
-    Checks that incorrectly formated windowed aggregations. Raise a JIT error
+    Checks that incorrectly formatted windowed aggregations. Raise a JIT error
     """
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(
             "select LEAD(A, 1) over (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING and 1 FOLLOWING) from table1"
         )
@@ -649,11 +649,11 @@ def test_row_fn_jit(memory_leak_check):
 @pytest.mark.slow
 def test_invalid_syntax_fn(memory_leak_check):
     """
-    Checks that incorrectly formated windowed aggregations. Raise a JIT error
+    Checks that incorrectly formatted windowed aggregations. Raise a JIT error
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select INT(A, 1) from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -667,12 +667,12 @@ def test_invalid_syntax_fn(memory_leak_check):
 @pytest.mark.slow
 def test_invalid_syntax_fn_jit(memory_leak_check):
     """
-    Checks that incorrectly formated windowed aggregations. Raise a JIT error
+    Checks that incorrectly formatted windowed aggregations. Raise a JIT error
     """
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select INT(A, 1) from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -690,7 +690,7 @@ def test_invalid_syntax_comma(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select A,B,C, from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -712,7 +712,7 @@ def test_invalid_syntax_comma_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select A,B,C, from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -733,7 +733,7 @@ def test_invalid_named_param(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select @a from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -752,7 +752,7 @@ def test_invalid_named_param_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select @a from table1")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -770,7 +770,7 @@ def test_multi_table_colname(memory_leak_check):
     """
 
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df, "table2": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df, "TABLE2": df})
         return bc.sql("select A from table1, table2")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -789,7 +789,7 @@ def test_multi_table_colname_jit(memory_leak_check):
 
     @bodo.jit
     def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df, "table2": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df, "TABLE2": df})
         return bc.sql("select A from table1, table2")
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
@@ -813,7 +813,7 @@ def test_qualify_no_groupby_err(memory_leak_check):
 
     def impl(df):
         query = "SELECT A from table1 GROUP BY A HAVING MAX(A) > 3 QUALIFY MAX(A) OVER (PARTITION BY B) = 3"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     with pytest.raises(
@@ -837,12 +837,12 @@ def test_qualify_no_window_err(memory_leak_check):
 
     def impl(df):
         query = "SELECT A from table1 QUALIFY A > 3"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     with pytest.raises(
         BodoError,
-        match=r"QUALIFY expression '`table1`.`A` > 3' must contain a window function",
+        match=r"QUALIFY expression '`TABLE1`.`A` > 3' must contain a window function",
     ):
         impl(table1)
 
@@ -863,7 +863,7 @@ def test_lag_respect_nulls_no_window():
 
     def impl(df):
         query = "SELECT LAG(A) RESPECT NULLS from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql(query)
 
     with pytest.raises(

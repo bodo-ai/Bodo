@@ -135,7 +135,7 @@ def test_interval_arith(
     query = f"""
         SELECT @a {datetime_arith_ops} A as colname from table1
         """
-    A = bodosql_interval_types["table1"]["A"]
+    A = bodosql_interval_types["TABLE1"]["A"]
     a = timedelta_named_params["a"]
     expected_output = (a + A) if datetime_arith_ops == "+" else (a - A)
     expected_output = expected_output.to_frame()

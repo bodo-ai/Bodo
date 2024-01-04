@@ -3032,7 +3032,7 @@ public class SqlToRelConverter {
     //NOTE: we're defaulting this value to a random index, as we don't actually need
     // a physical index for this 'extension field'
     int newIdx = 999;
-    RelDataTypeField rowIdFieldType = new RelDataTypeFieldImpl("_bodo_row_id",
+    RelDataTypeField rowIdFieldType = new RelDataTypeFieldImpl("_BODO_ROW_ID",
         newIdx, int_typ);
     List<RelDataTypeField> extensionFields = new ArrayList<>();
     extensionFields.add(rowIdFieldType);
@@ -4824,7 +4824,7 @@ public class SqlToRelConverter {
     List<String> destTableFieldNames = new ArrayList<>();
     destTableFieldNames.addAll(destTable.getRowType().getFieldNames());
     //Add the Row ID column
-    destTableFieldNames.add("_bodo_row_id");
+    destTableFieldNames.add("_BODO_ROW_ID");
 
     for (int destColIdx = 0; destColIdx < destTableFieldNames.size(); destColIdx++) {
       caseValues.add(new ArrayList<>());
@@ -4945,7 +4945,7 @@ public class SqlToRelConverter {
 
     List<String> destTableFieldNames = new ArrayList<>();
     destTableFieldNames.addAll(destTable.getRowType().getFieldNames());
-    destTableFieldNames.add("_bodo_row_id");
+    destTableFieldNames.add("_BODO_ROW_ID");
 
     for (int destColIdx = 0; destColIdx < destTableFieldNames.size(); destColIdx++) {
       caseValues.add(new ArrayList<>());
@@ -4977,7 +4977,7 @@ public class SqlToRelConverter {
           Integer curOffset = curInsertTargetColumnMap.get(curFieldName)
               + totalOffset;
           valToAdd = mergeSourceRelProjects.get(curOffset);
-        } else if (curFieldName.equals("_bodo_row_id")) {
+        } else if (curFieldName.equals("_BODO_ROW_ID")) {
           // Don't have a BODO_ROW_ID for insert rows, so
           // we just default to null
           valToAdd = this.relBuilder.getRexBuilder()
@@ -5265,7 +5265,7 @@ public class SqlToRelConverter {
     }
 
     // Add Bodo Row ID to final projects
-    int row_id_index = mergeSourceRel.getRowType().getFieldNames().indexOf("_bodo_row_id");
+    int row_id_index = mergeSourceRel.getRowType().getFieldNames().indexOf("_BODO_ROW_ID");
     finalProjects.add(relBuilder.getRexBuilder().makeInputRef(mergeSourceRel, row_id_index));
 
     // Finally, append the row that checks what operation we're performing

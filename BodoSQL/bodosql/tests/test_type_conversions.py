@@ -23,7 +23,7 @@ def test_float_to_int_cast(
     """
     Checks that numeric casting of constants behaves as expected
     """
-    # Spark converts this to 0, but Bodo uses Decimal and Double interchangably
+    # Spark converts this to 0, but Bodo uses Decimal and Double interchangeably
     if sql_numeric_typestrings == "DECIMAL" and numeric_values == 0.001:
         return
     query = f"SELECT CAST({numeric_values} AS {sql_numeric_typestrings})"
@@ -96,7 +96,7 @@ def test_varchar_to_numeric_cast(
     str_data = {
         "A": ["1", "2", "3"] * 4,
     }
-    ctx = {"table1": pd.DataFrame(str_data)}
+    ctx = {"TABLE1": pd.DataFrame(str_data)}
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
@@ -116,7 +116,7 @@ def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak
         None,
         expected_output=pd.DataFrame(
             {
-                "COL": bodosql_nullable_numeric_types["table1"]["A"].map(
+                "COL": bodosql_nullable_numeric_types["TABLE1"]["A"].map(
                     lambda x: None if pd.isna(x) else str(x)
                 )
             }

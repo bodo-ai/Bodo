@@ -34,7 +34,7 @@ pytestmark = pytest_snowflake
 def test_simple_filter_pushdown(memory_leak_check):
     def impl1(table_name):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
         return bc.sql(
             "select L_SUPPKEY from sql_table WHERE L_ORDERKEY > 10 AND 2 >= L_LINENUMBER ORDER BY L_SUPPKEY LIMIT 70",
@@ -42,13 +42,13 @@ def test_simple_filter_pushdown(memory_leak_check):
 
     def impl2(table_name):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
         return bc.sql(
             "SELECT l_suppkey from sql_table where l_shipmode LIKE 'AIR%%' OR l_orderkey = 32",
         )
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
@@ -106,11 +106,11 @@ def test_zero_columns_pruning(memory_leak_check):
 
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
         return bc.sql("SELECT COUNT(*) as cnt from sql_table")
 
-    table_name = "lineitem"
+    table_name = "LINEITEM"
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn_str = get_snowflake_connection_string(db, schema)
@@ -146,7 +146,7 @@ def test_snowflake_limit_pushdown(memory_leak_check):
 
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
         return bc.sql(
             "select mycol from sql_table WHERE mycol = 'A' LIMIT 5",
@@ -191,7 +191,7 @@ def test_snowflake_in_pushdown(memory_leak_check):
 
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
-            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+            {"SQL_TABLE": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
         return bc.sql(
             "select mycol from sql_table WHERE mycol in ('A', 'B', 'C')",

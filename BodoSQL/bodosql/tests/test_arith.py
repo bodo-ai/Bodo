@@ -270,7 +270,7 @@ def test_arith_ops_between_tables(basic_df, spark_info, memory_leak_check):
     Tests that arith operations between tables work as intended
     """
     query = "Select table1.A + table2.C / table1.B - table2.A from table1, table2"
-    newCtx = {"table1": basic_df["table1"], "table2": basic_df["table1"]}
+    newCtx = {"TABLE1": basic_df["TABLE1"], "TABLE2": basic_df["TABLE1"]}
     check_query(query, newCtx, spark_info, check_dtype=False, check_names=False)
 
 
@@ -377,7 +377,7 @@ def test_date_arithmetic(bodosql_date_types, memory_leak_check):
     """
     query = "select A + 7 as col1, B - 2 as col2, 1 + C as col3 from table1"
     # Spark doesn't support date arithmetic with integers
-    table1 = bodosql_date_types["table1"]
+    table1 = bodosql_date_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "COL1": table1.A + pd.Timedelta(days=7),
@@ -404,7 +404,7 @@ def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
 
     query = "select CASE WHEN A > B THEN A + 7 WHEN B > C THEN B - 2 END as col1 from table1"
     # Spark doesn't support date arithmetic with integers
-    table1 = bodosql_date_types["table1"]
+    table1 = bodosql_date_types["TABLE1"]
     S1 = table1.A + pd.Timedelta(days=7)
     S2 = table1.B - pd.Timedelta(days=2)
     expected_output = pd.DataFrame({"COL1": S1})
@@ -428,7 +428,7 @@ def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
     """Tests - on two date columns. The output in SQL is an integer."""
     query = "select A - B as col1 from table1"
     # Spark doesn't support date arithmetic with integers
-    table1 = bodosql_date_types["table1"]
+    table1 = bodosql_date_types["TABLE1"]
     expected_output = pd.DataFrame(
         {
             "COL1": (table1.A - table1.B).map(
@@ -450,7 +450,7 @@ def test_subtraction_between_dates_case(bodosql_date_types, memory_leak_check):
 
     query = "select CASE WHEN A > B THEN A - B ELSE B - A END as col1 from table1"
     # Spark doesn't support date arithmetic with integers
-    table1 = bodosql_date_types["table1"]
+    table1 = bodosql_date_types["TABLE1"]
     S1 = (table1.A - table1.B).map(lambda a: pd.NA if pd.isna(a) else a.days)
     S2 = (table1.B - table1.A).map(lambda a: pd.NA if pd.isna(a) else a.days)
     expected_output = pd.DataFrame({"COL1": S1})

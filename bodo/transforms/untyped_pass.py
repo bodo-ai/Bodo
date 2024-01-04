@@ -3291,6 +3291,7 @@ def _get_sql_types_arr_colnames(
     orig_table_const: Optional[str] = None,
     orig_table_indices_const: Optional[Tuple[int]] = None,
     snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
+    convert_snowflake_column_names: bool = True,
 ):
     """
     Wrapper function to determine the db_type, column names,
@@ -3319,6 +3320,9 @@ def _get_sql_types_arr_colnames(
         orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
             in the original table. This is to handle renaming and replace name based reads with
             index based reads.
+        convert_snowflake_column_names (bool, default True): Should Snowflake column names be
+            converted to match SqlAlchemy. This is needed to ensure table path is consistent for
+            casing with the SnowflakeCatalog.
 
     Returns:
         A very large tuple (TODO: add docs)
@@ -3381,6 +3385,7 @@ def _get_sql_types_arr_colnames(
         orig_table_const,
         orig_table_indices_const,
         snowflake_conn_cache=snowflake_conn_cache,
+        convert_snowflake_column_names=convert_snowflake_column_names,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3424,6 +3429,7 @@ def _get_sql_df_type_from_db(
     orig_table_const: Optional[str] = None,
     orig_table_indices_const: Optional[Tuple[int]] = None,
     snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
+    convert_snowflake_column_names: bool = True,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3447,6 +3453,9 @@ def _get_sql_df_type_from_db(
         orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
             in the original table. This is to handle renaming and replace name based reads with
             index based reads.
+        convert_snowflake_column_names (bool, default True): Should Snowflake column names be
+            converted to match SqlAlchemy. This is needed to ensure table path is consistent for
+            casing with the SnowflakeCatalog.
 
 
     Returns:
@@ -3526,6 +3535,7 @@ def _get_sql_df_type_from_db(
                     downcast_decimal_to_double,
                     orig_table_const,
                     orig_table_indices_const,
+                    convert_snowflake_column_names=convert_snowflake_column_names,
                 )
 
                 # Log the chosen dict-encoding timeout behavior

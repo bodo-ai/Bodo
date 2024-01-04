@@ -26,7 +26,7 @@ def grouped_dfs():
     groupby functions.
     """
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": [0, 1, 2, 4] * 50,
                 "B": np.arange(200),
@@ -44,7 +44,7 @@ def test_agg_numeric(
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
-        if not np.issubdtype(bodosql_numeric_types["table1"]["A"].dtype, np.integer):
+        if not np.issubdtype(bodosql_numeric_types["TABLE1"]["A"].dtype, np.integer):
             return
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
@@ -66,7 +66,7 @@ def test_agg_numeric_larger_group(
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
-        if not np.issubdtype(bodosql_numeric_types["table1"]["A"].dtype, np.integer):
+        if not np.issubdtype(grouped_dfs["TABLE1"]["A"].dtype, np.integer):
             return
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
@@ -168,7 +168,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=bodosql_interval_types["table1"]
+        expected_output=bodosql_interval_types["TABLE1"]
         .groupby("A")["B"]
         .nunique()
         .to_frame()
@@ -180,7 +180,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=bodosql_interval_types["table1"]
+        expected_output=bodosql_interval_types["TABLE1"]
         .groupby("A")
         .size()
         .to_frame()
@@ -287,7 +287,7 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 @pytest.mark.slow
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
-    expected_output = bodosql_interval_types["table1"].groupby("A")["B"].count()
+    expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()
     expected_output = (
         expected_output[expected_output > 2].to_frame().reset_index(drop=True)
     )
@@ -404,7 +404,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         query,
         bodosql_interval_types,
         None,
-        expected_output=bodosql_interval_types["table1"]
+        expected_output=bodosql_interval_types["TABLE1"]
         .groupby("A")["B"]
         .max()
         .to_frame()
@@ -443,7 +443,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
 )
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [True, False, True, None, True, None, True, False] * 5,
@@ -573,7 +573,7 @@ def groupby_extension_table():
     B = B * len(vals)
 
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {"A": A * 2, "B": B * 2, "C": C * 2, "D": np.arange(len(A) * 2)}
         )
     }
@@ -710,7 +710,7 @@ def test_any_value(agg_col, memory_leak_check):
     implemented in a way that is reproducible (by always returning the first
     value). The test data is set up so that each group has all identical values."""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "K": pd.Series(
                     [1, None, 1, 2, 1, None, 1, 2, 3, 2, 1, 40, 5, -6, 7],
@@ -848,7 +848,7 @@ def test_any_value(agg_col, memory_leak_check):
 
     query = f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K"
 
-    answer = ctx["table1"].groupby("K", as_index=False, dropna=False)[agg_col].first()
+    answer = ctx["TABLE1"].groupby("K", as_index=False, dropna=False)[agg_col].first()
 
     check_query(
         query,
@@ -917,7 +917,7 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
     """
 
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "I": pd.Series(
                     [
@@ -1062,7 +1062,7 @@ def test_booland_agg_having(memory_leak_check):
     )
     expected_output = pd.DataFrame({"0: ": [4, 5, 6], "1: ": [True, True, True]})
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "B": pd.Series(
                     [
@@ -1125,7 +1125,7 @@ def test_boolor_agg_output_type(memory_leak_check):
         SELECT COUNT (DISTINCT CASE WHEN agg_A then B end) as totals
         from TEMP"""
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -1180,10 +1180,10 @@ def test_max_min_tz_aware(memory_leak_check):
         list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
         + [None] * 5
     )
-    df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
-    ctx = {"table1": df}
+    df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
-        {"OUTPUT1": df.groupby("id").max()["A"], "OUTPUT2": df.groupby("id").min()["A"]}
+        {"OUTPUT1": df.groupby("ID").max()["A"], "OUTPUT2": df.groupby("ID").min()["A"]}
     )
     query = "Select max(A) as output1, min(A) as output2 from table1 group by id"
     check_query(
@@ -1203,10 +1203,10 @@ def test_count_tz_aware(memory_leak_check):
         list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
         + [None] * 5
     )
-    df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
-    ctx = {"table1": df}
+    df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
+    ctx = {"TABLE1": df}
     py_output = pd.DataFrame(
-        {"OUTPUT1": df.groupby("id").count()["A"], "OUTPUT2": df.groupby("id").size()}
+        {"OUTPUT1": df.groupby("ID").count()["A"], "OUTPUT2": df.groupby("ID").size()}
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1 group by id"
     check_query(
@@ -1234,11 +1234,11 @@ def test_any_value_tz_aware(memory_leak_check):
                 pd.Timestamp("2022/1/4", tz="Poland"),
             ]
             * 7,
-            "id": ["a", "b", "c", "a", "d"] * 7,
+            "ID": ["a", "b", "c", "a", "d"] * 7,
         }
     )
-    ctx = {"table1": df}
-    py_output = pd.DataFrame({"OUTPUT1": df.groupby("id").head(1)["A"]})
+    ctx = {"TABLE1": df}
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("ID").head(1)["A"]})
     query = "Select ANY_VALUE(A) as output1 from table1 group by id"
     check_query(
         query,
@@ -1263,11 +1263,11 @@ def test_tz_aware_key(memory_leak_check):
                 pd.Timestamp("2022/1/4", tz="Poland"),
             ]
             * 7,
-            "val": np.arange(35),
+            "VAL": np.arange(35),
         }
     )
-    ctx = {"table1": df}
-    py_output = pd.DataFrame({"OUTPUT1": df.groupby("A").sum()["val"]})
+    ctx = {"TABLE1": df}
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("A").sum()["VAL"]})
     query = "Select SUM(val) as output1 from table1 group by A"
     check_query(
         query,
@@ -1306,7 +1306,7 @@ def test_tz_aware_having(memory_leak_check):
             "C": [1, 2, 3] * 10 + [1, 2, 3, 4, 5],
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
 
     def groupby_func(df):
         if df.A.max() > df.B.min():
@@ -1353,7 +1353,7 @@ def test_all_nulls_1(memory_leak_check):
             "OUT8": pd.Series([False, None, None, None, None], dtype="boolean"),
         }
     )
-    ctx = {"table1": df}
+    ctx = {"TABLE1": df}
     query = """
         Select A,
         SUM(B) as out1,
@@ -1437,7 +1437,7 @@ def test_all_nulls_2(memory_leak_check):
 
     check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         expected_output=expected,
         check_dtype=False,
@@ -1464,7 +1464,7 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
     # Datasets designed to exhibit different distributions, thus producing myriad
     # cases of kurtosis and skew calculations
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [int(np.log2(i**2 + 10)) for i in range(100)],
@@ -1492,18 +1492,18 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
     }
 
     def kurt_skew_refsol(cols):
-        result = pd.DataFrame({"A0": ctx["table1"]["A"].drop_duplicates()})
+        result = pd.DataFrame({"A0": ctx["TABLE1"]["A"].drop_duplicates()})
         i = 0
         for col in cols:
             result[f"A{i}"] = (
-                ctx["table1"]
+                ctx["TABLE1"]
                 .groupby("A")
                 .agg(res=pd.NamedAgg(col, aggfunc=pd.Series.skew))["res"]
                 .values
             )
             i += 1
             result[f"A{i}"] = (
-                ctx["table1"]
+                ctx["TABLE1"]
                 .groupby("A")
                 .agg(res=pd.NamedAgg(col, aggfunc=pd.Series.kurtosis))["res"]
                 .values
@@ -1554,7 +1554,7 @@ def test_mode(values, dtype, memory_leak_check):
     """
     query = "SELECT K, MODE(V) FROM table1 GROUP BY K"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "K": pd.Series(list("AAAABBBBBCCCCCCCDD")),
                 "V": pd.Series(
@@ -1615,7 +1615,7 @@ def test_array_agg(call, answer, memory_leak_check):
     """
     query = f"SELECT K, {call} FROM table1 GROUP BY K"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "K": pd.Series(list("EIEIO") * 5),
                 "O": list(range(25, 0, -1)),
@@ -1689,7 +1689,7 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
     """
     query = f"SELECT K, {call} FROM table1 GROUP BY K"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "K": pd.Series(list("EIEIO") * 5),
                 "D": pd.Series(
@@ -1793,7 +1793,7 @@ def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_che
             ),
         }
     )
-    ctx = {"table1": in_df}
+    ctx = {"TABLE1": in_df}
     pairs = []
     unique_keys = in_df["G"].drop_duplicates()
     keep = pd.notna(in_df["K"]) & pd.notna(in_df["V"])
@@ -1852,7 +1852,7 @@ def test_array_unique_agg(call, expected, memory_leak_check):
     """
     query = f"SELECT K, {call} FROM table1 GROUP BY K"
     ctx = {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "K": pd.Series(list("EIEIO") * 5),
                 "D": pd.Series(

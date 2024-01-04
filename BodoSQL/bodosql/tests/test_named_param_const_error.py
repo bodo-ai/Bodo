@@ -21,11 +21,11 @@ def test_named_param_extract(bodosql_datetime_types, memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select Extract(@a from A) from table1", {"a": a})
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        impl(bodosql_datetime_types["table1"], "year")
+        impl(bodosql_datetime_types["TABLE1"], "year")
 
 
 @pytest.mark.slow
@@ -37,11 +37,11 @@ def test_named_param_order_by(basic_df, memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select A from table1 order by A @a", {"a": a})
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        impl(basic_df["table1"], "ASC")
+        impl(basic_df["TABLE1"], "ASC")
 
 
 @pytest.mark.slow
@@ -54,7 +54,7 @@ def test_named_param_str_to_date(memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select str_to_date(A, @a) from table1", {"a": a})
 
     with pytest.raises(BodoError, match="Failure in compiling or validating SQL Query"):
@@ -71,8 +71,8 @@ def test_named_param_date_format(bodosql_datetime_types, memory_leak_check):
 
     @bodo.jit
     def impl(df, a):
-        bc = bodosql.BodoSQLContext({"table1": df})
+        bc = bodosql.BodoSQLContext({"TABLE1": df})
         return bc.sql("select date_format(A, @a) from table1", {"a": a})
 
     with pytest.raises(BodoError, match="Failure in compiling or validating SQL Query"):
-        impl(bodosql_datetime_types["table1"], "%Y %m %d")
+        impl(bodosql_datetime_types["TABLE1"], "%Y %m %d")

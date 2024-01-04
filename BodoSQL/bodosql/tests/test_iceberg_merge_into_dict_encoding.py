@@ -64,15 +64,15 @@ def source_table(request):
             ).cast(pa.dictionary(pa.int32(), pa.large_string()))
         )
 
-    return pd.DataFrame({"a": A, "b": B})
+    return pd.DataFrame({"A": A, "B": B})
 
 
-@pytest.fixture(params=[None, ["a", "b"]])
+@pytest.fixture(params=[None, ["A", "B"]])
 def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, request):
     target_table = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100,
-            "b": [str(i) for i in range(1000)],
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100,
+            "B": [str(i) for i in range(1000)],
         }
     )
 
@@ -81,7 +81,7 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
     table_name = (
         calling_func_name.replace("[", "_").replace("-", "_").replace("]", "").lower()
     )
-    sql_schema = [("a", "string", False), ("b", "string", False)]
+    sql_schema = [("A", "string", False), ("B", "string", False)]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             target_table,
@@ -93,14 +93,14 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     bc = bodosql.BodoSQLContext(
         {
-            "target_table": bodosql.TablePath(
+            "TARGET_TABLE": bodosql.TablePath(
                 table_name,
                 "sql",
                 conn_str=conn,
                 db_schema=db_schema,
                 bodo_read_as_dict=request.param,
             ),
-            "source": source_table,
+            "SOURCE": source_table,
         }
     )
     bc.add_or_replace_view(table_name, target_table)
@@ -122,9 +122,9 @@ def test_merge_into_dict_encoding_inserts(
 
     expected = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100
             + ["h", "ï", "j", "k", "l", "m", "n", "ö", "p", "q"] * 50,
-            "b": [str(i) for i in range(1000)]
+            "B": [str(i) for i in range(1000)]
             + [str(i + 500) for i in range(500, 1000)],
         }
     )
@@ -170,9 +170,9 @@ def test_merge_into_dict_encoding_updates(
 
     expected = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50
             + ["h", "ï", "j", "k", "l", "m", "n", "ö", "p", "q"] * 50,
-            "b": [str(i) for i in range(1000)],
+            "B": [str(i) for i in range(1000)],
         }
     )
 
@@ -215,8 +215,8 @@ def test_merge_into_dict_encoding_deletes(bodosql_dict_context):
 
     expected = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50,
-            "b": [str(i) for i in range(500)],
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50,
+            "B": [str(i) for i in range(500)],
         }
     )
 
@@ -260,9 +260,9 @@ def test_merge_into_dict_encoding_all(bodosql_dict_context):
 
     expected = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 50
             + ["h", "ï", "j", "k", "l", "m", "n", "ö", "p", "q"] * 75,
-            "b": [str(i) for i in range(750)] + [str(i + 1000) for i in range(500)],
+            "B": [str(i) for i in range(750)] + [str(i + 1000) for i in range(500)],
         }
     )
 
@@ -308,8 +308,8 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
 
     target_table = pd.DataFrame(
         {
-            "a": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100,
-            "b": [str(i) for i in range(1000)],
+            "A": ["ä", "b", "c", "d", "ë", "f", "g", "h", "ï", "j"] * 100,
+            "B": [str(i) for i in range(1000)],
         }
     )
 
@@ -318,8 +318,8 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
 
     # open connection and create initial table
     db_schema, warehouse_loc = iceberg_database
-    table_name = "merge_into_dict_encoding2"
-    sql_schema = [("a", "string", False), ("b", "string", False)]
+    table_name = "MERGE_INTO_DICT_ENCODING2"
+    sql_schema = [("A", "string", False), ("B", "string", False)]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             target_table,
@@ -330,10 +330,10 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     bc = bodosql.BodoSQLContext(
         {
-            "target_table": bodosql.TablePath(
+            "TARGET_TABLE": bodosql.TablePath(
                 table_name, "sql", conn_str=conn, db_schema=db_schema
             ),
-            "source": source,
+            "SOURCE": source,
         }
     )
     bc.add_or_replace_view(table_name, target_table)
@@ -359,7 +359,7 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
 
     args = (bodo.typeof(bc),)
     func_name = ("iceberg_merge_cow_py", "bodo.io.iceberg")
-    dict_encoded_column_names = ["a"]
+    dict_encoded_column_names = ["A"]
 
     # TODO: Fix dict encoding?
     verify_dict_encoding_in_columns(

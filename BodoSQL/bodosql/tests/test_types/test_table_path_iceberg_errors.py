@@ -25,7 +25,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
     Test that TablePath raises an error when passing the wrong arguments
     """
     db_schema, warehouse_loc = iceberg_database
-    conn = iceberg_table_conn("simple_string_table", db_schema, warehouse_loc)
+    conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
         BodoError,
@@ -38,7 +38,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
         bc = bodosql.BodoSQLContext(
             {
                 "iceberg_tbl": bodosql.TablePath(
-                    "simple_string_table",
+                    "SIMPLE_STRING_TABLE",
                     "sql",
                     conn_str=conn,
                 )
@@ -54,7 +54,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
         bc = bodosql.BodoSQLContext(
             {
                 "iceberg_tbl": bodosql.TablePath(
-                    "simple_string_table",
+                    "SIMPLE_STRING_TABLE",
                     "sql",
                     conn_str=conn,
                     db_schema=10,
@@ -69,7 +69,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
     Test that TablePath raises an error when passing the wrong arguments in JIT code
     """
     db_schema, warehouse_loc = iceberg_database
-    conn = iceberg_table_conn("simple_string_table", db_schema, warehouse_loc)
+    conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
         BodoError,
@@ -84,7 +84,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
             bc = bodosql.BodoSQLContext(
                 {
                     "iceberg_tbl": bodosql.TablePath(
-                        "simple_string_table",
+                        "SIMPLE_STRING_TABLE",
                         "sql",
                         conn_str=conn,
                     )
@@ -104,7 +104,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
             bc = bodosql.BodoSQLContext(
                 {
                     "iceberg_tbl": bodosql.TablePath(
-                        "simple_string_table",
+                        "SIMPLE_STRING_TABLE",
                         "sql",
                         conn_str=conn,
                         db_schema=10,
@@ -122,7 +122,7 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     does not exist.
     """
     db_schema, warehouse_loc = iceberg_database
-    conn = iceberg_table_conn("simple_string_table", db_schema, warehouse_loc)
+    conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     # test outside of JIT
     with pytest.raises(
@@ -131,7 +131,7 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     ):
         bc = bodosql.BodoSQLContext(
             {
-                "iceberg_tbl": bodosql.TablePath(
+                "ICEBERG_TBL": bodosql.TablePath(
                     "does_not_exist", "sql", conn_str=conn, db_schema=db_schema
                 )
             }
@@ -147,7 +147,7 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
         def test_func(conn, db_schema):
             bc = bodosql.BodoSQLContext(
                 {
-                    "iceberg_tbl": bodosql.TablePath(
+                    "ICEBERG_TBL": bodosql.TablePath(
                         "does_not_exist", "sql", conn_str=conn, db_schema=db_schema
                     )
                 }
