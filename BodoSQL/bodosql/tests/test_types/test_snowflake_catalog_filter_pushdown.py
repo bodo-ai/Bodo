@@ -1989,7 +1989,7 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
         # Test for the aliases of LENGTH which are valid in snowflake
         for func_name in ("LENGTH", "LEN", "CHAR_LENGTH", "CHARACTER_LENGTH"):
             query = f"Select a from {table_name} where {func_name}(A) = 4"
-            if func_name in ("CHAR_LENGTH", "CHARACTER_LENGTH"):
+            if func_name in ("CHAR_LENGTH", "CHARACTER_LENGTH", "LEN"):
                 pushdown_name = "LENGTH"
             else:
                 pushdown_name = func_name
