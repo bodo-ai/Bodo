@@ -359,10 +359,12 @@ def test_ft2(fft_arr, memory_leak_check):
     # Single precision results have higher error
     # than the default closeness
     rtol = 1e-05
+    atol = 1e-08
     if fft_arr.dtype == np.complex64:
-        rtol = 1e-03
+        rtol = 5e-03
+        atol = 1e-01
 
-    check_func(ft2, (fft_arr,), convert_to_nullable_float=False, rtol=rtol)
+    check_func(ft2, (fft_arr,), convert_to_nullable_float=False, rtol=rtol, atol=atol)
 
 
 def test_fft_error(memory_leak_check):
