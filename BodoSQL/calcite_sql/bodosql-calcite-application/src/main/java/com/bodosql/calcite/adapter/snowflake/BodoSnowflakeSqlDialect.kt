@@ -222,9 +222,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         val DEFAULT_CONTEXT: Context = org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT
             .withLiteralQuoteString("$$")
             .withLiteralEscapedQuoteString("\\$\\$")
-            // TODO: Switch to True
-            // https://bodo.atlassian.net/browse/BSE-2348
-            .withCaseSensitive(false)
+            .withCaseSensitive(true)
             .withQuotedCasing(Casing.UNCHANGED)
             .withUnquotedCasing(Casing.TO_UPPER)
 

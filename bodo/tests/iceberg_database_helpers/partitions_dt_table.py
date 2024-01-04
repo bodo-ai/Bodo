@@ -10,8 +10,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 
 
-def create_table(table_name="partitions_dt_table", spark=None):
-
+def create_table(table_name="PARTITIONS_DT_TABLE", spark=None):
     if spark is None:
         spark = get_spark()
 

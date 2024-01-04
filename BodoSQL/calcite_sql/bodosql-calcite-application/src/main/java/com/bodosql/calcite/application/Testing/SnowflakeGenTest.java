@@ -57,7 +57,7 @@ public class SnowflakeGenTest {
             (String) envVars.get("SF_DATABASE"),
             "DEMO_WH",
             prop);
-    LocalSchema schema = new LocalSchema("__bodolocal__");
+    LocalSchema schema = new LocalSchema("__BODOLOCAL__");
 
     // Add a local table to also resolve
     ArrayList arr = new ArrayList();

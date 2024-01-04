@@ -30,7 +30,7 @@ import bodosql
 @bodo.jit
 def f(filename):
     df1 = pd.read_parquet(filename)
-    bc = bodosql.BodoSQLContext({"table1": df1})
+    bc = bodosql.BodoSQLContext({"TABLE1": df1})
     df2 = bc.sql("SELECT A FROM table1 WHERE B > 4")
     print(df2.A.sum())
 
@@ -116,21 +116,21 @@ SELECT A FROM customers
 ```py
 >>>@bodo.jit
 ... def g(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name FROM customers"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customers_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
 ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton",
 ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
-...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+...     "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
 ... })
 
 >>>g(customers_df)
-                name
+                NAME
 0       Deangelo Todd
 1        Nikolai Kent
 2          Eden Heath
@@ -187,13 +187,13 @@ SELECT COUNT DISTINCT A FROM table1
 ```py
 >>>@bodo.jit
 ... def g(df):
-...    bc = bodosql.BodoSQLContext({"payments":df})
-...    query = "SELECT DISTINCT paymentType FROM payments"
+...    bc = bodosql.BodoSQLContext({"PAYMENTS":df})
+...    query = "SELECT DISTINCT \"paymentType\" FROM payments"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>payment_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE", "VISA", "VISA", "WIRE", "VISA", "AMEX"],
 ... })
 
@@ -204,13 +204,13 @@ paymentType
 4        WIRE
 
 >>>def g(df):
-...    bc = bodosql.BodoSQLContext({"payments":df})
-...    query = "SELECT COUNT(DISTINCT paymentType) as num_payment_types FROM payments"
+...    bc = bodosql.BodoSQLContext({"PAYMENTS":df})
+...    query = "SELECT COUNT(DISTINCT \"paymentType\") as num_payment_types FROM payments"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>g(payment_df) # inside aggregate
-num_payment_types
+NUM_PAYMENT_TYPES
 0          3
 ```
 
@@ -232,21 +232,21 @@ SELECT A FROM table1 WHERE B > 4
 ```py
 >>>@bodo.jit
 ... def g(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name FROM customers WHERE balance 3000"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customers_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
 ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton",
 ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
-...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+...     "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
 ... })
 
 >>>g(customers_df)
-                name
+                NAME
 3    Taliyah Martinez
 6  Jonathon Middleton
 7       Shawn Winters
@@ -284,21 +284,21 @@ SELECT A, B FROM table1 ORDER BY B, A DESC NULLS LAST
 ```py
 >>>@bodo.jit
 ... def g(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name, balance FROM customers ORDER BY balance"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customers_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
 ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton",
 ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
-...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+...     "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
 ... })
 
 >>>g(customers_df)
-                name   balance
+                NAME   BALANCE
 2          Eden Heath     23.58
 5    Weston Jefferson     68.34
 8    Keely Hutchinson    654.24
@@ -344,35 +344,35 @@ SELECT B FROM table2 LIMIT 3, 8
 ```py
 >>>@bodo.jit
 ... def g1(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name FROM customers LIMIT 4"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>@bodo.jit
 ... def g2(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name FROM customers LIMIT 4 OFFSET 2"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customers_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
 ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton",
 ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
-...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+...     "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
 ... })
 
 >>>g1(customers_df) # LIMIT 4
-               name
+               NAME
 0     Deangelo Todd
 1      Nikolai Kent
 2        Eden Heath
 3  Taliyah Martinez
 
 >>>g2(customers_df) # LIMIT 4 OFFSET 2
-               name
+               NAME
 2        Eden Heath
 3  Taliyah Martinez
 4  Demetrius Chavez
@@ -397,32 +397,32 @@ SELECT A FROM table1 WHERE A IN (5, 10, 15, 20, 25)
 ```py
 >>>@bodo.jit
 ... def g1(df):
-...    bc = bodosql.BodoSQLContext({"payments":df})
-...    query = "SELECT customerID FROM payments WHERE paymentType IN ('AMEX', 'WIRE')"
+...    bc = bodosql.BodoSQLContext({"PAYMENTS":df})
+...    query = "SELECT customerID FROM payments WHERE \"paymentType\" IN ('AMEX', 'WIRE')"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>@bodo.jit
 ... def g2(df):
-...    bc = bodosql.BodoSQLContext({"payments":df})
-...    query = "SELECT customerID FROM payments WHERE paymentType NOT IN ('AMEX', 'VISA')"
+...    bc = bodosql.BodoSQLContext({"PAYMENTS":df})
+...    query = "SELECT customerID FROM payments WHERE \"paymentType\" NOT IN ('AMEX', 'VISA')"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>payment_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE", "VISA", "VISA", "WIRE", "VISA", "AMEX"],
 ... })
 
 >>>g1(payment_df) # IN
-   customerID
+   CUSTOMERID
 2           2
 4           4
 7           7
 9           9
 
 >>>g2(payment_df) # NOT IN
-   customerID
+   CUSTOMERID
 4           4
 7           7
 ```
@@ -445,34 +445,34 @@ SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
 ```py
 >>>@bodo.jit
 ... def g(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name, balance FROM customers WHERE balance BETWEEN 1000 and 5000"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>@bodo.jit
 ... def g2(df):
-...    bc = bodosql.BodoSQLContext({"customers":df})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df})
 ...    query = "SELECT name, balance FROM customers WHERE balance NOT BETWEEN 100 and 10000"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customers_df = pd.DataFrame({
-...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
+...     "CUSTOMERID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+...     "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez",
 ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton",
 ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
-...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+...     "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
 ... })
 
 >>>g1(payment_df) # BETWEEN
-            name  balance
+            NAME  BALANCE
 0  Deangelo Todd  1123.34
 1   Nikolai Kent  2133.43
 7  Shawn Winters  3489.25
 
 >>>g2(payment_df) # NOT BETWEEN
-                 name   balance
+                 NAME   BALANCE
 2          Eden Heath     23.58
 5    Weston Jefferson     68.34
 6  Jonathon Middleton  12764.50
@@ -550,39 +550,39 @@ in either left or right table
 ```py
 >>>@bodo.jit
 ... def g1(df1, df2):
-...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
-...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID"
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df1, "PAYMENTS":df2})
+...    query = "SELECT name, \"paymentType\" FROM customers JOIN payments ON customers.customerID = payments.customerID"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>@bodo.jit
 ... def g2(df1, df2):
-...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df1, "PAYMENTS":df2})
 ...    query = "SELECT name, paymentType FROM customers FULL JOIN payments ON customers.customerID = payments.customerID"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customer_df = pd.DataFrame({
-...    "customerID": [0, 2, 4, 5, 7,],
-...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
-...    "address": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
+...    "CUSTOMERID": [0, 2, 4, 5, 7,],
+...    "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+...    "ADDRESS": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
 ...                "639 Maple St.nNorth Kingstown, RI 02852","93 Bowman Rd.nChester, PA 19013",
 ...                "513 Manchester Ave.nWindsor, CT 06095",],
-...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+...    "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
 ... })
 >>>payment_df = pd.DataFrame({
-...     "customerID": [0, 1, 4, 6, 7],
+...     "CUSTOMERID": [0, 1, 4, 6, 7],
 ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
 ... })
 
 >>>g1(customer_df, payment_df) # INNER JOIN
-               name paymentType
+               NAME paymentType
 0     Deangelo Todd        VISA
 1        Eden Heath        AMEX
 2  Demetrius Chavez        WIRE
 
 >>>g2(customer_df, payment_df) # OUTER JOIN
-               name paymentType
+               NAME paymentType
 0     Deangelo Todd        VISA
 1      Nikolai Kent         NaN
 2        Eden Heath        AMEX
@@ -623,39 +623,39 @@ in either left or right table
 ```py
 >>>@bodo.jit
 ... def g1(df1, df2):
-...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df1, "PAYMENTS":df2})
 ...    query = "SELECT payments.* FROM customers NATURAL JOIN payments"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>@bodo.jit
 ... def g2(df1, df2):
-...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df1, "PAYMENTS":df2})
 ...    query = "SELECT payments.* FROM customers NATURAL FULL JOIN payments"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customer_df = pd.DataFrame({
-...    "customerID": [0, 2, 4, 5, 7,],
-...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
-...    "address": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
+...    "CUSTOMERID": [0, 2, 4, 5, 7,],
+...    "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+...    "ADDRESS": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
 ...                "639 Maple St.nNorth Kingstown, RI 02852","93 Bowman Rd.nChester, PA 19013",
 ...                "513 Manchester Ave.nWindsor, CT 06095",],
-...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+...    "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
 ... })
 >>>payment_df = pd.DataFrame({
-...     "customerID": [0, 1, 4, 6, 7],
+...     "CUSTOMERID": [0, 1, 4, 6, 7],
 ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
 ... })
 
 >>>g1(customer_df, payment_df) # INNER JOIN
-   customerID paymentType
+   CUSTOMERID paymentType
 0           0        VISA
 1           4        AMEX
 2           7        WIRE
 
 >>>g2(customer_df, payment_df) # OUTER JOIN
-   customerID paymentType
+   CUSTOMERID paymentType
 0           0        VISA
 1        <NA>        <NA>
 2           4        AMEX
@@ -693,8 +693,8 @@ SELECT <COLUMN_NAMES> FROM <TABLE2>
 ```py
 >>>@bodo.jit
 ... def g1(df):
-...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
-...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE paymentType in ('WIRE')
+...    bc = bodosql.BodoSQLContext({"CUSTOMERS":df1, "PAYMENTS":df2})
+...    query = "SELECT name, \"paymentType\" FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE \"paymentType\" in ('WIRE')
 ...             UNION SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE balance < 1000"
 ...    res = bc.sql(query)
 ...    return res
@@ -702,31 +702,31 @@ SELECT <COLUMN_NAMES> FROM <TABLE2>
 >>>@bodo.jit
 ... def g2(df):
 ...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
-...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE paymentType in ('WIRE')
+...    query = "SELECT name, \"paymentType\" FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE \"paymentType\" in ('WIRE')
 ...             UNION ALL SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE balance < 1000"
 ...    res = bc.sql(query)
 ...    return res
 
 >>>customer_df = pd.DataFrame({
-...    "customerID": [0, 2, 4, 5, 7,],
-...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
-...    "address": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
+...    "CUSTOMERID": [0, 2, 4, 5, 7,],
+...    "NAME": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+...    "ADDRESS": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
 ...                "639 Maple St.nNorth Kingstown, RI 02852","93 Bowman Rd.nChester, PA 19013",
 ...                "513 Manchester Ave.nWindsor, CT 06095",],
-...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+...    "BALANCE": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
 ... })
 >>>payment_df = pd.DataFrame({
-...     "customerID": [0, 1, 4, 6, 7],
+...     "CUSTOMERID": [0, 1, 4, 6, 7],
 ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
 ... })
 
 >>>g1(customer_df, payment_df) # UNION
-           name paymentType  balance
+           NAME paymentType  BALANCE
 0  Demetrius Chavez        WIRE   943.43
 0        Eden Heath        AMEX    23.58
 
 >>>g2(customer_df, payment_df) # UNION ALL
-            name paymentType  balance
+            NAME paymentType  BALANCE
 0  Demetrius Chavez        WIRE   943.43
 0        Eden Heath        AMEX    23.58
 1  Demetrius Chavez        WIRE   943.43
@@ -1625,7 +1625,7 @@ BodoSQL Currently supports the following Aggregation & Window functions:
     Computes a counter within each partition that starts at zero and increases by 1 each
     time the value inside the window changes. `NULL` does not count as a new/changed value.
     `#!sql ORDER BY` is required for this function.
-    
+
 
 #### CONDITIONAL_TRUE_EVENT
 -   `#!sql CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
@@ -1711,7 +1711,7 @@ BodoSQL Currently supports the following Aggregation & Window functions:
     than 4 non-`NULL` entries. Supported on numeric types.
 
     Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
-    
+
 
 #### LAG
 -   `#!sql LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
@@ -1766,10 +1766,10 @@ BodoSQL Currently supports the following Aggregation & Window functions:
 -   `#!sql MEDIAN(COLUMN_EXPRESSION)`
 
     Compute the median over the  column/group/window. Supported on
-    all numeric types. 
+    all numeric types.
 
     Returns `#!sql NULL` if the input is all `#!sql NULL` or empty.
-    
+
 
 #### MIN
 -   `#!sql MIN`
@@ -1798,7 +1798,7 @@ BodoSQL Currently supports the following Aggregation & Window functions:
 
     Select the last value in the window or `NULL` if the window
     does not have `N` elements. Uses 1-indexing. Requires
-    `N` to be a positive integer literal.  Supported on all 
+    `N` to be a positive integer literal.  Supported on all
     non-semi-structured types.
 
 
@@ -1863,7 +1863,7 @@ BodoSQL Currently supports the following Aggregation & Window functions:
     within the window partition. Ranking calculated using `#!sql RANK()` divided by the number of rows in the window
     partition minus one. Partitions with one row have `#!sql PERCENT_RANK()` of 0. `#!sql ORDER BY` is required for this function.
 
-    
+
 #### RANK
 -   `#!sql RANK()`
 
@@ -2072,7 +2072,7 @@ BodoSQL currently supports the following Timestamp functions:
     Constructs a date from the integer inputs specified, e.g. `(2020, 7, 4)`
     will output July 4th, 2020.
 
-    !!! note 
+    !!! note
         Month does not have to be in the 1-12 range, and day does not have to
         be in the 1-31 range. Values out of bounds are overflowed logically,
         e.g. `(2020, 14, -1)` will output January 31st, 2021.
@@ -3230,7 +3230,7 @@ BodoSQL currently supports the following JSON functions:
 #### OBJECT_CONSTRUCT
 -   `#!sql OBJECT_CONSTRUCT(key1, value1[, key2, value2, ...])`
 
-    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value 
+    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value
     (e.g. `value1`, `value2`, ...) is null have that key-value pair dropped from the row's final JSON output.
 
     !!! note
@@ -3329,7 +3329,7 @@ BodoSQL currently supports the following JSON functions:
     - `#!sql PARSE_JSON('{"A": 0, "B": 3.1}')` is equivalent to `#!sql TO_VARIANT({"A": 0, "B": 3.1})`
 
     !!! note
-        Currently only supported under limited conditions where it is possible to rewrite 
+        Currently only supported under limited conditions where it is possible to rewrite
         the call to `PARSE_JSON` as a sequence of Parse-Extract-Cast
         operations, where the output of `PARSE_JSON` immediately has an extraction
         operation like GET/GET_PATH called on it, and the result is casted to a
@@ -3964,8 +3964,8 @@ Bodo currently supports the following functions that produce tables:
     - `#!sql MODE` (optional): a string literal that can be either `'OBJECT'`, `'ARRAY'` or `'BOTH'`, indicating what type of flattening rule should be done. BodoSQL currently only supports when this argument is omitted or is `'BOTH'` (which is the default).
 
     !!! note
-        BodoSQL supports the input argument being an array, json or variant 
-        so long as the values are of the same type (with limited support for 
+        BodoSQL supports the input argument being an array, json or variant
+        so long as the values are of the same type (with limited support for
         JSON when the values are also JSON).
 
 
@@ -4066,8 +4066,8 @@ Bodo currently supports the following functions that produce tables:
 #### GENERATOR
 -   `#!sql GENERATOR([ROWCOUNT=>count][, TIMELIMIT=>sec])`
 
-    Generates a table with a certain number of rows, specified by the `ROWCOUNT` argument. 
-    Currently only supports when the `ROW_COUNT` argument is provided and when it is a 
+    Generates a table with a certain number of rows, specified by the `ROWCOUNT` argument.
+    Currently only supports when the `ROW_COUNT` argument is provided and when it is a
     non-negative integer. Does not support when the `TIMELIMIT` argument is provided, neither
     argument is provided, or both are provided.
 
@@ -4258,7 +4258,7 @@ JIT function. BodoSQL caching works the same as Bodo, so for example:
 @bodo.jit(cache=True)
 def f(filename):
     df1 = pd.read_parquet(filename)
-    bc = bodosql.BodoSQLContext({"table1": df1})
+    bc = bodosql.BodoSQLContext({"TABLE1": df1})
     df2 = bc.sql("SELECT A FROM table1 WHERE B > 4")
     print(df2.A.sum())
 ```
@@ -4290,7 +4290,7 @@ this:
 @bodo.jit(cache=True)
 def f(filename, python_var):
     df1 = pd.read_parquet(filename)
-    bc = bodosql.BodoSQLContext({"table1": df1})
+    bc = bodosql.BodoSQLContext({"TABLE1": df1})
     df2 = bc.sql("SELECT A FROM table1 WHERE B @var", {"var": python_var})
     print(df2.A.sum())
 ```
@@ -4298,6 +4298,9 @@ def f(filename, python_var):
 Named parameters cannot be used in places that require a constant value
 to generate the correct implementation (e.g. TimeUnit in EXTRACT).
 
+!!! note
+    Named parameters are case sensitive, so `@var` and `@VAR` are
+    different identifiers.
 
 ## IO Handling
 
@@ -4313,8 +4316,8 @@ def f(f1, f2):
     df2 = pd.read_parquet(f2)
     bc = bodosql.BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "T1": df1,
+            "T2": df2,
         }
     )
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")
@@ -4336,8 +4339,8 @@ def load_data(f1, f2):
 def q1(df1, df2):
     bc = bodosql.BodoSQLContext(
         {
-            "t1": df1,
-            "t2": df2,
+            "T1": df1,
+            "T2": df2,
         }
     )
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")
@@ -4394,7 +4397,7 @@ For example:
 ```py
 bc = bodosql.BodoSQLContext(
     {
-        "t1": bodosql.TablePath("my_file_path.pq", "parquet"),
+        "T1": bodosql.TablePath("my_file_path.pq", "parquet"),
     },
     catalog=bodosql.SnowflakeCatalog(
         username,
@@ -4533,8 +4536,8 @@ For example, here is some sample code that loads two DataFrames from parquet usi
 ```py
 bc = bodosql.BodoSQLContext(
     {
-        "t1": bodosql.TablePath("my_file_path1.pq", "parquet"),
-        "t2": bodosql.TablePath("my_file_path2.pq", "parquet"),
+        "T1": bodosql.TablePath("my_file_path1.pq", "parquet"),
+        "T2": bodosql.TablePath("my_file_path2.pq", "parquet"),
     }
 )
 
@@ -4587,7 +4590,7 @@ catalog = bodosql.SnowflakeCatalog(
     "DEMO_WH", # warehouse name
     "SNOWFLAKE_SAMPLE_DATA", # database name
 )
-bc = bodosql.BodoSQLContext({"local_table1": df1}, catalog=catalog)
+bc = bodosql.BodoSQLContext({"LOCAL_TABLE1": df1}, catalog=catalog)
 
 @bodo.jit
 def run_query(bc):
@@ -4606,12 +4609,12 @@ An error is raised if the table cannot be resolved after searching through both 
 
 This ordering indicates that in the event of a name conflict between a table in the database catalog and a local table, the table in the database catalog is used.
 
-If a user wants to use the local table instead, the user can explicitly specify the table with the local schema `__bodolocal__`.
+If a user wants to use the local table instead, the user can explicitly specify the table with the local schema `__BODOLOCAL__`.
 
 For example:
 
 ```SQL
-SELECT A from __bodolocal__.table1
+SELECT A from __BODOLOCAL__.table1
 ```
 
 Currently, BodoSQL supports catalogs Snowflake, but support for other data storage systems will be added in future releases.
@@ -4702,6 +4705,53 @@ The `SnowflakeCatalog` currently supports the following types of SQL queries:
   * `#!sql INSERT INTO`
   * `#!sql DELETE`
 
+## Identifier Case Sensitivity
+
+In BodoSQL all identifiers not wrapped in quotes are automatically converted to upper case.
+If you are a Snowflake user who is using either the Snowflake Catalog or Table Path API, then this should not impact you and the
+rules will be the same as Snowflake (i.e. identifiers are case-insensitive unless wrapped in quotes during table creation).
+[See here for the Snowflake documentation.](https://docs.snowflake.com/en/sql-reference/identifiers-syntax#label-identifier-casing).
+
+This means that the following queries are equivalent:
+
+```sql
+SELECT A FROM table1
+```
+
+```sql
+SELECT a FROM TABLE1
+```
+
+When providing column or table names, identifiers will only match if the original name is in uppercase
+For example, the following code will fail to compile because there is no match for TABLE1:
+
+```py
+@bodo.jit
+def f(filename):
+    df1 = pd.read_parquet(filename)
+    bc = bodosql.BodoSQLContext({"table1": df1})
+    return bc.sql("SELECT A FROM table1")
+```
+
+To match non-uppercase names you can use quotes to specify the name exactly as it appears in the BodoSQLContext
+definition or the columns of a DataFrame. For example:
+
+```py
+@bodo.jit
+def f(filename):
+    df1 = pd.read_parquet(filename)
+    bc = bodosql.BodoSQLContext({"table1": df1})
+    return bc.sql("SELECT A FROM \"table1\"")
+```
+
+Similarly if you want an alias to be case sensitive then you will also need it to be wrapped in quotes:
+
+```sql
+SELECT A as "myIdentifier" FROM table1
+```
+
+If you provide DataFrames directly from Python or are using the TablePath API to load Parquet files, then please be advised
+that the column names will be required to match exactly and for ease of use we highly recommend using uppercase column names.
 
 ## Performance Considerations
 

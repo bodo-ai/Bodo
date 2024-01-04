@@ -20,7 +20,7 @@ public class PandasGenTest {
     String sql = "select CURRENT_DATE()";
     int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
-    LocalSchema schema = new LocalSchema("__bodolocal__");
+    LocalSchema schema = new LocalSchema("__BODOLOCAL__");
     ArrayList arr = new ArrayList();
     BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
@@ -33,7 +33,7 @@ public class PandasGenTest {
 
     BodoSqlTable table =
         new LocalTable(
-            "table1",
+            "TABLE1",
             schema.getFullPath(),
             arr,
             true,
@@ -53,7 +53,7 @@ public class PandasGenTest {
 
     BodoSqlTable table2 =
         new LocalTable(
-            "table2",
+            "TABLE2",
             schema.getFullPath(),
             arr,
             true,
@@ -65,7 +65,7 @@ public class PandasGenTest {
     schema.addTable(table2);
     BodoSqlTable table3 =
         new LocalTable(
-            "table3",
+            "TABLE3",
             schema.getFullPath(),
             arr,
             true,
@@ -78,7 +78,7 @@ public class PandasGenTest {
     schema.addTable(table3);
 
     // Define the Parameter table
-    String paramTableName = "ParamTable";
+    String paramTableName = "PARAMTABLE";
     arr = new ArrayList();
     arr.add(column);
     BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType, true);

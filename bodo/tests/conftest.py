@@ -639,7 +639,7 @@ def time_df():
     for use in testing, including None object.
     """
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
@@ -722,7 +722,7 @@ def date_df():
     for use in testing, including None object.
     """
     return {
-        "table1": pd.DataFrame(
+        "TABLE1": pd.DataFrame(
             {
                 "A": pd.Series(
                     [
