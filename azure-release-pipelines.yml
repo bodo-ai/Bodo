@@ -178,7 +178,7 @@ stages:
       name: BodoSQL_Conda_Build
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.11
-      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, in(variables['Build.Reason'], 'Schedule', 'ScheduleForced')) }}
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
   - template: buildscripts/bodosql/azure/azure-build-pip.yml
     parameters:
       name: BodoSQL_Pip_Build
