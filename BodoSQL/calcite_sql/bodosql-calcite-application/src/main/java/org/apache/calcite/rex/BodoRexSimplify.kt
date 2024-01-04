@@ -6,6 +6,7 @@ import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
+import com.bodosql.calcite.rex.JsonPecUtil
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
@@ -481,7 +482,7 @@ class BodoRexSimplify(
      * @return Whether e is a call to a concatenation operation without a separator
      */
     private fun isConcat(e: RexNode): Boolean {
-        return e is RexCall && (e.operator.name == "||" || e.operator.name == SqlStdOperatorTable.CONCAT.name)
+        return e is RexCall && (e.operator.name == SqlStdOperatorTable.CONCAT.name || e.operator.name == StringOperatorTable.CONCAT.name)
     }
 
     /**
@@ -940,6 +941,8 @@ class BodoRexSimplify(
      * and then dispatch to the regular RexSimplifier.
      */
     override fun simplify(e: RexNode, unknownAs: RexUnknownAs): RexNode {
+        // Before doing anything else, do any PEC rewrites
+        if (JsonPecUtil.isPec(e)) return simplify(JsonPecUtil.rewritePec(e as RexCall, rexBuilder), unknownAs)
         val simplifiedNode = when (e.kind) {
             SqlKind.CAST -> simplifyBodoCast(e as RexCall, unknownAs)
             SqlKind.PLUS -> simplifyBodoPlusMinus(e as RexCall, true)

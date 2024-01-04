@@ -52,7 +52,7 @@ public class BodoOperandTypes {
   }
 
   public static SqlOperandTypeChecker TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TO_NUMBER",
-          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER), "NUMERIC or CHAR"),
+          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER).or(BodoOperandTypes.VARIANT), "NUMERIC or CHAR"),
           Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
           Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
 
