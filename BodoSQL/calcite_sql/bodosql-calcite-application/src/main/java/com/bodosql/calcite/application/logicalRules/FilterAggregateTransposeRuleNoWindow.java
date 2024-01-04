@@ -17,8 +17,7 @@ package com.bodosql.calcite.application.logicalRules;
  * limitations under the License.
  */
 
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable;
-import com.bodosql.calcite.application.operatorTables.NumericOperatorTable;
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
@@ -219,11 +218,11 @@ public class FilterAggregateTransposeRuleNoWindow
           SqlStdOperatorTable.MIN.getName(),
           SqlStdOperatorTable.SUM.getName(),
           SqlStdOperatorTable.AVG.getName(),
-          NumericOperatorTable.MEDIAN.getName(),
-          NumericOperatorTable.BITAND_AGG.getName(),
-          NumericOperatorTable.BITOR_AGG.getName(),
-          NumericOperatorTable.BITXOR_AGG.getName(),
-          CondOperatorTable.BOOLAND_AGG.getName(),
-          CondOperatorTable.BOOLOR_AGG.getName(),
-          CondOperatorTable.BOOLXOR_AGG.getName());
+          AggOperatorTable.MEDIAN.getName(),
+          AggOperatorTable.BITAND_AGG.getName(),
+          AggOperatorTable.BITOR_AGG.getName(),
+          AggOperatorTable.BITXOR_AGG.getName(),
+          AggOperatorTable.BOOLAND_AGG.getName(),
+          AggOperatorTable.BOOLOR_AGG.getName(),
+          AggOperatorTable.BOOLXOR_AGG.getName());
 }

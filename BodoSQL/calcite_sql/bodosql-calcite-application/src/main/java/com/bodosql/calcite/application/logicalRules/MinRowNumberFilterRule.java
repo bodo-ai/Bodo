@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.logicalRules;
 
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable;
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
@@ -239,7 +239,7 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
         // with the min_row_number_filter internal function.
         RelBuilder.OverCall baseCall =
             builder
-                .aggregateCall(CondOperatorTable.MIN_ROW_NUMBER_FILTER, overNode.getOperands())
+                .aggregateCall(AggOperatorTable.MIN_ROW_NUMBER_FILTER, overNode.getOperands())
                 .distinct(overNode.isDistinct())
                 .ignoreNulls(overNode.ignoreNulls())
                 .over()

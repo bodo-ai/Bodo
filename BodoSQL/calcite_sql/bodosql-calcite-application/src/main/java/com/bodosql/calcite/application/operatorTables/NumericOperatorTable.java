@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
-import static org.apache.calcite.sql.type.BodoReturnTypes.bitX_ret_type;
 
 import com.bodosql.calcite.sql.func.SqlRandomOperator;
 import java.util.ArrayList;
@@ -10,7 +9,6 @@ import java.util.List;
 import java.util.function.Supplier;
 import org.apache.calcite.plan.Strong;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlFunction;
@@ -20,7 +18,6 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
@@ -30,7 +27,6 @@ import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
-import org.apache.calcite.util.Optionality;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.dataflow.qual.Pure;
 
@@ -212,87 +208,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction LEAST = new SqlLeastGreatestFunction("LEAST", SqlKind.LEAST);
 
-  public static final SqlBasicAggFunction VARIANCE_POP =
-      SqlBasicAggFunction.create(
-          "VARIANCE_POP",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          OperandTypes.NUMERIC);
-
-  public static final SqlBasicAggFunction VARIANCE_SAMP =
-      SqlBasicAggFunction.create(
-          "VARIANCE_SAMP",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          OperandTypes.NUMERIC);
-
-  public static final SqlBasicAggFunction CORR =
-      SqlBasicAggFunction.create(
-          "CORR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          OperandTypes.NUMERIC_NUMERIC);
-
-  public static final SqlAggFunction APPROX_PERCENTILE =
-      SqlBasicAggFunction.create(
-              "APPROX_PERCENTILE",
-              SqlKind.OTHER_FUNCTION,
-              ReturnTypes.DOUBLE_NULLABLE,
-              OperandTypes.NUMERIC_NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction MEDIAN =
-      SqlBasicAggFunction.create(
-              "MEDIAN", SqlKind.MEDIAN, ReturnTypes.ARG0_NULLABLE_IF_EMPTY, OperandTypes.NUMERIC)
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction KURTOSIS =
-      SqlBasicAggFunction.create(
-              "KURTOSIS", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction SKEW =
-      SqlBasicAggFunction.create(
-              "SKEW", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction RATIO_TO_REPORT =
-      SqlBasicAggFunction.create(
-          "RATIO_TO_REPORT",
-          SqlKind.OTHER_FUNCTION,
-          // Can output null in the case that the sum within the group
-          // evaluates to 0
-          BodoReturnTypes.DOUBLE_FORCE_NULLABLE,
-          OperandTypes.NUMERIC);
-
-  public static final SqlAggFunction BITOR_AGG =
-      SqlBasicAggFunction.create(
-              "BITOR_AGG",
-              SqlKind.BIT_OR,
-              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.NUMERIC.or(OperandTypes.STRING))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction BITAND_AGG =
-      SqlBasicAggFunction.create(
-              "BITAND_AGG",
-              SqlKind.BIT_AND,
-              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.NUMERIC.or(OperandTypes.STRING))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction BITXOR_AGG =
-      SqlBasicAggFunction.create(
-              "BITXOR_AGG",
-              SqlKind.BIT_XOR,
-              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.NUMERIC.or(OperandTypes.STRING))
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
   public static final SqlFunction RANDOM = new SqlRandomOperator();
 
   private List<SqlOperator> functionList =
@@ -300,7 +215,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ACOSH,
           ASINH,
           ATANH,
-          APPROX_PERCENTILE,
           COSH,
           SINH,
           TANH,
@@ -311,9 +225,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           BITSHIFTLEFT,
           BITSHIFTRIGHT,
           GETBIT,
-          BITOR_AGG,
-          BITAND_AGG,
-          BITXOR_AGG,
           CEILING,
           SNOWFLAKE_CEIL,
           SNOWFLAKE_FLOOR,
@@ -321,11 +232,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           HAVERSINE,
           LOG,
           LOG2,
-          CORR,
-          MEDIAN,
-          KURTOSIS,
-          SKEW,
-          RATIO_TO_REPORT,
           POW,
           CONV,
           FACTORIAL,
@@ -334,9 +240,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           UNIFORM,
           RANDOM,
           GREATEST,
-          LEAST,
-          VARIANCE_POP,
-          VARIANCE_SAMP);
+          LEAST);
 
   @Override
   public void lookupOperatorOverloads(

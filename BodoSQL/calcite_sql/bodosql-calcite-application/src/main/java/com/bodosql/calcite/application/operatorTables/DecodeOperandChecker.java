@@ -67,17 +67,17 @@ public class DecodeOperandChecker extends SameOperandTypeChecker {
     // an output (this is the part that is different from SameOperandTypeExceptLastOperandChecker)
     RelDataType inputType = types[0];
     RelDataType outputType = types[2];
-    Boolean faliure;
+    Boolean failure;
     for (int i = 1; i < nOperandsActual; i += 1) {
       if (i == 2) {
         continue;
       }
       if ((i % 2 == 1) && (i != (nOperandsActual - 1))) {
-        faliure = !SqlTypeUtil.isComparable(types[i], inputType);
+        failure = !SqlTypeUtil.isComparable(types[i], inputType);
       } else {
-        faliure = !SqlTypeUtil.isComparable(types[i], outputType);
+        failure = !SqlTypeUtil.isComparable(types[i], outputType);
       }
-      if (faliure) {
+      if (failure) {
         if (throwOnFailure) {
           throw requireNonNull(callBinding, "callBinding")
               .newValidationError(RESOURCE.needSameTypeParameter());

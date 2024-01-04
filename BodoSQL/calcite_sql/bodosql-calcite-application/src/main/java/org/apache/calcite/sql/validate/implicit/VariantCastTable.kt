@@ -1,12 +1,12 @@
 package org.apache.calcite.sql.validate.implicit
 
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.operatorTables.ObjectOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
-import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.rel.type.RelDataType
@@ -459,15 +459,15 @@ internal class VariantCastTable {
             ArrayOperatorTable.ARRAY_REMOVE to arg0ArrayCast,
             ArrayOperatorTable.ARRAY_REMOVE_AT to arg0ArrayRestNumber9Cast,
             ArrayOperatorTable.ARRAY_SLICE to arg0ArrayRestNumber9Cast,
-            CondOperatorTable.BOOLOR_AGG to anyArgBooleanCast,
-            CondOperatorTable.BOOLAND_AGG to anyArgBooleanCast,
-            CondOperatorTable.BOOLXOR_AGG to anyArgBooleanCast,
-            CondOperatorTable.CONDITIONAL_TRUE_EVENT to anyArgBooleanCast,
+            AggOperatorTable.BOOLOR_AGG to anyArgBooleanCast,
+            AggOperatorTable.BOOLAND_AGG to anyArgBooleanCast,
+            AggOperatorTable.BOOLXOR_AGG to anyArgBooleanCast,
+            AggOperatorTable.CONDITIONAL_TRUE_EVENT to anyArgBooleanCast,
             DatetimeOperatorTable.DAYNAME to anyArgDateCast,
             DatetimeOperatorTable.MONTHNAME to anyArgDateCast,
             DatetimeOperatorTable.MONTH_NAME to anyArgDateCast,
-            JsonOperatorTable.OBJECT_AGG to arg0VarcharCast,
-            JsonOperatorTable.JSON_EXTRACT_PATH_TEXT to anyArgVarcharCast,
+            AggOperatorTable.OBJECT_AGG to arg0VarcharCast,
+            ObjectOperatorTable.JSON_EXTRACT_PATH_TEXT to anyArgVarcharCast,
             StringOperatorTable.REPEAT to varcharIntegerCast,
             SqlAggOperatorTable.LISTAGG to arg0VarcharCast,
             SqlStdOperatorTable.AND to anyArgBooleanCast,
@@ -493,8 +493,8 @@ internal class VariantCastTable {
             StringOperatorTable.MD5_HEX to anyArgVarcharCast,
             StringOperatorTable.STARTSWITH to anyArgVarcharCast,
             StringOperatorTable.ENDSWITH to anyArgVarcharCast,
-            ThreeOperatorStringTable.LPAD to padCasting,
-            ThreeOperatorStringTable.RPAD to padCasting,
+            StringOperatorTable.LPAD to padCasting,
+            StringOperatorTable.RPAD to padCasting,
             SqlStdOperatorTable.SUM to anyArgDoubleCast,
             SqlStdOperatorTable.SUM0 to anyArgDoubleCast,
             SqlStdOperatorTable.PLUS to anyArgDoubleCast,
@@ -532,20 +532,20 @@ internal class VariantCastTable {
             NumericOperatorTable.TANH to anyArgDoubleCast,
             SqlStdOperatorTable.ABS to anyArgDoubleCast,
             SqlStdOperatorTable.AVG to anyArgDoubleCast,
-            NumericOperatorTable.CORR to anyArgDoubleCast,
+            AggOperatorTable.CORR to anyArgDoubleCast,
             SqlStdOperatorTable.COVAR_POP to anyArgDoubleCast,
             SqlStdOperatorTable.COVAR_SAMP to anyArgDoubleCast,
-            NumericOperatorTable.KURTOSIS to anyArgDoubleCast,
-            NumericOperatorTable.RATIO_TO_REPORT to anyArgDoubleCast,
-            NumericOperatorTable.SKEW to anyArgDoubleCast,
+            AggOperatorTable.KURTOSIS to anyArgDoubleCast,
+            AggOperatorTable.RATIO_TO_REPORT to anyArgDoubleCast,
+            AggOperatorTable.SKEW to anyArgDoubleCast,
             SqlStdOperatorTable.STDDEV to anyArgDoubleCast,
             SqlStdOperatorTable.STDDEV_POP to anyArgDoubleCast,
             SqlStdOperatorTable.STDDEV_SAMP to anyArgDoubleCast,
             SqlStdOperatorTable.VARIANCE to anyArgDoubleCast,
             SqlStdOperatorTable.VAR_SAMP to anyArgDoubleCast,
             SqlStdOperatorTable.VAR_POP to anyArgDoubleCast,
-            NumericOperatorTable.VARIANCE_POP to anyArgDoubleCast,
-            NumericOperatorTable.VARIANCE_SAMP to anyArgDoubleCast,
+            AggOperatorTable.VARIANCE_POP to anyArgDoubleCast,
+            AggOperatorTable.VARIANCE_SAMP to anyArgDoubleCast,
             CondOperatorTable.ZEROIFNULL to anyArgDoubleCast,
             StringOperatorTable.CHAR to anyArgIntegerCast,
             StringOperatorTable.CHR to anyArgIntegerCast,
@@ -593,9 +593,9 @@ internal class VariantCastTable {
             StringOperatorTable.REGEXP_SUBSTR to regexpSubstrCast,
             StringOperatorTable.REGEXP_INSTR to regexpInstrCast,
             StringOperatorTable.REGEXP_REPLACE to regexpReplaceCast,
-            NumericOperatorTable.BITAND_AGG to anyArgNumberCast(18),
-            NumericOperatorTable.BITOR_AGG to anyArgNumberCast(18),
-            NumericOperatorTable.BITXOR_AGG to anyArgNumberCast(18),
+            AggOperatorTable.BITAND_AGG to anyArgNumberCast(18),
+            AggOperatorTable.BITOR_AGG to anyArgNumberCast(18),
+            AggOperatorTable.BITXOR_AGG to anyArgNumberCast(18),
             NumericOperatorTable.BITAND to anyArgNumberCast(18, 18),
             NumericOperatorTable.BITOR to anyArgNumberCast(18, 18),
             NumericOperatorTable.BITXOR to anyArgNumberCast(18, 18),
@@ -612,7 +612,7 @@ internal class VariantCastTable {
             DatetimeOperatorTable.DATEFROMPARTS to anyArgNumberCast(9, 9, 9),
             DatetimeOperatorTable.TIME_FROM_PARTS to anyArgNumberCast(9, 9, 9, 18),
             DatetimeOperatorTable.TIMEFROMPARTS to anyArgNumberCast(9, 9, 9, 18),
-            NumericOperatorTable.MEDIAN to anyArgNumberCast(9),
+            AggOperatorTable.MEDIAN to anyArgNumberCast(9),
             DatetimeOperatorTable.DATEADD to dateTimeAddCast,
             DatetimeOperatorTable.TIMEADD to dateTimeAddCast,
             SqlBodoOperatorTable.TIMESTAMP_ADD to dateTimeAddCast,
@@ -629,10 +629,10 @@ internal class VariantCastTable {
             DatetimeOperatorTable.TIMESTAMPNTZFROMPARTS to timestampPartsCast,
             DatetimeOperatorTable.TIMESTAMPLTZFROMPARTS to timestampPartsCast,
             DatetimeOperatorTable.TIMESTAMPTZFROMPARTS to timestampPartsCast,
-            JsonOperatorTable.OBJECT_KEYS to anyArgMapCast,
-            JsonOperatorTable.OBJECT_INSERT to objectInsertCast,
-            JsonOperatorTable.OBJECT_PICK to objectPickDeleteCast,
-            JsonOperatorTable.OBJECT_DELETE to objectPickDeleteCast,
+            ObjectOperatorTable.OBJECT_KEYS to anyArgMapCast,
+            ObjectOperatorTable.OBJECT_INSERT to objectInsertCast,
+            ObjectOperatorTable.OBJECT_PICK to objectPickDeleteCast,
+            ObjectOperatorTable.OBJECT_DELETE to objectPickDeleteCast,
         ).mapKeys { it.key.name }
     }
 }

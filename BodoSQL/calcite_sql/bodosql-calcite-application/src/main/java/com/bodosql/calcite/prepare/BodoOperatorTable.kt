@@ -1,16 +1,16 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.ContextOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.operatorTables.ObjectOperatorTable
 import com.bodosql.calcite.application.operatorTables.SinceEpochFnTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
-import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
@@ -25,16 +25,16 @@ object BodoOperatorTable : ChainedSqlOperatorTable(
         DatetimeOperatorTable.instance(),
         NumericOperatorTable.instance(),
         StringOperatorTable.instance(),
-        JsonOperatorTable.instance(),
+        ObjectOperatorTable.instance(),
         CondOperatorTable.instance(),
         SinceEpochFnTable.instance(),
-        ThreeOperatorStringTable.instance(),
         CastingOperatorTable.instance(),
         ArrayOperatorTable.instance(),
         ContextOperatorTable.instance(),
         TableFunctionOperatorTable.instance(),
+        AggOperatorTable.instance(),
         SqlAggOperatorTable.instance(),
-        // Note: we put SqlStdOperatorTable last so we can override
+        // Note: we put SqlStdOperatorTable last, so we can override
         // any functions it provides.
         SqlStdOperatorTable.instance(),
     ),

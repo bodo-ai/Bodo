@@ -1,12 +1,9 @@
 package com.bodosql.calcite.application.operatorTables;
 
-import static org.apache.calcite.sql.type.BodoReturnTypes.toArrayReturnType;
-
 import java.util.Arrays;
 import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -16,7 +13,6 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
@@ -24,7 +20,6 @@ import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
-import org.apache.calcite.util.Optionality;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ArrayOperatorTable implements SqlOperatorTable {
@@ -77,16 +72,6 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           OperandTypes.ONE_OR_MORE,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction TO_ARRAY =
-      SqlBasicFunction.create(
-          "TO_ARRAY",
-          // What Value should the return type be
-          opBinding -> toArrayReturnType(opBinding),
-          // The input can be any data type.
-          OperandTypes.ANY,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
   public static final SqlFunction ARRAY_TO_STRING =
       SqlBasicFunction.create(
           "ARRAY_TO_STRING",
@@ -97,21 +82,6 @@ public class ArrayOperatorTable implements SqlOperatorTable {
               "ARRAY_TO_STRING(ARRAY, STRING)", OperandTypes.ARRAY, OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
-  public static final SqlAggFunction ARRAY_AGG =
-      SqlBasicAggFunction.create(
-              "ARRAY_AGG",
-              SqlKind.ARRAY_AGG,
-              opBinding -> ArrayAggReturnType(opBinding),
-              OperandTypes.ANY)
-          .withGroupOrder(Optionality.OPTIONAL)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
-
-  public static final SqlAggFunction ARRAY_UNIQUE_AGG =
-      SqlBasicAggFunction.create(
-              "ARRAY_UNIQUE_AGG", SqlKind.OTHER_FUNCTION, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
-          .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   public static final SqlFunction ARRAY_MAP_GET =
       SqlBasicFunction.create(
@@ -234,7 +204,6 @@ public class ArrayOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
-          TO_ARRAY,
           ARRAY_COMPACT,
           ARRAY_CONSTRUCT,
           ARRAY_CONSTRUCT_COMPACT,
@@ -242,8 +211,6 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_INTERSECTION,
           ARRAY_CAT,
           ARRAY_TO_STRING,
-          ARRAY_AGG,
-          ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
           ARRAY_REMOVE,
           ARRAY_REMOVE_AT,
