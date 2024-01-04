@@ -144,9 +144,9 @@ SELECT A FROM customers
 ```
 
 The `#!sql SELECT` also has some special syntactic forms. The `#!sql *` term is
-used as a shortcut for specifying all columns. The clause `#!sql * EXCLUDING col`
-or `#!sql * EXCLUDING (col1, col2, col3...)` is a shortcut for specifying every
-column except the ones after the excluding keyword.
+used as a shortcut for specifying all columns. The clause `#!sql * EXCLUDE col`
+or `#!sql * EXCLUDE (col1, col2, col3...)` is a shortcut for specifying every
+column except the ones after the EXCLUDE keyword.
 
 For example, suppose we have a table The `#!sql T` with columns named The `#!sql A`, `#!sql B`,
 `#!sql C`, `#!sql D`, `#!sql E`. Consider the following queries
@@ -154,7 +154,7 @@ For example, suppose we have a table The `#!sql T` with columns named The `#!sql
 ```sql
 SELECT * FROM T
 
-SELECT A, B, C, D, E FROM T
+SELECT * EXCLUDE (A, E) FROM T
 ```
 
 These two are syntactic sugar for the following:
@@ -1496,10 +1496,10 @@ BodoSQL Currently supports the following Aggregation & Window functions:
 | `#!sql MAX` | Y | Y | Y | Y | N | Y |
 | `#!sql MEDIAN` | Y | Y | Y | N | N | N |
 | `#!sql MIN` | Y | Y | Y | Y | N | Y |
-| `#!sql MODE` | N | Y | Y | Y | N | N |
+| `#!sql MODE` | Y | N | Y | Y | N | N |
 | `#!sql NTH_VALUE` | N | N | Y | Y | N | Y |
 | `#!sql NTILE` | N | N | Y | Y | Y | N |
-| `#!sql OBJECT_AGG` | N | Y | N | N/A | N/A | N/A |
+| `#!sql OBJECT_AGG` | Y | N | N | N/A | N/A | N/A |
 | `#!sql PERCENTILE_CONT` | Y | Y | N | N/A | N/A | N/A |
 | `#!sql PERCENTILE_DISC` | Y | Y | N | N/A | N/A | N/A |
 | `#!sql PERCENT_RANK` | N | N | Y | Y | Y | N |
@@ -3190,152 +3190,6 @@ BodoSQL currently supports the following regex functions:
     ```
 
 
-###  JSON Functions
-
-
-BodoSQL currently supports the following JSON functions:
-
-
-#### OBJECT_CONSTRUCT_KEEP_NULL
--   `#!sql OBJECT_CONSTRUCT_KEEP_NULL(key1, value1[, key2, value2, ...])`
-
-    Takes in a variable number of key-value pairs and combines them
-    into JSON data. BodoSQL currently requires all `key` arguments to
-    be string literals.
-
-    The full Snowflake specification: https://docs.snowflake.com/en/sql-reference/functions/object_construct_keep_null.html
-
-    BodoSQL supports the syntactic sugar `#!sql OBJECT_CONSTRUCT_KEEP_NULL(*)`
-    which indicates that all columns should be used as key-value pairs, where
-    the column is the value and its column name is the key. For example, if we have
-    the table `T` as defined below:
-
-    | First    | Middle   | Last         |
-    |----------|----------|--------------|
-    | "George" | NULL     | "WASHINGTON" |
-    | "John"   | "Quincy" | "Adams"      |
-    | "Lyndon" | "Baines" | "Johnson"    |
-    | "James"  | NULL     | "Madison"    |
-
-    Then `SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) as name FROM T` returns the following table:
-
-    | name                                                      |
-    |-----------------------------------------------------------|
-    | {"First": "George", "Middle": NULL, "Last": "Washington"} |
-    | {"First": "John", "Middle": "Quincy", "Last": "Adams"}    |
-    | {"First": "Lyndon", "Middle":"Baines", "Last": "Johnson"} |
-    | {"First": "Thomas", "Middle": NULL, "Last": "Jefferson"}  |
-
-
-#### OBJECT_CONSTRUCT
--   `#!sql OBJECT_CONSTRUCT(key1, value1[, key2, value2, ...])`
-
-    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value
-    (e.g. `value1`, `value2`, ...) is null have that key-value pair dropped from the row's final JSON output.
-
-    !!! note
-        BodoSQL only supports this function under narrow conditions where all of the values
-        are either of the same type or of easily reconciled types.
-
-    The full Snowflake specification: https://docs.snowflake.com/en/sql-reference/functions/object_construct.html
-
-    BodoSQL supports the syntactic sugar `#!sql OBJECT_CONSTRUCT(*)`
-    which indicates that all columns should be used as key-value pairs, where
-    the column is the value and its column name is the key. For example, if we have
-    the table `T` as defined below:
-
-    | First    | Middle   | Last         |
-    |----------|----------|--------------|
-    | "George" | NULL     | "WASHINGTON" |
-    | "John"   | "Quincy" | "Adams"      |
-    | "Lyndon" | "Baines" | "Johnson"    |
-    | "James"  | NULL     | "Madison"    |
-
-    Then `SELECT OBJECT_CONSTRUCT(*) as name FROM T` returns the following table:
-
-    | name                                                      |
-    |-----------------------------------------------------------|
-    | {"First": "George", "Last": "Washington"}                 |
-    | {"First": "John", "Middle": "Quincy", "Last": "Adams"}    |
-    | {"First": "Lyndon", "Middle":"Baines", "Last": "Johnson"} |
-    | {"First": "Thomas", "Last": "Jefferson"}                  |
-
-
-
-#### OBJECT_KEYS
--   `#!sql OBJECT_KEYS(data)`
-
-    Extracts all of the field names from the JSON object `data` and returns them
-    as an array of strings.
-
-
-#### OBJECT_PICK
--   `#!sql OBJECT_PICK(data, key1[, key2, ...])`
-
-    Takes in a column of JSON data and 1+ keys and returns the JSON data only
-    containing the keys specified. If a specified key is not present in `data`,
-    it is ignored.
-
-    !!! note: BodoSQL supports when the keys are passed in as string literals,
-    but only sometimes supports when they are passed in as columns of strings.
-
-
-#### OBJECT_INSERT
--   `#!sql OBJECT_INSERT(data, key, value[, update])`
-
-    Takes a columns of JSON data, a column of string keys, and a columns of
-    values and inserts the keys and values into the data. If the key is already
-    present in the data, an error will be thrown, unless an additional argument
-    (`update`) of type boolean is supplied, which will update existing keys to
-    hold the new value only if the value is true.
-
-
-#### OBJECT_DELETE
--   `#!sql OBJECT_DELETE(data, key1[, key2, ...])`
-
-    Takes in a column of JSON data and 1+ keys and returns the same JSON data but
-    with all of those keys removed. If a specified key is not present in
-    `data`, it is ignored.
-
-    !!! note
-        BodoSQL supports when the keys are passed in as string literals,
-        but only sometimes supports when they are passed in as columns of strings.
-
-
-#### JSON_EXTRACT_PATH_TEXT
--   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
-
-    Parses the string `data` as if it were JSON data, then extracts values from
-    within (possibly multiple times if the data is nested) using the string `path`.
-
-    Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
-
-
-#### GET_PATH
--   `#!sql GET_PATH(data, path_string)`
-
-    Extracts an entry from a semi-structured data expression based on the path string.
-    Obeys the specification described here: https://docs.snowflake.com/en/sql-reference/functions/get_path
-
-
-#### PARSE_JSON
--   `#!sql PARSE_JSON(str)`
-
-    Takes in a string representing a json document and parses it to the
-    corresponding value as a variant. For example:
-
-    - `#!sql PARSE_JSON('42')` is equivalent to `#!sql TO_VARIANT(42)`
-
-    - `#!sql PARSE_JSON('{"A": 0, "B": 3.1}')` is equivalent to `#!sql TO_VARIANT({"A": 0, "B": 3.1})`
-
-    !!! note
-        Currently only supported under limited conditions where it is possible to rewrite
-        the call to `PARSE_JSON` as a sequence of Parse-Extract-Cast
-        operations, where the output of `PARSE_JSON` immediately has an extraction
-        operation like GET/GET_PATH called on it, and the result is casted to a
-        non-semi-structured type. For example, `#!sql PARSE_JSON(S):fizz::integer`
-        can be rewritten, as can `#!sql GET_PATH(TO_OBJECT(TO_ARRAY(PARSE_JSON(S))[0]), 'foo.bar')::varchar`.
-
 ###   Control Flow Functions
 
 #### DECODE
@@ -3389,24 +3243,32 @@ BodoSQL currently supports the following JSON functions:
     Equivalent to `#!sql IF`
 
 
+#### COALESCE
+-   `#!sql COALESCE(A, B, C, ...)`
+
+    Returns the first non-`NULL` argument, or `NULL` if no non-`NULL`
+    argument is found. Requires at least two arguments. If
+    Arguments do not have the same type, BodoSQL will attempt
+    to cast them to a common data type, which is currently
+    undefined behavior.
+
+
 #### IFNULL
 -   `#!sql IFNULL(Arg0, Arg1)`
 
-    Returns `Arg1` if `Arg0` is `null`, and otherwise returns `Arg1`. If
-    arguments do not have the same type, BodoSQL will attempt
-    to cast them all to a common type, which is currently
-    undefined behavior.
-
-#### ZEROIFNULL
--   `#!sql ZEROIFNULL(Arg0, Arg1)`
-
-    Equivalent to `#!sql IFNULL(Arg0, 0)`
+    Equivalent to `#!sql COALESCE(Arg0, Arg1)`
 
 
 #### NVL
 -   `#!sql NVL(Arg0, Arg1)`
 
-    Equivalent to `#!sql IFNULL`
+    Equivalent to `#!sql COALESCE(Arg0, Arg1)`
+
+
+#### ZEROIFNULL
+-   `#!sql ZEROIFNULL(Arg0, Arg1)`
+
+    Equivalent to `#!sql COALESCE(Arg0, 0)`
 
 
 #### NVL2
@@ -3418,8 +3280,8 @@ BodoSQL currently supports the following JSON functions:
 #### NULLIF
 -   `#!sql NULLIF(Arg0, Arg1)`
 
-    Returns `null` if the `Arg0` evaluates to true, and otherwise
-    returns `Arg1`
+    Returns `#!sql NULL` if `Arg0` is equal to `Arg1`, and otherwise
+    returns `Arg0`.
 
 
 #### NULLIFZERO
@@ -3428,25 +3290,22 @@ BodoSQL currently supports the following JSON functions:
     Equivalent to `#!sql NULLIF(Arg0, 0)`
 
 
-#### COALESCE
--   `#!sql COALESCE(A, B, C, ...)`
-
-    Returns the first non-`NULL` argument, or `NULL` if no non-`NULL`
-    argument is found. Requires at least two arguments. If
-    Arguments do not have the same type, BodoSQL will attempt
-    to cast them to a common data type, which is currently
-    undefined behavior.
-
-
 ### Array Functions
 Bodo currently supports the following functions that operate on columns of arrays:
 
 
 #### GET
 -   `#!sql GET(arr, idx)`
+-   `#!sql GET(object, field)`
 -   `#!sql arr[idx]`
+-   `#!sql object[field]`
 
-    Returns the element found at the specified index in the array. Inexing is 0 based, not 1 based. Returns NULL if the index is outside of the boundaries of the array.
+    Returns the element found at the specified index in the array, or the specified field of an object. 
+    
+    When indexing into an array: indexing is 0 based, not 1 based. Returns `#!sql NULL` if the index is outside of the boundaries of the array. The index must be an integer.
+    
+    When retrieving a field from an object: the field name must be a string. If the object is a struct, the field name must be a string literal. If the object is a map, it can be a non-constant string. Returns `#!sql NULL` if the field name is not found. Field name
+    matching is case-sensitive.
 
 
 #### ARRAY_TO_STRING
@@ -3561,6 +3420,155 @@ Bodo currently supports the following functions that operate on columns of array
 
     Returns an array constructed from a specified subset of elements of the input array `arr[from:to]`.
     Returns `NULL` if one of `arr`, `from` and `to` is `NULL`.
+
+
+###  Object Functions
+
+
+BodoSQL currently supports the following Object functions:
+
+
+#### OBJECT_CONSTRUCT_KEEP_NULL
+-   `#!sql OBJECT_CONSTRUCT_KEEP_NULL(key1, value1[, key2, value2, ...])`
+
+    Takes in a variable number of key-value pairs and combines them
+    into JSON data. BodoSQL currently requires all `key` arguments to
+    be string literals.
+
+    [The full Snowflake specification](https://docs.snowflake.com/en/sql-reference/functions/object_construct_keep_null.html).
+
+    BodoSQL supports the syntactic sugar `#!sql OBJECT_CONSTRUCT_KEEP_NULL(*)`
+    which indicates that all columns should be used as key-value pairs, where
+    the column is the value and its column name is the key. For example, if we have
+    the table `T` as defined below:
+
+    | First    | Middle   | Last         |
+    |----------|----------|--------------|
+    | "George" | NULL     | "WASHINGTON" |
+    | "John"   | "Quincy" | "Adams"      |
+    | "Lyndon" | "Baines" | "Johnson"    |
+    | "James"  | NULL     | "Madison"    |
+
+    Then `SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) as name FROM T` returns the following table:
+
+    | name                                                      |
+    |-----------------------------------------------------------|
+    | {"First": "George", "Middle": NULL, "Last": "Washington"} |
+    | {"First": "John", "Middle": "Quincy", "Last": "Adams"}    |
+    | {"First": "Lyndon", "Middle":"Baines", "Last": "Johnson"} |
+    | {"First": "Thomas", "Middle": NULL, "Last": "Jefferson"}  |
+
+
+#### OBJECT_CONSTRUCT
+-   `#!sql OBJECT_CONSTRUCT(key1, value1[, key2, value2, ...])`
+
+    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value 
+    (e.g. `value1`, `value2`, ...) is null have that key-value pair dropped from the row's final JSON output.
+
+    !!! note
+        BodoSQL only supports this function under narrow conditions where all of the values
+        are either of the same type or of easily reconciled types.
+
+    [The full Snowflake specification](https://docs.snowflake.com/en/sql-reference/functions/object_construct.html).
+
+    BodoSQL supports the syntactic sugar `#!sql OBJECT_CONSTRUCT(*)`
+    which indicates that all columns should be used as key-value pairs, where
+    the column is the value and its column name is the key. For example, if we have
+    the table `T` as defined below:
+
+    | First    | Middle   | Last         |
+    |----------|----------|--------------|
+    | "George" | NULL     | "WASHINGTON" |
+    | "John"   | "Quincy" | "Adams"      |
+    | "Lyndon" | "Baines" | "Johnson"    |
+    | "James"  | NULL     | "Madison"    |
+
+    Then `SELECT OBJECT_CONSTRUCT(*) as name FROM T` returns the following table:
+
+    | name                                                      |
+    |-----------------------------------------------------------|
+    | {"First": "George", "Last": "Washington"}                 |
+    | {"First": "John", "Middle": "Quincy", "Last": "Adams"}    |
+    | {"First": "Lyndon", "Middle":"Baines", "Last": "Johnson"} |
+    | {"First": "Thomas", "Last": "Jefferson"}                  |
+
+
+#### OBJECT_KEYS
+-   `#!sql OBJECT_KEYS(data)`
+
+    Extracts all of the field names from the object `data` and returns them
+    as an array of strings.
+
+
+#### OBJECT_PICK
+-   `#!sql OBJECT_PICK(data, key1[, key2, ...])`
+
+    Takes in a column of object data and 1+ keys and returns the object data only
+    containing the keys specified. If a specified key is not present in `data`,
+    it is ignored.
+
+    !!! note: BodoSQL supports when the keys are passed in as string literals,
+    but only supports when they are passed in as columns of strings if the object
+    is a map instead of struct.
+
+
+
+#### OBJECT_INSERT
+-   `#!sql OBJECT_INSERT(data, key, value[, update])`
+
+    Takes a columns of JSON data, a column of string keys, and a columns of
+    values and inserts the keys and values into the data. If the key is already
+    present in the data, an error will be thrown, unless an additional argument
+    (`update`) of type boolean is supplied, which will update existing keys to
+    hold the new value only if the value is true.
+
+
+#### OBJECT_DELETE
+-   `#!sql OBJECT_DELETE(data, key1[, key2, ...])`
+
+    Takes in a column of JSON data and 1+ keys and returns the same JSON data but
+    with all of those keys removed. If a specified key is not present in
+    `data`, it is ignored.
+
+    !!! note: BodoSQL supports when the keys are passed in as string literals,
+    but only supports when they are passed in as columns of strings if the object
+    is a map instead of struct.
+
+
+#### JSON_EXTRACT_PATH_TEXT
+-   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
+
+    Parses the string `data` as if it were JSON data, then extracts values from
+    within (possibly multiple times if the data is nested) using the string `path`.
+
+    Obeys the specification [described here](https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html).
+
+
+#### GET_PATH
+-   `#!sql GET_PATH(data, path_string)`
+
+    Extracts an entry from a semi-structured data expression based on the path string.
+    Obeys the specification [described here](https://docs.snowflake.com/en/sql-reference/functions/get_path).
+
+
+
+#### PARSE_JSON
+-   `#!sql PARSE_JSON(str)`
+
+    Takes in a string representing a json document and parses it to the
+    corresponding value as a variant. For example:
+
+    - `#!sql PARSE_JSON('42')` is equivalent to `#!sql TO_VARIANT(42)`
+
+    - `#!sql PARSE_JSON('{"A": 0, "B": 3.1}')` is equivalent to `#!sql TO_VARIANT({"A": 0, "B": 3.1})`
+
+    !!! note
+        Currently only supported under limited conditions where it is possible to rewrite 
+        the call to `PARSE_JSON` as a sequence of Parse-Extract-Cast
+        operations, where the output of `PARSE_JSON` immediately has an extraction
+        operation like GET/GET_PATH called on it, and the result is casted to a
+        non-semi-structured type. For example, `#!sql PARSE_JSON(S):fizz::integer`
+        can be rewritten, as can `#!sql GET_PATH(TO_OBJECT(TO_ARRAY(PARSE_JSON(S))[0]), 'foo.bar')::varchar`.
 
 
 ### Casting / Conversion Functions
