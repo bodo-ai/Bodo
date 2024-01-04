@@ -513,6 +513,58 @@ public final class StringOperatorTable implements SqlOperatorTable {
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction LPAD =
+      SqlBasicFunction.create(
+          "LPAD",
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          // What Input Types does the function accept? This function accepts only
+          // (string, binary)
+          // Takes in 3 arguments.
+          // The 1st is string/binary, the 2nd is an integer, and the 3rd is the same as the 1st.
+          // The 3rd argument can be optionally omitted if the 1st argument is a string.
+          OperandTypes.family(
+                  SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.CHARACTER)
+              .or(
+                  OperandTypes.family(
+                      SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER, SqlTypeFamily.BINARY))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction RPAD =
+      SqlBasicFunction.create(
+          "RPAD",
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          // What Input Types does the function accept? This function accepts only
+          // (string, binary)
+          // Takes in 3 arguments.
+          // The first is string/binary, the second is an integer, and the third is the same as the
+          // first.
+          // The 3rd argument can be optionally omitted if the first argument is a string.
+          OperandTypes.family(
+                  SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.CHARACTER)
+              .or(
+                  OperandTypes.family(
+                      SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER, SqlTypeFamily.BINARY))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REPLACE =
+      SqlBasicFunction.create(
+          "REPLACE",
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          // What Input Types does the function accept.
+          // Note: Calcite already defines REPLACE with 3 arguments
+          // in the SqlStdOperatorTable, so we just define when
+          // the third argument is missing.
+          OperandTypes.STRING_STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
@@ -575,7 +627,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlLibraryOperators.NOT_RLIKE,
           SqlLibraryOperators.ILIKE,
           SqlLibraryOperators.NOT_ILIKE,
-          RLIKE);
+          RLIKE,
+          LPAD,
+          RPAD,
+          REPLACE);
 
   @Override
   public void lookupOperatorOverloads(

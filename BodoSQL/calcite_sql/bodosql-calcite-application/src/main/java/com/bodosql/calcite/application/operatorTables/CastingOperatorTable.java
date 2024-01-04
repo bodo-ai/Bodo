@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
+import static org.apache.calcite.sql.type.BodoReturnTypes.toArrayReturnType;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
@@ -349,6 +350,16 @@ public class CastingOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction TRY_TO_DECIMAL = TRY_TO_NUMBER.withName("TRY_TO_DECIMAL");
 
+  public static final SqlFunction TO_ARRAY =
+      SqlBasicFunction.create(
+          "TO_ARRAY",
+          // What Value should the return type be
+          opBinding -> toArrayReturnType(opBinding),
+          // The input can be any data type.
+          OperandTypes.ANY,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlOperator INFIX_CAST = SqlLibraryOperators.INFIX_CAST;
 
   private List<SqlOperator> functionList =
@@ -384,7 +395,8 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TRY_TO_DECIMAL,
           TRY_TO_NUMERIC,
           TO_VARIANT,
-          TO_OBJECT);
+          TO_OBJECT,
+          TO_ARRAY);
 
   @Override
   public void lookupOperatorOverloads(

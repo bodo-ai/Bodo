@@ -2,7 +2,7 @@ package com.bodosql.calcite.rex
 
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
-import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
+import com.bodosql.calcite.application.operatorTables.ObjectOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexBuilder
@@ -33,7 +33,7 @@ class JsonPecUtil {
          */
         private fun isCastFunc(node: RexCall): Boolean {
             return when (node.operator.name) {
-                ArrayOperatorTable.TO_ARRAY.name,
+                CastingOperatorTable.TO_ARRAY.name,
                 CastingOperatorTable.TO_VARIANT.name,
                 CastingOperatorTable.TO_OBJECT.name,
                 CastingOperatorTable.TO_NUMBER.name,
@@ -112,9 +112,9 @@ class JsonPecUtil {
          */
         private fun isPecExtract(node: RexCall): Boolean {
             return when (node.operator.name) {
-                JsonOperatorTable.PARSE_JSON.name -> true
+                ObjectOperatorTable.PARSE_JSON.name -> true
                 SqlStdOperatorTable.ITEM.name,
-                JsonOperatorTable.GET_PATH.name,
+                ObjectOperatorTable.GET_PATH.name,
                 ArrayOperatorTable.ARRAY_MAP_GET.name,
                 -> (node.operands[0] is RexCall && isPecExtract(node.operands[0] as RexCall)) || isPecCast(node.operands[0], true)
                 else -> false
@@ -135,7 +135,7 @@ class JsonPecUtil {
         @JvmStatic
         public fun rewritePec(node: RexCall, builder: RexBuilder): RexNode {
             val (stringToParse, pathToExtract) = rewritePecHelper(node, builder, null)
-            val parseExtract = builder.makeCall(JsonOperatorTable.JSON_EXTRACT_PATH_TEXT, stringToParse, pathToExtract)
+            val parseExtract = builder.makeCall(ObjectOperatorTable.JSON_EXTRACT_PATH_TEXT, stringToParse, pathToExtract)
             val newOperands: MutableList<RexNode> = mutableListOf()
             newOperands.add(parseExtract)
             newOperands.addAll(node.operands.subList(1, node.operands.size))
@@ -162,7 +162,7 @@ class JsonPecUtil {
             return when (node.operator.name) {
                 // Base case: when we reach the PARSE_JSON call, its input
                 // is the string that is to be parsed.
-                JsonOperatorTable.PARSE_JSON.name -> {
+                ObjectOperatorTable.PARSE_JSON.name -> {
                     if (pathSoFar != null) {
                         Pair(node.operands[0], pathSoFar)
                     } else {
@@ -172,7 +172,7 @@ class JsonPecUtil {
                 // Extract case: for each get/get_path call, recursively build
                 // up the extraction string.
                 SqlStdOperatorTable.ITEM.name,
-                JsonOperatorTable.GET_PATH.name,
+                ObjectOperatorTable.GET_PATH.name,
                 ArrayOperatorTable.ARRAY_MAP_GET.name,
                 -> {
                     val newPath = prependToExtractPath(pathSoFar, builder, node.operands[1])

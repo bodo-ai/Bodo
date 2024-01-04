@@ -3,7 +3,7 @@ package com.bodosql.calcite.rel.metadata
 import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.RowSample
 import com.bodosql.calcite.rel.core.TableFunctionScanBase
@@ -375,7 +375,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
         // If there is not exactly 1 OVER condition and it is not an MRNF, fall back to the regular implementation
         if (otherConds.any { RexOver.containsOver(it) } || windowConds.size != 1) return super.getRowCount(rel, mq)
         val windowCond = windowConds[0]
-        if (windowCond.aggOperator.name != CondOperatorTable.MIN_ROW_NUMBER_FILTER.name) return super.getRowCount(rel, mq)
+        if (windowCond.aggOperator.name != AggOperatorTable.MIN_ROW_NUMBER_FILTER.name) return super.getRowCount(rel, mq)
 
         // Estimate how many rows remain based on the # of combinations of the partition keys
         val mrnfRowCount = getMinRowNumFilterRowCount(windowCond, rel.input, mq)

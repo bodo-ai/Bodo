@@ -3,9 +3,8 @@ package com.bodosql.calcite.adapter.snowflake
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter.Companion.create
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
+import com.bodosql.calcite.application.operatorTables.ObjectOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
-import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelOptUtil
@@ -165,8 +164,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             StringOperatorTable.REGEXP_COUNT.name,
             StringOperatorTable.STRTOK.name,
             StringOperatorTable.LENGTH.name,
-            ThreeOperatorStringTable.LPAD.name,
-            ThreeOperatorStringTable.RPAD.name,
+            StringOperatorTable.LPAD.name,
+            StringOperatorTable.RPAD.name,
             SqlStdOperatorTable.TRUNCATE.name,
             SqlStdOperatorTable.UPPER.name,
             SqlStdOperatorTable.LOWER.name,
@@ -216,7 +215,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlStdOperatorTable.FLOOR.name,
 
             // Other functions
-            JsonOperatorTable.GET_PATH.name,
+            ObjectOperatorTable.GET_PATH.name,
         )
 
         @JvmStatic

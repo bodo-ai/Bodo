@@ -1336,6 +1336,6 @@ final Span s;
     )
     <RBRACE>
     {
-        return JsonOperatorTable.OBJECT_CONSTRUCT.createCall(s.end(this), list);
+        return ObjectOperatorTable.OBJECT_CONSTRUCT.createCall(s.end(this), list);
     }
 }

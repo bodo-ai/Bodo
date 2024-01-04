@@ -246,7 +246,7 @@ class CoalesceTypeCastingUtils {
             Pair(SF_TYPE.ARRAY, SF_TYPE.NUMBER) to null,
             Pair(SF_TYPE.ARRAY, SF_TYPE.TIMESTAMP_LTZ) to null,
             Pair(SF_TYPE.ARRAY, SF_TYPE.TIMESTAMP_TZ) to null,
-            Pair(SF_TYPE.ARRAY, SF_TYPE.VARIANT) to Pair(SF_TYPE.ARRAY, ArrayOperatorTable.TO_ARRAY),
+            Pair(SF_TYPE.ARRAY, SF_TYPE.VARIANT) to Pair(SF_TYPE.ARRAY, CastingOperatorTable.TO_ARRAY),
             Pair(SF_TYPE.ARRAY, SF_TYPE.OBJECT) to null,
         )
 
