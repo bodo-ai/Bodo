@@ -60,3 +60,30 @@ Bodo 2023.12 Release (Date: 12/01/2023) {#December_2023}
 
 
 - Upgrade to Calcite 1.36
+
+
+## 2023.12.2 New Features and Improvements
+
+
+### New Features:
+
+
+- Support `OBJECT_INSERT`
+- Support for writing columns of unnested JSON data with homogenous key and value types to Snowflake as Objects
+- Improved error messages for Unsupported Snowflake UDFs. Future releases will contain increased Snowflake UDF support
+- Support `COALESCE` with Datetime and Timestamp + timezone data
+- Support `VALUES` syntax with multiple rows
+- Support for struct columns with no fields
+
+
+
+### Performance Improvements:
+
+
+- Improved ability to push filters down to Snowflake and order joins based on the distinctness of columns from inlined views.
+
+
+### Bug Fixes:
+
+
+- Fixed a bug where FROM_DATE incorrectly returned TIMESTAMPs when the inputs were DATEs
