@@ -338,6 +338,7 @@ struct ArrayBuildBuffer {
                            uint64_t append_rows_sum) {
         this->child_array_builders.front().UnsafeAppendBatch(
             in_arr->child_arrays[0], append_rows, append_rows_sum);
+        this->data_array->length += append_rows_sum;
     }
 
     /**

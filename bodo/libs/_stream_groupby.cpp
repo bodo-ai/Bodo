@@ -1199,10 +1199,13 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     // input)
     std::vector<int8_t> build_arr_array_types;
     std::vector<int8_t> build_arr_c_types;
-    for (size_t i = 0; i < n_keys; i++) {
-        build_arr_array_types.push_back(in_arr_array_types[i]);
-        build_arr_c_types.push_back(in_arr_c_types[i]);
+    std::unique_ptr<bodo::Schema> in_arr_schema =
+        bodo::Schema::Deserialize(in_arr_array_types, in_arr_c_types);
+    for (size_t i = 0; i < n_keys; ++i) {
+        in_arr_schema->column_types[i]->Serialize(build_arr_array_types,
+                                                  build_arr_c_types);
     }
+
     std::vector<int8_t> separate_out_col_array_types;
     std::vector<int8_t> separate_out_col_c_types;
 

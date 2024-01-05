@@ -839,3 +839,148 @@ def test_groupby_nested_array_data(memory_leak_check, df, check_error):
             sort_output=True,
             only_seq=True,
         )
+
+
+@pytest.mark.parametrize(
+    "df, expected_df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [
+                            {1: 1.4, 2: 3.1},
+                            {1: 1.4, 2: 3.1},
+                            None,
+                            {},
+                            {11: 3.4, 21: 3.1, 9: 8.1},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [{1: 1.4, 2: 3.1}, None, {}, {11: 3.4, 21: 3.1, 9: 8.1}],
+                        dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+                    )
+                }
+            ),
+            id="map",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [
+                            {"a": "xyz", "b": "abc"},
+                            None,
+                            {},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("a", pa.string()), pa.field("b", pa.string())]
+                            )
+                        ),
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [{"a": "xyz", "b": "abc"}, None, {}],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("a", pa.string()), pa.field("b", pa.string())]
+                            )
+                        ),
+                    )
+                }
+            ),
+            id="struct",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [[{}, None, {1: 1, 2: 2}], [{3: 3}]] * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.map_(pa.int64(), pa.int64()))
+                        ),
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [[{}, None, {1: 1, 2: 2}], [{3: 3}]],
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.map_(pa.int64(), pa.int64()))
+                        ),
+                    )
+                }
+            ),
+            id="list_of_map",
+        ),
+    ],
+)
+def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
+    """
+    Tests support for streaming groupby with nested array keys.
+    """
+    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
+    num_cols = len(df.columns)
+    keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
+    kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
+    batch_size = 3
+    fnames = bodo.utils.typing.MetaType(tuple())
+    f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
+    f_in_cols = bodo.utils.typing.MetaType(tuple())
+
+    def test_groupby(df):
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            kept_cols,
+            num_cols,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
+            _iter_1 = _iter_1 + 1
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+        out_dfs = []
+        is_last2 = False
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+        delete_groupby_state(groupby_state)
+        return pd.concat(out_dfs)
+
+    check_func(
+        test_groupby,
+        (df,),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
+    )

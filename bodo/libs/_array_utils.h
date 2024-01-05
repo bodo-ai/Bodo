@@ -335,6 +335,15 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                      const std::shared_ptr<array_info>& arr2, int64_t pos2,
                      bool is_na_equal);
 
+/* @brief Get the sort indices of a slice of an array
+ * @param arr Array to sort
+ * @param pos_s Start position of the slice
+ * @param pos_e End position of the slice
+ * @return Array of sort indices
+ */
+std::shared_ptr<arrow::ArrayData> get_sort_indices_of_slice_arrow(
+    std::shared_ptr<arrow::Array> const& arr, int64_t pos_s, int64_t pos_e);
+
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
  *
@@ -343,6 +352,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
  * @param arr2            : the second arrow array
  * @param pos2_s, pos2_e  : the starting and ending positions
  * @param na_position_bis : Whether the missing data is first or last
+ * @param is_na_equal      : should na values be considered equal
  * @return 1 is arr1[pos1_s:pos1_e] < arr2[pos2_s:pos2_e], 0 is equality, -1 if
  * >.
  */
@@ -350,7 +360,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           int64_t pos1_s, int64_t pos1_e,
                           std::shared_ptr<arrow::Array> const& arr2,
                           int64_t pos2_s, int64_t pos2_e,
-                          bool const& na_position_bis);
+                          bool const& na_position_bis, bool const& is_na_equal);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
