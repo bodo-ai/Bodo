@@ -1397,23 +1397,25 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   }
 
   /**
-   * Constructs the Expression to make a call to the variadic function OBJECT_DELETE.
+   * Constructs the Expression to make a call to the variadic functions OBJECT_DELETE or
+   * OBJECT_PICK.
    *
-   * @param codeExprs the Python expressions to calculate the arguments
+   * @param codeExprs the Python expressions to calculate the arguments.
+   * @param keep True for OBJECT_PICK and false for OBJECT_DELETE.
+   * @param argScalars List of booleans indicating which arguments are scalars.
    * @return Expr containing the code generated for the relational expression.
    */
-  public static Expr visitObjectDelete(List<Expr> codeExprs) {
+  public Expr visitObjectPickDelete(List<Expr> codeExprs, Boolean keep, List<Boolean> argScalars) {
     List<Expr> tupleArgs = new ArrayList<>(codeExprs);
-    tupleArgs.add(0, new Expr.BooleanLiteral(false));
+    List<Expr> scalarExprs = new ArrayList();
+    for (Boolean isScalar : argScalars) {
+      scalarExprs.add(new Expr.BooleanLiteral(isScalar));
+    }
+    Expr scalarGlobal = this.visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
     return ExprKt.BodoSQLKernel(
-        "object_filter_keys", List.of(new Expr.Tuple(tupleArgs)), List.of());
-  }
-
-  public static Expr visitObjectPick(List<Expr> codeExprs) {
-    List<Expr> tupleArgs = new ArrayList<>(codeExprs);
-    tupleArgs.add(0, new Expr.BooleanLiteral(true));
-    return ExprKt.BodoSQLKernel(
-        "object_filter_keys", List.of(new Expr.Tuple(tupleArgs)), List.of());
+        "object_filter_keys",
+        List.of(new Expr.Tuple(tupleArgs), new Expr.BooleanLiteral(keep), scalarGlobal),
+        List.of());
   }
 
   protected static Expr visitVariantFunc(String fnName, List<Expr> operands) {
@@ -1886,9 +1888,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "OBJECT_KEYS":
             return visitJsonFunc(fnName, operands, argScalars);
           case "OBJECT_DELETE":
-            return visitObjectDelete(operands);
+            return visitObjectPickDelete(operands, false, argScalars);
           case "OBJECT_PICK":
-            return visitObjectPick(operands);
+            return visitObjectPickDelete(operands, true, argScalars);
           case "OBJECT_INSERT":
             return visitObjectInsert(operands, argScalars);
           case "IS_ARRAY":

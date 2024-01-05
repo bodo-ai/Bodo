@@ -1311,7 +1311,7 @@ def test_row_number(test, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "keep_mode, keys_to_filter, json_data,  answer",
+    "keep_mode, keys_to_filter, json_data, scalars, answer",
     [
         pytest.param(
             True,
@@ -1339,6 +1339,7 @@ def test_row_number(test, memory_leak_check):
                     )
                 ),
             ),
+            (False, True),
             pd.array(
                 [{"A": 0}, {"A": 1}, {"A": 2}] * 10
                 + [None, {"A": None}, {"A": 4}, {"A": 5}],
@@ -1369,6 +1370,7 @@ def test_row_number(test, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
             ),
+            (False, True),
             pd.array(
                 [
                     {"A": 0},
@@ -1390,16 +1392,6 @@ def test_row_number(test, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
             ),
             id="map-keep_literal_string",
-        ),
-        pytest.param(
-            True,
-            ("C", "A", "E"),
-            {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
-            {"B": 1, "D": None},
-            id="scalar_map-drop_3",
-            marks=pytest.mark.skip(
-                reason="[BSE-1945] TODO: support dict scalars with OBJECT_PICK"
-            ),
         ),
         pytest.param(
             False,
@@ -1427,6 +1419,7 @@ def test_row_number(test, memory_leak_check):
                     )
                 ),
             ).values,
+            (False, True),
             pd.Series(
                 [
                     {"B": 10, "C": ""},
@@ -1472,6 +1465,7 @@ def test_row_number(test, memory_leak_check):
                     )
                 ),
             ).values,
+            (False, True, True, True, True),
             pd.Series(
                 [
                     {"A": 0, "B": 10, "C": ""},
@@ -1521,6 +1515,7 @@ def test_row_number(test, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
+            (False, True),
             pd.Series(
                 [
                     {"B": 1, "C": 2},
@@ -1562,6 +1557,7 @@ def test_row_number(test, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
+            (False, False),
             pd.Series(
                 [
                     {"B": 1, "C": 2},
@@ -1588,21 +1584,12 @@ def test_row_number(test, memory_leak_check):
         ),
         pytest.param(
             False,
-            ("C", "A", "E"),
-            {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
-            {"B": 1, "D": None},
-            id="scalar_map-drop_3",
-            marks=pytest.mark.skip(
-                reason="[BSE-1945] TODO: support dict scalars with OBJECT_DELETE"
-            ),
-        ),
-        pytest.param(
-            False,
             (pd.Series(["A"] * 10),),
             pd.Series(
                 [{"A": 0}] * 10,
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
+            (False, False),
             pd.Series(
                 [{}] * 10,
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
@@ -1616,6 +1603,7 @@ def test_row_number(test, memory_leak_check):
                 [{"A": 0}] * 10,
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
+            (False, False),
             pd.Series(
                 [{}] * 10,
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
@@ -1629,6 +1617,7 @@ def test_row_number(test, memory_leak_check):
                 [{"A": 0}] * 10,
                 dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
             ).values,
+            (False, True),
             pd.Series(
                 [{}] * 10,
                 dtype=pd.ArrowDtype(pa.struct([])),
@@ -1642,6 +1631,7 @@ def test_row_number(test, memory_leak_check):
                 [{"A": 0}] * 10,
                 dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
             ).values,
+            (False, True),
             pd.Series(
                 [{}] * 10,
                 dtype=pd.ArrowDtype(pa.struct([])),
@@ -1651,7 +1641,7 @@ def test_row_number(test, memory_leak_check):
     ],
 )
 def test_object_filter_keys(
-    keep_mode, keys_to_filter, json_data, answer, memory_leak_check
+    keep_mode, keys_to_filter, scalars, json_data, answer, memory_leak_check
 ):
     raw_arg_text = ", ".join(f"arg{i}" for i in range(len(keys_to_filter) + 1))
     arg_text = ["arg0"]
@@ -1661,12 +1651,12 @@ def test_object_filter_keys(
         else:
             arg_text.append(f"arg{i+1}")
     func_text = f"def impl({raw_arg_text}):\n"
-    func_text += f"   res = bodo.libs.bodosql_array_kernels.object_filter_keys(({keep_mode}, {', '.join(arg_text)},))\n"
+    func_text += f"   res = bodo.libs.bodosql_array_kernels.object_filter_keys(({', '.join(arg_text)},), {keep_mode}, scalars)\n"
     if any(isinstance(arg, pd.Series) for arg in keys_to_filter + (json_data, answer)):
         func_text += "   res = pd.Series(res)\n"
     func_text += "   return res\n"
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "pd": pd}, loc_vars)
+    exec(func_text, {"bodo": bodo, "pd": pd, "scalars": MetaType(scalars)}, loc_vars)
     impl = loc_vars["impl"]
 
     check_func(
@@ -3342,13 +3332,16 @@ def test_array_construct_optional(is_none_0, is_none_1, memory_leak_check):
 
 
 def test_object_filter_keys_errors(memory_leak_check):
+    scalars = MetaType((False, True))
     with pytest.raises(
         BodoError, match=re.escape("keep_keys argument must be a const bool")
     ):
 
         @bodo.jit
         def impl(B, A):
-            return bodo.libs.bodosql_array_kernels.object_filter_keys((B, A, "A"))
+            return bodo.libs.bodosql_array_kernels.object_filter_keys(
+                (A, "A"), B, scalars
+            )
 
         impl(True, pd.Series([{"a": 0}]))
 
@@ -3359,7 +3352,9 @@ def test_object_filter_keys_errors(memory_leak_check):
 
         @bodo.jit
         def impl(B, A):
-            return bodo.libs.bodosql_array_kernels.object_filter_keys((True, A, B))
+            return bodo.libs.bodosql_array_kernels.object_filter_keys(
+                (A, B), True, scalars
+            )
 
         impl(
             pd.Series(["a"]),
