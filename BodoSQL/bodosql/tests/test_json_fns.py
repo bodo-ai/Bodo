@@ -990,7 +990,7 @@ def test_object_construct(query, answer, memory_leak_check):
             id="struct-pick_literal-no_case",
         ),
         pytest.param(
-            "SELECT OBJECT_PICK(J, K) FROM table1",
+            "SELECT CASE WHEN K = '' THEN NULL ELSE OBJECT_PICK(J, K) END FROM table1",
             pd.DataFrame(
                 {
                     "J": pd.Series(
@@ -1015,10 +1015,10 @@ def test_object_construct(query, answer, memory_leak_check):
                 + [None, {"B": 7}, {}, {"D": None}],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ),
-            id="map-pick_column-no_case",
+            id="map-pick_column-with_case",
         ),
         pytest.param(
-            "SELECT OBJECT_PICK(J, 'D', K, 'E', 'A') FROM table1",
+            "SELECT CASE WHEN K = '' THEN NULL ELSE OBJECT_PICK(J, 'D', K, 'E', 'A') END FROM table1",
             pd.DataFrame(
                 {
                     "J": pd.Series(
@@ -1053,7 +1053,7 @@ def test_object_construct(query, answer, memory_leak_check):
                 + [None, {"A": 6, "B": 7, "D": None}, {}, {"A": 8, "D": None}],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ),
-            id="map-pick_mixed-no_case",
+            id="map-pick_mixed-with_case",
         ),
     ],
 )
@@ -1077,47 +1077,88 @@ def test_object_pick(query, df, answer, memory_leak_check):
             "SELECT OBJECT_DELETE(J, 'id') FROM table1",
             pd.DataFrame(
                 {
-                    "J": [
-                        {
-                            "id": i,
-                            "tags": [
-                                "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
-                                for j in range(1 + (i**2) % 7)
-                            ],
-                            "attrs": {"A": i, "B": str(i), "C": [i]},
-                        }
-                        for i in range(50)
-                    ]
-                    + [
-                        None,
-                        {
-                            "id": None,
-                            "tags": [],
-                            "attrs": {"A": None, "B": None, "C": []},
-                        },
-                        {
-                            "id": -1,
-                            "tags": None,
-                            "attrs": {"A": None, "B": None, "C": None},
-                        },
-                    ]
+                    "J": pd.array(
+                        [
+                            {
+                                "id": i,
+                                "tags": [
+                                    "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                                    for j in range(1 + (i**2) % 7)
+                                ],
+                                "attrs": {"A": i, "B": str(i), "C": [i]},
+                            }
+                            for i in range(50)
+                        ]
+                        + [
+                            None,
+                            {
+                                "id": None,
+                                "tags": [],
+                                "attrs": {"A": None, "B": None, "C": []},
+                            },
+                            {
+                                "id": -1,
+                                "tags": None,
+                                "attrs": {"A": None, "B": None, "C": None},
+                            },
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("id", pa.int64()),
+                                    pa.field("tags", pa.large_list(pa.string())),
+                                    pa.field(
+                                        "attrs",
+                                        pa.struct(
+                                            [
+                                                pa.field("A", pa.int64()),
+                                                pa.field("B", pa.string()),
+                                                pa.field(
+                                                    "C", pa.large_list(pa.int64())
+                                                ),
+                                            ]
+                                        ),
+                                    ),
+                                ]
+                            )
+                        ),
+                    )
                 }
             ),
-            [
-                {
-                    "tags": [
-                        "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
-                        for j in range(1 + (i**2) % 7)
-                    ],
-                    "attrs": {"A": i, "B": str(i), "C": [i]},
-                }
-                for i in range(50)
-            ]
-            + [
-                None,
-                {"tags": [], "attrs": {"A": None, "B": None, "C": []}},
-                {"tags": None, "attrs": {"A": None, "B": None, "C": None}},
-            ],
+            pd.array(
+                [
+                    {
+                        "tags": [
+                            "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                            for j in range(1 + (i**2) % 7)
+                        ],
+                        "attrs": {"A": i, "B": str(i), "C": [i]},
+                    }
+                    for i in range(50)
+                ]
+                + [
+                    None,
+                    {"tags": [], "attrs": {"A": None, "B": None, "C": []}},
+                    {"tags": None, "attrs": {"A": None, "B": None, "C": None}},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("tags", pa.large_list(pa.string())),
+                            pa.field(
+                                "attrs",
+                                pa.struct(
+                                    [
+                                        pa.field("A", pa.int64()),
+                                        pa.field("B", pa.string()),
+                                        pa.field("C", pa.large_list(pa.int64())),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
             id="struct-drop_literal-no_case",
         ),
         pytest.param(
@@ -1164,7 +1205,7 @@ def test_object_pick(query, df, answer, memory_leak_check):
             id="map-drop_column-no_case",
         ),
         pytest.param(
-            "SELECT OBJECT_DELETE(J, 'D', K, 'E', 'A') FROM table1",
+            "SELECT CASE WHEN K = '' THEN NULL ELSE OBJECT_DELETE(J, 'D', K, 'E', 'A') END FROM table1",
             pd.DataFrame(
                 {
                     "J": pd.Series(
@@ -1199,7 +1240,7 @@ def test_object_pick(query, df, answer, memory_leak_check):
                 + [None, {"C": None}, {}, {"B": 9, "C": None}],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ),
-            id="map-drop_mixed-no_case",
+            id="map-drop_mixed-with_case",
         ),
     ],
 )
@@ -1211,8 +1252,7 @@ def test_object_delete(query, df, answer, memory_leak_check):
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
         check_names=False,
-        # Can't sort semi-structured data outputs in Python
-        sort_output=False,
+        convert_columns_to_pandas=True,
     )
 
 
@@ -1393,7 +1433,7 @@ def test_object_insert_conflicting_key_struct(memory_leak_check):
             )
         }
     )
-    with pytest.raises(TypingError):
+    with pytest.raises(bodo.utils.typing.BodoError):
         check_query(
             query,
             {"TABLE1": df},
@@ -1433,6 +1473,13 @@ def test_object_insert_conflicting_key_map():
 
 
 @pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
     "df, key_to_update, value_to_update_expr, answer",
     [
         pytest.param(
@@ -1443,6 +1490,7 @@ def test_object_insert_conflicting_key_map():
                         dtype=pd.ArrowDtype(pa.struct([pa.field("b", pa.int32())])),
                     ),
                     "B": ["a", "b", "c"],
+                    "Z": pd.Series([True] * 3),
                 }
             ),
             "a",
@@ -1463,6 +1511,7 @@ def test_object_insert_conflicting_key_map():
                         dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
                     ),
                     "B": [10, 11, 12],
+                    "Z": pd.Series([True] * 3),
                 }
             ),
             "a",
@@ -1481,6 +1530,7 @@ def test_object_insert_conflicting_key_map():
                         dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.string())])),
                     ),
                     "B": ["0", "1", "2"],
+                    "Z": pd.Series([True] * 3),
                 }
             ),
             "a",
@@ -1499,6 +1549,7 @@ def test_object_insert_conflicting_key_map():
                         dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
                     ),
                     "B": ["0", "1", "2"],
+                    "Z": pd.Series([True] * 3),
                 }
             ),
             "a",
@@ -1525,6 +1576,7 @@ def test_object_insert_conflicting_key_map():
                         ),
                     ),
                     "B": ["first", "second", "third"],
+                    "Z": pd.Series([True] * 3),
                 }
             ),
             "a",
@@ -1551,7 +1603,8 @@ def test_object_insert_conflicting_key_map():
                                 [pa.field("a", pa.int32()), pa.field("b", pa.string())]
                             )
                         ),
-                    )
+                    ),
+                    "Z": pd.Series([True] * 10),
                 }
             ),
             "a",
@@ -1571,6 +1624,7 @@ def test_object_insert_conflicting_key_map():
                         [{"a": i} for i in range(10)],
                         dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
                     ),
+                    "Z": pd.Series([True] * 10),
                 }
             ),
             "a",
@@ -1584,9 +1638,12 @@ def test_object_insert_conflicting_key_map():
     ],
 )
 def test_object_insert_update_key(
-    df, key_to_update, value_to_update_expr, answer, memory_leak_check
+    df, key_to_update, value_to_update_expr, answer, use_case, memory_leak_check
 ):
-    query = f"SELECT OBJECT_INSERT(A, '{key_to_update}', {value_to_update_expr}, true) from table1"
+    if use_case:
+        query = f"SELECT CASE WHEN Z THEN OBJECT_INSERT(A, '{key_to_update}', {value_to_update_expr}, true) ELSE NULL END from table1"
+    else:
+        query = f"SELECT OBJECT_INSERT(A, '{key_to_update}', {value_to_update_expr}, true) from table1"
     check_query(
         query,
         {"TABLE1": df},

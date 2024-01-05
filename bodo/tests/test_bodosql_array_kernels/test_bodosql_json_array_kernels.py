@@ -730,41 +730,12 @@ def test_object_keys(data, answer, vector, memory_leak_check):
     "vector",
     [
         pytest.param(True, id="vector"),
-        pytest.param(
-            False,
-            id="scalar",
-            marks=pytest.mark.skip(
-                reason="Dictionaries not supported for object_insert"
-            ),
-        ),
+        pytest.param(False, id="scalar"),
     ],
 )
 @pytest.mark.parametrize(
     "data, key, value, answer",
     [
-        pytest.param(
-            pd.Series(
-                [
-                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0"},
-                    None,
-                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2"},
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
-            ),
-            "k3",
-            pd.Series(["v3_0", "v3_1", "v3_2"] * 3, dtype=pd.StringDtype()),
-            pd.Series(
-                [
-                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0", "k3": "v3_0"},
-                    None,
-                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2", "k3": "v3_2"},
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
-            ),
-            id="map-string",
-        ),
         pytest.param(
             pd.Series(
                 [
@@ -803,7 +774,7 @@ def test_object_keys(data, answer, vector, memory_leak_check):
                     )
                 ),
             ),
-            id="struct-string",
+            id="struct-new_field",
         ),
         pytest.param(
             pd.Series(
@@ -823,44 +794,48 @@ def test_object_keys(data, answer, vector, memory_leak_check):
                     )
                 ),
             ),
-            "k3",
-            pd.Series(
-                [["v3_0"], ["v3_1"], ["v3_2"]] * 3,
-                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
-            ),
+            "k0",
+            pd.Series([4, 16, None] * 3, dtype=pd.Int64Dtype()),
             pd.Series(
                 [
-                    {"k0": "v0_0", "k1": "v1_0", "k2": "v2_0", "k3": ["v3_0"]},
+                    {"k0": 4, "k1": "v1_0", "k2": "v2_0"},
                     None,
-                    {"k0": "v0_2", "k1": "v1_2", "k2": "v2_2", "k3": ["v3_2"]},
+                    {"k0": None, "k1": "v1_2", "k2": "v2_2"},
                 ]
                 * 3,
                 dtype=pd.ArrowDtype(
                     pa.struct(
                         [
-                            pa.field("k0", pa.string()),
+                            pa.field("k0", pa.int64()),
                             pa.field("k1", pa.string()),
                             pa.field("k2", pa.string()),
-                            pa.field("k3", pa.large_list(pa.string())),
                         ]
                     )
                 ),
             ),
-            id="struct-stringArray",
+            id="struct-replace_field",
         ),
     ],
 )
-def test_object_insert(data, key, value, answer, vector, memory_leak_check):
-    """test object_insert - more comprehensive tests are done at the BodoSQL level"""
+def test_object_insert_struct(data, key, value, answer, vector, memory_leak_check):
+    """Test object_insert on STRUCT values"""
+
+    is_scalar = not vector
 
     def impl_vector(data, value):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.object_insert(data, key, value, False)
+            bodo.libs.bodosql_array_kernels.object_insert(
+                data, key, value, True, is_scalar
+            )
         )
 
     def impl_scalar(data, value):
-        return bodo.libs.bodosql_array_kernels.object_insert(
-            data[0], key, value[0], False
+        return pd.Series(
+            [
+                bodo.libs.bodosql_array_kernels.object_insert(
+                    data[0], key, value[0], True, is_scalar
+                )
+            ]
         )
 
     if vector:
@@ -874,8 +849,110 @@ def test_object_insert(data, key, value, answer, vector, memory_leak_check):
         check_func(
             impl_scalar,
             (data, value),
-            py_output=answer[0],
+            py_output=answer.iloc[0:1],
             check_dtype=False,
+            only_seq=True,
+            is_out_distributed=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [
+        pytest.param(True, id="vector"),
+        pytest.param(False, id="scalar"),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, key, value, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    {"k0": "A", "k1": None, "k2": "C", "k6": None},
+                    None,
+                    {"k0": "D", "k2": "E"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            pd.Series(["k1", "k2", "k3"] * 3),
+            pd.Series(["Q", "R", "S"] * 3),
+            pd.Series(
+                [
+                    {"k0": "A", "k1": "Q", "k2": "C", "k6": None},
+                    None,
+                    {"k0": "D", "k2": "E", "k3": "S"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="vector_key",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"k0": "A", "k1": None, "k2": "C", "k6": None},
+                    None,
+                    {"k0": "D", "k2": "E"},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            "k1",
+            pd.Series(["Alpha", "Beta", None] * 3),
+            pd.Series(
+                [
+                    {"k0": "A", "k1": "Alpha", "k2": "C", "k6": None},
+                    None,
+                    {"k0": "D", "k2": "E", "k1": None},
+                ]
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="scalar-key",
+        ),
+    ],
+)
+def test_object_insert_map(data, key, value, answer, vector, memory_leak_check):
+    """Test object_insert on MAP values"""
+
+    is_scalar = not vector
+
+    def impl_vector(data, key, value):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.object_insert(
+                data, key, value, True, is_scalar
+            )
+        )
+
+    def impl_scalar(data, key, value):
+        return pd.Series(
+            [
+                bodo.libs.bodosql_array_kernels.object_insert(
+                    data[0], key, value[0], True, is_scalar
+                )
+            ]
+        )
+
+    vector_args = (data, key, value)
+    scalar_args = (data, key if isinstance(key, str) else key[0], value)
+
+    if vector:
+        check_func(
+            impl_vector,
+            vector_args,
+            py_output=answer,
+            check_dtype=False,
+        )
+    else:
+        check_func(
+            impl_scalar,
+            scalar_args,
+            py_output=answer.iloc[0:1],
+            check_dtype=False,
+            only_seq=True,
+            is_out_distributed=False,
         )
 
 
