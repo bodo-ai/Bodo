@@ -6,6 +6,7 @@ import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
 import org.apache.calcite.rex.RexNode
@@ -51,6 +52,29 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         addAlias(StringOperatorTable.MD5_HEX, StringOperatorTable.MD5)
         addAlias(CondOperatorTable.IF_FUNC, CondOperatorTable.IFF_FUNC)
         addAlias(CondOperatorTable.NVL, SqlStdOperatorTable.COALESCE)
+        addAlias(CondOperatorTable.IFNULL_FUNC, SqlStdOperatorTable.COALESCE)
+        addAlias(StringOperatorTable.CHR, StringOperatorTable.CHAR)
+        addAlias(StringOperatorTable.ORD, SqlStdOperatorTable.ASCII)
+        addAlias(StringOperatorTable.LCASE, SqlStdOperatorTable.LOWER)
+        addAlias(StringOperatorTable.UCASE, SqlStdOperatorTable.UPPER)
+        addAlias(DatetimeOperatorTable.SYSDATE, DatetimeOperatorTable.UTC_TIMESTAMP)
+        addAlias(SqlStdOperatorTable.LOCALTIME, SqlStdOperatorTable.CURRENT_TIME)
+        addAlias(DatetimeOperatorTable.CURDATE, SqlStdOperatorTable.CURRENT_DATE)
+        addAlias(SqlBodoOperatorTable.CURRENT_TIMESTAMP, DatetimeOperatorTable.GETDATE)
+        addAlias(DatetimeOperatorTable.NOW, DatetimeOperatorTable.GETDATE)
+        addAlias(SqlBodoOperatorTable.LOCALTIMESTAMP, DatetimeOperatorTable.GETDATE)
+        addAlias(DatetimeOperatorTable.SYSTIMESTAMP, DatetimeOperatorTable.GETDATE)
+        addAlias(DatetimeOperatorTable.DATE_ADD, DatetimeOperatorTable.DATEADD)
+        addAlias(DatetimeOperatorTable.TIMEADD, DatetimeOperatorTable.DATEADD)
+        addAlias(SqlBodoOperatorTable.TIMESTAMP_ADD, DatetimeOperatorTable.DATEADD)
+        addAlias(DatetimeOperatorTable.TIMEDIFF, DatetimeOperatorTable.DATEDIFF)
+        addAlias(SqlBodoOperatorTable.TIMESTAMP_DIFF, DatetimeOperatorTable.DATEDIFF)
+        addAlias(SqlStdOperatorTable.POSITION, StringOperatorTable.CHARINDEX)
+        addAlias(StringOperatorTable.POSITION, StringOperatorTable.CHARINDEX)
+        addAlias(StringOperatorTable.SUBSTR, SqlStdOperatorTable.SUBSTRING)
+        addAlias(StringOperatorTable.MID, SqlStdOperatorTable.SUBSTRING)
+        addAlias(SqlLibraryOperators.RLIKE, StringOperatorTable.REGEXP_LIKE)
+        addAlias(StringOperatorTable.RLIKE, StringOperatorTable.REGEXP_LIKE)
         registerOp(StringOperatorTable.LENGTH, this::simpleConversion)
     }
 

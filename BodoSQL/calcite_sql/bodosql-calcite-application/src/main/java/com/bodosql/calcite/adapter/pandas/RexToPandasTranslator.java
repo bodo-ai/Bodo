@@ -466,13 +466,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     // The regular expression functions only support literal patterns
     boolean patternRegex = false;
-    if (op.getKind() == SqlKind.RLIKE) {
-      if (!(patternNode instanceof RexLiteral)) {
-        throw new BodoSQLCodegenException(
-            String.format("%s Error: Pattern must be a string literal", op.getName()));
-      }
-      patternRegex = true;
-    }
 
     Expr arg = operands.get(0).accept(this);
     Expr pattern = patternNode.accept(this);
@@ -891,7 +884,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         break;
       case "COALESCE":
       case "ZEROIFNULL":
-      case "IFNULL":
       case "DECODE":
         result = visitVariadic(fnName, codeExprs, streamingNamedArgs);
         break;
@@ -1105,7 +1097,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     String fnName = fnOperation.getOperator().getName();
     switch (fnName) {
-      case "RLIKE":
       case "REGEXP_LIKE":
         if (!(2 <= operands.size() && operands.size() <= 3)) {
           throw new BodoSQLCodegenException(
@@ -1183,25 +1174,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     String fnName = fnOperation.getOperator().getName();
     switch (fnName) {
-      case "RLIKE":
       case "REGEXP_LIKE":
       case "REGEXP_COUNT":
       case "REGEXP_REPLACE":
       case "REGEXP_SUBSTR":
       case "REGEXP_INSTR":
         return visitRegexFunc(fnOperation, operands, streamingNamedArgs);
-      case "CHR":
       case "CHAR":
       case "FORMAT":
         return getStringFnCode(fnName, operands);
-      case "ORD":
       case "ASCII":
       case "CHAR_LENGTH":
       case "LENGTH":
       case "REVERSE":
-      case "LCASE":
       case "LOWER":
-      case "UCASE":
       case "UPPER":
       case "SPACE":
       case "RTRIMMED_LENGTH":
@@ -1216,7 +1202,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "STARTSWITH":
       case "ENDSWITH":
       case "SPLIT_PART":
-      case "MID":
       case "SUBSTRING_INDEX":
       case "TRANSLATE3":
       case "SPLIT":
@@ -1224,9 +1209,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "RPAD":
       case "LPAD":
         return generatePadCode(fnOperation, operands, streamingNamedArgs);
-      case "SUBSTR":
+      case "SUBSTRING":
         return generateSubstringCode(operands, streamingNamedArgs);
-      case "POSITION":
       case "CHARINDEX":
         return visitPosition(operands, streamingNamedArgs);
       case "STRTOK":
@@ -1283,20 +1267,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Expr systemCall;
     switch (fnName) {
       case "GETDATE":
-      case "CURRENT_TIMESTAMP":
-      case "NOW":
-      case "LOCALTIMESTAMP":
-      case "SYSTIMESTAMP":
         assert fnOperation.getType() instanceof TZAwareSqlType;
         BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
         systemCall = generateCurrTimestampCode(tzTimestampInfo, makeConsistent);
         break;
       case "CURRENT_TIME":
-      case "LOCALTIME":
         BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
         systemCall = generateCurrTimeCode(tzTimeInfo, makeConsistent);
         break;
-      case "SYSDATE":
       case "UTC_TIMESTAMP":
         systemCall = generateUTCTimestampCode(makeConsistent);
         break;
@@ -1304,7 +1282,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         systemCall = generateUTCDateCode(makeConsistent);
         break;
       case "CURRENT_DATE":
-      case "CURDATE":
         systemCall =
             generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem), makeConsistent);
         break;
@@ -1469,7 +1446,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "HASH"
         || fnName == "IF"
         || fnName == "IFF"
-        || fnName == "IFNULL"
         || fnName == "NVL"
         || fnName == "NVL2"
         || fnName == "OBJECT_CONSTRUCT"
@@ -1492,22 +1468,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case GREATEST:
       case LEAST:
         return visitLeastGreatest(fnOperation.getOperator().toString(), operands);
-      case TIMESTAMP_ADD:
-        // Uses Calcite parser, accepts both quoted and unquoted time units
-        dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
-        assert isScalar(fnOperation.operands.get(0));
-        return generateSnowflakeDateAddCode(operands.subList(1, operands.size()), unit);
-      case TIMESTAMP_DIFF:
-        assert operands.size() == 3;
-        dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
-        dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(2));
-        if ((dateTimeExprType1 == DateTimeType.TIME) != (dateTimeExprType2 == DateTimeType.TIME)) {
-          throw new BodoSQLCodegenException(
-              "Invalid type of arguments to TIMESTAMPDIFF: cannot mix date/timestamp with time.");
-        }
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
-        return generateDateDiffFnInfo(unit, operands.get(1), operands.get(2));
       case TRIM:
         assert operands.size() == 3;
         // NOTE: Operand 0 is one of BOTH/LEADING/TRAILING. We should make sure this is
@@ -1575,7 +1535,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               return ExprKt.BodoSQLKernel("div0", operands, List.of());
             }
           case "DATEADD":
-          case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operands.size() == 3) {
@@ -1584,7 +1543,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               assert isScalar(fnOperation.operands.get(0));
               return generateSnowflakeDateAddCode(operands.subList(1, operands.size()), unit);
             }
-          case "DATE_ADD":
           case "ADDDATE":
           case "SUBDATE":
           case "DATE_SUB":
@@ -1663,19 +1621,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                   "Invalid type of arguments to DATEDIFF: cannot mix date/timestamp with time.");
             }
             unit = standardizeTimeUnit(fnName, unit, dateTimeExprType1);
-            return generateDateDiffFnInfo(unit, arg1, arg2);
-          case "TIMEDIFF":
-            assert operands.size() == 3;
-            dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
-            dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(2));
-            if ((dateTimeExprType1 == DateTimeType.TIME)
-                != (dateTimeExprType2 == DateTimeType.TIME)) {
-              throw new BodoSQLCodegenException(
-                  "Invalid type of arguments to TIMEDIFF: cannot mix date/timestamp with time.");
-            }
-            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
-            arg1 = operands.get(1);
-            arg2 = operands.get(2);
             return generateDateDiffFnInfo(unit, arg1, arg2);
           case "STR_TO_DATE":
             assert operands.size() == 2;
@@ -1785,18 +1730,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateConcatWSCode(
                 operands.get(0), operands.subList(1, operands.size()), List.of());
           case "GETDATE":
-          case "CURRENT_TIMESTAMP":
-          case "NOW":
-          case "LOCALTIMESTAMP":
-          case "SYSTIMESTAMP":
           case "CURRENT_TIME":
-          case "LOCALTIME":
-          case "SYSDATE":
           case "UTC_TIMESTAMP":
           case "UTC_DATE":
           case "CURRENT_DATE":
           case "CURRENT_DATABASE":
-          case "CURDATE":
             assert operands.size() == 0;
             return visitGeneralContextFunction(fnOperation);
           case "MAKEDATE":
@@ -1896,22 +1834,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "IS_ARRAY":
           case "IS_OBJECT":
             return visitVariantFunc(fnName, operands);
-          case "RLIKE":
           case "REGEXP_LIKE":
           case "REGEXP_COUNT":
           case "REGEXP_REPLACE":
           case "REGEXP_SUBSTR":
           case "REGEXP_INSTR":
-          case "ORD":
           case "ASCII":
           case "CHAR":
-          case "CHR":
           case "CHAR_LENGTH":
           case "LENGTH":
           case "REVERSE":
-          case "LCASE":
           case "LOWER":
-          case "UCASE":
           case "UPPER":
           case "SPACE":
           case "RTRIMMED_LENGTH":
@@ -1927,13 +1860,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "RPAD":
           case "LPAD":
           case "SPLIT_PART":
-          case "MID":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
           case "REPLACE":
-          case "SUBSTR":
+          case "SUBSTRING":
           case "INSERT":
-          case "POSITION":
           case "CHARINDEX":
           case "STRTOK":
           case "STRTOK_TO_ARRAY":

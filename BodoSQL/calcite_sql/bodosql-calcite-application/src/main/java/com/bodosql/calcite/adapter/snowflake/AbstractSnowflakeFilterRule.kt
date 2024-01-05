@@ -132,7 +132,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.GREATEST,
             // Other functions
             SqlKind.IN,
-            SqlKind.RLIKE,
         )
 
         // Note that several of these functions also have their SqlKind in

@@ -30,7 +30,6 @@ public class CondOpCodeGen {
     equivalentFnMap.put("HASH", "sql_hash");
     equivalentFnMap.put("COALESCE", "coalesce");
     equivalentFnMap.put("NVL2", "nvl2");
-    equivalentFnMap.put("IFNULL", "coalesce");
     equivalentFnMap.put("ZEROIFNULL", "coalesce");
   }
 

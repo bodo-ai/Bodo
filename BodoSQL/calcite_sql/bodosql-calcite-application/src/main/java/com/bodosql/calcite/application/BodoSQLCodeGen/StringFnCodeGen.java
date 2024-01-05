@@ -28,19 +28,15 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast = new HashMap<>();
     equivalentFnMapBroadcast.put("CHAR_LENGTH", "length");
     equivalentFnMapBroadcast.put("LENGTH", "length");
-    equivalentFnMapBroadcast.put("LCASE", "lower");
     equivalentFnMapBroadcast.put("LOWER", "lower");
-    equivalentFnMapBroadcast.put("UCASE", "upper");
     equivalentFnMapBroadcast.put("UPPER", "upper");
     equivalentFnMapBroadcast.put("CONTAINS", "contains");
     equivalentFnMapBroadcast.put("LPAD", "lpad");
     equivalentFnMapBroadcast.put("RPAD", "rpad");
     equivalentFnMapBroadcast.put("LEFT", "left");
     equivalentFnMapBroadcast.put("RIGHT", "right");
-    equivalentFnMapBroadcast.put("ORD", "ord_ascii");
     equivalentFnMapBroadcast.put("ASCII", "ord_ascii");
     equivalentFnMapBroadcast.put("CHAR", "char");
-    equivalentFnMapBroadcast.put("CHR", "char");
     equivalentFnMapBroadcast.put("FORMAT", "format");
     equivalentFnMapBroadcast.put("REPEAT", "repeat");
     equivalentFnMapBroadcast.put("REVERSE", "reverse");
@@ -50,7 +46,6 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("SPACE", "space");
     equivalentFnMapBroadcast.put("STRCMP", "strcmp");
     equivalentFnMapBroadcast.put("INSTR", "instr");
-    equivalentFnMapBroadcast.put("MID", "substring");
     equivalentFnMapBroadcast.put("SUBSTRING_INDEX", "substring_index");
     equivalentFnMapBroadcast.put("TRANSLATE3", "translate");
     equivalentFnMapBroadcast.put("SPLIT_PART", "split_part");
@@ -296,7 +291,7 @@ public class StringFnCodeGen {
         streamingNamedArgs);
   }
   /**
-   * Function that returns the rexInfo for a SUBSTR/MID Function call
+   * Function that returns the rexInfo for a SUBSTRING Function call
    *
    * @param operands The arguments to Substring
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
@@ -312,8 +307,7 @@ public class StringFnCodeGen {
     } else if (argCount == 2) {
       fnName = "substring_suffix";
     } else {
-      throw new BodoSQLCodegenException(
-          "Error, invalid number of arguments passed to SUBSTR/SUBSTRING");
+      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to SUBSTRING");
     }
     return BodoSQLKernel(fnName, operands, streamingNamedArgs);
   }

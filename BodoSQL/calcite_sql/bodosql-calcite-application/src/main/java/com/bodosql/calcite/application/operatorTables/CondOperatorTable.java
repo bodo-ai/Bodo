@@ -96,19 +96,6 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.SAME_SAME,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction IFNULL_FUNC =
-      SqlBasicFunction.create(
-          "IFNULL",
-          // LEAST_RESTRICTIVE will cast the return type to the least restrictive union of the
-          // Two input types, and LEAST_NULLABLE will cast that type to a nullable type
-          // If both of the two inputs are a nullable type.
-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.LEAST_NULLABLE),
-          // What Input Types does the function accept. This function accepts two
-          // matching input types
-          OperandTypes.SAME_SAME,
-          // TODO: Add a proper category
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
   public static final SqlFunction NULLIFZERO =
       SqlBasicFunction.create(
           "NULLIFZERO",
@@ -120,7 +107,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction NVL =
+  public static final SqlBasicFunction NVL =
       SqlBasicFunction.create(
           "NVL",
           // LEAST_RESTRICTIVE will cast the return type to the least restrictive union of the
@@ -132,6 +119,8 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.SAME_SAME,
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction IFNULL_FUNC = NVL.withName("IFNULL");
 
   public static final SqlFunction NVL2 =
       SqlBasicFunction.create(
@@ -155,6 +144,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.NUMERIC,
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction DECODE =
       SqlBasicFunction.create(
           "DECODE",
