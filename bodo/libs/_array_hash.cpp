@@ -2,11 +2,12 @@
 #include "_array_hash.h"
 #include <Python.h>
 #include <arrow/api.h>
-#include <concepts>
+#include <arrow/array/data.h>
+#include <arrow/compute/api_scalar.h>
+#include <arrow/compute/api_vector.h>
 #include <span>
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
 
 /**
  * Computation of the NA value hash
@@ -381,6 +382,7 @@ void apply_arrow_numeric_hash(
  * @param out_hashes: the hashes on input/output
  * @param list_offsets: the list of offsets (of length n_rows+1)
  * @param n_rows: the number of rows in input
+ * @param start_row_offset: where to start hashing input_array
  * @param input_array: the input array put in argument.
  */
 template <typename hashes_t>
@@ -388,7 +390,8 @@ template <typename hashes_t>
 void hash_arrow_array(const hashes_t& out_hashes,
                       const std::span<const offset_t> list_offsets,
                       size_t const& n_rows,
-                      std::shared_ptr<arrow::Array> const& input_array) {
+                      std::shared_ptr<arrow::Array> const& input_array,
+                      size_t start_row_offset) {
 #if OFFSET_BITWIDTH == 32
     if (input_array->type_id() == arrow::Type::LIST) {
         auto list_array =
@@ -404,7 +407,7 @@ void hash_arrow_array(const hashes_t& out_hashes,
             list_offsets_out[i_row] =
                 list_array->value_offset(list_offsets[i_row]);
         hash_arrow_array(out_hashes, list_offsets_out, n_rows,
-                         list_array->values());
+                         list_array->values(), start_row_offset);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
         auto struct_array =
@@ -413,8 +416,81 @@ void hash_arrow_array(const hashes_t& out_hashes,
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
         for (int i_field = 0; i_field < struct_type->num_fields(); i_field++)
             hash_arrow_array(out_hashes, list_offsets, n_rows,
-                             struct_array->field(i_field));
+                             struct_array->field(i_field), start_row_offset);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
+    } else if (input_array->type_id() == arrow::Type::MAP) {
+        auto map_array =
+            std::dynamic_pointer_cast<arrow::MapArray>(input_array);
+        apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, map_array);
+
+        size_t nkeys = map_array->value_offset(list_offsets[n_rows]) -
+                       map_array->value_offset(list_offsets[0]);
+        auto sort_indices = arrow::UInt64Builder();
+        auto reserve_res = sort_indices.Reserve(nkeys);
+        if (!reserve_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "hash_arrow_array: Unable to reserve sort_indices");
+        }
+
+        // For every row, get the relevant slice of the child arrays, get the
+        // sort indices, shift them by the row offset, and append to the sort
+        // indices array.
+        bodo::vector<offset_t> list_offsets_out(n_rows + 1);
+        list_offsets_out[n_rows] = nkeys;
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            // Get the sort indices of the relevant slice of the keys
+            offset_t row_offset = map_array->value_offset(list_offsets[i_row]);
+            list_offsets_out[i_row] =
+                row_offset - map_array->value_offset(start_row_offset);
+            auto slice_sort_indices = get_sort_indices_of_slice_arrow(
+                map_array->keys(), row_offset,
+                map_array->value_offset(list_offsets[i_row + 1]));
+            // Shift the sort indices by the row offset
+            auto offset_slice_sort_indices_res = arrow::compute::Add(
+                slice_sort_indices, arrow::Int32Scalar(row_offset));
+            if (!offset_slice_sort_indices_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "hash_arrow_array: Unable to offset sort_indices");
+            }
+            auto offset_slice_sort_indices =
+                offset_slice_sort_indices_res.ValueOrDie().array();
+            // Append the sort indices to the sort indices array
+            auto append_res = sort_indices.AppendArraySlice(
+                *offset_slice_sort_indices, 0, slice_sort_indices->length);
+            if (!append_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "hash_arrow_array: Unable to append sort_indices");
+            }
+        }
+        // Finish the sort indices array
+        auto sort_indices_array_res = sort_indices.Finish();
+        if (!sort_indices_array_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "hash_arrow_array: Unable to finish sort_indices");
+        }
+        auto sort_indices_array = sort_indices_array_res.ValueOrDie();
+        // Get the sorted keys
+        auto sorted_keys_res =
+            arrow::compute::Take(map_array->keys(), sort_indices_array);
+        if (!sorted_keys_res.ok()) [[unlikely]] {
+            throw std::runtime_error("hash_arrow_array: Unable to sort array");
+        }
+        auto sorted_keys = sorted_keys_res.ValueOrDie().make_array();
+        // Get the sorted values
+        auto sorted_vals_res =
+            arrow::compute::Take(map_array->items(), sort_indices_array);
+        if (!sorted_vals_res.ok()) [[unlikely]] {
+            throw std::runtime_error("hash_arrow_array: Unable to sort array");
+        }
+        auto sorted_vals = sorted_vals_res.ValueOrDie().make_array();
+        // Hash the sorted keys and values
+        hash_arrow_array(out_hashes, list_offsets_out, n_rows, sorted_keys,
+                         start_row_offset);
+        hash_arrow_array(out_hashes, list_offsets_out, n_rows, sorted_vals,
+                         start_row_offset);
+        // Hash the null bitmask
+        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
+
 #if OFFSET_BITWIDTH == 32
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
@@ -474,17 +550,9 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::MAP) {
-        if (start_row_offset != 0) {
-            // Support for these isn't required since start_row_offset
-            // is only used in streaming hash join and STRUCT and
-            // ARRAY_ITEM arrays cannot be keys at this time.
-            throw std::runtime_error(
-                "_array_hash.cpp::hash_array: Non-zero start_row_offset is not "
-                "supported for Arrow arrays.");
-        }
         bodo::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++)
-            list_offsets[i] = i;
+            list_offsets[i] = i + start_row_offset;
         for (offset_t i = 0; i < n_rows; i++)
             out_hashes[i] = seed;
         if (use_murmurhash)
@@ -492,7 +560,7 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
                 "_array_hash::hash_array: MurmurHash not supported for Arrow "
                 "arrays.");
         return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                to_arrow(array));
+                                to_arrow(array), start_row_offset);
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_string(out_hashes, (char*)array->data1(),
@@ -810,17 +878,12 @@ void hash_array_combine(const hashes_t& out_hashes,
         // Support for these isn't required since start_row_offset
         // is only used in streaming hash join and STRUCT and
         // ARRAY_ITEM arrays cannot be keys at this time.
-        if (start_row_offset != 0) {
-            throw std::runtime_error(
-                "_array_hash.cpp::hash_array_combine: Non-zero "
-                "start_row_offset not supported for Arrow arrays!");
-        }
         bodo::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++) {
-            list_offsets[i] = i;
+            list_offsets[i] = i + start_row_offset;
         }
         return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                to_arrow(array));
+                                to_arrow(array), start_row_offset);
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(

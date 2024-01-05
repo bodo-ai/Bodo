@@ -4035,6 +4035,346 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
     )
 
 
+semi_structured_keys = [
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [[1, 2], [3], [], None, [4, 5], [6]],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                ),
+                "B": [1, 2, 3, 4, 5, 6],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [[1, 2], [9], [], None, [5, 4], [6]],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                ),
+                "D": [6, 5, 4, 3, 2, 1],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [[1, 2], [], [6]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+                ),
+                "B": [1, 3, 6],
+                "C": pd.Series(
+                    [[1, 2], [], [6]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+                ),
+                "D": [6, 4, 1],
+            }
+        ),
+        id="array_item",
+    ),
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        {"x": 1, "y": 2},
+                        {"x": 3, "y": 4},
+                        {"a": 2, "b": 3, "c": 4},
+                        {"x": 5, "y": 6},
+                        {},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "B": [1, 2, 3, 4, 5],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [
+                        {"y": 2, "x": 1},
+                        {"a": 2, "b": 3, "c": 4},
+                        {"p": 1, "q": 2},
+                        {"x": 1},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "D": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [{"x": 1, "y": 2}, {"a": 2, "b": 3, "c": 4}],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "B": [1, 3],
+                "C": pd.Series(
+                    [{"y": 2, "x": 1}, {"a": 2, "b": 3, "c": 4}],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "D": [1, 2],
+            }
+        ),
+        id="map",
+    ),
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        {"x": 1, "y": 2},
+                        {"x": 2, "y": 3},
+                        {"x": 2, "y": 4},
+                        {"x": 1, "y": 1},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.int32()), pa.field("y", pa.int32())]
+                        )
+                    ),
+                ),
+                "B": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [
+                        {"x": 1, "y": 1},
+                        {"x": 1, "y": 3},
+                        {"x": 2, "y": 5},
+                        {"x": 1, "y": 2},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.int32()), pa.field("y", pa.int32())]
+                        )
+                    ),
+                ),
+                "D": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [{"x": 1, "y": 2}, {"x": 1, "y": 1}],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.int32()), pa.field("y", pa.int32())]
+                        )
+                    ),
+                ),
+                "B": [1, 4],
+                "C": pd.Series(
+                    [{"x": 1, "y": 2}, {"x": 1, "y": 1}],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.int32()), pa.field("y", pa.int32())]
+                        )
+                    ),
+                ),
+                "D": [4, 1],
+            }
+        ),
+        id="struct",
+    ),
+]
+
+
+@pytest.mark.parametrize("probe_df, build_df, expected_df", semi_structured_keys)
+def test_hash_join_semistructured_keys(
+    probe_df, build_df, expected_df, memory_leak_check
+):
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 2
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    check_func(
+        test_hash_join,
+        (build_df, probe_df),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+    )
+
+
+def test_join_semistructured_cond_func(memory_leak_check):
+    """
+    Ensures that an error is thrown if a semistructured type is used in a join condition function
+    """
+    probe_df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [[1, 2], [3], [], None, [4, 5], [6]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "B": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    build_df = pd.DataFrame(
+        {
+            "C": pd.Series(
+                [[1, 2], [9], [], None, [5, 4], [6]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "D": [6, 5, 4, 3, 2, 1],
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+            non_equi_condition="right.A > left.C",
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 2
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    with pytest.raises(
+        bodo.utils.typing.BodoError,
+        match=r"General Join Conditions with 'ArrayItemArrayType\(IntegerArrayType\(int64\)\)' column type and 'IntegerArrayType\(int64\)' data type not supported",
+    ):
+        bodo.jit(test_hash_join)(build_df, probe_df)
+
+
 # Note we mark this as slow because the volume of data in
 # the output makes checking correctness slow.
 @pytest.mark.slow

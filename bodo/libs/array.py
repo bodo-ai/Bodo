@@ -3484,7 +3484,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         return getitem_func
 
     raise BodoError(
-        f"General Join Conditions with '{col_dtype}' column data type not supported"
+        f"General Join Conditions with '{col_array_typ}' column type and '{col_dtype}' data type not supported"
     )
 
 
