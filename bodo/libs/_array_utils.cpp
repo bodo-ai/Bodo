@@ -4,8 +4,10 @@
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 
+#include <arrow/array/array_nested.h>
 #include <arrow/compute/cast.h>
 #include <arrow/type_fwd.h>
+#include <fmt/format.h>
 #include <mpi.h>
 #include <complex>
 #include <iostream>
@@ -980,12 +982,24 @@ std::shared_ptr<table_info> RetrieveTable(
     return std::make_shared<table_info>(out_arrs);
 }
 
+// @brief Compare the bitmap of two arrow arrays at a given position
+// @param na_position_bis True if NA should be considered greater than any value
+// @param arrow1 First array
+// @param pos1 Position in first array
+// @param arrow2 Second array
+// @param pos2 Position in second array
+// @param is_na_equal True if NA should be considered equal to NA
 template <typename T>
 std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
                                           T const& arrow1, int64_t pos1,
-                                          T const& arrow2, int64_t pos2) {
+                                          T const& arrow2, int64_t pos2,
+                                          bool const& is_na_equal) {
     bool bit1 = !arrow1->IsNull(pos1);
     bool bit2 = !arrow2->IsNull(pos2);
+    // if either bit is null and !is_na_equal, they are not equal
+    if ((!bit1 || !bit2) && !is_na_equal) {
+        return {-1, false};
+    }
     if (bit1 && !bit2) {
         int val = -1;
         if (na_position_bis)
@@ -1001,11 +1015,26 @@ std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
     return {0, bit1};
 }
 
+std::shared_ptr<arrow::ArrayData> get_sort_indices_of_slice_arrow(
+    std::shared_ptr<arrow::Array> const& arr, int64_t pos_s, int64_t pos_e) {
+    // Get a slice of the array containing only the selected elements
+    std::shared_ptr<arrow::Array> slice = arr->Slice(pos_s, pos_e - pos_s);
+    arrow::Result<arrow::Datum> sort_indices_res =
+        arrow::compute::CallFunction("array_sort_indices", {slice});
+    if (!sort_indices_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            fmt::format("get_sort_indices: Error sorting array: {}",
+                        sort_indices_res.status().message()));
+    }
+    return sort_indices_res.ValueOrDie().array();
+}
+
 int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           int64_t pos1_s, int64_t pos1_e,
                           std::shared_ptr<arrow::Array> const& arr2,
                           int64_t pos2_s, int64_t pos2_e,
-                          bool const& na_position_bis) {
+                          bool const& na_position_bis,
+                          bool const& is_na_equal) {
     auto process_length = [](int const& len1, int const& len2) -> int {
         if (len1 > len2)
             return -1;
@@ -1032,7 +1061,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         for (int64_t idx = 0; idx < min_len; idx++) {
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, list_array1, pos1_s + idx,
-                                     list_array2, pos2_s + idx);
+                                     list_array2, pos2_s + idx, is_na_equal);
             if (epair.first != 0)
                 return epair.first;
             if (epair.second) {
@@ -1042,29 +1071,79 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 int n_pos2_e = list_array2->value_offset(pos2_s + idx + 1);
                 int test = ComparisonArrowColumn(
                     list_array1->values(), n_pos1_s, n_pos1_e,
-                    list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis);
+                    list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis,
+                    is_na_equal);
                 if (test)
                     return test;
             }
         }
         return process_length(len1, len2);
     } else if (arr1->type_id() == arrow::Type::MAP) {
-        // MapArray is subclass of ListArray so we cast to LargeList to reuse
-        // code above
-        auto res1 = arrow::compute::Cast(
-            *arr1, arrow::large_list(arr1->type()->field(0)),
-            arrow::compute::CastOptions::Safe(),
-            bodo::default_buffer_exec_context());
-        std::shared_ptr<arrow::Array> casted_arr1;
-        CHECK_ARROW_AND_ASSIGN(res1, "Cast", casted_arr1);
-        auto res2 = arrow::compute::Cast(
-            *arr2, arrow::large_list(arr2->type()->field(0)),
-            arrow::compute::CastOptions::Safe(),
-            bodo::default_buffer_exec_context());
-        std::shared_ptr<arrow::Array> casted_arr2;
-        CHECK_ARROW_AND_ASSIGN(res2, "Cast", casted_arr2);
-        return ComparisonArrowColumn(casted_arr1, pos1_s, pos1_e, casted_arr2,
-                                     pos2_s, pos2_e, na_position_bis);
+        std::shared_ptr<arrow::MapArray> map_array1 =
+            std::dynamic_pointer_cast<arrow::MapArray>(arr1);
+        std::shared_ptr<arrow::MapArray> map_array2 =
+            std::dynamic_pointer_cast<arrow::MapArray>(arr2);
+        int64_t len1 = pos1_e - pos1_s;
+        int64_t len2 = pos2_e - pos2_s;
+
+        int64_t min_len = std::min(len1, len2);
+        for (int64_t idx = 0; idx < min_len; ++idx) {
+            std::pair<int, bool> epair =
+                process_arrow_bitmap(na_position_bis, map_array1, pos1_s + idx,
+                                     map_array2, pos2_s + idx, is_na_equal);
+
+            if (epair.first != 0)
+                return epair.first;
+            if (epair.second) {
+                int inner_pos1_s = map_array1->value_offset(pos1_s + idx);
+                int inner_pos1_e = map_array1->value_offset(pos1_s + idx + 1);
+                int inner_pos2_s = map_array2->value_offset(pos2_s + idx);
+                int inner_pos2_e = map_array2->value_offset(pos2_s + idx + 1);
+                int64_t inner_len1 = inner_pos1_e - inner_pos1_s;
+                int64_t inner_len2 = inner_pos2_e - inner_pos2_s;
+                int64_t min_inner_len = std::min(inner_len1, inner_len2);
+
+                // Get the sort indices of the row's elements based on the keys
+                auto sort_indices1_arr = get_sort_indices_of_slice_arrow(
+                    map_array1->keys(), inner_pos1_s, inner_pos1_e);
+                auto sort_indices2_arr = get_sort_indices_of_slice_arrow(
+                    map_array2->keys(), inner_pos2_s, inner_pos2_e);
+                const uint64_t* sort_indices1 =
+                    sort_indices1_arr->GetValues<uint64_t>(1);
+                const uint64_t* sort_indices2 =
+                    sort_indices2_arr->GetValues<uint64_t>(1);
+
+                for (int64_t inner_idx = 0; inner_idx < min_inner_len;
+                     ++inner_idx) {
+                    // Compare the keys and values in the sorted order
+                    int n_pos1_s = inner_pos1_s + sort_indices1[inner_idx];
+                    int n_pos1_e = n_pos1_s + 1;
+                    int n_pos2_s = inner_pos2_s + sort_indices2[inner_idx];
+                    int n_pos2_e = n_pos2_s + 1;
+                    int test = ComparisonArrowColumn(
+                        map_array1->keys(), n_pos1_s, n_pos1_e,
+                        map_array2->keys(), n_pos2_s, n_pos2_e, na_position_bis,
+                        is_na_equal);
+                    if (test) {
+                        return test;
+                    }
+                    test = ComparisonArrowColumn(map_array1->items(), n_pos1_s,
+                                                 n_pos1_e, map_array2->items(),
+                                                 n_pos2_s, n_pos2_e,
+                                                 na_position_bis, is_na_equal);
+                    if (test) {
+                        return test;
+                    }
+                }
+                int inner_len_processed =
+                    process_length(inner_len1, inner_len2);
+                if (inner_len_processed) {
+                    return inner_len_processed;
+                }
+            }
+        }
+        return process_length(len1, len2);
+
     } else if (arr1->type_id() == arrow::Type::STRUCT) {
         auto struct_array1 =
             std::dynamic_pointer_cast<arrow::StructArray>(arr1);
@@ -1074,7 +1153,13 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             std::dynamic_pointer_cast<arrow::StructType>(struct_array1->type());
         auto struct_type2 =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array2->type());
-        int num_fields = struct_type1->num_fields();
+        int num_fields1 = struct_type1->num_fields();
+        int num_fields2 = struct_type2->num_fields();
+        if (num_fields1 > num_fields2) {
+            return -1;
+        } else if (num_fields1 < num_fields2) {
+            return 1;
+        }
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
@@ -1085,15 +1170,15 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             int n_pos2_e = pos2_s + idx + 1;
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, struct_array1, n_pos1_s,
-                                     struct_array2, n_pos2_s);
+                                     struct_array2, n_pos2_s, is_na_equal);
             if (epair.first != 0)
                 return epair.first;
             if (epair.second) {
-                for (int i = 0; i < num_fields; i++) {
+                for (int i = 0; i < num_fields1; i++) {
                     int test = ComparisonArrowColumn(
                         struct_array1->field(i), n_pos1_s, n_pos1_e,
                         struct_array2->field(i), n_pos2_s, n_pos2_e,
-                        na_position_bis);
+                        na_position_bis, is_na_equal);
                     if (test)
                         return test;
                 }
@@ -1117,8 +1202,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         for (int64_t idx = 0; idx < min_len; idx++) {
             int n_pos1_s = pos1_s + idx;
             int n_pos2_s = pos2_s + idx;
-            std::pair<int, bool> epair = process_arrow_bitmap(
-                na_position_bis, str_array1, n_pos1_s, str_array2, n_pos2_s);
+            std::pair<int, bool> epair =
+                process_arrow_bitmap(na_position_bis, str_array1, n_pos1_s,
+                                     str_array2, n_pos2_s, is_na_equal);
             if (epair.first != 0)
                 return epair.first;
             if (epair.second) {
@@ -1154,9 +1240,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             for (int64_t idx = 0; idx < min_len; idx++) {
                 int n_pos1_s = pos1_s + idx;
                 int n_pos2_s = pos2_s + idx;
-                std::pair<int, bool> epair =
-                    process_arrow_bitmap(na_position_bis, primitive_array1,
-                                         n_pos1_s, primitive_array2, n_pos2_s);
+                std::pair<int, bool> epair = process_arrow_bitmap(
+                    na_position_bis, primitive_array1, n_pos1_s,
+                    primitive_array2, n_pos2_s, is_na_equal);
                 if (epair.first != 0) {
                     return epair.first;
                 } else if (epair.second) {
@@ -1179,9 +1265,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             for (int64_t idx = 0; idx < min_len; idx++) {
                 int n_pos1_s = pos1_s + idx;
                 int n_pos2_s = pos2_s + idx;
-                std::pair<int, bool> epair =
-                    process_arrow_bitmap(na_position_bis, primitive_array1,
-                                         n_pos1_s, primitive_array2, n_pos2_s);
+                std::pair<int, bool> epair = process_arrow_bitmap(
+                    na_position_bis, primitive_array1, n_pos1_s,
+                    primitive_array2, n_pos2_s, is_na_equal);
                 if (epair.first != 0) {
                     return epair.first;
                 } else if (epair.second) {
@@ -1220,7 +1306,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         bool na_position_bis = true;  // This value has no importance
         int val = ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
                                         to_arrow(arr2), pos2_s, pos2_e,
-                                        na_position_bis);
+                                        na_position_bis, is_na_equal);
         return val == 0;
     }
     if (arr1->arr_type == bodo_array_type::NUMPY ||
@@ -1341,7 +1427,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         int64_t pos2_e = iRow2 + 1;
         return ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
                                      to_arrow(arr2), pos2_s, pos2_e,
-                                     na_position_bis);
+                                     na_position_bis, true);
     }
     if (arr1->arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY, we compare the values for concluding.

@@ -233,7 +233,7 @@ struct multi_col_key {
                     bool na_position_bis = true;
                     int test = ComparisonArrowColumn(
                         to_arrow(c1), pos1_s, pos1_e, to_arrow(c2), pos2_s,
-                        pos2_e, na_position_bis);
+                        pos2_e, na_position_bis, true);
                     if (test != 0) {
                         return false;
                     }
