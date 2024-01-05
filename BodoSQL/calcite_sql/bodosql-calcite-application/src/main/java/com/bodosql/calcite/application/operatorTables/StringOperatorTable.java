@@ -68,23 +68,15 @@ public final class StringOperatorTable implements SqlOperatorTable {
               .or(OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.CHARACTER)),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction MID =
-      SqlBasicFunction.create(
-          "MID",
-          // Match input precision. The substring is at most the same string.
-          ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What Input Types does the function accept. CHAR_INT_INT
-          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
-
-  public static final SqlFunction SUBSTR =
+  public static final SqlBasicFunction SUBSTR =
       SqlBasicFunction.create(
           "SUBSTR",
           ReturnTypes.ARG0_NULLABLE_VARYING,
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER)
               .or(OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.STRING);
+
+  public static final SqlFunction MID = SUBSTR.withName("MID");
 
   public static final SqlFunction INSTR =
       SqlBasicFunction.create(
@@ -185,9 +177,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
       SqlNullPolicyFunction.createAnyPolicy(
           "ORD",
           // What Value should the return type be
-          ReturnTypes.BIGINT_NULLABLE,
+          ReturnTypes.INTEGER_NULLABLE,
           // What Input Types does the function accept.
-          OperandTypes.STRING,
+          OperandTypes.CHARACTER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 

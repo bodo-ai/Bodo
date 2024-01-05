@@ -693,7 +693,7 @@ class BodoRexSimplify(
      */
     private fun isSnowflakeDateaddOp(e: RexNode): Boolean {
         if (e is RexCall) {
-            return e.operator.name in listOf(DatetimeOperatorTable.DATEADD.name, DatetimeOperatorTable.TIMEADD.name) && e.operands.size == 3
+            return e.operator.name == DatetimeOperatorTable.DATEADD.name && e.operands.size == 3
         }
         return false
     }

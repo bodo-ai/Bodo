@@ -349,7 +349,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "TIMEADD('mon', 6, T)",
-            'Unsupported unit for TIMEADD with TIME input: "mon"',
+            'Unsupported unit for DATEADD with TIME input: "mon"',
             id="timeadd-month",
             marks=pytest.mark.slow,
         ),
@@ -377,13 +377,13 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "TIMEDIFF('wy', T, T)",
-            'Unsupported unit for TIMEDIFF with TIME input: "wy"',
+            'Unsupported unit for DATEDIFF with TIME input: "wy"',
             id="timediff-week",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "TIMESTAMPDIFF(DAY, T, T)",
-            'Unsupported unit for TIMESTAMPDIFF with TIME input: "DAY"',
+            'Unsupported unit for DATEDIFF with TIME input: "DAY"',
             id="timestampdiff-day",
         ),
     ],
@@ -505,7 +505,7 @@ def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
-        match=f'Unsupported unit for {fn_name} with TIME input: "{day_part_strings}"',
+        match=f'Unsupported unit for DATEDIFF with TIME input: "{day_part_strings}"',
     ):
         check_query(
             query,
