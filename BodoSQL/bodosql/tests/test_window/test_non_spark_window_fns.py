@@ -330,7 +330,7 @@ def test_approx_percentile(memory_leak_check):
 
     pandas_code = check_query(
         query,
-        {"table1": df},
+        {"TABLE1": df},
         None,
         check_dtype=False,
         check_names=False,
