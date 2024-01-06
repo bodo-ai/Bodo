@@ -16,11 +16,15 @@
  */
 package org.apache.calcite.sql.validate.implicit;
 
+import org.apache.calcite.adapter.java.JavaTypeFactory;
+import org.apache.calcite.rel.type.DynamicRecordType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlInsert;
@@ -34,10 +38,12 @@ import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.SqlUtil;
 import org.apache.calcite.sql.SqlWith;
 import org.apache.calcite.sql.fun.SqlCase;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlOperandMetadata;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeMappingRule;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
@@ -53,6 +59,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
+import static org.apache.calcite.sql.type.BodoSqlTypeUtil.convertTypeToSpec;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getSelectList;
 
@@ -467,6 +474,113 @@ public class TypeCoercionImpl extends AbstractTypeCoercion {
       return coerced;
     }
     return false;
+  }
+
+  /**
+   * Extension of getWiderTypeForTwo to fix a bug in Array types.
+   */
+  @Override public @Nullable RelDataType getWiderTypeForTwo(
+          @Nullable RelDataType type1,
+          @Nullable RelDataType type2,
+          boolean stringPromotion) {
+    RelDataType resultType = super.getWiderTypeForTwo(type1, type2, stringPromotion);
+    if (resultType == null) {
+      return null;
+    }
+    // There is a bug in getWiderTypeForTwo where it just creates an array type
+    // without considering nullability
+    if (resultType.getSqlTypeName() == SqlTypeName.ARRAY && !resultType.isNullable()) {
+      if (type1.isNullable() || type2.isNullable()) {
+        resultType = factory.createTypeWithNullability(resultType, true);
+      }
+    }
+    return resultType;
+  }
+
+  /**
+   * Copy of AbstractTypeCoercion so we can modify
+   * the CastTo usage.
+   *
+   * Cast column at index {@code index} to target type.
+   *
+   * @param scope      Validator scope for the node list
+   * @param nodeList   Column node list
+   * @param index      Index of column
+   * @param targetType Target type to cast to
+   */
+  @Override
+  protected boolean coerceColumnType(
+          @Nullable SqlValidatorScope scope,
+          SqlNodeList nodeList,
+          int index,
+          RelDataType targetType) {
+    // Transform the JavaType to SQL type because the SqlDataTypeSpec
+    // does not support deriving JavaType yet.
+    if (RelDataTypeFactoryImpl.isJavaType(targetType)) {
+      targetType = ((JavaTypeFactory) factory).toSql(targetType);
+    }
+
+    // This will happen when there is a star/dynamic-star column in the select list,
+    // and the source is values expression, i.e. `select * from (values(1, 2, 3))`.
+    // There is no need to coerce the column type, only remark
+    // the inferred row type has changed, we will then add in type coercion
+    // when expanding star/dynamic-star.
+
+    // See SqlToRelConverter#convertSelectList for details.
+    if (index >= nodeList.size()) {
+      // Can only happen when there is a star(*) in the column,
+      // just return true.
+      return true;
+    }
+
+    final SqlNode node = nodeList.get(index);
+    if (node instanceof SqlDynamicParam) {
+      // Do not support implicit type coercion for dynamic param.
+      return false;
+    }
+    if (node instanceof SqlIdentifier) {
+      // Do not expand a star/dynamic table col.
+      SqlIdentifier node1 = (SqlIdentifier) node;
+      if (node1.isStar()) {
+        return true;
+      } else if (DynamicRecordType.isDynamicStarColName(Util.last(node1.names))) {
+        // Should support implicit cast for dynamic table.
+        return false;
+      }
+    }
+
+    requireNonNull(scope, "scope is needed for needToCast(scope, operand, targetType)");
+    if (node instanceof SqlCall) {
+      SqlCall node2 = (SqlCall) node;
+      if (node2.getOperator().kind == SqlKind.AS) {
+        final SqlNode operand = node2.operand(0);
+        if (!needToCast(scope, operand, targetType)) {
+          return false;
+        }
+        RelDataType targetType2 = syncAttributes(validator.deriveType(scope, operand), targetType);
+        final SqlNode casted = castTo(operand, targetType2);
+        node2.setOperand(0, casted);
+        updateInferredType(casted, targetType2);
+        return true;
+      }
+    }
+    if (!needToCast(scope, node, targetType)) {
+      return false;
+    }
+    RelDataType targetType3 = syncAttributes(validator.deriveType(scope, node), targetType);
+    final SqlNode node3 = castTo(node, targetType3);
+    nodeList.set(index, node3);
+    updateInferredType(node3, targetType3);
+    return true;
+  }
+
+  /**
+   * Replaced castTo from AbstractTypeCoercion to use our implementation
+   * of convertTypeToSpec.
+   */
+  private static SqlNode castTo(SqlNode node, RelDataType type) {
+    return SqlStdOperatorTable.CAST.createCall(SqlParserPos.ZERO, node,
+            convertTypeToSpec(type).withNullable(type.isNullable()));
   }
 
   /**

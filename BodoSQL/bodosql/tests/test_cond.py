@@ -446,8 +446,12 @@ def test_regr_valx_regr_valy(args, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
-                "X": [1.0, None, 3.0, 4.0, None, 6.0, 7.0, 8.0],
-                "Y": [1.0, 4.0, 9.0, 16.0, None, None, None, 64.0],
+                "X": pd.array(
+                    [1.0, None, 3.0, 4.0, None, 6.0, 7.0, 8.0], dtype="Float64"
+                ),
+                "Y": pd.array(
+                    [1.0, 4.0, 9.0, 16.0, None, None, None, 64.0], dtype="Float64"
+                ),
             }
         )
     }

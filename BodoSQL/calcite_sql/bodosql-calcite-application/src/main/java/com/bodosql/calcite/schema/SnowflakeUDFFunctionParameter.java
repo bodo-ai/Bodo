@@ -1,12 +1,9 @@
 package com.bodosql.calcite.schema;
 
-import com.bodosql.calcite.catalog.SnowflakeCatalog;
-import com.bodosql.calcite.table.BodoSQLColumn;
-import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.FunctionParameter;
-import org.apache.calcite.sql.type.BodoTZInfo;
 
 public class SnowflakeUDFFunctionParameter implements FunctionParameter {
 
@@ -14,10 +11,10 @@ public class SnowflakeUDFFunctionParameter implements FunctionParameter {
   private final int ord;
 
   private final boolean isOptional;
-  private final SnowflakeCatalog.SnowflakeTypeInfo typeInfo;
+  private final ColumnDataTypeInfo typeInfo;
 
   public SnowflakeUDFFunctionParameter(
-      String name, int ord, SnowflakeCatalog.SnowflakeTypeInfo typeInfo, boolean isOptional) {
+      String name, int ord, ColumnDataTypeInfo typeInfo, boolean isOptional) {
     this.name = name;
     this.ord = ord;
     this.typeInfo = typeInfo;
@@ -52,16 +49,7 @@ public class SnowflakeUDFFunctionParameter implements FunctionParameter {
    */
   @Override
   public RelDataType getType(RelDataTypeFactory typeFactory) {
-    // Assume nullable for now.
-    final boolean nullable = true;
-    final BodoTZInfo tzInfo = BodoTZInfo.getDefaultTZInfo(typeFactory.getTypeSystem());
-    // Make a dummy BodoSQLColumn for now.
-    BodoSQLColumn.BodoSQLColumnDataType type = typeInfo.columnDataType;
-    BodoSQLColumn.BodoSQLColumnDataType elemType = typeInfo.elemType;
-    int precision = typeInfo.precision;
-    BodoSQLColumn column =
-        new BodoSQLColumnImpl("", "", type, elemType, nullable, tzInfo, precision);
-    return column.convertToSqlType(typeFactory, nullable, tzInfo, precision);
+    return typeInfo.convertToSqlType(typeFactory);
   }
 
   /** Bodo requires every argument to be required for now. */

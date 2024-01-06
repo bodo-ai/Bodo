@@ -9,6 +9,7 @@ import com.bodosql.calcite.schema.LocalSchema;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.io.PrintWriter;
@@ -62,11 +63,12 @@ public class SnowflakeGenTest {
     // Add a local table to also resolve
     ArrayList arr = new ArrayList();
     BodoSQLColumn.BodoSQLColumnDataType dataType = BodoSQLColumn.BodoSQLColumnDataType.INT64;
-    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
+    ColumnDataTypeInfo dataTypeInfo = new ColumnDataTypeInfo(dataType, true);
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataTypeInfo);
     arr.add(column);
-    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataTypeInfo);
     arr.add(column2);
-    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataTypeInfo);
     arr.add(column3);
 
     BodoSqlTable table =

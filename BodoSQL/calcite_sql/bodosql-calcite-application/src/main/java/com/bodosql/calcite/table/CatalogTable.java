@@ -1,5 +1,7 @@
 package com.bodosql.calcite.table;
 
+import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
+
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
@@ -12,8 +14,6 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
-import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -193,11 +193,8 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
       RelDataTypeField curField = extensionFields.get(0);
       String fieldName = curField.getName();
       RelDataType colType = curField.getType();
-      BodoSQLColumn.BodoSQLColumnDataType newColType =
-          BodoSQLColumn.BodoSQLColumnDataType.fromSqlType(colType);
-      // getTZInfo() returns null if the type is not TZAware Timestamp
-      BodoTZInfo tzInfo = TZAwareSqlType.getTZInfo(colType);
-      BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
+      ColumnDataTypeInfo newColType = fromSqlType(colType);
+      BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType);
       extendedColumns.add(newCol);
     }
     return new CatalogTable(name, getParentFullPath(), extendedColumns, this.catalog);

@@ -6,6 +6,7 @@ import com.bodosql.calcite.schema.LocalSchema;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
@@ -24,11 +25,13 @@ public class PandasGenTest {
     ArrayList arr = new ArrayList();
     BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
-    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
+    ColumnDataTypeInfo dataTypeInfo = new ColumnDataTypeInfo(dataType, true);
+    ColumnDataTypeInfo paramTypeInfo = new ColumnDataTypeInfo(paramType, true);
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataTypeInfo);
     arr.add(column);
-    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataTypeInfo);
     arr.add(column2);
-    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataTypeInfo);
     arr.add(column3);
 
     BodoSqlTable table =
@@ -46,9 +49,9 @@ public class PandasGenTest {
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(column);
-    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType, true);
+    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataTypeInfo);
     arr.add(column4);
-    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType, true);
+    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataTypeInfo);
     arr.add(column5);
 
     BodoSqlTable table2 =
@@ -81,9 +84,9 @@ public class PandasGenTest {
     String paramTableName = "PARAMTABLE";
     arr = new ArrayList();
     arr.add(column);
-    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType, true);
+    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramTypeInfo);
     arr.add(param1);
-    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
+    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramTypeInfo);
     arr.add(param2);
     BodoSqlTable paramTable =
         new LocalTable(

@@ -15,14 +15,15 @@ from numba.core import ir, types
 import bodo
 from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
 from bodo.libs.distributed_api import bcast_scalar
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, dtype_to_array_type
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     ArrayListClass,
     BodoTZInfoClass,
     ColumnClass,
-    ColumnTypeClass,
+    ColumnDataEnumClass,
+    ColumnDataTypeClass,
     LocalSchemaClass,
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
@@ -122,54 +123,48 @@ class _PlannerType(IntEnum):
     Streaming = 1
 
 
-def construct_tz_aware_column_type(typ, col_name, nullable):
-    """Construct a BodoSQL column type for a tz-aware
-    value.
+def construct_tz_aware_array_type(typ, nullable):
+    """Construct a BodoSQL data type for a tz-aware timestamp array
 
     Args:
         typ (types.Type): A tz-aware Bodo type
-        col_name (str): Column name
         nullable (bool): Is the column Nullable
 
     Returns:
-        JavaObject: The Java Object for the BodoSQL column type.
+        JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    # Create the BodoTzInfo Java object.
-    tz_info = BodoTZInfoClass(str(typ.tz), "int" if isinstance(typ.tz, int) else "str")
-    return ColumnClass(
-        col_name,
-        ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value),
-        nullable,
-        tz_info,
-    )
+    # Timestamps only support precision 9 right now.
+    precision = 9
+    if typ.tz is None:
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Datetime.value)
+        return ColumnDataTypeClass(type_enum, nullable, precision)
+    else:
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
+        # Create the BodoTzInfo Java object.
+        tz_info = BodoTZInfoClass(
+            str(typ.tz), "int" if isinstance(typ.tz, int) else "str"
+        )
+        return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
 
 
-def construct_time_column_type(
-    typ: Union[bodo.TimeArrayType, bodo.TimeType], col_name: str, nullable: bool
+def construct_time_array_type(
+    typ: Union[bodo.TimeArrayType, bodo.TimeType], nullable: bool
 ):
-    """Construct a BodoSQL column type for a time
-    value.
+    """Construct a BodoSQL data type for a time array.
 
     Args:
         typ (Union[bodo.TimeArrayType, bodo.TimeType]): A time Bodo type
-        col_name (str): Column name
         nullable (bool): Is the column Nullable
 
     Returns:
-        JavaObject: The Java Object for the BodoSQL column type.
+        JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    # Create the BodoTzInfo Java object.
-    precision = typ.precision
-    return ColumnClass(
-        col_name,
-        ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value),
-        nullable,
-        precision,
-    )
+    type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Time.value)
+    return ColumnDataTypeClass(type_enum, nullable, typ.precision)
 
 
-def construct_array_column_type(arr_type, col_name):
-    """Construct a BodoSQL column type for an array
+def construct_array_item_array_type(arr_type):
+    """Construct a BodoSQL data type for an array item array
     value.
 
     Args:
@@ -177,113 +172,89 @@ def construct_array_column_type(arr_type, col_name):
         col_name (str): Column name
 
     Returns:
-        JavaObject: The Java Object for the BodoSQL column type.
+        JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
-    dtype = arr_type.dtype
-    warning_msg = f"ARRAY column '{col_name}' with type {dtype} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    nullable = bodo.utils.typing.is_nullable_type(dtype)
-    tz_info = None
-    precision = -1
-    if isinstance(dtype, bodo.DatetimeArrayType):
-        tz_info = BodoTZInfoClass(
-            str(dtype.tz), "int" if isinstance(dtype.tz, int) else "str"
-        )
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
-    elif isinstance(dtype, bodo.TimeArrayType):
-        precision = dtype.precision
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value)
-    elif isinstance(dtype, bodo.ArrayItemArrayType):
-        # TODO: Support nested array element type
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
-    elif dtype.dtype in _numba_to_sql_column_type_map:
-        elem_dtype = ColumnTypeClass.fromTypeId(
-            _numba_to_sql_column_type_map[dtype.dtype]
-        )
-    else:
-        # The type is unsupported we raise a warning indicating this is a possible
-        # error but we generate a dummy type because we may be able to support it
-        # if its optimized out.
-        warnings.warn(warning_msg)
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
-    return ColumnClass(col_name, col_dtype, elem_dtype, nullable, tz_info, precision)
+    child = get_sql_data_type(arr_type.dtype)
+    type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Array.value)
+    return ColumnDataTypeClass(type_enum, True, child)
 
 
-def construct_json_column_type(arr_type, col_name):
-    """Construct a BodoSQL column type for a JSON column
+def construct_json_array_type(arr_type):
+    """Construct a BodoSQL data type for a JSON array
     value.
 
     Args:
-        typ (bodo.StructArrayType): A StructArray type
+        typ (bodo.StructArrayType or bodo.MapArrayType): A StructArray or MapArray type
         col_name (str): Column name
 
     Returns:
-        JavaObject: The Java Object for the BodoSQL column type.
+        JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Json_Object.value)
-    elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Variant.value)
-    nullable = True
-    tz_info = None
-    precision = -1
-    return ColumnClass(col_name, col_dtype, elem_dtype, nullable, tz_info, precision)
+    if isinstance(arr_type, bodo.StructArrayType):
+        # TODO: FIXME. We don't support full structs of types yet.
+        # As a placeholder we will just match Snowflake.
+        key_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.String.value)
+        key = ColumnDataTypeClass(key_enum, True)
+        value_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Variant.value)
+        value = ColumnDataTypeClass(value_enum, True)
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Json_Object.value)
+        return ColumnDataTypeClass(type_enum, True, key, value)
+    else:
+        # TODO: Add map scalar support
+        key = get_sql_data_type(arr_type.key_arr_type)
+        value = get_sql_data_type(arr_type.value_arr_type)
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Json_Object.value)
+        return ColumnDataTypeClass(type_enum, True, key, value)
 
 
 def get_sql_column_type(arr_type, col_name):
+    data_type = get_sql_data_type(arr_type)
+    return ColumnClass(col_name, data_type)
+
+
+def get_sql_data_type(arr_type):
     """get SQL type for a given array type."""
-    warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    # We currently treat NaN and NaT as nullable in BodoSQL, so for any array that has timestamp/float elements
+    warning_msg = f"Encountered type {arr_type} which is not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    # We currently treat NaT as nullable in BodoSQL, so for any array that has timestamp elements
     # type, we treat it as nullable.
     dtype_has_nullable = arr_type.dtype in (
-        types.float64,
-        types.float32,
         bodo.datetime64ns,
         bodo.timedelta64ns,
     )
     nullable = dtype_has_nullable or bodo.utils.typing.is_nullable_type(arr_type)
     if isinstance(arr_type, bodo.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
-        return construct_tz_aware_column_type(arr_type, col_name, nullable)
+        return construct_tz_aware_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
-        return construct_time_column_type(arr_type, col_name, nullable)
+        return construct_time_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.DecimalArrayType):
         # For now, treat Decimal like float64 in BodoSQL planning
         warnings.warn(
-            f"Column '{col_name}' with type {arr_type} is not properly supported from a Python + Pandas Dataframe. BodoSQL will implicitly treat this column as a float64, which may lead to unexpected conversion errors. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+            f"Type {arr_type} is not properly supported from a Python + Pandas DataFrame. BodoSQL will implicitly treat this column as a float64, which may lead to unexpected conversion errors. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
         )
-        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Float64.value)
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Float64.value)
+        return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
-        # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
-        return construct_array_column_type(arr_type, col_name)
+        return construct_array_item_array_type(arr_type)
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
-        # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
-        return construct_json_column_type(arr_type, col_name)
+        return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
-        col_dtype = ColumnTypeClass.fromTypeId(
+        type_enum = ColumnDataEnumClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
+        return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
-        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Categorical.value)
-        elem = arr_type.dtype.elem_type
-        if elem in _numba_to_sql_column_type_map:
-            elem_dtype = ColumnTypeClass.fromTypeId(_numba_to_sql_column_type_map[elem])
-        else:
-            # The type is unsupported we raise a warning indicating this is a possible
-            # error but we generate a dummy type because we may be able to support it
-            # if its optimized out.
-            warnings.warn(BodoSQLWarning(warning_msg))
-            col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
-            elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Categorical.value)
+        child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
+        return ColumnDataTypeClass(type_enum, nullable, child)
     else:
         # The type is unsupported we raise a warning indicating this is a possible
         # error but we generate a dummy type because we may be able to support it
         # if its optimized out.
         warnings.warn(BodoSQLWarning(warning_msg))
-        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
-    return ColumnClass(col_name, col_dtype, elem_dtype, nullable)
+        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+        return ColumnDataTypeClass(type_enum, nullable)
 
 
 def get_sql_param_type(param_type, param_name):
@@ -301,23 +272,23 @@ def get_sql_param_type(param_type, param_name):
     ):
         # Timezone-aware Timestamps have their own special handling.
         return (
-            construct_tz_aware_column_type(param_type, param_name, nullable),
+            ColumnClass(
+                param_name, construct_tz_aware_array_type(param_type, nullable)
+            ),
             is_literal,
         )
     elif isinstance(unliteral_type, bodo.TimeType):
         # Time array types have their own special handling for precision
-        return construct_time_column_type(param_type, param_name, nullable), is_literal
-    elif unliteral_type in _numba_to_sql_param_type_map:
         return (
-            ColumnClass(
-                param_name,
-                ColumnTypeClass.fromTypeId(
-                    _numba_to_sql_param_type_map[unliteral_type]
-                ),
-                nullable,
-            ),
+            ColumnClass(param_name, construct_time_array_type(param_type, nullable)),
             is_literal,
         )
+    elif unliteral_type in _numba_to_sql_param_type_map:
+        type_enum = ColumnDataEnumClass.fromTypeId(
+            _numba_to_sql_param_type_map[unliteral_type]
+        )
+        data_type = ColumnDataTypeClass(type_enum, nullable)
+        return ColumnClass(param_name, data_type), is_literal
     raise TypeError(
         f"Scalar value: '{param_name}' with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     )
@@ -325,7 +296,7 @@ def get_sql_param_type(param_type, param_name):
 
 def compute_df_types(df_list, is_bodo_type):
     """Given a list of Bodo types or Python objects,
-    determines the dataframe type for each object. This
+    determines the DataFrame type for each object. This
     is used by both Python and JIT, where Python converts to
     Bodo types via the is_bodo_type argument. This function
     converts any TablePathType to the actual DataFrame type,
@@ -599,7 +570,7 @@ def _generate_table_read(
 
 
 def add_param_table(table_name, schema, param_keys, param_values):
-    """get SQL Table type in Java for Numba dataframe type"""
+    """get SQL Table type in Java for Numba DataFrame type"""
     assert bodo.get_rank() == 0, "add_param_table should only be called on rank 0."
     param_arr = ArrayListClass()
     literal_params = []

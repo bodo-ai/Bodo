@@ -18,10 +18,11 @@ gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
-        ColumnTypeClass = (
+        ColumnDataEnumClass = (
             gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
         )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
+        ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
         LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
         RelationalAlgebraGeneratorClass = (
@@ -41,8 +42,9 @@ if bodo.get_rank() == 0:
         msg = str(e)
 else:
     ArrayListClass = None
-    ColumnTypeClass = None
+    ColumnDataEnumClass = None
     ColumnClass = None
+    ColumnDataTypeClass = None
     LocalTableClass = None
     LocalSchemaClass = None
     RelationalAlgebraGeneratorClass = None

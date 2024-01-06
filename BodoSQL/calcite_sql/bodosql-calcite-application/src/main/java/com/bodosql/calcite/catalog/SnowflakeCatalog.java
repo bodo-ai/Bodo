@@ -21,6 +21,7 @@ import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.io.UnsupportedEncodingException;
@@ -435,20 +436,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // https://docs.snowflake.com/en/sql-reference/sql/desc-table#examples
         // TODO: Can we leverage primary key and unique key? Snowflake
         // states they don't enforce them.
-        // TODO: Can we leverage additional type information (e.g. max string size).
         String writeName = tableInfo.getString(1);
         String readName = writeName;
         String dataType = tableInfo.getString(2);
-        // Parse the given type for the column type and precision information.
-        SnowflakeTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType);
-        BodoSQLColumnDataType type = typeInfo.columnDataType;
-        BodoSQLColumnDataType elemType = typeInfo.elemType;
-        int precision = typeInfo.precision;
         // The column is nullable unless we are certain it has no nulls.
-        boolean nullable = snowflakeYesNoToBoolean(tableInfo.getString(4));
-        columns.add(
-            new BodoSQLColumnImpl(
-                readName, writeName, type, elemType, nullable, tzInfo, precision));
+        boolean isNullable = snowflakeYesNoToBoolean(tableInfo.getString(4));
+        // Parse the given type for the column type and precision information.
+        ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType, isNullable, tzInfo);
+        columns.add(new BodoSQLColumnImpl(readName, writeName, typeInfo));
       }
       return new SnowflakeCatalogTable(
           tableName, ImmutableList.of(databaseName, schemaName), columns, this);
@@ -468,28 +463,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
   }
 
-  public static class SnowflakeTypeInfo {
-    public final BodoSQLColumnDataType columnDataType;
-    public final BodoSQLColumnDataType elemType;
-    public final int precision;
-
-    SnowflakeTypeInfo(BodoSQLColumnDataType dtype, BodoSQLColumnDataType etype, int prec) {
-      columnDataType = dtype;
-      elemType = etype;
-      precision = prec;
-    }
-  }
-
   /**
    * Parse the BodoSQL column data type obtained from a type returned by a "DESCRIBE TABLE" call.
    * This is done to obtain information about types that cannot be communicated via JDBC APIs.
    *
    * @param typeName The type name string returned for a column by Snowflake's describe table query.
-   * @return A dataclass of the BodoSQLColumnDataType of the column itself, the elem type if it is
-   *     an ARRAY containing nested data and precision for the type in question. If the type is not
-   *     Time then the precision value is garbage and its value is ignored.
+   * @param isNullable Is the element nullable?v
+   * @return A dataclass of the BodoSQLColumnDataType of the column itself, with support for nested
+   *     data.
    */
-  public static SnowflakeTypeInfo snowflakeTypeNameToTypeInfo(String typeName) {
+  public static ColumnDataTypeInfo snowflakeTypeNameToTypeInfo(
+      String typeName, boolean isNullable, BodoTZInfo tzInfo) {
     // Convert the type to all caps to simplify checking.
     typeName = typeName.toUpperCase(Locale.ROOT);
     final BodoSQLColumnDataType columnDataType;
@@ -530,12 +514,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnDataType = BodoSQLColumnDataType.INT64;
         }
       }
+      // Note: We don't use the precision/scale yet, but we should when we add decimal support.
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision, scale);
     } else if (typeName.equals("BOOLEAN")) {
       columnDataType = BodoSQLColumnDataType.BOOL8;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     } else if (typeName.equals("TEXT") || typeName.equals("STRING")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // TEXT/STRING using no defined limit.
       precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("VARCHAR") || typeName.startsWith("CHAR")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // Load max string information if it exists
@@ -546,21 +534,19 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         if (typeFields.length > 1) {
           // The precision is passed as VARCHAR(N)/CHAR(N)
           precision = Integer.valueOf(typeFields[1].trim());
-          // If precision is the Snowflake max, convert it back to -1 to avoid
-          // max character issues.
-          if (precision == 16777216) {
-            precision = RelDataType.PRECISION_NOT_SPECIFIED;
-          }
         }
       }
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.equals("DATE")) {
       columnDataType = BodoSQLColumnDataType.DATE;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     } else if (typeName.startsWith("DATETIME")) {
       // TODO(njriasan): can DATETIME contain precision?
       // Most likely Snowflake should never return this type as
       // its a user alias
       columnDataType = BodoSQLColumnDataType.DATETIME;
       precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("TIMESTAMP_NTZ")) {
       columnDataType = BodoSQLColumnDataType.DATETIME;
       // Snowflake table types should contain precision, but UDFs may not.
@@ -571,6 +557,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
       // TODO(njriasan): Remove TIMESTAMP_TZ
       columnDataType = BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP;
@@ -582,6 +569,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision, tzInfo);
     } else if (typeName.startsWith("TIME")) {
       columnDataType = BodoSQLColumnDataType.TIME;
       // Snowflake table types should contain precision, but UDFs may not.
@@ -592,20 +580,34 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("BINARY") || typeName.startsWith("VARBINARY")) {
       columnDataType = BodoSQLColumnDataType.BINARY;
+      precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      // Snowflake columns should contain precision, but UDFs may not.
+      if (typeName.contains("(")) {
+        String[] typeFields = typeName.split("\\(|\\)");
+        if (typeFields.length > 1) {
+          // The precision is passed as VARCHAR(N)/CHAR(N)
+          precision = Integer.valueOf(typeFields[1].trim());
+        }
+      }
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.equals("VARIANT")) {
       columnDataType = BodoSQLColumnDataType.VARIANT;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     } else if (typeName.equals("OBJECT")) {
       // TODO: Replace with a map type if possible.
       columnDataType = BodoSQLColumnDataType.JSON_OBJECT;
+      // Assume keys and values are always nullable
+      ColumnDataTypeInfo key = new ColumnDataTypeInfo(BodoSQLColumnDataType.STRING, true);
+      ColumnDataTypeInfo value = new ColumnDataTypeInfo(BodoSQLColumnDataType.VARIANT, true);
+      return new ColumnDataTypeInfo(columnDataType, isNullable, key, value);
     } else if (typeName.startsWith("ARRAY")) {
-      // TODO: Replace with the true inner dtype rather than defaulting to variant
       columnDataType = BodoSQLColumnDataType.ARRAY;
-      elemType = BodoSQLColumnDataType.VARIANT;
-    } else if (typeName.startsWith("TIMESTAMP")) {
-      // TODO: Leverage the snowflake session parameter.
-      columnDataType = BodoSQLColumnDataType.DATETIME;
+      // Assume inner elements are always nullable
+      ColumnDataTypeInfo child = new ColumnDataTypeInfo(BodoSQLColumnDataType.VARIANT, true);
+      return new ColumnDataTypeInfo(columnDataType, isNullable, child);
     } else if (typeName.startsWith("FLOAT")
         || typeName.startsWith("DOUBLE")
         || typeName.equals("REAL")
@@ -613,21 +615,22 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         || typeName.equals("NUMERIC")) {
       // A snowflake bug outputs float for double and float, so we match double
       columnDataType = BodoSQLColumnDataType.FLOAT64;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     } else if (typeName.startsWith("INT")
         || typeName.equals("BIGINT")
         || typeName.equals("SMALLINT")
         || typeName.equals("TINYINT")
         || typeName.equals("BYTEINT")) {
-      // Snowflake treats these all internally as suggestions so we must use INT64
+      // Snowflake treats these all internally as suggestions, so we must use INT64
       columnDataType = BodoSQLColumnDataType.INT64;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     } else {
       // Unsupported types (e.g. GEOGRAPHY and GEOMETRY) may be in the table but
       // unused,
       // so we don't fail here.
       columnDataType = BodoSQLColumnDataType.UNSUPPORTED;
+      return new ColumnDataTypeInfo(columnDataType, isNullable);
     }
-    SnowflakeTypeInfo typeInfo = new SnowflakeTypeInfo(columnDataType, elemType, precision);
-    return typeInfo;
   }
 
   /**
@@ -896,6 +899,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               databaseName,
               schemaName);
       ResultSet results = executeSnowflakeQuery(query, 5);
+      BodoTZInfo tzInfo = getDefaultTimezone();
       while (results.next()) {
         // See the return values here:
         // https://docs.snowflake.com/en/sql-reference/sql/show-functions
@@ -933,7 +937,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                 isSecure,
                 isExternal,
                 language,
-                isMemoizable);
+                isMemoizable,
+                tzInfo);
         functions.add(function);
       }
     } catch (SQLException e) {

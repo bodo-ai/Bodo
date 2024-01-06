@@ -696,17 +696,16 @@ def bodosql_nullable_numeric_types(request):
             id="Integer",
         ),
         pytest.param(
-            # TODO: Update float to nullable float
             pd.DataFrame(
                 {
                     "A": pd.Series(
-                        [1.312, 2.1, np.nan, 10000.0, np.nan] * 3, dtype="float64"
+                        [1.312, 2.1, np.nan, 10000.0, np.nan] * 3, dtype="Float64"
                     ),
                     "B": pd.Series(
-                        [-432.41, np.nan, np.nan, np.nan, 52.3] * 3, dtype="float64"
+                        [-432.41, np.nan, np.nan, np.nan, 52.3] * 3, dtype="Float64"
                     ),
                     "C": pd.Series(
-                        [np.nan, np.nan, np.nan, -234325.0, 0.0] * 3, dtype="float64"
+                        [np.nan, np.nan, np.nan, -234325.0, 0.0] * 3, dtype="Float64"
                     ),
                 }
             ),

@@ -1,10 +1,8 @@
 package org.apache.calcite.sql;
 
-import com.bodosql.calcite.catalog.SnowflakeCatalog;
 import com.bodosql.calcite.schema.SnowflakeUDFFunctionParameter;
 import com.bodosql.calcite.sql.BodoSqlUtil;
-import com.bodosql.calcite.table.BodoSQLColumn;
-import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -33,7 +31,7 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
     // Full function path, including the name.
     public final ImmutableList<String> functionPath;
 
-    private final SnowflakeCatalog.SnowflakeTypeInfo returnTypeInfo;
+    private final ColumnDataTypeInfo returnTypeInfo;
 
     private final List<FunctionParameter> parameters;
 
@@ -60,17 +58,18 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
      */
-    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
         this.functionPath = functionPath;
-        this.parameters = parseParameters(args, numOptional);
-        this.returnTypeInfo = snowflakeTypeNameToTypeInfo(returns);
+        this.parameters = parseParameters(args, numOptional, tzInfo);
+        // Assume nullable for now
+        this.returnTypeInfo = snowflakeTypeNameToTypeInfo(returns, true, tzInfo);
         this.body = body;
         this.errorInfo = new SnowflakeUserDefinedFunctionErrorInfo(isTableFunction, isSecure, isExternal, language, isMemoizable);
     }
 
     // -- static creators
-    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
-        return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isTableFunction, isSecure, isExternal, language, isMemoizable);
+    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isTableFunction, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
+        return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isTableFunction, isSecure, isExternal, language, isMemoizable, tzInfo);
     }
 
     /**
@@ -81,15 +80,7 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      */
     @Override
     public RelDataType getReturnType(RelDataTypeFactory typeFactory) {
-        // Assume nullable for now.
-        final boolean nullable = true;
-        final BodoTZInfo tzInfo = BodoTZInfo.getDefaultTZInfo(typeFactory.getTypeSystem());
-        // Make a dummy BodoSQLColumn for now.
-        BodoSQLColumn.BodoSQLColumnDataType type = returnTypeInfo.columnDataType;
-        BodoSQLColumn.BodoSQLColumnDataType elemType = returnTypeInfo.elemType;
-        int precision = returnTypeInfo.precision;
-        BodoSQLColumn column = new BodoSQLColumnImpl("", "", type, elemType, nullable, tzInfo, precision);
-        return column.convertToSqlType(typeFactory, nullable, tzInfo, precision);
+        return returnTypeInfo.convertToSqlType(typeFactory);
     }
 
     /**
@@ -108,7 +99,7 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
      * @param args The arguments that are of the form:
      *             (name1 arg1, name2, arg2, ... nameN argN)
      */
-    private List<FunctionParameter> parseParameters(String args, int numOptional) {
+    private List<FunctionParameter> parseParameters(String args, int numOptional, BodoTZInfo tzInfo) {
         List<FunctionParameter> parameters = new ArrayList<>();
         // Remove the starting ( and trailing )
         String trimmedArgs = args.substring(1, args.length() - 1).trim();
@@ -120,7 +111,8 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
                 String[] typeParts = input.split(" ");
                 String argName = typeParts[0];
                 String type = typeParts[1];
-                SnowflakeCatalog.SnowflakeTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(type);
+                // Assume nullable for now
+                ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(type, true, tzInfo);
                 parameters.add(new SnowflakeUDFFunctionParameter(argName, i, typeInfo, i >= startOptionalIdx));
             }
         }
