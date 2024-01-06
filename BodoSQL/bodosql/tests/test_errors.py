@@ -148,7 +148,7 @@ def test_unsupported_decimal(memory_leak_check):
     if bodo.get_rank() == 0:
         with pytest.warns(
             UserWarning,
-            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas Dataframe. BodoSQL will implicitly treat this column as a float64",
+            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas DataFrame. BodoSQL will implicitly treat this column as a float64",
         ):
             impl(df)
     else:
@@ -171,7 +171,7 @@ def test_unsupported_decimal_jit(memory_leak_check):
     if bodo.get_rank() == 0:
         with pytest.warns(
             UserWarning,
-            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas Dataframe. BodoSQL will implicitly treat this column as a float64",
+            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas DataFrame. BodoSQL will implicitly treat this column as a float64",
         ):
             impl(df)
     else:

@@ -36,8 +36,10 @@ pytestmark = pytest_slow_unless_codegen
             {
                 "TABLE1": pd.DataFrame(
                     {
-                        "A": pd.Series([42.0] * 3 + [0.0] * 3 + [None] * 3),
-                        "B": pd.Series([-13.1, 0.0, None] * 3),
+                        "A": pd.Series(
+                            [42.0] * 3 + [0.0] * 3 + [None] * 3, dtype="Float64"
+                        ),
+                        "B": pd.Series([-13.1, 0.0, None] * 3, dtype="Float64"),
                     }
                 )
             },

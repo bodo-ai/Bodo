@@ -3,6 +3,7 @@ package com.bodosql.calcite.table;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.sql.JDBCType;
+import java.util.List;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -23,16 +24,8 @@ public interface BodoSQLColumn {
   /** Name to use for the column when writing to the original DB. * */
   String getWriteColumnName();
 
-  BodoSQLColumnDataType getColumnDataType();
-
-  boolean isNullable();
-
-  BodoTZInfo getTZInfo();
-
-  int getPrecision();
-
-  RelDataType convertToSqlType(
-      RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision);
+  /** Data Type Information. * */
+  ColumnDataTypeInfo getDataTypeInfo();
 
   /**
    * Does reading this column type need to be cast to another Bodo type to match the generated Java
@@ -150,69 +143,13 @@ public interface BodoSQLColumn {
       }
     }
 
-    // TODO: support ARRAY, JSON and VARIANT so that CatalogTable and LocalTable will work
-    public static BodoSQLColumnDataType fromSqlType(RelDataType relDataType) {
-      SqlTypeName typeName = relDataType.getSqlTypeName();
-      BodoSQLColumnDataType outType;
-      switch (typeName) {
-        case TINYINT:
-          outType = BodoSQLColumnDataType.INT8;
-          break;
-        case SMALLINT:
-          outType = BodoSQLColumnDataType.INT16;
-          break;
-        case INTEGER:
-          outType = BodoSQLColumnDataType.INT32;
-          break;
-        case BIGINT:
-          outType = BodoSQLColumnDataType.INT64;
-          break;
-        case FLOAT:
-          outType = BodoSQLColumnDataType.FLOAT32;
-          break;
-        case REAL:
-        case DOUBLE:
-        case DECIMAL:
-          outType = BodoSQLColumnDataType.FLOAT64;
-          break;
-        case DATE:
-          outType = BodoSQLColumnDataType.DATE;
-          break;
-        case CHAR:
-        case VARCHAR:
-          outType = BodoSQLColumnDataType.STRING;
-          break;
-        case TIMESTAMP:
-          outType = BodoSQLColumnDataType.DATETIME;
-          break;
-        case BOOLEAN:
-          outType = BodoSQLColumnDataType.BOOL8;
-          break;
-        case INTERVAL_DAY_HOUR:
-        case INTERVAL_DAY_MINUTE:
-        case INTERVAL_DAY_SECOND:
-        case INTERVAL_HOUR_MINUTE:
-        case INTERVAL_HOUR_SECOND:
-        case INTERVAL_MINUTE_SECOND:
-        case INTERVAL_HOUR:
-        case INTERVAL_MINUTE:
-        case INTERVAL_SECOND:
-        case INTERVAL_DAY:
-        case INTERVAL_YEAR:
-        case INTERVAL_MONTH:
-        case INTERVAL_YEAR_MONTH:
-          outType = BodoSQLColumnDataType.TIMEDELTA;
-          break;
-        default:
-          throw new RuntimeException(
-              "Internal Error: Calcite Plan Produced an Unsupported relDataType"
-                  + "for table extension Type");
-      }
-      return outType;
-    }
-
     public RelDataType convertToSqlType(
-        RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision) {
+        RelDataTypeFactory typeFactory,
+        boolean nullable,
+        BodoTZInfo tzInfo,
+        int precision,
+        int scale,
+        List<RelDataType> children) {
       RelDataType temp;
       switch (this) {
         case INT8:
@@ -273,21 +210,16 @@ public interface BodoSQLColumn {
           temp = BodoRelDataTypeFactory.createVariantSqlType(typeFactory);
           break;
         case JSON_OBJECT:
-          temp =
-              typeFactory.createMapType(
-                  typeFactory.createSqlType(SqlTypeName.VARCHAR),
-                  BodoRelDataTypeFactory.createVariantSqlType(typeFactory));
+          temp = typeFactory.createMapType(children.get(0), children.get(1));
           break;
         case ARRAY:
-          temp =
-              typeFactory.createArrayType(
-                  BodoRelDataTypeFactory.createVariantSqlType(typeFactory), -1);
+          temp = typeFactory.createArrayType(children.get(0), -1);
           break;
         case STRING:
           temp = typeFactory.createSqlType(SqlTypeName.VARCHAR, precision);
           break;
         case BINARY:
-          temp = typeFactory.createSqlType(SqlTypeName.VARBINARY);
+          temp = typeFactory.createSqlType(SqlTypeName.VARBINARY, precision);
           break;
         default:
           // If a type is not supported default to unknown
