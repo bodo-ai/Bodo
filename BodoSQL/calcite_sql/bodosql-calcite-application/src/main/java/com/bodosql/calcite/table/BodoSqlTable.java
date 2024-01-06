@@ -101,10 +101,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   public RelDataType getRowType(RelDataTypeFactory rdtf) {
     RelDataTypeFactory.Builder builder = rdtf.builder();
     for (BodoSQLColumn column : columns) {
-      builder.add(
-          column.getColumnName(),
-          column.convertToSqlType(
-              rdtf, column.isNullable(), column.getTZInfo(), column.getPrecision()));
+      builder.add(column.getColumnName(), column.getDataTypeInfo().convertToSqlType(rdtf));
     }
     return builder.build();
   }
