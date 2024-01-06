@@ -52,12 +52,12 @@ public class BodoOperandTypes {
   }
 
   public static SqlOperandTypeChecker TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TO_NUMBER",
-          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER).or(BodoOperandTypes.VARIANT), "NUMERIC or CHAR"),
+          List.of(Pair.of(OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC).or(OperandTypes.CHARACTER).or(BodoOperandTypes.VARIANT), "BOOLEAN, NUMERIC, CHAR, or VARIANT"),
           Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
           Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
 
   public static SqlOperandTypeChecker TRY_TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TRY_TO_NUMBER",
-          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER), "NUMERIC or CHAR"),
+          List.of(Pair.of(OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC).or(OperandTypes.CHARACTER), "BOOLEAN, NUMERIC, CHAR, or VARIANT"),
                   Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
                   Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
 
