@@ -665,6 +665,13 @@ def test_option_to_char(flag0, flag1, memory_leak_check):
             pd.Series([1.3, 2.5, 3.2, None, 5.7, 6.0, 7.1, None, 9.7, 10.9]),
             id="float_with_nulls_all_valid_with_scale",
         ),
+        pytest.param(
+            pd.Series([True, False, None, False, True], dtype="boolean"),
+            38,
+            0,
+            pd.Series([1, 0, None, 0, 1], dtype="Int64"),
+            id="boolean_with_nulls",
+        ),
     ],
 )
 def test_to_number(arr, prec, scale, answer):
