@@ -1218,6 +1218,30 @@ def test_array_transpose(nrows, ncols, memory_leak_check):
     check_func(impl, (A,), convert_to_nullable_float=False)
 
 
+@pytest.mark.skip(reason="TODO[BE-2435]: fix distributed handling")
+def test_array_transpose_dist_matching(memory_leak_check):
+    """Make sure distribution matching of equivalent arrays works for transposed arrays"""
+
+    def impl(A, v, w):
+        n = A.shape[0]
+        m = A.shape[1]
+        C = np.empty((n, m), A.dtype)
+        for i in bodo.prange(n):
+            C[i, :] = A[i, :] + v
+        B = A.T
+        D = np.empty((m, n), B.dtype)
+        for i in bodo.prange(m):
+            D[i, :] = B[i, :] + w
+        return C, D
+
+    nrows = 4
+    ncols = 5
+    A = np.arange(nrows * ncols).reshape((nrows, ncols))
+    v = np.arange(ncols)
+    w = np.arange(nrows) * 2
+    check_func(impl, (A, v, w), distributed=[("A", 0)])
+
+
 def test_np_dot(is_slow_run, memory_leak_check):
     """test np.dot() distribute transform"""
 
