@@ -13,6 +13,7 @@ import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.InferTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.util.ReflectiveSqlOperatorTable;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
@@ -133,6 +134,20 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
                   "LAST_DAY(DATE/TIMESTAMP, STRING)",
                   OperandTypes.DATETIME,
                   OperandTypes.CHARACTER)),
+          SqlFunctionCategory.TIMEDATE);
+
+  /**
+   * A dummy function that allows adding intervals that are illegal to add using the + operator.
+   * This is an internal-only operator for supporting interval literals with commas. For example, we
+   * want to parse "INTERVAL '1 year, 1 second'" as "INTERVAL '1 year' + INTERVAL '1 second'", but
+   * that addition would not type check. Instead, we use COMBINE_INTERVALS to represent the
+   * addition, and let bodo handle the actual addition implementation.
+   */
+  public static final SqlBasicFunction COMBINE_INTERVALS =
+      SqlBasicFunction.create(
+          "COMBINE_INTERVALS",
+          ReturnTypes.ARG0_INTERVAL,
+          OperandTypes.family(SqlTypeFamily.DATETIME_INTERVAL, SqlTypeFamily.DATETIME_INTERVAL),
           SqlFunctionCategory.TIMEDATE);
 
   public static synchronized SqlBodoOperatorTable instance() {

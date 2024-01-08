@@ -20,6 +20,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.gene
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.TIME_PART_UNITS;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCombineIntervalsCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateConvertTimezoneCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimeCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimestampCode;
@@ -1750,6 +1751,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                   "Error DATE_FORMAT(): 'Format' must be a string literal");
             }
             return generateDateFormatCode(operands.get(0), operands.get(1));
+          case "COMBINE_INTERVALS":
+            assert operands.size() == 2;
+            return generateCombineIntervalsCode(operands);
           case "CONVERT_TIMEZONE":
             assert operands.size() == 2 || operands.size() == 3;
             return generateConvertTimezoneCode(

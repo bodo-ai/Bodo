@@ -6,7 +6,6 @@ import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.sql.SqlIdentifier
-import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalQualifier
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
@@ -146,7 +145,7 @@ class SqlBodoParserUtil {
             pos: SqlParserPos,
             sign: Int,
             s: String,
-        ): SqlIntervalLiteral {
+        ): SqlNode {
             // Collect all the interval strings/qualifiers found in the string
             val intervalStrings: MutableList<String> = ArrayList()
             val intervalQualifiers: MutableList<SqlIntervalQualifier> = ArrayList()
@@ -154,14 +153,6 @@ class SqlBodoParserUtil {
             // series of <integer> [ <date_time_part> ]. If any date_time_part is omitted this
             // defaults to seconds.
             val splitStrings = s.split(",".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-            if (splitStrings.size > 1) {
-                // TODO: Support multiple commas. We currently can't represent the
-                // Interval properly.
-                throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.unsupportedSnowflakeIntervalLiteral(s, pos.toString()),
-                )
-            }
             for (intervalInfo in splitStrings) {
                 val trimmedStr = intervalInfo.trim { it <= ' ' }
                 val intervalParts = trimmedStr.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }
@@ -229,7 +220,14 @@ class SqlBodoParserUtil {
                     RESOURCE.illegalIntervalLiteral(s, pos.toString()),
                 )
             }
-            return SqlLiteral.createInterval(sign, intervalStrings[0], intervalQualifiers[0], pos)
+
+            var res: SqlNode = SqlLiteral.createInterval(sign, intervalStrings[0], intervalQualifiers[0], pos)
+            for (i in 1..(intervalStrings.size - 1)) {
+                val interval = SqlLiteral.createInterval(sign, intervalStrings[i], intervalQualifiers[i], pos)
+                // we use COMBINE_INTERVALS instead of operator+ because adding day/time intervals to year/month intervals is not allowed.
+                res = SqlBodoOperatorTable.COMBINE_INTERVALS.createCall(pos, listOf(res, interval))
+            }
+            return res
         }
     }
 }

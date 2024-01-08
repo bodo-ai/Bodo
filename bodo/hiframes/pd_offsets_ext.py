@@ -29,6 +29,7 @@ from numba.extending import (
 
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     get_days_in_month,
@@ -1050,10 +1051,161 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
     return impl
 
 
+class CombinedInterval:
+    """Class that accumulates intervals that cannot trivially be added. This
+    effectively delays interval addition until it is added to a non-relative
+    time (e.g. date/timestamp)
+
+    @param intervals: List[DateOffset]
+    """
+
+    def __init__(self, intervals):
+        self.intervals = intervals
+
+
+class CombinedIntervalType(types.Type):
+    def __init__(self):
+        super(CombinedIntervalType, self).__init__(name="CombinedIntervalType()")
+
+
+combined_interval_type = CombinedIntervalType()
+
+
+@typeof_impl.register(CombinedInterval)
+def typeof_combined_interval(val, c):
+    return combined_interval_type
+
+
+@register_model(CombinedIntervalType)
+class CombinedIntervalModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("intervals", numba.types.List(date_offset_type))]
+        super(CombinedIntervalModel, self).__init__(dmm, fe_type, members)
+
+
+@box(CombinedIntervalType)
+def box_combined_interval(typ, val, c):
+    combined_interval = cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, value=val
+    )
+    intervals_obj = c.pyapi.from_native_value(
+        numba.types.List(date_offset_type),
+        combined_interval.intervals,
+        c.env_manager,
+    )
+    combined_interval_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(CombinedInterval)
+    )
+    res = c.pyapi.call_function_objargs(combined_interval_obj, (intervals_obj,))
+    c.pyapi.decref(intervals_obj)
+    c.pyapi.decref(combined_interval_obj)
+    return res
+
+
+@unbox(CombinedIntervalType)
+def unbox_combined_interval(typ, val, c):
+    intervals_obj = c.pyapi.object_getattr_string(val, "intervals")
+
+    intervals = c.pyapi.to_native_value(
+        numba.types.List(date_offset_type), intervals_obj
+    ).value
+
+    combined_interval = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    combined_interval.intervals = intervals
+
+    c.pyapi.decref(intervals_obj)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+
+    # _getvalue(): Load and return the value of the underlying LLVM structure.
+    return NativeValue(combined_interval._getvalue(), is_error=is_error)
+
+
+@overload(CombinedInterval, no_unliteral=True)
+def CombinedInterval_(intervals):
+    def impl(intervals):  # pragma: no cover
+        return init_combined_interval(intervals)
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def init_combined_interval(typingctx, intervals):
+    def codegen(context, builder, signature, args):  # pragma: no cover
+        typ = signature.return_type
+        # Increment the refcount of the list argument to track it's use in this
+        # struct.
+        context.nrt.incref(builder, signature.args[0], args[0])
+        combined_interval = cgutils.create_struct_proxy(typ)(context, builder)
+        combined_interval.intervals = args[0]
+        return combined_interval._getvalue()
+
+    return CombinedIntervalType()(intervals), codegen
+
+
+# 2nd arg is used in LLVM level, 3rd arg is used in python level
+make_attribute_wrapper(CombinedIntervalType, "intervals", "intervals")
+
+
 def overload_add_operator_date_offset_type(lhs, rhs):
     """Implement all of the relevant scalar types additions.
     These will be reused to implement arrays.
     """
+
+    # Since date_offset_types cannot trivially be combined, we use
+    # CombinedInterval to "delay" the addition by accumulating values instead.
+    if lhs == date_offset_type and rhs == date_offset_type:
+        # TODO(aneesh) this needs to support more complex cases like:
+        #   Interval '1 qtr, 1 yr, 1 month, 1 day, 1 s'
+        # The above example mixes date_offset_type and timestamps.
+        def impl(lhs, rhs):  # pragma: no cover
+            return CombinedInterval([lhs, rhs])
+
+        return impl
+
+    if lhs == date_offset_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            date_offset_rhs = pd.DateOffset(
+                days=rhs.days,
+                seconds=rhs.seconds,
+                microseconds=rhs.microseconds,
+                nanoseconds=rhs.nanoseconds,
+            )
+            return CombinedInterval([lhs, date_offset_rhs])
+
+        return impl
+    if lhs == pd_timedelta_type and rhs == date_offset_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs + lhs
+
+        return impl
+
+    if isinstance(lhs, CombinedIntervalType) and rhs == date_offset_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            intervals = [i for i in lhs.intervals]
+            intervals.append(rhs)
+            return CombinedInterval(intervals)
+
+        return impl
+
+    if isinstance(lhs, CombinedIntervalType) and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            intervals = [i for i in lhs.intervals]
+            date_offset_rhs = pd.DateOffset(
+                days=rhs.days,
+                seconds=rhs.seconds,
+                microseconds=rhs.microseconds,
+                nanoseconds=rhs.nanoseconds,
+            )
+            intervals.append(date_offset_rhs)
+            return CombinedInterval(intervals)
+
+        return impl
+
     # rhs is a timestamp
     if lhs == date_offset_type and isinstance(rhs, PandasTimestampType):
 
@@ -1086,7 +1238,6 @@ def overload_add_operator_date_offset_type(lhs, rhs):
             return rhs + lhs
 
         return impl
-
     # Raise Bodo error if not supported
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
