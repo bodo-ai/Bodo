@@ -3701,8 +3701,22 @@ class DistributedAnalysis:
         if not var_set:
             return
 
+        # Avoid matching distributions if one of the arrays is transposed since one
+        # dimension of the transposed array can be replicated before transpose but
+        # distributed afterwards. Therefore, matching arrays with same size universally
+        # can be incorrect.
+        if any(
+            isinstance(v, str)
+            # array analysis adds "#0" to array name to designate 1st dimension
+            # See https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/parfors/array_analysis.py#L439
+            and "#0" in v and guard(_is_transposed_array, self.func_ir, v.split("#")[0])
+            for v in var_set
+        ):
+            return
+
         for v in var_set:
             # array analysis adds "#0" to array name to designate 1st dimension
+            # See https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/parfors/array_analysis.py#L439
             if isinstance(v, str) and "#0" in v:
                 arr_name = v.split("#")[0]
                 if is_distributable_typ(self.typemap[arr_name]):
