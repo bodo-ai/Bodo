@@ -16,6 +16,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
+from bodo.hiframes.pd_offsets_ext import DateOffsetType
 from bodo.hiframes.pd_series_ext import (
     SeriesType,
     is_timedelta64_series_typ,
@@ -923,6 +924,7 @@ def is_valid_timedelta_arg(arg):
     return (
         arg == pd_timedelta_type
         or arg == types.NPTimedelta("ns")
+        or isinstance(arg, DateOffsetType)
         or (
             bodo.utils.utils.is_array_typ(arg, True)
             and (

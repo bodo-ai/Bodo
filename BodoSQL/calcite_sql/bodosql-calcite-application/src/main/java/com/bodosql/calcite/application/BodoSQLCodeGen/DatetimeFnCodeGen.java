@@ -192,6 +192,10 @@ public class DatetimeFnCodeGen {
     return ExprKt.BodoSQLKernel("date_format", List.of(arg1Info, pythonFormatString), List.of());
   }
 
+  public static Expr generateCombineIntervalsCode(List<Expr> operands) {
+    return new Expr.Binary("+", operands.get(0), operands.get(1));
+  }
+
   /**
    * Helper function that handles codegen for CONVERT_TIMEZONE
    *

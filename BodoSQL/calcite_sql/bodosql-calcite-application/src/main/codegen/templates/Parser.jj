@@ -3437,7 +3437,8 @@ SqlMatchRecognize MatchRecognize(SqlNode tableRef) :
     final SqlNodeList partitionList;
     final SqlNodeList orderList;
     final SqlNode pattern;
-    final SqlLiteral interval;
+    // Bodo change: interval type changed to SqlNode to support literals with commas
+    final SqlNode interval;
     final SqlNodeList patternDefList;
     final SqlNode after;
     final SqlNode var;
@@ -3540,7 +3541,9 @@ SqlMatchRecognize MatchRecognize(SqlNode tableRef) :
     <RPAREN> {
         return new SqlMatchRecognize(s.end(this), tableRef,
             pattern, isStrictStarts, isStrictEnds, patternDefList, measureList,
-            after, subsetList, rowsPerMatch, partitionList, orderList, interval);
+            after, subsetList, rowsPerMatch, partitionList, orderList,
+            // Bodo change: SqlMatchRecognize only expects SqlLiterals, so for now we need to do an unsafe cast here
+            (SqlLiteral) interval);
     }
 }
 
@@ -5494,8 +5497,12 @@ SqlNode PeriodConstructor() :
 
 /**
  * Parses an interval literal.
+ *
+ * Bodo change: allow literals containing commas (multiple values). Since we
+ * represent such literals as an addition of normal SqlIntervalLiterals, we
+ * need to return a SqlNode here instead of the more specific SqlLiteral
  */
-SqlLiteral IntervalLiteral() :
+SqlNode IntervalLiteral() :
 {
     final String p;
     final SqlIntervalQualifier intervalQualifier;
@@ -5520,8 +5527,6 @@ SqlLiteral IntervalLiteral() :
             return SqlBodoParserUtil.parseSnowflakeIntervalLiteral(s.end(this), sign, p);
         }
     )
-
-
 }
 
 SqlNode IntervalLiteralOrExpression() :
