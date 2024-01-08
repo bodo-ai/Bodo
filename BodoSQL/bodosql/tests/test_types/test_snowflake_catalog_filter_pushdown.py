@@ -2408,9 +2408,9 @@ nonregex_string_match_func = {
     [
         pytest.param(("LEFT(A, 3)", "LEFT", "hel"), id="left"),
         pytest.param(("RIGHT(A, 4)", "RIGHT", "ello"), id="right"),
-        pytest.param(("POSITION(A, 'Hi, bye bodo.ai')", "POSITION", 5), id="position"),
+        pytest.param(("POSITION(A, 'Hi, bye bodo.ai')", "CHARINDEX", 5), id="position"),
         pytest.param(
-            ("POSITION(A in 'Hi, bye bodo.ai')", "POSITION", 5), id="position-alt"
+            ("POSITION(A in 'Hi, bye bodo.ai')", "CHARINDEX", 5), id="position-alt"
         ),
         pytest.param(
             ("REPLACE(A, 'bodo', 'snowflake')", "REPLACE", "hi snowflake"), id="replace"
@@ -2502,15 +2502,15 @@ def test_nonregex_string_match_functions(
             id="regexp_like_opt_arg",
         ),
         pytest.param(
-            ("RLIKE(A, 'bodo[sS].*')", "bodo[sS].*", True, "RLIKE"),
+            ("RLIKE(A, 'bodo[sS].*')", "bodo[sS].*", True, "REGEXP_LIKE"),
             id="regexp_like_alias_1",
         ),
         pytest.param(
-            ("RLIKE(A, 'bodo[sS].*', 'c')", "bodo[sS].*", True, "RLIKE"),
+            ("RLIKE(A, 'bodo[sS].*', 'c')", "bodo[sS].*", True, "REGEXP_LIKE"),
             id="regexp_like_alias_1_opt_args",
         ),
         pytest.param(
-            ("A REGEXP 'hi* [bB].*'", "hi* [bB].*", True, "RLIKE"),
+            ("A REGEXP 'hi* [bB].*'", "hi* [bB].*", True, "REGEXP_LIKE"),
             id="regexp_like_alias_2",
         ),
         pytest.param(
