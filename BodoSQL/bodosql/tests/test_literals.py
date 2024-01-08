@@ -186,6 +186,10 @@ def test_interval_literals(
 ):
     """
     tests that interval literals are correctly parsed by BodoSQL
+
+    Note that since we are returning interval literals, we must restrict this
+    test to only test the subset of literals that output non-relative times
+    (i.e. ones that are compiled to Timedeltas and not DateOffsets)
     """
 
     query = f"""
@@ -203,6 +207,91 @@ def test_interval_literals(
         query,
         basic_df,
         spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected,
+    )
+
+
+@pytest.fixture(
+    params=[
+        ("1 day", lambda x: x + pd.DateOffset(days=1)),
+        ("2 month", lambda x: x + pd.DateOffset(months=2)),
+        ("3 year", lambda x: x + pd.DateOffset(years=3)),
+        ("1 quarter", lambda x: x + pd.DateOffset(months=3)),
+        ("10 seconds", lambda x: x + pd.Timedelta(seconds=10)),
+        ("1 year, 1 quarter, 1 month", lambda x: x + pd.DateOffset(years=1, months=4)),
+        (
+            "1 year, 2 second",
+            lambda x: (x + pd.DateOffset(years=1)) + pd.Timedelta(seconds=2),
+        ),
+        (
+            "1 second, 2 year",
+            lambda x: (x + pd.DateOffset(years=2)) + pd.Timedelta(seconds=1),
+        ),
+        (
+            "1 year, 2 month, 3 second",
+            lambda x: (x + pd.DateOffset(years=1, months=2)) + pd.Timedelta(seconds=3),
+        ),
+        (
+            "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
+            lambda x: x
+            + pd.Timedelta(
+                days=1,
+                hours=2,
+                minutes=3,
+                seconds=4,
+                milliseconds=5,
+                microseconds=6,
+                nanoseconds=7,
+            ),
+        ),
+        (
+            "1 months, 2 days, 3 hrs, 4 mins, 5s, 6ms, 7us, 8ns",
+            lambda x: (
+                x + pd.DateOffset(months=1, days=2, hours=3, minutes=4, seconds=5)
+            )
+            + pd.Timedelta(milliseconds=6, microseconds=7, nanoseconds=8),
+        ),
+    ]
+)
+def interval_addition_values(request):
+    """fixture that returns a tuple of a interval string literal, and a
+    corresponding function that would add the eequivalent offset to a
+    timestamp"""
+    return request.param
+
+
+def test_interval_literals_addition(interval_addition_values, memory_leak_check):
+    """
+    tests that interval literal addtion is correctly parsed by BodoSQL
+    This allows for testing all possible interval literals.
+    """
+
+    query = f"""
+    SELECT
+        A + INTERVAL {repr(interval_addition_values[0])}
+    FROM
+        table1
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp(2020, 1, 2),
+                pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
+                pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
+                pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
+            ]
+        }
+    )
+
+    expected = pd.DataFrame({"0": df["A"].apply(interval_addition_values[1])})
+
+    check_query(
+        query,
+        {"TABLE1": df},
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=expected,

@@ -12,6 +12,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
+from bodo.hiframes.pd_offsets_ext import CombinedIntervalType
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.pd_datetime_arr_ext import (
     python_timezone_from_bodo_timezone_info,
@@ -177,8 +178,18 @@ def add_interval_unopt_util(start_dt, interval):
                 i,
             )
 
-    def impl(start_dt, interval):  # pragma: no cover
-        return add_interval_util(start_dt, interval)
+    if isinstance(interval, CombinedIntervalType):
+
+        def impl(start_dt, interval):  # pragma: no cover
+            result = start_dt
+            for interval_part in interval.intervals:
+                result = add_interval_util(result, interval_part)
+            return result
+
+    else:
+
+        def impl(start_dt, interval):  # pragma: no cover
+            return add_interval_util(start_dt, interval)
 
     return impl
 
@@ -2891,8 +2902,10 @@ def overload_interval_add_interval_util(arr0, arr1):
     Returns:
         types.Type: Interval scalar or array returned after adding the results.
     """
-    verify_td_arg(arr0, "INTERVAL_ADD_INTERVAL", "arr0")
-    verify_td_arg(arr1, "INTERVAL_ADD_INTERVAL", "arr1")
+    if not isinstance(arr0, CombinedIntervalType):
+        verify_td_arg(arr0, "INTERVAL_ADD_INTERVAL", "arr0")
+    if not isinstance(arr1, CombinedIntervalType):
+        verify_td_arg(arr1, "INTERVAL_ADD_INTERVAL", "arr1")
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
     propagate_null = [True, True]
@@ -3061,8 +3074,18 @@ def add_date_interval_to_date(start_dt, interval):
                 i,
             )
 
-    def impl(start_dt, interval):  # pragma: no cover
-        return add_date_interval_to_date_util(start_dt, interval)
+    if isinstance(interval, CombinedIntervalType):
+
+        def impl(start_dt, interval):  # pragma: no cover
+            result = start_dt
+            for interval_part in interval.intervals:
+                result = add_date_interval_to_date_util(result, interval_part)
+            return result
+
+    else:
+
+        def impl(start_dt, interval):  # pragma: no cover
+            return add_date_interval_to_date_util(start_dt, interval)
 
     return impl
 

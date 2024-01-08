@@ -32,6 +32,7 @@ from bodo.hiframes.pd_index_ext import (
     is_index_type,
 )
 from bodo.hiframes.pd_offsets_ext import (
+    CombinedIntervalType,
     date_offset_type,
     month_begin_type,
     month_end_type,
@@ -242,6 +243,10 @@ def overload_add_operator_scalars(lhs, rhs):
             lhs, rhs
         )
     if lhs == date_offset_type or rhs == date_offset_type:
+        return bodo.hiframes.pd_offsets_ext.overload_add_operator_date_offset_type(
+            lhs, rhs
+        )
+    if isinstance(lhs, CombinedIntervalType) or isinstance(rhs, CombinedIntervalType):
         return bodo.hiframes.pd_offsets_ext.overload_add_operator_date_offset_type(
             lhs, rhs
         )

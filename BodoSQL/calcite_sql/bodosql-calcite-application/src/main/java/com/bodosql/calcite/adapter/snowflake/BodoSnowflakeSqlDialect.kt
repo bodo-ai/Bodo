@@ -19,6 +19,30 @@ import org.apache.calcite.sql.type.SqlTypeName
 import java.math.BigDecimal
 
 class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
+
+    /**
+     * Helper method for outputting just the duration part of an Interval literal
+     */
+    private fun unparseSqlIntervalLiteralInner(
+        writer: SqlWriter,
+        literal: SqlIntervalLiteral,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        val interval = literal.getValueAs(IntervalValue::class.java)
+        if (interval.intervalQualifier.startUnit != TimeUnit.SECOND) {
+            // Truncate the interval amount to an integer if the time unit isn't a second.
+            // TODO(aneesh) we should see if it is commonly supported for other time units to also support fractional amounts.
+            writer.literal(BigDecimal(interval.intervalLiteral).setScale(0).toString())
+        } else {
+            writer.literal(interval.intervalLiteral)
+        }
+        unparseSqlIntervalQualifier(
+            writer,
+            interval.intervalQualifier,
+            BodoSQLRelDataTypeSystem(),
+        )
+    }
     override fun unparseSqlIntervalLiteral(
         writer: SqlWriter,
         literal: SqlIntervalLiteral,
@@ -36,18 +60,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         // literal and the interval qualifier be
         // wrapped in quotes.
         writer.print("'")
-        if (interval.intervalQualifier.startUnit != TimeUnit.SECOND) {
-            // Truncate the interval amount to an integer if the time unit isn't a second.
-            // TODO(aneesh) we should see if it is commonly supported for other time units to also support fractional amounts.
-            writer.literal(BigDecimal(interval.intervalLiteral).setScale(0).toString())
-        } else {
-            writer.literal(interval.intervalLiteral)
-        }
-        unparseSqlIntervalQualifier(
-            writer,
-            interval.intervalQualifier,
-            BodoSQLRelDataTypeSystem(),
-        )
+        unparseSqlIntervalLiteralInner(writer, literal, leftPrec, rightPrec)
         writer.print("'")
     }
 
@@ -196,6 +209,41 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         writer.endList(frame)
     }
 
+    private fun unParseCombineIntervals(writer: SqlWriter, call: SqlCall, leftPrec: Int, rightPrec: Int) {
+        // COMBINE_INTERVAL calls are inserted by the parser as an abstraction to deal with INTERVAL literals with commas (multiple values),
+        // which isn't well-supported by calcite. However, interval addition isn't allowed in snowflake for all interval types,
+        // so we need to unparse COMBINE_INTERVAL calls back into their original form.
+        // We know that user code should never create COMBINE_INTERVALS calls, so we can make assumptions about the arguments.
+        // The format of COMBINE_INTERVALS calls are:
+        // INTERVAL 'interval0, interval1, interval2' -> COMBINE_INTERVALS(COMBINE_INTERVALS(interval0, interval1), interval2)
+        writer.print("INTERVAL ")
+        val arg1 = call.operandList[1] as SqlIntervalLiteral
+        if (arg1.signum() == -1) {
+            writer.print("-")
+        }
+        // Snowflake requires both the interval
+        // literal and the interval qualifier be
+        // wrapped in quotes.
+        writer.print("'")
+
+        // Collect all the intervals in reverse order
+        val intervals = ArrayList(listOf(arg1))
+        var node = call.operandList[0]
+        while (node is SqlCall) {
+            intervals.add(node.operandList[1] as SqlIntervalLiteral)
+            node = node.operandList[0]
+        }
+        intervals.add(node as SqlIntervalLiteral)
+
+        // Write out all the intervals in the correct order and add commas between each
+        unparseSqlIntervalLiteralInner(writer, intervals[intervals.size - 1], leftPrec, rightPrec)
+        for (i in (intervals.size - 2) downTo 0) {
+            writer.print(", ")
+            unparseSqlIntervalLiteralInner(writer, intervals[i], leftPrec, rightPrec)
+        }
+        writer.print("'")
+    }
+
     override fun unparseCall(
         writer: SqlWriter,
         call: SqlCall,
@@ -210,6 +258,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
                     "SUBSTRING" -> unParseSubstring(writer, call, leftPrec, rightPrec)
                     "CHAR_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
                     "NANOSECOND" -> unParseNanosecond(writer, call, leftPrec, rightPrec)
+                    "COMBINE_INTERVALS" -> unParseCombineIntervals(writer, call, leftPrec, rightPrec)
                     else -> super.unparseCall(writer, call, leftPrec, rightPrec)
                 }
             }
