@@ -305,7 +305,7 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
         # restore the old threshold
         bodo.COMPLEX_CASE_THRESHOLD = old_threshold
 
-
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_case_indent_limit(memory_leak_check):
     """
