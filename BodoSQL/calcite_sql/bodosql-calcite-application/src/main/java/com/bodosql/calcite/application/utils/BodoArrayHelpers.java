@@ -86,6 +86,13 @@ public class BodoArrayHelpers {
       case NULL:
         typeName = "bodo.null_array_type";
         break;
+      case MAP:
+        typeName =
+            String.format(
+                "bodo.MapArrayType(%s, %s)",
+                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getKeyType()), false).emit(),
+                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getValueType()), false).emit());
+        break;
       case ARRAY:
         typeName =
             String.format(

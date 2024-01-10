@@ -242,16 +242,17 @@ public class Utils {
    * @param type input type to check
    * @return true flag if there is VARIANT/MAP
    */
-  public static boolean hasVariantOrMapType(RelDataType type) {
+  public static boolean hasVariantType(RelDataType type) {
     if (type instanceof VariantSqlType) {
       return true;
     }
     if (type instanceof MapSqlType) {
-      return true;
+      MapSqlType mapType = (MapSqlType) type;
+      return hasVariantType(mapType.getKeyType()) || hasVariantType(mapType.getValueType());
     }
     if (type instanceof ArraySqlType) {
-      ArraySqlType arrayType = ((ArraySqlType) type);
-      return hasVariantOrMapType(arrayType.getComponentType());
+      ArraySqlType arrayType = (ArraySqlType) type;
+      return hasVariantType(arrayType.getComponentType());
     }
     return false;
   }
