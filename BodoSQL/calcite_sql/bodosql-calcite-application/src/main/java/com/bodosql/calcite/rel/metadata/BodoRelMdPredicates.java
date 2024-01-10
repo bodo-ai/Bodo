@@ -147,11 +147,8 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       } else {
         Mappings.TargetMapping leftMapping =
             Mappings.createShiftMapping(nSysFields + nFieldsLeft, nSysFields, 0, nFieldsLeft);
-        // Bodo Change: Simplify the lifted predicate.
         leftChildPredicates =
-            simplify.simplify(
-                leftPredicates.accept(
-                    new RexPermuteInputsShuttle(leftMapping, joinRel.getInput(0))));
+            leftPredicates.accept(new RexPermuteInputsShuttle(leftMapping, joinRel.getInput(0)));
 
         allExprs.add(leftChildPredicates);
         for (RexNode r : RelOptUtil.conjunctions(leftChildPredicates)) {
@@ -165,11 +162,8 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         Mappings.TargetMapping rightMapping =
             Mappings.createShiftMapping(
                 nSysFields + nFieldsLeft + nFieldsRight, nSysFields + nFieldsLeft, 0, nFieldsRight);
-        // Bodo Change: Simplify the lifted predicate.
         rightChildPredicates =
-            simplify.simplify(
-                rightPredicates.accept(
-                    new RexPermuteInputsShuttle(rightMapping, joinRel.getInput(1))));
+            rightPredicates.accept(new RexPermuteInputsShuttle(rightMapping, joinRel.getInput(1)));
 
         allExprs.add(rightChildPredicates);
         for (RexNode r : RelOptUtil.conjunctions(rightChildPredicates)) {
@@ -293,15 +287,44 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
           Mappings.createShiftMapping(nSysFields + nFieldsLeft, 0, nSysFields, nFieldsLeft);
       final RexPermuteInputsShuttle leftPermute =
           new TypeChangingRexPermuteInputsShuttle(leftMapping, joinRel.getLeft());
-      final List<RexNode> leftInferredPredicates = new ArrayList<>();
-      final List<RexNode> rightInferredPredicates = new ArrayList<>();
+      final List<RexNode> initialLeftInferredPredicates = new ArrayList<>();
+      final List<RexNode> initialRightInferredPredicates = new ArrayList<>();
 
       for (RexNode iP : inferredPredicates) {
         ImmutableBitSet iPBitSet = RelOptUtil.InputFinder.bits(iP);
         if (leftFieldsBitSet.contains(iPBitSet)) {
-          leftInferredPredicates.add(iP.accept(leftPermute));
+          initialLeftInferredPredicates.add(iP.accept(leftPermute));
         } else if (rightFieldsBitSet.contains(iPBitSet)) {
-          rightInferredPredicates.add(iP.accept(rightPermute));
+          initialRightInferredPredicates.add(iP.accept(rightPermute));
+        }
+      }
+
+      // Bodo change: Don't just accept they inferred predicates unless
+      // the left/right predicates simplify
+      final List<RexNode> leftInferredPredicates = new ArrayList<>();
+      RexNode simplifiedLeftChildPredicates =
+          simplify.simplify(leftChildPredicates.accept(leftPermute));
+      for (RexNode predicate : initialLeftInferredPredicates) {
+        List<RexNode> parts = RelOptUtil.conjunctions(simplifiedLeftChildPredicates);
+        parts.add(predicate);
+        RexNode newFilter = RexUtil.composeConjunction(simplify.rexBuilder, parts);
+        RexNode updatedPredicates = simplify.simplify(newFilter);
+        if (!updatedPredicates.equals(simplifiedLeftChildPredicates)) {
+          simplifiedLeftChildPredicates = updatedPredicates;
+          leftInferredPredicates.add(predicate);
+        }
+      }
+      final List<RexNode> rightInferredPredicates = new ArrayList<>();
+      RexNode simplifiedRightChildPredicates =
+          simplify.simplify(rightChildPredicates.accept(rightPermute));
+      for (RexNode predicate : initialRightInferredPredicates) {
+        List<RexNode> parts = RelOptUtil.conjunctions(simplifiedRightChildPredicates);
+        parts.add(predicate);
+        RexNode newFilter = RexUtil.composeConjunction(simplify.rexBuilder, parts);
+        RexNode updatedPredicates = simplify.simplify(newFilter);
+        if (!updatedPredicates.equals(simplifiedRightChildPredicates)) {
+          simplifiedRightChildPredicates = updatedPredicates;
+          rightInferredPredicates.add(predicate);
         }
       }
 
@@ -364,33 +387,11 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         for (Mapping m : mappings(r)) {
           RexNode tr =
               r.accept(new RexPermuteInputsShuttle(m, joinRel.getInput(0), joinRel.getInput(1)));
-          // Filter predicates can be already simplified, so we should work with
-          // simplified RexNode versions as well. It also allows prevent of having
-          // some duplicates in in result pulledUpPredicates
-          RexNode simplifiedTarget = simplify.simplifyFilterPredicates(RelOptUtil.conjunctions(tr));
-          if (simplifiedTarget == null) {
-            simplifiedTarget = joinRel.getCluster().getRexBuilder().makeLiteral(false);
-          }
-          if (checkTarget(inferringFields, allExprs, tr)
-              && checkTarget(inferringFields, allExprs, simplifiedTarget)) {
-            // Bodo Change: Write to an intermediate target instead.
-            localInferredPredicates.add(simplifiedTarget);
-            allExprs.add(simplifiedTarget);
+          if (checkTarget(inferringFields, allExprs, tr)) {
+            inferredPredicates.add(tr);
+            allExprs.add(tr);
           }
         }
-      }
-      // Bodo Change: Ensure the predicates aren't added if all simplified together. If any
-      // predicate matches
-      // then we can update the inferred predicates. This won't catch every combination, as its
-      // possible that
-      // only some filters are new, but this should prevent repeatedly adding the same simplified
-      // filters.
-      if (localInferredPredicates.size() == 1
-          || checkTarget(
-              inferringFields,
-              allExprs,
-              simplify.simplifyFilterPredicates(localInferredPredicates))) {
-        inferredPredicates.addAll(localInferredPredicates);
       }
     }
 
