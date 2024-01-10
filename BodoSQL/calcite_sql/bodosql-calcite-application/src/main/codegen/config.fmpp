@@ -31,6 +31,7 @@ data: {
       "com.bodosql.calcite.application.operatorTables.ArrayOperatorTable",
       "com.bodosql.calcite.application.operatorTables.ContextOperatorTable"
       "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.CondOperatorTable"
       "com.bodosql.calcite.application.operatorTables.NumericOperatorTable"
       "com.bodosql.calcite.application.operatorTables.ObjectOperatorTable"
       "com.bodosql.calcite.application.operatorTables.SelectOperatorTable",
@@ -84,6 +85,7 @@ data: {
       "TRIM_SPACE",
       "FIELD_OPTIONALLY_ENCLOSED_BY",
       "NULL_IF",
+      "NULLIF",
       "ERROR_ON_COLUMN_COUNT_MISMATCH",
       "REPLACE_INVALID_CHARACTERS",
       "EMPTY_FIELD_AS_NULL",
@@ -250,6 +252,7 @@ data: {
         "TRIM_SPACE",
         "FIELD_OPTIONALLY_ENCLOSED_BY",
         "NULL_IF",
+        "NULLIF",
         "ERROR_ON_COLUMN_COUNT_MISMATCH",
         "REPLACE_INVALID_CHARACTERS",
         "EMPTY_FIELD_AS_NULL",

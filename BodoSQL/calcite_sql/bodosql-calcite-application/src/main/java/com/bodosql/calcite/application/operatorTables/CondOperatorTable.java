@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import com.bodosql.calcite.application.utils.CoalesableTypeChecker;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.calcite.sql.SqlBasicFunction;
@@ -9,6 +10,7 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -107,6 +109,20 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction NULLIF =
+      SqlBasicFunction.create(
+          "NULLIF",
+          // The output type is the same as the input type, but nullable
+          ReturnTypes.ARG0_FORCE_NULLABLE,
+          // Either both input types are comparable, or both are VARIANT.
+          new CoalesableTypeChecker(
+              OperandTypes.COMPARABLE_UNORDERED_COMPARABLE_UNORDERED.or(
+                  OperandTypes.sequence(
+                      "NULLIF(<VARIANT>, <VARIANT>)",
+                      BodoOperandTypes.VARIANT,
+                      BodoOperandTypes.VARIANT))),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlBasicFunction NVL =
       SqlBasicFunction.create(
           "NVL",
@@ -174,6 +190,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           BOOLNOT,
           EQUAL_NULL,
           IFNULL_FUNC,
+          NULLIF,
           NULLIFZERO,
           NVL,
           NVL2,

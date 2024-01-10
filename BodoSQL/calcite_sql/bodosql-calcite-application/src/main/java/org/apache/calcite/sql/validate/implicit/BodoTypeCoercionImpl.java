@@ -257,6 +257,37 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     // an exception throws when entering this method.
     SqlCall call = callBinding.getCall();
     assert call.getOperator().getKind() == SqlKind.COALESCE;
+    return coalesceCoercionImpl(callBinding);
+  }
+
+  // This is copied from TypeCoersionImpl.coalesceCoercion but without the assertion that callBinding is a COALESCE call.
+  private boolean coalesceCoercionDefaultImpl(SqlCallBinding callBinding) {
+    SqlCall call = callBinding.getCall();
+    SqlNodeList operandList = new SqlNodeList(call.getOperandList(), call.getParserPosition());
+    List<RelDataType> argTypes = new ArrayList<RelDataType>();
+    SqlValidatorScope scope = getScope(callBinding);
+    for (SqlNode node : operandList) {
+      argTypes.add(
+              validator.deriveType(
+                      scope, node));
+    }
+    // Entering this method means we have already got a wider type, recompute it here
+    // just to make the interface more clear.
+    RelDataType widerType = getWiderTypeFor(argTypes, true);
+    if (null != widerType) {
+      boolean coerced = false;
+      for (int i = 0; i < operandList.size(); i++) {
+        coerced = coerceColumnType(scope, operandList, i, widerType) || coerced;
+        // manually propagate changes back to the call operands
+        call.setOperand(i, operandList.get(i));
+      }
+      return coerced;
+    }
+    return false;
+  }
+
+  public boolean coalesceCoercionImpl(SqlCallBinding callBinding) {
+    SqlCall call = callBinding.getCall();
     // Note, we have to create a newSqlNodeList here to use coerceColumnType
     // set's on this node list will not affect the actual operand list of the call, so we have
     // to propagate changes manually
@@ -269,14 +300,14 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
                       scope, node));
     }
 
-    Boolean coerced = false;
+    boolean coerced = false;
     CoalesceTypeCastingUtils.SF_TYPE curRhsType = CoalesceTypeCastingUtils.Companion.TO_SF_TYPE(
             originalArgTypes.get(originalArgTypes.size()-1));
 
     // If we ever encounter a type that does not have an equivalent type in SF (Mainly interval types),
     // default to the super class's handling to avoid breaking any existing functionality.
     if (curRhsType == null) {
-      return super.coalesceCoercion(callBinding) || coerced;
+      return coalesceCoercionDefaultImpl(callBinding) || coerced;
     }
 
     for (int i = originalArgTypes.size() - 2; i >= 0; i--) {
@@ -286,7 +317,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       // If we ever encounter a type that does not have an equivalent type in SF (Mainly interval types),
       // default to the super class's handling to avoid breaking any existing functionality.
       if (lhsType == null) {
-        return super.coalesceCoercion(callBinding) || coerced;
+        return coalesceCoercionDefaultImpl(callBinding) || coerced;
       }
 
       if (lhsType.equals(curRhsType)){
@@ -336,7 +367,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
 
     // Finally,
     // Call super to handle potential need to unify precisions etc.
-    return super.coalesceCoercion(callBinding) || coerced;
+    return coalesceCoercionDefaultImpl(callBinding) || coerced;
   }
 
 }

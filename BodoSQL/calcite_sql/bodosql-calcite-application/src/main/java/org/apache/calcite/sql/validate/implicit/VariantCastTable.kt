@@ -447,6 +447,14 @@ internal class VariantCastTable {
             varcharNumericHelper(inType, factory, idx, 7, setOf(0, 1, 5), SqlTypeName.BIGINT)
         }
 
+        private val arg0ToArg1Cast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, operandTypes: List<RelDataType> ->
+            when (idx) {
+                0 -> factory.createTypeWithNullability(operandTypes[1], inType.isNullable)
+                else -> inType
+            }
+        }
+
         /**
          * Mapping of function names to a lambda function used to derive the default variant type.
          *
@@ -608,6 +616,7 @@ internal class VariantCastTable {
             CondOperatorTable.BOOLOR to anyArgNumberCast(18, 18),
             CondOperatorTable.BOOLXOR to anyArgNumberCast(18, 18),
             CondOperatorTable.BOOLNOT to anyArgNumberCast(18),
+            CondOperatorTable.NULLIF to arg0ToArg1Cast,
             DatetimeOperatorTable.DATE_FROM_PARTS to anyArgNumberCast(9, 9, 9),
             DatetimeOperatorTable.DATEFROMPARTS to anyArgNumberCast(9, 9, 9),
             DatetimeOperatorTable.TIME_FROM_PARTS to anyArgNumberCast(9, 9, 9, 18),
