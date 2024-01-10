@@ -1347,7 +1347,7 @@ def verify_time_or_datetime_arg_forbid_tz(arg, f_name, a_name):  # pragma: no co
         )
 
 
-def get_common_broadcasted_type(arg_types, func_name):
+def get_common_broadcasted_type(arg_types, func_name, supress_error=False):
     """Takes in a list of types from arrays/Series/scalars, verifies that they
     have a common underlying scalar type, and if so returns the corresponding
     array type (+ ensures that it is nullable). Assumes scalar Nones coerce to any
@@ -1356,6 +1356,7 @@ def get_common_broadcasted_type(arg_types, func_name):
     Args:
         arg_types (dtype list/tuple): the types of the arrays/Series/scalars being checked
         func_name (string): the name of the function being compiled
+        supress_error (boolean): if True, don't return an error if the types are incompatible and return None instead
 
     Returns:
         dtype: the common underlying dtype of the inputted types. If all inputs are
@@ -1409,6 +1410,8 @@ def get_common_broadcasted_type(arg_types, func_name):
             scalar_dtypes, allow_downcast=True
         )
         if common_dtype is None:
+            if supress_error:
+                return None
             raise_bodo_error(
                 f"Cannot call {func_name} on columns with different dtypes: {scalar_dtypes}"
             )

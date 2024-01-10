@@ -771,7 +771,17 @@ def nullif_util(arr0, arr1, dict_encoding_state, func_id):
         scalar_text += "else:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
 
-    out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
+    out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF", supress_error=True)
+    if out_dtype is None:
+        # If the types are incompatible but that wasn't caught by the type
+        # checker in BodoSQL, then we must have VARIANT inputs. In that case,
+        # we know that the two values will never be equal, so we just return
+        # the first argument.
+        def impl(arr0, arr1, dict_encoding_state, func_id):
+            return arr0
+
+        return impl
+
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
