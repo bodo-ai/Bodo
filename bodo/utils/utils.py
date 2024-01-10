@@ -494,52 +494,17 @@ def is_array_typ(var_typ, include_index_series=True):
     """
 
     # NOTE: make sure all Bodo arrays are here
-    return (
-        is_np_array_typ(var_typ)
-        or var_typ
-        in (
-            string_array_type,
-            bodo.binary_array_type,
-            bodo.dict_str_arr_type,
-            bodo.hiframes.split_impl.string_array_split_view_type,
-            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-            boolean_array_type,
-            bodo.libs.str_ext.random_access_string_array,
-            bodo.libs.interval_arr_ext.IntervalArrayType,
-            bodo.null_array_type,
-        )
-        or isinstance(
-            var_typ,
-            (
-                IntegerArrayType,
-                FloatingArrayType,
-                bodo.libs.primitive_arr_ext.PrimitiveArrayType,
-                bodo.libs.decimal_arr_ext.DecimalArrayType,
-                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
-                bodo.libs.array_item_arr_ext.ArrayItemArrayType,
-                bodo.libs.struct_arr_ext.StructArrayType,
-                bodo.libs.interval_arr_ext.IntervalArrayType,
-                bodo.libs.tuple_arr_ext.TupleArrayType,
-                bodo.libs.map_arr_ext.MapArrayType,
-                bodo.libs.matrix_ext.MatrixType,
-                bodo.libs.csr_matrix_ext.CSRMatrixType,
-                bodo.DatetimeArrayType,
-                TimeArrayType,
-            ),
-        )
-        or (
-            include_index_series
-            and (
-                isinstance(
-                    var_typ,
-                    (
-                        bodo.hiframes.pd_series_ext.SeriesType,
-                        bodo.hiframes.pd_multi_index_ext.MultiIndexType,
-                    ),
-                )
-                or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+    return isinstance(var_typ, bodo.libs.array_kernels.BODO_ARRAY_TYPE_CLASSES) or (
+        include_index_series
+        and (
+            isinstance(
+                var_typ,
+                (
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                    bodo.hiframes.pd_multi_index_ext.MultiIndexType,
+                ),
             )
+            or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
         )
     )
 

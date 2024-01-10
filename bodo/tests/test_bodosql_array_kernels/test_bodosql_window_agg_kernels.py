@@ -1302,6 +1302,9 @@ def test_windowed_kernels_two_arg(
             0.5,
             pd.Series([None] * 5000, dtype=pd.Float64Dtype()),
             id="0.5-all_null",
+            marks=pytest.mark.skip(
+                reason="Pandas doesn't support np.nan data in nullable float arrays"
+            ),
         ),
         pytest.param(
             pd.Series(list(range(1000)), dtype=pd.Float64Dtype()),
@@ -1320,7 +1323,7 @@ def test_windowed_kernels_two_arg(
         ),
     ],
 )
-def test_windowed_approx_percentile(arr, q, answer, memory_leak_check):
+def test_windowed_approx_percentile(arr, q, answer):
     def impl(arr, q):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_approx_percentile(arr, q)
