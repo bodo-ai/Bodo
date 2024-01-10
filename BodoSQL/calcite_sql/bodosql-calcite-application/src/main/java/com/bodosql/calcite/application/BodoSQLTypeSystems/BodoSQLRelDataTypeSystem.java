@@ -115,6 +115,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
         // Snowflake: Time precision default is 9.
       case TIME:
       case TIMESTAMP:
+      case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         return MAX_DATETIME_PRECISION;
       default:
         return super.getDefaultPrecision(typeName);
@@ -133,6 +134,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
         return getMaxNumericPrecision();
       case TIME:
       case TIMESTAMP:
+      case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         return MAX_DATETIME_PRECISION;
       case VARBINARY:
       case BINARY:

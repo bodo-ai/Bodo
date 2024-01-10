@@ -2690,7 +2690,7 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
             # Note this is optimized in the planner because the second value is always True.
             check_logger_msg(
                 stream,
-                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "L_COMMITDATE" IS NULL OR "L_COMMITDATE" >= TIMESTAMP '2023-01-20 00:00:00'""",
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "L_COMMITDATE" IS NULL OR "L_COMMITDATE" >= TIMESTAMP '2023-01-20 00:00:00.000'""",
             )
 
 

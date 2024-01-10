@@ -136,6 +136,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
           // as a second argument.
+          // TODO: Remove TIME and Integer
           OperandTypes.DATETIME
               .or(OperandTypes.INTEGER)
               .or(OperandTypes.STRING)
@@ -312,10 +313,11 @@ public class CastingOperatorTable implements SqlOperatorTable {
       SqlBasicFunction.create(
           "TO_TIME",
           BodoReturnTypes.TIME_DEFAULT_PRECISION_NULLABLE,
+          // TODO: Remove date as an option.
           OperandTypes.DATETIME
               .or(OperandTypes.CHARACTER)
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER))
-              .or(BodoOperandTypes.VARIANT),
+              .or(BodoOperandTypes.VARIANT)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIME = TO_TIME.withName("TIME");
@@ -325,6 +327,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           "TRY_TO_TIME",
           // What Value should the return type be
           BodoReturnTypes.TIME_DEFAULT_PRECISION_FORCE_NULLABLE,
+          // TODO: Remove date as an option.
           OperandTypes.DATETIME
               .or(OperandTypes.CHARACTER)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),

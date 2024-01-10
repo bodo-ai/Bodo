@@ -23,8 +23,8 @@ public class BodoSqlTypeCoercionRule {
         SqlTypeMappingRules.Builder builder = SqlTypeMappingRules.builder();
         final SqlTypeCoercionRule defaultRules = SqlTypeCoercionRule.instance();
         builder.addAll(defaultRules.getTypeMapping());
-        // Allow casting from boolean to integer types.
-        SqlTypeName[] numericTypes = {SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT};
+        // Allow casting from boolean to integer types and decimal
+        SqlTypeName[] numericTypes = {SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT, SqlTypeName.DECIMAL};
         ImmutableCollection.Builder<SqlTypeName> booleanRule = builder.copyValues(SqlTypeName.BOOLEAN);
         for (SqlTypeName type: numericTypes) {
             builder.add(type, builder.copyValues(type).add(SqlTypeName.BOOLEAN).build());

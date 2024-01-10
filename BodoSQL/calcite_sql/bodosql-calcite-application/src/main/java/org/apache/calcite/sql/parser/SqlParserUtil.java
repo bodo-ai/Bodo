@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql.parser;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.config.CalciteSystemProperty;
@@ -348,7 +349,8 @@ public final class SqlParserUtil {
     }
     final TimeString t = TimeString.fromCalendarFields(pt.getCalendar())
         .withFraction(pt.getFraction());
-    return SqlLiteral.createTime(t, pt.getPrecision(), pos);
+    // Bodo Change: Make the default precision for Time literals BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION
+    return SqlLiteral.createTime(t, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION, pos);
   }
 
   public static SqlTimestampLiteral parseTimestampLiteral(String s,
@@ -385,7 +387,8 @@ public final class SqlParserUtil {
     final TimestampString ts =
         TimestampString.fromCalendarFields(pt.getCalendar())
             .withFraction(pt.getFraction());
-    return SqlLiteral.createTimestamp(typeName, ts, pt.getPrecision(), pos);
+    // Bodo Change: Make the default precision for Timestamp literals BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION
+    return SqlLiteral.createTimestamp(typeName, ts, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION, pos);
   }
 
   public static SqlIntervalLiteral parseIntervalLiteral(SqlParserPos pos,

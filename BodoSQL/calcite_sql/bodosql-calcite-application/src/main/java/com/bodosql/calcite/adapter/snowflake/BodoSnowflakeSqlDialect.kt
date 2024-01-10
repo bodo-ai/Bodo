@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSyst
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.sql.SqlAbstractDateTimeLiteral
 import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalLiteral.IntervalValue
@@ -17,6 +18,8 @@ import org.apache.calcite.sql.type.AbstractSqlType
 import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.SqlTypeName
 import java.math.BigDecimal
+import java.util.*
+import kotlin.collections.ArrayList
 
 class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
 
@@ -266,9 +269,27 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         }
     }
 
+    override fun unparseDateTimeLiteral(
+        writer: SqlWriter,
+        literal: SqlAbstractDateTimeLiteral,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        if (literal.typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+            // Snowflake doesn't recognize TIMESTAMP_WITH_LOCAL_TIME_ZONE as a way to create,
+            // a literal, so we need to remap it to a TO_TIMESTAMP_LTZ call.
+            writer.print("TO_TIMESTAMP_LTZ")
+            val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
+            writer.print(String.format(Locale.ROOT, "'%s'", literal.toFormattedString()))
+            writer.endList(frame)
+        } else {
+            super.unparseDateTimeLiteral(writer, literal, leftPrec, rightPrec)
+        }
+    }
+
     companion object {
         @JvmField
-        val DEFAULT_CONTEXT: Context = org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT
+        val DEFAULT_CONTEXT: Context = SnowflakeSqlDialect.DEFAULT_CONTEXT
             .withLiteralQuoteString("$$")
             .withLiteralEscapedQuoteString("\\$\\$")
             .withCaseSensitive(true)
@@ -281,6 +302,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         // Default implementation to use before we have support for $ strings in the parser.
         // TODO: Add $ string suppport
         @JvmField
-        val NO_DOLLAR_ESCAPE = BodoSnowflakeSqlDialect(org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT)
+        val NO_DOLLAR_ESCAPE = BodoSnowflakeSqlDialect(SnowflakeSqlDialect.DEFAULT_CONTEXT)
     }
 }
