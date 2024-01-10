@@ -2303,12 +2303,15 @@ public class RexSimplify {
                     default:
                         break;
                 }
-                final List<RexNode> reducedValues = new ArrayList<>();
-                final RexNode simplifiedExpr =
-                    rexBuilder.makeCast(e.getType(), operand, safe, safe);
-                executor.reduce(rexBuilder, ImmutableList.of(simplifiedExpr), reducedValues);
-                return requireNonNull(
-                        Iterables.getOnlyElement(reducedValues));
+                // Bodo Change: Remove calls to the executor to simplify literals.
+                // These don't match our rules.
+                // final List<RexNode> reducedValues = new ArrayList<>();
+                // final RexNode simplifiedExpr =
+                //     rexBuilder.makeCast(e.getType(), operand, safe, safe);
+                // executor.reduce(rexBuilder, ImmutableList.of(simplifiedExpr), reducedValues);
+                // return requireNonNull(
+                //
+                //         Iterables.getOnlyElement(reducedValues));
             default:
                 if (operand == e.getOperands().get(0)) {
                     return e;

@@ -876,7 +876,9 @@ def test_try_to_double_scalars(spark_info):
     ],
 )
 def test_to_boolean_optional_invalid_str(fn_name):
-    """Test TRY_TO_BOOLEAN and TO_BOOLEAN in optional argument case"""
+    """Test TRY_TO_BOOLEAN and TO_BOOLEAN in optional argument case.
+    Note because of how the IN operator works the integer values are cast
+    to boolean, not the other way around. This is verified in SF."""
     query = f"""SELECT case when {fn_name}(A) in (0, 1, 2, 3, 4, 5)
             then 'USA' else 'international' end as origin_zip_type
             FROM table1 """
@@ -901,18 +903,18 @@ def test_to_boolean_optional_invalid_str(fn_name):
     expected_output = pd.DataFrame(
         {
             "ORIGIN_ZIP_TYPE": [
+                "international",
                 "USA",
                 "USA",
                 "USA",
                 "USA",
                 "USA",
                 "USA",
-                "international",
-                "international",
-                "international",
-                "international",
-                "international",
-                "international",
+                "USA",
+                "USA",
+                "USA",
+                "USA",
+                "USA",
             ]
         }
     )
