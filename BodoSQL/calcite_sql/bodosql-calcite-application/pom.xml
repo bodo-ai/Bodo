@@ -290,11 +290,6 @@
                                         <!-- List of all class files we overwrite from Calcite. -->
                                         <!-- Ideally, this list is empty and classes should only be added here sparingly or removed. -->
                                         <!-- The existence of this list is a maintenance nightmare. -->
-                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$1.class</exclude>
-                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetter.class</exclude>
-                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetterImpl.class</exclude>
-                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$Result.class</exclude>
-                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptAbstractTable.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$1.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$ProjectFilterTable.class</exclude>
@@ -317,6 +312,7 @@
                                         <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>

@@ -8,8 +8,10 @@ import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.rex.JsonPecUtil
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.avatica.util.ByteString
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
@@ -18,11 +20,16 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.BasicSqlType
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.SqlTypeUtil.isTimestamp
+import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
+import java.lang.IllegalArgumentException
 import java.math.BigDecimal
+import java.math.BigInteger
+import java.math.MathContext
 import java.math.RoundingMode
 import java.util.*
 import java.util.regex.Pattern
@@ -102,52 +109,193 @@ class BodoRexSimplify(
         }
     }
 
-    private fun stringLiteralToDate(call: RexCall, literal: RexLiteral): RexNode {
-        // Convert a SQL literal being cast to a date with the default Snowflake
-        // parsing to a date literal. If the parsed date doesn't match our supported
-        // formats then we return the original date.
-        val literalString = literal.value2.toString()
-
-        // Just support the basic Snowflake pattern without whitespace.
-        val pattern = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})")
-        val matcher = pattern.matcher(literalString)
-        return if (matcher.find()) {
-            val year = matcher.group(1)
-            val month = matcher.group(2)
-            val day = matcher.group(3)
-            rexBuilder.makeDateLiteral(DateString(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day)))
+    /**
+     * Converts a Snowflake string literal that represents an offset from the
+     * start of UNIX Time and returns that value normalized to milliseconds.
+     *
+     * A precondition for this function is that the entire string is an
+     * integer literal.
+     *
+     * Note Snowflake interprets the epoch value differently depending
+     * on the value of the integer, which we duplicate here:
+     * https://docs.snowflake.com/en/sql-reference/functions/to_timestamp#usage-notes
+     */
+    private fun integerStringLiteralToEpoch(literalString: String): BigDecimal {
+        val offset = BigDecimal(literalString)
+        return if (offset < BigDecimal(SECOND_EPOCH_THRESHOLD)) {
+            // Value is in seconds.
+            offset * BigDecimal(NANOSEC_PER_SECOND)
+        } else if (offset < BigDecimal(MILLISECOND_EPOCH_THRESHOLD)) {
+            // Value is in milliseconds
+            offset * BigDecimal(NANOSEC_PER_MILLISECOND)
+        } else if (offset < BigDecimal(MICROSECOND_EPOCH_THRESHOLD)) {
+            // Value is in microseconds
+            offset * BigDecimal(NANOSEC_PER_MICROSECOND)
         } else {
-            call
+            // Value is in nanoseconds
+            offset
         }
     }
 
-    private fun dateLiteralToTimestamp(literal: RexLiteral, precision: Int): RexNode {
+    /**
+     * Convert epoch in nanoseconds to the corresponding date string.
+     */
+    private fun epochToDateString(epochNanoseconds: BigDecimal): DateString {
+        // Only keep the date portion
+        val dateOffset = epochNanoseconds.divideToIntegralValue(BigDecimal(NANOSEC_PER_DAY)).toInt()
+        return DateString.fromDaysSinceEpoch(dateOffset)
+    }
+
+    /**
+     * Convert epoch in nanoseconds to the corresponding time string.
+     */
+    private fun epochToTimeString(epochNanoseconds: BigDecimal): TimeString {
+        // Only keep the time portion
+        val timeOffset = epochNanoseconds.remainder(BigDecimal(NANOSEC_PER_DAY))
+        val nanos = timeOffset.remainder(BigDecimal(NANOSEC_PER_SECOND)).toInt()
+        // We can now move from decimal to integer
+        val secondHigher = timeOffset.divideToIntegralValue(BigDecimal(NANOSEC_PER_SECOND)).toInt()
+        val second = secondHigher.mod(SECOND_PER_MINUTE)
+        val minute = secondHigher.div(SECOND_PER_MINUTE).mod(MINUTE_PER_HOUR)
+        val hour = secondHigher.div(SECOND_PER_HOUR)
+        return TimeString(hour, minute, second).withNanos(nanos)
+    }
+
+    private fun stringLiteralToDateString(literalString: String): Pair<DateString?, String> {
+        // Just support the main Snowflake patterns without whitespace. Note that Snowflake
+        // appends leading 0s if they are absent
+        val pattern1 = Pattern.compile("^(\\d{1,4})-(\\d{1,2})-(\\d{1,2})")
+        val matcher1 = pattern1.matcher(literalString)
+        return if (matcher1.find()) {
+            val year = matcher1.group(1)
+            val month = matcher1.group(2)
+            val day = matcher1.group(3)
+            val remainingString = literalString.substring(matcher1.end())
+            Pair(DateString(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day)), remainingString)
+        } else {
+            val pattern2 = Pattern.compile("^(\\d{1,2})/(\\d{1,2})/(\\d{1,4})")
+            val matcher2 = pattern2.matcher(literalString)
+            if (matcher2.find()) {
+                val month = matcher2.group(1)
+                val day = matcher2.group(2)
+                val year = matcher2.group(3)
+                val remainingString = literalString.substring(matcher2.end())
+                Pair(DateString(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day)), remainingString)
+            } else {
+                val pattern3 = Pattern.compile("^(\\d{1,2})-(\\p{L}{3})-(\\d{1,4})$")
+                val matcher3 = pattern3.matcher(literalString)
+                if (matcher3.find()) {
+                    val day = matcher3.group(1)
+                    val monthName = matcher3.group(2).uppercase()
+                    val year = matcher3.group(3)
+                    // Month is 1-indexed
+                    val month = monthCodeList.indexOf(monthName) + 1
+                    val remainingString = literalString.substring(matcher3.end())
+                    // This format cannot be used at the start of a timestamp string
+                    if (remainingString.isEmpty()) {
+                        Pair(
+                            DateString(Integer.valueOf(year), Integer.valueOf(month), Integer.valueOf(day)),
+                            remainingString,
+                        )
+                    } else {
+                        Pair(null, literalString)
+                    }
+                } else {
+                    Pair(null, literalString)
+                }
+            }
+        }
+    }
+
+    private fun stringLiteralToDate(call: RexCall, literal: RexLiteral): RexNode {
+        val literalString = literal.value2.toString()
+        // Snowflake accepts timestamp inputs for date casts
+        return if (literalString.all { char -> char.isDigit() }) {
+            val nanoseconds = integerStringLiteralToEpoch(literalString)
+            rexBuilder.makeDateLiteral(epochToDateString(nanoseconds))
+        } else {
+            val tsString = stringLiteralToTimestampString(literalString, true)
+            if (tsString == null) {
+                call
+            } else {
+                // Extract the date component
+                val dateComponent = tsString.toString().split(" ")[0]
+                val dateString = DateString(dateComponent)
+                rexBuilder.makeDateLiteral(dateString)
+            }
+        }
+    }
+
+    /**
+     * Converts a date literal to a TIMESTAMP literal. This supports both
+     * TIMESTAMP_LTZ and TIMESTAMP_NTZ.
+     */
+    private fun dateLiteralToTimestamp(literal: RexLiteral, precision: Int, isTzAware: Boolean): RexNode {
         val calendar = literal.getValueAs(Calendar::class.java)!!
-        return rexBuilder.makeTimestampLiteral(TimestampString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, 0), precision)
+        val tsString = TimestampString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+        return if (isTzAware) {
+            rexBuilder.makeTimestampWithLocalTimeZoneLiteral(tsString, precision)
+        } else {
+            rexBuilder.makeTimestampLiteral(tsString, precision)
+        }
+    }
+
+    /**
+     * Converts a TIMESTAMP_LTZ or TIMESTAMP_NTZ literal to a date literal.
+     */
+    private fun timestampLiteralToDate(literal: RexLiteral): RexNode {
+        val string = literal.getValueAs(TimestampString::class.java)!!.toString()
+        val dateString = DateString(string.split(" ")[0])
+        return rexBuilder.makeDateLiteral(dateString)
+    }
+
+    /**
+     * Converts a timestamp literal to a date literal. This supports both
+     * TIMESTAMP_LTZ and TIMESTAMP_NTZ.
+     */
+    private fun timestampLiteralToTime(literal: RexLiteral, precision: Int): RexNode {
+        val tsString = literal.getValueAs(TimestampString::class.java)
+        return if (tsString == null) {
+            // This code path should never be reachable.
+            literal
+        } else {
+            // Convert to a string and extract the time value.
+            val strValue = tsString.toString()
+            val parts = strValue.split(" ")
+            if (parts.size != 2) {
+                // This code path should never be reachable
+                literal
+            } else {
+                val timeStr = TimeString(parts[1])
+                rexBuilder.makeTimeLiteral(timeStr, precision)
+            }
+        }
     }
 
     /**
      * Simplify ::date and to_date functions for supported literals.
      */
-    private fun simplifyDateCast(call: RexCall): RexNode {
-        return if (call.operands.size == 1 && (call.operands[0] is RexLiteral || call.operands[0] is RexCall)) {
-            if (call.operands[0] is RexLiteral) {
-                // Resolve constant casts for literals
-                val literal = call.operands[0] as RexLiteral
-                when (literal.typeName) {
+    private fun simplifyDateCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexLiteral) {
+            // Resolve constant casts for literals
+            if (operand.type is TZAwareSqlType) {
+                timestampLiteralToDate(operand)
+            } else {
+                when (operand.typeName) {
+                    SqlTypeName.DATE -> operand
                     SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
-                    SqlTypeName.DATE -> literal
-                    SqlTypeName.VARCHAR, SqlTypeName.CHAR -> stringLiteralToDate(call, literal)
+                    SqlTypeName.VARCHAR, SqlTypeName.CHAR -> stringLiteralToDate(call, operand)
+                    SqlTypeName.TIMESTAMP -> timestampLiteralToDate(operand)
                     else -> call
                 }
+            }
+        } else if (operand is RexCall) {
+            val innerCall = call.operands[0] as RexCall
+            if (innerCall.operator.name == DatetimeOperatorTable.GETDATE.name) {
+                // Replace GETDATE::DATE with CURRENT_DATE
+                rexBuilder.makeCall(SqlStdOperatorTable.CURRENT_DATE)
             } else {
-                val innerCall = call.operands[0] as RexCall
-                if (innerCall.operator.name == DatetimeOperatorTable.GETDATE.name) {
-                    // Replace GETDATE::DATE with CURRENT_DATE
-                    rexBuilder.makeCall(SqlStdOperatorTable.CURRENT_DATE)
-                } else {
-                    call
-                }
+                call
             }
         } else {
             call
@@ -163,12 +311,11 @@ class BodoRexSimplify(
      * as BIGINT, so when inlining a view we will generate a cast of X::DECIMAL(38,0)::BIGINT
      * where X has an original type of BIGINT.
      */
-    private fun simplifyIntegerCast(call: RexCall): RexNode {
-        return if (call.operands[0].kind == SqlKind.CAST || call.operands[0].kind == SqlKind.SAFE_CAST) {
+    private fun simplifyIntegerCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexCall && (operand.kind == SqlKind.CAST || operand.kind == SqlKind.SAFE_CAST)) {
             val outerCastType = call.type
-            val innerCast = call.operands[0] as RexCall
-            val innerCastType = innerCast.type
-            val innerMostNode = innerCast.operands[0]
+            val innerCastType = operand.type
+            val innerMostNode = operand.operands[0]
             val innerMostNodeType = innerMostNode.type
             val allNumeric = SqlTypeFamily.EXACT_NUMERIC.contains(outerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerCastType) && SqlTypeFamily.EXACT_NUMERIC.contains(innerMostNodeType)
             val allInteger = outerCastType.scale == 0 && innerCastType.scale == 0 && innerMostNodeType.scale == 0
@@ -180,101 +327,556 @@ class BodoRexSimplify(
             } else {
                 call
             }
+        } else if (operand is RexLiteral) {
+            // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
+            // call for non-TRY_ casts (since they need to raise an error at runtime).
+            val nullInteger = rexBuilder.makeNullLiteral(call.type)
+            // TODO: Add a bit width check as a non-error case. We don't want
+            // to confuse the TINYINT definitions in SF and hit errors.
+            // TODO: Separate Decimal Literals from Double literals in the plan.
+            // TODO: Be more conservative with the error code path to avoid false positives
+            // on try cast.
+            val errorValue = if (isTryCast) { nullInteger } else { call }
+            when (operand.type.sqlTypeName) {
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.DECIMAL,
+                // Note FLOAT and DOUBLE are internally stored as BigDecimal in Calcite
+                SqlTypeName.DOUBLE,
+                SqlTypeName.FLOAT,
+                -> {
+                    val asDecimal = operand.getValueAs(BigDecimal::class.java)
+                    if (asDecimal == null) {
+                        errorValue
+                    } else {
+                        val storedValue = asDecimal.setScale(0, RoundingMode.HALF_UP).toBigInteger()
+                        val isSafe = when (call.type.sqlTypeName) {
+                            SqlTypeName.TINYINT -> (storedValue >= BigInteger.valueOf(Byte.MIN_VALUE.toLong())) && (
+                                storedValue <= BigInteger.valueOf(
+                                    Byte.MAX_VALUE.toLong(),
+                                )
+                                )
+
+                            SqlTypeName.SMALLINT -> (storedValue >= BigInteger.valueOf(Short.MIN_VALUE.toLong())) && (
+                                storedValue <= BigInteger.valueOf(
+                                    Short.MAX_VALUE.toLong(),
+                                )
+                                )
+
+                            SqlTypeName.INTEGER -> (storedValue >= BigInteger.valueOf(Int.MIN_VALUE.toLong())) && (
+                                storedValue <= BigInteger.valueOf(
+                                    Int.MAX_VALUE.toLong(),
+                                )
+                                )
+
+                            SqlTypeName.BIGINT -> (storedValue >= BigInteger.valueOf(Long.MIN_VALUE)) && (
+                                storedValue <= BigInteger.valueOf(
+                                    Long.MAX_VALUE,
+                                )
+                                )
+
+                            else -> true
+                        }
+                        if (isSafe) {
+                            rexBuilder.makeLiteral(storedValue.longValueExact(), call.type)
+                        } else {
+                            call
+                        }
+                    }
+                }
+                SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR,
+                -> {
+                    val asString = operand.getValueAs(String::class.java)?.uppercase()?.trim()
+                    val asDecimal = if (asString.equals("E") || asString.equals("-E")) {
+                        BigDecimal(0)
+                    } else {
+                        asString?.toBigDecimalOrNull()
+                    }
+                    if (asDecimal == null) {
+                        errorValue
+                    } else {
+                        val storedValue = asDecimal.setScale(0, RoundingMode.HALF_UP).toBigInteger()
+                        val isSafe = when (call.type.sqlTypeName) {
+                            SqlTypeName.TINYINT -> (storedValue >= BigInteger.valueOf(Byte.MIN_VALUE.toLong())) && (storedValue <= BigInteger.valueOf(Byte.MAX_VALUE.toLong()))
+                            SqlTypeName.SMALLINT -> (storedValue >= BigInteger.valueOf(Short.MIN_VALUE.toLong())) && (storedValue <= BigInteger.valueOf(Short.MAX_VALUE.toLong()))
+                            SqlTypeName.INTEGER -> (storedValue >= BigInteger.valueOf(Int.MIN_VALUE.toLong())) && (storedValue <= BigInteger.valueOf(Int.MAX_VALUE.toLong()))
+                            SqlTypeName.BIGINT -> (storedValue >= BigInteger.valueOf(Long.MIN_VALUE)) && (storedValue <= BigInteger.valueOf(Long.MAX_VALUE))
+                            else -> true
+                        }
+                        if (isSafe) {
+                            rexBuilder.makeLiteral(storedValue.longValueExact(), call.type)
+                        } else {
+                            call
+                        }
+                    }
+                }
+                SqlTypeName.BOOLEAN -> {
+                    val isTrue = operand.isAlwaysTrue
+                    val isFalse = operand.isAlwaysFalse
+                    if (isTrue) {
+                        rexBuilder.makeLiteral(1, call.getType())
+                    } else if (isFalse) {
+                        rexBuilder.makeLiteral(0, call.getType())
+                    } else {
+                        // This shouldn't be reachable.
+                        call
+                    }
+                }
+                SqlTypeName.NULL -> nullInteger
+                else -> call
+            }
         } else {
             call
         }
     }
 
-    private fun isDateConversion(e: RexNode): Boolean {
-        return e is RexCall && (
-            e.operator.name == CastingOperatorTable.TO_DATE.name ||
-                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
+    /**
+     * Simplifies a cast to a decimal type.
+     *
+     * @param call The original cast call.
+     * @param operand The argument being casted.
+     * @param isTryCast If true, returns null on invalid inputs.
+     */
+    private fun simplifyDecimalCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexLiteral) {
+            // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
+            // call for non-TRY_ casts (since they need to raise an error at runtime).
+            val nullDecimal = rexBuilder.makeNullLiteral(call.type)
+            val errorValue = if (isTryCast) { nullDecimal } else { call }
+            val precision = call.getType().precision
+            val scale = call.getType().scale
+            // Compute bounds for the decimal value
+            val numericSection = BigDecimal(10, MathContext.UNLIMITED).pow((precision - scale))
+            // Subtract the smallest positive value
+            val smallestPositive = BigDecimal(BigInteger.ONE, scale)
+            val domain = numericSection.subtract(smallestPositive)
+            // TODO: Be more conservative with the error code paths.
+            when (operand.type.sqlTypeName) {
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.DECIMAL,
+                -> {
+                    val asDecimal = operand.getValueAs(BigDecimal::class.java)
+                    if (asDecimal == null) { errorValue } else {
+                        if (asDecimal <= -domain || asDecimal >= domain) {
+                            errorValue
+                        } else {
+                            rexBuilder.makeLiteral(asDecimal.setScale(scale, RoundingMode.HALF_UP), call.type)
+                        }
+                    }
+                }
+                SqlTypeName.DOUBLE,
+                SqlTypeName.FLOAT,
+                -> {
+                    // Float values round so they don't need to fit.
+                    val asDecimal = operand.getValueAs(BigDecimal::class.java)
+                    if (asDecimal == null) {
+                        errorValue
+                    } else {
+                        rexBuilder.makeLiteral(asDecimal.setScale(scale, RoundingMode.HALF_UP), call.type)
+                    }
+                }
+                SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR,
+                -> {
+                    val asString = operand.getValueAs(String::class.java)?.uppercase()?.trim()
+                    val asDecimal = if (asString.equals("E") || asString.equals("-E")) {
+                        BigDecimal(0)
+                    } else {
+                        asString?.toBigDecimalOrNull()
+                    }
+                    if (asDecimal == null) {
+                        errorValue
+                    } else {
+                        if (asDecimal <= -domain || asDecimal >= domain) {
+                            errorValue
+                        } else {
+                            rexBuilder.makeLiteral(asDecimal.setScale(scale, RoundingMode.HALF_UP), call.type)
+                        }
+                    }
+                }
+                SqlTypeName.BOOLEAN -> {
+                    val isTrue = operand.isAlwaysTrue
+                    val isFalse = operand.isAlwaysFalse
+                    if (isTrue) {
+                        if (scale == precision) {
+                            // If scale == precision 1 cannot be represented.
+                            // This is allowed in SF but clearly a bug as it has value 1.
+                            call
+                        } else {
+                            rexBuilder.makeLiteral(BigDecimal.ONE, call.getType())
+                        }
+                    } else if (isFalse) {
+                        if (scale == precision) {
+                            // If scale == precision calcite won't allow making
+                            // the literal unless we make the precision 0.
+                            rexBuilder.makeLiteral(BigDecimal.ZERO.setScale(1), call.getType())
+                        } else {
+                            rexBuilder.makeLiteral(BigDecimal.ZERO, call.getType())
+                        }
+                    } else {
+                        // This shouldn't be reachable.
+                        call
+                    }
+                }
+                SqlTypeName.NULL -> nullDecimal
+                else -> call
+            }
+        } else {
+            call
+        }
+    }
+
+    /**
+     * Simplifies a cast to a double type.
+     *
+     * @param call The original cast call.
+     * @param operand The argument being casted.
+     * @param isTryCast If true, returns null on invalid inputs.
+     */
+    private fun simplifyDoubleCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexLiteral) {
+            // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
+            // call for non-TRY_ casts (since they need to raise an error at runtime).
+            val nullDouble = rexBuilder.makeNullLiteral(call.type)
+            val errorValue = if (isTryCast) { nullDouble } else { call }
+            when (operand.type.sqlTypeName) {
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.DECIMAL,
+                // Note: Double and float internally are represented as BigDecimal inside Calcite, so
+                // we use the same code path as decimal/integer.
+                SqlTypeName.DOUBLE,
+                SqlTypeName.FLOAT,
+                -> {
+                    val asDecimal = operand.getValueAs(BigDecimal::class.java)
+                    if (asDecimal == null) { errorValue } else { rexBuilder.makeLiteral(asDecimal, call.type) }
+                }
+                SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR,
+                -> {
+                    val asString = operand.getValueAs(String::class.java)?.uppercase()?.trim()
+                    val asDecimal = asString?.toBigDecimalOrNull()
+                    if (asDecimal == null) {
+                        // Manually check for NAN or strings containing INF.
+                        // Don't simplify these because they aren't invalid.
+                        // Note: We are conservative in case whitespace matters.
+                        if (asString.equals("NAN") || asString.equals("INF") || asString.equals("-INF")) {
+                            call
+                        } else {
+                            errorValue
+                        }
+                    } else {
+                        rexBuilder.makeLiteral(asDecimal, call.type)
+                    }
+                }
+                SqlTypeName.BOOLEAN -> {
+                    val isTrue = operand.isAlwaysTrue
+                    val isFalse = operand.isAlwaysFalse
+                    if (isTrue) {
+                        rexBuilder.makeLiteral(1.0, call.getType())
+                    } else if (isFalse) {
+                        rexBuilder.makeLiteral(0.0, call.getType())
+                    } else {
+                        // This shouldn't be reachable.
+                        call
+                    }
+                }
+                SqlTypeName.NULL -> nullDouble
+                else -> call
+            }
+        } else {
+            call
+        }
+    }
+
+    /**
+     * Parse the time component from a Snowflake string. This returns null for the time string
+     * if there is no time component as this is shared by both Time and Timestamp support.
+     *
+     * This also returns any leftover string components for further validation
+     */
+    private fun parseTimeComponents(literalString: String, isTimestamp: Boolean): Pair<TimeString?, String> {
+        val prefix = if (isTimestamp) {
+            "[ T]"
+        } else {
+            ""
+        }
+        // This supports HH24:MI:SS.FF and HH24:MI:SS ISO time formats. Note Snowflake
+        // supports when leading 0s are missing.
+        val timeStringPattern1 = Pattern.compile("^$prefix(\\d{1,2}):(\\d{1,2}):(\\d{1,2})")
+        val timeStringMatcher1 = timeStringPattern1.matcher(literalString)
+        var remainingString = literalString
+        return if (timeStringMatcher1.find()) {
+            val hour = Integer.valueOf(timeStringMatcher1.group(1))
+            val minute = Integer.valueOf(timeStringMatcher1.group(2))
+            val second = Integer.valueOf(timeStringMatcher1.group(3))
+            var subsecond = ""
+            remainingString = remainingString.substring(timeStringMatcher1.end())
+
+            // The pattern for the sub-second components of a timestamp string.
+            val subsecondStringPattern = Pattern.compile("^\\.(\\d{1,9})")
+            val subsecondStringMatcher = subsecondStringPattern.matcher(remainingString)
+            if (subsecondStringMatcher.find()) {
+                subsecond = subsecondStringMatcher.group(1)
+                remainingString = remainingString.substring(subsecondStringMatcher.end())
+            }
+            var timeStr = TimeString(hour, minute, second)
+            if (subsecond.isNotEmpty()) {
+                timeStr = timeStr.withFraction(subsecond)
+            }
+            Pair(timeStr, remainingString)
+        } else {
+            // We also support HH24:MI. This requires no fractional component
+            val timeStringPattern2 = Pattern.compile("^$prefix(\\d{1,2}):(\\d{1,2})")
+            val timeStringMatcher2 = timeStringPattern2.matcher(literalString)
+            if (timeStringMatcher2.find()) {
+                val hour = Integer.valueOf(timeStringMatcher2.group(1))
+                val minute = Integer.valueOf(timeStringMatcher2.group(2))
+                val second = 0
+                val suffix = remainingString.substring(timeStringMatcher2.end())
+                // We cannot have anything after the time string
+                if (suffix.isNotEmpty()) {
+                    Pair(null, remainingString)
+                } else {
+                    var timeStr = TimeString(hour, minute, second)
+                    Pair(timeStr, suffix)
+                }
+            } else if (isTimestamp) {
+                // Only Timestamp support just hours. There must be no fractional component.
+                val timeStringPattern3 = Pattern.compile("^$prefix(\\d{1,2})")
+                val timeStringMatcher3 = timeStringPattern3.matcher(literalString)
+                if (timeStringMatcher3.find()) {
+                    val hour = Integer.valueOf(timeStringMatcher3.group(1))
+                    val minute = 0
+                    val second = 0
+                    val suffix = remainingString.substring(timeStringMatcher3.end())
+                    // We cannot have anything after the time string
+                    if (suffix.isNotEmpty()) {
+                        Pair(null, remainingString)
+                    } else {
+                        var timeStr = TimeString(hour, minute, second)
+                        Pair(timeStr, suffix)
+                    }
+                } else {
+                    Pair(null, remainingString)
+                }
+            } else {
+                Pair(null, remainingString)
+            }
+        }
+    }
+
+    /**
+     * Convert a String literal that represents a datetime value to a TimestampString
+     */
+    private fun stringLiteralToTimestampString(literalString: String, isNaive: Boolean): TimestampString? {
+        // Convert a SQL literal being cast to a timestamp with the default Snowflake
+        // parsing to a timestamp literal. If the parsed date doesn't match our supported
+        // formats then we return the original cast call.
+        val (dateString, nonDateString) = stringLiteralToDateString(literalString)
+        if (dateString == null) {
+            return null
+        }
+        val parts = dateString.toString().split("-")
+        val year = Integer.valueOf(parts[0])
+        val month = Integer.valueOf(parts[1])
+        val day = Integer.valueOf(parts[2])
+
+        var (timeString, remainingString) = parseTimeComponents(nonDateString, true)
+        val (timeParts, subSecond) = if (timeString == null) {
+            Pair(Triple(0, 0, 0), "")
+        } else {
+            // Parse the time string.
+            val strValue = timeString.toString()
+            val clockParts = strValue.split(".")
+            val clockTime = clockParts[0]
+            val subClockTime = if (clockParts.size == 2) {
+                clockParts[1]
+            } else {
+                ""
+            }
+            val units = clockTime.split(":")
+            val integerUnits = Triple(Integer.valueOf(units[0]), Integer.valueOf(units[1]), Integer.valueOf(units[2]))
+            Pair(integerUnits, subClockTime)
+        }
+        val (hour, minute, second) = timeParts
+        if (isNaive) {
+            // Naive timestamps ignore any UTC offset since it's a localize conversion.
+            // Non-Naive would need ot actually calcuate the value.
+            val offsetPattern = Pattern.compile("^[+-]\\d{1,2}:\\d{1,2}$")
+            val offsetMatcher = offsetPattern.matcher(remainingString)
+            if (offsetMatcher.find()) {
+                // Remove the UTC offset
+                remainingString = remainingString.substring(offsetMatcher.end())
+            }
+        }
+        // Verify that the remainder of the string is either empty or "+00:00"
+        return if (remainingString.isEmpty()) {
+            var tsString = TimestampString(
+                Integer.valueOf(year),
+                Integer.valueOf(month),
+                Integer.valueOf(day),
+                Integer.valueOf(hour),
+                Integer.valueOf(minute),
+                Integer.valueOf(second),
             )
+            if (subSecond.isNotEmpty()) {
+                tsString = tsString.withFraction(subSecond)
+            }
+            tsString
+        } else {
+            null
+        }
     }
 
     /**
      * Convert a SQL literal being cast to a timestamp with the default Snowflake
      * parsing to a timestamp literal. If the parsed date doesn't match our supported
-     * formats then we return the original date.
+     * formats then we return the original cast.
+     *
+     * Note: This handles both TIMESTAMP_NTZ and TIMESTAMP_LTZ
      *
      * @param call The original call to cast the string to a timestamp
      * @param literal The string literal being casted
      * @return Either the simplified timestamp literal, or the original call
      */
-    private fun stringLiteralToTimestamp(call: RexCall, literal: RexLiteral): RexNode {
+    private fun stringLiteralToTimestamp(call: RexCall, literal: RexLiteral, isNaive: Boolean): RexNode {
+        val literalString = literal.value2.toString()
+        return if (literalString.all { char -> char.isDigit() }) {
+            val nanoseconds = integerStringLiteralToEpoch(literalString)
+            // Compute the date and timestamp string and convert it to a Timestamp
+            val dateString = epochToDateString(nanoseconds)
+            val timeString = epochToTimeString(nanoseconds)
+            // Combine the string to build the timestamp string
+            val stringValue = "$dateString $timeString"
+            val tsString = TimestampString(stringValue)
+            if (isNaive) {
+                rexBuilder.makeTimestampLiteral(tsString, call.getType().precision)
+            } else {
+                rexBuilder.makeTimestampWithLocalTimeZoneLiteral(tsString, call.getType().precision)
+            }
+        } else {
+            val tsString = stringLiteralToTimestampString(literalString, isNaive)
+            return if (tsString == null) {
+                call
+            } else if (isNaive) {
+                rexBuilder.makeTimestampLiteral(tsString, call.getType().precision)
+            } else {
+                rexBuilder.makeTimestampWithLocalTimeZoneLiteral(tsString, call.getType().precision)
+            }
+        }
+    }
+
+    /**
+     * Convert a SQL literal being cast to a time with the default Snowflake
+     * parsing to a time literal. If the parsed date doesn't match our supported
+     * formats then we return the original cast.
+     *
+     * Note: This handles both TIMESTAMP_NTZ and TIMESTAMP_LTZ
+     *
+     * @param call The original call to cast the string to a timestamp
+     * @param literal The string literal being casted
+     * @return Either the simplified time literal, or the original call
+     */
+    private fun stringLiteralToTime(call: RexCall, literal: RexLiteral): RexNode {
         // Convert a SQL literal being cast to a timestamp with the default Snowflake
         // parsing to a timestamp literal. If the parsed date doesn't match our supported
         // formats then we return the original cast call.
         var literalString = literal.value2.toString()
-
-        val year: Int
-        val month: Int
-        val day: Int
-        var hour = 0
-        var minute = 0
-        var second = 0
-        var subsecond = ""
-        var result: RexNode = call
-
-        // The basic Snowflake (date-only) pattern without whitespace.
-        val dateStringPattern = Pattern.compile("^(\\d{4})-(\\d{2})-(\\d{2})")
-        val dateStringMatcher = dateStringPattern.matcher(literalString)
-        if (dateStringMatcher.find()) {
-            year = Integer.valueOf(dateStringMatcher.group(1))
-            month = Integer.valueOf(dateStringMatcher.group(2))
-            day = Integer.valueOf(dateStringMatcher.group(3))
-            literalString = literalString.substring(dateStringMatcher.end())
-
-            // The basic pattern for the time component of a timestamp following the date component
-            val timeStringPattern = Pattern.compile("^[ T](\\d{2}):(\\d{2}):(\\d{2})")
-            val timeStringMatcher = timeStringPattern.matcher(literalString)
-            if (timeStringMatcher.find()) {
-                hour = Integer.valueOf(timeStringMatcher.group(1))
-                minute = Integer.valueOf(timeStringMatcher.group(2))
-                second = Integer.valueOf(timeStringMatcher.group(3))
-                literalString = literalString.substring(timeStringMatcher.end())
-
-                // The pattern for the sub-second components of a timestamp string.
-                val subsecondStringPattern = Pattern.compile("^(\\d{1,9})")
-                val subsecondStringMatcher = subsecondStringPattern.matcher(literalString)
-                if (subsecondStringMatcher.find()) {
-                    subsecond = subsecondStringMatcher.group(1)
-                    literalString = literalString.substring(timeStringMatcher.end())
-                }
-            }
-            // Verify that the remainder of the string is either empty or "+00:00"
-            if (literalString.isEmpty() || literalString == "+00:00") {
-                var tsString = TimestampString(
-                    Integer.valueOf(year),
-                    Integer.valueOf(month),
-                    Integer.valueOf(day),
-                    Integer.valueOf(hour),
-                    Integer.valueOf(minute),
-                    Integer.valueOf(second),
-                )
-                if (subsecond != "") {
-                    tsString = tsString.withFraction(subsecond)
-                }
-                result = rexBuilder.makeTimestampLiteral(tsString, call.getType().precision)
+        return if (literalString.all { char -> char.isDigit() }) {
+            val nanoseconds = integerStringLiteralToEpoch(literalString)
+            rexBuilder.makeTimeLiteral(epochToTimeString(nanoseconds), call.type.precision)
+        } else {
+            val (timeStr, remaining) = parseTimeComponents(literalString, false)
+            if (timeStr == null || remaining.isNotEmpty()) {
+                call
+            } else {
+                rexBuilder.makeTimeLiteral(timeStr, call.type.precision)
             }
         }
-        return result
     }
 
     /**
-     * Simplify to_timestamp for supported literals. Note this only
-     * supports TZ-Naive timestamps.
+     * Simplify TIMESTAMP_NTZ cast for literals.
      */
-    private fun simplifyTimestampCast(call: RexCall): RexNode {
-        return if (call.getType() is BasicSqlType && call.operands.size == 1 && call.operands[0] is RexLiteral) {
-            val literal = call.operands[0] as RexLiteral
-            when (literal.typeName) {
-                SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
-                SqlTypeName.VARCHAR,
-                SqlTypeName.CHAR,
-                -> stringLiteralToTimestamp(call, literal)
-                SqlTypeName.DATE -> dateLiteralToTimestamp(literal, call.getType().precision)
-                else -> call
+    private fun simplifyTimestampNtzCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexLiteral) {
+            val nullValue = rexBuilder.makeNullLiteral(call.type)
+            val errorValue = if (isTryCast) nullValue else { call }
+            if (operand.type is TZAwareSqlType) {
+                val timestampString = operand.getValueAs(TimestampString::class.java)
+                if (timestampString == null) {
+                    errorValue
+                } else {
+                    rexBuilder.makeTimestampLiteral(timestampString, call.type.precision)
+                }
+            } else {
+                when (operand.typeName) {
+                    SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                    SqlTypeName.VARCHAR,
+                    SqlTypeName.CHAR,
+                    -> stringLiteralToTimestamp(call, operand, true)
+
+                    SqlTypeName.DATE -> dateLiteralToTimestamp(operand, call.getType().precision, false)
+                    SqlTypeName.TIMESTAMP -> {
+                        // Support change of precision
+                        val timestampString = operand.getValueAs(TimestampString::class.java)
+                        if (timestampString == null) {
+                            errorValue
+                        } else {
+                            rexBuilder.makeTimestampLiteral(timestampString, call.type.precision)
+                        }
+                    }
+                    else -> call
+                }
+            }
+        } else {
+            call
+        }
+    }
+
+    /**
+     * Simplify TIMESTAMP_LTZ cast for literals.
+     */
+    private fun simplifyTimestampLtzCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        return if (operand is RexLiteral) {
+            val nullValue = rexBuilder.makeNullLiteral(call.type)
+            val errorValue = if (isTryCast) nullValue else { call }
+            if (operand.type is TZAwareSqlType) {
+                // Support change of precision
+                val timestampString = operand.getValueAs(TimestampString::class.java)
+                if (timestampString == null) {
+                    errorValue
+                } else {
+                    rexBuilder.makeTimestampWithLocalTimeZoneLiteral(timestampString, call.type.precision)
+                }
+            } else {
+                when (operand.typeName) {
+                    SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                    SqlTypeName.VARCHAR,
+                    SqlTypeName.CHAR,
+                    -> stringLiteralToTimestamp(call, operand, false)
+
+                    SqlTypeName.DATE -> dateLiteralToTimestamp(operand, call.getType().precision, true)
+                    SqlTypeName.TIMESTAMP -> {
+                        val timestampString = operand.getValueAs(TimestampString::class.java)
+                        if (timestampString == null) {
+                            errorValue
+                        } else {
+                            rexBuilder.makeTimestampWithLocalTimeZoneLiteral(timestampString, call.type.precision)
+                        }
+                    }
+
+                    else -> call
+                }
             }
         } else {
             call
@@ -285,28 +887,220 @@ class BodoRexSimplify(
      * Simplify Varchar casts that are equivalent in our type system. These
      * are scalar casts to varchar or varchar casts that only change precision.
      */
-    private fun simplifyVarcharCast(call: RexCall, unknownAs: RexUnknownAs): RexNode {
-        // Bodo Change: Ignore precision for Varchar casts. Calcite requires the
-        // Varchar cast precision be >= to the input, but we don't care and often use
-        // -1.
-        return if (call.operands.size == 1 && call.operands[0].type.sqlTypeName == SqlTypeName.VARCHAR) {
-            simplify(call.operands[0], unknownAs)
+    private fun simplifyVarcharCast(call: RexCall, operand: RexNode, unknownAs: RexUnknownAs): RexNode {
+        val operandTypeName = operand.type.sqlTypeName
+        return if (operand is RexLiteral) {
+            when (operandTypeName) {
+                SqlTypeName.CHAR, SqlTypeName.VARCHAR -> rexBuilder.makeLiteral(operand.getValueAs(String::class.java), call.getType())
+                SqlTypeName.DATE -> rexBuilder.makeLiteral(
+                    operand.getValueAs(DateString::class.java)!!.toString(),
+                    call.getType(),
+                )
+
+                SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT, SqlTypeName.DECIMAL -> {
+                    val literalValue = operand.getValueAs(BigDecimal::class.java)!!
+                    val newLiteral = literalValue.toPlainString()
+                    rexBuilder.makeLiteral(newLiteral, call.getType())
+                }
+
+                SqlTypeName.BOOLEAN -> {
+                    val isTrue = operand.isAlwaysTrue
+                    val isFalse = operand.isAlwaysFalse
+                    if (isTrue) {
+                        rexBuilder.makeLiteral("true", call.getType())
+                    } else if (isFalse) {
+                        rexBuilder.makeLiteral("false", call.getType())
+                    } else {
+                        // This shouldn't be reachable.
+                        call
+                    }
+                }
+                SqlTypeName.BINARY, SqlTypeName.VARBINARY -> {
+                    val byteString = operand.getValueAs(ByteString::class.java)!!
+                    // Snowflake treats A-F as uppercase
+                    rexBuilder.makeLiteral(byteString.toString().uppercase(), call.getType())
+                }
+                SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                else -> call
+            }
+        } else if (operandTypeName == SqlTypeName.VARCHAR || operandTypeName == SqlTypeName.CHAR) {
+            // Ignore precision for intermediate casts
+            simplify(operand, unknownAs)
         } else {
             call
         }
     }
 
     /**
+     * Simplify Varbinary casts that are equivalent in our type system. These
+     * are scalar casts to Varbinary/Binary or literal simplification.
+     */
+    private fun simplifyVarbinaryCast(call: RexCall, operand: RexNode, unknownAs: RexUnknownAs, isTryCast: Boolean): RexNode {
+        val nullValue = rexBuilder.makeNullLiteral(call.type)
+        val errorValue = if (isTryCast) nullValue else { call }
+        val operandTypeName = operand.type.sqlTypeName
+        // Ignore precision on casts (TODO: Do we need to fix precision in our type system for binary/varbinary)
+        return if (operand is RexLiteral) {
+            when (operandTypeName) {
+                SqlTypeName.CHAR, SqlTypeName.VARCHAR -> {
+                    val asString = operand.getValueAs(String::class.java)
+                    if (asString == null) {
+                        errorValue
+                    } else {
+                        // Cast to Binary converts to hex.
+                        try {
+                            val bytesString = ByteString.of(asString, 16)
+                            rexBuilder.makeLiteral(bytesString, call.type)
+                        } catch (e: IllegalArgumentException) {
+                            // hex parsing is straightforward, so if we have an illicit cast convert
+                            // to the error value.
+                            errorValue
+                        }
+                    }
+                }
+                SqlTypeName.BINARY, SqlTypeName.VARBINARY -> rexBuilder.makeLiteral(operand.getValueAs(ByteString::class.java), call.type)
+                SqlTypeName.NULL -> nullValue
+                else -> call
+            }
+        } else if (operandTypeName == SqlTypeName.VARBINARY || operandTypeName == SqlTypeName.BINARY) {
+            // Ignore precision for intermediate casts
+            simplify(operand, unknownAs)
+        } else {
+            call
+        }
+    }
+
+    /**
+     * Simplifies a cast to a boolean type.
+     *
+     * @param call The original cast call.
+     * @param operand The argument being casted.
+     * @param isTryCast If true, returns null on invalid inputs.
+     */
+    private fun simplifyBooleanCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
+        // call for non-TRY_ casts (since they need to raise an error at runtime).
+        val nullBoolean = rexBuilder.makeNullLiteral(call.type)
+        val errorValue = if (isTryCast) { nullBoolean } else { call }
+        return if (operand is RexLiteral) {
+            when (operand.type.sqlTypeName) {
+                SqlTypeName.FLOAT,
+                SqlTypeName.DOUBLE,
+                -> {
+                    val asNumber = operand.getValueAs(Double::class.java)
+                    if (asNumber == null || !asNumber.isFinite()) {
+                        errorValue
+                    } else {
+                        rexBuilder.makeLiteral(asNumber != 0.0)
+                    }
+                }
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.DECIMAL,
+                -> {
+                    val asNumber = operand.getValueAs(BigDecimal::class.java)
+                    if (asNumber == null) {
+                        errorValue
+                    } else {
+                        rexBuilder.makeLiteral(asNumber.signum() != 0)
+                    }
+                }
+                SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR,
+                -> {
+                    val asString = operand.getValueAs(String::class.java)
+                    if (asString == null) {
+                        errorValue
+                    } else {
+                        when (asString.lowercase(Locale.ROOT)) {
+                            "true", "t", "yes", "y", "on", "1" -> {
+                                rexBuilder.makeLiteral(true)
+                            }
+                            "false", "f", "no", "n", "off", "0" -> {
+                                rexBuilder.makeLiteral(false)
+                            }
+                            else -> {
+                                errorValue
+                            }
+                        }
+                    }
+                }
+                SqlTypeName.NULL -> nullBoolean
+                else -> call
+            }
+        } else { call }
+    }
+
+    /**
+     * Simplifies a cast to a time type.
+     *
+     * @param call The original cast call.
+     * @param operand The argument being casted.
+     * @param isTryCast If true, returns null on invalid inputs.
+     */
+    private fun simplifyTimeCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+        // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
+        // call for non-TRY_ casts (since they need to raise an error at runtime).
+        // We are conservative with String parsing here.
+        val nullTime = rexBuilder.makeNullLiteral(call.type)
+        return if (operand is RexLiteral) {
+            if (operand.type is TZAwareSqlType) {
+                timestampLiteralToTime(operand, call.getType().precision)
+            } else {
+                when (operand.type.sqlTypeName) {
+                    SqlTypeName.TIMESTAMP -> timestampLiteralToTime(operand, call.getType().precision)
+                    SqlTypeName.TIME -> {
+                        // Handle precision changes.
+                        val timeStr = operand.getValueAs(TimeString::class.java)
+                        if (timeStr == null) {
+                            // Note: This shouldn't be reachable.
+                            call
+                        } else {
+                            rexBuilder.makeTimeLiteral(timeStr, call.getType().precision)
+                        }
+                    }
+                    SqlTypeName.CHAR,
+                    SqlTypeName.VARCHAR,
+                    -> { stringLiteralToTime(call, operand) }
+                    SqlTypeName.NULL -> nullTime
+                    else -> call
+                }
+            }
+        } else { call }
+    }
+
+    /**
      * Simplify Bodo call expressions that don't depend on handling unknown
      * values in custom way.
      */
-    private fun simplifyBodoCast(call: RexCall, unknownAs: RexUnknownAs): RexNode {
-        return when (call.getType().sqlTypeName) {
-            SqlTypeName.INTEGER, SqlTypeName.SMALLINT, SqlTypeName.TINYINT, SqlTypeName.BIGINT -> simplifyIntegerCast(call)
-            SqlTypeName.DATE -> simplifyDateCast(call)
-            SqlTypeName.TIMESTAMP -> simplifyTimestampCast(call)
-            SqlTypeName.VARCHAR -> simplifyVarcharCast(call, unknownAs)
-            else -> call
+    private fun simplifyBodoCast(call: RexCall, operand: RexNode, targetType: RelDataType, isTryCast: Boolean, unknownAs: RexUnknownAs): RexNode {
+        return if (targetType is TZAwareSqlType) {
+            simplifyTimestampLtzCast(call, operand, isTryCast)
+        } else {
+            when (targetType.sqlTypeName) {
+                SqlTypeName.INTEGER, SqlTypeName.SMALLINT, SqlTypeName.TINYINT, SqlTypeName.BIGINT -> simplifyIntegerCast(
+                    call,
+                    operand,
+                    isTryCast,
+                )
+
+                SqlTypeName.FLOAT, SqlTypeName.DOUBLE -> simplifyDoubleCast(call, operand, isTryCast)
+                SqlTypeName.DECIMAL -> simplifyDecimalCast(
+                    call,
+                    operand,
+                    isTryCast,
+                )
+
+                SqlTypeName.DATE -> simplifyDateCast(call, operand, isTryCast)
+                SqlTypeName.TIMESTAMP -> simplifyTimestampNtzCast(call, operand, isTryCast)
+                SqlTypeName.CHAR, SqlTypeName.VARCHAR -> simplifyVarcharCast(call, operand, unknownAs)
+                SqlTypeName.BOOLEAN -> simplifyBooleanCast(call, operand, isTryCast)
+                SqlTypeName.TIME -> simplifyTimeCast(call, operand, isTryCast)
+                SqlTypeName.BINARY, SqlTypeName.VARBINARY -> simplifyVarbinaryCast(call, operand, unknownAs, isTryCast)
+                else -> call
+            }
         }
     }
 
@@ -396,6 +1190,44 @@ class BodoRexSimplify(
         val secondArg = call.operands[1]
         return if (firstArg is RexLiteral && secondArg is RexLiteral) {
             bodoLiteralPlusMinus(call, firstArg, secondArg, isPlus)
+        } else {
+            call
+        }
+    }
+
+    /**
+     * Simplify numeric literals being negated.
+     */
+    private fun simplifyBodoMinusPrefix(call: RexCall): RexNode {
+        val operand = call.operands[0]
+        return if (operand is RexLiteral) {
+            when (operand.type.sqlTypeName) {
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.FLOAT,
+                SqlTypeName.DOUBLE,
+                SqlTypeName.DECIMAL,
+                -> {
+                    val decimalValue = operand.getValueAs(BigDecimal::class.java)!!
+                    // Check for integer limits
+                    val isSafe = when (operand.type.sqlTypeName) {
+                        SqlTypeName.TINYINT -> decimalValue.toLong() != Byte.MIN_VALUE.toLong()
+                        SqlTypeName.SMALLINT -> decimalValue.toLong() != Short.MIN_VALUE.toLong()
+                        SqlTypeName.INTEGER -> decimalValue.toLong() != Int.MIN_VALUE.toLong()
+                        SqlTypeName.BIGINT -> decimalValue.toLong() != Long.MIN_VALUE
+                        else -> true
+                    }
+                    if (isSafe) {
+                        val newLiteral = decimalValue.negate()
+                        rexBuilder.makeLiteral(newLiteral, call.type)
+                    } else {
+                        call
+                    }
+                }
+                else -> call
+            }
         } else {
             call
         }
@@ -937,19 +1769,48 @@ class BodoRexSimplify(
     }
 
     /**
+     * Returns true if a RexCall is any kind of cast
+     */
+    private fun isCast(e: RexNode): Boolean {
+        return if (e is RexCall) { e.kind == SqlKind.CAST || e.kind == SqlKind.SAFE_CAST } else { false }
+    }
+
+    /**
+     * Deprecated: Determine if the function call is a date conversion function that we may
+     * be able to simplify.
+     */
+    private fun isDateConversion(e: RexNode): Boolean {
+        return e is RexCall && (
+            e.operator.name == CastingOperatorTable.TO_DATE.name ||
+                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
+            ) && e.operands.size == 1
+    }
+
+    /**
+     * Deprecated: Determine if the function call is a date conversion function
+     * equivalent to a safe cast
+     */
+    private fun isSafeDateConversion(e: RexCall): Boolean {
+        return e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
+    }
+
+    /**
      * Implementation of simplifyUnknownAs where we simplify custom Bodo functions
      * and then dispatch to the regular RexSimplifier.
      */
     override fun simplify(e: RexNode, unknownAs: RexUnknownAs): RexNode {
         // Before doing anything else, do any PEC rewrites
+
         if (JsonPecUtil.isPec(e)) return simplify(JsonPecUtil.rewritePec(e as RexCall, rexBuilder), unknownAs)
         val simplifiedNode = when (e.kind) {
-            SqlKind.CAST -> simplifyBodoCast(e as RexCall, unknownAs)
             SqlKind.PLUS -> simplifyBodoPlusMinus(e as RexCall, true)
             SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
+            SqlKind.MINUS_PREFIX -> simplifyBodoMinusPrefix(e as RexCall)
             else -> when {
-                isDateConversion(e) -> simplifyDateCast(e as RexCall)
+                isCast(e) -> simplifyBodoCast(e as RexCall, e.operands[0], e.type, e.kind == SqlKind.SAFE_CAST, unknownAs)
+                // TODO: Remove when we simplify TO_DATE as ::DATE
+                isDateConversion(e) -> simplifyDateCast(e as RexCall, e.operands[0], isSafeDateConversion(e))
                 isConcat(e) -> simplifyConcat(e as RexCall)
                 isStringCapitalizationOp(e) -> simplifyStringCapitalizationOp(e as RexCall)
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
@@ -966,11 +1827,22 @@ class BodoRexSimplify(
     }
 
     companion object {
-        const val NANOSEC_PER_DAY: Long = 86_400_000_000_000
-        const val NANOSEC_PER_HOUR: Long = 3_600_000_000_000
-        const val NANOSEC_PER_MINUTE: Long = 60_000_000_000
-        const val NANOSEC_PER_SECOND: Long = 1_000_000_000
-        const val NANOSEC_PER_MILLISECOND: Long = 1_000_000
-        const val NANOSEC_PER_MICROSECOND: Long = 1_000
+        const val NANOSEC_PER_DAY: Long = 86_400_000_000_000L
+        const val NANOSEC_PER_HOUR: Long = 3_600_000_000_000L
+        const val NANOSEC_PER_MINUTE: Long = 60_000_000_000L
+        const val NANOSEC_PER_SECOND: Long = 1_000_000_000L
+        const val NANOSEC_PER_MILLISECOND: Long = 1_000_000L
+        const val NANOSEC_PER_MICROSECOND: Long = 1_000L
+
+        const val SECOND_EPOCH_THRESHOLD: Long = 31_536_000_000L
+        const val MILLISECOND_EPOCH_THRESHOLD: Long = 31_536_000_000_000L
+        const val MICROSECOND_EPOCH_THRESHOLD: Long = 31_536_000_000_000_000L
+
+        const val SECOND_PER_MINUTE: Int = 60
+        const val SECOND_PER_HOUR: Int = 3600
+        const val MINUTE_PER_HOUR: Int = 60
+
+        @JvmStatic
+        val monthCodeList = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
     }
 }

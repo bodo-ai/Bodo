@@ -106,7 +106,8 @@ public class CastCodeGen {
           return arg;
         }
         SqlTypeName typeName = outputType.getSqlTypeName();
-        String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
+        String dtype =
+            sqlTypenameToPandasTypename(typeName, outputScalar, outputType.getPrecision());
         if (outputScalar) {
           fnName = dtype;
         } else {

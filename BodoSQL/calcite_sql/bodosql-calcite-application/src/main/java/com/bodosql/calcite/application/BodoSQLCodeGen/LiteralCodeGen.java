@@ -12,8 +12,10 @@ import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import kotlin.Pair;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Sarg;
 import org.apache.calcite.util.TimeString;
@@ -72,6 +74,19 @@ public class LiteralCodeGen {
       RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
     SqlTypeName typeName = node.getType().getSqlTypeName();
     // TODO: Add more types here
+    if ((node.getType() instanceof TZAwareSqlType && node.getTypeName() != SqlTypeName.NULL)) {
+      // TZ-Aware uses a timestamp string. We can't use the integer version
+      // as the value is in UTC time. We could in the future convert this to
+      // the integer code path + tz_localize if that's faster, but it's probably
+      // better to optimize pd.Timestamp.
+      //
+      // Note: This can have issues with the Python path in case the Timezones differ.
+      TimestampString timestampString = node.getValueAs(TimestampString.class);
+      Expr argString = new Expr.StringLiteral(timestampString.toString());
+      TZAwareSqlType type = (TZAwareSqlType) node.getType();
+      Expr tzInfo = type.getTZInfo().getZoneExpr();
+      return new Expr.Call("pd.Timestamp", List.of(argString), List.of(new Pair<>("tz", tzInfo)));
+    }
     switch (node.getTypeName()) {
       case NULL:
         return Expr.None.INSTANCE;

@@ -14,6 +14,7 @@ import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -113,9 +114,11 @@ public class Utils {
    *
    * @param typeName SQL Type.
    * @param outputScalar Should the output generate a type for converting scalars.
+   * @param precision The type precision for types that require it.
    * @return The pandas type
    */
-  public static String sqlTypenameToPandasTypename(SqlTypeName typeName, boolean outputScalar) {
+  public static String sqlTypenameToPandasTypename(
+      SqlTypeName typeName, boolean outputScalar, int precision) {
     String dtype;
     switch (typeName) {
       case BOOLEAN:
@@ -183,9 +186,12 @@ public class Utils {
         }
         break;
       case TIME:
-        // TODO [BE-3649]: The precision needs to be handled here.
-        throw new BodoSQLCodegenException(
-            "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
+        if (outputScalar) {
+          dtype = String.format(Locale.ROOT, "bodo.TimeType(%d)", precision);
+        } else {
+          dtype = String.format(Locale.ROOT, "TimeArrayType(%d)", precision);
+        }
+        break;
       case VARCHAR:
       case CHAR:
         if (outputScalar) {
