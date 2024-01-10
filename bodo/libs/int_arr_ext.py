@@ -16,6 +16,7 @@ from numba.extending import (
     box,
     intrinsic,
     lower_builtin,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -78,6 +79,15 @@ class IntegerArrayType(types.IterableType, types.ArrayCompatible):
     @property
     def iterator_type(self):
         return BodoArrayIterator(self)
+
+    def unify(self, typingctx, other):
+        """Allow casting Numpy int arrays to nullable int arrays"""
+        if isinstance(other, types.Array) and other.ndim == 1:
+            # If dtype matches or other.dtype is undefined (inferred)
+            # Similar to Numba array unify:
+            # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/core/types/npytypes.py#L491
+            if other.dtype == self.dtype or not other.dtype.is_precise():
+                return self
 
     @property
     def get_pandas_scalar_type_instance(self):
@@ -758,6 +768,23 @@ def overload_int_arr_astype(A, dtype, copy=True):
     return lambda A, dtype, copy=True: bodo.libs.int_arr_ext.get_int_arr_data(A).astype(
         nb_dtype
     )
+
+
+@lower_cast(types.Array, IntegerArrayType)
+def cast_numpy_to_nullable_int_array(context, builder, fromty, toty, val):
+    """cast Numpy int array to nullable int array"""
+    f = lambda A: bodo.utils.conversion.coerce_to_array(
+        A, use_nullable_array=True
+    )  # pragma: no cover
+    return context.compile_internal(builder, f, toty(fromty), [val])
+
+
+@lower_cast(IntegerArrayType, types.Array)
+def cast_nullable_int_array_to_numpy(context, builder, fromty, toty, val):
+    """cast nullable int array to Numpy int array"""
+    dtype = toty.dtype
+    f = lambda A: A.astype(dtype)  # pragma: no cover
+    return context.compile_internal(builder, f, toty(fromty), [val])
 
 
 ############################### numpy ufuncs #################################

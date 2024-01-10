@@ -67,6 +67,15 @@ class BooleanArrayType(types.ArrayCompatible):
     def copy(self):
         return BooleanArrayType()
 
+    def unify(self, typingctx, other):
+        """Allow casting Numpy bool arrays to nullable bool arrays"""
+        if isinstance(other, types.Array) and other.ndim == 1:
+            # If dtype matches or other.dtype is undefined (inferred)
+            # Similar to Numba array unify:
+            # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/core/types/npytypes.py#L491
+            if other.dtype == types.bool_ or not other.dtype.is_precise():
+                return self
+
 
 boolean_array_type = BooleanArrayType()
 
