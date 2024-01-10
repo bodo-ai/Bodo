@@ -4241,114 +4241,29 @@ def np_tile(A, reps):
         )
 
 
-@numba.generated_jit
-def interp_bin_search(x, xp, fp, parallel=False):
-    """
-    Given a number x and arrays xp/fp corresponding to
-    x and y coordinates where xp is assumed to be sorted
-    in increasing order, returns a tuple (x_a, f_a, x_b, f_p)
-    with the following properties:
-    - x_a and x_b are adjacent elements in xp (or identical, if necessary)
-    - x_a <= x <= x_b
-    - f_a is the y coordinate corresponding to x_a
-    - f_b is the y coordinate corresponding to x_b
-    Note: it is assumed that min(xp) <= x <= max(xp) before this function is called.
-    """
-    if is_overload_true(parallel):  # pragma: no cover
-        raise_bodo_error("interp_bin_search: currently unsupported in parallel")
-    else:
-
-        def impl(x, xp, fp, parallel=False):  # pragma: no cover
-            lo = 0
-            hi = len(xp) - 1
-            while lo < hi - 1:
-                mid = (lo + hi) // 2
-                x_mid = xp[mid]
-                if x <= x_mid:
-                    hi = mid
-                else:
-                    lo = mid
-            return (xp[lo], fp[lo], xp[hi], fp[hi])
-
-        return impl
-
-
 @overload(np.interp, no_unliteral=True)
 def np_interp(x, xp, fp, left=None, right=None, period=None):
     if not (
         bodo.utils.utils.is_array_typ(x, False)
-        and x.ndim == 1
-        and x.dtype == types.float64
         and bodo.utils.utils.is_array_typ(xp, False)
-        and xp.ndim == 1
-        and xp.dtype == types.float64
         and bodo.utils.utils.is_array_typ(fp, False)
-        and fp.ndim == 1
-        and fp.dtype == types.float64
-        and (
-            is_overload_none(left)
-            or is_overload_constant_int(left)
-            or is_overload_constant_float(left)
-            or isinstance(left, types.Integer)
-            or isinstance(left, types.Float)
-        )
-        and (
-            is_overload_none(right)
-            or is_overload_constant_int(right)
-            or is_overload_constant_float(right)
-            or isinstance(right, types.Integer)
-            or isinstance(right, types.Float)
-        )
-        and is_overload_none(period)
     ):  # pragma: no cover
-        return
+        raise BodoError("np.interp(): x, xp, fp inputs should be arrays")
 
-    if is_overload_none(left):
-        too_small_val = "f_lo"
-    else:
-        too_small_val = "left"
-    if is_overload_none(right):
-        too_large_val = "f_hi"
-    else:
-        too_large_val = "right"
+    # Output is the same dtype as fp but same shape as x
+    # https://numpy.org/doc/stable/reference/generated/numpy.interp.html
+    dtype = fp.dtype
+    ndim = x.ndim
+    out_type = types.Array(dtype, ndim, "C")
 
-    func_text = "def impl(x, xp, fp, left=None, right=None, period=None):\n"
-    func_text += "   n = len(x)\n"
-    func_text += "   m = len(xp)\n"
-    func_text += "   if m < 1 or len(fp) != m: raise ValueError('np.interp: xp and fp arguments must be same length and have least 1 element')\n"
-    func_text += "   res = bodo.utils.utils.alloc_type(n, np.float64, (-1,))\n"
-    func_text += "   numba.parfors.parfor.init_prange()\n"
-    func_text += "   x_lo = xp[0]\n"
-    func_text += "   x_hi = xp[-1]\n"
-    func_text += "   f_lo = fp[0]\n"
-    func_text += "   f_hi = fp[-1]\n"
-    func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "      x_i = x[i]\n"
-    func_text += f"      if x_i < x_lo: res[i] = {too_small_val}\n"
-    func_text += f"      elif x_i > x_hi: res[i] = {too_large_val}\n"
-    func_text += "      elif x_i == x_lo: res[i] = f_lo\n"
-    func_text += "      elif x_i == x_hi: res[i] = f_hi\n"
-    func_text += "      else:\n"
-    func_text += "         x_a, f_a, x_b, f_b = interp_bin_search(x_i, xp, fp)\n"
-    func_text += "         if x_i == x_a: res[i] = f_a\n"
-    func_text += "         elif x_i == x_b: res[i] = f_b\n"
-    func_text += (
-        "         else: res[i] = f_a + (f_b - f_a) * (x_i - x_a) / (x_b - x_a)\n"
-    )
-    func_text += "   return res"
+    # Using objmode since Numpy's implementation is optimized:
+    # https://github.com/numpy/numpy/blob/1f82da745496092d85b402b1703877462a7c2de2/numpy/core/src/multiarray/compiled_base.c#L492
+    
+    def impl(x, xp, fp, left=None, right=None, period=None):  # pragma: no cover
+        with bodo.objmode(A=out_type):
+            A = np.interp(x, xp, fp, left, right, period)
+        return A
 
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "bodo": bodo,
-            "numba": numba,
-            "np": np,
-            "interp_bin_search": interp_bin_search,
-        },
-        loc_vars,
-    )
-    impl = loc_vars["impl"]
     return impl
 
 
