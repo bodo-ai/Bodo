@@ -8270,7 +8270,6 @@ SqlIdentifier ReservedFunctionName() :
     |   <MONTH>
     |   <NTH_VALUE>
     |   <NTILE>
-    |   <NULLIF>
     |   <OCTET_LENGTH>
     |   <PERCENTILE_CONT>
     |   <PERCENTILE_DISC>
@@ -9030,7 +9029,6 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < NTILE: "NTILE" >
 |   < NULL: "NULL" >
 |   < NULLABLE: "NULLABLE" >
-|   < NULLIF: "NULLIF" >
 |   < NULLS: "NULLS" >
 |   < NUMBER: "NUMBER" >
 |   < NUMERIC: "NUMERIC" >

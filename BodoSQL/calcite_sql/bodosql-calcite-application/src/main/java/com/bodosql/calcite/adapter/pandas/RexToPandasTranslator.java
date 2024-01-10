@@ -1486,9 +1486,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         // However, Snowflake/BodoSQL expects: TRIM(<expr>, <chars>)
         // So we just need to swap the arguments here.
         return visitTrimFunc(fnName, operands.get(2), operands.get(1));
-      case NULLIF:
-        assert operands.size() == 2;
-        return visitNullIfFunc(operands);
       case POSITION:
         return visitPosition(operands);
       case RANDOM:
@@ -1533,6 +1530,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               assert operands.size() == 2 && fnOperation.operands.size() == 2;
               return ExprKt.BodoSQLKernel("div0", operands, List.of());
             }
+          case "NULLIF":
+            assert operands.size() == 2;
+            return visitNullIfFunc(operands);
           case "DATEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
