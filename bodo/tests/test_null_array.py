@@ -4,8 +4,13 @@ Tests for the null array type, which is an array of all nulls
 that can be cast to any type. See null_arr_ext.py for the
 core implementation.
 """
+import datetime
+from decimal import Decimal
+
+import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -126,3 +131,104 @@ def test_nullarray_to_char():
     n = 10
     py_output = pd.Series([None] * n)
     check_func(impl, (n,), py_output=py_output)
+
+
+def test_nullarray_cast():
+    """Test casting arrays to null array, which is necessary for BodoSQL"""
+
+    def impl(A, flag):
+        n = len(A)
+        if flag:
+            B = A
+        else:
+            B = bodo.libs.null_arr_ext.init_null_array(n)
+        return B
+
+    n = 5
+    for t in bodo.libs.array_kernels.BODO_ARRAY_TYPE_CLASSES:
+        py_output = np.array([None] * n, object)
+        if t == numba.core.types.Array:
+            # Numpy arrays are tested below
+            continue
+        elif t == bodo.libs.str_arr_ext.StringArrayType:
+            A = pd.array(["A"] * n, "string[pyarrow]")
+        elif t == bodo.libs.binary_arr_ext.BinaryArrayType:
+            A = np.array([b"A"] * n, dtype=object)
+        elif t == bodo.hiframes.datetime_date_ext.DatetimeDateArrayType:
+            A = np.array([datetime.date(2011, 8, 9)] * n, object)
+        elif t == bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaArrayType:
+            A = np.array([datetime.timedelta(33)] * n, object)
+        elif t == bodo.libs.bool_arr_ext.BooleanArrayType:
+            A = pd.array([True] * n, "boolean")
+        elif t == bodo.libs.int_arr_ext.IntegerArrayType:
+            A = pd.array(np.arange(n), "Int32")
+        elif t == bodo.libs.float_arr_ext.FloatingArrayType:
+            A = pd.array(np.arange(n) + 1.1, "Float64")
+        elif t == bodo.libs.decimal_arr_ext.DecimalArrayType:
+            A = np.array([Decimal("32.1")] * n, object)
+        elif t == bodo.libs.array_item_arr_ext.ArrayItemArrayType:
+            A = pd.array([[1]] * n, dtype=pd.ArrowDtype(pa.large_list(pa.int32())))
+        elif t == bodo.libs.struct_arr_ext.StructArrayType:
+            A = pd.array(
+                [{"A": 1, "B": 2}] * n,
+                pd.ArrowDtype(
+                    pa.struct([pa.field("A", pa.int64()), pa.field("B", pa.int32())])
+                ),
+            )
+        elif t == bodo.libs.map_arr_ext.MapArrayType:
+            A = pd.array(
+                [{"A": 1, "B": 2}] * n,
+                pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
+            )
+        elif t == bodo.DatetimeArrayType:
+            A = pd.array([pd.Timestamp("2000-01-01", tz="UTC")] * 5)
+            py_output = pd.array([pd.NaT] * n, pd.DatetimeTZDtype(tz="UTC"))
+        elif t == bodo.TimeArrayType:
+            A = np.array([bodo.Time(12, 0, precision=6)] * n, object)
+        else:
+            # Ignore array types that are not used in BodoSQL
+            assert t in (
+                bodo.libs.primitive_arr_ext.PrimitiveArrayType,
+                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
+                bodo.libs.interval_arr_ext.IntervalArrayType,
+                bodo.hiframes.split_impl.StringArraySplitViewType,
+                bodo.libs.tuple_arr_ext.TupleArrayType,
+                bodo.libs.str_ext.RandomAccessStringArrayType,
+                # Dictionary type is tested with regular string input automatically
+                bodo.libs.dict_arr_ext.DictionaryArrayType,
+                bodo.libs.null_arr_ext.NullArrayType,
+                bodo.libs.matrix_ext.MatrixType,
+                bodo.libs.csr_matrix_ext.CSRMatrixType,
+            ), f"test_nullarray_cast: unsupported array type {t}"
+
+        check_func(impl, (A, False), py_output=py_output, only_seq=True)
+        check_func(impl, (A, True), py_output=A, only_seq=True)
+
+    # Numpy integer input (needs Numpy to nullable cast)
+    A = np.arange(n)
+    check_func(impl, (A, False), py_output=py_output, only_seq=True)
+    check_func(impl, (A, True), py_output=A, only_seq=True)
+
+    # Numpy float input (needs Numpy to nullable cast)
+    A = np.arange(n) + 1.1
+    check_func(impl, (A, False), py_output=py_output, only_seq=True)
+    check_func(impl, (A, True), py_output=A, only_seq=True)
+
+    # Numpy bool input (needs Numpy to nullable cast)
+    A = np.arange(n) > n // 2
+    check_func(impl, (A, False), py_output=py_output, only_seq=True)
+    check_func(impl, (A, True), py_output=A, only_seq=True)
+
+
+def test_nullarray_invalid_cast():
+    """Make sure invalid null array cast raises a proper error"""
+
+    def impl(A, flag):
+        if flag:
+            B = A
+        else:
+            B = bodo.libs.null_arr_ext.init_null_array(3)
+        return B
+
+    with pytest.raises(numba.TypingError, match="Cannot unify"):
+        bodo.jit(impl)(3, True)

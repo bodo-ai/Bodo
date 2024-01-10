@@ -20,7 +20,7 @@ from numba.core.imputils import lower_builtin
 from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import overload, overload_attribute, register_jitable
+from numba.extending import lower_cast, overload, overload_attribute, register_jitable
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -103,6 +103,34 @@ and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
 bitor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Or.value)
 bitand_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_And.value)
 bitxor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Xor.value)
+
+
+BODO_ARRAY_TYPE_CLASSES = (
+    types.Array,
+    bodo.libs.str_arr_ext.StringArrayType,
+    bodo.libs.binary_arr_ext.BinaryArrayType,
+    bodo.libs.dict_arr_ext.DictionaryArrayType,
+    bodo.hiframes.split_impl.StringArraySplitViewType,
+    bodo.hiframes.datetime_date_ext.DatetimeDateArrayType,
+    bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaArrayType,
+    BooleanArrayType,
+    bodo.libs.str_ext.RandomAccessStringArrayType,
+    bodo.libs.null_arr_ext.NullArrayType,
+    IntegerArrayType,
+    FloatingArrayType,
+    bodo.libs.primitive_arr_ext.PrimitiveArrayType,
+    bodo.libs.decimal_arr_ext.DecimalArrayType,
+    bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
+    bodo.libs.array_item_arr_ext.ArrayItemArrayType,
+    bodo.libs.struct_arr_ext.StructArrayType,
+    bodo.libs.interval_arr_ext.IntervalArrayType,
+    bodo.libs.tuple_arr_ext.TupleArrayType,
+    bodo.libs.map_arr_ext.MapArrayType,
+    bodo.libs.matrix_ext.MatrixType,
+    bodo.libs.csr_matrix_ext.CSRMatrixType,
+    bodo.DatetimeArrayType,
+    TimeArrayType,
+)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -2736,6 +2764,33 @@ def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no co
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_array_equiv
+
+
+def cast_null_arr(context, builder, fromty, toty, val):
+    """Cast null array to any other nullable array"""
+    assert fromty == bodo.null_array_type, "cast_null_arr: null_array_type expected"
+
+    if toty != bodo.utils.typing.to_nullable_type(toty):  # pragma: no cover
+        raise BodoError(
+            f"Casting null array to non-nullable array type {toty} not allowed."
+        )
+
+    # NOTE: this cast isn't free since it needs to create a new array (allocate and fill with nulls)
+    return context.compile_internal(
+        builder,
+        lambda A: bodo.libs.array_kernels.gen_na_array(len(A), toty),
+        toty(fromty),
+        [val],
+    )  # pragma: no cover
+
+
+def _install_null_array_casts():
+    """Install casting all Bodo arrays to null array"""
+    for t in BODO_ARRAY_TYPE_CLASSES:
+        lower_cast(bodo.null_array_type, t)(cast_null_arr)
+
+
+_install_null_array_casts()
 
 
 def resize_and_copy(A, new_len):  # pragma: no cover

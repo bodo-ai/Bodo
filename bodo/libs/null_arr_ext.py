@@ -68,6 +68,13 @@ class NullArrayType(types.IterableType, types.ArrayCompatible):
     def iterator_type(self):
         return bodo.utils.typing.BodoArrayIterator(self)
 
+    def unify(self, typingctx, other):
+        """Allow casting null array to all other arrays (converted to nullable if
+        non-nullable).
+        """
+        if bodo.utils.utils.is_array_typ(other, False):
+            return to_nullable_type(other)
+
 
 null_array_type = NullArrayType()
 

@@ -88,8 +88,13 @@ class FloatingArrayType(types.IterableType, types.ArrayCompatible):
         return pd.Float64Dtype() if self.dtype == types.float64 else pd.Float32Dtype()
 
     def unify(self, typingctx, other):
-        if isinstance(other, types.Array) and isinstance(other.dtype, types.Float):
-            return other
+        """Allow casting Numpy float arrays to nullable float arrays"""
+        if isinstance(other, types.Array) and other.ndim == 1:
+            # If dtype matches or other.dtype is undefined (inferred)
+            # Similar to Numba array unify:
+            # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/core/types/npytypes.py#L491
+            if other.dtype == self.dtype or not other.dtype.is_precise():
+                return self
 
 
 # store data and nulls as regular numpy arrays without payload machinery
