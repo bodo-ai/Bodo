@@ -124,6 +124,19 @@ def run_params():
 run_params()
 ```
 
+A similar flag is `distributed_block` which informs bodo that the data is
+distributed in equal chunks across cores (as done and expected by Bodo).
+Typically, this is used when output
+of `bodo.scatterv` is passed to a JIT function to allow for optimization and parallelization of more complex code.
+
+```py
+@bodo.jit(distributed_block=["A"])
+def f(A):
+    ...
+
+data = bodo.scatterv(...)
+f(data)
+```
 
 ## Indexing Operations on Distributed Data
 

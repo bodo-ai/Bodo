@@ -176,6 +176,7 @@ optimize and parallelize.
 - `numpy.hstack`  concatenates elements on each rank without maintaining order
 - `numpy.tile`  Supported in 2 cases: the array is 2D and `reps` is in the form `(1, x)`, or
                 the array is 1D and `reps` is in the form `(x, 1)`.   
+- `numpy.ndarray.T` distributed array transpose is supported for 2D arrays.
 
 ## Numpy mathematical and statistics functions
 
@@ -187,6 +188,7 @@ optimize and parallelize.
 - `numpy.mean`
 - `numpy.std`
 - `numpy.interp` no distributed support yet.
+- `np.linalg.norm` parallelized only for 2D inputs with axis=1.
 
 ## Random number generator functions
 
@@ -218,16 +220,27 @@ optimize and parallelize.
 
 ## `numpy.dot` function 
 
-- `numpy.dot` between a matrix and a vector
-- `numpy.dot`two vectors.
+- `numpy.dot` between a matrix and a vector or between two vectors.
 
 
 ##  Numpy I/O
 
 - `numpy.ndarray.tofile` 
-- `numpy.fromfile`
+- `numpy.fromfile` supports reading binary files. `file`, `dtype`, `count`, and `offset` arguments are supported (`file` and `dtype` are required). `file` should be a string. `s3://` and `hdfs://` file paths are also supported.
 
 Our documentation on scalable I/O contains [example usage and more system specific instructions][numpy-binary-section].
+
+
+## Numpy matrix support
+
+- `numpy.asmatrix` parallelized only for array or matrix input.
+- `*` left-hand side argument can be distributed but right-hand side argument is replicated.
+
+
+## Scipy support
+
+- `scipy.fftpack.fft2` supports complex64 and complex128 data.
+- `scipy.fftpack.fftshift` supports 2D arrays of complex64 and complex128 data.
 
 
 ##  Miscellaneous
@@ -286,8 +299,8 @@ def example_dot(N, D):            |
 ```
 
 The first `dot` has a 1D array with `1D_Block`
-distribution as first input `Y`), while the second input is
-a 2D array with `1D_Block` distribution (`X`).
+distribution as first input `Y`, while the second input `X` is
+a 2D array with `1D_Block` distribution.
 Hence, `dot` is a sum reduction across distributed datasets
 and therefore, the output (`w`) is on the `reduce` side and is 
 assigned `REP` distribution.
@@ -303,5 +316,3 @@ distribution for output (`z`).
 Variable `z` does not exist in the distribution report since
 the compiler optimizations were able to eliminate it. Its values are
 generated and consumed on-the-fly, without memory load/store overheads.
-
-
