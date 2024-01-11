@@ -305,6 +305,7 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
         # restore the old threshold
         bodo.COMPLEX_CASE_THRESHOLD = old_threshold
 
+
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_case_indent_limit(memory_leak_check):
@@ -314,6 +315,9 @@ def test_case_indent_limit(memory_leak_check):
     case statement is naively decomposed into if/else
     it hits a max indentation limit.
     """
+    # This test is very slow when NP > 1, so we disable it.
+    if bodo.get_size() > 1:
+        pytest.skip("Test is too slow for NP != 1")
     query = """
     select
         case
