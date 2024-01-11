@@ -862,8 +862,6 @@ def overload_windowed_approx_percentile(data, q):
         data = bodo.utils.conversion.coerce_to_array(data)
         n = len(data)
         approx = bodo.libs.array_kernels.approx_percentile(data, q)
-        if approx is None:
-            return bodo.utils.conversion.coerce_scalar_to_array(None, n, arr_type)
         return bodo.utils.conversion.coerce_scalar_to_array(approx, n, arr_type)
 
     return impl

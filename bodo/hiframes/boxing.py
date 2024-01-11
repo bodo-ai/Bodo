@@ -1707,7 +1707,14 @@ def _infer_ndarray_obj_dtype(val):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)
     if isinstance(first_val, pd._libs.interval.Interval):
-        return bodo.libs.interval_arr_ext.IntervalArrayType
+        left_dtype = numba.typeof(first_val.left)
+        right_dtype = numba.typeof(first_val.right)
+        if left_dtype != right_dtype:
+            raise BodoError(
+                "Bodo can only type Interval Arrays where the the left and right values are the same type"
+            )
+        arr = dtype_to_array_type(left_dtype, False)
+        return bodo.libs.interval_arr_ext.IntervalArrayType(arr)
 
     raise BodoError(
         f"Unsupported object array with first value: {first_val}"
