@@ -260,26 +260,19 @@ void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs,
 
 FileReader *init_s3_reader(const char *fname, const char *suffix,
                            bool csv_header, bool json_lines) {
-    try {
-        arrow::fs::FileInfo file_stat;
-        std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("", false);
-        arrow::Result<arrow::fs::FileInfo> result =
-            fs->GetFileInfo(std::string(fname));
-        CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat,
-                               fs->region())
-        if (file_stat.IsDirectory()) {
-            return new S3DirectoryFileReader(fname, suffix, csv_header,
-                                             json_lines);
-        } else if (file_stat.IsFile()) {
-            return new S3FileReader(fname, suffix, csv_header, json_lines);
-        } else {
-            throw std::runtime_error(
-                "_s3_reader.cpp::init_s3_reader: Error in arrow s3: invalid "
-                "path");
-        }
-    } catch (const std::exception &e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+    arrow::fs::FileInfo file_stat;
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("", false);
+    arrow::Result<arrow::fs::FileInfo> result =
+        fs->GetFileInfo(std::string(fname));
+    CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat, fs->region())
+    if (file_stat.IsDirectory()) {
+        return new S3DirectoryFileReader(fname, suffix, csv_header, json_lines);
+    } else if (file_stat.IsFile()) {
+        return new S3FileReader(fname, suffix, csv_header, json_lines);
+    } else {
+        throw std::runtime_error(
+            "_s3_reader.cpp::init_s3_reader: Error in arrow s3: invalid "
+            "path");
     }
 }
 
