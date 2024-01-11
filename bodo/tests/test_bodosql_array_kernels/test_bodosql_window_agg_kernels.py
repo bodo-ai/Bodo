@@ -1323,7 +1323,7 @@ def test_windowed_kernels_two_arg(
         ),
     ],
 )
-def test_windowed_approx_percentile(arr, q, answer):
+def test_windowed_approx_percentile(arr, q, answer, memory_leak_check):
     def impl(arr, q):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_approx_percentile(arr, q)
