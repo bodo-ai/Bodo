@@ -70,8 +70,14 @@ size_t get_total_chars_needed_for_output(
         }
     }
 
-    size_t num_chars_due_to_sep =
-        (separator_length * (sorted_agg_col->length - num_null_elements - 1));
+    size_t num_chars_due_to_sep;
+    if (sorted_agg_col->length > num_null_elements) {
+        num_chars_due_to_sep = (separator_length * (sorted_agg_col->length -
+                                                    num_null_elements - 1));
+    } else {
+        num_chars_due_to_sep = 0;
+    }
+
     //+1 for null terminator
     size_t output_size =
         num_chars_due_to_sep + num_char_from_existing_strings + 1;

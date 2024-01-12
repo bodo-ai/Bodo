@@ -3,6 +3,7 @@
 Test correctness of the LISTAGG SQL aggregation operations with and without groupby for BodoSQL
 """
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_groupby
@@ -18,22 +19,30 @@ def test_listagg_without_group_sorting_complex(listagg_data, memory_leak_check):
 
     query = """
 SELECT
+   LISTAGG(all_null_column) as agg_output_col0,
    LISTAGG(group_constant_str_col) as agg_output_col1,
    LISTAGG(group_constant_str_col2, ',') as agg_output_col2,
    LISTAGG(group_constant_str_col, '*') as agg_output_col3,
+   LISTAGG(non_constant_str_col_with_nulls, '*') as agg_output_col3_2,
    LISTAGG(non_constant_str_col, ', ') WITHIN GROUP (ORDER BY order_col_1, order_col_3) as agg_output_col4,
    LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_1 DESC NULLS LAST, order_col_2 ASC, order_col_3) as agg_output_col5,
-   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col6
+   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col6,
+   LISTAGG(non_constant_str_col_with_nulls, ', ') WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col7,
+   LISTAGG(all_null_column, '-') WITHIN GROUP (ORDER BY order_col_2 DESC NULLS LAST, order_col_3) as agg_output_col8
 FROM table1\n"""
 
     expected = pd.DataFrame(
         {
+            "AGG_OUTPUT_COL0": [""],
             "AGG_OUTPUT_COL1": ["aaaaaaœœœœœœeeeeee"],
             "AGG_OUTPUT_COL2": ["į,į,į,į,į,į,ë,ë,ë,ë,ë,ë,₠,₠,₠,₠,₠,₠"],
             "AGG_OUTPUT_COL3": ["a*a*a*a*a*a*œ*œ*œ*œ*œ*œ*e*e*e*e*e*e"],
+            "AGG_OUTPUT_COL3_2": ["hi*hello*world*hi*hello*world*hi*hello*world"],
             "AGG_OUTPUT_COL4": ["B, B, B, D, D, D, F, F, F, A, C, E, A, C, E, A, C, E"],
             "AGG_OUTPUT_COL5": ["FFFDDDBBBAAACCCEEE"],
             "AGG_OUTPUT_COL6": ["BBBDDDFFFAAACCCEEE"],
+            "AGG_OUTPUT_COL7": ["hello, hello, hello, world, world, world, hi, hi, hi"],
+            "AGG_OUTPUT_COL8": [""],
         }
     )
 
@@ -121,12 +130,15 @@ def test_listagg_withing_group_sorting_complex(
 
     query = """
 SELECT
+   LISTAGG(all_null_column) as agg_output_col0,
    LISTAGG(group_constant_str_col) as agg_output_col1,
    LISTAGG(group_constant_str_col2, ',') as agg_output_col2,
    LISTAGG(group_constant_str_col, '*') as agg_output_col3,
    LISTAGG(non_constant_str_col, ', ') WITHIN GROUP (ORDER BY order_col_1, order_col_3) as agg_output_col4,
    LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_1 DESC NULLS LAST, order_col_2 ASC, order_col_3) as agg_output_col5,
-   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col6
+   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col6,
+   LISTAGG(non_constant_str_col_with_nulls, ', ') WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST, order_col_3) as agg_output_col7,
+   LISTAGG(all_null_column, '-') WITHIN GROUP (ORDER BY order_col_2 DESC NULLS LAST, order_col_3) as agg_output_col8
 FROM table1
 GROUP BY key_col"""
 
@@ -135,23 +147,29 @@ GROUP BY key_col"""
         # Slightly different expected in having case
         expected = pd.DataFrame(
             {
+                "AGG_OUTPUT_COL0": ["", ""],
                 "AGG_OUTPUT_COL1": ["aaaaaa", "eeeeee"],
                 "AGG_OUTPUT_COL2": ["į,į,į,į,į,į", "₠,₠,₠,₠,₠,₠"],
                 "AGG_OUTPUT_COL3": ["a*a*a*a*a*a", "e*e*e*e*e*e"],
                 "AGG_OUTPUT_COL4": ["B, D, F, A, C, E"] * 2,
                 "AGG_OUTPUT_COL5": ["FDBACE"] * 2,
                 "AGG_OUTPUT_COL6": ["BDFACE"] * 2,
+                "AGG_OUTPUT_COL7": ["hello, world, hi"] * 2,
+                "AGG_OUTPUT_COL8": ["", ""],
             }
         )
     else:
         expected = pd.DataFrame(
             {
+                "AGG_OUTPUT_COL0": ["", "", ""],
                 "AGG_OUTPUT_COL1": ["aaaaaa", "œœœœœœ", "eeeeee"],
                 "AGG_OUTPUT_COL2": ["į,į,į,į,į,į", "ë,ë,ë,ë,ë,ë", "₠,₠,₠,₠,₠,₠"],
                 "AGG_OUTPUT_COL3": ["a*a*a*a*a*a", "œ*œ*œ*œ*œ*œ", "e*e*e*e*e*e"],
                 "AGG_OUTPUT_COL4": ["B, D, F, A, C, E"] * 3,
                 "AGG_OUTPUT_COL5": ["FDBACE"] * 3,
                 "AGG_OUTPUT_COL6": ["BDFACE"] * 3,
+                "AGG_OUTPUT_COL7": ["hello, world, hi"] * 3,
+                "AGG_OUTPUT_COL8": ["", "", ""],
             }
         )
 
