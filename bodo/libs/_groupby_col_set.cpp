@@ -1045,13 +1045,6 @@ void listagg_update_helper(
 
     offset_t* offsets_out = (offset_t*)real_out_arr->data2();
 
-    // Set null bits for the groups that have no non-null values
-    for (size_t i = 0; i < num_groups; i++) {
-        if (!seen_non_nulls[i]) {
-            real_out_arr->set_null_bit(i, false);
-        }
-    }
-
     // copy to the output offset array
     // This should be num_groups + 1. If you look inside the allocate,
     // string function, the allocated offset length is 1+number of strings.
