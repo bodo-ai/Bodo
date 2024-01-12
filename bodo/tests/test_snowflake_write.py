@@ -939,8 +939,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             ),
             # nullable float
             "NULLABLE_FLOAT_COL": pd.array(
-                rng.choice([1.4, None, 3.4, 2.5], df_len),
-                "Float64" if bodo.libs.float_arr_ext._use_nullable_float else "float64",
+                rng.choice([1.4, None, 3.4, 2.5], df_len), dtype="Float64"
             ),
             # nan with float
             "NAN_FLOAT_COL": np.array(rng.choice([np.nan, 2.5], df_len)),

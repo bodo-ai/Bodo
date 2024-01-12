@@ -2214,10 +2214,7 @@ def test_series_np_where_num(memory_leak_check):
         [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
     )
     cond = S == 2.0
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        check_func(test_impl1, (S,), py_output=pd.array(np.where(cond, S, 11.0)))
-    else:
-        check_func(test_impl1, (S,))
+    check_func(test_impl1, (S,), py_output=pd.array(np.where(cond, S, 11.0)))
     check_func(test_impl2, (S, 12, cond))
 
 

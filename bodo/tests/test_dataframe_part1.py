@@ -1138,10 +1138,7 @@ def test_df_dtypes(df_value):
                 py_output.iloc[i].categories.astype("string[pyarrow]")
             )
         # check_func converts input to nullable float if flag is on
-        if (
-            py_output.iloc[i] in (np.float32, np.float64)
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if py_output.iloc[i] in (np.float32, np.float64):
             py_output.iloc[i] = (
                 pd.Float32Dtype()
                 if py_output.iloc[i] == np.float32

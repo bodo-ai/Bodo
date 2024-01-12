@@ -1708,10 +1708,7 @@ def to_nullable_type(t):
         if isinstance(t.dtype, types.Integer):
             return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
 
-        if (
-            isinstance(t.dtype, types.Float)
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if isinstance(t.dtype, types.Float):
             return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
 
     if isinstance(t, bodo.ArrayItemArrayType):
@@ -2842,18 +2839,6 @@ def get_castable_arr_dtype(arr_type: types.Type):
         # Most array types cast using the dtype.
         cast_typ = arr_type.dtype
     return cast_typ
-
-
-def get_float_arr_type(base_float_type):
-    """
-    Returns a dtype for floating point arrays depending on whether _use_nullable_float
-    is set to True or not. The base_float_type dictates which float size to use
-    (bodo.float32 or bodo.float64).
-    """
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        return bodo.libs.float_arr_ext.FloatingArrayType(base_float_type)
-    else:
-        return types.Array(base_float_type, 1, "C")
 
 
 def is_bodosql_integer_arr_type(arr_typ: types.ArrayCompatible) -> bool:

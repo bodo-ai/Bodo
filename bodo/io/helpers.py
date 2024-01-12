@@ -304,7 +304,6 @@ def _get_numba_typ_from_pa_typ(
 
     if (
         _use_nullable_pd_arr
-        and bodo.libs.float_arr_ext._use_nullable_float
         and not is_index
         and isinstance(dtype, types.Float)
         and pa_typ.nullable
