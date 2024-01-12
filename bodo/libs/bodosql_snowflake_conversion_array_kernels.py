@@ -954,10 +954,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
     arg_types = [val, optional_format_string, _try, dict_encoding_state, func_id]
     propagate_null = [True, False, False, False, False]
 
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
-    else:  # pragma: no cover
-        out_dtype = types.Array(bodo.float64, 1, "C")
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
     extra_globals = {
         "is_string_numeric": is_string_numeric,

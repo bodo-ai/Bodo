@@ -646,9 +646,5 @@ def test_float_arr_series_box_unbox(float_dtype, memory_leak_check):
     ],
 )
 def test_float_arr_series_where_mask(impl, memory_leak_check):
-    if not bodo.libs.float_arr_ext._use_nullable_float:
-        pytest.skip("Requires nullable float")
-
     s = pd.Series([float(i) if i % 2 else None for i in range(30)], dtype="Float64")
-
     check_func(impl, (s,))

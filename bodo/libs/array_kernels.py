@@ -2307,10 +2307,7 @@ def overload_convert_to_nullable_tup(arr_tup):
     if isinstance(comm_dtype, types.Integer):
         out_dtype = bodo.libs.int_arr_ext.IntDtype(comm_dtype)
         astype_str = ".astype(out_dtype, False)"
-    if (
-        isinstance(comm_dtype, types.Float)
-        and bodo.libs.float_arr_ext._use_nullable_float
-    ):
+    if isinstance(comm_dtype, types.Float):
         out_dtype = bodo.libs.float_arr_ext.FloatDtype(comm_dtype)
         astype_str = ".astype(out_dtype, False)"
 

@@ -389,18 +389,12 @@ def check_query(
             expected_output = convert_spark_timedelta(
                 expected_output, convert_columns_timedelta
             )
-        if (
-            convert_input_to_nullable_float
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if convert_input_to_nullable_float:
             dataframe_dict = {
                 c: _convert_float_to_nullable_float(df)
                 for c, df in dataframe_dict.items()
             }
-        if (
-            convert_expected_output_to_nullable_float
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if convert_expected_output_to_nullable_float:
             expected_output = _convert_float_to_nullable_float(expected_output)
         if convert_float_nan:
             expected_output = convert_spark_nan_none(expected_output)

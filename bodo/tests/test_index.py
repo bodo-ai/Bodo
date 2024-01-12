@@ -2682,12 +2682,7 @@ def test_index_unique(idx):
         ),
         pytest.param(
             (
-                pd.Index(
-                    [1.0, 2.0, 3.0, 2.0, 1.0],
-                    dtype="Float64"
-                    if bodo.libs.float_arr_ext._use_nullable_float
-                    else "float64",
-                ),
+                pd.Index([1.0, 2.0, 3.0, 2.0, 1.0], dtype="Float64"),
                 pd.array([True, True, False, False, False]),
                 pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
             ),
@@ -2846,12 +2841,7 @@ def test_index_unique(idx):
         ),
         pytest.param(
             (
-                pd.Index(
-                    [0.1, 0.2, 0.3, 0.4, 0.5],
-                    dtype="Float64"
-                    if bodo.libs.float_arr_ext._use_nullable_float
-                    else "float64",
-                ),
+                pd.Index([0.1, 0.2, 0.3, 0.4, 0.5], dtype="Float64"),
                 pd.array([False, True, True, False, True]),
                 pd.Series([1, 2, 3, 4, 5]),
             ),

@@ -158,7 +158,6 @@ double_arg_funcs = ("ATAN2",)
 
 
 def create_trig_func_overload(func_name):
-
     if func_name not in double_arg_funcs:
         func_name = func_name.lower()
 
@@ -262,10 +261,7 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            if bodo.libs.float_arr_ext._use_nullable_float:
-                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-            else:
-                out_dtype = types.Array(bodo.float64, 1, "C")
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -286,10 +282,7 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            if bodo.libs.float_arr_ext._use_nullable_float:
-                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-            else:
-                out_dtype = types.Array(bodo.float64, 1, "C")
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
             return gen_vectorized(
                 arg_names,

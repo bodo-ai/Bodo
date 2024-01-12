@@ -2875,7 +2875,7 @@ def test_df_mem_usage(memory_leak_check):
         index=pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
     )
     # 1 extra byte for null_bit_map per rank
-    null_bitmap_byte = 1 if bodo.libs.float_arr_ext._use_nullable_float else 0
+    null_bitmap_byte = 1
     col_B_size = 48 + null_bitmap_byte
     col_B_size_parallel = col_B_size + null_bitmap_byte * (bodo.get_size() - 1)
     py_out = pd.Series([48, 48, col_B_size], index=["Index", "A", "B"])
