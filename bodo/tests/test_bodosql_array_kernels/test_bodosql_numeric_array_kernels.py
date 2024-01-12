@@ -964,91 +964,137 @@ def test_numeric_operators(dtype_str, memory_leak_check):
     Note: we aren't testing signed integers to allow unsigned data and we make sure
     everything fits within an int8 to simplify the test.
     """
-    try:
-        # Test with nullable floats for the output
-        old_flag = bodo.libs.float_arr_ext._use_nullable_float
-        bodo.libs.float_arr_ext._use_nullable_float = True
 
-        def impl1(arr0, arr1):
-            return pd.Series(bodo.libs.bodosql_array_kernels.add_numeric(arr0, arr1))
+    def impl1(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.add_numeric(arr0, arr1))
 
-        def impl2(arr0, arr1):
-            return pd.Series(
-                bodo.libs.bodosql_array_kernels.subtract_numeric(arr0, arr1)
-            )
+    def impl2(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.subtract_numeric(arr0, arr1))
 
-        def impl3(arr0, arr1):
-            return pd.Series(
-                bodo.libs.bodosql_array_kernels.multiply_numeric(arr0, arr1)
-            )
+    def impl3(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.multiply_numeric(arr0, arr1))
 
-        def impl4(arr0, arr1):
-            return pd.Series(bodo.libs.bodosql_array_kernels.divide_numeric(arr0, arr1))
+    def impl4(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.divide_numeric(arr0, arr1))
 
-        def scalar_impl1(arr0, arr1):
-            return bodo.libs.bodosql_array_kernels.add_numeric(arr0, arr1)
+    def scalar_impl1(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.add_numeric(arr0, arr1)
 
-        def scalar_impl2(arr0, arr1):
-            return bodo.libs.bodosql_array_kernels.subtract_numeric(arr0, arr1)
+    def scalar_impl2(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.subtract_numeric(arr0, arr1)
 
-        def scalar_impl3(arr0, arr1):
-            return bodo.libs.bodosql_array_kernels.multiply_numeric(arr0, arr1)
+    def scalar_impl3(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.multiply_numeric(arr0, arr1)
 
-        def scalar_impl4(arr0, arr1):
-            return bodo.libs.bodosql_array_kernels.divide_numeric(arr0, arr1)
+    def scalar_impl4(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.divide_numeric(arr0, arr1)
 
-        def compute_output_dtype(op, type_str1, type_str2):
-            if op == operator.__truediv__:
+    def compute_output_dtype(op, type_str1, type_str2):
+        if op == operator.__truediv__:
+            out_dtype = "Float64"
+        else:
+            if type_str1 in ("Float64", "Float32") or type_str2 in (
+                "Float64",
+                "Float32",
+            ):
                 out_dtype = "Float64"
+            elif type_str1 in (
+                "UInt64",
+                "Int64",
+                "UInt32",
+                "Int32",
+            ) or type_str2 in ("UInt64", "Int64", "UInt32", "Int32"):
+                out_dtype = "Int64"
+            elif type_str1 in ("UInt16", "Int16") or type_str2 in (
+                "UInt16",
+                "Int16",
+            ):
+                out_dtype = "Int32"
             else:
-                if type_str1 in ("Float64", "Float32") or type_str2 in (
-                    "Float64",
-                    "Float32",
-                ):
-                    out_dtype = "Float64"
-                elif type_str1 in (
-                    "UInt64",
-                    "Int64",
-                    "UInt32",
-                    "Int32",
-                ) or type_str2 in ("UInt64", "Int64", "UInt32", "Int32"):
-                    out_dtype = "Int64"
-                elif type_str1 in ("UInt16", "Int16") or type_str2 in (
-                    "UInt16",
-                    "Int16",
-                ):
-                    out_dtype = "Int32"
-                else:
-                    out_dtype = "Int16"
-            return out_dtype
+                out_dtype = "Int16"
+        return out_dtype
 
-        def generate_numeric_scalar_fn(op, out_dtype):
-            # Convert the output dtype string to a numpy function
-            out_type_func = np.dtype(out_dtype.lower()).type
+    def generate_numeric_scalar_fn(op, out_dtype):
+        # Convert the output dtype string to a numpy function
+        out_type_func = np.dtype(out_dtype.lower()).type
 
-            # Generate the actual scalar function
-            def impl(arg0, arg1):
-                if pd.isna(arg0) or pd.isna(arg1):
-                    return None
-                else:
-                    return out_type_func(op(out_type_func(arg0), out_type_func(arg1)))
+        # Generate the actual scalar function
+        def impl(arg0, arg1):
+            if pd.isna(arg0) or pd.isna(arg1):
+                return None
+            else:
+                return out_type_func(op(out_type_func(arg0), out_type_func(arg1)))
 
-            return impl
+        # Generate the actual scalar function
+        def impl(arg0, arg1):
+            if pd.isna(arg0) or pd.isna(arg1):
+                return None
+            else:
+                return out_type_func(op(out_type_func(arg0), out_type_func(arg1)))
 
-        # Note: we aren't testing signed integers to allow unsigned data and we make sure
-        # everything fits within an int8 to simplify the test.
-        arr1 = pd.Series([0, 1, 42, None, None] * 6, dtype=dtype_str).array
-        arr2 = pd.Series([7, 1, None, 3, 5, 6] * 5, dtype=dtype_str).array
-        scalar1 = arr1[0]
+        return impl
+
+    # Note: we aren't testing signed integers to allow unsigned data and we make sure
+    # everything fits within an int8 to simplify the test.
+    arr1 = pd.Series([0, 1, 42, None, None] * 6, dtype=dtype_str).array
+    arr2 = pd.Series([7, 1, None, 3, 5, 6] * 5, dtype=dtype_str).array
+    scalar1 = arr1[0]
+    scalar2 = arr2[0]
+
+    add_out_type = compute_output_dtype(operator.__add__, dtype_str, dtype_str)
+    add_func = generate_numeric_scalar_fn(operator.__add__, add_out_type)
+    sub_out_type = compute_output_dtype(operator.__sub__, dtype_str, dtype_str)
+    sub_func = generate_numeric_scalar_fn(operator.__sub__, sub_out_type)
+    mult_out_type = compute_output_dtype(operator.__mul__, dtype_str, dtype_str)
+    mult_func = generate_numeric_scalar_fn(operator.__mul__, mult_out_type)
+    div_out_type = compute_output_dtype(operator.__truediv__, dtype_str, dtype_str)
+    div_func = generate_numeric_scalar_fn(operator.__truediv__, div_out_type)
+
+    for impl, scalar_impl, answer_func, out_type in (
+        (impl1, scalar_impl1, add_func, add_out_type),
+        (impl2, scalar_impl2, sub_func, sub_out_type),
+        (impl3, scalar_impl3, mult_func, mult_out_type),
+        (impl4, scalar_impl4, div_func, div_out_type),
+    ):
+        # Test everything with 2 arrays
+        args = (arr1, arr2)
+        answer = vectorized_sol(args, answer_func, out_type)
+        check_func(impl, args, py_output=answer, reset_index=True)
+        # Test with 1 array and 1 scalar
+        args = (arr1, scalar2)
+        answer = vectorized_sol(args, answer_func, out_type)
+        check_func(impl, args, py_output=answer, reset_index=True)
+        args = (scalar1, arr2)
+        answer = vectorized_sol(args, answer_func, out_type)
+        check_func(impl, args, py_output=answer, reset_index=True)
+        # Test with 2 scalars
+        args = (scalar1, scalar2)
+        answer = vectorized_sol(args, answer_func, out_type)
+        check_func(scalar_impl, args, py_output=answer, reset_index=True)
+
+    # Test with an int32
+    other_dtype_str = "Int32"
+    if dtype_str != other_dtype_str:
+        arr2 = pd.Series(
+            [20000, -1, None, 36, -5000, None] * 5, dtype=other_dtype_str
+        ).array
         scalar2 = arr2[0]
 
-        add_out_type = compute_output_dtype(operator.__add__, dtype_str, dtype_str)
+        add_out_type = compute_output_dtype(
+            operator.__add__, dtype_str, other_dtype_str
+        )
         add_func = generate_numeric_scalar_fn(operator.__add__, add_out_type)
-        sub_out_type = compute_output_dtype(operator.__sub__, dtype_str, dtype_str)
+        sub_out_type = compute_output_dtype(
+            operator.__sub__, dtype_str, other_dtype_str
+        )
         sub_func = generate_numeric_scalar_fn(operator.__sub__, sub_out_type)
-        mult_out_type = compute_output_dtype(operator.__mul__, dtype_str, dtype_str)
+        mult_out_type = compute_output_dtype(
+            operator.__mul__, dtype_str, other_dtype_str
+        )
         mult_func = generate_numeric_scalar_fn(operator.__mul__, mult_out_type)
-        div_out_type = compute_output_dtype(operator.__truediv__, dtype_str, dtype_str)
+        div_out_type = compute_output_dtype(
+            operator.__truediv__, dtype_str, other_dtype_str
+        )
         div_func = generate_numeric_scalar_fn(operator.__truediv__, div_out_type)
 
         for impl, scalar_impl, answer_func, out_type in (
@@ -1073,103 +1119,53 @@ def test_numeric_operators(dtype_str, memory_leak_check):
             answer = vectorized_sol(args, answer_func, out_type)
             check_func(scalar_impl, args, py_output=answer, reset_index=True)
 
-        # Test with an int32
-        other_dtype_str = "Int32"
-        if dtype_str != other_dtype_str:
-            arr2 = pd.Series(
-                [20000, -1, None, 36, -5000, None] * 5, dtype=other_dtype_str
-            ).array
-            scalar2 = arr2[0]
+    # Test with a float64
+    other_dtype_str = "Float64"
+    if dtype_str != other_dtype_str:
+        arr2 = pd.Series(
+            [20000.34411, -1.231, None, 36, -5000.43143, None] * 5,
+            dtype=other_dtype_str,
+        ).array
+        scalar2 = arr2[0]
 
-            add_out_type = compute_output_dtype(
-                operator.__add__, dtype_str, other_dtype_str
-            )
-            add_func = generate_numeric_scalar_fn(operator.__add__, add_out_type)
-            sub_out_type = compute_output_dtype(
-                operator.__sub__, dtype_str, other_dtype_str
-            )
-            sub_func = generate_numeric_scalar_fn(operator.__sub__, sub_out_type)
-            mult_out_type = compute_output_dtype(
-                operator.__mul__, dtype_str, other_dtype_str
-            )
-            mult_func = generate_numeric_scalar_fn(operator.__mul__, mult_out_type)
-            div_out_type = compute_output_dtype(
-                operator.__truediv__, dtype_str, other_dtype_str
-            )
-            div_func = generate_numeric_scalar_fn(operator.__truediv__, div_out_type)
+        add_out_type = compute_output_dtype(
+            operator.__add__, dtype_str, other_dtype_str
+        )
+        add_func = generate_numeric_scalar_fn(operator.__add__, add_out_type)
+        sub_out_type = compute_output_dtype(
+            operator.__sub__, dtype_str, other_dtype_str
+        )
+        sub_func = generate_numeric_scalar_fn(operator.__sub__, sub_out_type)
+        mult_out_type = compute_output_dtype(
+            operator.__mul__, dtype_str, other_dtype_str
+        )
+        mult_func = generate_numeric_scalar_fn(operator.__mul__, mult_out_type)
+        div_out_type = compute_output_dtype(
+            operator.__truediv__, dtype_str, other_dtype_str
+        )
+        div_func = generate_numeric_scalar_fn(operator.__truediv__, div_out_type)
 
-            for impl, scalar_impl, answer_func, out_type in (
-                (impl1, scalar_impl1, add_func, add_out_type),
-                (impl2, scalar_impl2, sub_func, sub_out_type),
-                (impl3, scalar_impl3, mult_func, mult_out_type),
-                (impl4, scalar_impl4, div_func, div_out_type),
-            ):
-                # Test everything with 2 arrays
-                args = (arr1, arr2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                # Test with 1 array and 1 scalar
-                args = (arr1, scalar2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                args = (scalar1, arr2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                # Test with 2 scalars
-                args = (scalar1, scalar2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(scalar_impl, args, py_output=answer, reset_index=True)
-
-        # Test with a float64
-        other_dtype_str = "Float64"
-        if dtype_str != other_dtype_str:
-            arr2 = pd.Series(
-                [20000.34411, -1.231, None, 36, -5000.43143, None] * 5,
-                dtype=other_dtype_str,
-            ).array
-            scalar2 = arr2[0]
-
-            add_out_type = compute_output_dtype(
-                operator.__add__, dtype_str, other_dtype_str
-            )
-            add_func = generate_numeric_scalar_fn(operator.__add__, add_out_type)
-            sub_out_type = compute_output_dtype(
-                operator.__sub__, dtype_str, other_dtype_str
-            )
-            sub_func = generate_numeric_scalar_fn(operator.__sub__, sub_out_type)
-            mult_out_type = compute_output_dtype(
-                operator.__mul__, dtype_str, other_dtype_str
-            )
-            mult_func = generate_numeric_scalar_fn(operator.__mul__, mult_out_type)
-            div_out_type = compute_output_dtype(
-                operator.__truediv__, dtype_str, other_dtype_str
-            )
-            div_func = generate_numeric_scalar_fn(operator.__truediv__, div_out_type)
-
-            for impl, scalar_impl, answer_func, out_type in (
-                (impl1, scalar_impl1, add_func, add_out_type),
-                (impl2, scalar_impl2, sub_func, sub_out_type),
-                (impl3, scalar_impl3, mult_func, mult_out_type),
-                (impl4, scalar_impl4, div_func, div_out_type),
-            ):
-                # Test everything with 2 arrays
-                args = (arr1, arr2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                # Test with 1 array and 1 scalar
-                args = (arr1, scalar2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                args = (scalar1, arr2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(impl, args, py_output=answer, reset_index=True)
-                # Test with 2 scalars
-                args = (scalar1, scalar2)
-                answer = vectorized_sol(args, answer_func, out_type)
-                check_func(scalar_impl, args, py_output=answer, reset_index=True)
-    finally:
-        # Reset the flag
-        bodo.libs.float_arr_ext._use_nullable_float = old_flag
+        for impl, scalar_impl, answer_func, out_type in (
+            (impl1, scalar_impl1, add_func, add_out_type),
+            (impl2, scalar_impl2, sub_func, sub_out_type),
+            (impl3, scalar_impl3, mult_func, mult_out_type),
+            (impl4, scalar_impl4, div_func, div_out_type),
+        ):
+            # Test everything with 2 arrays
+            args = (arr1, arr2)
+            answer = vectorized_sol(args, answer_func, out_type)
+            check_func(impl, args, py_output=answer, reset_index=True)
+            # Test with 1 array and 1 scalar
+            args = (arr1, scalar2)
+            answer = vectorized_sol(args, answer_func, out_type)
+            check_func(impl, args, py_output=answer, reset_index=True)
+            args = (scalar1, arr2)
+            answer = vectorized_sol(args, answer_func, out_type)
+            check_func(impl, args, py_output=answer, reset_index=True)
+            # Test with 2 scalars
+            args = (scalar1, scalar2)
+            answer = vectorized_sol(args, answer_func, out_type)
+            check_func(scalar_impl, args, py_output=answer, reset_index=True)
 
 
 @pytest.mark.slow

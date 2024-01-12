@@ -106,10 +106,7 @@ def overload_coerce_to_ndarray(
     if isinstance(data, types.Array):
         if not is_overload_none(use_nullable_array) and (
             isinstance(data.dtype, (types.Boolean, types.Integer))
-            or (
-                isinstance(data.dtype, types.Float)
-                and bodo.libs.float_arr_ext._use_nullable_float
-            )
+            or isinstance(data.dtype, types.Float)
         ):
             if data.dtype == types.bool_:
 
@@ -126,10 +123,7 @@ def overload_coerce_to_ndarray(
                     return out_array
 
                 return impl
-            elif (
-                isinstance(data.dtype, types.Float)
-                and bodo.libs.float_arr_ext._use_nullable_float
-            ):
+            elif isinstance(data.dtype, types.Float):
                 if data.layout != "C":
                     return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
                         np.ascontiguousarray(data),
@@ -354,11 +348,7 @@ def overload_coerce_to_ndarray(
 
             return impl_null_integer
 
-        if (
-            not is_overload_none(use_nullable_array)
-            and isinstance(dtype, types.Float)
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if not is_overload_none(use_nullable_array) and isinstance(dtype, types.Float):
 
             def impl_null_float(
                 data,
@@ -1359,11 +1349,7 @@ def overload_fix_arr_dtype(
         return impl
 
     # nullable float array to non-nullable int array case
-    if (
-        isinstance(nb_dtype, types.Float)
-        and isinstance(data.dtype, types.Float)
-        and bodo.libs.float_arr_ext._use_nullable_float
-    ):
+    if isinstance(nb_dtype, types.Float) and isinstance(data.dtype, types.Float):
 
         def impl(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False

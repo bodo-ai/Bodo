@@ -698,10 +698,9 @@ def test_series_concat_convert_to_nullable(memory_leak_check):
     check_func(impl2, (S1, S2), sort_output=True, reset_index=True)
 
     # Float case
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        S1 = pd.Series([3, 2, 1, -4, None, 11, 21, 31, None] * 2, dtype="Float64")
-        S2 = pd.Series(np.arange(11) * 2.1, dtype="float32")
-        check_func(impl1, (S1, S2), sort_output=True, reset_index=True)
+    S1 = pd.Series([3, 2, 1, -4, None, 11, 21, 31, None] * 2, dtype="Float64")
+    S2 = pd.Series(np.arange(11) * 2.1, dtype="float32")
+    check_func(impl1, (S1, S2), sort_output=True, reset_index=True)
 
 
 def test_series_notna(series_val, memory_leak_check):

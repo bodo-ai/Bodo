@@ -3,7 +3,6 @@
 However, nulls are stored in bit arrays similar to Arrow's arrays.
 """
 import operator
-import os
 
 import llvmlite.binding as ll
 import numba
@@ -58,8 +57,6 @@ from bodo.utils.typing import (
     parse_dtype,
     raise_bodo_error,
 )
-
-_use_nullable_float = int(os.environ.get("BODO_USE_NULLABLE_FLOAT", "1"))
 
 
 class FloatingArrayType(types.IterableType, types.ArrayCompatible):

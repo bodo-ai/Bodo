@@ -264,7 +264,7 @@ def windowed_sum(S, lower_bound, upper_bound):
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
         propagate_nan = False
     else:
-        out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
         propagate_nan = True
 
     return gen_windowed(
@@ -456,7 +456,7 @@ def windowed_avg(S, lower_bound, upper_bound):
 
     exit_block = "total -= elem0"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_windowed(
         calculate_block,
@@ -523,7 +523,7 @@ def make_windowed_variance_stddev_function(name, method, ddof):
         calculate_block += "else:\n"
         calculate_block += f"   res[i] = {calculation}"
 
-        out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
         return gen_windowed(
             calculate_block,
@@ -567,7 +567,7 @@ def windowed_median(S, lower_bound, upper_bound):
 
     exit_block = "vals = np.delete(vals, np.argwhere(vals == elem0)[0])"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(types.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -590,7 +590,7 @@ def windowed_mode(S, lower_bound, upper_bound):
 
     # For float values, handle NaN as a special case:
     if is_valid_float_arg(S):
-        out_dtype = bodo.utils.typing.get_float_arr_type(types.float64)
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
         calculate_block = "best_val, best_count = np.nan, nan_count\n"
         calculate_block += "for key in counts:\n"
@@ -669,7 +669,7 @@ def windowed_ratio_to_report(S, lower_bound, upper_bound):
 
     exit_block = "total -= elem0"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(types.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -709,7 +709,7 @@ def windowed_covar_pop(Y, X, lower_bound, upper_bound):
     exit_block += "total_x -= elem1\n"
     exit_block += "total_xy -= elem0 * elem1\n"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(types.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -750,7 +750,7 @@ def windowed_covar_samp(Y, X, lower_bound, upper_bound):
     exit_block += "total_x -= elem1\n"
     exit_block += "total_xy -= elem0 * elem1\n"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(types.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
     return gen_windowed(
         calculate_block,
@@ -821,7 +821,7 @@ def windowed_corr(Y, X, lower_bound, upper_bound):
     exit_block += "e1_x -= elem1 - k_x\n"
     exit_block += "e2_x -= (elem1 - k_x) ** 2\n"
 
-    out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_windowed(
         calculate_block,
@@ -1034,9 +1034,7 @@ def make_windowed_min_max_function(func, cmp):
         else:
             out_dtype = S
 
-        propagate_nan = (
-            bodo.libs.float_arr_ext._use_nullable_float and is_valid_float_arg(S)
-        )
+        propagate_nan = is_valid_float_arg(S)
 
         return gen_windowed(
             calculate_block,

@@ -181,10 +181,7 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
     if (arr0 is None or arr0_dtype == bodo.none) or (
         func_name in double_arg_funcs and (arr1 is None or arr1_dtype == bodo.none)
     ):
-        if (
-            isinstance(out_dtype, types.Float)
-            and bodo.libs.float_arr_ext._use_nullable_float
-        ):
+        if isinstance(out_dtype, types.Float):
             return bodo.libs.float_arr_ext.FloatingArrayType(out_dtype)
         else:
             return types.Array(out_dtype, 1, "C")
@@ -239,10 +236,7 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
 
     if isinstance(out_dtype, types.Integer):
         return bodo.libs.int_arr_ext.IntegerArrayType(out_dtype)
-    elif (
-        isinstance(out_dtype, types.Float)
-        and bodo.libs.float_arr_ext._use_nullable_float
-    ):
+    elif isinstance(out_dtype, types.Float):
         return bodo.libs.float_arr_ext.FloatingArrayType(out_dtype)
     else:
         return types.Array(out_dtype, 1, "C")
@@ -1101,10 +1095,7 @@ def haversine_util(lat1, lon1, lat2, lon2):
     # r = 6731 is used for the radius of Earth (2r below)
     scalar_text += f"res[i] = 12742.0 * np.arcsin(np.sqrt({h}))\n"
 
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-    else:
-        out_dtype = types.Array(bodo.float64, 1, "C")
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
@@ -1122,10 +1113,7 @@ def div0_util(arr, divisor):
     propogate_null = [True] * 2
     scalar_text = "res[i] = arg0 / arg1 if arg1 else 0\n"
 
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-    else:
-        out_dtype = types.Array(bodo.float64, 1, "C")
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
@@ -1152,10 +1140,7 @@ def log_util(arr, base):
     propagate_null = [True] * 2
     scalar_text = "res[i] = np.log(arg0) / np.log(arg1)"
 
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-    else:
-        out_dtype = types.Array(bodo.float64, 1, "C")
+    out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

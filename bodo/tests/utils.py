@@ -257,7 +257,7 @@ def check_func(
         run_1D = False
 
     # convert float input to nullable float to test new nullable float functionality
-    if convert_to_nullable_float and bodo.libs.float_arr_ext._use_nullable_float:
+    if convert_to_nullable_float:
         args = _convert_float_to_nullable_float(args)
         py_output = _convert_float_to_nullable_float(py_output)
 
