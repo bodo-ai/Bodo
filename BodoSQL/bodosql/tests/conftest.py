@@ -6,6 +6,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from pyspark.sql.types import (
     DoubleType,
@@ -1923,6 +1924,20 @@ def listagg_data():
                 "GROUP_CONSTANT_STR_COL": ["a"] * 6 + ["œ"] * 6 + ["e"] * 6,
                 "GROUP_CONSTANT_STR_COL2": ["į"] * 6 + ["ë"] * 6 + ["₠"] * 6,
                 "NON_CONSTANT_STR_COL": list(string.ascii_uppercase[:6]) * 3,
+                "NON_CONSTANT_STR_COL_WITH_NULLS": np.array(
+                    [
+                        None,
+                        None,
+                        "hi",
+                        "hello",
+                        None,
+                        "world",
+                    ]
+                    * 3
+                ),
+                "ALL_NULL_COLUMN": pd.array(
+                    [None] * 18, dtype=pd.ArrowDtype(pa.string())
+                ),
                 "ORDER_COL_1": [None, 1, None, 2, None, 3] * 3,
                 "ORDER_COL_2": [1, None, 2, None, 3, None] * 3,
                 "ORDER_COL_3": np.arange(18),

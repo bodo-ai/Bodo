@@ -582,7 +582,7 @@ def test_kurtosis_skew(df, memory_leak_check):
                         ),
                     }
                 ),
-                pd.DataFrame({"AGG_OUTPUT_0": ["A", "B__different_sep__C", None]}),
+                pd.DataFrame({"AGG_OUTPUT_0": ["A", "B__different_sep__C", ""]}),
             ),
             id="some-null",
         ),
@@ -607,7 +607,7 @@ def test_kurtosis_skew(df, memory_leak_check):
                             [
                                 "A__different_sep__A__different_sep__A__different_sep__A__different_sep__A"
                             ]
-                            + [None] * 2,
+                            + [""] * 2,
                             dtype=str,
                         )
                     }
@@ -636,7 +636,7 @@ def test_kurtosis_skew(df, memory_leak_check):
                         "AGG_OUTPUT_0": [
                             "½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞",
                             "₩__« »__B__« »__Å Ů ẘ ẙ",
-                            None,
+                            "",
                         ]
                     }
                 ),

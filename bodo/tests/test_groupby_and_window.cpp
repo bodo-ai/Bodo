@@ -1064,14 +1064,10 @@ static bodo::tests::suite tests([] {
             make_all_null_arr<bodo_array_type::NULLABLE_INT_BOOL,
                               Bodo_CTypes::INT64>(n);
 
-        // [BSE-2182] Ensure LISTAGG with groupby returns "" instead of NULL on
-        // all-null inputs.
-
-        // auto listagg_col_set = new ListAggColSet(str_col,
-        // dict_col, {int_col}, {true}, {false});
-        // TEST_GROUPBY_FN(listagg_col_set, n,
-        //             bodo_array_type::STRING,
-        //             Bodo_CTypes::STRING, empty_return_enum::EMPTY_STRING);
+        auto listagg_col_set =
+            new ListAggColSet(str_col, dict_col, {int_col}, {true}, {false});
+        TEST_GROUPBY_FN(listagg_col_set, n, bodo_array_type::STRING,
+                        Bodo_CTypes::STRING, empty_return_enum::EMPTY_STRING);
 
         auto array_agg_set = new ArrayAggColSet(
             int_col, {int_col}, {true}, {false}, Bodo_FTypes::array_agg, false);

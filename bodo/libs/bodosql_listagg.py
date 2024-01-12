@@ -163,7 +163,6 @@ def bodosql_listagg_seq(df, ascending, na_position, separator=""):
     in_col_inds = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
     num_table_cols = len(df.columns)
     func_text += f"  py_table = logical_table_to_table(get_dataframe_all_data(df), (), in_col_inds, {num_table_cols})\n"
-
     func_text += "  cpp_table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     func_text += f"  out_str = listagg_seq_cpp(cpp_table, unicode_to_utf8(separator), {len(ascending)}, ascending.ctypes, na_position.ctypes, len(separator))\n"
     func_text += "  return out_str\n"
