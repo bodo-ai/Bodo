@@ -238,10 +238,11 @@ mpi_comm_info::mpi_comm_info(
 }
 
 mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
-                             const mpi_comm_info& parent_comm_info)
+                             const mpi_comm_info& parent_comm_info,
+                             bool _has_nulls)
     : myrank(parent_comm_info.myrank),
       n_pes(parent_comm_info.n_pes),
-      has_nulls(parent_arr->child_arrays[0]->null_bitmask() != nullptr),
+      has_nulls(_has_nulls),
       send_count(n_pes),
       recv_count(n_pes),
       send_disp(n_pes),
@@ -998,7 +999,9 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
                                      tmp_null_bytes, comm_info.recv_count_null,
                                      comm_info.recv_count);
             // inner array
-            mpi_comm_info comm_info_inner(in_arr, comm_info);
+            mpi_comm_info comm_info_inner(
+                in_arr, comm_info,
+                in_arr->child_arrays[0]->null_bitmask() != nullptr);
             tmp_null_bytes.resize(comm_info_inner.n_null_bytes);
             out_arr->child_arrays[0] =
                 shuffle_array(in_arr->child_arrays[0], comm_info_inner,
@@ -1378,7 +1381,7 @@ std::shared_ptr<table_info> shuffle_table_kernel(
 
 void reverse_shuffle_preallocated_data_array(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
-    std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info) {
+    mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_preallocated_data_array");
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
         in_arr->dtype == Bodo_CTypes::_BOOL) {
@@ -1417,8 +1420,9 @@ void reverse_shuffle_preallocated_data_array(
                        mpi_typ, temp_recv.data(), send_count_bytes,
                        send_disp_bytes, mpi_typ, MPI_COMM_WORLD);
         std::vector<int64_t> tmp_offset(n_pes, 0);
+        const bodo::vector<int>& row_dest = comm_info.row_dest;
         for (size_t i_row = 0; i_row < out_arr->length; i_row++) {
-            size_t node = hash_to_rank(hashes[i_row], n_pes);
+            size_t node = row_dest[i_row];
             uint8_t* out_bitmap = &(temp_recv.data())[send_disp_bytes[node]];
             bool bit = GetBit(out_bitmap, tmp_offset[node]);
             SetBitTo(data1_o, i_row, bit);
@@ -1436,8 +1440,6 @@ void reverse_shuffle_preallocated_data_array(
                        comm_info.send_disp, mpi_typ, MPI_COMM_WORLD);
         std::vector<int64_t> tmp_offset(comm_info.send_disp);
         const bodo::vector<int>& row_dest = comm_info.row_dest;
-        // Nullable boolean arrays store 1 bit per boolean so
-        // we need a specialized setitem.
         for (size_t i = 0; i < out_arr->length; i++) {
             int64_t& ind = tmp_offset[row_dest[i]];
             memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind++,
@@ -1447,21 +1449,19 @@ void reverse_shuffle_preallocated_data_array(
 }
 
 std::shared_ptr<array_info> reverse_shuffle_data_array(
-    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info) {
+    std::shared_ptr<array_info> in_arr, mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_data_array");
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
     std::shared_ptr<array_info> out_arr =
         alloc_array_top_level(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype,
                               -1, 0, in_arr->num_categories);
-    reverse_shuffle_preallocated_data_array(in_arr, out_arr, hashes, comm_info);
+    reverse_shuffle_preallocated_data_array(in_arr, out_arr, comm_info);
     return out_arr;
 }
 
 std::shared_ptr<array_info> reverse_shuffle_string_array(
-    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info) {
+    std::shared_ptr<array_info> in_arr, mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_string_array");
     // 1: computing the recv_count_sub and related
     offset_t* in_offset = (offset_t*)in_arr->data2();
@@ -1500,13 +1500,13 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
                    comm_info.send_count, comm_info.send_disp, mpi_typ,
                    MPI_COMM_WORLD);
 #if OFFSET_BITWIDTH == 32
-    fill_recv_data_inner(list_len_recv.data(), out_offset, hashes,
-                         comm_info.send_disp, comm_info.n_pes, out_len);
+    fill_recv_data_inner(list_len_recv.data(), out_offset, comm_info.row_dest,
+                         comm_info.send_disp, out_len);
     convert_len_arr_to_offset32(out_offset, out_len);
 #else
     bodo::vector<uint32_t> out_lens(out_arr->length);
-    fill_recv_data_inner(list_len_recv.data(), out_lens.data(), hashes,
-                         comm_info.send_disp, comm_info.n_pes, out_len);
+    fill_recv_data_inner(list_len_recv.data(), out_lens.data(),
+                         comm_info.row_dest, comm_info.send_disp, out_len);
     convert_len_arr_to_offset(out_lens.data(), out_offset, out_len);
 #endif
     // 4: the characters themselves
@@ -1518,8 +1518,9 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
                    tmp_recv.data(), send_count_sub, send_disp_sub, mpi_typ,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
+    const bodo::vector<int>& row_dest = comm_info.row_dest;
     for (int64_t i = 0; i < out_len; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
+        size_t node = row_dest[i];
         offset_t str_len = out_offset[i + 1] - out_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
         char* out_ptr = out_arr->data1() + out_offset[i];
@@ -1532,7 +1533,6 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
 
 void reverse_shuffle_null_bitmap_array(std::shared_ptr<array_info> in_arr,
                                        std::shared_ptr<array_info> out_arr,
-                                       std::shared_ptr<uint32_t[]>& hashes,
                                        mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_null_bitmap_array");
     int n_pes = comm_info.n_pes;
@@ -1565,8 +1565,9 @@ void reverse_shuffle_null_bitmap_array(std::shared_ptr<array_info> in_arr,
                    mask_recv.data(), send_count_null, send_disp_null, mpi_typ,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(n_pes, 0);
+    const bodo::vector<int>& row_dest = comm_info.row_dest;
     for (size_t i_row = 0; i_row < out_arr->length; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        size_t node = row_dest[i_row];
         uint8_t* out_bitmap = &(mask_recv.data())[send_disp_null[node]];
         bool bit = GetBit(out_bitmap, tmp_offset[node]);
         SetBitTo(null_bitmask_out, i_row, bit);
@@ -1574,174 +1575,120 @@ void reverse_shuffle_null_bitmap_array(std::shared_ptr<array_info> in_arr,
     }
 }
 
-std::shared_ptr<array_info> reverse_shuffle_list_string_array(
-    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info) {
-    tracing::Event ev("reverse_shuffle_list_string_array");
-
-    // 1: computing the recv_count_sub and related
-    int n_pes = comm_info.n_pes;
-    offset_t* in_str_offset = (offset_t*)in_arr->data1();
-    std::vector<int64_t> recv_count_sub(n_pes),
-        recv_disp_sub(n_pes);  // we continue using here the recv/send
-    for (int i = 0; i < n_pes; i++)
-        recv_count_sub[i] =
-            in_str_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
-            in_str_offset[comm_info.recv_disp[i]];
-    std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
-    MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T, send_count_sub.data(),
-                 1, MPI_INT64_T, MPI_COMM_WORLD);
-    calc_disp(send_disp_sub, send_count_sub);
-    calc_disp(recv_disp_sub, recv_count_sub);
-
-    // 2: computing the recv_count_sub_sub and related
-    offset_t* in_data_offset = (offset_t*)in_arr->child_arrays[0]->data2();
-    std::vector<int64_t> recv_count_sub_sub(n_pes),
-        recv_disp_sub_sub(n_pes);  // we continue using here the recv/send
-    for (int i = 0; i < n_pes; i++)
-        recv_count_sub_sub[i] =
-            in_data_offset[recv_disp_sub[i] + recv_count_sub[i]] -
-            in_data_offset[recv_disp_sub[i]];
-    std::vector<int64_t> send_count_sub_sub(n_pes), send_disp_sub_sub(n_pes);
-    MPI_Alltoall(recv_count_sub_sub.data(), 1, MPI_INT64_T,
-                 send_count_sub_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
-    calc_disp(send_disp_sub_sub, send_count_sub_sub);
-    calc_disp(recv_disp_sub_sub, recv_count_sub_sub);
-
-    // 3: Now allocating
-    int64_t n_rows_ret = std::accumulate(
-        comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
-    int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
-    int64_t n_count_sub_sub =
-        send_disp_sub_sub[n_pes - 1] + send_count_sub_sub[n_pes - 1];
-    std::shared_ptr<array_info> out_arr = alloc_array_item(
-        n_rows_ret, alloc_string_array(Bodo_CTypes::CTypeEnum::STRING,
-                                       n_count_sub, n_count_sub_sub));
-    int64_t in_len = in_arr->length;
-    int64_t out_len = out_arr->length;
-
-    // 4: the string offsets
-    bodo::vector<uint32_t> list_str_len_send(in_len);
-    offset_t* out_str_offset = (offset_t*)out_arr->data1();
+/**
+ * @brief Reverse shuffle offsets of array(item) array
+ *
+ * @param in_offset input array offsets (shuffled array)
+ * @param out_offset output array offsets (reverse shuffled array)
+ * @param in_len input array length
+ * @param out_len output array length
+ * @param comm_info mpi comm info of shuffle
+ */
+void reverse_shuffle_offsets(offset_t* in_offset, offset_t* out_offset,
+                             int64_t in_len, int64_t out_len,
+                             mpi_comm_info const& comm_info) {
+    bodo::vector<uint32_t> send_arr_lens(in_len);
     for (int64_t i = 0; i < in_len; i++)
-        list_str_len_send[i] = in_str_offset[i + 1] - in_str_offset[i];
+        send_arr_lens[i] = in_offset[i + 1] - in_offset[i];
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
-    bodo::vector<uint32_t> list_str_len_recv(out_len);
-    bodo_alltoallv(list_str_len_send.data(), comm_info.recv_count,
-                   comm_info.recv_disp, mpi_typ, list_str_len_recv.data(),
+    bodo::vector<uint32_t> recv_arr_lens(out_len);
+    bodo_alltoallv(send_arr_lens.data(), comm_info.recv_count,
+                   comm_info.recv_disp, mpi_typ, recv_arr_lens.data(),
                    comm_info.send_count, comm_info.send_disp, mpi_typ,
                    MPI_COMM_WORLD);
-#if OFFSET_BITWIDTH == 32
-    fill_recv_data_inner(list_str_len_recv.data(), out_str_offset, hashes,
-                         comm_info.send_disp, comm_info.n_pes, out_len);
-    convert_len_arr_to_offset32(out_str_offset, out_len);
-#else
+    static_assert(OFFSET_BITWIDTH == 64);
     bodo::vector<uint32_t> out_lens(out_len);
-    fill_recv_data_inner(list_str_len_recv.data(), out_lens.data(), hashes,
-                         comm_info.send_disp, comm_info.n_pes, out_len);
-    convert_len_arr_to_offset(out_lens.data(), out_str_offset, out_len);
-#endif
+    fill_recv_data_inner(recv_arr_lens.data(), out_lens.data(),
+                         comm_info.row_dest, comm_info.send_disp, out_len);
+    convert_len_arr_to_offset(out_lens.data(), out_offset, out_len);
+}
 
-    // 5: the character offsets
-    int32_t in_sub_len = in_str_offset[in_len];
-    int32_t out_sub_len = out_str_offset[out_len];
-    bodo::vector<uint32_t> list_char_len_send(in_sub_len);
-    offset_t* out_data_offset = (offset_t*)out_arr->child_arrays[0]->data2();
-    for (int64_t i = 0; i < in_sub_len; i++)
-        list_char_len_send[i] = in_data_offset[i + 1] - in_data_offset[i];
-    bodo::vector<uint32_t> list_char_len_recv(out_sub_len);
-    bodo_alltoallv(list_char_len_send.data(), recv_count_sub, recv_disp_sub,
-                   mpi_typ, list_char_len_recv.data(), send_count_sub,
-                   send_disp_sub, mpi_typ, MPI_COMM_WORLD);
-    std::vector<int64_t> tmp_offset_sub(send_disp_sub);
-#if OFFSET_BITWIDTH != 32
-    out_lens.resize(out_sub_len);
-#endif
-    for (int64_t i = 0; i < out_len; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        uint32_t nb_str = out_str_offset[i + 1] - out_str_offset[i];
-        int64_t c_ind = tmp_offset_sub[node];
-#if OFFSET_BITWIDTH == 32
-        uint32_t* out_ptr = out_data_offset + out_str_offset[i];
-#else
-        uint32_t* out_ptr = out_lens.data() + out_str_offset[i];
-#endif
-        uint32_t* in_ptr = list_char_len_recv.data() + c_ind;
-        memcpy((char*)out_ptr, (char*)in_ptr, sizeof(uint32_t) * nb_str);
-        tmp_offset_sub[node] += nb_str;
-    }
-#if OFFSET_BITWIDTH == 32
-    convert_len_arr_to_offset32(out_data_offset, out_sub_len);
-#else
-    convert_len_arr_to_offset(out_lens.data(), out_data_offset, out_sub_len);
-#endif
+/**
+ * @brief reverse shuffle an array(item) array
+ *
+ * @param in_arr previously shuffled array(item) array
+ * @param comm_info mpi comm info of shuffle
+ * @return std::shared_ptr<array_info> array before shuffle
+ */
+std::shared_ptr<array_info> reverse_shuffle_array_item(
+    std::shared_ptr<array_info> in_arr, mpi_comm_info const& comm_info) {
+    // allocate output array
+    int64_t out_len = std::accumulate(comm_info.send_count.begin(),
+                                      comm_info.send_count.end(), int64_t(0));
+    std::shared_ptr<array_info> out_arr = alloc_array_item(out_len, nullptr);
+    int64_t in_len = in_arr->length;
 
-    // 6: the characters themselves
-    int32_t out_sub_sub_len = out_data_offset[out_sub_len];
-    char* in_char = in_arr->child_arrays[0]->data1();
-    char* out_char = out_arr->child_arrays[0]->data1();
-    MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-    bodo::vector<char> list_char_recv(out_sub_sub_len);
-    bodo_alltoallv(in_char, recv_count_sub_sub, recv_disp_sub_sub, mpi_typ8,
-                   list_char_recv.data(), send_count_sub_sub, send_disp_sub_sub,
-                   mpi_typ8, MPI_COMM_WORLD);
-    std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub);
-    for (int64_t i = 0; i < out_len; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        uint32_t nb_char = out_data_offset[out_str_offset[i + 1]] -
-                           out_data_offset[out_str_offset[i]];
-        int64_t c_ind = tmp_offset_sub_sub[node];
-        char* out_ptr = out_char + out_data_offset[out_str_offset[i]];
-        char* in_ptr = list_char_recv.data() + c_ind;
-        memcpy(out_ptr, in_ptr, nb_char);
-        tmp_offset_sub_sub[node] += nb_char;
-    }
-    //
-    // Now doing the mask
-    //
-    std::vector<int64_t> send_count_sub_null(n_pes), recv_count_sub_null(n_pes);
-    for (int i = 0; i < n_pes; i++) {
-        send_count_sub_null[i] = (send_count_sub[i] + 7) >> 3;
-        recv_count_sub_null[i] = (recv_count_sub[i] + 7) >> 3;
-    }
-    int64_t n_send_sub_null_tot = std::accumulate(
-        send_count_sub_null.begin(), send_count_sub_null.end(), int64_t(0));
-    int64_t n_recv_sub_null_tot = std::accumulate(
-        recv_count_sub_null.begin(), recv_count_sub_null.end(), int64_t(0));
-    std::vector<int64_t> send_disp_sub_null(n_pes), recv_disp_sub_null(n_pes);
-    calc_disp(send_disp_sub_null, send_count_sub_null);
-    calc_disp(recv_disp_sub_null, recv_count_sub_null);
-    bodo::vector<uint8_t> mask_send(n_recv_sub_null_tot);
+    // reverse shuffle offsets
+    offset_t* in_offset = (offset_t*)in_arr->data1();
+    offset_t* out_offset = (offset_t*)out_arr->data1();
+    reverse_shuffle_offsets(in_offset, out_offset, in_len, out_len, comm_info);
 
-    uint8_t* sub_null_bitmask_in =
-        (uint8_t*)in_arr->child_arrays[0]->null_bitmask();
-    uint8_t* sub_null_bitmask_out =
-        (uint8_t*)out_arr->child_arrays[0]->null_bitmask();
+    // reverse shuffle child array
+    mpi_comm_info comm_info_inner(
+        out_arr, comm_info, in_arr->child_arrays[0]->null_bitmask() != nullptr);
+    out_arr->child_arrays[0] =
+        reverse_shuffle_array(in_arr->child_arrays[0], comm_info_inner);
+    return out_arr;
+}
 
-    for (int i_p = 0; i_p < n_pes; i_p++) {
-        for (int64_t i_str = 0; i_str < recv_count_sub[i_p]; i_str++) {
-            int64_t pos = i_str + recv_disp_sub[i_p];
-            bool bit = GetBit(sub_null_bitmask_in, pos);
-            SetBitTo(mask_send.data(), 8 * recv_disp_sub_null[i_p] + i_str,
-                     bit);
+/**
+ * @brief Reverse shuffle a previously shuffled array
+ *
+ * @param in_arr input array (previously shuffled)
+ * @param comm_info comm_info of the original shuffle
+ * @return std::shared_ptr<array_info> the original shuffled array
+ */
+std::shared_ptr<array_info> reverse_shuffle_array(
+    std::shared_ptr<array_info> in_arr, mpi_comm_info const& comm_info) {
+    // keep input array since in_arr is changed to indices for DICT below
+    std::shared_ptr<array_info> in_arr_original = in_arr;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    std::shared_ptr<array_info> out_arr = nullptr;
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        out_arr = reverse_shuffle_array_item(in_arr, comm_info);
+    } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+        // reverse shuffle child arrays
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        for (const std::shared_ptr<array_info>& child_arr :
+             in_arr->child_arrays) {
+            child_arrays.push_back(reverse_shuffle_array(child_arr, comm_info));
         }
-    }
-    bodo::vector<uint8_t> mask_recv(n_send_sub_null_tot);
-    bodo_alltoallv(mask_send.data(), recv_count_sub_null, recv_disp_sub_null,
-                   mpi_typ8, mask_recv.data(), send_count_sub_null,
-                   send_disp_sub_null, mpi_typ8, MPI_COMM_WORLD);
-    std::vector<int64_t> tmp_offset(n_pes, 0);
-    int64_t pos_si = 0;
-    for (size_t i_row = 0; i_row < out_arr->length; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
-        uint8_t* sub_out_bitmap = &(mask_recv.data())[send_disp_sub_null[node]];
-        int64_t n_str = out_str_offset[i_row + 1] - out_str_offset[i_row];
-        for (int64_t i_str = 0; i_str < n_str; i_str++) {
-            bool bit = GetBit(sub_out_bitmap, tmp_offset[node] + i_str);
-            SetBitTo(sub_null_bitmask_out, pos_si, bit);
-            pos_si++;
+        int64_t length = child_arrays.size() == 0 ? 0 : child_arrays[0]->length;
+        out_arr = alloc_struct(length, std::move(child_arrays));
+    } else if (arr_type == bodo_array_type::MAP) {
+        std::shared_ptr<array_info> child_arr =
+            reverse_shuffle_array(in_arr->child_arrays[0], comm_info);
+        out_arr = alloc_map(child_arr->length, child_arr);
+    } else if (arr_type == bodo_array_type::DICT) {
+        if (!in_arr->child_arrays[0]->is_globally_replicated) {
+            throw std::runtime_error(
+                "reverse_shuffle_table: input dictionary array doesn't "
+                "have a "
+                "global dictionary");
         }
-        tmp_offset[node] += n_str;
+        // in_arr <- indices array, to simplify code below
+        in_arr = in_arr->child_arrays[1];
+        arr_type = in_arr->arr_type;
+    }
+    if (arr_type == bodo_array_type::NUMPY ||
+        arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        out_arr = reverse_shuffle_data_array(in_arr, comm_info);
+    }
+    if (arr_type == bodo_array_type::STRING) {
+        out_arr = reverse_shuffle_string_array(in_arr, comm_info);
+    }
+    if (arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::STRUCT) {
+        reverse_shuffle_null_bitmap_array(in_arr, out_arr, comm_info);
+    }
+    if (in_arr_original->arr_type == bodo_array_type::DICT) {
+        in_arr = in_arr_original;
+        std::shared_ptr<array_info> out_dict_arr =
+            create_dict_string_array(in_arr->child_arrays[0], out_arr);
+        out_arr = out_dict_arr;
     }
     return out_arr;
 }
@@ -1755,68 +1702,18 @@ std::shared_ptr<array_info> reverse_shuffle_list_string_array(
    compute_reverse_shuffle(std::shared_ptr<uint32_t[]>& hashes)
     ---
     @param in_table  : The shuffled input table
-    @param hashes    : the hashes (of the original table)
     @param comm_info : The comm_info (computed from the original table)
     @return the reshuffled table
  */
 std::shared_ptr<table_info> reverse_shuffle_table_kernel(
-    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info) {
+    std::shared_ptr<table_info> in_table, mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_table_kernel");
     uint64_t n_cols = in_table->ncols();
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (uint64_t i = 0; i < n_cols; i++) {
-        std::shared_ptr<array_info> in_arr = in_table->columns[i];
-        bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-        std::shared_ptr<array_info> out_arr = nullptr;
-        if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM &&
-            in_arr->child_arrays[0]->arr_type == bodo_array_type::STRING) {
-            out_arr =
-                reverse_shuffle_list_string_array(in_arr, hashes, comm_info);
-            reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
-                                              comm_info);
-
-        } else if (in_arr->arr_type == bodo_array_type::STRUCT ||
-                   in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
-                   in_arr->arr_type == bodo_array_type::MAP) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                "Reverse shuffle for nested data not yet supported");
-            return nullptr;
-
-        } else if (arr_type == bodo_array_type::DICT) {
-            if (!in_arr->child_arrays[0]->is_globally_replicated) {
-                throw std::runtime_error(
-                    "reverse_shuffle_table: input dictionary array doesn't "
-                    "have a "
-                    "global dictionary");
-            }
-            // in_arr <- indices array, to simplify code below
-            in_arr = in_arr->child_arrays[1];
-            arr_type = in_arr->arr_type;
-        }
-        if (arr_type == bodo_array_type::NUMPY ||
-            arr_type == bodo_array_type::CATEGORICAL ||
-            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            out_arr = reverse_shuffle_data_array(in_arr, hashes, comm_info);
-        }
-        if (arr_type == bodo_array_type::STRING) {
-            out_arr = reverse_shuffle_string_array(in_arr, hashes, comm_info);
-        }
-        if (arr_type == bodo_array_type::STRING ||
-            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
-                                              comm_info);
-        }
-        if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
-            in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr =
-                create_dict_string_array(in_arr->child_arrays[0], out_arr);
-            out_arr = out_dict_arr;
-        }
-        in_arr.reset();
+        out_arrs.push_back(
+            reverse_shuffle_array(in_table->columns[i], comm_info));
         reset_col_if_last_table_ref(in_table, i);
-        out_arrs.push_back(out_arr);
     }
     return std::make_shared<table_info>(out_arrs);
 }
@@ -1925,9 +1822,8 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
             make_dictionary_global_and_unique(a, true);
         }
     }
-    std::shared_ptr<table_info> revshuf_table =
-        reverse_shuffle_table_kernel(std::shared_ptr<table_info>(in_table),
-                                     sh_info->hashes, *sh_info->comm_info);
+    std::shared_ptr<table_info> revshuf_table = reverse_shuffle_table_kernel(
+        std::shared_ptr<table_info>(in_table), *sh_info->comm_info);
 
     return new table_info(*revshuf_table);
 }

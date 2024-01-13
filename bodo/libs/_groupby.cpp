@@ -785,7 +785,7 @@ class GroupbyPipeline {
              window_op) &&
             is_parallel) {
             std::shared_ptr<table_info> revshuf_table =
-                reverse_shuffle_table_kernel(std::move(out_table), in_hashes,
+                reverse_shuffle_table_kernel(std::move(out_table),
                                              *comm_info_ptr);
             in_hashes.reset();
             out_table = revshuf_table;

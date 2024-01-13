@@ -137,7 +137,7 @@ void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
         shuf_table_in_values.reset();
         shuf_table_in_arr.reset();
         // Now the reverse shuffling operation.
-        reverse_shuffle_preallocated_data_array(shuf_out_arr, out_arr, hashes,
+        reverse_shuffle_preallocated_data_array(shuf_out_arr, out_arr,
                                                 comm_info);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

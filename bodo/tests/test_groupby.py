@@ -3357,6 +3357,70 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "array",
+    [
+        # array(int)
+        pd.array(
+            [[1], [1, None, 2], None, [3, 4], [None]],
+            dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+        ),
+        # array(struct(array))
+        pd.array(
+            [
+                [{"A": 0, "B": [1]}, None, {"A": 10, "B": [1, 11]}],
+                None,
+                [{"A": 1, "B": [1, 3, 2]}, {"A": 5, "B": [2]}],
+                [{"A": 4, "B": [0, 1]}],
+                [None],
+            ],
+            dtype=pd.ArrowDtype(
+                pa.large_list(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.large_list(pa.int64())),
+                        ]
+                    )
+                )
+            ),
+        ),
+        # array(string)
+        pd.array(
+            [
+                pd.array(["asfdav", None, "abc"], dtype="string[pyarrow]"),
+                pd.array(["1423", "aa3"], dtype="string[pyarrow]"),
+                pd.array(["!@#$"], dtype="string[pyarrow]"),
+                None,
+                pd.array(["0.9305", None], dtype="string[pyarrow]"),
+            ],
+            dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+        ),
+        # map
+        pd.array(
+            [
+                [{"A": 0, "B": 1}, {"A": 0, "B": 1, "C": 2}],
+                [{}, {"A": 0}],
+                [
+                    {"A": 1, "B": 0},
+                ],
+                None,
+                [{}, {"B": 1, "A": 0}],
+            ],
+            dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.large_string(), pa.int64()))),
+        ),
+    ],
+)
+def test_reverse_shuffle_nested_arrays(array, memory_leak_check):
+    """Test reverse shuffle used in groupby/apply for nested array types"""
+
+    def impl(df):
+        return df.groupby("A").apply(lambda x: pd.DataFrame({"C": x["B"]}))
+
+    df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": array})
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
 @pytest.mark.skip(reason="[BE-1531] test fails in CI")
 def test_groupby_apply_objmode():
     """
