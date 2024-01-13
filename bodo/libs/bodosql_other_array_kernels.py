@@ -660,8 +660,6 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
     dtype_a = typ_a if is_scalar_a else typ_a.dtype
     dtype_b = typ_b if is_scalar_b else typ_b.dtype
 
-    get_common_broadcasted_type([dtype_a, dtype_b], "EQUAL_NULL")
-
     arg_names = [
         "A",
         "B",
@@ -672,6 +670,12 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
     ]
     arg_types = [A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id]
     propagate_null = [False] * 6
+
+    # If there is no unified type for A and B, then we should return false for
+    # every row.
+    unified_typ, _ = bodo.utils.typing.get_common_scalar_dtype(
+        [dtype_a, dtype_b], allow_downcast=True
+    )
 
     if A == bodo.none:
         # A = scalar null, B = scalar null
@@ -694,25 +698,24 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
         # A = non-null scalar, B = null
         else:
             scalar_text = "res[i] = False"
-
-    elif are_arrays[0]:
-        # A & B are both vectors
-        if are_arrays[1]:
+    # A & B are both vectors
+    elif are_arrays[0] and are_arrays[1]:
+        if unified_typ == None:
+            # Incompatible inner types
+            scalar_text = "res[i] = False"
+        else:
             scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
             scalar_text += "   res[i] = True\n"
             scalar_text += "elif bodo.libs.array_kernels.isna(A, i) or bodo.libs.array_kernels.isna(B, i):\n"
             scalar_text += "   res[i] = False\n"
             scalar_text += "else:\n"
             scalar_text += "   res[i] = semi_safe_equals(arg0, arg1)"
-
-        # A is a vector, B is a non-null scalar
-        else:
-            scalar_text = "res[i] = (not bodo.libs.array_kernels.isna(A, i)) and semi_safe_equals(arg0, arg1)"
-
+    # A is a vector, B is a non-null scalar
+    elif are_arrays[0]:
+        scalar_text = "res[i] = (not bodo.libs.array_kernels.isna(A, i)) and semi_safe_equals(arg0, arg1)"
     # B is a vector, A is a non-null scalar
     elif are_arrays[1]:
         scalar_text = "res[i] = (not bodo.libs.array_kernels.isna(B, i)) and semi_safe_equals(arg0, arg1)"
-
     # A and B are both non-null scalars
     else:
         scalar_text = "res[i] = semi_safe_equals(arg0, arg1)"
