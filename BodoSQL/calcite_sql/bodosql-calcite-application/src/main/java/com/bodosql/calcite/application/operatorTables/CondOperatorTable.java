@@ -14,6 +14,7 @@ import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
@@ -21,10 +22,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class CondOperatorTable implements SqlOperatorTable {
   private static @Nullable CondOperatorTable instance;
-
-  // Type for a function with a boolean and then two matching types
-  public static final SqlSingleOperandTypeChecker BOOLEAN_SAME_SAME =
-      new SameOperandTypeExceptFirstOperandChecker(3, "BOOLEAN");
 
   // Type for a function with a boolean and then two matching types
   public static final SqlSingleOperandTypeChecker DECODE_VARIADIC = new DecodeOperandChecker();
@@ -54,6 +51,11 @@ public class CondOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction REGR_VALY = REGR_VALX.withName("REGR_VALY");
 
+  // Check that the first operand is BOOLEAN, and that the types of the second two are the same. If
+  // exactly one of the last two arguments is variant, cast the other to variant as well.
+  private static final SqlOperandTypeChecker IF_FUNC_OPERAND_CHECKER =
+      IfFuncOperandChecker.INSTANCE;
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlBasicFunction IF_FUNC =
       SqlBasicFunction.create(
@@ -66,7 +68,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What Input Types does the function accept. This function accepts
           // a boolean arg0 and two matching args
-          BOOLEAN_SAME_SAME,
+          IF_FUNC_OPERAND_CHECKER,
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -95,7 +97,7 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicFunction.create(
           "EQUAL_NULL",
           ReturnTypes.BOOLEAN,
-          OperandTypes.SAME_SAME,
+          new VariantCastingTypeChecker(OperandTypes.SAME_SAME, List.of(0, 1), true),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction NULLIFZERO =
@@ -132,7 +134,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.LEAST_NULLABLE),
           // What Input Types does the function accept. This function accepts two
           // matching input types
-          OperandTypes.SAME_SAME,
+          new VariantCastingTypeChecker(OperandTypes.SAME_SAME, List.of(0, 1), false),
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -146,7 +148,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What Input Types does the function accept. This function accepts two
           // matching input types
-          OperandTypes.SAME_SAME_SAME,
+          new VariantCastingTypeChecker(OperandTypes.SAME_SAME_SAME, List.of(1, 2), false),
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 

@@ -753,6 +753,13 @@ def test_nvl2(args, memory_leak_check):
             pd.Series([True] * 2 + [False] * 4),
             id="map-scalar-vector",
         ),
+        pytest.param(
+            (1, "1"),
+            True,
+            True,
+            False,
+            id="mismatched-types",
+        ),
     ],
 )
 def test_bool_equal_null(args, is_scalar_a, is_scalar_b, answer, memory_leak_check):
