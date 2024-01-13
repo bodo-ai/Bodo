@@ -1383,7 +1383,8 @@ struct mpi_comm_info {
      * @param parent_comm_info The mpi_comm_info of parent_arr
      */
     explicit mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
-                           const mpi_comm_info& parent_comm_info);
+                           const mpi_comm_info& parent_comm_info,
+                           bool _has_nulls);
 
    private:
     /**

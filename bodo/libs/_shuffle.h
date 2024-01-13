@@ -137,13 +137,11 @@ std::shared_ptr<table_info> shuffle_table_kernel(
 /** Reverse shuffling a table from all nodes to all the other nodes.
  *
  * @param in_table  : the input table.
- * @param hashes    : the hash of the reversed table
  * @param comm_info : the array for the communication.
  * @return the new table after the shuffling-
  */
 std::shared_ptr<table_info> reverse_shuffle_table_kernel(
-    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info);
+    std::shared_ptr<table_info> in_table, mpi_comm_info const& comm_info);
 
 /**
  * @brief Broadcast an array. Child arrays will also be copied.
@@ -266,12 +264,12 @@ table_info* shuffle_renormalization_group_py_entrypt(
  */
 template <class T>
 inline void fill_recv_data_inner(T* recv_buff, T* data,
-                                 std::shared_ptr<uint32_t[]>& hashes,
+                                 const bodo::vector<int>& row_dest,
                                  std::vector<int64_t> const& send_disp,
-                                 int n_pes, size_t n_rows) {
+                                 size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = static_cast<size_t>(hash_to_rank(hashes[i], n_pes));
+        size_t node = static_cast<size_t>(row_dest[i]);
         int64_t ind = tmp_offset[node];
         data[i] = recv_buff[ind];
         tmp_offset[node]++;
@@ -344,4 +342,14 @@ void make_dictionary_global_and_unique(
  */
 void reverse_shuffle_preallocated_data_array(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
-    std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info);
+    mpi_comm_info const& comm_info);
+
+/**
+ * @brief Reverse shuffle a previously shuffled array using MPI alltoallv info
+ *
+ * @param in_arr input array (previously shuffled)
+ * @param comm_info MPI alltoallv comm info
+ * @return std::shared_ptr<array_info> array before shuffle
+ */
+std::shared_ptr<array_info> reverse_shuffle_array(
+    std::shared_ptr<array_info> in_arr, mpi_comm_info const& comm_info);

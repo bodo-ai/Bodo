@@ -336,9 +336,10 @@ def map_arr_getitem(arr, ind):
 
         return map_arr_getitem_impl
 
-    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
-        ind, types.SliceType
-    ):
+    if (
+        is_list_like_index_type(ind)
+        and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
+    ) or isinstance(ind, types.SliceType):
 
         def map_arr_getitem_impl(arr, ind):  # pragma: no cover
             # Reuse the array item array implementation
