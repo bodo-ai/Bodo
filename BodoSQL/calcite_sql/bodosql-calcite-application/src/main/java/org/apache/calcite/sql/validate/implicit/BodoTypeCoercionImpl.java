@@ -170,7 +170,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
   }
 
   @Override
-  protected boolean coerceOperandType(
+  public boolean coerceOperandType(
       @Nullable SqlValidatorScope scope,
       SqlCall call,
       int index,
