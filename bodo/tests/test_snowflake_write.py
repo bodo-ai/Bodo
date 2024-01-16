@@ -2223,7 +2223,7 @@ def test_logged_queryid_write(memory_leak_check):
         with ensure_clean_snowflake_table(conn) as table_name:
             bodo.jit(impl)(df, table_name, conn)
 
-        check_logger_msg(stream, "Snowflake Query Submission")
+        check_logger_msg(stream, "Snowflake Query Submission (Write)")
 
 
 def test_aborted_detached_query(memory_leak_check):
