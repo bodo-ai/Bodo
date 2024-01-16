@@ -1,19 +1,24 @@
 ---
 
-- name: WORKER_DEPS | Upload environemnt file to /tmp/worker_env.yaml
+- name: WORKER_DEPS | Upload Lockfile to /tmp/conda-linux-64.lock.yml
   template:
-    dest: /tmp/worker_env.yaml
-    src: ../files/worker_env.yaml
+    dest: /tmp/conda-linux-64.lock.yml
+    src: ../files/conda-linux-64.lock.yml
     owner: "{{ CLUSTER_USER }}"
     group: "{{ CLUSTER_USER }}"
     mode: '0644'
   tags:
     - worker_deps
 
-
-- name: WORKER_DEPS | Install bodo and all other dependencies via mamba.
+- name: WORKER_DEPS | Install Bodo Dependencies from Mamba via Conda-Lock
   command:
-    cmd: "/opt/conda/bin/mamba env update --name base --file /tmp/worker_env.yaml"
+    cmd: "/opt/conda/bin/mamba env update --name base --file /tmp/conda-linux-64.lock.yml"
+  tags:
+    - worker_deps
+
+- name: WORKER_DEPS | Install Additional Bodo Dependencies from Mamba
+  command:
+    cmd: "/opt/conda/bin/mamba install --name base -y bodo-azurefs-sas-token-provider=1.0 --no-update-deps -c bodo.ai"
   tags:
     - worker_deps
 

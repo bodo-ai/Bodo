@@ -107,11 +107,13 @@ while read -r LINE; do
       "${TEMPLATE_FILE}"
 
     newExitCode=$?
-    echo "Finished creating VM Image..."
+    echo "Finished creating VM Image. Exit Code: $newExitCode"
 
     if [ -f "${NODE_ROLE}_manifest_${ind}.json" ]; then
       echo "Manifest File:"
       cat "${NODE_ROLE}_manifest_${ind}.json"
+    else
+      echo "Manifest file not found..."
     fi
     
     # Exit code is 0 if all inputs succeed

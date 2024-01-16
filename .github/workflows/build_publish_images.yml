@@ -6,18 +6,21 @@ on:
       - develop
     paths:
       - "bodo-platform-image/**"
+      - "buildscripts/envs/conda-lock.yml"
 
   pull_request:
     branches:
       - develop
     paths:
       - "bodo-platform-image/**"
+      - "buildscripts/envs/conda-lock.yml"
 
   workflow_dispatch:
     inputs:
       pythonVersion:
-        description: Python Version (e.g. 3.10)
+        description: Python Version (e.g. 3.11)
         required: false
+        default: "3.11"
 
       bodoVersion:
         description: Bodo Version (e.g. 2022.8)
@@ -69,7 +72,6 @@ jobs:
       bodoSQLCondaChannel: ${{ steps.setup_variables.outputs.bodoSQLCondaChannel }}
       bodoIcebergCondaChannel: ${{ steps.setup_variables.outputs.bodoIcebergCondaChannel }}
       pythonVersion: ${{ steps.setup_variables.outputs.pythonVersion }}
-      addToBodoVersionsTable: ${{ steps.setup_variables.outputs.addToBodoVersionsTable }}
       pushImage: ${{ steps.setup_variables.outputs.pushImage }}
       buildName: ${{ steps.setup_variables.outputs.buildName }}
       skipCreateImages: ${{ steps.setup_variables.outputs.skipCreateImages }}
@@ -87,17 +89,19 @@ jobs:
             ./miniconda.sh -b
             export PATH=$HOME/miniconda3/bin:$PATH
             sudo apt install -y jq
-            BODO_VERSION=$(conda search -f bodo -c "https://${{ secrets.CONDA_USERNAME }}:${{ secrets.CONDA_TOKEN }}@bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform" --json | jq .[][-1].version --raw-output) 
+            FULL_OUTPUT=$(conda search -f bodo -c bodo.ai -c bodo.ai/label/dev --json | jq .[][-1])
+            FULL_CHANNEL=$(echo $FULL_OUTPUT | jq .channel --raw-output)
+            OUT_CHANNEL=$(if [[ $FULL_CHANNEL == *"dev"* ]]; then echo "bodo.ai/label/dev"; else echo "bodo.ai"; fi)
+
+            BODO_VERSION=$(echo $FULL_OUTPUT | jq .version --raw-output)
             SQL_VERSION=$BODO_VERSION
-            ICEBERG_VERSION=${BODO_VERSION}alpha
+            # ICEBERG_VERSION=${BODO_VERSION}alpha
             echo "bodoVersion=$BODO_VERSION" >> $GITHUB_OUTPUT  
             echo "bodoSQLVersion=$SQL_VERSION" >> $GITHUB_OUTPUT 
-            echo "icebergConnectorVersion=$ICEBERG_VERSION" >> $GITHUB_OUTPUT
+            echo "icebergConnectorVersion=" >> $GITHUB_OUTPUT
 
-            echo "bodoSQLCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT 
-            echo "bodoIcebergCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT
-            echo "pythonVersion=3.11" >> $GITHUB_OUTPUT
-            echo "addToBodoVersionsTable=true" >> $GITHUB_OUTPUT
+            echo "bodoSQLCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT 
+            echo "bodoIcebergCondaChannel=" >> $GITHUB_OUTPUT
 
             echo "buildName=dev${BODO_VERSION}.b${{ github.run_number }}" >> $GITHUB_OUTPUT
           else
@@ -111,8 +115,6 @@ jobs:
 
             echo "bodoSQLCondaChannel=${{ github.event.inputs.bodoSQLCondaChannel }}" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=${{ github.event.inputs.bodoIcebergCondaChannel }}" >> $GITHUB_OUTPUT
-            echo "pythonVersion=${{ github.event.inputs.pythonVersion }}" >> $GITHUB_OUTPUT
-            echo "addToBodoVersionsTable=${{ github.event.inputs.addToBodoVersionsTable }}" >> $GITHUB_OUTPUT
             
             echo "buildName=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
           fi
@@ -127,28 +129,8 @@ jobs:
           echo "Running workflow with following variables:"
           cat $GITHUB_OUTPUT
 
-  get-bodo-versions:
-    runs-on: ubuntu-latest
-    needs: [setup]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v1
-
-      - name: Get Bodo Version from setup
-        env:
-          BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
-        run: |
-          # Replace the version in the file with the user provided input
-          echo "$BODO_VERSION" > bodo-platform-image/bodo_versions.txt
-
-      - name: Upload Bodo Versions Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: bodo-versions-artifact
-          path: bodo-platform-image/bodo_versions.txt
-
   build-worker:
-    needs: [setup, get-bodo-versions]
+    needs: [setup]
     runs-on: ubuntu-latest
     steps:
       # TODO: make git_sha available everywhere needed instead of duplicating steps
@@ -166,25 +148,26 @@ jobs:
           creds: ${{  secrets.AZURE_CREDENTIALS  }}
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
-      - name: Download Artifact Bodo Versions
-        uses: actions/download-artifact@v2
-        with:
-          name: bodo-versions-artifact
-          path: bodo-platform-image/
+      - name: Get Bodo Version from setup
+        env:
+          BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
+        run: |
+          # Replace the version in the file with the user provided input
+          echo "$BODO_VERSION" > bodo-platform-image/bodo_versions.txt
 
       - name: Create Azure Image definition
         # For event that is not workflow, we skip the image creation in the build step,
         # and therefore this step is not required.
-        uses: azure/CLI@v1.0.6
+        uses: azure/CLI@v1.0.9
         if: |
           needs.setup.outputs.pushImage == 'true' &&
           needs.setup.outputs.skipCreateImages == 'false'
@@ -196,6 +179,24 @@ jobs:
             $GITHUB_WORKSPACE/bodo-platform-image/scripts/azure/create_image_definition.sh \
               --image-sha ${GIT_SHA} \
               --node-role worker
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11' 
+
+      # We can't use conda-lock directly because it can't install to the base environment
+      # Thus, we need to generate Conda-style .lock file first
+      - name: Generate Lock File for Platform Build
+        run: |
+          pip install conda-lock
+          conda-lock render -k env -p linux-64 --no-dev-dependencies $GITHUB_WORKSPACE/buildscripts/envs/conda-lock.yml
+          cp conda-linux-64.lock.yml $GITHUB_WORKSPACE/bodo-platform-image/ansible/roles/worker_deps/files/conda-linux-64.lock.yml
+
+      - name: Save Lock File to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lock-file
+          path: conda-linux-64.lock.yml
 
       - name: Build Images
         id: build
@@ -211,7 +212,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           GIT_SHA: ${{ env.SHA }}
           SKIP_CREATE_IMAGES: ${{ needs.setup.outputs.skipCreateImages }}
-          PYTHON_VERSION: ${{ needs.setup.outputs.pythonVersion }}
+          PYTHON_VERSION: ${{ github.event.inputs.pythonVersion  }}
           BODOSQL_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
           BODOSQL_CHANNEL: ${{ needs.setup.outputs.bodoSQLCondaChannel }}
           BUILD_NAME: ${{ needs.setup.outputs.buildName }}
@@ -231,7 +232,7 @@ jobs:
             --build-name $BUILD_NAME
 
       - name: Upload Packer Manifest
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: worker-manifest
           path: bodo-platform-image/packer/worker_manifest_*.json
@@ -242,16 +243,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Download Worker Packer Manifest
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: worker-manifest
           path: bodo-platform-image/
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
@@ -263,7 +264,7 @@ jobs:
           python gen_images_entries_from_manifests.py
 
       - name: Upload Image Entries Request JSON
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: img-entries-request-json
           path: bodo-platform-image/img_share_requests.json
@@ -277,10 +278,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
@@ -292,7 +293,7 @@ jobs:
           python -m pip install requests
 
       - name: Download Image Entries Request JSON
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: img-entries-request-json
           path: bodo-platform-image/
@@ -319,10 +320,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
@@ -334,7 +335,7 @@ jobs:
           python -m pip install requests
 
       - name: Download Image Entries Request JSON
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: img-entries-request-json
           path: bodo-platform-image/
@@ -361,10 +362,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
@@ -376,7 +377,7 @@ jobs:
           python -m pip install requests
 
       - name: Download Image Entries Request JSON
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: img-entries-request-json
           path: bodo-platform-image/
@@ -403,10 +404,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
@@ -418,7 +419,7 @@ jobs:
           python -m pip install requests
 
       - name: Download Image Entries Request JSON
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: img-entries-request-json
           path: bodo-platform-image/

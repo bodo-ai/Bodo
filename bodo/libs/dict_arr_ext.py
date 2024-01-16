@@ -1469,7 +1469,7 @@ def create_extractall_methods(is_multi_group):
 
         For example,
         pd.Series(["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
-        ["е3", "не3", "н2с2", "AA", "C"] * 2).str.extractall(r"([чен]+)\d+([ст]+)\d+")
+        ["е3", "не3", "н2с2", "AA", "C"] * 2).str.extractall(r"([чен]+)\\d+([ст]+)\\d+")
         will invoke the implementation with is_multi_group set to true since
         the regex expression has two capture groups.
         On the other hand,

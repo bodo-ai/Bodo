@@ -17,10 +17,6 @@ dependencies:
   - numpy >=1.23,<1.27
   - pandas >=2,<2.1
 
-  # IO
-  - pyarrow =13.0.0=*_cpu
-  - fsspec >=2021.09
-
   # HDFS
   - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_*
   - h5py
@@ -33,7 +29,41 @@ dependencies:
   # Java
   - openjdk =11
   - py4j ==0.10.9.7
-  - maven
 
   # FFT
   - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+
+  # Data Science 
+  - scipy
+  - scikit-learn=1.1.*
+  - matplotlib<=3.6.1
+  
+  # IO
+  - pyarrow =13.0.0=*_cpu
+  - fsspec >=2021.09
+  # IO Optional
+  - boto3
+  - botocore
+  # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
+  # Due to s3fs pinning aiobotocore and not regularly updating
+  - s3fs>=2022.1
+  - gcsfs>=2022.1
+
+  # Databases
+  - pymysql
+  - psycopg2
+  - cx_oracle #[linux64]
+  - cx_oracle #[osx64]
+  - sqlalchemy
+
+  # Snowflake
+  - snowflake-connector-python 
+  - snowflake-sqlalchemy
+
+  # Additional?
+  # TODO: Should install via apt-get?
+  - libaio #[linux64]
+
+  # IPython
+  - ipython==8.16.1 
+
