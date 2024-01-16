@@ -54,7 +54,7 @@ jobs:
       source activate base
       mamba install -y pip
       pip install pipx
-      pipx run conda-lock install -E azure -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
+      pipx run conda-lock install --dev -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
     displayName: 'Create Mamba Env'
     retryCountOnTaskFailure: 5
 

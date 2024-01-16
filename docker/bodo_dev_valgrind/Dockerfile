@@ -46,7 +46,7 @@ ENV PATH /root/mambaforge/bin:${PATH}
 # Creation of the BODODEV environment
 ADD buildscripts/envs/conda-lock.yml conda-lock.yml
 RUN mamba install -y -c conda-forge conda-lock
-RUN conda-lock install --mamba -n BODODEV conda-lock.yml
+RUN conda-lock install --dev --mamba -n BODODEV conda-lock.yml
 RUN mamba install -y -n BODODEV nomkl -c conda-forge
 
 # Creation of the .bashrc file

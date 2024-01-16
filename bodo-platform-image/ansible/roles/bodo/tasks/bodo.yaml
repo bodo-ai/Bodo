@@ -2,20 +2,23 @@
 
 - name: BODO | Install bodo
   command:
-    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ URL_BODO }} -c conda-forge bodo=={{ BODO_VERSION }}"
+    cmd: |
+      /opt/conda/bin/mamba install --yes -c {{ URL_BODO }} -c conda-forge bodo=={{ BODO_VERSION }}
   tags:
     - bodo
 
 - name: BODO | Install BodoSQL if specified
   command:
-    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ BODOSQL_CHANNEL }} -c conda-forge bodosql=={{ BODOSQL_VERSION }}"
+    cmd: |
+      /opt/conda/bin/mamba install --yes -c {{ BODOSQL_CHANNEL }} -c conda-forge bodosql=={{ BODOSQL_VERSION }}
   when: "BODOSQL_VERSION | length > 0"
   tags:
     - bodo
 
 - name: BODO | Install ICEBERG Connector if specified
   command:
-    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ ICEBERG_CONNECTOR_CHANNEL }} -c conda-forge bodo-iceberg-connector=={{ ICEBERG_CONNECTOR_VERSION }}"
+    cmd: |
+      /opt/conda/bin/mamba install --yes -c {{ ICEBERG_CONNECTOR_CHANNEL }} -c conda-forge bodo-iceberg-connector=={{ ICEBERG_CONNECTOR_VERSION }}
   when: "ICEBERG_CONNECTOR_VERSION | length > 0"
   tags:
     - bodo

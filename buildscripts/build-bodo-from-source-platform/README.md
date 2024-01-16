@@ -9,7 +9,7 @@
 1. Install `conda-lock` on all nodes: `psh sudo /opt/conda/bin/mamba install conda-lock -c conda-forge -n base --yes`
 1. Remove `mpi` and `mpich` on all nodes: `psh sudo /opt/conda/bin/conda remove mpi mpich -n base --force --yes`
 1. Navigate to the folder with the environment lock file: `cd Bodo/buildscripts/envs`
-1. Create a DEV environment from the lock file: `psh conda-lock install --mamba -n DEV conda-lock.yml`
+1. Create a DEV environment from the lock file: `psh conda-lock install --dev --mamba -n DEV conda-lock.yml`
 1. Activate the environment: `conda activate DEV`
 1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
