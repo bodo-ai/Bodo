@@ -3171,7 +3171,7 @@ def test_logged_queryid_read(memory_leak_check):
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 2):
         bodo.jit(impl)(query, conn)
-        check_logger_msg(stream, "Snowflake Query Submission")
+        check_logger_msg(stream, "Snowflake Query Submission (Read)")
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="This test is only designed for 1 rank")

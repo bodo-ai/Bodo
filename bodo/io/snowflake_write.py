@@ -925,7 +925,7 @@ def gen_snowflake_writer_append_table_impl_inner(
             writer["finished"] = True
             if bodo.user_logging.get_verbose_level() >= 2:
                 bodo.user_logging.log_message(
-                    "Snowflake Query Submission",
+                    "Snowflake Query Submission (Write)",
                     "/* async_execute_copy_into */ Snowflake Query IDs: "
                     + writer["copy_into_sfqids"],
                 )

@@ -1943,7 +1943,7 @@ def get_dataset(
             sf_exec_time = time.time() - t0
             if bodo.user_logging.get_verbose_level() >= 2:
                 bodo.user_logging.log_message(
-                    "Snowflake Query Submission",
+                    "Snowflake Query Submission (Read)",
                     "/* execute_length_query */ Snowflake Query ID: "
                     + cur.sfqid
                     + "\nSQL Text:\n"
@@ -1972,7 +1972,7 @@ def get_dataset(
             sf_exec_time = time.time() - t0
             if bodo.user_logging.get_verbose_level() >= 2:
                 bodo.user_logging.log_message(
-                    "Snowflake Query Submission",
+                    "Snowflake Query Submission (Read)",
                     "/* execute_query */ Snowflake Query ID: "
                     + cur.sfqid
                     + "\nSQL Text:\n"
@@ -2430,7 +2430,7 @@ def execute_copy_into(
         sf_exec_time = time.time() - t0
         if bodo.user_logging.get_verbose_level() >= 2:
             bodo.user_logging.log_message(
-                "Snowflake Query Submission",
+                "Snowflake Query Submission (Write)",
                 "/* io.snowflake.execute_copy_into() */ Snowflake Query ID: "
                 + cursor.sfqid
                 + "\nSQL Text:\n"
