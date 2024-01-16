@@ -7,17 +7,27 @@ import com.bodosql.calcite.rel.core.RowSample;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.ViewExpanders;
 import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.hint.RelHint;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.runtime.Resources;
+import org.apache.calcite.schema.Function;
+import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSampleSpec;
+import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorException;
+import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.sql2rel.RelStructuredTypeFlattener;
 import org.apache.calcite.sql2rel.SqlRexConvertletTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
@@ -90,5 +100,69 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
 
     // Defer all other conversions to calcite core.
     super.convertFrom(bb, from, fieldNames);
+  }
+
+  protected class BodoBlackboard extends Blackboard {
+
+    /**
+     * Creates a Blackboard.
+     *
+     * @param scope Name-resolution scope for expressions validated within this query. Can be null
+     *     if this Blackboard is for a leaf node, say
+     * @param nameToNodeMap Map which translates the expression to map a given parameter into, if
+     *     translating expressions; null otherwise
+     * @param top Whether this is the root of the query
+     */
+    protected BodoBlackboard(
+        @Nullable SqlValidatorScope scope,
+        @Nullable Map<String, RexNode> nameToNodeMap,
+        boolean top) {
+      super(scope, nameToNodeMap, top);
+    }
+
+    /** Extension of Blackboard.convertExpression with support for inlining SnowflakeUDFs. */
+    @Override
+    public RexNode convertExpression(SqlNode expr) {
+      if (expr instanceof SqlCall) {
+        SqlCall call = ((SqlCall) expr);
+        if (call.getOperator() instanceof SqlUserDefinedFunction) {
+          SqlUserDefinedFunction udf = (SqlUserDefinedFunction) call.getOperator();
+          Function function = udf.getFunction();
+          if (function instanceof SnowflakeUserDefinedFunction) {
+            SnowflakeUserDefinedFunction snowflakeUdf = (SnowflakeUserDefinedFunction) function;
+            Resources.ExInst<SqlValidatorException> exInst = snowflakeUdf.errorOrWarn();
+            if (exInst != null) {
+              throw validator.newValidationError(expr, exInst);
+            }
+            // Expand the call to add default values.
+            SqlCall extendedCall = new SqlCallBinding(validator, scope, call).permutedCall();
+            Resources.ExInst<SqlValidatorException> defaultExInst =
+                snowflakeUdf.errorOnDefaults(extendedCall.getOperandList());
+            if (defaultExInst != null) {
+              throw validator.newValidationError(expr, defaultExInst);
+            }
+            ImmutableList<String> functionPath = snowflakeUdf.functionPath;
+            String msg =
+                String.format(
+                    Locale.ROOT,
+                    "Unable to resolve function: %s.%s.%s. BodoSQL does not have support for"
+                        + " Snowflake UDFs yet.",
+                    functionPath.get(0),
+                    functionPath.get(1),
+                    functionPath.get(2));
+            throw new RuntimeException(msg);
+          }
+        }
+      }
+      // Bodo extension to handle Snowflake UDFs
+      return super.convertExpression(expr);
+    }
+  }
+
+  /** Factory method for creating translation workspace. */
+  @Override
+  protected Blackboard createBlackboard(
+      SqlValidatorScope scope, @Nullable Map<String, RexNode> nameToNodeMap, boolean top) {
+    return new BodoBlackboard(scope, nameToNodeMap, top);
   }
 }
