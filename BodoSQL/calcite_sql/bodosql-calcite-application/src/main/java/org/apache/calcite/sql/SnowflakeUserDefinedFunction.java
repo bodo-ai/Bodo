@@ -6,6 +6,7 @@ import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
@@ -121,23 +122,29 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
 
 
     /**
-     * Raise an error or warning if the Snowflake UDF contains features that we
+     * Returns an error or creates warning if the Snowflake UDF contains features that we
      * are unable to support. A warning should only be raised if the function
      * doesn't error.
-     * @throws SqlValidatorException
+     * @return Resources.ExInst<SqlValidatorException>: This is converted to a proper error
+     * by the validator with node context.
      */
-    public void errorOrWarn() throws SqlValidatorException {
-        this.errorInfo.error();
+    public Resources.ExInst<SqlValidatorException> errorOrWarn() {
+        Resources.ExInst<SqlValidatorException> retVal = this.errorInfo.error();
+        if (retVal != null) {
+            return retVal;
+        }
         this.errorInfo.warn();
+        return null;
     }
 
     /**
-     * Raise an error if any function argument is omitted. We cannot support
+     * Returns an error if any function argument is omitted. We cannot support
      * default values yet because this information is not yet available in
      * Snowflake metadata.
-     * @throws SqlValidatorException
+     * @return Resources.ExInst<SqlValidatorException>: This is converted to a proper error
+     * by the validator with node context.
      */
-    public void errorOnDefaults(List<SqlNode> operandList) throws SqlValidatorException {
+    public Resources.ExInst<SqlValidatorException> errorOnDefaults(List<SqlNode> operandList) {
         ImmutableBitSet.Builder builder = ImmutableBitSet.builder();
         for (int i = 0; i < operandList.size(); i++) {
             SqlNode operand = operandList.get(i);
@@ -157,9 +164,9 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
             String schemaName = functionPath.get(1);
             String functionName = functionPath.get(2);
             String badArguments = String.join(", ", argumentNames);
-            throw BODO_SQL_RESOURCE.snowflakeUDFContainsDefaultArguments(databaseName, schemaName, functionName, badArguments).ex();
-
+            return BODO_SQL_RESOURCE.snowflakeUDFContainsDefaultArguments(databaseName, schemaName, functionName, badArguments);
         }
+        return null;
     }
 
     // -- Helper Classes --
@@ -189,10 +196,11 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
         }
 
         /**
-         * Raise an error if we cannot support this UDF.
-         * @throws SqlValidatorException the Validation error.
+         * Returns an error if we cannot support this UDF.
+         * @return Resources.ExInst<SqlValidatorException>: This is converted to a proper error
+         * by the validator with node context.
          */
-        private void error() throws SqlValidatorException {
+        private Resources.ExInst<SqlValidatorException> error() {
             // Note this order is not strictly required, but in general we aim to go from least
             // to most recoverable.
             final String errorMsg;
@@ -214,8 +222,9 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
                 String databaseName = functionPath.get(0);
                 String schemaName = functionPath.get(1);
                 String functionName = functionPath.get(2);
-                throw BODO_SQL_RESOURCE.snowflakeUDFContainsUnsupportedFeature(databaseName, schemaName, functionName, errorMsg).ex();
+                return BODO_SQL_RESOURCE.snowflakeUDFContainsUnsupportedFeature(databaseName, schemaName, functionName, errorMsg);
             }
+            return null;
         }
 
         /**
