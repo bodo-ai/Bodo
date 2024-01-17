@@ -1,6 +1,5 @@
 parameters:
   name: ''
-  vmImage: ''
 
 jobs:
 - job: ${{ parameters.name }}
