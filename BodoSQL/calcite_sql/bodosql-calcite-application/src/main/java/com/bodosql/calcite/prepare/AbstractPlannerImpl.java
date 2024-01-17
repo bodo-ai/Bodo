@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableList;
 import java.io.Reader;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
@@ -359,7 +360,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    */
   @Override
   public void expandFunction(
-      @NonNull String functionBody, @NonNull ImmutableList<@NonNull String> functionPath) {
+      String functionBody,
+      ImmutableList<String> functionPath,
+      Map<String, RelDataType> paramNameToTypeMap) {
     // Base to use for several exception conditions.
     String baseErrorMessage =
         String.format(
@@ -368,50 +371,38 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
             functionPath.get(0),
             functionPath.get(1),
             functionPath.get(2));
-    // Parse the function body. The body can either be a simple expression or a query.
-    // We will tackle the first case using `parseSqlExpression()` and the second using
-    // parseExpressionList()
-    SqlParser parser = SqlParser.create(functionBody, parserConfig);
-    SqlParseException firstException = null;
-    SqlParseException secondException = null;
-    SqlNode node = null;
     try {
-      node = parser.parseExpression();
-    } catch (SqlParseException e) {
-      firstException = e;
-    }
-    if (firstException != null) {
+      // The body can either be a simple expression or a query.
+      // These have different potential API calls, so we process them separately.
+      SqlParseException firstException = null;
+      SqlParseException secondException = null;
       try {
-        List<SqlNode> stmtList = parser.parseStmtList();
-        if (stmtList.size() == 1) {
-          node = stmtList.get(0);
-        } else {
-          String msg =
-              String.format(
-                  Locale.ROOT,
-                  "%s Failure when parsing function body: Multiple statements were encountered.",
-                  baseErrorMessage);
-          throw new RuntimeException(msg);
-        }
+        expandExpressionFunction(functionBody, functionPath, paramNameToTypeMap);
+      } catch (SqlParseException e) {
+        firstException = e;
+      }
+      try {
+        expandQueryFunction(functionBody, functionPath, paramNameToTypeMap);
       } catch (SqlParseException e) {
         secondException = e;
       }
-    }
-    if (node == null) {
-      // Both parsing attempts failed.
-      String msg =
-          String.format(
-              Locale.ROOT,
-              "%s Failed to parse the function either as an Expression or as a"
-                  + " query.\n"
-                  + " When parsing the body as an Expression we get the following error: %s\n"
-                  + "After parsing the body as a query we got this error: %s\n"
-                  + "If you UDF body is an Expression without SELECT refer to message 1, otherwise"
-                  + " refer to message 2.",
-              baseErrorMessage,
-              firstException.toString(),
-              secondException.toString());
-      throw new RuntimeException(msg);
+      if (firstException != null && secondException != null) {
+        // Both parsing attempts failed.
+        String msg =
+            String.format(
+                Locale.ROOT,
+                "Failed to parse the function either as an Expression or as a query.\n"
+                    + " When parsing the body as an Expression we get the following error: %s\n"
+                    + "After parsing the body as a query we got this error: %s\n"
+                    + "If you UDF body is an Expression without SELECT refer to message 1,"
+                    + " otherwise refer to message 2.",
+                firstException,
+                secondException);
+        throw new RuntimeException(msg);
+      }
+    } catch (Exception e) {
+      // Wrap an exceptions with an indication that we couldn't inline the UDF.
+      throw new RuntimeException(baseErrorMessage, e);
     }
 
     String msg =
@@ -420,6 +411,62 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
             "%s BodoSQL does not have support for Snowflake UDFs yet.",
             baseErrorMessage);
     throw new RuntimeException(msg);
+  }
+
+  /**
+   * Expand the contents of a function whose body must be an expression.
+   *
+   * @param functionBody
+   * @param functionPath
+   */
+  private void expandExpressionFunction(
+      @NonNull String functionBody,
+      @NonNull ImmutableList<@NonNull String> functionPath,
+      Map<String, RelDataType> paramNameToTypeMap)
+      throws SqlParseException {
+    SqlParser parser = SqlParser.create(functionBody, parserConfig);
+    SqlNode node = parser.parseExpression();
+
+    // Create the validator. We need the function's path for any additional functions in the body
+    // of query.
+    final CalciteCatalogReader catalogReader =
+        createCatalogReaderWithDefaultPath(functionPath.subList(0, 2));
+    final SqlValidator validator = createSqlValidator(catalogReader);
+    SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
+  }
+
+  /**
+   * Expand the contents of a function whose body must be a query.
+   *
+   * @param functionBody
+   * @param functionPath
+   */
+  private void expandQueryFunction(
+      @NonNull String functionBody,
+      @NonNull ImmutableList<@NonNull String> functionPath,
+      Map<String, RelDataType> paramNameToTypeMap)
+      throws SqlParseException {
+    SqlParser parser = SqlParser.create(functionBody, parserConfig);
+    final SqlNode node;
+    List<SqlNode> stmtList = parser.parseStmtList();
+    if (stmtList.size() == 1) {
+      node = stmtList.get(0);
+    } else {
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "Failure when parsing function body: Multiple statements were encountered.");
+      throw new RuntimeException(msg);
+    }
+    // We only check validation (to give a more detailed error) if there are no arguments.
+    // We need to extend the validator to properly handle the parameter scope with queries.
+    if (paramNameToTypeMap.isEmpty()) {
+      // Create the validator. We need the function path for any tables and/or any functions.
+      final CalciteCatalogReader catalogReader =
+          createCatalogReaderWithDefaultPath(functionPath.subList(0, 2));
+      final SqlValidator validator = createSqlValidator(catalogReader);
+      SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
+    }
   }
 
   // CalciteCatalogReader is stateless; no need to store one

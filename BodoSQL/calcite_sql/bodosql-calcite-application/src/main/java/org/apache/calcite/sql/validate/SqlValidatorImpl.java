@@ -1383,8 +1383,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlValidatorScope scope) {
     if (node instanceof SqlIdentifier && scope instanceof DelegatingScope) {
       final SqlIdentifier id = (SqlIdentifier) node;
-      final DelegatingScope idScope =
-          (DelegatingScope) ((DelegatingScope) scope).getParent();
+      final SqlValidatorScope idScope =
+          ((DelegatingScope) scope).getParent();
       return getNamespace(id, idScope);
     } else if (node instanceof SqlCall) {
       // Handle extended identifiers.
