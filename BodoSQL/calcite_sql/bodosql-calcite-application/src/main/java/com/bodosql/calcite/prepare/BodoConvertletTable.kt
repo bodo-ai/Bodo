@@ -9,6 +9,7 @@ import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
+import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlCall
@@ -18,6 +19,7 @@ import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.sql2rel.SqlRexContext
 import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.StandardConvertletTable
@@ -73,6 +75,8 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         addAlias(SqlLibraryOperators.RLIKE, StringOperatorTable.REGEXP_LIKE)
         addAlias(StringOperatorTable.RLIKE, StringOperatorTable.REGEXP_LIKE)
         registerOp(StringOperatorTable.LENGTH, this::simpleConversion)
+        registerOp(SqlStdOperatorTable.PLUS, this::convertPlus)
+        registerOp(SqlStdOperatorTable.MINUS, this::convertMinus)
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
@@ -85,12 +89,97 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
     }
 
     /**
-     * Convert an operator from Sql To Rex direclty. This is used in case our convertlet
+     * Convert an operator from Sql To Rex directly. This is used in case our convertlet
      * conflicts with Calcite.
      */
     private fun simpleConversion(cx: SqlRexContext, call: SqlCall): RexNode {
         val operands = call.operandList.map { op -> cx.convertExpression(op) }
         return cx.rexBuilder.makeCall(call.operator, operands)
+    }
+
+    /**
+     * Convert a Sql Datetime Plus. This is used to expand Calcite functionality.
+     */
+    private fun convertPlus(cx: SqlRexContext, call: SqlCall): RexNode {
+        val rex = convertCall(cx, call)
+        return when (rex.type.sqlTypeName) {
+            SqlTypeName.DATE, SqlTypeName.TIME, SqlTypeName.TIMESTAMP -> {
+                // Use special "+" operator for datetime + interval.
+                // Re-order operands, if necessary, so that interval is second.
+                val rexBuilder = cx.rexBuilder
+                var operands = (rex as RexCall).getOperands()
+                if (operands.size == 2) {
+                    when (operands[0].type.sqlTypeName) {
+                        SqlTypeName.DATE, SqlTypeName.TIME, SqlTypeName.TIMESTAMP, SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE -> {
+                            if (listOf(SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT).contains(operands[1].type.sqlTypeName)) {
+                                val newOperands = listOf(rexBuilder.makeLiteral("DAY"), operands[1], operands[0])
+                                rexBuilder.makeCall(
+                                    rex.getType(),
+                                    DatetimeOperatorTable.DATEADD,
+                                    newOperands,
+                                )
+                            } else {
+                                rexBuilder.makeCall(
+                                    rex.getType(),
+                                    SqlStdOperatorTable.DATETIME_PLUS,
+                                    operands,
+                                )
+                            }
+                        }
+                        SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_YEAR_MONTH, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_SECOND -> {
+                            val newOperands = listOf(operands[1], operands[0])
+                            rexBuilder.makeCall(
+                                rex.getType(),
+                                SqlStdOperatorTable.DATETIME_PLUS,
+                                newOperands,
+                            )
+                        }
+                        SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT -> {
+                            val newOperands = listOf(rexBuilder.makeLiteral("DAY"), operands[0], operands[1])
+                            rexBuilder.makeCall(
+                                rex.getType(),
+                                DatetimeOperatorTable.DATEADD,
+                                newOperands,
+                            )
+                        }
+                        else -> { rex }
+                    }
+                } else { rex }
+            } else -> rex
+        }
+    }
+
+    /**
+     * Convert a Sql Datetime Minus. This is used to expand Calcite functionality.
+     */
+    private fun convertMinus(cx: SqlRexContext, call: SqlCall): RexNode {
+        val e = convertCall(cx, call) as RexCall
+        val operands = e.getOperands()
+        return when (operands[0].type.sqlTypeName) {
+            SqlTypeName.DATE, SqlTypeName.TIME, SqlTypeName.TIMESTAMP -> {
+                val rexBuilder = cx.rexBuilder
+                when (operands[1].type.sqlTypeName) {
+                    SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT -> {
+                        val newOperands = listOf(
+                            rexBuilder.makeLiteral("DAY"),
+                            // Reuse add by negating the integer input.
+                            rexBuilder.makeCall(operands[1].type, SqlStdOperatorTable.UNARY_MINUS, listOf(operands[1])),
+                            operands[0],
+                        )
+                        rexBuilder.makeCall(
+                            e.getType(),
+                            DatetimeOperatorTable.DATEADD,
+                            newOperands,
+                        )
+                    } else -> {
+                        // TODO: Determine if we need/want to support MINUS_DATE. This syntax
+                        // doesn't seem to be supported by Snowflake.
+                        e
+                    }
+                }
+            }
+            else -> e
+        }
     }
 
     override fun get(call: SqlCall): SqlRexConvertlet? {
