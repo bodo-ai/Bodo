@@ -30,7 +30,7 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
     // -- Fields --
 
     // Full function path, including the name.
-    public final ImmutableList<String> functionPath;
+    private final ImmutableList<String> functionPath;
 
     private final ColumnDataTypeInfo returnTypeInfo;
 
@@ -120,6 +120,13 @@ public class SnowflakeUserDefinedFunction implements ScalarFunction {
         return parameters;
     }
 
+    public String getBody() {
+        return body;
+    }
+
+    public ImmutableList<String> getFunctionPath() {
+        return functionPath;
+    }
 
     /**
      * Returns an error or creates warning if the Snowflake UDF contains features that we

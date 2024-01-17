@@ -4,10 +4,10 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
+import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.google.common.collect.ImmutableList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
@@ -39,19 +39,24 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   // it created.
   private final RelBuilder relBuilder;
 
+  // Function expander used for inlining Snowflake UDFs.
+  private final FunctionExpander functionExpander;
+
   public BodoSqlToRelConverter(
       final RelOptTable.ViewExpander viewExpander,
       @Nullable final SqlValidator validator,
       final Prepare.CatalogReader catalogReader,
       final RelOptCluster cluster,
       final SqlRexConvertletTable convertletTable,
-      final Config config) {
+      final Config config,
+      final FunctionExpander functionExpander) {
     super(viewExpander, validator, catalogReader, cluster, convertletTable, config);
     this.relBuilder =
         config
             .getRelBuilderFactory()
             .create(cluster, null)
             .transform(config.getRelBuilderConfigTransform());
+    this.functionExpander = functionExpander;
   }
 
   @Override
@@ -141,16 +146,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             if (defaultExInst != null) {
               throw validator.newValidationError(expr, defaultExInst);
             }
-            ImmutableList<String> functionPath = snowflakeUdf.functionPath;
-            String msg =
-                String.format(
-                    Locale.ROOT,
-                    "Unable to resolve function: %s.%s.%s. BodoSQL does not have support for"
-                        + " Snowflake UDFs yet.",
-                    functionPath.get(0),
-                    functionPath.get(1),
-                    functionPath.get(2));
-            throw new RuntimeException(msg);
+            functionExpander.expandFunction(snowflakeUdf.getBody(), snowflakeUdf.getFunctionPath());
           }
         }
       }

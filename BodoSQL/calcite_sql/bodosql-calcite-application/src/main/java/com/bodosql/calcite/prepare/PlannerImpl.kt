@@ -40,7 +40,6 @@ import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
-import java.lang.RuntimeException
 
 class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config)) {
     private val defaultSchemas = config.defaultSchemas
