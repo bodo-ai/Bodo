@@ -1123,3 +1123,69 @@ overload(windowed_bitxor_agg)(
         propagate_nan=False,
     )
 )
+
+
+def windowed_object_agg(K, V):  # pragma: no cover
+    pass
+
+
+@overload(windowed_object_agg)
+def overload_windowed_object_agg(K, V):
+    """
+    Returns the result of calling OBJECT_AGG as a window
+    function on the partition represented by arrays K and V.
+
+    Only allowed without an order/frame:
+    https://docs.snowflake.com/en/sql-reference/functions-analytic
+
+    Args:
+        K (string series/array) the data that becomes the keys.
+        V (any series/array) the data that becomes the values.
+
+    Returns
+        (map array) Same number of rows as K & V where each row is
+        an identical map containing each pair of values from K and V,
+        excluding pairs where the current row of either K or V is null.
+    """
+    key_type = K.data if bodo.hiframes.pd_series_ext.is_series_type else K
+    val_type = V.data if bodo.hiframes.pd_series_ext.is_series_type else V
+    struct_typ_tuple = (key_type, val_type)
+    map_struct_names = bodo.utils.typing.ColNamesMetaType(("key", "value"))
+    map_arr = bodo.MapArrayType(key_type, val_type)
+
+    def impl(K, V):  # pragma: no cover
+        # Convert series to arrays
+        key_arr = bodo.utils.conversion.coerce_to_array(K)
+        val_arr = bodo.utils.conversion.coerce_to_array(V)
+        n = len(key_arr)
+
+        # Figure out which key-value pairs are both non-null so a
+        # struct array can be allocated with that many rows.
+        pairs_to_keep = np.zeros(n, dtype=np.bool_)
+        for i in range(n):
+            pairs_to_keep[i] = not (
+                bodo.libs.array_kernels.isna(key_arr, i)
+                or bodo.libs.array_kernels.isna(val_arr, i)
+            )
+        n_keep = pairs_to_keep.sum()
+        struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+            n_keep, (-1,), struct_typ_tuple, ("key", "value")
+        )
+
+        # Copy over the elements of K and V into the struct array, skipping
+        # over rows where either K or V is null.
+        write_idx = 0
+        for i in range(n):
+            if pairs_to_keep[i]:
+                struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(
+                    (key_arr[i], val_arr[i]), (False, False), map_struct_names
+                )
+                write_idx += 1
+
+        # Convert the struct array into a map scalar, then replicate to create the entire array
+        key_data, value_data = bodo.libs.struct_arr_ext.get_data(struct_arr)
+        nulls = bodo.libs.struct_arr_ext.get_null_bitmap(struct_arr)
+        map_val = bodo.libs.map_arr_ext.init_map_value(key_data, value_data, nulls)
+        return bodo.utils.conversion.coerce_scalar_to_array(map_val, n, map_arr)
+
+    return impl
