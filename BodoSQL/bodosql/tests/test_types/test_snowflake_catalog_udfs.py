@@ -63,6 +63,31 @@ def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
+def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that they aren't supported yet,
+    which should differ from the default "access" issues.
+
+    QUERY_PARAM_FUNCTION is manually defined inside TEST_DB.PUBLIC to take
+    one argument.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select QUERY_PARAM_FUNCTION(1)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
 def test_unsupported_udf_multiple_definitions(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -225,6 +250,53 @@ def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\. Failed to parse the function either as an Expression or as a query\\.",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\.\nCaused by: Failed to parse the function either as an Expression or as a query\\.",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_validation(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with contents that can't be validated give an error indicating this.
+
+    VALIDATION_ERROR_FUNCTION is manually defined inside TEST_DB.PUBLIC to use COMPRESS,
+    which we don't support.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select VALIDATION_ERROR_FUNCTION('abc')"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_FUNCTION\\.\nCaused by: .* No match found for function signature COMPRESS\\(<CHARACTER>, <CHARACTER>\\)",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with contents that can't be validated give an error indicating this
+    even for functions with a query function body (e.g. SELECT).
+
+    VALIDATION_ERROR_QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC to use COMPRESS,
+    which we don't support and has a query function body (e.g. SELECT).
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select VALIDATION_ERROR_QUERY_FUNCTION('abc')"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet\\.",
     ):
         impl(bc, query)

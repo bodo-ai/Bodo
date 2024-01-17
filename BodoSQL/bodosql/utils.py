@@ -41,6 +41,10 @@ def error_to_string(e: Exception) -> str:
             )
             msg_body = CommonsExceptionUtilsClass.getStackTrace(java_exception)
             message = msg_header + msg_body
+        # Append the cause if it exists
+        cause = java_exception.getCause()
+        if cause is not None:
+            message += "\nCaused by: " + cause.getMessage()
     elif isinstance(e, py4j.protocol.Py4JNetworkError):
         message = "Unexpected Py4J Network Error: " + str(e)
     elif isinstance(e, py4j.protocol.Py4JError):
