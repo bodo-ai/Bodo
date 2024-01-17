@@ -1499,7 +1499,7 @@ BodoSQL Currently supports the following Aggregation & Window functions:
 | `#!sql MODE` | Y | N | Y | Y | N | N |
 | `#!sql NTH_VALUE` | N | N | Y | Y | N | Y |
 | `#!sql NTILE` | N | N | Y | Y | Y | N |
-| `#!sql OBJECT_AGG` | Y | N | N | N/A | N/A | N/A |
+| `#!sql OBJECT_AGG` | Y | N | Y | N | N | N |
 | `#!sql PERCENTILE_CONT` | Y | Y | N | N/A | N/A | N/A |
 | `#!sql PERCENTILE_DISC` | Y | Y | N | N/A | N/A | N/A |
 | `#!sql PERCENT_RANK` | N | N | Y | Y | Y | N |

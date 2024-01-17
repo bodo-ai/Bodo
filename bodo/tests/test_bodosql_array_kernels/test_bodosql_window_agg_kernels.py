@@ -1460,3 +1460,107 @@ def test_string_min_max(memory_leak_check):
         else:
             check_func(impl_max_series, (data,), py_output=data_max, only_seq=True)
             check_func(impl_min_series, (data,), py_output=data_min, only_seq=True)
+
+
+@pytest.mark.parametrize(
+    "value_data, value_dtype",
+    [
+        pytest.param(
+            pd.Series(
+                [None if i % 2 == 0 else 2**i for i in range(10)],
+                dtype=pd.Int64Dtype(),
+            ),
+            pa.int64(),
+            id="int64",
+        ),
+        pytest.param(
+            pd.Series([None if i % 5 == 4 else chr(65 + i) * i for i in range(10)]),
+            pa.large_string(),
+            id="string",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None
+                    if i % 4 == 3
+                    else [datetime.date(2023, 12, 21), None, datetime.date(2022, 7, 4)][
+                        : i % 3
+                    ]
+                    for i in range(10)
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.date32())),
+            ),
+            pa.large_list(pa.date32()),
+            id="array_date",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None
+                    if i % 5 == 4
+                    else {
+                        "A": None if i % 4 == 3 else i,
+                        "B": None if i == 7 else [True, False, None, True][: i % 4],
+                    }
+                    for i in range(10)
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.float64()),
+                            pa.field("B", pa.large_list(pa.bool_())),
+                        ]
+                    )
+                ),
+            ),
+            pa.struct(
+                [pa.field("A", pa.float64()), pa.field("B", pa.large_list(pa.bool_()))]
+            ),
+            id="struct-float_list_bool",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None
+                    if i % 4 == 1
+                    else {
+                        chr(j): None if j % 2 == 0 else j
+                        for j in range(65 + i, 65 + i + i % 3)
+                    }
+                    for i in range(10)
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int8())),
+            ),
+            pa.map_(pa.string(), pa.int8()),
+            id="map-int",
+        ),
+    ],
+)
+def test_window_object_agg(value_data, value_dtype, memory_leak_check):
+    def impl(K, V):
+        return pd.DataFrame(
+            {"res": bodo.libs.bodosql_array_kernels.windowed_object_agg(K, V)}
+        )
+
+    key_data = pd.Series([None if c in "AEI" else c for c in "ABCDEFGHIJ"])
+    json_res = {}
+    keep = pd.notna(key_data) & pd.notna(value_data)
+    for i in range(len(key_data)):
+        if keep[i]:
+            json_res[key_data.iloc[i]] = value_data.iloc[i]
+    answer = pd.DataFrame(
+        {
+            "res": pd.array(
+                [json_res] * 10, dtype=pd.ArrowDtype(pa.map_(pa.string(), value_dtype))
+            )
+        }
+    )
+
+    check_func(
+        impl,
+        (key_data, value_data),
+        py_output=answer,
+        check_dtype=False,
+        only_seq=True,
+        convert_columns_to_pandas=True,
+    )
