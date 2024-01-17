@@ -33,6 +33,53 @@ void export_wisdom(int rank) {
         fftw_export_wisdom_to_filename_fn<dtype>();
     }
 }
+
+/**
+ * @brief Get FFTW planning flag from environment variable BODO_FFTW_PLANNING if
+ * available. Otherwise, return FFTW_MEASURE by default. See //
+ * https://www.fftw.org/fftw3_doc/Planner-Flags.html
+ *
+ * @return unsigned int FFTW planning flag (e.g. FFTW_MEASURE)
+ */
+unsigned int get_fftw_planning_flag() {
+    char* fftw_planning_env_ = std::getenv("BODO_FFTW_PLANNING");
+
+    if (fftw_planning_env_) {
+        if (std::strcmp(fftw_planning_env_, "FFTW_ESTIMATE") == 0) {
+            return FFTW_ESTIMATE;
+        }
+        if (std::strcmp(fftw_planning_env_, "FFTW_MEASURE") == 0) {
+            return FFTW_MEASURE;
+        }
+        if (std::strcmp(fftw_planning_env_, "FFTW_PATIENT") == 0) {
+            return FFTW_PATIENT;
+        }
+        if (std::strcmp(fftw_planning_env_, "FFTW_EXHAUSTIVE") == 0) {
+            return FFTW_EXHAUSTIVE;
+        }
+        if (std::strcmp(fftw_planning_env_, "FFTW_WISDOM_ONLY") == 0) {
+            return FFTW_WISDOM_ONLY;
+        }
+    }
+    return FFTW_MEASURE;
+}
+
+/**
+ * @brief Set timeout for FFTW planning which can take a long time, especially
+ * on few cores. Uses BODO_FFTW_PLANNING_TIMEOUT environment variable if
+ * available. Otherwises, sets to 1 hour by default (FFTW's default is
+ * unlimited which can seem like hanging).
+ *
+ */
+void set_fftw_timeout() {
+    double seconds = 60.0 * 60.0;
+    char* fftw_planning_env_ = std::getenv("BODO_FFTW_PLANNING_TIMEOUT");
+    if (fftw_planning_env_) {
+        seconds = std::stod(fftw_planning_env_);
+    }
+    fftw_set_timelimit(seconds);
+}
+
 /**
  * @brief Redistributes the given array to match fftw's expected distribution
  * @param arr The array to redistribute
@@ -157,18 +204,20 @@ std::shared_ptr<array_info> fft2(std::shared_ptr<array_info> arr,
 
     fftw_plan_type<dtype> plan;
     tracing::Event plan_ev = tracing::Event("fft2: plan");
+    unsigned int planning_flag = get_fftw_planning_flag();
+    set_fftw_timeout();
     if (parallel) {
         plan = fftw_plan_dft_2d_fn<dtype, true>(
             shape[0], shape[1],
             (fftw_complex_type<dtype>*)out_arr->buffers[0]->mutable_data(),
             (fftw_complex_type<dtype>*)out_arr->buffers[0]->mutable_data(),
-            MPI_COMM_WORLD, FFTW_FORWARD, FFTW_MEASURE);
+            MPI_COMM_WORLD, FFTW_FORWARD, planning_flag);
     } else {
         plan = fftw_plan_dft_2d_fn<dtype, false>(
             shape[0], shape[1],
             (fftw_complex_type<dtype>*)out_arr->buffers[0]->mutable_data(),
             (fftw_complex_type<dtype>*)out_arr->buffers[0]->mutable_data(),
-            MPI_COMM_WORLD, FFTW_FORWARD, FFTW_MEASURE);
+            MPI_COMM_WORLD, FFTW_FORWARD, planning_flag);
     }
     plan_ev.finalize();
 
