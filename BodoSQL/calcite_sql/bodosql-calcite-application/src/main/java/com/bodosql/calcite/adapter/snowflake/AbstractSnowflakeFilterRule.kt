@@ -258,10 +258,17 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
         /**
          * Test for like variants we can push to Snowflake. Snowflake requires
-         * escape to be a Stirng literal.
+         * escape to be a String literal.
          */
         private fun isSupportedLike(call: RexCall): Boolean {
             return call.kind == SqlKind.LIKE && (call.operands.size < 3 || (call.operands[2] is RexLiteral))
+        }
+
+        /**
+         * Enable pushing DateAdd but only if there is the 3 argument version.
+         */
+        private fun isSupportedDateAdd(call: RexCall): Boolean {
+            return call.kind == SqlKind.OTHER_FUNCTION && call.operator.name == DatetimeOperatorTable.DATEADD.name && call.operands.size == 3
         }
 
         /**
@@ -293,7 +300,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     return if (call != null && (
                             SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(
                                 call,
-                            ) || isSupportedLike(call)
+                            ) || isSupportedLike(call) || isSupportedDateAdd(call)
                             )
                     ) {
                         // Arguments also need to be pushable.
