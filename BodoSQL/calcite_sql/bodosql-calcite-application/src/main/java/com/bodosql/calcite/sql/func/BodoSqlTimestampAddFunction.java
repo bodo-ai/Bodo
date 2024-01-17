@@ -55,9 +55,7 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
   private static final SqlReturnTypeInference RETURN_TYPE_INFERENCE =
       opBinding -> {
         final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
-        assert opBinding instanceof SqlCallBinding;
-        SqlCallBinding opBindingWithCast = (SqlCallBinding) opBinding;
-        RelDataType arg0Type = opBindingWithCast.getOperandType(0);
+        RelDataType arg0Type = opBinding.getOperandType(0);
         TimeUnit arg0timeUnit;
         switch (arg0Type.getSqlTypeName()) {
             // This must be a constant string or time unit input,
@@ -67,19 +65,26 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
             // This will fail if the value is a non-literal
             try {
               String inputTimeStr =
-                  requireNonNull(opBindingWithCast.getOperandLiteralValue(0, String.class));
+                  requireNonNull(opBinding.getOperandLiteralValue(0, String.class));
               arg0timeUnit =
                   standardizeTimeUnit(
                       "TIMESTAMPADD",
                       inputTimeStr,
-                      opBindingWithCast.getOperandType(2).getSqlTypeName() == SqlTypeName.TIME);
+                      opBinding.getOperandType(2).getSqlTypeName() == SqlTypeName.TIME);
             } catch (RuntimeException e) {
               String errMsg = requireNonNull(e.getMessage());
-              throw opBindingWithCast
-                  .getValidator()
-                  .newValidationError(
-                      opBindingWithCast.getCall(),
-                      BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+              // This can be called in the convertlet. If so we won't have a SqlCallBinding,
+              // but also validation shouldn't fail.
+              if (opBinding instanceof SqlCallBinding) {
+                SqlCallBinding opBindingWithCast = (SqlCallBinding) opBinding;
+                throw opBindingWithCast
+                    .getValidator()
+                    .newValidationError(
+                        opBindingWithCast.getCall(),
+                        BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+              } else {
+                throw e;
+              }
             }
             break;
 
@@ -97,11 +102,18 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
                   opBinding.getOperandType(2));
         } catch (RuntimeException e) {
           String errMsg = requireNonNull(e.getMessage());
-          throw opBindingWithCast
-              .getValidator()
-              .newValidationError(
-                  opBindingWithCast.getCall(),
-                  BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+          // This can be called in the convertlet. If so we won't have a SqlCallBinding,
+          // but also validation shouldn't fail.
+          if (opBinding instanceof SqlCallBinding) {
+            SqlCallBinding opBindingWithCast = (SqlCallBinding) opBinding;
+            throw opBindingWithCast
+                .getValidator()
+                .newValidationError(
+                    opBindingWithCast.getCall(),
+                    BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+          } else {
+            throw e;
+          }
         }
         return ret;
       };
