@@ -1,14 +1,12 @@
 # Copied from BodoSQL
 parameters:
     name: ''
-    vmImage: ''
     pythonVersion: ''
 
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 240
-  pool:
-    vmImage: ${{ parameters.vmImage }}
+  pool: ScalingVMSet
 
   steps:
   # Install Micromamba and Create Environment. Reference:
