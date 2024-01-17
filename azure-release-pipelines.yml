@@ -70,7 +70,8 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: Linux
-      vmImage: ubuntu-latest
+      pool: ScalingVMSet
+      buildMac: false
       platformBuild: false
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
@@ -85,7 +86,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_311
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
@@ -93,7 +96,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_310
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
@@ -101,7 +106,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_39
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
@@ -113,7 +120,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_311
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       buildARM: true
@@ -122,7 +131,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_310
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       buildARM: true
@@ -131,7 +142,9 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_39
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       buildARM: true
@@ -148,8 +161,6 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-pip-linux.yml
     parameters:
       name: Linux_pip
-      vmImage: ubuntu-latest
-      platformBuild: false
 
 #  - template: buildscripts/bodo/azure/azure-build-pip-windows.yml
 #    parameters:

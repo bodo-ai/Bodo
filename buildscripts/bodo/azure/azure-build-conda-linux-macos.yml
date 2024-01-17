@@ -2,11 +2,13 @@ parameters:
 - name: name
   type: string
   default: ''
-- name: vmImage
-  displayName: VM Image
-  values:
-  - ubuntu-latest
-  - macOS-latest
+- name: pool
+  displayName: Pool Config
+  type: object
+  default: ScalingVMSet
+- name: buildMac
+  type: boolean
+  default: false
 - name: buildARM
   type: boolean
   default: false
@@ -26,14 +28,18 @@ parameters:
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 360
-  pool:
-    vmImage: ${{ parameters.vmImage }}
+  pool: ${{ parameters.pool }}
 
   steps:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '3.8'
-      # Github Token used to download python from the GitHub registry if it doesn't already exist locally
+      # Github Token used to download python from the GitHub registry if it doesn't already exist locally.
+      # This is currently @Keaton's github token. If you need to change it, you can use anyone's token
+      # that has access to the GitHub registry.
+      # To change this variable, go to the pipeline (from which this template is being invoked), 
+      # click on the 'Edit' --> 'Variables', and then you should be able to edit the
+      # GITHUB_REGISTRY_DL_TOKEN variable.
       githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
     displayName: 'Use Python 3.8'
 
@@ -105,7 +111,7 @@ jobs:
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
       fi
       buildscripts/setup_osx_sdk.sh
-    condition: eq('${{ parameters.vmImage }}', 'macOS-latest')
+    condition: eq('${{ parameters.buildMac }}', 'true')
     displayName: 'Setup OSX SDK'
 
   - script: |
@@ -136,7 +142,7 @@ jobs:
 
       set +x
       source run_conda_forge_build_setup
-    condition: and(eq('${{ parameters.vmImage }}', 'macOS-latest'), eq('${{ parameters.buildARM }}', 'true'))
+    condition: and(eq('${{ parameters.buildMac }}', 'true'), eq('${{ parameters.buildARM }}', 'true'))
     displayName: 'Setup for Cross Compilation'
 
   - script: |

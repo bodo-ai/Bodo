@@ -18,6 +18,7 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: LinuxForPlatform
-      vmImage: ubuntu-latest
+      buildMac: false
+      pool: ScalingVMSet
       platformBuild: true
       weeklyTest: false

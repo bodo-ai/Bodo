@@ -1,20 +1,14 @@
 # Copied from Iceberg Connector
 parameters:
     name: ''
-    vmImage: ''
     pythonVersion: ''
 
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 240
-  pool:
-    vmImage: ${{ parameters.vmImage }}
+  pool: ScalingVMSet
 
   steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: ${{ parameters.pythonVersion }}
-    displayName: 'Use Python ${{ parameters.pythonVersion }}'
 
   # Install Micromamba and Create Environment . Reference:
   # https://mamba.readthedocs.io/en/latest/installation.html#micromamba

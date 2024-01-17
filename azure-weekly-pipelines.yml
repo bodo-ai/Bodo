@@ -43,13 +43,17 @@ stages:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: Linux
-      vmImage: ubuntu-latest
+      buildMac: false
+      pool:
+        vmImage: ubuntu-latest
       platformBuild: false
       weeklyTest: true
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS
-      vmImage: macOS-latest
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
       platformBuild: false
       weeklyTest: true
 #  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
