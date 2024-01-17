@@ -75,6 +75,7 @@ internal object WindowAggregateApplyFuncTable {
         AggOperatorTable.BITOR_AGG to ::bitorAgg,
         AggOperatorTable.BITAND_AGG to ::bitandAgg,
         AggOperatorTable.BITXOR_AGG to ::bitxorAgg,
+        AggOperatorTable.OBJECT_AGG to ::objectAgg,
     ).mapKeys { it.key.name }
 
     fun get(op: SqlOperator): WindowAggregateApplyFunc? =
@@ -167,6 +168,9 @@ internal object WindowAggregateApplyFuncTable {
 
     private fun stddevPop(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
         boundedNativeKernel(ctx, "windowed_stddev_pop", operands)
+
+    private fun objectAgg(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
+        BodoSQLKernel("windowed_object_agg", operands)
 
     private fun rowNumber(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
         Expr.Call(

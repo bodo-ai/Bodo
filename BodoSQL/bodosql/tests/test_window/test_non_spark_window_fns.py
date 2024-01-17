@@ -2,6 +2,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo import Time
@@ -833,3 +834,68 @@ def test_bit_agg(data, dtype, memory_leak_check):
 
     # Verify that fusion is working correctly.
     count_window_applies(pandas_code, 1, bit_agg_funcs)
+
+
+@pytest.mark.parametrize(
+    "data, value_dtype",
+    [
+        pytest.param(
+            pd.array([1, 2, None, 4, 5, None, 7, 8, None, None], dtype=pd.Int64Dtype()),
+            pa.int64(),
+            id="integer",
+        ),
+        pytest.param(
+            pd.array(
+                ["Alpha", None, "Gamma", "Delta", None, "", "Theta", "Iota", None, None]
+            ),
+            pa.large_string(),
+            id="string",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_object_agg(data, value_dtype, memory_leak_check):
+    """Tests the OBJECT_AGG window function."""
+    query = f"SELECT P, O, OBJECT_AGG(K, V) OVER (PARTITION BY P) FROM table1"
+
+    df = pd.DataFrame(
+        {
+            "P": [1, 2, 1, 2, 1, 3, 1, 3, 1, 4],
+            "O": list(range(10)),
+            "K": list("ABC") + [None] + list("EFGHIJ"),
+            "V": data,
+        }
+    )
+
+    json_data = []
+    for i in range(len(df)):
+        partition = df["P"].iloc[i]
+        keys = df["K"][df["P"] == partition]
+        values = df["V"][df["P"] == partition]
+        keep = pd.notna(keys) & pd.notna(values)
+        res = {}
+        for j in range(len(keys)):
+            if keep.iloc[j]:
+                res[keys.iloc[j]] = values.iloc[j]
+        json_data.append(res)
+
+    expected = pd.DataFrame(
+        {
+            "P": df["P"],
+            "O": df["O"],
+            "J": pd.array(
+                json_data, dtype=pd.ArrowDtype(pa.map_(pa.string(), value_dtype))
+            ),
+        }
+    )
+
+    check_query(
+        query,
+        {"TABLE1": df},
+        None,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_to_pandas=True,
+        expected_output=expected,
+        use_dict_encoded_strings=False,
+    )
