@@ -19,12 +19,14 @@ package com.bodosql.calcite.prepare;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
+import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
 import com.bodosql.calcite.sql2rel.BodoRelDecorrelator;
 import com.bodosql.calcite.sql2rel.BodoSqlToRelConverter;
 import com.google.common.collect.ImmutableList;
 import java.io.Reader;
 import java.util.List;
+import java.util.Locale;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
@@ -67,9 +69,10 @@ import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.ValidationException;
 import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
+public abstract class AbstractPlannerImpl implements Planner, ViewExpander, FunctionExpander {
   private final SqlOperatorTable operatorTable;
   private final ImmutableList<Program> programs;
   private final @Nullable RelOptCostFactory costFactory;
@@ -278,7 +281,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new BodoSqlToRelConverter(
-            this, validator, createCatalogReader(), cluster, convertletTable, config);
+            this, validator, createCatalogReader(), cluster, convertletTable, config, this);
     RelRoot root = sqlToRelConverter.convertQuery(validatedSqlNode, false, true);
     root = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
     final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
@@ -327,7 +330,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
         BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
-        new BodoSqlToRelConverter(this, validator, catalogReader, cluster, convertletTable, config);
+        new BodoSqlToRelConverter(
+            this, validator, catalogReader, cluster, convertletTable, config, this);
 
     final RelRoot root = sqlToRelConverter.convertQuery(sqlNode, true, false);
     final RelRoot root2 = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
@@ -337,6 +341,85 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     return RelRoot.of(root3.rel, rowType, root3.kind)
         .withCollation(root3.collation)
         .withHints(root3.hints);
+  }
+
+  /**
+   * Inline the body of a function. This API is responsible for parsing the function body as a query
+   * and validating the contents query for type stability.
+   *
+   * <p>This API is still under active development, so the return type is not yet finalized and
+   * additional arguments are likely to be added.
+   *
+   * <p>Currently, this function just attempts to parse the UDF. If parsing fails then it provides a
+   * parsing error (to indicate the function can't be inlined). If parsing succeeds then it still
+   * raises a more general exception.
+   *
+   * @param functionBody Body of the function.
+   * @param functionPath Path of the function.
+   */
+  @Override
+  public void expandFunction(
+      @NonNull String functionBody, @NonNull ImmutableList<@NonNull String> functionPath) {
+    // Base to use for several exception conditions.
+    String baseErrorMessage =
+        String.format(
+            Locale.ROOT,
+            "Unable to resolve function: %s.%s.%s.",
+            functionPath.get(0),
+            functionPath.get(1),
+            functionPath.get(2));
+    // Parse the function body. The body can either be a simple expression or a query.
+    // We will tackle the first case using `parseSqlExpression()` and the second using
+    // parseExpressionList()
+    SqlParser parser = SqlParser.create(functionBody, parserConfig);
+    SqlParseException firstException = null;
+    SqlParseException secondException = null;
+    SqlNode node = null;
+    try {
+      node = parser.parseExpression();
+    } catch (SqlParseException e) {
+      firstException = e;
+    }
+    if (firstException != null) {
+      try {
+        List<SqlNode> stmtList = parser.parseStmtList();
+        if (stmtList.size() == 1) {
+          node = stmtList.get(0);
+        } else {
+          String msg =
+              String.format(
+                  Locale.ROOT,
+                  "%s Failure when parsing function body: Multiple statements were encountered.",
+                  baseErrorMessage);
+          throw new RuntimeException(msg);
+        }
+      } catch (SqlParseException e) {
+        secondException = e;
+      }
+    }
+    if (node == null) {
+      // Both parsing attempts failed.
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "%s Failed to parse the function either as an Expression or as a"
+                  + " query.\n"
+                  + " When parsing the body as an Expression we get the following error: %s\n"
+                  + "After parsing the body as a query we got this error: %s\n"
+                  + "If you UDF body is an Expression without SELECT refer to message 1, otherwise"
+                  + " refer to message 2.",
+              baseErrorMessage,
+              firstException.toString(),
+              secondException.toString());
+      throw new RuntimeException(msg);
+    }
+
+    String msg =
+        String.format(
+            Locale.ROOT,
+            "%s BodoSQL does not have support for Snowflake UDFs yet.",
+            baseErrorMessage);
+    throw new RuntimeException(msg);
   }
 
   // CalciteCatalogReader is stateless; no need to store one
