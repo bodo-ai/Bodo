@@ -39,6 +39,30 @@ def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
+def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    gives a message that they aren't supported yet,
+    which should differ from the default "access" issues.
+
+    QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select QUERY_FUNCTION()"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
 def test_unsupported_udf_multiple_definitions(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -179,5 +203,28 @@ def test_unsupported_udf_with_named_args(test_db_snowflake_catalog, memory_leak_
     with pytest.raises(
         BodoError,
         match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with contents that can't be parsed give an error indicating this.
+
+    DOLLAR_STRING is manually defined inside TEST_DB.PUBLIC with a $$ quoted string
+    as the body.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select DOLLAR_STRING()"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\. Failed to parse the function either as an Expression or as a query\\.",
     ):
         impl(bc, query)
