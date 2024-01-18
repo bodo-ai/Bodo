@@ -5083,6 +5083,19 @@ SqlNode StringLiteral() :
     SqlCharStringLiteral literal;
 }
 {
+(
+    <DOLLAR_QUOTED_STRING> {
+        p =  token.image.substring(2, token.image.length() - 2);
+
+        try {
+            return SqlLiteral.createCharString(p, charSet, getPos());
+        } catch (java.nio.charset.UnsupportedCharsetException e) {
+            throw SqlUtil.newContextException(getPos(),
+                RESOURCE.unknownCharacterSet(charSet));
+        }
+    }
+)
+|
     // A continued string literal consists of a head fragment and one or more
     // tail fragments. Since comments may occur between the fragments, and
     // comments are special tokens, each fragment is a token. But since spaces
@@ -5243,6 +5256,10 @@ String SimpleStringLiteral() :
 {
     <QUOTED_STRING> {
         return SqlParserUtil.parseString(token.image);
+    }
+|
+    <DOLLAR_QUOTED_STRING> {
+        return token.image.substring(2, token.image.length() - 2);
     }
 |
     <BIG_QUERY_QUOTED_STRING> {
@@ -9502,6 +9519,11 @@ void NonReservedKeyWord2of3() :
 <DEFAULT, DQID, BTID> TOKEN :
 {
     < QUOTED_STRING: <QUOTE> (("\\" ~[]) | (~["'","\\"]) | ("''"))* <QUOTE> >
+|
+    < DOLLAR_QUOTED_STRING: <DOLLAR> <DOLLAR> (
+        (<DOLLAR> (~["$"]))
+    |   (~["$"])
+    )* <DOLLAR> <DOLLAR> >
 |
     < PREFIXED_STRING_LITERAL: ("_" <CHARSETNAME> | "N") <QUOTED_STRING> >
 |

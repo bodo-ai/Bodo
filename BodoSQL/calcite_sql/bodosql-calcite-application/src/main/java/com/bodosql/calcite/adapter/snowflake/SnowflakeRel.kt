@@ -70,7 +70,7 @@ interface SnowflakeRel : RelNode {
 
         val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString { c: SqlWriterConfig ->
             c.withClauseStartsLine(false)
-                .withDialect(BodoSnowflakeSqlDialect.NO_DOLLAR_ESCAPE)
+                .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
         }
 
         return this.getCatalogTable().trySubmitIntegerMetadataQuerySnowflake(metadataSelectQueryString)?.toDouble()
