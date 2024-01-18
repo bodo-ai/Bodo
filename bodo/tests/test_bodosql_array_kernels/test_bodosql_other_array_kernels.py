@@ -2062,16 +2062,19 @@ internal_struct_type = pa.struct(
             True,
             pd.Series([0, 1, None, None], dtype=pd.Int32Dtype()),
             id="int_map-scalar-vector",
-            marks=pytest.mark.skip("Causes a memory leak: https://bodo.atlassian.net/browse/BSE-2440"),
+            marks=pytest.mark.skip(
+                "Causes a memory leak: https://bodo.atlassian.net/browse/BSE-2440"
+            ),
         ),
         pytest.param(
-            pd.array([
-                {"A": 0, "B": 1, "C": 2},
-                {"A": 0, "B": 1, "C": 2},
-                None,
-                {"D": 0, "C": 1, "B": 2},
-            ],
-            dtype = pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            pd.array(
+                [
+                    {"A": 0, "B": 1, "C": 2},
+                    {"A": 0, "B": 1, "C": 2},
+                    None,
+                    {"D": 0, "C": 1, "B": 2},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ),
             pd.Series(["A", "D", "C", "D"]),
             False,
@@ -2079,13 +2082,14 @@ internal_struct_type = pa.struct(
             id="int_map-vector-vector",
         ),
         pytest.param(
-            pd.array([
-                {"A": "A", "B": "B", "C": "C"},
-                {"A": "A", "B": "B", "C": "C"},
-                None,
-                {"D": "D", "C": "C", "B": "B"},
-            ],
-            dtype = pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            pd.array(
+                [
+                    {"A": "A", "B": "B", "C": "C"},
+                    {"A": "A", "B": "B", "C": "C"},
+                    None,
+                    {"D": "D", "C": "C", "B": "B"},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
             ),
             pd.Series(["D", "B", "C", "D"]),
             False,
@@ -2545,9 +2549,12 @@ def test_map_get(map, ind, is_scalar_map, expected, memory_leak_check):
 
     is_scalar_ind = not isinstance(ind, pd.Series)
 
-    # TODO: need to test that map values can have non-constant indices
-    # if not is_scalar_ind:
-    #     pytest.skip("TODO: Support non-constant indices for map_get")
+    if (not is_scalar_ind) and (
+        is_scalar_map or isinstance(map.dtype.pyarrow_dtype, pa.StructType)
+    ):
+        pytest.skip(
+            "TODO: Support non-constant indices for map_get with pyarrow struct types"
+        )
 
     both_scalar = is_scalar_map and is_scalar_ind
     no_scalar = not is_scalar_map and not is_scalar_ind
