@@ -90,18 +90,23 @@ public class JsonCodeGen {
   }
 
   /**
-   * Helper function that Handles the codegen for indexing operations into arrays. This will be
-   * updated to handle map indexing at a later time.
+   * Helper function that Handles the codegen for indexing operations into arrays/maps/variants.
+   * This also handles the alternate GET(val, idx) syntax.
    *
-   * @param arrayScalar Is the input array scalar
-   * @param operands The inputs to the operand as Codgen Exprs
-   * @return A codegen Expr for the indexing operation
+   * @param arrayScalar Is the input array/map scalar
+   * @param indexScalar Is the input index scalar
+   * @param operands The inputs to the operand as Codegen Exprs
+   * @return A codegen Expr for the indexing/GET operation
    */
-  public static Expr visitArrayMapIndexOp(boolean arrayScalar, List<Expr> operands) {
+  public static Expr visitGetOp(boolean arrayScalar, boolean indexScalar, List<Expr> operands) {
     assert operands.size() == 2;
-    kotlin.Pair isScalarArg =
+
+    kotlin.Pair isScalarArrArg =
         new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(arrayScalar));
-    List<Pair<String, Expr>> namedArgs = List.of(isScalarArg);
+
+    kotlin.Pair isScalarIndArg =
+        new kotlin.Pair("is_scalar_idx", new Expr.BooleanLiteral(indexScalar));
+    List<Pair<String, Expr>> namedArgs = List.of(isScalarArrArg, isScalarIndArg);
     return ExprKt.BodoSQLKernel("arr_get", operands, namedArgs);
   }
 }

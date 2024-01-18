@@ -66,6 +66,18 @@ internal class VariantCastTable {
             }
         }
 
+        // converts the second argument to varchar
+        private val arg1StringCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                1 -> factory.createTypeWithNullability(
+                    factory.createSqlType(SqlTypeName.VARCHAR),
+                    inType.isNullable,
+                )
+                else -> inType
+            }
+        }
+
         private val anyArgDateCast = {
                 inType: RelDataType, factory: RelDataTypeFactory, _: Int, _: List<RelDataType> ->
             factory.createTypeWithNullability(
@@ -642,6 +654,8 @@ internal class VariantCastTable {
             ObjectOperatorTable.OBJECT_INSERT to objectInsertCast,
             ObjectOperatorTable.OBJECT_PICK to objectPickDeleteCast,
             ObjectOperatorTable.OBJECT_DELETE to objectPickDeleteCast,
+            ArrayOperatorTable.ARRAY_MAP_GET to arg1StringCast,
+            ArrayOperatorTable.ARRAY_MAP_GET_BRACKET to arg1StringCast,
         ).mapKeys { it.key.name }
     }
 }
