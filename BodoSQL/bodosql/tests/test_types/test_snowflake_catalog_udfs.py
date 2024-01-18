@@ -2,11 +2,12 @@
 """
 Tests UDF operations with a Snowflake catalog.
 """
+import pandas as pd
 import pytest
 
 import bodo
 import bodosql
-from bodo.tests.utils import pytest_snowflake
+from bodo.tests.utils import check_func, pytest_snowflake
 from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     azure_snowflake_catalog,
@@ -16,12 +17,30 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
 pytestmark = pytest_snowflake
 
 
-def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
+def test_expression_udf(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDFs give a message that they aren't supported yet,
-    which should differ from the default "access" issues.
+    Test that a basic expression UDF can be inlined.
 
     PLUS_ONE is manually defined inside TEST_DB.PUBLIC.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select PLUS_ONE(1) as OUTPUT"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    check_func(impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": [2]}))
+
+
+def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    gives a message that they aren't supported yet,
+    which should differ from the default "access" issues.
+
+    QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC.
     """
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
@@ -30,11 +49,36 @@ def test_unsupported_udf(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select PLUS_ONE(1)"
+    query = "select QUERY_FUNCTION()"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.PLUS_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that they aren't supported yet,
+    which should differ from the default "access" issues.
+
+    QUERY_PARAM_FUNCTION is manually defined inside TEST_DB.PUBLIC to take
+    one argument.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select QUERY_PARAM_FUNCTION(1)"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
     ):
         impl(bc, query)
 
@@ -182,77 +226,59 @@ def test_unsupported_python_udf(azure_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
-def test_unsupported_udf_with_provided_defaults(
+def test_expression_udf_with_provided_defaults(
     test_db_snowflake_catalog, memory_leak_check
 ):
     """
-    Test that Snowflake UDFs that allow defaults gives a message they aren't supported.
-    because Snowflake UDFs are not supported yet, not because of the signature accepting
-    default values.
+    Test that Snowflake UDFs that allow defaults can be inlined if values are provided
+    for the defaults.
 
     ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
     """
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select ADD_DEFAULT_ONE(1, 2)"
+    query = "select ADD_DEFAULT_ONE(1, 2) as OUTPUT"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
+    check_func(impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": [3]}))
 
 
-def test_unsupported_udf_with_named_args(test_db_snowflake_catalog, memory_leak_check):
+def test_expression_udf_with_named_args(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDFs with named args gives a message they aren't supported.
-    because Snowflake UDFs are not supported yet, not because we don't handle named
-    arguments.
+    Test that Snowflake UDFs with named args can be inlined.
 
     ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
     """
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select ADD_DEFAULT_ONE(Y => 1, X => 2)"
+    query = "select ADD_DEFAULT_ONE(Y => 1, X => 2) as OUTPUT"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ADD_DEFAULT_ONE\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
+    check_func(impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": [3]}))
 
 
-def test_unsupported_udf_dollar_string(test_db_snowflake_catalog, memory_leak_check):
+def test_udf_dollar_string(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDFs with a dollar string can be parsed.
+    Test that Snowflake UDFs with a dollar string can supported.
 
     DOLLAR_STRING is manually defined inside TEST_DB.PUBLIC with a $$ quoted string
     as the body.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select DOLLAR_STRING()"
+    query = "select DOLLAR_STRING() as OUTPUT"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
+    check_func(
+        impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": ["NICK'S TEST FUNCTION"]})
+    )
 
 
 def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
@@ -323,3 +349,43 @@ def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak
         match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet\\.",
     ):
         impl(bc, query)
+
+
+def test_nested_expression_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that a basic expression UDF that calls another expression UDF
+    can be inlined.
+
+    PLUS_ONE_WRAPPER is manually defined inside TEST_DB.PUBLIC
+    and simply calls PLUS_ONE.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select PLUS_ONE_WRAPPER(1) as OUTPUT"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    check_func(impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": [2]}))
+
+
+def test_repeated_nested_expression_udf(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that a basic expression UDF that calls another expression UDF
+    can be inlined and called multiple times.
+
+    PLUS_ONE_WRAPPER is manually defined inside TEST_DB.PUBLIC
+    and simply calls PLUS_ONE.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select PLUS_ONE_WRAPPER(1) as OUTPUT1, PLUS_ONE_WRAPPER(2) as OUTPUT2"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    check_func(
+        impl, (bc, query), py_output=pd.DataFrame({"OUTPUT1": [2], "OUTPUT2": [3]})
+    )

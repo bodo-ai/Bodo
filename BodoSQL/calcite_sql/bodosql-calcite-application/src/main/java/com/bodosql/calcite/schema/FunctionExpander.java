@@ -1,8 +1,9 @@
 package com.bodosql.calcite.schema;
 
 import com.google.common.collect.ImmutableList;
-import java.util.Map;
+import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexNode;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 /**
@@ -20,11 +21,16 @@ public interface FunctionExpander {
    *
    * @param functionBody Body of the function.
    * @param functionPath Path of the function.
-   * @param paramNameToTypeMap Mapping from the name of each parameter as an identifier to its
-   *     expected argument type. This is needed for validation.
+   * @param paramNames The name of the function parameters.
+   * @param arguments The RexNode argument inputs to the function.
+   * @param returnType The expected function return type.
+   * @return The body of the function as a RexNode. This should either be a scalar sub-query or a
+   *     simple expression.
    */
-  void expandFunction(
+  RexNode expandFunction(
       @NonNull String functionBody,
       @NonNull ImmutableList<@NonNull String> functionPath,
-      @NonNull Map<@NonNull String, @NonNull RelDataType> paramNameToTypeMap);
+      @NonNull List<@NonNull String> paramNames,
+      @NonNull List<@NonNull RexNode> arguments,
+      @NonNull RelDataType returnType);
 }
