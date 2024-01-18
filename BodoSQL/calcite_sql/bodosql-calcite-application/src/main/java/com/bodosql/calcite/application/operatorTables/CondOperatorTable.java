@@ -107,7 +107,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           ReturnTypes.ARG0_FORCE_NULLABLE,
           // What Input Types does the function accept. This function accepts two
           // matching input types
-          OperandTypes.NUMERIC,
+          OperandTypes.NUMERIC.or(BodoOperandTypes.VARIANT),
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
