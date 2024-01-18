@@ -35,8 +35,7 @@ abstract class AbstractSnowflakeProjectIntoScanRule protected constructor(config
         var newIndex = 0
         for (indexVal in oldUsedColumns.iterator().withIndex()) {
             val oldIndex = indexVal.index
-            val value = indexVal.value
-            if (usedColumns.contains(value)) {
+            if (usedColumns.contains(oldIndex)) {
                 projMap[oldIndex] = newIndex
                 newIndex++
             }

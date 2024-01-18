@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.JoinBase
@@ -43,7 +44,7 @@ class PandasJoin(
         joinType: JoinRelType,
         semiJoinDone: Boolean,
     ): Join {
-        assert(PandasJoinRule.isValidNode(conditionExpr))
+        assert(BodoJoinConditionUtil.isValidNode(conditionExpr))
         return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)
     }
 
