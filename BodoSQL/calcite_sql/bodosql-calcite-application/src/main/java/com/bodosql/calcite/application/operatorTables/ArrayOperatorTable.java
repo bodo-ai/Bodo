@@ -8,12 +8,10 @@ import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -83,37 +81,11 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction ARRAY_MAP_GET =
-      SqlBasicFunction.create(
-              // What SqlKind should match?
-              SqlKind.ITEM,
-              // What Value should the return type be
-              BodoReturnTypes.ARRAY_MAP_GETITEM,
-              // The input can be any data type, any number of times.
-              // TODO: this may need to be variant as well.
+  // GET(val, idx) syntax
+  public static final SqlFunction ARRAY_MAP_GET = new BodoSqlItemOperatorGetFnSyntax();
 
-              // I can't do OperandTypes.or(OperandTypes.CHARACTER, OperandTypes.INTEGER)
-              // due to a bug with family operand.or with family operand types when checking
-              // arguments
-              // not in the 0-th index. I think the solution is modify
-              // CompositeSingleOperandTypeChecker.java
-              // similar to the changes we've made to fix to
-              // CompositeOperandTypeChecker.java
-              // ... but I'm not certain this is the correct fix, and I don't want to modify Calcite
-              // source
-              // files when there exists a very easy workaround. So for now, we'll just do an OR of
-              // the two
-              // sequences.
-              OperandTypes.or(
-                  OperandTypes.sequence(
-                      "GET(ARRAY_OR_MAP, CHARACTER)",
-                      BodoOperandTypes.ARRAY_OR_MAP,
-                      OperandTypes.CHARACTER),
-                  OperandTypes.sequence(
-                      "GET(ARRAY_OR_MAP, INTEGER)",
-                      BodoOperandTypes.ARRAY_OR_MAP,
-                      OperandTypes.INTEGER)))
-          .withName("GET");
+  // val[idx] syntax
+  public static final SqlOperator ARRAY_MAP_GET_BRACKET = new BodoSqlItemOperatorBracketsSyntax();
 
   /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
   public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
@@ -218,7 +190,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAYS_OVERLAP,
           ARRAY_CONTAINS,
           ARRAY_POSITION,
-          ARRAY_MAP_GET);
+          ARRAY_MAP_GET,
+          ARRAY_MAP_GET_BRACKET);
 
   @Override
   public void lookupOperatorOverloads(

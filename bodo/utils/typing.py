@@ -2817,6 +2817,26 @@ def gen_bodosql_case_func(
 gen_objmode_func_overload(warnings.warn, "none")
 
 
+def get_array_getitem_scalar_type(t):
+    """Returns scalar type of the array as returned by its getitem.
+
+    Args:
+        t (types.Type): input array type
+
+    Returns:
+        types.Type: scalar type (e.g int64, Timestamp, etc)
+    """
+    # Scalar type of most arrays is the same as dtype (e.g. int64), except
+    # DatetimeArrayType and null_array_type which have different dtype objects.
+    if isinstance(t, bodo.DatetimeArrayType):
+        return bodo.PandasTimestampType(t.tz)
+
+    if t == bodo.null_array_type:
+        return types.none
+
+    return t.dtype
+
+
 def get_castable_arr_dtype(arr_type: types.Type):
     """Convert a Bodo array type into a Type representation
     that can be used for casting an array via fix_arr_dtype.

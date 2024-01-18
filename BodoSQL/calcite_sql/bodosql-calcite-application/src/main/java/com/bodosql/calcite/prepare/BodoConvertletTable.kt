@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
@@ -33,6 +34,18 @@ import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
     init {
         registerOp(SqlNamedParameterOperator.INSTANCE, this::convertNamedParam)
+        /**
+         * The default Item implementation has this convertlet, so we also use this convertlet for our
+         * extended implementation.
+         *
+         * The `convertItem` convertlet only makes changes if we're indexing into "ROW" objects
+         * A "ROW" object is different from an array. It seems to be some sort of a struct type,
+         * I assume from indexing into some scalar subquery? I'm not sure. We don't seem to be
+         * using this functionality, but it seems more likely to cause a problem if exclude this.
+         * TODO: investigate and confirm how the convertItem convertlet works
+         */
+        registerOp(ArrayOperatorTable.ARRAY_MAP_GET, this::convertItem)
+        addAlias(ArrayOperatorTable.ARRAY_MAP_GET, ArrayOperatorTable.ARRAY_MAP_GET_BRACKET)
         addAlias(CastingOperatorTable.TO_NUMERIC, CastingOperatorTable.TO_NUMBER)
         addAlias(CastingOperatorTable.TO_DECIMAL, CastingOperatorTable.TO_NUMBER)
         addAlias(CastingOperatorTable.TRY_TO_NUMERIC, CastingOperatorTable.TRY_TO_NUMBER)

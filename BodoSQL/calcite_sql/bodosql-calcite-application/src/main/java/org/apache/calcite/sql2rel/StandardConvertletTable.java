@@ -1013,7 +1013,9 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
     return rexBuilder.makeNewInvocation(type, defaultCasts);
   }
 
-  private RexNode convertItem(
+  // BODO CHANGE: changed this to protected so that I can
+  // call in our child class
+  protected RexNode convertItem(
       @UnknownInitialization StandardConvertletTable this,
       SqlRexContext cx,
       SqlCall call) {

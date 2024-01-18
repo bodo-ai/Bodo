@@ -4257,7 +4257,9 @@ SqlOperator getItemOp() :
 |
     <SAFE_ORDINAL> { return SqlLibraryOperators.SAFE_ORDINAL; }
 |
-    { return SqlStdOperatorTable.ITEM; }
+        // BODO CHANGE: Replaced Calcite's default Item operator with our
+        // own custom operator that handles variant
+        { return ArrayOperatorTable.ARRAY_MAP_GET_BRACKET; }
 }
 
 /** Parses a comparison operator inside a SOME / ALL predicate. */

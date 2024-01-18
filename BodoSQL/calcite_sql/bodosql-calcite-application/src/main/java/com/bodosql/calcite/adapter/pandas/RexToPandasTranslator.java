@@ -281,7 +281,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     switch (node.getKind()) {
       case ITEM:
         assert operands.size() == 2;
-        return JsonCodeGen.visitArrayMapIndexOp(isOperandScalar(node.operands.get(0)), operands);
+        return JsonCodeGen.visitGetOp(
+            isOperandScalar(node.operands.get(0)), isOperandScalar(node.operands.get(1)), operands);
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported special operand call: "
@@ -1492,8 +1493,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return generateRandomFnInfo(input, isSingleRow);
       case ITEM:
         assert operands.size() == 2;
-        return JsonCodeGen.visitArrayMapIndexOp(
-            isOperandScalar(fnOperation.operands.get(0)), operands);
+        return JsonCodeGen.visitGetOp(
+            isOperandScalar(fnOperation.operands.get(0)),
+            isOperandScalar(fnOperation.operands.get(1)),
+            operands);
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */

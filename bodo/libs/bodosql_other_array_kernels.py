@@ -13,7 +13,10 @@ from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernels import get_field
+from bodo.libs.null_arr_ext import null_array_type, null_dtype
 from bodo.utils.typing import (
+    dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
     raise_bodo_error,
@@ -1118,13 +1121,13 @@ def uniform_util(lo, hi, gen):
     )
 
 
-def arr_get(arr, ind, is_scalar_arr=False):  # pragma: no cover
+def arr_get(arr, ind, is_scalar_arr=False, is_scalar_idx=True):  # pragma: no cover
     # Dummy function used for overload
     pass
 
 
 @overload(arr_get, no_unliteral=True)
-def overload_arr_get(arr, ind, is_scalar_arr=False):
+def overload_arr_get(arr, ind, is_scalar_arr=False, is_scalar_idx=True):
     """Handles cases where GET receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, ind]
@@ -1132,56 +1135,52 @@ def overload_arr_get(arr, ind, is_scalar_arr=False):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.arr_get",
-                ["arr", "ind", "is_scalar_arr"],
+                ["arr", "ind", "is_scalar_arr", "is_scalar_idx"],
                 i,
-                default_map={"is_scalar_arr": False},
+                default_map={"is_scalar_arr": False, "is_scalar_idx": True},
             )
 
-    def impl(arr, ind, is_scalar_arr=False):  # pragma: no cover
-        return arr_get_util(arr, ind, is_scalar_arr)
+    def impl(arr, ind, is_scalar_arr=False, is_scalar_idx=True):  # pragma: no cover
+        return arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx)
 
     return impl
 
 
-def arr_get_util(arr, ind, is_scalar_arr):  # pragma: no cover
+def arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx):  # pragma: no cover
     # Dummy function used for overload
     pass
 
 
 @overload(arr_get_util, no_unliteral=True)
-def overload_arr_get_util(arr, ind, is_scalar_arr):
+def overload_arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx):
     """
-    A dedicated kernel for the SQL function GET which takes in an array
-    and an index, and returns the elements at that index of the array
+    A dedicated kernel for the SQL function GET which takes in an array/map
+    and an index, and returns the elements at that index/key of the array/map.
+    For invalid inputs, null/null array is returned.
 
     Args:
         arr (array/column of arrays): the data array(s)
-        ind (integer/column of integers): the index/indices. Null is returned if ind is negative or out of bounds.
+        ind (integer/column of integers): the index/indices. Null is returned if ind is invalid or out of bounds.
         is_scalar_arr: if true, treats the inputs as scalar arrays i.e. a single element of an array of arrays
 
     Returns:
         arr's inner type/column of inner type: the element at ind of array arr
     """
 
-    verify_int_arg(ind, "GET", "ind")
-    arg_names = ["arr", "ind", "is_scalar_arr"]
-    arg_types = [arr, ind, is_scalar_arr]
-    propagate_null = [True, True, False]
+    arg_names = ["arr", "ind", "is_scalar_arr", "is_scalar_idx"]
+    arg_types = [arr, ind, is_scalar_arr, is_scalar_idx]
+    propagate_null = [True, True, False, False]
 
     is_scalar_arr_bool = get_overload_const_bool(
         is_scalar_arr, "arr_get", "is_scalar_arr"
     )
 
-    # If this input type is invalid, then we need to create a null array
-    invalid_type = (
-        not is_overload_none(arr)
-        and not is_array_item_array(arr)
-        and not (is_scalar_arr_bool and is_array_typ(arr, True))
+    is_scalar_idx_bool = get_overload_const_bool(
+        is_scalar_idx, "arr_get", "is_scalar_idx"
     )
 
-    if invalid_type or is_overload_none(arr):
-        out_dtype = bodo.null_array_type
-    else:
+    if is_valid_array_get(arr, ind, is_scalar_arr_bool, is_scalar_idx_bool):
+        # Handle array[int_idx] case
         dtype = (
             arr.data.dtype
             if bodo.hiframes.pd_series_ext.is_series_type(arr)
@@ -1193,19 +1192,80 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
             else dtype
         )
         out_dtype = bodo.utils.typing.to_nullable_type(arr_type)
-
-    if invalid_type:
-        scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
-    else:
         scalar_text = "if arg1 < 0 or arg1 >= len(arg0) or bodo.libs.array_kernels.isna(arg0, arg1):\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
         scalar_text += "else:\n"
         scalar_text += "   res[i] = arg0[arg1]"
+    elif is_valid_object_get(arr, ind, is_scalar_arr_bool, is_scalar_idx_bool):
+        # Handle map[str_idx] case
+        def impl(arr, ind, is_scalar_arr, is_scalar_idx):
+            return get_field(arr, ind, is_scalar_arr)
+
+        return impl
+    else:
+        # In all other cases, return null
+        out_dtype = bodo.null_array_type
+        scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
+
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
-        are_arrays=[not is_scalar_arr_bool, bodo.utils.utils.is_array_typ(ind), False],
+        are_arrays=[not is_scalar_arr_bool, not is_scalar_idx_bool, False, False],
     )
+
+
+def is_valid_array_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):
+    """Returns true if the input is a valid GET operation on an array type
+    That is, arg0 is an array type, and arg1 is a int type.
+
+    Note that we don't check for scalar nulls here, since that is implicitly handled by the
+    null array case.
+    """
+
+    # Check if arg0 is an array type
+    if not (
+        is_array_item_array(arg0_type)
+        or (arg0_scalar and is_array_typ(arg0_type, True))
+    ):
+        return False
+
+    # Check if arg1 is an int type
+    if not is_valid_int_arg(arg1_type):
+        return False
+
+    # is_valid_int_arg will return true if it's an int or an int array.
+    # The input is scalar, we need to disallow int array, because indexing
+    # an array by an array in GET should return null.
+    if arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True):
+        return False
+
+    return True
+
+
+def is_valid_object_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):
+    """
+    Returns true if the input is a valid GET operation on an object type.
+    That is, arg0 is an object type, and arg1 is a string type.
+
+    Note that we don't check for scalar nulls here, since that is implicitly handled by the
+    null array case.
+    """
+
+    # Check if arg0 is an object type
+    if not is_valid_SQL_object_arg(arg0_type):
+        return False
+
+    # Check if arg1 is an string type
+    if not is_valid_string_arg(arg1_type):
+        return False
+
+    # is_valid_int_arg will return true if it's an int or an int array.
+    # The input is scalar, we need to disallow string array, because indexing
+    # an object by an array in GET should return null.
+    if arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True):
+        return False
+
+    return True
