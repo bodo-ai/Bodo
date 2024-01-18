@@ -13,7 +13,9 @@ import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.dialect.SnowflakeSqlDialect
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.`fun`.SqlTrimFunction
+import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.type.AbstractSqlType
 import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.SqlTypeName
@@ -247,6 +249,28 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         writer.print("'")
     }
 
+    private fun unParseIsBoolean(writer: SqlWriter, call: SqlCall, leftPrec: Int, rightPrec: Int) {
+        val targetValue = when (call.kind) {
+            SqlKind.IS_FALSE, SqlKind.IS_NOT_FALSE -> false
+            else -> true
+        }
+
+        val isInequality = when (call.kind) {
+            SqlKind.IS_NOT_FALSE, SqlKind.IS_NOT_TRUE -> true
+            else -> false
+        }
+
+        val newOp = if (isInequality) {
+            SqlStdOperatorTable.IS_DISTINCT_FROM
+        } else {
+            SqlStdOperatorTable.IS_NOT_DISTINCT_FROM
+        }
+
+        val compValue = SqlLiteral.createBoolean(targetValue, SqlParserPos.ZERO)
+        val newCall = newOp.createCall(call.parserPosition, listOf(call.operand(0), compValue))
+        newCall.unparse(writer, leftPrec, rightPrec)
+    }
+
     override fun unparseCall(
         writer: SqlWriter,
         call: SqlCall,
@@ -254,6 +278,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         rightPrec: Int,
     ) {
         when (call.kind) {
+            SqlKind.IS_FALSE, SqlKind.IS_NOT_FALSE, SqlKind.IS_TRUE, SqlKind.IS_NOT_TRUE -> unParseIsBoolean(writer, call, leftPrec, rightPrec)
             SqlKind.TRIM -> unParseTrim(writer, call, leftPrec, rightPrec)
             SqlKind.OTHER, SqlKind.OTHER_FUNCTION -> {
                 when (call.operator.name) {
