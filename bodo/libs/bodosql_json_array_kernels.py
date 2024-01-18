@@ -794,7 +794,7 @@ def overload_get_field_util(data, field, is_scalar):
             scalar_text += f"else:\n"
             scalar_text += f"  res[i] = arg0[{repr(key_str)}]\n"
     elif map_mode:
-        out_dtype = json_type.value_arr_type
+        out_dtype = bodo.utils.typing.to_nullable_type(json_type.value_arr_type)
         scalar_text += "keys = list(arg0)\n"
         scalar_text += "if arg1 in keys:\n"
         scalar_text += "  value = arg0[arg1]\n"

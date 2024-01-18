@@ -49,6 +49,7 @@ from bodo.utils.cg_helpers import (
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
+    get_array_getitem_scalar_type,
     get_overload_const_int,
     get_overload_const_str,
     is_list_like_index_type,
@@ -95,7 +96,13 @@ class StructArrayType(types.ArrayCompatible):
         # TODO: consider enabling dict return if possible
         # if types.is_homogeneous(*self.data):
         #     return types.DictType(bodo.string_type, self.data[0].dtype)
-        return StructType(tuple(t.dtype for t in self.data), self.names)
+
+        # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+        # DatetimeArrayType and null_array_type which have different dtype objects.
+        # Therefore, we have to use get_array_getitem_scalar_type instead of dtype here
+        return StructType(
+            tuple(get_array_getitem_scalar_type(t) for t in self.data), self.names
+        )
 
     @classmethod
     def from_dict(cls, d):
@@ -892,7 +899,10 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
     assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
         ind_typ, types.Integer
     )
-    data_types = tuple(d.dtype for d in struct_arr_typ.data)
+    # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+    # DatetimeArrayType and null_array_type which have different dtype objects.
+    # Therefore, we have to use get_array_getitem_scalar_type instead of dtype here
+    data_types = tuple(get_array_getitem_scalar_type(d) for d in struct_arr_typ.data)
     # TODO: consider enabling dict return if possible
     # # return a regular dictionary if values have the same type, otherwise struct
     # if types.is_homogeneous(*struct_arr_typ.data):
@@ -920,8 +930,12 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
             )
             null_vals.append(na_val)
 
+            # NOTE: the scalar type of most arrays is the same as dtype (e.g. int64), except
+            # DatetimeArrayType and null_array_type which have different dtype objects.
+            # Therefore, we have to use get_array_getitem_scalar_type instead of dtype
             data_val_ptr = cgutils.alloca_once_value(
-                builder, context.get_constant_null(arr_typ.dtype)
+                builder,
+                context.get_constant_null(get_array_getitem_scalar_type(arr_typ)),
             )
             # check for not NA
             not_na_cond = builder.icmp_unsigned(
@@ -931,7 +945,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
                 data_val = context.compile_internal(
                     builder,
                     lambda arr, ind: arr[ind],
-                    arr_typ.dtype(arr_typ, types.int64),
+                    get_array_getitem_scalar_type(arr_typ)(arr_typ, types.int64),
                     [arr_ptr, ind],
                 )
                 builder.store(data_val, data_val_ptr)

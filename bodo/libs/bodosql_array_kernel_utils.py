@@ -22,6 +22,7 @@ from bodo.hiframes.pd_series_ext import (
     is_timedelta64_series_typ,
     pd_timedelta_type,
 )
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.utils.typing import (
     is_overload_bool,
     is_overload_constant_bool,
@@ -33,6 +34,31 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
+
+
+def is_valid_SQL_object_arg(arg):
+    """
+    Returns true if the given argument is a valid SQL object (scalar or column). This function is
+    used to check if an argument is valid for SQL functions that accept SQL objects as arguments.
+    """
+    return (
+        isinstance(arg, StructArrayType)
+        or isinstance(arg, StructType)
+        or (
+            isinstance(arg, bodo.libs.map_arr_ext.MapArrayType)
+            and (
+                arg.key_arr_type == bodo.string_array_type
+                or arg.key_arr_type == bodo.dict_str_arr_type
+            )
+        )
+        or (
+            isinstance(arg, bodo.libs.map_arr_ext.MapScalarType)
+            and (
+                arg.key_arr_type == bodo.string_array_type
+                or arg.key_arr_type == bodo.dict_str_arr_type
+            )
+        )
+    )
 
 
 def is_array_item_array(typ):

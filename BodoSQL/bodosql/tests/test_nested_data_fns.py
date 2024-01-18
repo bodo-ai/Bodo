@@ -126,6 +126,249 @@ def array_values(request):
     return request.param
 
 
+# Used in the fixture below
+mixed_struct_type = pa.struct(
+    [
+        pa.field("X", pa.string()),
+        pa.field("Y", pa.large_list(pa.float32())),
+        pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
+        pa.field(
+            "W",
+            pa.struct(
+                pa.struct(
+                    [
+                        pa.field(
+                            "A",
+                            pa.int32(),
+                            pa.field("B", pa.string()),
+                        )
+                    ]
+                )
+            ),
+        ),
+    ]
+)
+
+
+def wrapped_in_id_typ(typ):
+    return pa.struct(
+        [
+            pa.field("id", pa.int32()),
+            pa.field("value", typ),
+        ]
+    )
+
+
+nested_nested_df = pd.DataFrame(
+    {
+        "A": pd.array(
+            [
+                {
+                    "id": 1,
+                    "value": {
+                        "A": {
+                            "X": "AB",
+                            "Y": [1.1, 2.2],
+                            "Z": [[1], None, [3, None]],
+                            "W": {"A": 1, "B": "A"},
+                        },
+                        "B": {
+                            "X": "C",
+                            "Y": [1.1],
+                            "Z": [[11], None],
+                            "W": {"A": 1, "B": "ABC"},
+                        },
+                    },
+                },
+                {
+                    "id": 1,
+                    "value": {
+                        "A": {
+                            "X": "D",
+                            "Y": [4.0, np.nan],
+                            "Z": [[1], None],
+                            "W": {"A": 1, "B": ""},
+                        },
+                        "B": {
+                            "X": "VFD",
+                            "Y": [1.2],
+                            "Z": [[], [3, 1]],
+                            "W": {"A": 1, "B": "AA"},
+                        },
+                    },
+                },
+                None,
+            ]
+            * 2,
+            dtype=pd.ArrowDtype(
+                wrapped_in_id_typ(
+                    pa.struct(
+                        [
+                            pa.field("A", mixed_struct_type),
+                            pa.field("B", mixed_struct_type),
+                        ]
+                    )
+                )
+            ),
+        ),
+        "B": pd.Series([None, "random_key", None, "id", "value", None]),
+    }
+)
+
+"""
+These list contain pytest params containing a table with a two columns,
+"A" that is a SQL object array, and "B",
+which is a string column.
+the SQL object type in A will always have two fields, "id" and "value".
+id is always an integer, but value may vary between the returned tables.
+"""
+
+#List of data types represented as a pa map array
+map_object_params = [
+    pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {
+                        "A": pd.array(
+                            [
+                                {"id": 1, "value": 10},
+                                {"id": 1, "value": 20},
+                            ],
+                            dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                        ),
+                        "B": pd.Series(["id", "value"]),
+                    }
+                ),
+            },
+            id="int_map",
+        ),
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame({
+                "A": pd.Series([{
+                        "id": 1,
+                        "value": 10
+                    },
+                    None,
+                    {
+                        "id": 1,
+                        "value": -10
+                    },
+                    {
+                        "id": 1,
+                        "value": 0
+                    },
+                    ] * 2,
+                    dtype = pd.ArrowDtype(pa.map_(pa.string(), pa.int64()))
+                ),
+                "B": pd.Series(["random_key", "id", "value", None] * 2),
+            })
+            },
+            id="map_array"
+        ),
+]
+
+#List of data types represented as a pa struct array
+struct_object_params = [
+    pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {
+                        "A": pd.array(
+                            [
+                                {"id": 1, "value": 10},
+                                {"id": 1, "value": 20},
+                            ],
+                            dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.int32())),
+                        ),
+                        "B": pd.Series(["id", "value"]),
+                    }
+                ),
+            },
+            id="int_struct",
+        ),
+    pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {
+                        "A": pd.array(
+                            [
+                                {
+                                    "id": 1,
+                                    "value": pd.Timestamp("2020-01-01"),
+                                },
+                                {
+                                    "id": 1,
+                                    "value": pd.Timestamp("2020-01-02"),
+                                },
+                            ],
+                            dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.timestamp("ns"))),
+                        ),
+                        "B": pd.Series(["id", "value"]),
+                    }
+                ),
+            },
+            id="timestamp",
+        ),
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {
+                        "A": pd.array(
+                            [
+                                {
+                                    "id": 1,
+                                    "value": {
+                                        "X": "VFD",
+                                        "Y": [1.2],
+                                        "Z": [[], [3, 1]],
+                                        "W": {"A": 1, "B": "AA"},
+                                    },
+                                },
+                                {
+                                    "id": 1,
+                                    "value": {
+                                        "X": "D",
+                                        "Y": [4.0, np.nan],
+                                        "Z": [[1], None],
+                                        "W": {"A": 1, "B": ""},
+                                    },
+                                },
+                            ],
+                            dtype=pd.ArrowDtype(wrapped_in_id_typ(mixed_struct_type)),
+                        ),
+                        "B": pd.Series(["id", "value"]),
+                    }
+                ),
+            },
+            id="nested_nested_struct",
+        ),
+        pytest.param(
+            {
+                "TABLE1": nested_nested_df,
+            },
+            id="nested_nested_struct",
+            marks=pytest.mark.slow,
+        ),
+]
+
+
+@pytest.fixture(
+    params= map_object_params + struct_object_params
+)
+def sql_object_array_values(request):
+    "Tables containing sql object types that can either be struct or map internally"
+    return request.param
+
+
+@pytest.fixture(
+    params = map_object_params
+)
+def map_array_values(request):
+    "Tables containing sql object types that are map internally"
+    return request.param
+
+
 @pytest.fixture(
     params=[
         pytest.param(
@@ -1987,10 +2230,13 @@ def test_array_index_scalar(args, syntax, memory_leak_check):
 
     expr = args[0]
 
+    # TO_VARIANT isn't needed, but wanted to confirm variant behavior.
+    # TO_VARIANT is used in the scalar test with the opposite syntax,
+    # to make sure that's no weird syntax specific bugs.
     arr_expr = f"ARRAY_CONSTRUCT({expr})"
-    idx_call = f"{arr_expr}[0]" if syntax else f"GET({arr_expr}, 0)"
+    idx_call = f"{arr_expr}[0]" if syntax else f"GET(TO_VARIANT({arr_expr}), 0)"
 
-    query = f"SELECT CASE WHEN {idx_call} = {expr} THEN {idx_call} ELSE NULL END as out_col FROM TABLE1"
+    query = f"SELECT CASE WHEN {idx_call} = {expr} THEN {expr} ELSE NULL END as out_col FROM TABLE1"
     ctx = {"TABLE1": pd.DataFrame({"UNUSED_COL": list(range(10))})}
     py_output = pd.DataFrame({"OUT_COL": [args[1]] * 10})
 
@@ -2012,35 +2258,49 @@ def test_array_index_scalar(args, syntax, memory_leak_check):
         pytest.param(False, id="GET_syntax"),
     ],
 )
-@pytest.mark.parametrize(
-    "args",
-    [
-        pytest.param(("1", 1), marks=pytest.mark.slow),
-        pytest.param(("'hello world'", "hello world"), marks=pytest.mark.slow),
-        pytest.param(
-            ("TIMESTAMP '1969-07-20 20:17:40'", pd.Timestamp("1969-07-20 20:17:40")),
-        ),
-    ],
-)
-def test_array_index_column(args, syntax, memory_leak_check):
+def test_map_index_column_scalar(sql_object_array_values, syntax, memory_leak_check):
     """
-    Test Array indexing works correctly with different data type
+    Test map indexing works correctly with different data type
     """
 
-    expr = args[0]
-    idx_call = "arr_col[0]" if syntax else "GET(arr_col, 0)"
-    query = f"SELECT {idx_call} as out_col from (SELECT ARRAY_CONSTRUCT({expr}) as arr_col FROM TABLE1)"
-    ctx = {"TABLE1": pd.DataFrame({"UNUSED_COL": list(range(10))})}
-    py_output = pd.DataFrame({"OUT_COL": [args[1]] * 10})
+    # TO_VARIANT isn't needed, but wanted to confirm variant behavior.
+    # TO_VARIANT is used in the scalar test with the opposite syntax,
+    # to make sure that's no weird syntax specific bugs.
+    idx_call = "TO_VARIANT(A)['value']" if syntax else "GET(A, 'value')"
+    non_existent_idx_call = (
+        "TO_VARIANT(A)['non_existent_key']" if syntax else "GET(A, 'non_existent_key')"
+    )
+    query = (
+        f"SELECT {idx_call} as out_col, {non_existent_idx_call} as null_col FROM TABLE1"
+    )
+
+    input_col = sql_object_array_values["TABLE1"]["A"]
+    output_col = []
+
+    if isinstance(input_col.dtype.pyarrow_dtype, pa.MapType):
+        for row in input_col:
+            if row is None or (isinstance(row, list) and pd.isna(row).all()) or (not isinstance(row, list) and pd.isna(row)):
+                output_col.append(None)
+            else:
+                output_col.append(row[1][1])
+    else:
+        for row in input_col:
+            if row is None or pd.isna(row):
+                output_col.append(None)
+            else:
+                output_col.append(row["value"])
+
+    py_out = pd.DataFrame(
+        {"OUT_COL": pd.array(output_col), "NULL_COL": [None] * len(output_col)}
+    )
 
     check_query(
         query,
-        ctx,
+        sql_object_array_values,
         None,
-        check_names=False,
         check_dtype=False,
         sort_output=False,
-        expected_output=py_output,
+        expected_output=py_out,
     )
 
 
@@ -2054,7 +2314,7 @@ def test_array_index_stress_test(memory_leak_check):
     SELECT
         GET(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(GET(ARRAY_CONSTRUCT(0), 0))[ARRAY_CONSTRUCT(0)[0]]), 0) as out_col_1,
         arr_col[arr_col[arr_col[arr_col[arr_col[0]]]] + 1] as out_col_2,
-        GET(arr_col, GET(arr_col, GET( arr_col, GET(arr_col, GET(arr_col, 0)))) + 1) as out_col_3
+        GET(arr_col, GET(arr_col, GET(arr_col, GET(arr_col, GET(arr_col, 0)))) + 1) as out_col_3
     from
     (SELECT ARRAY_CONSTRUCT(int_col_0, int_col_1, int_col_2) as arr_col FROM TABLE1)
     """
@@ -2161,4 +2421,250 @@ def test_array_index_out_of_bounds(memory_leak_check):
         check_dtype=False,
         sort_output=False,
         expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="get_syntax"),
+    ],
+)
+@pytest.mark.parametrize(
+    "expr",
+    [
+        pytest.param("1", id="int"),
+        pytest.param("1.23", id="float"),
+        pytest.param("'1'", id="string", marks=pytest.mark.slow),
+        pytest.param("True", id="bool", marks=pytest.mark.slow),
+    ],
+)
+def test_index_variant_invalid(expr, syntax, memory_leak_check):
+    """
+    Test indexing works correctly on variant data that is neither
+    struct nor array (should return null).
+    """
+
+    arr_expr = f"TO_VARIANT(input_col)"
+    idx_call = f"{arr_expr}[{expr}]" if syntax else f"GET({arr_expr}, {expr})"
+
+    query = f"SELECT CASE WHEN {idx_call} IS NULL THEN 'A' ELSE 'B' END as OUT_COL FROM TABLE1"
+    ctx = {"TABLE1": pd.DataFrame({"INPUT_COL": list(range(10))})}
+    py_output = pd.DataFrame({"OUT_COL": ["A"] * 10})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="Index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="GET_syntax"),
+    ],
+)
+def test_map_index_scalar_scalar(sql_object_array_values, syntax, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data type, when indexing with a scalar
+    """
+
+    idx_call = "TO_VARIANT(A)['value']" if syntax else "GET(A, 'value')"
+    query = f"SELECT CASE WHEN A['id'] > 0 THEN {idx_call} ELSE NULL END as out_col FROM TABLE1"
+
+    input_col = sql_object_array_values["TABLE1"]["A"]
+    output_col = []
+
+    if isinstance(input_col.dtype.pyarrow_dtype, pa.MapType):
+        for row in input_col:
+            if row is None or (isinstance(row, list) and pd.isna(row).all()) or (not isinstance(row, list) and pd.isna(row)):
+                output_col.append(None)
+            else:
+                output_col.append(row[1][1])
+    else:
+        for row in input_col:
+            if row is None or pd.isna(row):
+                output_col.append(None)
+            else:
+                output_col.append(row["value"])
+
+    py_out = pd.DataFrame({"out_col": pd.array(output_col)})
+
+    check_query(
+        query,
+        sql_object_array_values,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_out,
+    )
+
+
+
+@pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="Index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="GET_syntax"),
+    ],
+)
+def test_map_index_scalar_column(map_array_values, syntax, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data type, when indexing with a column.
+    Currently, this can only be done on sql objects that are internally represented with
+    the map array type.
+    """
+
+    idx_call = "TO_VARIANT(A)[B]" if syntax else "GET(A, B)"
+    query = f"SELECT CASE WHEN A['id'] > 0 THEN {idx_call} ELSE NULL END as out_col FROM TABLE1"
+
+    input_table = map_array_values["TABLE1"]
+
+    def lambda_fn(val):
+        if val is None or pd.isna(val).any():
+            return None
+        if val.B == "id":
+            return val.A[0][1]
+        elif val.B == "value":
+            return val.A[1][1]
+        else:
+            return None
+
+    output_col = input_table.apply(lambda x: lambda_fn(x), axis=1)
+
+    py_out = pd.DataFrame({"out_col": pd.array(output_col)})
+
+    check_query(
+        query,
+        map_array_values,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_out,
+    )
+
+@pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="Index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="GET_syntax"),
+    ],
+)
+def test_map_index_column_column(map_array_values, syntax, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data type, when indexing with a column.
+    Currently, this can only be done on sql objects that are internally represented with
+    the map array type.
+    """
+
+    idx_call = "TO_VARIANT(A)[B]" if syntax else "GET(A, B)"
+    query = f"SELECT {idx_call} as out_col FROM TABLE1"
+
+    input_table = map_array_values["TABLE1"]
+
+    def lambda_fn(val):
+        if val is None or pd.isna(val).any():
+            return None
+        if val.B == "id":
+            return val.A[0][1]
+        elif val.B == "value":
+            return val.A[1][1]
+        else:
+            return None
+
+    output_col = input_table.apply(lambda x: lambda_fn(x), axis=1)
+
+    py_out = pd.DataFrame({"out_col": pd.array(output_col)})
+
+    check_query(
+        query,
+        map_array_values,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_out,
+    )
+
+
+@pytest.mark.slow()
+def test_map_index_nested(memory_leak_check):
+    """
+    Making sure that map indexing works for nested maps
+    // TODO: extend these tests after #7041 merges
+    // https://bodo.atlassian.net/browse/BSE-2434
+    """
+
+    sql_object_array_values = {
+        "TABLE1": nested_nested_df,
+    }
+
+    query = f"""
+    SELECT
+        GET(A, 'value')['A']['X'] as out_col_1,
+        GET(A['value']['A'], 'W') as out_col_2
+    from
+    TABLE1
+    """
+
+    input_col = sql_object_array_values["TABLE1"]["A"]
+    output_col_1 = []
+    output_col_2 = []
+
+    for row in input_col:
+        if row is None or pd.isna(row):
+            output_col_1.append(None)
+            output_col_2.append(None)
+        else:
+            firstVal = row["value"]
+            if firstVal is None or pd.isna(firstVal):
+                output_col_1.append(None)
+                output_col_2.append(None)
+            else:
+                secondVal = firstVal["A"]
+                if secondVal is None or pd.isna(secondVal):
+                    output_col_1.append(None)
+                    output_col_2.append(None)
+                else:
+                    output_col_1.append(secondVal["X"])
+                    output_col_2.append(secondVal["W"])
+
+    py_out = pd.DataFrame(
+        {
+            "out_col_1": pd.array(output_col_1, dtype=pd.ArrowDtype(pa.string())),
+            "out_col_2": pd.array(
+                output_col_2,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        pa.struct(
+                            [
+                                pa.field(
+                                    "A",
+                                    pa.int32(),
+                                    pa.field("B", pa.string()),
+                                )
+                            ]
+                        )
+                    )
+                ),
+            ),
+        }
+    )
+
+    check_query(
+        query,
+        sql_object_array_values,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_out,
     )
