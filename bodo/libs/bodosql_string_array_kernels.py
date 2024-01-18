@@ -10,6 +10,7 @@ from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
+import bodo.libs.uuid
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     BodoError,
@@ -2973,6 +2974,50 @@ def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_i
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def uuid4(A):
+    if A == bodo.none:
+
+        def impl(A):  # pragma: no cover
+            return bodo.libs.uuid.uuidV4()
+
+    else:
+
+        def impl(A):  # pragma: no cover
+            n = len(A)
+            res = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 36)
+            numba.parfors.parfor.init_prange()
+            for i in numba.parfors.parfor.internal_prange(n):
+                res[i] = bodo.libs.uuid.uuidV4()
+            return res
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def uuid5(namespace, name, dict_encoding_state=None, func_id=-1):
+    verify_string_arg(namespace, "UUID_STRING", "namespace")
+    verify_string_arg(name, "UUID_STRING", "name")
+
+    out_dtype = bodo.string_array_type
+    arg_names = ["namespace", "name", "dict_encoding_state", "func_id"]
+    arg_types = [namespace, name, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
+    scalar_text = "res[i] = bodo.libs.uuid.uuidV5(arg0, arg1)\n"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
         # Add support for dict encoding caching with streaming.
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,

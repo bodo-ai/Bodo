@@ -270,6 +270,8 @@ broadcasted_fixed_arg_functions = {
     "try_to_timestamp",
     "tz_aware_interval_add",
     "uniform",
+    "uuid4",
+    "uuid5",
     "upper",
     "week",
     "weekday",

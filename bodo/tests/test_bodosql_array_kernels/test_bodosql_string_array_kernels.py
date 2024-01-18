@@ -3,6 +3,7 @@
 """
 
 
+import uuid
 from builtins import round as py_round
 
 import numpy as np
@@ -3166,3 +3167,74 @@ def test_base64_encode_decode(
             py_output=bytes(string, encoding="utf-8"),
             check_dtype=False,
         )
+
+
+def test_uuidv4(memory_leak_check):
+    @bodo.jit
+    def impl(A):
+        return pd.Series(bodo.libs.bodosql_array_kernels.uuid4(A))
+
+    A = pd.DataFrame({"a": [0] * 5})
+    x = impl(A)
+
+    assert len(x) == 5
+    for uid in x:
+        # This will fail if uid is not a well-formed UUIDv4
+        assert uuid.UUID(uid, version=4)
+
+    # Check that all ids are unique
+    assert len(set(x)) == 5
+
+
+def test_uuidv4_scalar(memory_leak_check):
+    @bodo.jit
+    def impl():
+        return bodo.libs.bodosql_array_kernels.uuid4(None)
+
+    x = impl()
+    # This will fail if x is not a well-formed UUIDv4
+    assert uuid.UUID(x, version=4)
+
+
+def test_uuidv5(memory_leak_check):
+    def impl(namespace, name):
+        return pd.Series(bodo.libs.bodosql_array_kernels.uuid5(namespace, name))
+
+    namespace = pd.Series(
+        [
+            str(x)
+            for x in [
+                uuid.NAMESPACE_DNS,
+                uuid.NAMESPACE_URL,
+                uuid.NAMESPACE_OID,
+                uuid.NAMESPACE_X500,
+                uuid.NAMESPACE_DNS,
+                uuid.NAMESPACE_DNS,
+                uuid.NAMESPACE_DNS,
+            ]
+        ]
+    )
+
+    name = pd.Series(["foo", "bar", "baz", "qux", "foo", "foo0", "foo1", "foo2"])
+
+    answer = pd.Series(
+        [str(uuid.uuid5(uuid.UUID(ns), n)) for (ns, n) in zip(namespace, name)]
+    )
+    check_func(
+        impl,
+        (namespace, name),
+        py_output=answer,
+        check_dtype=False,
+    )
+
+
+def test_uuidv5_scalar(memory_leak_check):
+    def impl(namespace, name):
+        return bodo.libs.bodosql_array_kernels.uuid5(namespace, name)
+
+    check_func(
+        impl,
+        ("fe971b24-9572-4005-b22f-351e9c09274d", "foo"),
+        py_output="dc0b6f65-fca6-5b4b-9d37-ccc3fde1f3e2",
+        only_seq=True,
+    )

@@ -338,6 +338,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_storage_manager.cpp",
     "bodo/libs/_utils.cpp",
     "bodo/libs/_fft.cpp",
+    "bodo/libs/_uuid.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",

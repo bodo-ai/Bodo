@@ -1,3 +1,5 @@
+import uuid
+
 import pandas as pd
 import pytest
 
@@ -2140,4 +2142,65 @@ def test_jarowinkler_similarity(datapath, memory_leak_check):
 
     check_query(
         query, ctx, None, check_dtype=False, check_names=False, expected_output=jw_data
+    )
+
+
+def test_uuid_string_niladic(memory_leak_check):
+    """Check that every UUID is unique"""
+
+    query = (
+        "SELECT COUNT(DISTINCT uuid) from (SELECT UUID_STRING() as uuid from table1)"
+    )
+    ctx = {"TABLE1": pd.DataFrame({"a": pd.Series([0] * 10)})}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({0: [10]}),
+        is_out_distributed=False,
+    )
+
+
+def test_uuid_string_with_arguments(memory_leak_check):
+    """Check that every UUID generated matches python's uuid5"""
+
+    query = "SELECT UUID_STRING(NS, N) as uuid from table1"
+
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "NS": pd.Series(
+                    [
+                        str(x)
+                        for x in [
+                            uuid.NAMESPACE_DNS,
+                            uuid.NAMESPACE_URL,
+                            uuid.NAMESPACE_OID,
+                            uuid.NAMESPACE_X500,
+                            uuid.NAMESPACE_DNS,
+                            uuid.NAMESPACE_DNS,
+                            uuid.NAMESPACE_DNS,
+                        ]
+                    ]
+                ),
+                "N": pd.Series(["foo", "bar", "baz", "qux", "foo", "foo0", "foo1"]),
+            }
+        )
+    }
+
+    answer = pd.Series(
+        [
+            str(uuid.uuid5(uuid.UUID(ns), n))
+            for (ns, n) in zip(ctx["TABLE1"]["NS"], ctx["TABLE1"]["N"])
+        ]
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({0: answer}),
     )
