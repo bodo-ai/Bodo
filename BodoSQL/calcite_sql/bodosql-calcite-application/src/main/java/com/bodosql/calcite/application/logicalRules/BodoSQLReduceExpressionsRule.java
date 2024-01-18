@@ -419,8 +419,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
           Lists.newArrayList(predicates.constantMap.entrySet());
       BodoSQLReduceExpressionsRule.RexReplacer replacer =
           new BodoSQLReduceExpressionsRule.RexReplacer(
-              simplify,
-              unknownAs,
+              simplify.rexBuilder,
               Pair.left(pairs),
               Pair.right(pairs),
               Collections.nCopies(pairs.size(), false));
@@ -462,7 +461,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     }
 
     new BodoSQLReduceExpressionsRule.RexReplacer(
-            simplify, unknownAs, constExps, reducedValues, addCasts)
+            simplify.rexBuilder, constExps, reducedValues, addCasts)
         .mutate(expList);
     return true;
   }
@@ -582,19 +581,20 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
    * Replaces expressions with their reductions. Note that we only have to look for RexCall, since
    * nothing else is reducible in the first place.
    */
-  protected static class RexReplacer extends RexShuttle {
-    private final RexSimplify simplify;
+  public static class RexReplacer extends RexShuttle {
+
+    // Bodo Change: Replace the simplifier info with just a RexBuilder.
+    private final RexBuilder builder;
     private final List<RexNode> reducibleExps;
     private final List<RexNode> reducedValues;
     private final List<Boolean> addCasts;
 
     RexReplacer(
-        RexSimplify simplify,
-        RexUnknownAs unknownAs,
+        RexBuilder builder,
         List<RexNode> reducibleExps,
         List<RexNode> reducedValues,
         List<Boolean> addCasts) {
-      this.simplify = simplify;
+      this.builder = builder;
       this.reducibleExps = reducibleExps;
       this.reducedValues = reducedValues;
       this.addCasts = addCasts;
@@ -605,6 +605,15 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       RexNode node = visit(inputRef);
       if (node == null) {
         return super.visitInputRef(inputRef);
+      }
+      return node;
+    }
+
+    @Override
+    public RexNode visitLiteral(RexLiteral literal) {
+      RexNode node = visit(literal);
+      if (node == null) {
+        return super.visitLiteral(literal);
       }
       return node;
     }
@@ -635,7 +644,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
         // the same expression in a Project's digest where it has
         // type VARCHAR(3), and that's wrong.
         RelDataType type = call.getType();
-        replacement = simplify.rexBuilder.makeAbstractCast(type, replacement, false);
+        replacement = builder.makeAbstractCast(type, replacement, false);
       }
       return replacement;
     }

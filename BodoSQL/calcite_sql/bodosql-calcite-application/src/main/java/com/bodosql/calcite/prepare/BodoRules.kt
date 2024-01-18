@@ -24,6 +24,7 @@ import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
 import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
+import com.bodosql.calcite.application.logicalRules.PartialJoinConditionIntoChildrenRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
@@ -661,6 +662,9 @@ object BodoRules {
     @JvmStatic
     val SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE: RelOptRule = SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()
 
+    @JvmStatic
+    val PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE: RelOptRule = PartialJoinConditionIntoChildrenRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
     // RULE GROUPINGS
 
     /**
@@ -881,6 +885,7 @@ object BodoRules {
             JOIN_CONDITION_TO_FILTER_RULE,
             PANDAS_FILTER_INTO_JOIN_RULE,
             FILTER_JOIN_RULE,
+            PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE,
         ),
     ).toList()
 
