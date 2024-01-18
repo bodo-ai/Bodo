@@ -21,6 +21,7 @@ import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.sql2rel.SqlRexContext
 import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.StandardConvertletTable
@@ -234,7 +235,18 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             // Convert NULLIFZERO(a) into IFF(a = 0, NULL, a)
             val originalOperands = call.operandList.map { op -> cx.convertExpression(op) }
             val arg0 = originalOperands[0]
-            val literalZero = cx.rexBuilder.makeZeroLiteral(arg0.type)
+
+            val inputIsVariant = arg0.type is VariantSqlType
+            val literalZero = if (inputIsVariant) {
+                // Construct a TO_VARIANT(0::INTEGER) to compare the input with
+                val type = cx.typeFactory.createSqlType(SqlTypeName.INTEGER)
+                val zero = cx.rexBuilder.makeZeroLiteral(type)
+                cx.rexBuilder.makeCall(CastingOperatorTable.TO_VARIANT, listOf(zero))
+            } else {
+                // Create a 0 using the input's type
+                cx.rexBuilder.makeZeroLiteral(arg0.type)
+            }
+
             val equalityCheck = cx.rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, listOf(arg0, literalZero))
             // NULL returned in the "then" branch
             val nullValue = cx.rexBuilder.makeNullLiteral(arg0.type)
