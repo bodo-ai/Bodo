@@ -34,7 +34,7 @@ def test_expression_udf(test_db_snowflake_catalog, memory_leak_check):
     check_func(impl, (bc, query), py_output=pd.DataFrame({"OUTPUT": [2]}))
 
 
-def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
+def test_query_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
     gives a message that they aren't supported yet,
@@ -45,17 +45,17 @@ def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
     if bodo.get_size() != 1:
         pytest.skip("This test is only designed for 1 rank")
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select QUERY_FUNCTION()"
+    query = "select QUERY_FUNCTION() as OUTPUT"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=pd.DataFrame({"OUTPUT": [1500000]}),
+        check_dtype=False,
+    )
 
 
 def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
@@ -78,7 +78,7 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
     ):
         impl(bc, query)
 
@@ -346,7 +346,7 @@ def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet\\.",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
     ):
         impl(bc, query)
 

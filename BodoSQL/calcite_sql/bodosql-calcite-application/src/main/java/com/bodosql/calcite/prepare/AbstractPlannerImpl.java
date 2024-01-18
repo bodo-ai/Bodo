@@ -18,6 +18,7 @@ package com.bodosql.calcite.prepare;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
@@ -55,6 +56,7 @@ import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexExecutor;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlNode;
@@ -407,7 +409,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       // The body can either be a simple expression or a query.
       // These have different potential API calls, so we process them separately.
       SqlParseException firstException;
-      SqlParseException secondException = null;
+      SqlParseException secondException;
       try {
         return expandExpressionFunction(
             functionBody, functionPath, paramNames, arguments, returnType);
@@ -415,24 +417,22 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
         firstException = e;
       }
       try {
-        expandQueryFunction(functionBody, functionPath, paramNames, arguments, returnType);
+        return expandQueryFunction(functionBody, functionPath, paramNames, arguments, returnType);
       } catch (SqlParseException e) {
         secondException = e;
       }
-      if (firstException != null && secondException != null) {
-        // Both parsing attempts failed.
-        String msg =
-            String.format(
-                Locale.ROOT,
-                "Failed to parse the function either as an Expression or as a query.\n"
-                    + " When parsing the body as an Expression we get the following error: %s\n"
-                    + "After parsing the body as a query we got this error: %s\n"
-                    + "If you UDF body is an Expression without SELECT refer to message 1,"
-                    + " otherwise refer to message 2.",
-                firstException,
-                secondException);
-        throw new RuntimeException(msg);
-      }
+      // Both parsing attempts failed.
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "Failed to parse the function either as an Expression or as a query.\n"
+                  + " When parsing the body as an Expression we get the following error: %s\n"
+                  + "After parsing the body as a query we got this error: %s\n"
+                  + "If you UDF body is an Expression without SELECT refer to message 1,"
+                  + " otherwise refer to message 2.",
+              firstException,
+              secondException);
+      throw new RuntimeException(msg);
     } catch (Exception e) {
       // If we have failed to inline then clear the in progress functions to ensure we can't impact
       // future queries
@@ -440,14 +440,10 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       inProgressFunctionExpansion.clear();
       // Wrap an exceptions with an indication that we couldn't inline the UDF.
       throw new RuntimeException(baseErrorMessage, e);
+    } finally {
+      // Remove from the in progress functions
+      inProgressFunctionExpansion.remove(functionPath);
     }
-
-    String msg =
-        String.format(
-            Locale.ROOT,
-            "%s BodoSQL does not have support for Snowflake UDFs yet.",
-            baseErrorMessage);
-    throw new RuntimeException(msg);
   }
 
   /**
@@ -502,13 +498,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       argMap.put(paramNames.get(i), arguments.get(i));
     }
     RexNode result = sqlToRelConverter.convertExpression(validatedNode, argMap);
-    // Remove from the in progress functions
-    inProgressFunctionExpansion.remove(functionPath);
-    if (result.getType().equals(returnType)) {
-      return result;
-    } else {
-      return rexBuilder.makeCast(returnType, result, true, false);
-    }
+    return rexBuilder.ensureType(returnType, result, false);
   }
 
   /**
@@ -519,8 +509,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    * @param paramNames The name of the function parameters.
    * @param arguments The RexNode argument inputs to the function.
    * @param returnType The expected function return type.
+   * @return The compiled output as a RexSubQuery.
    */
-  private void expandQueryFunction(
+  private RexNode expandQueryFunction(
       @NonNull String functionBody,
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
@@ -555,6 +546,28 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
           createCatalogReaderWithDefaultPath(functionPath.subList(0, 2));
       final SqlValidator validator = createSqlValidator(catalogReader);
       SqlNode validatedNode = validator.validateParameterizedExpression(node, Map.of());
+
+      // Create a new SQL to RelConvert for converting the query into a root and extracting
+      // the plan. We need a new convert because it uses a separate catalog reader and validator.
+      final RexBuilder rexBuilder = createRexBuilder();
+      final RelOptCluster cluster =
+          BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
+      final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
+      final SqlToRelConverter sqlToRelConverter =
+          new BodoSqlToRelConverter(
+              this, validator, catalogReader, cluster, convertletTable, config, this);
+
+      RelRoot outputRoot = sqlToRelConverter.convertQuery(validatedNode, false, false);
+      final RelRoot outputRoot2 =
+          outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
+      RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
+      RexSubQuery subQuery = RexSubQuery.scalar(result);
+      return rexBuilder.ensureType(returnType, subQuery, false);
+    } else {
+      String msg =
+          "BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a"
+              + " query.";
+      throw new RuntimeException(msg);
     }
   }
 
