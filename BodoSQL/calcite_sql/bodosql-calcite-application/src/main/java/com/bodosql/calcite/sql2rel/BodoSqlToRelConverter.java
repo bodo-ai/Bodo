@@ -7,7 +7,7 @@ import com.bodosql.calcite.rel.core.RowSample;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.google.common.collect.ImmutableList;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.apache.calcite.plan.RelOptCluster;
@@ -151,12 +151,27 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             }
             // Construct parameter type information.
             List<FunctionParameter> parameters = snowflakeUdf.getParameters();
-            Map<String, RelDataType> paramNameToTypeMap = new HashMap<>();
-            for (FunctionParameter parameter : parameters) {
-              paramNameToTypeMap.put(parameter.getName(), parameter.getType(typeFactory));
+            List<SqlNode> operands = extendedCall.getOperandList();
+            List<String> names = new ArrayList<>();
+            List<RexNode> arguments = new ArrayList<>();
+            for (int i = 0; i < parameters.size(); i++) {
+              FunctionParameter parameter = parameters.get(i);
+              // Add the name
+              String name = parameter.getName();
+              names.add(name);
+              // Add the RexNode
+              SqlNode operand = operands.get(i);
+              RexNode convertedOperand = convertExpression(operand);
+              arguments.add(convertedOperand);
             }
-            functionExpander.expandFunction(
-                snowflakeUdf.getBody(), snowflakeUdf.getFunctionPath(), paramNameToTypeMap);
+            // Get the expected return type for casting the output
+            RelDataType returnType = snowflakeUdf.getReturnType(typeFactory);
+            return functionExpander.expandFunction(
+                snowflakeUdf.getBody(),
+                snowflakeUdf.getFunctionPath(),
+                names,
+                arguments,
+                returnType);
           }
         }
       }
