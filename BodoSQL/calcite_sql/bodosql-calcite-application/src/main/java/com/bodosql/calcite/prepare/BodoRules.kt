@@ -1,7 +1,6 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasJoin
-import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeLimitLockRule
@@ -29,6 +28,7 @@ import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEl
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
+import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_BOTH_PROJECT
@@ -519,7 +519,7 @@ object BodoRules {
         FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
             .withPredicate { join, _, exp ->
                 when (join) {
-                    is PandasJoin -> PandasJoinRule.isValidNode(exp)
+                    is PandasJoin -> BodoJoinConditionUtil.isValidNode(exp)
                     else -> true
                 }
             }

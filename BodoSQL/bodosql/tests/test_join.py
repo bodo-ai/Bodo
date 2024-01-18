@@ -21,6 +21,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import pytest_slow_unless_join
+from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
@@ -679,3 +680,26 @@ def test_join_div(spark_info, join_type, memory_leak_check):
         "T2": df2,
     }
     check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
+
+
+def test_join_invalid_condition(memory_leak_check):
+    """
+    Make sure an invalid join condition throws a proper error.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    df1 = pd.DataFrame({"A": pd.array([2, 4, 3, None] * 4, dtype="Int64")})
+    df2 = pd.DataFrame({"C": pd.array([1, None, 2] * 3, dtype="Int64")})
+    query1 = f"select * from ARG1 full outer join ARG2 on COALESCE(ARG1.A, ARG2.C) = 11"
+    ctx = {
+        "ARG1": df1,
+        "ARG2": df2,
+    }
+    with pytest.raises(
+        BodoError,
+        match=".* Encountered an unsupported join condition in an outer join that cannot be rewritten",
+    ):
+        check_query(
+            query1, ctx, None, check_dtype=False, check_names=False, expected_output=1
+        )
