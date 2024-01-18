@@ -77,6 +77,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtokToArray;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateUUIDString;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getOptimizedStringFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getStringFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getTrigFnCode;
@@ -1157,8 +1158,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  protected Expr visitStringFunc(RexCall fnOperation, List<Expr> operands) {
-    return visitStringFunc(fnOperation, operands, List.of());
+  protected Expr visitStringFunc(RexCall fnOperation, List<Expr> operands, boolean isSingleRow) {
+    return visitStringFunc(fnOperation, operands, List.of(), isSingleRow);
   }
 
   /**
@@ -1171,7 +1172,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @return The generated expression.
    */
   protected Expr visitStringFunc(
-      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+      RexCall fnOperation,
+      List<Expr> operands,
+      List<Pair<String, Expr>> streamingNamedArgs,
+      boolean isSingleRow) {
     String fnName = fnOperation.getOperator().getName();
     switch (fnName) {
       case "REGEXP_LIKE":
@@ -1241,6 +1245,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "BASE64_DECODE_BINARY":
       case "TRY_BASE64_DECODE_BINARY":
         return generateBase64DecodeFn(fnName, operands, streamingNamedArgs);
+      case "UUID_STRING":
+        return generateUUIDString(input, isSingleRow, operands, streamingNamedArgs);
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected String function: %s", fnName));
     }
@@ -1889,7 +1895,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TRY_BASE64_DECODE_STRING":
           case "BASE64_DECODE_BINARY":
           case "TRY_BASE64_DECODE_BINARY":
-            return visitStringFunc(fnOperation, operands);
+          case "UUID_STRING":
+            return visitStringFunc(fnOperation, operands, isSingleRow);
           case "DATE_TRUNC":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
             unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);

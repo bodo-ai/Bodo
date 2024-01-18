@@ -1384,6 +1384,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
     SetAttrStringFromPyInit(m, table_builder_cpp);
     SetAttrStringFromPyInit(m, fft_cpp);
+    SetAttrStringFromPyInit(m, uuid_cpp);
 
 #ifdef IS_TESTING
     SetAttrStringFromPyInit(m, test_cpp);

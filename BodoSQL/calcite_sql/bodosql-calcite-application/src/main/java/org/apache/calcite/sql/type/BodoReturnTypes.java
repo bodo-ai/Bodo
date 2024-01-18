@@ -273,6 +273,11 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference VARCHAR_128 = explicit(SqlTypeName.VARCHAR, 128);
 
     /**
+     * Type-inference strategy for returning a VARCHAR with precision 36 (e.g. UUIDs)
+     */
+    public static final SqlReturnTypeInference VARCHAR_36 = explicit(SqlTypeName.VARCHAR, 36);
+
+    /**
      * Type-inference strategy for returning a VARCHAR with precision 128
      * and SqlTypeTransforms.TO_NULLABLE.
      */
