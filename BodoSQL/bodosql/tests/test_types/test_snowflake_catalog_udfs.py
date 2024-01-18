@@ -232,9 +232,9 @@ def test_unsupported_udf_with_named_args(test_db_snowflake_catalog, memory_leak_
         impl(bc, query)
 
 
-def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
+def test_unsupported_udf_dollar_string(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDFs with contents that can't be parsed give an error indicating this.
+    Test that Snowflake UDFs with a dollar string can be parsed.
 
     DOLLAR_STRING is manually defined inside TEST_DB.PUBLIC with a $$ quoted string
     as the body.
@@ -250,7 +250,30 @@ def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\.\nCaused by: Failed to parse the function either as an Expression or as a query\\.",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.DOLLAR_STRING\\. BodoSQL does not have support for Snowflake UDFs yet",
+    ):
+        impl(bc, query)
+
+
+def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test that Snowflake UDFs with contents that can't be parsed give an error indicating this.
+
+    BAD_ALIAS_FUNCTION is manually defined inside TEST_DB.PUBLIC to use the alias OUTER,
+    which our parser does not support yet.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select BAD_ALIAS_FUNCTION()"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.BAD_ALIAS_FUNCTION\\.\nCaused by: Failed to parse the function either as an Expression or as a query\\.",
     ):
         impl(bc, query)
 
