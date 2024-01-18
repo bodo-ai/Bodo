@@ -5268,6 +5268,11 @@ String SimpleStringLiteral() :
 |
     <BIG_QUERY_DOUBLE_QUOTED_STRING> {
         return SqlParserUtil.stripQuotes(token.image, DQ, DQ, "\\\"", Casing.UNCHANGED);
+     }
+|
+    // Bodo Change: Also accept QUOTED_IDENTIFIERs as string literals
+    <QUOTED_IDENTIFIER> {
+        return SqlParserUtil.stripQuotes(token.image, DQ, DQ, "\\\"", Casing.UNCHANGED);
     }
 }
 
