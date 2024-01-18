@@ -330,6 +330,9 @@
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCall.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlCallBinding$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlCallBinding$DefaultCallHolder.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlCallBinding.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDataTypeSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDelete.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem$SqlDeleteUsingItemOperator.class</exclude>

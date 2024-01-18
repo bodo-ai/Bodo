@@ -7,6 +7,7 @@ import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.SqlIntervalQualifier
+import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
@@ -18,7 +19,6 @@ import org.apache.calcite.sql.parser.SqlParserUtil
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import org.apache.calcite.util.Static.RESOURCE
 import java.util.*
-import kotlin.collections.ArrayList
 
 class SqlBodoParserUtil {
     companion object {
@@ -57,7 +57,27 @@ class SqlBodoParserUtil {
         @JvmStatic
         fun createBuiltinTableFunction(name: SqlIdentifier, pos: SqlParserPos, args: List<SqlNode>): SqlNode {
             if (name.simple == "FLATTEN") {
-                return TableFunctionOperatorTable.FLATTEN.createCall(pos, args)
+                // In Snowflake FLATTEN supports calling functions using a mix of
+                // position and named arguments, which is not generally supported in SQL.
+                // Calcite has the backed in assumption that it must be either all positional
+                // or all named (which Snowflake docs support for UDFs), so we add support
+                // for this mix by inserting the parameter names for any initial arguments
+                // preceding the first named argument.
+                val argNames = listOf("INPUT", "PATH", "OUTER", "RECURSIVE", "MODE")
+                val updatedArgs = if (args.any { x -> x.kind == SqlKind.ARGUMENT_ASSIGNMENT } && args.size <= argNames.size) {
+                    var seenNamed = false
+                    args.mapIndexed { i, arg ->
+                        if (!seenNamed && arg.kind != SqlKind.ARGUMENT_ASSIGNMENT) {
+                            SqlStdOperatorTable.ARGUMENT_ASSIGNMENT.createCall(arg.parserPosition, arg, SqlIdentifier(argNames[i], arg.parserPosition))
+                        } else {
+                            seenNamed = true
+                            arg
+                        }
+                    }
+                } else {
+                    args
+                }
+                return TableFunctionOperatorTable.FLATTEN.createCall(pos, updatedArgs)
             } else {
                 throw RuntimeException("Internal Error: Unexpected builtin table")
             }
