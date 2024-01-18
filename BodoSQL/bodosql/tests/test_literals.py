@@ -665,3 +665,25 @@ def test_array_literals_case(query, answer, memory_leak_check):
         check_dtype=False,
         sort_output=False,
     )
+
+
+def test_dollar_strings(datapath, memory_leak_check):
+    """
+    Test that parsing of dollar-enclosed strings matches the behavior
+    described here: https://docs.snowflake.com/en/sql-reference/data-types-text#dollar-quoted-string-constants
+    """
+    with open(datapath("dollar_string_test.sql")) as f:
+        query = f.read()
+    answer = pd.DataFrame(
+        {"idx1": list(range(1, 5)), "idx2": list(range(1, 5)), "L": [25, 55, 31, 7]}
+    )
+    check_query(
+        query,
+        {},
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        only_jit_seq=True,
+        is_out_distributed=False,
+    )
