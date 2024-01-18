@@ -557,6 +557,14 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction UUID_STRING =
+      SqlBasicFunction.create(
+          "UUID_STRING",
+          BodoReturnTypes.VARCHAR_36,
+          // either UUID_STRING() for uuid4 or UUID_STRING(<STRING>, <STRING>) for uuid5.
+          OperandTypes.STRING_STRING.or(OperandTypes.NILADIC),
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
@@ -622,7 +630,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           RLIKE,
           LPAD,
           RPAD,
-          REPLACE);
+          REPLACE,
+          UUID_STRING);
 
   @Override
   public void lookupOperatorOverloads(

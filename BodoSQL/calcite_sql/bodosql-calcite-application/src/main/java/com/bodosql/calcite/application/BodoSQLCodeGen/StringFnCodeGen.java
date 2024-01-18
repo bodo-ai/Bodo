@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.Tuple;
 import com.bodosql.calcite.ir.ExprKt;
@@ -512,5 +513,23 @@ public class StringFnCodeGen {
     args.add(new Expr.BooleanLiteral(tryMode));
     assert args.size() == 3;
     return ExprKt.BodoSQLKernel(kernel, args, streamingNamedArgs);
+  }
+
+  public static Expr generateUUIDString(
+      BodoEngineTable input,
+      boolean isSingleRow,
+      List<Expr> operands,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+    if (!operands.isEmpty()) {
+      return ExprKt.BodoSQLKernel("uuid5", operands, streamingNamedArgs);
+    } else {
+      Expr arg;
+      if (isSingleRow) {
+        arg = Expr.None.INSTANCE;
+      } else {
+        arg = input;
+      }
+      return ExprKt.BodoSQLKernel("uuid4", List.of(arg), List.of());
+    }
   }
 }
