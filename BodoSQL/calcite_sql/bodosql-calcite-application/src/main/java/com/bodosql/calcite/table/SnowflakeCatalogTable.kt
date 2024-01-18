@@ -4,7 +4,7 @@ import com.bodosql.calcite.adapter.pandas.calciteLogicalProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan.Companion.create
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
-import com.bodosql.calcite.application.utils.checkTablePermissions.Companion.canRead
+import com.bodosql.calcite.application.utils.CheckTablePermissions.Companion.canRead
 import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
 import com.bodosql.calcite.schema.ExpandViewInput
@@ -178,6 +178,7 @@ open class SnowflakeCatalogTable(
             if (canRead(rel)) {
                 return rel
             }
+            // TODO: FIX the else with an error.
         } catch (e: Exception) {
             // Log the failure
             val message = String.format(

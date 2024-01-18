@@ -10,7 +10,7 @@ import org.apache.calcite.util.Util
 /**
  * Helper functions related to checking table permissions in a RelNode tree.
  */
-class checkTablePermissions {
+class CheckTablePermissions {
 
     companion object {
 
