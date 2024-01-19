@@ -28,8 +28,8 @@ requirements:
     - cross-python_{{ target_platform }}    # [build_platform != target_platform]
     - cython <3.0                           # [build_platform != target_platform]
     - numpy >=1.23                          # [build_platform != target_platform]
-    - arrow-cpp =13.0.0                     # [build_platform != target_platform]
-    - pyarrow =13.0.0                       # [build_platform != target_platform]
+    - libarrow =14.0.2                      # [build_platform != target_platform]
+    - pyarrow =14.0.2                       # [build_platform != target_platform]
     - numba 0.58.1
 
   host:
@@ -41,11 +41,11 @@ requirements:
     - cython <3.0
     - pandas >=2,<2.1
     - fsspec >=2021.09
-    - arrow-cpp =13.0.0
-    - pyarrow =13.0.0
-    - boost-cpp =1.82
+    - libarrow =14.0.2
+    - pyarrow =14.0.2
+    - boost-cpp =1.84
     - fmt =10.1
-    - libcurl <=8.4
+    - libcurl <=8.5
     - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_* # [not win]
     - h5py
     - mpich *=h* # [not win]
@@ -61,8 +61,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=2,<2.1
     - fsspec >=2021.09
-    - pyarrow =13.0.0
-    - libcurl <=8.4
+    - pyarrow =14.0.2
     - numba =0.58.1
     - mpich *=h* # [not win]
     - msmpi # [win]

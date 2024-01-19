@@ -1474,7 +1474,7 @@ def create_extractall_methods(is_multi_group):
         the regex expression has two capture groups.
         On the other hand,
         pd.Series(["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
-        [4, 3, 5, 1, 0, 2, 6, 11]).str.extractall(r"(?P<BBB>[abd]+)\d+")
+        [4, 3, 5, 1, 0, 2, 6, 11]).str.extractall(r"(?P<BBB>[abd]+)\\d+")
         will invoke the implementation with is_multi_group set to False,
         as the regex consists of only one capture group.
     """
