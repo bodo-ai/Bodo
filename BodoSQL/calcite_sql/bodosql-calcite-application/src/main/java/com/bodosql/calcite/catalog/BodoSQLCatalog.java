@@ -1,9 +1,11 @@
 package com.bodosql.calcite.catalog;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
@@ -108,7 +110,8 @@ public interface BodoSQLCatalog {
    *     table.
    * @return The generated code to produce the append write.
    */
-  Expr generateAppendWriteCode(Variable varName, List<String> tableName);
+  Expr generateAppendWriteCode(
+      PandasCodeGenVisitor visitor, Variable varName, List<String> tableName);
 
   /**
    * Generates the code necessary to produce a write expression from the given catalog.
@@ -121,10 +124,12 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   Expr generateWriteCode(
+      PandasCodeGenVisitor visitor,
       Variable varName,
       List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType);
+      SqlCreateTable.CreateTableType createTableType,
+      SnowflakeCreateTableMetadata meta);
 
   /**
    * Generates the code necessary to produce the streaming write initialization code from the given
@@ -167,12 +172,14 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce the write-appending code
    */
   Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecisions);
+      Expr columnPrecisions,
+      SnowflakeCreateTableMetadata meta);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.

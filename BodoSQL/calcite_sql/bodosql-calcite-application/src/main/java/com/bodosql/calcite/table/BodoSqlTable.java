@@ -5,8 +5,10 @@
 package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -210,7 +212,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param varName Name of the variable to write.
    * @return The generated code to write the table.
    */
-  public abstract Expr generateWriteCode(Variable varName);
+  public abstract Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName);
 
   /**
    * Generate the code needed to write the given variable to storage.
@@ -220,7 +222,8 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public abstract Expr generateWriteCode(Variable varName, String extraArgs);
+  public abstract Expr generateWriteCode(
+      PandasCodeGenVisitor visitor, Variable varName, String extraArgs);
 
   /**
    * Generate the streaming code needed to initialize a writer for the given variable.
@@ -230,12 +233,14 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   public abstract Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID);
 
   public abstract Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecisions);
+      Expr columnPrecisions,
+      SnowflakeCreateTableMetadata meta);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely

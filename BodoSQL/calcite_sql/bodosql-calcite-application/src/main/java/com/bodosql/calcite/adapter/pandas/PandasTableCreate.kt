@@ -3,12 +3,12 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.tableCreateProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.LogicalTableCreate
 import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.ddl.SqlCreateTable
 
@@ -21,7 +21,9 @@ class PandasTableCreate(
     isReplace: Boolean,
     createTableType: SqlCreateTable.CreateTableType,
     path: List<String>,
-) : LogicalTableCreate(cluster, traitSet.replace(PandasRel.CONVENTION), input, schema, tableName, isReplace, createTableType, path), PandasRel {
+    meta: SnowflakeCreateTableMetadata,
+
+) : TableCreateBase(cluster, traitSet.replace(PandasRel.CONVENTION), input, schema, tableName, isReplace, createTableType, path, meta), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableCreate {
         return PandasTableCreate(
@@ -32,7 +34,8 @@ class PandasTableCreate(
             tableName,
             isReplace,
             createTableType,
-            schemaPath,
+            path,
+            meta,
         )
     }
 

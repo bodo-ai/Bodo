@@ -3,8 +3,10 @@ package com.bodosql.calcite.table;
 import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -106,7 +108,7 @@ public class LocalTable extends BodoSqlTable {
    * @return The generated code to write the table.
    */
   @Override
-  public Expr generateWriteCode(Variable varName) {
+  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName) {
     assert this.isWriteable
         : "Internal error: Local table not writeable in call to generateWriteCode";
     return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), ""));
@@ -120,7 +122,7 @@ public class LocalTable extends BodoSqlTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public Expr generateWriteCode(Variable varName, String extraArgs) {
+  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
     assert this.isWriteable;
     return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), extraArgs));
   }
@@ -136,12 +138,14 @@ public class LocalTable extends BodoSqlTable {
   }
 
   public Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable dfVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecisions) {
+      Expr columnPrecisions,
+      SnowflakeCreateTableMetadata meta) {
     throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
   }
 

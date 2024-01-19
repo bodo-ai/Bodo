@@ -21,6 +21,7 @@ class SqlSnowflakeColumnDeclaration(
     dataType: SqlDataTypeSpec,
     val defaultExpr: SqlNode?,
     val incrementExpr: Pair<SqlLiteral, SqlLiteral>?,
+    val comment: SqlNode?,
     strategy: ColumnStrategy?,
 ) : SqlColumnDeclaration(pos, name, dataType, defaultExpr, strategy) {
 
@@ -43,6 +44,10 @@ class SqlSnowflakeColumnDeclaration(
             writer.sep(",")
             incrementExpr.right.unparse(writer, leftPrec, rightPrec)
             writer.sep(")")
+        }
+        comment?.let {
+            writer.keyword("COMMENT")
+            comment.unparse(writer, leftPrec, rightPrec)
         }
     }
 

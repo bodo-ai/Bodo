@@ -304,7 +304,6 @@
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$MySchemaPlus.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/AggregateCall.class</exclude>
-                                        <exclude>org/apache/calcite/rel/core/LogicalTableCreate.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableCreate.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableModify$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableModify$Operation.class</exclude>

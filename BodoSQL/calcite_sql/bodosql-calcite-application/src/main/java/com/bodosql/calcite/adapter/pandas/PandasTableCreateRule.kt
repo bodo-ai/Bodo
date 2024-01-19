@@ -1,16 +1,16 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
-import org.apache.calcite.rel.core.LogicalTableCreate
 
 class PandasTableCreateRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(
-                LogicalTableCreate::class.java,
+                BodoLogicalTableCreate::class.java,
                 Convention.NONE,
                 PandasRel.CONVENTION,
                 "PandasTableCreateRule",
@@ -19,7 +19,7 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
     }
 
     override fun convert(rel: RelNode): RelNode {
-        val create = rel as LogicalTableCreate
+        val create = rel as BodoLogicalTableCreate
         val traitSet = rel.traitSet.replace(PandasRel.CONVENTION)
         return PandasTableCreate(
             rel.cluster,
@@ -32,7 +32,8 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
             create.tableName,
             create.isReplace,
             create.createTableType,
-            create.schemaPath,
+            create.path,
+            create.meta,
         )
     }
 }

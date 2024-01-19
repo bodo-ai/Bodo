@@ -1,8 +1,10 @@
 package com.bodosql.calcite.schema;
 
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
@@ -194,12 +196,14 @@ public class CatalogSchema extends BodoSqlSchema {
    * @return The generated code to compute the write in Python.
    */
   public Expr generateWriteCode(
+      PandasCodeGenVisitor visitor,
       Variable varName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
+      SqlCreateTable.CreateTableType createTableType,
+      SnowflakeCreateTableMetadata meta) {
     return this.catalog.generateWriteCode(
-        varName, createTablePath(tableName), ifExists, createTableType);
+        visitor, varName, createTablePath(tableName), ifExists, createTableType, meta);
   }
 
   public Expr generateStreamingWriteInitCode(
@@ -212,14 +216,23 @@ public class CatalogSchema extends BodoSqlSchema {
   }
 
   public Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecision) {
+      Expr columnPrecision,
+      SnowflakeCreateTableMetadata meta) {
     return this.catalog.generateStreamingWriteAppendCode(
-        stateVarName, tableVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecision);
+        visitor,
+        stateVarName,
+        tableVarName,
+        colNamesGlobal,
+        isLastVarName,
+        iterVarName,
+        columnPrecision,
+        meta);
   }
 
   /** @return The catalog for the schema. */
