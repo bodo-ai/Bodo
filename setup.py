@@ -633,7 +633,7 @@ setup(
         if develop_mode
         else [
             "numba==0.58.1",
-            "pyarrow==13.0.0",
+            "pyarrow==14.0.2",
             "pandas>=2,<2.1",
             "numpy>=1.23,<1.27",
             "fsspec>=2021.09",

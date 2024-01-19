@@ -22,10 +22,11 @@
 # cython: language_level = 3
 
 from cython cimport binding
-from pyarrow._fs cimport FileSystem
+
 from pyarrow.includes.common cimport *
 from pyarrow.includes.libarrow cimport *
 from pyarrow.includes.libarrow_fs cimport *
+from pyarrow._fs cimport FileSystem
 
 from pyarrow.lib import frombytes, tobytes
 from pyarrow.util import _stringify_path

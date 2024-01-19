@@ -2333,7 +2333,7 @@ def test_read_parquet_hive_partitions_type_clash(datapath):
 
     with pytest.raises(
         BodoError,
-        match="error from pyarrow: ArrowInvalid: Unable to merge: Field test_date has incompatible types:",
+        match="error from pyarrow: ArrowTypeError: Unable to merge: Field test_date has incompatible types:",
     ):
         bodo.jit(test_impl)()
 
