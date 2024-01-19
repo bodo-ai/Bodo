@@ -537,8 +537,8 @@ def create_overload_cmp_operator(op):
         if is_str_arr_type(lhs) or is_str_arr_type(rhs):
             return bodo.libs.str_arr_ext.create_binary_op_overload(op)(lhs, rhs)
 
-        # decimal_arr
-        if isinstance(lhs, Decimal128Type) and isinstance(rhs, Decimal128Type):
+        # decimal scalar
+        if isinstance(lhs, Decimal128Type) or isinstance(rhs, Decimal128Type):
             return bodo.libs.decimal_arr_ext.decimal_create_cmp_op_overload(op)(
                 lhs, rhs
             )

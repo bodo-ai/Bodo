@@ -9,6 +9,7 @@ The precision can be up to 38, the scale must be less or equal to precision.'
 """
 import operator
 from decimal import Decimal
+from enum import Enum
 
 import llvmlite.binding as ll
 import numba
@@ -42,12 +43,20 @@ ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
 ll.add_symbol("int64_to_decimal", decimal_ext.int64_to_decimal)
-ll.add_symbol("decimal_cmp_eq", decimal_ext.decimal_cmp_eq)
-ll.add_symbol("decimal_cmp_ne", decimal_ext.decimal_cmp_ne)
-ll.add_symbol("decimal_cmp_gt", decimal_ext.decimal_cmp_gt)
-ll.add_symbol("decimal_cmp_ge", decimal_ext.decimal_cmp_ge)
-ll.add_symbol("decimal_cmp_lt", decimal_ext.decimal_cmp_lt)
-ll.add_symbol("decimal_cmp_le", decimal_ext.decimal_cmp_le)
+
+ll.add_symbol("arrow_compute_cmp_py_entry", decimal_ext.arrow_compute_cmp_py_entry)
+ll.add_symbol(
+    "arrow_compute_cmp_decimal_int_py_entry",
+    decimal_ext.arrow_compute_cmp_decimal_int_py_entry,
+)
+ll.add_symbol(
+    "arrow_compute_cmp_decimal_float_py_entry",
+    decimal_ext.arrow_compute_cmp_decimal_float_py_entry,
+)
+ll.add_symbol(
+    "arrow_compute_cmp_decimal_decimal_py_entry",
+    decimal_ext.arrow_compute_cmp_decimal_decimal_py_entry,
+)
 
 
 from bodo.utils.indexing import (
@@ -67,6 +76,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
+    is_scalar_type,
 )
 
 int128_type = types.Integer("int128", 128)
@@ -242,21 +252,42 @@ def decimal128type_to_int64_tuple(typingctx, val):
     return types.UniTuple(types.int64, 2)(val), codegen
 
 
-@intrinsic(prefer_literal=True)
-def decimal128type_cmp(typingctx, val1, scale1, val2, scale2, func_name):
-    assert is_overload_constant_str(func_name)
-    _func_name = get_overload_const_str(func_name)
+_arrow_compute_cmp_decimal_int = types.ExternalFunction(
+    "arrow_compute_cmp_decimal_int_py_entry",
+    types.bool_(
+        types.int32,
+        int128_type,
+        types.int32,
+        types.int32,
+        types.int64,
+    ),
+)
 
-    def codegen(context, builder, signature, args):
-        val1, scale1, val2, scale2, _ = args
-        fnty = lir.FunctionType(
-            lir.IntType(1),
-            [lir.IntType(128), lir.IntType(64), lir.IntType(128), lir.IntType(64)],
-        )
-        fn = cgutils.get_or_insert_function(builder.module, fnty, name=_func_name)
-        return builder.call(fn, (val1, scale1, val2, scale2))
 
-    return types.boolean(val1, scale1, val2, scale2, func_name), codegen
+_arrow_compute_cmp_decimal_float = types.ExternalFunction(
+    "arrow_compute_cmp_decimal_float_py_entry",
+    types.bool_(
+        types.int32,
+        int128_type,
+        types.int32,
+        types.int32,
+        types.float64,
+    ),
+)
+
+
+_arrow_compute_cmp_decimal_decimal = types.ExternalFunction(
+    "arrow_compute_cmp_decimal_decimal_py_entry",
+    types.bool_(
+        types.int32,
+        int128_type,
+        types.int32,
+        types.int32,
+        types.int32,
+        types.int32,
+        int128_type,
+    ),
+)
 
 
 def decimal_create_cmp_op_overload(op):
@@ -264,13 +295,82 @@ def decimal_create_cmp_op_overload(op):
 
     def overload_cmp(lhs, rhs):
         if isinstance(lhs, Decimal128Type) and isinstance(rhs, Decimal128Type):
-            _func_name = "decimal_cmp_" + op.__name__
+            op_enum = cmp_op_to_enum[op].value
+            precision1 = lhs.precision
             scale1 = lhs.scale
+            precision2 = rhs.precision
             scale2 = rhs.scale
-            # TODO: Make sure the precisions are compared correctly
 
             def impl(lhs, rhs):  # pragma: no cover
-                return decimal128type_cmp(lhs, scale1, rhs, scale2, _func_name)
+                out = _arrow_compute_cmp_decimal_decimal(
+                    op_enum,
+                    decimal128type_to_int128(lhs),
+                    precision1,
+                    scale1,
+                    precision2,
+                    scale2,
+                    decimal128type_to_int128(rhs),
+                )
+                bodo.utils.utils.check_and_propagate_cpp_exception()
+                return out
+
+            return impl
+
+        elif isinstance(lhs, Decimal128Type) and isinstance(rhs, types.Integer):
+            op_enum = cmp_op_to_enum[op].value
+            precision = lhs.precision
+            scale = lhs.scale
+
+            def impl(lhs, rhs):  # pragma: no cover
+                out = _arrow_compute_cmp_decimal_int(
+                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                )
+                bodo.utils.utils.check_and_propagate_cpp_exception()
+                return out
+
+            return impl
+
+        elif isinstance(lhs, types.Integer) and isinstance(rhs, Decimal128Type):
+            op_enum = cmp_op_to_enum[op].value
+            precision = rhs.precision
+            scale = rhs.scale
+            op_enum = _reverse_cmp_op[op_enum]
+
+            def impl(lhs, rhs):  # pragma: no cover
+                out = _arrow_compute_cmp_decimal_int(
+                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                )
+                bodo.utils.utils.check_and_propagate_cpp_exception()
+                return out
+
+            return impl
+
+        elif isinstance(lhs, Decimal128Type) and isinstance(rhs, types.Float):
+            op_enum = cmp_op_to_enum[op].value
+            precision = lhs.precision
+            scale = lhs.scale
+
+            def impl(lhs, rhs):  # pragma: no cover
+                out = _arrow_compute_cmp_decimal_float(
+                    op_enum, decimal128type_to_int128(lhs), precision, scale, rhs
+                )
+                bodo.utils.utils.check_and_propagate_cpp_exception()
+                return out
+
+            return impl
+
+        elif isinstance(lhs, types.Float) and isinstance(rhs, Decimal128Type):
+            op_enum = cmp_op_to_enum[op].value
+            precision = rhs.precision
+            scale = rhs.scale
+            op_enum = _reverse_cmp_op[op_enum]
+
+            def impl(lhs, rhs):  # pragma: no cover
+                out = _arrow_compute_cmp_decimal_float(
+                    op_enum, decimal128type_to_int128(rhs), precision, scale, lhs
+                )
+                bodo.utils.utils.check_and_propagate_cpp_exception()
+                return out
 
             return impl
 
@@ -836,3 +936,144 @@ def decimal_arr_getitem(A, ind):
     raise BodoError(
         f"getitem for DecimalArray with indexing type {ind} not supported."
     )  # pragma: no cover
+
+
+####################### cmp operators ###############################
+
+
+# int values designating cmp operators to pass to C++
+# XXX: these are defined in _decimal_ext.cpp and must match here
+class CmpOpEnum(Enum):
+    LT = 0
+    LE = 1
+    EQ = 2
+    NE = 3
+    GT = 4
+    GE = 5
+
+
+# Reverse of cmp operators to use when we switch arguments (e.g. a <= b to b >= a)
+_reverse_cmp_op = {
+    CmpOpEnum.LT.value: CmpOpEnum.GT.value,
+    CmpOpEnum.LE.value: CmpOpEnum.GE.value,
+    CmpOpEnum.EQ.value: CmpOpEnum.EQ.value,
+    CmpOpEnum.NE.value: CmpOpEnum.NE.value,
+    CmpOpEnum.GT.value: CmpOpEnum.LT.value,
+    CmpOpEnum.GE.value: CmpOpEnum.LE.value,
+}
+
+
+cmp_op_to_enum = {
+    operator.lt: CmpOpEnum.LT,
+    operator.le: CmpOpEnum.LE,
+    operator.eq: CmpOpEnum.EQ,
+    operator.ne: CmpOpEnum.NE,
+    operator.gt: CmpOpEnum.GT,
+    operator.ge: CmpOpEnum.GE,
+}
+
+
+def array_or_scalar_to_info(a):  # pragma: no cover
+    pass
+
+
+@overload(array_or_scalar_to_info)
+def overload_array_or_scalar_to_info(a):
+    """Returns array_info for array or scalar (converted to array) input, and a flag
+    indicating that input was scalar.
+    """
+    from bodo.libs.array import array_to_info
+
+    if bodo.utils.utils.is_array_typ(a, False):
+        return lambda a: (array_to_info(a), False)  # pragma: no cover
+
+    assert is_scalar_type(
+        a
+    ), f"array_or_scalar_to_info: scalar type expected but input is {a}"
+
+    return lambda a: (
+        array_to_info(bodo.utils.conversion.coerce_to_array(a, True, True, 1, False)),
+        True,
+    )  # pragma: no cover
+
+
+def call_arrow_compute_cmp(op, lhs, rhs):
+    """Create an implementation that calls Arrow compute for comparison
+    operator op with input types lhs and rhs
+    """
+    from bodo.libs.array import (
+        array_info_type,
+        delete_info,
+        info_to_array,
+    )
+
+    _arrow_compute_cmp = types.ExternalFunction(
+        "arrow_compute_cmp_py_entry",
+        array_info_type(
+            types.int32,
+            array_info_type,
+            array_info_type,
+            types.bool_,
+            types.bool_,
+        ),
+    )
+
+    op_enum = cmp_op_to_enum[op].value
+    out_array_type = bodo.boolean_array_type
+
+    def impl_pc_binop(lhs, rhs):  # pragma: no cover
+        # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
+        # convert back to scalars
+        lhs, is_scalar_lhs = array_or_scalar_to_info(lhs)
+        rhs, is_scalar_rhs = array_or_scalar_to_info(rhs)
+        out_info = _arrow_compute_cmp(op_enum, lhs, rhs, is_scalar_lhs, is_scalar_rhs)
+        bodo.utils.utils.check_and_propagate_cpp_exception()
+        out_arr = info_to_array(out_info, out_array_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl_pc_binop
+
+
+def create_cmp_op_overload(op):
+    """Creates an overload function (not implementation) for comparison operator op
+    that handles decimal array input(s).
+    """
+
+    def overload_decimal_op(lhs, rhs):
+        if isinstance(lhs, DecimalArrayType) or isinstance(rhs, DecimalArrayType):
+            allowed_types = (
+                DecimalArrayType,
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                types.Array,
+                types.Integer,
+                types.Float,
+                Decimal128Type,
+            )
+            # TODO[BSE-2502]: support other types
+            if not isinstance(lhs, allowed_types) or not isinstance(rhs, allowed_types):
+                raise BodoError(f"Invalid decimal comparison with {lhs} and {rhs}")
+            return call_arrow_compute_cmp(op, lhs, rhs)
+
+    return overload_decimal_op
+
+
+cmp_ops = [
+    operator.lt,
+    operator.le,
+    operator.eq,
+    operator.ne,
+    operator.gt,
+    operator.ge,
+]
+
+
+def _install_cmp_ops():
+    """Install overloads for comparison operators"""
+    for op in cmp_ops:
+        overload_impl = create_cmp_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_cmp_ops()

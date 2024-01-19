@@ -1311,6 +1311,11 @@ class SeriesPass:
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
+            # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
+            and not (
+                any(isinstance(t, DecimalArrayType) for t in (typ1, typ2))
+                and rhs.fn in cmp_ops
+            )
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
@@ -1329,6 +1334,11 @@ class SeriesPass:
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+            # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
+            and not (
+                any(isinstance(t, DecimalArrayType) for t in (typ1, typ2))
+                and rhs.fn in cmp_ops
+            )
         ):
             overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
