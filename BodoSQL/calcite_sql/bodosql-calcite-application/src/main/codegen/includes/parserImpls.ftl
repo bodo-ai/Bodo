@@ -130,6 +130,7 @@ SqlNode ColumnWithType() :
     Pair<SqlLiteral,SqlLiteral> incrementExpr = null;
     SqlLiteral incrementStart = null;
     SqlLiteral incrementStep = null;
+    SqlNode comment = null;
 }
 {
     id = CompoundIdentifier()
@@ -145,6 +146,7 @@ SqlNode ColumnWithType() :
           )
           { incrementExpr = new Pair<SqlLiteral, SqlLiteral>(incrementStart, incrementStep); }
         )
+    |   ( <COMMENT> comment = StringLiteral() )
     )*
     {
         return new SqlSnowflakeColumnDeclaration(
@@ -153,6 +155,7 @@ SqlNode ColumnWithType() :
             type.withNullable(nullable),
             defaultExpr,
             incrementExpr,
+            comment,
             null
         );
     }
@@ -245,6 +248,7 @@ SqlNode ColumnWithOptionalType() :
             type.withNullable(nullable),
             null,
             null,
+            null,
             null
         );
     }
@@ -274,6 +278,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
     SqlNodeList columnList = null;
     SqlNodeList clusterExprs = null;
     boolean copyGrants = false;
+    SqlNode comment = null;
 }
 {
     tableType = TableTypeOpt()
@@ -292,10 +297,11 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             (
               clusterExprs = ClusterBy()
             | ( <COPY> <GRANTS> { copyGrants = true; } )
+            | ( <COMMENT> <EQ> comment = StringLiteral() )
             )*
             {
                 return new SqlSnowflakeCreateTableLike(s.end(this), replace, tableType,
-                    ifNotExists, id, query, clusterExprs, copyGrants);
+                    ifNotExists, id, query, clusterExprs, copyGrants, comment);
             }
         )
     |   /* CLONE syntax
@@ -307,10 +313,11 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             <CLONE> query = CompoundIdentifier()
             (
               <COPY> <GRANTS> { copyGrants = true; }
+            | ( <COMMENT> <EQ> comment = StringLiteral() )
             )*
             {
                 return new SqlSnowflakeCreateTableClone(s.end(this), replace, tableType,
-                    ifNotExists, id, query, copyGrants);
+                    ifNotExists, id, query, copyGrants, comment);
             }
         )
         /* Regular syntax
@@ -330,18 +337,19 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             (
               clusterExprs = ClusterBy()
             | ( <COPY> <GRANTS> { copyGrants = true; } )
+            | ( <COMMENT> <EQ> comment = StringLiteral() )
             ) *
             [ <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) ]
             {
                 // The query is only provided for CTAS statements
                 if (query != null) {
                     return new SqlSnowflakeCreateTableAs(s.end(this), replace, tableType,
-                        ifNotExists, id, columnList, query, clusterExprs, copyGrants);
+                        ifNotExists, id, columnList, query, clusterExprs, copyGrants, comment);
                 } else {
                     // Non-CTAS statements require the column names/types to be provided
                     assert columnList != null;
                     return new SqlSnowflakeCreateTable(s.end(this), replace, tableType,
-                        ifNotExists, id, columnList, clusterExprs, copyGrants);
+                        ifNotExists, id, columnList, clusterExprs, copyGrants, comment);
                 }
             }
         )

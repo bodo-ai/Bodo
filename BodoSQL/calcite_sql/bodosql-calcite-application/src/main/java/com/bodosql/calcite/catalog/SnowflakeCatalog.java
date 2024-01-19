@@ -11,6 +11,7 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.ir.Expr;
@@ -18,6 +19,7 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.bodosql.calcite.sql.BodoSqlUtil;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
@@ -1132,9 +1134,15 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   @Override
-  public Expr generateAppendWriteCode(Variable varName, List<String> tableName) {
+  public Expr generateAppendWriteCode(
+      PandasCodeGenVisitor visitor, Variable varName, List<String> tableName) {
     return generateWriteCode(
-        varName, tableName, ifExistsBehavior.APPEND, SqlCreateTable.CreateTableType.DEFAULT);
+        visitor,
+        varName,
+        tableName,
+        ifExistsBehavior.APPEND,
+        SqlCreateTable.CreateTableType.DEFAULT,
+        new SnowflakeCreateTableMetadata());
   }
 
   /**
@@ -1147,20 +1155,24 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateWriteCode(
+      PandasCodeGenVisitor visitor,
       Variable varName,
       List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType tableType) {
-    return new Expr.Raw(
-        String.format(
-            "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', _bodo_create_table_type='%s',"
-                + " index=False)",
-            varName.emit(),
-            tableName.get(2),
-            generatePythonConnStr(tableName.get(0), tableName.get(1)),
-            tableName.get(1),
-            ifExists.asToSqlKwArgument(),
-            tableType.asStringKeyword()));
+      SqlCreateTable.CreateTableType tableType,
+      SnowflakeCreateTableMetadata meta) {
+    List<Expr> args = new ArrayList<>();
+    List<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
+    args.add(new Expr.StringLiteral(tableName.get(2)));
+    args.add(new Expr.StringLiteral(generatePythonConnStr(tableName.get(0), tableName.get(1))));
+    kwargs.add(new kotlin.Pair("schema", new Expr.StringLiteral(tableName.get(1))));
+    kwargs.add(new kotlin.Pair("if_exists", new Expr.StringLiteral(ifExists.asToSqlKwArgument())));
+    kwargs.add(
+        new kotlin.Pair(
+            "_bodo_create_table_type", new Expr.StringLiteral(tableType.asStringKeyword())));
+    // CTAS metadata not used for non-streaming writes
+    kwargs.add(new kotlin.Pair("index", new Expr.BooleanLiteral(false)));
+    return new Expr.Method(varName, "to_sql", args, kwargs);
   }
 
   @Override
@@ -1188,21 +1200,44 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   @Override
   public Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecisions) {
-    return new Expr.Call(
-        "bodo.io.snowflake_write.snowflake_writer_append_table",
-        List.of(
-            stateVarName,
-            tableVarName,
-            colNamesGlobal,
-            isLastVarName,
-            iterVarName,
-            columnPrecisions));
+      Expr columnPrecisions,
+      SnowflakeCreateTableMetadata meta) {
+    List<Expr> args = new ArrayList<>();
+    args.add(stateVarName);
+    args.add(tableVarName);
+    args.add(colNamesGlobal);
+    args.add(isLastVarName);
+    args.add(iterVarName);
+    args.add(columnPrecisions);
+
+    List<kotlin.Pair<String, Expr>> ctasMetaKwargs = new ArrayList<>();
+    if (meta.getTableComment() != null) {
+      Expr tableCommentExpr = new Expr.StringLiteral(meta.getTableComment());
+      ctasMetaKwargs.add(new kotlin.Pair("table_comments", tableCommentExpr));
+    }
+    if (meta.getColumnComments() != null) {
+      List<Expr> columnCommentExprs = new ArrayList<>();
+      for (String columnComment : meta.getColumnComments()) {
+        if (columnComment == null) {
+          columnCommentExprs.add(Expr.None.INSTANCE);
+        } else {
+          columnCommentExprs.add(new Expr.StringLiteral(columnComment));
+        }
+      }
+      Expr columnCommentTuple = new Expr.Tuple(columnCommentExprs);
+      ctasMetaKwargs.add(new kotlin.Pair("column_comments", columnCommentTuple));
+    }
+    Expr ctasMetaCall =
+        new Expr.Call("bodo.utils.typing.SnowflakeCreateTableMetaType", List.of(), ctasMetaKwargs);
+    Expr ctasMetaGlobal = visitor.lowerAsGlobal(ctasMetaCall);
+    args.add(ctasMetaGlobal);
+    return new Expr.Call("bodo.io.snowflake_write.snowflake_writer_append_table", args);
   }
 
   /**

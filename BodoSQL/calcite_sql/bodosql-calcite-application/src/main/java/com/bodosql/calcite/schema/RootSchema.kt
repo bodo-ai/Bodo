@@ -1,9 +1,11 @@
 package com.bodosql.calcite.schema
 
+import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.BodoSQLCatalog.ifExistsBehavior
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
@@ -53,17 +55,19 @@ class RootSchema {
         }
 
         override fun generateWriteCode(
+            visitor: PandasCodeGenVisitor,
             varName: Variable,
             tableName: String,
             ifExists: ifExistsBehavior,
             createTableType: CreateTableType,
+            meta: SnowflakeCreateTableMetadata,
         ): Expr? {
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
         }
 
         override fun generateStreamingWriteInitCode(
             operatorID: Expr.IntegerLiteral,
-            tableName: String,
+            tableName: String?,
             ifExists: ifExistsBehavior,
             createTableType: CreateTableType,
         ): Expr? {
@@ -71,12 +75,14 @@ class RootSchema {
         }
 
         override fun generateStreamingWriteAppendCode(
+            visitor: PandasCodeGenVisitor,
             stateVarName: Variable,
             tableVarName: Variable,
             colNamesGlobal: Variable,
             isLastVarName: Variable,
             iterVarName: Variable,
             columnPrecision: Expr,
+            meta: SnowflakeCreateTableMetadata,
         ): Expr? {
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
         }

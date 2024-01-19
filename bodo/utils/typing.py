@@ -1340,6 +1340,22 @@ class ColNamesMetaType(MetaType):
 register_model(ColNamesMetaType)(models.OpaqueModel)
 
 
+# A subclass of MetaType that is used to pass around information
+# when creating a table in Snowflake
+class SnowflakeCreateTableMetaType(MetaType):
+    def __init__(self, table_comment=None, column_comments=None):
+        self.table_comment = table_comment
+        self.column_comments = column_comments
+        meta = (self.table_comment, self.column_comments)
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: ColNamesMetaType should be hashable")
+        self.meta = meta
+        types.Type.__init__(self, f"SnowflakeCreateTableMetaType({meta})")
+
+
+register_model(SnowflakeCreateTableMetaType)(models.OpaqueModel)
+
+
 def is_literal_type(t):
     """return True if 't' represents a data type with known compile-time constant value"""
     return (

@@ -3,9 +3,11 @@ package com.bodosql.calcite.table;
 import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.*;
 import org.apache.calcite.plan.RelOptTable;
@@ -90,8 +92,8 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    * @return The generated code to write the table.
    */
   @Override
-  public Expr generateWriteCode(Variable varName) {
-    return catalog.generateAppendWriteCode(varName, getFullPath());
+  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName) {
+    return catalog.generateAppendWriteCode(visitor, varName, getFullPath());
   }
 
   /**
@@ -102,7 +104,8 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public Variable generateWriteCode(Variable varName, String extraArgs) {
+  public Variable generateWriteCode(
+      PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
@@ -116,14 +119,23 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   }
 
   public Expr generateStreamingWriteAppendCode(
+      PandasCodeGenVisitor visitor,
       Variable stateVarName,
       Variable dfVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
       Variable iterVarName,
-      Expr columnPrecisions) {
+      Expr columnPrecisions,
+      SnowflakeCreateTableMetadata meta) {
     return catalog.generateStreamingWriteAppendCode(
-        stateVarName, dfVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecisions);
+        visitor,
+        stateVarName,
+        dfVarName,
+        colNamesGlobal,
+        isLastVarName,
+        iterVarName,
+        columnPrecisions,
+        meta);
   }
 
   /**

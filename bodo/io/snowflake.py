@@ -2150,6 +2150,7 @@ def create_table_handle_exists(
     if_exists: str,
     table_type: str,
     always_escape_col_names=False,
+    create_table_info=None,
 ):  # pragma: no cover
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
@@ -2167,6 +2168,7 @@ def create_table_handle_exists(
         table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
         always_escape_col_names: True if we are in BodoSQL table write, which allows always escaping
             column names since BodoSQL handles casing.
+        create_table_info: meta information about how to create the table
 
     """
     ev = tracing.Event("create_table_if_not_exists", is_parallel=False)
@@ -2203,6 +2205,13 @@ def create_table_handle_exists(
             f'"fail", "replace", or "append"'
         )
 
+    table_comment = None
+    column_comments = None
+
+    if create_table_info != None:
+        table_comment = create_table_info.table_comment
+        column_comments = create_table_info.column_comments
+
     # Infer schema can return the columns out of order depending on the
     # chunking we do when we upload, so we have to iterate through the
     # dataframe columns to make sure we create the table with its columns
@@ -2213,15 +2222,19 @@ def create_table_handle_exists(
     # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     # BodoSQL matches Snowflake rules so we can always escape column names.
     create_table_col_lst = []
-    for col_name, typ in sf_schema.items():
+    for col_idx, item in enumerate(sf_schema.items()):
+        col_name, typ = item
         if always_escape_col_names or not matches_unquoted_id_rules(col_name):
             col_name = escape_col_name(col_name)
-        create_table_col_lst.append(f"{col_name} {typ}")
+        col_decl = f"{col_name} {typ}"
+        if column_comments != None and column_comments[col_idx] != None:
+            col_decl = f"{col_decl} COMMENT $${column_comments[col_idx]}$$"
+        create_table_col_lst.append(col_decl)
     create_table_columns = ", ".join(create_table_col_lst)
-    create_table_sql = (
-        f"{create_table_cmd} {location} ({create_table_columns}) "
-        f"/* io.snowflake.create_table_if_not_exists() */"
-    )
+    create_table_sql = f"{create_table_cmd} {location} ({create_table_columns}) "
+    if table_comment != None:
+        create_table_sql += f" COMMENT = $${table_comment}$$"
+    create_table_sql += f"/* io.snowflake.create_table_if_not_exists() */"
     cursor.execute(create_table_sql, _is_internal=True)
     ev_create_table.finalize()
 

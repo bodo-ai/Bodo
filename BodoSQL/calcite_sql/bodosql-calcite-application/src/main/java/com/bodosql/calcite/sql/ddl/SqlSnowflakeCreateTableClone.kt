@@ -16,7 +16,8 @@ class SqlSnowflakeCreateTableClone(
     name: SqlIdentifier?,
     val cloneSource: SqlNode,
     val copyGrants: Boolean,
-) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, cloneSource) {
+    comment: SqlNode?,
+) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, cloneSource, comment) {
 
     override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
         writer.keyword("CLONE")
