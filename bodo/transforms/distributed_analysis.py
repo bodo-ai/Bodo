@@ -413,13 +413,24 @@ class DistributedAnalysis:
         ):
             self._meet_array_dists(lhs, rhs.name, array_dists)
             return
-        elif is_array_typ(lhs_typ) and is_expr(rhs, "inplace_binop"):
+        # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
+        elif is_array_typ(lhs_typ) and (
+            is_expr(rhs, "inplace_binop")
+            or (
+                is_expr(rhs, "binop")
+                and (
+                    isinstance(self.typemap[rhs.lhs.name], bodo.DecimalArrayType)
+                    or isinstance(self.typemap[rhs.rhs.name], bodo.DecimalArrayType)
+                )
+            )
+        ):
             # distributions of all 3 variables should meet (lhs, arg1, arg2)
             # XXX: arg1 or arg2 (but not both) can be non-array like scalar
             arg1 = rhs.lhs.name
             arg2 = rhs.rhs.name
             arg1_typ = self.typemap[arg1]
             arg2_typ = self.typemap[arg2]
+            dist = Distribution.OneD
             if is_distributable_typ(arg1_typ):
                 dist = self._meet_array_dists(lhs, arg1, array_dists)
             if is_distributable_typ(arg2_typ):

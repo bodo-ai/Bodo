@@ -1,8 +1,10 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+import operator
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -366,3 +368,98 @@ def test_decimal_arr_nbytes(memory_leak_check):
     py_out = 128 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
     check_func(impl, (arr,), py_output=py_out, only_1D=True, only_1DVar=True)
     check_func(impl, (arr,), py_output=129, only_seq=True)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # int32 array
+        pd.array([1, -1, 3, 4, -2, 0, None, 4], "Int32"),
+        # int64 array
+        pd.array([5, -1, 0, None, -2, 10, None, 12], "Int64"),
+        # numpy array
+        np.array([5, -21131, 0, 7, -2, 10, 12340, 12]),
+        # float32 array
+        pd.array([5.1, -1.1, 0.54, None, -2.1, 101.1, None, 1.234], "Float32"),
+        # float64 array
+        pd.array(
+            [1.111, -1.12, 1000000.54, None, -2000.1, -101.1, None, 1.234], "Float64"
+        ),
+        # decimal array
+        np.array(
+            [
+                Decimal("1.62"),
+                Decimal("-1.222"),
+                Decimal("1.316"),
+                Decimal("-4.00046"),
+                Decimal("5.14"),
+                None,
+                Decimal("-131.0056"),
+                Decimal("0.0"),
+            ]
+        ),
+        # int32 scalar
+        np.int32(1),
+        # int64 scalar
+        -1,
+        # float32 scalar
+        np.float32(1.4),
+        # float64 scalar
+        -0.4,
+        # decimal scalar
+        Decimal("1.45"),
+    ],
+)
+def test_decimal_comparison(value, memory_leak_check):
+    arr = np.array(
+        [
+            Decimal("1.6"),
+            None,
+            Decimal("-0.222"),
+            Decimal("1111.316"),
+            Decimal("1234.00046"),
+            Decimal("5.1"),
+            Decimal("-11131.0056"),
+            Decimal("0.0"),
+        ]
+    )
+    pa_val = (
+        pa.scalar(value)
+        if bodo.utils.typing.is_scalar_type(bodo.typeof(value))
+        else pa.array(value)
+    )
+
+    for op, pa_op in (
+        (operator.gt, pa.compute.greater),
+        (operator.ge, pa.compute.greater_equal),
+        (operator.eq, pa.compute.equal),
+        (operator.ne, pa.compute.not_equal),
+        (operator.lt, pa.compute.less),
+        (operator.le, pa.compute.less_equal),
+    ):
+
+        def impl(a, b):
+            return op(a, b)
+
+        py_output = pd.array(pa_op(pa.array(arr), pa_val), pd.BooleanDtype())
+        check_func(impl, (arr, value), py_output=py_output)
+        py_output = pd.array(pa_op(pa_val, pa.array(arr)), pd.BooleanDtype())
+        check_func(impl, (value, arr), py_output=py_output)
+
+
+def test_decimal_comparison_error_checking():
+    """Make sure decimal comparison with invalid type raises an error"""
+    arr = np.array(
+        [
+            Decimal("1.6"),
+            None,
+            Decimal("-0.222"),
+        ]
+    )
+    other = np.array(["1.2", "3.1", None], object)
+
+    def impl(a, b):
+        return a < b
+
+    with pytest.raises(BodoError, match=r"Invalid decimal comparison with"):
+        bodo.jit(impl)(arr, other)
