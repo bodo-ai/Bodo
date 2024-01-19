@@ -23,7 +23,7 @@ from bodo.libs.stream_join import (
 from bodo.libs.stream_join import (
     get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
 )
-from bodo.tests.utils import temp_env_override
+from bodo.tests.utils import pytest_mark_one_rank, temp_env_override
 
 
 def hash_join_impl(df1, df2):
@@ -126,7 +126,7 @@ def hash_join_impl(df1, df2):
     return bodo.jit(distributed=["df1", "df2"])(impl)(df1, df2)
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_hash_join_dynamic_budget_increase(memory_leak_check, capfd):
     """
     Test that HashJoin is able to dynamically increase its budget
@@ -288,7 +288,7 @@ def groupby_impl(df, key_inds_list, func_names, f_in_offsets, f_in_cols):
     return bodo.jit(distributed=["df"])(impl)(df)
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_groupby_dynamic_budget_increase(memory_leak_check, capfd):
     """
     Test that Groupby is able to dynamically increase its budget

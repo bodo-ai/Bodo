@@ -18,7 +18,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import _get_dist_arg, temp_env_override
+from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
 
 # NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
 
@@ -228,7 +228,7 @@ def _test_helper(
 ########### TESTS FOR ACCUMULATE INPUT STRATEGY ##########
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_append_table_acc_funcs(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
@@ -299,7 +299,7 @@ def test_split_during_append_table_acc_funcs(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_append_table_str_running_vals(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
@@ -380,7 +380,7 @@ def test_split_during_append_table_str_running_vals(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_acc_finalize_build_acc_funcs(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
@@ -491,7 +491,7 @@ def test_split_during_acc_finalize_build_acc_funcs(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_acc_finalize_build_str_running_vals(
     capfd,
     # TODO Need to find and fix the memory leak
@@ -693,7 +693,7 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_max_partition_depth_fallback_acc_finalize(capfd, memory_leak_check):
     """
     Test that we fall back to disabling partitioning while
@@ -779,7 +779,7 @@ def test_max_partition_depth_fallback_acc_finalize(capfd, memory_leak_check):
 ####### TESTS FOR INCREMENTAL AGGREGATION STRATEGY #######
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_update_combine(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
@@ -863,7 +863,7 @@ def test_split_during_update_combine(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_drop_duplicates_split_during_update_combine(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly for drop_duplicates
@@ -922,7 +922,7 @@ def test_drop_duplicates_split_during_update_combine(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_agg_finalize(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
@@ -1015,7 +1015,7 @@ def test_split_during_agg_finalize(capfd, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_drop_duplicates_split_during_agg_finalize(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly for drop_duplicates
@@ -1258,7 +1258,7 @@ def test_drop_duplicates_spilt_during_shuffle_out_update_combine_and_diff_part_s
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_max_partition_depth_fallback_agg_finalize(capfd, memory_leak_check):
     """
     Test that we fall back to disabling partitioning while

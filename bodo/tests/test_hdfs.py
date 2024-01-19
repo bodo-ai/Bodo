@@ -6,7 +6,7 @@ import pytest
 from mpi4py import MPI
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = pytest.mark.hdfs
@@ -661,7 +661,8 @@ def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr[:count])
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Observing errors in hadoop fs")
+# Note: There are hadoop fs errors with more than 1 processor.
+@pytest_mark_one_rank
 def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
     """
     fromfile with offset larger than the length of the data
