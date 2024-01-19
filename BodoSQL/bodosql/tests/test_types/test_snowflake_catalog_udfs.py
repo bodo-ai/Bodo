@@ -7,7 +7,7 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.utils import check_func, pytest_snowflake
+from bodo.tests.utils import check_func, pytest_mark_one_rank, pytest_snowflake
 from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     azure_snowflake_catalog,
@@ -23,8 +23,6 @@ def test_expression_udf(test_db_snowflake_catalog, memory_leak_check):
 
     PLUS_ONE is manually defined inside TEST_DB.PUBLIC.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)
@@ -42,8 +40,6 @@ def test_query_udf(test_db_snowflake_catalog, memory_leak_check):
 
     QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)
@@ -58,6 +54,7 @@ def test_query_udf(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
+@pytest_mark_one_rank
 def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
@@ -67,8 +64,6 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
     QUERY_PARAM_FUNCTION is manually defined inside TEST_DB.PUBLIC to take
     one argument.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -83,6 +78,7 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
@@ -91,22 +87,21 @@ def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
 
     QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select QUERY_FUNCTION()"
+    query = "select QUERY_FUNCTION() as OUTPUT"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=pd.DataFrame({"OUTPUT": [1500000]}),
+        check_dtype=False,
+    )
 
 
+@pytest_mark_one_rank
 def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
@@ -116,8 +111,6 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
     QUERY_PARAM_FUNCTION is manually defined inside TEST_DB.PUBLIC to take
     one argument.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -132,6 +125,7 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_udf_multiple_definitions(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -142,8 +136,6 @@ def test_unsupported_udf_multiple_definitions(
     TIMES_TWO is manually defined inside TEST_DB.PUBLIC twice, once on strings and
     once on numbers.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -158,6 +150,7 @@ def test_unsupported_udf_multiple_definitions(
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_udf_defaults(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with defaults gives a message they aren't supported.
@@ -165,8 +158,6 @@ def test_unsupported_udf_defaults(test_db_snowflake_catalog, memory_leak_check):
 
     ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -181,6 +172,7 @@ def test_unsupported_udf_defaults(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_secure_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake secure UDFs, which we can't support, throws an appropriate
@@ -188,8 +180,6 @@ def test_unsupported_secure_udf(test_db_snowflake_catalog, memory_leak_check):
 
     SECURE_ADD_ONE is manually defined inside TEST_DB.PUBLIC as secure.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -204,14 +194,13 @@ def test_unsupported_secure_udf(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_python_udf(azure_snowflake_catalog, memory_leak_check):
     """
     Test that a Python UDF, which we can't support, throws an appropriate
     error message. We must test with Azure because our partner account doesn't
     have permission to use Python.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -235,8 +224,6 @@ def test_expression_udf_with_provided_defaults(
 
     ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)
@@ -252,8 +239,6 @@ def test_expression_udf_with_named_args(test_db_snowflake_catalog, memory_leak_c
 
     ADD_DEFAULT_ONE is manually defined inside TEST_DB.PUBLIC with a default value.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)
@@ -281,6 +266,7 @@ def test_udf_dollar_string(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
+@pytest_mark_one_rank
 def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with contents that can't be parsed give an error indicating this.
@@ -288,8 +274,6 @@ def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
     BAD_ALIAS_FUNCTION is manually defined inside TEST_DB.PUBLIC to use the alias OUTER,
     which our parser does not support yet.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -304,6 +288,7 @@ def test_unsupported_udf_parsing(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_udf_validation(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with contents that can't be validated give an error indicating this.
@@ -311,8 +296,6 @@ def test_unsupported_udf_validation(test_db_snowflake_catalog, memory_leak_check
     VALIDATION_ERROR_FUNCTION is manually defined inside TEST_DB.PUBLIC to use COMPRESS,
     which we don't support.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -327,6 +310,7 @@ def test_unsupported_udf_validation(test_db_snowflake_catalog, memory_leak_check
         impl(bc, query)
 
 
+@pytest_mark_one_rank
 def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with contents that can't be validated give an error indicating this
@@ -335,8 +319,6 @@ def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak
     VALIDATION_ERROR_QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC to use COMPRESS,
     which we don't support and has a query function body (e.g. SELECT).
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     @bodo.jit
     def impl(bc, query):
@@ -359,8 +341,6 @@ def test_nested_expression_udf(test_db_snowflake_catalog, memory_leak_check):
     PLUS_ONE_WRAPPER is manually defined inside TEST_DB.PUBLIC
     and simply calls PLUS_ONE.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)
@@ -378,8 +358,6 @@ def test_repeated_nested_expression_udf(test_db_snowflake_catalog, memory_leak_c
     PLUS_ONE_WRAPPER is manually defined inside TEST_DB.PUBLIC
     and simply calls PLUS_ONE.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
 
     def impl(bc, query):
         return bc.sql(query)

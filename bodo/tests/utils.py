@@ -2737,6 +2737,26 @@ pytest_snowflake = [
     pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
 ]
 
+# Decorate
+pytest_mark_one_rank = compose_decos(
+    (
+        pytest.mark.one_rank,
+        pytest.mark.skipif(
+            bodo.get_size() != 1,
+            reason="Test should only run on one rank",
+        ),
+    )
+)
+
+# This is for using a "mark" or marking a whole file.
+pytest_one_rank = [
+    pytest.mark.one_rank,
+    pytest.mark.skipif(
+        bodo.get_size() != 1,
+        reason="Test should only run on one rank",
+    ),
+]
+
 # Flag to ignore the mass slowing of tests unless specific files are changed
 ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
 

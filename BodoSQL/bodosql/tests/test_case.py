@@ -15,6 +15,7 @@ from bodo.tests.utils import (
     SeriesOptTestPipeline,
     dist_IR_contains,
     gen_nonascii_list,
+    pytest_mark_one_rank,
 )
 from bodosql.tests.utils import check_query
 
@@ -308,6 +309,8 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+# This test is very slow when NP > 1, so we disable it.
+@pytest_mark_one_rank
 def test_case_indent_limit(memory_leak_check):
     """
     Test of case statement bug noted in BSE-853.
@@ -315,9 +318,6 @@ def test_case_indent_limit(memory_leak_check):
     case statement is naively decomposed into if/else
     it hits a max indentation limit.
     """
-    # This test is very slow when NP > 1, so we disable it.
-    if bodo.get_size() > 1:
-        pytest.skip("Test is too slow for NP != 1")
     query = """
     select
         case

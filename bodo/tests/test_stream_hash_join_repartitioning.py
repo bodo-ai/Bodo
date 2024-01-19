@@ -16,7 +16,7 @@ from bodo.libs.stream_join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.tests.utils import set_broadcast_join, temp_env_override
+from bodo.tests.utils import pytest_mark_one_rank, set_broadcast_join, temp_env_override
 
 
 @pytest.fixture(params=[True, False])
@@ -259,7 +259,7 @@ def _test_helper(
     ), f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_append_table(
     build_probe_outer, broadcast, memory_leak_check, capfd
 ):
@@ -347,7 +347,7 @@ def test_split_during_append_table(
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+@pytest_mark_one_rank
 def test_split_during_finalize_build(build_probe_outer, memory_leak_check, capfd):
     """
     Test that re-partitioning works correctly when it happens

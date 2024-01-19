@@ -14,6 +14,7 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     get_start_end,
+    pytest_mark_one_rank,
 )
 from bodo.utils.testing import ensure_clean
 from bodo.utils.utils import is_call_assign
@@ -163,12 +164,9 @@ def test_h5_group_keys(datapath, memory_leak_check):
     assert bodo_func() == test_impl()
 
 
+@pytest_mark_one_rank
 @pytest.mark.smoke
 def test_h5_write(memory_leak_check):
-    # run only on 1 processor
-    if bodo.get_size() != 1:
-        return
-
     def test_impl(A, fname):
         f = h5py.File(fname, "w")
         dset1 = f.create_dataset("A", A.shape, "f8")
@@ -188,11 +186,8 @@ def test_h5_write(memory_leak_check):
         np.testing.assert_array_equal(A, A2)
 
 
+@pytest_mark_one_rank
 def test_h5_group_write(memory_leak_check):
-    # run only on 1 processor
-    if bodo.get_size() != 1:
-        return
-
     def test_impl(A, fname):
         f = h5py.File(fname, "w")
         g1 = f.create_group("AA")

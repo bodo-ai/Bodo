@@ -23,6 +23,7 @@ from bodo.tests.utils import (
     count_array_OneD_Vars,
     count_array_OneDs,
     count_array_REPs,
+    pytest_mark_one_rank,
     pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
@@ -573,11 +574,9 @@ def test_bodosql_context_loop_unrolling(memory_leak_check):
     check_func(impl, (bc, query), py_output=df)
 
 
+@pytest_mark_one_rank
 def test_bodosql_context_generate_plan(memory_leak_check):
     """Tests that BodoSQLContext.generate_plan works as expected"""
-
-    if bodo.get_size() > 1:
-        pytest.skip("This test should only be run on 1 rank")
 
     from bodosql import BodoSQLContext
 

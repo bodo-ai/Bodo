@@ -38,6 +38,8 @@ from bodo.tests.utils import (
     drop_snowflake_table,
     get_snowflake_connection_string,
     get_start_end,
+    pytest_mark_one_rank,
+    pytest_one_rank,
     pytest_snowflake,
     reduce_sum,
     run_rank0,
@@ -1279,14 +1281,12 @@ def test_snowflake_to_sql_nullarray(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_nullarray failed"
 
 
+@pytest_mark_one_rank
 def test_to_sql_snowflake_user2(memory_leak_check):
     """
     Tests that df.to_sql works when the Snowflake account password has special
     characters.
     """
-    # Only test with one rank because we are just testing access
-    if bodo.get_size() != 1:
-        return
     import platform
 
     # This test runs on both Mac and Linux, so give each table a different
@@ -1573,10 +1573,8 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         pytest.param(
             False,
             id="replicated",
-            marks=pytest.mark.skipif(
-                bodo.get_size() != 1,
-                reason="Replicated write is not supported yet, so running it on multiple ranks is unsafe!",
-            ),
+            # Note: Replicated write is not supported yet.
+            marks=pytest_one_rank,
         ),
     ],
 )
@@ -2134,14 +2132,12 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
 
 
+@pytest_mark_one_rank
 def test_decimal_sub_38_precision_write(memory_leak_check):
     """
     Tests that reading and writing a number column that requires > int64 but
     is smaller than Number(38, 0) is read and written correctly by Bodo.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
-
     snowflake_user = 1
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -2226,15 +2222,13 @@ def test_logged_queryid_write(memory_leak_check):
         check_logger_msg(stream, "Snowflake Query Submission (Write)")
 
 
+@pytest_mark_one_rank
 def test_aborted_detached_query(memory_leak_check):
     """
     Test that our snowflake connection always has ABORT_DETACHED_QUERY = False
     in a user's account. This is not a write test, but it is grouped here because
     if this is True it can cause write to fail.
     """
-    if bodo.get_size() != 1:
-        pytest.skip("This test is only designed for 1 rank")
-
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)

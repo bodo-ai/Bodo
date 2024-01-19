@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -952,6 +953,7 @@ def test_read_csv_sample_nrows_error(datapath):
 
 
 # TODO: fix memory_leak_check
+@pytest_mark_one_rank
 @pytest.mark.slow
 def test_read_json_sample_nrows_error(datapath):
     """Test read_json with sample_nrows argument where data type change
@@ -963,10 +965,7 @@ def test_read_json_sample_nrows_error(datapath):
         memory_leak_check (fixture function): check memory leak in the test.
 
     """
-    # run only on 1 processor
-    # TODO: [BE-3260]
-    if bodo.get_size() != 1:
-        return
+    # Enable multiple processes: [BE-3260]
     fname = datapath("large_data.json")
 
     def impl1():

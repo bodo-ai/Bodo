@@ -33,6 +33,7 @@ from bodo.tests.utils import (
     drop_snowflake_table,
     gen_unique_table_id,
     get_snowflake_connection_string,
+    pytest_mark_one_rank,
     pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
@@ -426,14 +427,12 @@ def test_read_timing_debug_message(
         check_logger_msg(stream, "Execution time for reading table ")
 
 
+@pytest_mark_one_rank
 def test_insert_into_timing_debug_message(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that using insert into with a SnowflakeCatalog and bodo.set_verbose_level(1)
     automatically adds a debug message about IO.
     """
-    if bodo.get_size() > 1:
-        # Only test on 1 rank to simplify testing.
-        return
 
     @bodo.jit
     def impl(bc, query):
@@ -459,6 +458,7 @@ def test_insert_into_timing_debug_message(test_db_snowflake_catalog, memory_leak
             )
 
 
+@pytest_mark_one_rank
 def test_create_table_timing_debug_message(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -466,9 +466,6 @@ def test_create_table_timing_debug_message(
     Tests that using insert into with a SnowflakeCatalog and bodo.set_verbose_level(1)
     automatically adds a debug message about IO.
     """
-    if bodo.get_size() > 1:
-        # Only test on 1 rank to simplify testing.
-        return
 
     @bodo.jit
     def impl(bc, query):
@@ -1905,6 +1902,7 @@ def test_snowflake_catalog_create_table_like(
         drop_snowflake_table(output_table_name, db, schema)
 
 
+@pytest_mark_one_rank
 def test_sf_filter_pushdown_rowcount_estimate(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -1913,9 +1911,6 @@ def test_sf_filter_pushdown_rowcount_estimate(
     Note that we can't do this in the maven unit tests, as the TPCH table/row counts
     are Mocked, and therefore we won't actually push any snowflake queries to snowflake.
     """
-
-    if bodo.get_size() > 1:
-        pytest.skip("This test should only run on a single rank")
     if not bodo.bodosql_use_streaming_plan:
         pytest.skip(
             "This filter pushdown cost estimate is only enabled with the streaming plan"
@@ -1935,6 +1930,7 @@ def test_sf_filter_pushdown_rowcount_estimate(
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
 
 
+@pytest_mark_one_rank
 def test_filter_pushdown_row_count_caching(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -1944,9 +1940,6 @@ def test_filter_pushdown_row_count_caching(
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn_str = get_snowflake_connection_string(db, schema)
-
-    if bodo.get_size() > 1:
-        pytest.skip("This test should only run on a single rank")
     if not bodo.bodosql_use_streaming_plan:
         pytest.skip(
             "This filter pushdown cost estimate is only enabled with the streaming plan"
@@ -2030,13 +2023,10 @@ def test_filter_pushdown_row_count_caching(
     ), "We should have one query for the C_COMMENT row estimate"
 
 
+@pytest_mark_one_rank
 def test_snowflake_catalog_string_format(test_db_snowflake_catalog, memory_leak_check):
     """Tests a specific issue with the unparsing of strings for snowflake query submission."""
     bodo.bodosql_use_streaming_plan = True
-
-    if bodo.get_size() > 1:
-        pytest.skip("This test should only run on a single rank")
-
     # Created a special table with a single addition to the lineitem table
     # should be a single row ouput
     query = """
@@ -2479,6 +2469,7 @@ def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check)
     check_func(impl, (bc, query), py_output=py_output)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize(
     "condition, answer",
     [
@@ -2501,9 +2492,6 @@ def test_snowflake_json_filter_pushdown(
     Tests reading from a Snowflake table with a filter condition based
     on a JSON field.
     """
-    # Only test on single rank
-    if bodo.get_size() != 1:
-        return
     query = f"SELECT id FROM BODOSQL_JSON_READ_TEST WHERE {condition}"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     answer_df = pd.DataFrame({"ID": answer})
@@ -2574,6 +2562,7 @@ def test_snowflake_json_filter_pushdown(
         ),
     ],
 )
+@pytest_mark_one_rank
 def test_snowflake_json_field_pushdown(
     fields, clauses, answer, test_db_snowflake_catalog, memory_leak_check
 ):
@@ -2585,9 +2574,6 @@ def test_snowflake_json_field_pushdown(
         clauses: any additional clauses provided after the FROM clause (e.g. GROUP BY, WHERE, ORDER BY).
         answer: the expected output for the query.
     """
-    # Only test with one rank
-    if bodo.get_size() != 1:
-        return
     query = f"SELECT {', '.join(fields)} FROM BODOSQL_JSON_READ_TEST"
     for clause in clauses:
         query += f"\n{clause}"

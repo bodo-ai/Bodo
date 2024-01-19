@@ -5,6 +5,7 @@ import pytest
 from numba.core.errors import TypingError
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
@@ -1411,11 +1412,8 @@ def test_object_insert_constant_key_value(df, answer, memory_leak_check):
     )
 
 
+@pytest_mark_one_rank
 def test_object_insert_conflicting_key_struct(memory_leak_check):
-    # only run on np=1 since it's an error check
-    # check_query turns off seq run on np>1
-    if bodo.get_size() > 1:
-        return
     query = "SELECT OBJECT_INSERT(A, 'a', 1) from table1"
     df = pd.DataFrame(
         {
@@ -1442,11 +1440,8 @@ def test_object_insert_conflicting_key_struct(memory_leak_check):
         )
 
 
+@pytest_mark_one_rank
 def test_object_insert_conflicting_key_map():
-    # only run on np=1 since it's an error check
-    # check_query turns off seq run on np>1
-    if bodo.get_size() > 1:
-        return
     query = "SELECT OBJECT_INSERT(A, 'd', 1) from table1"
     df = pd.DataFrame(
         {
