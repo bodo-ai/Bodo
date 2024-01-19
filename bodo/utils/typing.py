@@ -1766,6 +1766,7 @@ def is_scalar_type(t: types.Type) -> bool:
             types.StringLiteral,
             bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
             bodo.TimeType,
+            bodo.Decimal128Type,
         ),
     ) or t in (
         bodo.datetime64ns,

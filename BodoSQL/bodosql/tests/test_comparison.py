@@ -3,6 +3,7 @@
 Test correctness of SQL comparison operations on BodoSQL
 """
 import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -350,6 +351,45 @@ def test_comparison_operators_between_tables(
         "TABLE2": bodosql_numeric_types["TABLE1"],
     }
     check_query(query, new_context, spark_info, check_dtype=False)
+
+
+def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_check):
+    """Test comparison for decimal values"""
+
+    query = f"""
+        SELECT
+            A {comparison_ops} B
+        FROM
+            table1
+        """
+    context = {
+        "TABLE1": pd.DataFrame(
+            {
+                "A": pd.array([1, 4, 0, None, 3, None], "Int64"),
+                "B": np.array(
+                    [
+                        Decimal("0.0"),
+                        Decimal("-5.1"),
+                        Decimal("1"),
+                        None,
+                        Decimal("7"),
+                        Decimal("-1.71"),
+                    ]
+                ),
+            }
+        ),
+    }
+    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    query = f"""
+        SELECT
+            B {comparison_ops} A
+        FROM
+            table1
+        """
+    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    query = f"""SELECT CASE WHEN A {comparison_ops} B THEN 1 ELSE 0 END FROM table1
+    """
+    check_query(query, context, spark_info, check_dtype=False, check_names=False)
 
 
 def test_where_and(join_dataframes, spark_info, memory_leak_check):

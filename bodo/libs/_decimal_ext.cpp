@@ -5,7 +5,9 @@
 #include <numpy/arrayobject.h>
 #include <iostream>
 
+#include <fmt/format.h>
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 #include "arrow/util/bit_util.h"
 #include "arrow/util/decimal.h"
 
@@ -16,6 +18,19 @@
 struct decimal_value {
     int64_t low;
     int64_t high;
+};
+
+/**
+ * @brief enum for designating comparison operators passed from Python.
+ * Most match with definition in decimal_arr_ext.py.
+ */
+enum CmpOp {
+    LT = 0,
+    LE = 1,
+    EQ = 2,
+    NE = 3,
+    GT = 4,
+    GE = 5,
 };
 
 std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
@@ -83,23 +98,215 @@ void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
 
 arrow::Decimal128 str_to_decimal(const std::string& str_val);
 
-bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+/**
+ * @brief Get the Arrow function name for comparison operator
+ * See https://arrow.apache.org/docs/cpp/compute.html#comparisons
+ *
+ * @param op_enum operator enum value
+ * @return std::string Arrow function name
+ */
+std::string get_arrow_function_name(int32_t op_enum) {
+    switch (op_enum) {
+        case CmpOp::LT:
+            return "less";
+        case CmpOp::LE:
+            return "less_equal";
+        case CmpOp::EQ:
+            return "equal";
+        case CmpOp::NE:
+            return "not_equal";
+        case CmpOp::GT:
+            return "greater";
+        case CmpOp::GE:
+            return "greater_equal";
+        default:
+            throw std::runtime_error(
+                fmt::format("get_arrow_function_name: invalid op {}", op_enum));
+    }
+}
 
-bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+/**
+ * @brief Call Arrow compute function for comparison operator
+ *
+ * @param op_enum enum designating comparison operator to call
+ * @param arg0 first argument for comparison
+ * @param arg1 second argument for comparison
+ * @param is_scalar_arg0 first argument is scalar (passed as a one element
+ * array)
+ * @param is_scalar_arg1 second argument is scalar (passed as a one element
+ * array)
+ * @return array_info* output of comparison which is a boolean array
+ */
+array_info* arrow_compute_cmp_py_entry(int32_t op_enum, array_info* arg0,
+                                       array_info* arg1, bool is_scalar_arg0,
+                                       bool is_scalar_arg1) {
+    try {
+        // convert inputs to Arrow and handle scalars
+        std::shared_ptr<arrow::Array> arr0 =
+            to_arrow(std::shared_ptr<array_info>(arg0));
+        std::shared_ptr<arrow::Array> arr1 =
+            to_arrow(std::shared_ptr<array_info>(arg1));
 
-bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+        arrow::Datum arg0_datum(arr0);
+        arrow::Datum arg1_datum(arr1);
 
-bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+        // convert scalar arguments passed as one element arrays back to scalar
+        if (is_scalar_arg0) {
+            arrow::Result<std::shared_ptr<arrow::Scalar>> getitem_res =
+                arr0->GetScalar(0);
+            if (!getitem_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    fmt::format("arrow_compute_cmp_py_entry: Error in Arrow "
+                                "getitem for first argument: {}",
+                                getitem_res.status().message()));
+            }
+            arg0_datum = getitem_res.ValueOrDie();
+        }
 
-bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+        if (is_scalar_arg1) {
+            arrow::Result<std::shared_ptr<arrow::Scalar>> getitem_res =
+                arr1->GetScalar(0);
+            if (!getitem_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    fmt::format("arrow_compute_cmp_py_entry: Error in Arrow "
+                                "getitem for second argument: {}",
+                                getitem_res.status().message()));
+            }
+            arg1_datum = getitem_res.ValueOrDie();
+        }
 
-bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2);
+        // call Arrow compute function
+        arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
+            get_arrow_function_name(op_enum), {arg0_datum, arg1_datum});
+        if (!cmp_res.ok()) [[unlikely]] {
+            throw std::runtime_error(fmt::format(
+                "arrow_compute_cmp_py_entry: Error in Arrow compute: {}",
+                cmp_res.status().message()));
+        }
+        std::shared_ptr<arrow::Array> out_arrow_arr =
+            cmp_res.ValueOrDie().make_array();
+
+        // convert Arrow output to Bodo array
+        std::shared_ptr<array_info> out_arr =
+            arrow_array_to_bodo(out_arrow_arr);
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief call Arrow to compare scalars
+ *
+ * @param op_enum enum designating comparison operator to call
+ * @param arg0_scalar first argument of comparison
+ * @param arg1_scalar second argument of comparison
+ * @return bool output of comparison
+ */
+template <class T0, class T1>
+inline bool arrow_compute_cmp_scalar(int32_t op_enum, T0 arg0_scalar,
+                                     T1 arg1_scalar) {
+    // call Arrow compute function
+    arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
+        get_arrow_function_name(op_enum), {arg0_scalar, arg1_scalar});
+    if (!cmp_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            fmt::format("arrow_compute_cmp_scalar: Error in "
+                        "Arrow compute: {}",
+                        cmp_res.status().message()));
+    }
+
+    // return bool output
+    std::shared_ptr<arrow::BooleanScalar> out =
+        std::static_pointer_cast<arrow::BooleanScalar>(
+            cmp_res.ValueOrDie().scalar());
+    return out->value;
+}
+
+/**
+ * @brief compare decimal scalar to integer scalar
+ *
+ * @param op_enum enum designating comparison operator to call
+ * @param arg0 first argument of comparison (decimal)
+ * @param precision decimal argument's precision
+ * @param scale decimal argument's scale
+ * @param arg1 second argument (int)
+ * @return bool output of comparison
+ */
+bool arrow_compute_cmp_decimal_int_py_entry(int32_t op_enum, decimal_value arg0,
+                                            int32_t precision, int32_t scale,
+                                            int64_t arg1) {
+    try {
+        // convert input to Arrow scalars
+        arrow::Decimal128 arrow_decimal(arg0.high, arg0.low);
+        arrow::Decimal128Scalar arg0_scalar(
+            arrow_decimal, arrow::decimal128(precision, scale));
+        arrow::Int64Scalar arg1_scalar(arg1);
+        return arrow_compute_cmp_scalar(op_enum, arg0_scalar, arg1_scalar);
+
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return false;
+    }
+}
+
+/**
+ * @brief compare decimal scalar to float scalar
+ *
+ * @param op_enum enum designating comparison operator to call
+ * @param arg0 first argument of comparison (decimal)
+ * @param precision decimal argument's precision
+ * @param scale decimal argument's scale
+ * @param arg1 second argument (float)
+ * @return bool output of comparison
+ */
+bool arrow_compute_cmp_decimal_float_py_entry(int32_t op_enum,
+                                              decimal_value arg0,
+                                              int32_t precision, int32_t scale,
+                                              double arg1) {
+    try {
+        // convert input to Arrow scalars
+        arrow::Decimal128 arrow_decimal(arg0.high, arg0.low);
+        arrow::Decimal128Scalar arg0_scalar(
+            arrow_decimal, arrow::decimal128(precision, scale));
+        arrow::DoubleScalar arg1_scalar(arg1);
+        return arrow_compute_cmp_scalar(op_enum, arg0_scalar, arg1_scalar);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return false;
+    }
+}
+
+/**
+ * @brief compare decimal scalar to decimal scalar
+ *
+ * @param op_enum enum designating comparison operator to call
+ * @param arg0 first argument of comparison (decimal)
+ * @param precision0 first argument's precision
+ * @param scale0 first argument's scale
+ * @param arg1 second argument (decimal)
+ * @param precision1 second argument's precision
+ * @param scale1 second argument's scale
+ * @return bool output of comparison
+ */
+bool arrow_compute_cmp_decimal_decimal_py_entry(
+    int32_t op_enum, decimal_value arg0, int32_t precision0, int32_t scale0,
+    int32_t precision1, int32_t scale1, decimal_value arg1) {
+    try {
+        // convert input to Arrow scalars
+        arrow::Decimal128 arrow_decimal0(arg0.high, arg0.low);
+        arrow::Decimal128Scalar arg0_scalar(
+            arrow_decimal0, arrow::decimal128(precision0, scale0));
+        arrow::Decimal128 arrow_decimal1(arg1.high, arg1.low);
+        arrow::Decimal128Scalar arg1_scalar(
+            arrow_decimal1, arrow::decimal128(precision1, scale1));
+        return arrow_compute_cmp_scalar(op_enum, arg0_scalar, arg1_scalar);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return false;
+    }
+}
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
@@ -127,12 +334,10 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
     SetAttrStringFromVoidPtr(m, int64_to_decimal);
 
-    SetAttrStringFromVoidPtr(m, decimal_cmp_eq);
-    SetAttrStringFromVoidPtr(m, decimal_cmp_ne);
-    SetAttrStringFromVoidPtr(m, decimal_cmp_gt);
-    SetAttrStringFromVoidPtr(m, decimal_cmp_ge);
-    SetAttrStringFromVoidPtr(m, decimal_cmp_lt);
-    SetAttrStringFromVoidPtr(m, decimal_cmp_le);
+    SetAttrStringFromVoidPtr(m, arrow_compute_cmp_py_entry);
+    SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_int_py_entry);
+    SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_float_py_entry);
+    SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_decimal_py_entry);
 
     return m;
 }
@@ -375,157 +580,5 @@ arrow::Decimal128 str_to_decimal(const std::string& str_val) {
     CHECK_ARROW_AND_ASSIGN(decimal.Rescale(scale, PY_DECIMAL_SCALE),
                            "decimal rescale error", decimal);
     return decimal;
-#undef CHECK
-}
-
-// TODO: Make sure comparitors have the correct precision values/consider
-// precision values
-bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 == arrow_decimal2;
-#undef CHECK
-}
-
-bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 != arrow_decimal2;
-#undef CHECK
-}
-
-bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 > arrow_decimal2;
-#undef CHECK
-}
-
-bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 >= arrow_decimal2;
-#undef CHECK
-}
-
-bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 < arrow_decimal2;
-#undef CHECK
-}
-
-bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
-                    int64_t scale2) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal1);
-    arrow::Decimal128 arrow_decimal2(val2.high, val2.low);
-    CHECK_ARROW_AND_ASSIGN(arrow_decimal2.Rescale(scale2, PY_DECIMAL_SCALE),
-                           "decimal rescale error", arrow_decimal2);
-    return arrow_decimal1 <= arrow_decimal2;
 #undef CHECK
 }

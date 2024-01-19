@@ -131,6 +131,15 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
         else:
             operator_str = ">="
 
+        # decimal array comparison is done in Arrow to avoid function call overhead for
+        # each row
+        if isinstance(arr0, bodo.DecimalArrayType) or isinstance(
+            arr1, bodo.DecimalArrayType
+        ):
+            return eval(
+                f"lambda arr0, arr1, dict_encoding_state, func_id: arr0 {operator_str} arr1"
+            )
+
         # Always unbox in case of Timestamp to avoid issues
         scalar_text = f"res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0) {operator_str} bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg1)"
         use_dict_caching = not is_overload_none(dict_encoding_state)
