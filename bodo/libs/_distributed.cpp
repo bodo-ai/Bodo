@@ -536,9 +536,9 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
     int num_pes;
     int max_cores = FREE_MAX_CORES;
-    int year;
-    int month;
-    int day;
+    int year = -1;
+    int month = -1;
+    int day = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     if (num_pes > FREE_MAX_CORES) {
         // get max cores and expiration date from license, and verify license

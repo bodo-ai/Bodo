@@ -24,7 +24,7 @@ def test_pa_schema_reduction():
     # Different, incompatible schema
     schema_a = pa.schema([("a", pa.int32())])
     schema_b = pa.schema([("a", pa.int64())])
-    with pytest.raises(pa.lib.ArrowInvalid):
+    with pytest.raises(pa.lib.ArrowTypeError):
         res, _ = bodo.io.helpers.pa_schema_unify_reduction(
             (schema_a, 1), (schema_b, 1), None
         )

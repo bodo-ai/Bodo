@@ -8,10 +8,12 @@ import operator
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 
 import pandas as pd
+import psutil
 import pytest
 from mpi4py import MPI
 from numba.core.runtime import rtsys
@@ -260,13 +262,11 @@ def minio_server():
     cwd = os.getcwd()
 
     # Kill an existing Minio server (orphan process from segfault)
-    # TODO: Add psutil to conda-lock.yml after Arrow 13 PR
-    # import psutil
-    # for proc in psutil.process_iter():
-    #     if proc.name() == "minio":
-    #         proc.kill()
-    #         shutil.rmtree(cwd + "/Data")
-    #         time.sleep(1)
+    for proc in psutil.process_iter():
+        if proc.name() == "minio":
+            proc.kill()
+            shutil.rmtree(cwd + "/Data")
+            time.sleep(1)
 
     # Session level environment variables used for S3 Testing.
 

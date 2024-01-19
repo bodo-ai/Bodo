@@ -723,9 +723,9 @@ static std::unique_ptr<S3StorageManager> MakeS3(
     auto s3_location = options->location;
     std::string rel_path;
 
-    // TODO(srilman): Arrow 14 adds support for the AWS_ENDPOINT_URL env
-    // so it can potentially pick up a MinIO endpoint from here.
-    // Double check if this still works after upgrading Arrow
+    // Arrow 14 adds support for the AWS_ENDPOINT_URL env
+    // If set, this will use it as the S3 endpoint
+    // For example, it will spill to MinIO if it is exposed through the env
     if (!arrow::fs::IsS3Initialized()) {
         arrow::fs::S3GlobalOptions s3_global_options;
         s3_global_options.log_level = arrow::fs::S3LogLevel::Fatal;

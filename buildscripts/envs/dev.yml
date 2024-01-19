@@ -22,7 +22,7 @@ dependencies:
   - gxx_linux-64>=9        #[linux64]
 
   # C++ Deps
-  - boost-cpp =1.82
+  - boost-cpp =1.84
   - fmt =10.1
 
   # Dev Build Dependencies
@@ -52,8 +52,9 @@ dependencies:
   - ruff
   - credstash
 
-  # PyYAML
+  # Other Deps
   - pyyaml
+  - psutil
 
   # For deltalake testing
   # As of 2023-10-06, deltalake requires pyarrow <=12.0.0

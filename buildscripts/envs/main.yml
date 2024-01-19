@@ -10,7 +10,7 @@ platforms:
 dependencies:
   - python=3.11.*
   - pip
-  - libcurl <=8.4
+  - libcurl <=8.5
 
   # Core
   - numba =0.58.1
@@ -39,7 +39,7 @@ dependencies:
   - matplotlib<=3.6.1
   
   # IO
-  - pyarrow =13.0.0=*_cpu
+  - pyarrow =14.0.2=*_cpu
   - fsspec >=2021.09
   # IO Optional
   - boto3
