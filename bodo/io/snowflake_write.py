@@ -345,7 +345,9 @@ def unbox_snowflake_writer(typ, val, c):
     )  # pragma: no cover
 
 
-def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
+def begin_write_transaction(
+    cursor, location, sf_schema, if_exists, table_type, create_table_info
+):
     """
     Begin the write transactions within the connector
     This include the BEGIN transaction as well as CREATE TABLE
@@ -364,6 +366,7 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
                 if_exists,
                 table_type,
                 always_escape_col_names=True,
+                create_table_info=create_table_info,
             )
         except Exception as e:
             err = RuntimeError(str(e))
@@ -584,14 +587,14 @@ def lower_snowflake_writer_init(context, builder, sig, args):
 
 
 def snowflake_writer_append_table_inner(
-    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta, create_table_meta
 ):  # pragma: no cover
     pass
 
 
 @overload(snowflake_writer_append_table_inner)
 def gen_snowflake_writer_append_table_impl_inner(
-    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta, create_table_meta
 ):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
         raise BodoError(
@@ -643,6 +646,15 @@ def gen_snowflake_writer_append_table_impl_inner(
                 f"to contain a tuple of {n_cols} precision values as integers"
             )
 
+    create_table_info = unwrap_typeref(create_table_meta)
+    if not isinstance(
+        create_table_info, bodo.utils.typing.SnowflakeCreateTableMetaType
+    ):  # pragma: no cover
+        raise BodoError(
+            f"snowflake_writer_append_table: Expected type SnowflakeCreateTableMetaType "
+            f"for `create_table_meta`, found {create_table_info}"
+        )
+
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(
         col_names_meta.meta, table.arr_types, col_precisions_tup
     )
@@ -660,7 +672,13 @@ def gen_snowflake_writer_append_table_impl_inner(
     # all ranks must finish writing their respective files to Snowflake
     # internal stage and sync with rank 0 before it issues COPY INTO.
     def impl_snowflake_writer_append_table(
-        writer, table, col_names_meta, is_last, iter, col_precisions_meta
+        writer,
+        table,
+        col_names_meta,
+        is_last,
+        iter,
+        col_precisions_meta,
+        create_table_meta,
     ):  # pragma: no cover
         if writer["finished"]:
             return True
@@ -773,7 +791,12 @@ def gen_snowflake_writer_append_table_impl_inner(
                 table_type = writer["table_type"]
                 with bodo.objmode():
                     begin_write_transaction(
-                        cursor, location, sf_schema, if_exists, table_type
+                        cursor,
+                        location,
+                        sf_schema,
+                        if_exists,
+                        table_type,
+                        create_table_info,
                     )
                 writer["is_initialized"] = True
             # If an async COPY INTO command is in progress, retrieve and validate it.
@@ -936,7 +959,7 @@ def gen_snowflake_writer_append_table_impl_inner(
 
 
 def snowflake_writer_append_table(
-    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta, create_table_meta
 ):  # pragma: no cover
     pass
 
@@ -957,10 +980,16 @@ SnowflakeWriterAppendInfer._no_unliteral = True
 # Using a wrapper to keep snowflake_writer_append_table_inner as overload and avoid
 # Numba objmode bugs (e.g. leftover ir.Del in IR leading to errors)
 def impl_wrapper(
-    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta, create_table_meta
 ):  # pragma: no cover
     return snowflake_writer_append_table_inner(
-        writer, table, col_names_meta, is_last, iter, col_precisions_meta
+        writer,
+        table,
+        col_names_meta,
+        is_last,
+        iter,
+        col_precisions_meta,
+        create_table_meta,
     )
 
 

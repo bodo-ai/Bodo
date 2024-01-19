@@ -18,9 +18,13 @@ abstract class SqlSnowflakeCreateTableBase(
     name: SqlIdentifier?,
     columnList: SqlNodeList?,
     query: SqlNode?,
+    private val tableCommentNode: SqlNode?,
 ) : SqlCreateTable(pos, replace, ifNotExists, name, columnList, query) {
+    val meta = SnowflakeCreateTableMetadata()
     init {
         createType = tableType
+        tableCommentNode?.let { meta.setTableComment(it) }
+        columnList?.let { meta.setColumnComments(it) }
     }
 
     override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
@@ -36,8 +40,23 @@ abstract class SqlSnowflakeCreateTableBase(
             writer.keyword("IF NOT EXISTS")
         }
         name.unparse(writer, leftPrec, rightPrec)
+        getcolumnList()?.let {
+            val frame = writer.startList("(", ")")
+            for (c in it) {
+                writer.sep(",")
+                c.unparse(writer, 0, 0)
+            }
+            writer.endList(frame)
+        }
+        tableCommentNode?.let {
+            writer.keyword("COMMENT")
+            writer.keyword("=")
+            it.unparse(writer, leftPrec, rightPrec)
+        }
         unparseSuffix(writer, leftPrec, rightPrec)
     }
+
+    open fun getColumnCommentStrings(): List<String?>? = null
 
     abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int)
 }

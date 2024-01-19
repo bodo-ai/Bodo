@@ -4,8 +4,10 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
+import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,8 +16,12 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.ViewExpanders;
 import org.apache.calcite.prepare.Prepare;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.hint.RelHint;
+import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.Resources;
@@ -24,9 +30,12 @@ import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSampleSpec;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorException;
@@ -108,6 +117,88 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
 
     // Defer all other conversions to calcite core.
     super.convertFrom(bb, from, fieldNames);
+  }
+
+  /**
+   * Recursively converts a query to a relational expression.
+   *
+   * @param query Query
+   * @param top Whether this query is the top-level query of the statement
+   * @param targetRowType Target row type, or null
+   * @return Relational expression
+   */
+  @Override
+  protected RelRoot convertQueryRecursive(
+      SqlNode query, boolean top, @Nullable RelDataType targetRowType) {
+    if (query instanceof SqlSnowflakeCreateTableBase) {
+      // Create table has to be the topmost relnode
+      assert top;
+      // Bodo change: intercept logic for CREATE TABLE and call our own method
+      return RelRoot.of(
+          bodoConvertCreateTable((SqlSnowflakeCreateTableBase) query), SqlKind.CREATE_TABLE);
+    }
+    return super.convertQueryRecursive(query, top, targetRowType);
+  }
+
+  /**
+   * Converts a CREATE TABLE SqlNode to a RelNode.
+   *
+   * @param createCall The CREATE TABLE call being converted
+   */
+  private RelNode bodoConvertCreateTable(SqlSnowflakeCreateTableBase createCall) {
+    final SqlNode createTableDef = requireNonNull(createCall.getQuery());
+    final RelNode inputRel =
+        convertCreateTableDefinition(
+            createTableDef, requireNonNull(this.validator).getCreateTableScope(createCall));
+    return BodoLogicalTableCreate.create(
+        inputRel,
+        requireNonNull(createCall.getOutputTableSchema()),
+        requireNonNull(createCall.getOutputTableName()),
+        createCall.getReplace(),
+        createCall.getCreateTableType(),
+        requireNonNull(createCall.getOutputTableSchemaPath()),
+        createCall.getMeta());
+  }
+
+  private RelNode convertCreateTableQuery(SqlNode createTableDef) {
+    SqlNode nonNullCreateTableDef = requireNonNull(createTableDef, "createTableDef");
+    RelRoot relRoot = convertQueryRecursive(nonNullCreateTableDef, false, null);
+    // Map the root to the final row type. This is needed to prune intermediate columns needed
+    // if the inner data requires intermediate columns. See testCreateTableOrderByExpr
+    // as an example.
+    RelDataType validatedRowType = this.validator.getValidatedNodeType(nonNullCreateTableDef);
+    RelNode topNode = relRoot.project();
+    return RelRoot.of(topNode, validatedRowType, nonNullCreateTableDef.getKind()).project();
+  }
+
+  private RelNode convertCreateTableIdentifier(
+      SqlNode createTableDef, SqlValidatorScope createTableScope) {
+    // The scope of the createTableCall should always just be the catalog scope,
+    // which we use to convert this table
+
+    final Blackboard bb = createBlackboard(createTableScope, null, false);
+    convertFrom(bb, createTableDef);
+    final RelCollation emptyCollation = cluster.traitSet().canonize(RelCollations.of());
+
+    // Create Table like creates a table with an identical schema, copies no rows.
+    // Therefore, we add a LIMIT 0 to the query.
+    return LogicalSort.create(
+        bb.root(),
+        emptyCollation,
+        null,
+        relBuilder
+            .getRexBuilder()
+            .makeLiteral(0, typeFactory.createSqlType(SqlTypeName.BIGINT), false));
+  }
+
+  protected RelNode convertCreateTableDefinition(
+      SqlNode createTableDef, SqlValidatorScope createTableScope) {
+
+    if (createTableDef instanceof SqlIdentifier) {
+      return convertCreateTableIdentifier(createTableDef, createTableScope);
+    } else {
+      return convertCreateTableQuery(createTableDef);
+    }
   }
 
   protected class BodoBlackboard extends Blackboard {

@@ -1644,6 +1644,7 @@ def test_batched_write_agg(
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = int(256e3)
         bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = sf_write_streaming_num_files
+        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
         def impl_write(conn_r, conn_w):
             reader0 = pd.read_sql(
@@ -1665,7 +1666,7 @@ def test_batched_write_agg(
                 table, is_last = read_arrow_next(reader0, True)
                 total0 += get_table_data(table, 1).sum()
                 all_is_last = snowflake_writer_append_table(
-                    writer, table, col_meta, is_last, iter_val, None
+                    writer, table, col_meta, is_last, iter_val, None, ctas_meta
                 )
                 iter_val += 1
 
@@ -1907,6 +1908,7 @@ def test_batched_write_nested_array(
                 bcast_result=False,
             )(cursor, table_name, column_type, df)
         cursor.close()
+        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
         def write_impl(conn, df):
             writer = snowflake_writer_init(
@@ -1940,7 +1942,7 @@ def test_batched_write_nested_array(
                 )
                 is_last = (iter_val * batch_size) >= len(df)
                 all_is_last = snowflake_writer_append_table(
-                    writer, table, col_meta, is_last, iter_val, None
+                    writer, table, col_meta, is_last, iter_val, None, ctas_meta
                 )
                 iter_val += 1
 
@@ -1994,6 +1996,7 @@ def test_write_with_string_precision(memory_leak_check):
     try:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
         with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
+            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
             def impl(conn):
                 A1 = bodo.utils.conversion.make_replicated_array("ALPHABET", 50)
@@ -2024,7 +2027,7 @@ def test_write_with_string_precision(memory_leak_check):
                 iter_val = 0
                 while not all_is_last:
                     all_is_last = snowflake_writer_append_table(
-                        writer, T, global_1, True, iter_val, global_3
+                        writer, T, global_1, True, iter_val, global_3, ctas_meta
                     )
                     iter_val += 1
 
@@ -2063,6 +2066,7 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     try:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
         with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
+            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
             def impl(conn):
                 A1 = bodo.utils.conversion.make_replicated_array(
@@ -2104,7 +2108,7 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
                 iter_val = 0
                 while not all_is_last:
                     all_is_last = snowflake_writer_append_table(
-                        writer, T, global_1, True, iter_val, global_3
+                        writer, T, global_1, True, iter_val, global_3, ctas_meta
                     )
                     iter_val += 1
                 return df
@@ -2152,6 +2156,7 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
             select_query, bodo_read_tablename, db, schema
         ) as read_table_name:
             global_1 = bodo.utils.typing.ColNamesMetaType(("A",))
+            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
             def impl(conn):
                 reader = pd.read_sql(
@@ -2184,6 +2189,7 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
                         __bodo_is_last_streaming_output_1,
                         _iter_1,
                         None,
+                        ctas_meta,
                     )
                     _iter_1 = _iter_1 + 1
                 bodo.io.arrow_reader.arrow_reader_del(reader)
@@ -2247,3 +2253,95 @@ def test_aborted_detached_query(memory_leak_check):
         ), "ABORT_DETACHED_QUERY not set to False by snowflake_connect()"
     finally:
         pd.read_sql(f"alter user set ABORT_DETACHED_QUERY={old_value}", conn)
+
+
+def test_create_table_with_comments(memory_leak_check):
+    """
+    Tests using streaming Snowflake write functions to create a new table
+    with table comments and column comments.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    snowflake_user = 1
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = bodo.tests.utils.get_snowflake_connection_string(
+        db, schema, user=snowflake_user
+    )
+    bodo_write_tablename = "BODO_TEST_SNOWFLAKE_CTAS_COMMENT"
+    # Write the table to Snowflake using a table name that is created by the context
+    # manager and will be deleted at the end
+    with ensure_clean_snowflake_table(conn, bodo_write_tablename) as write_table_name:
+        name_global = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
+        keep_global = bodo.utils.typing.MetaType((0, 1, 2))
+        precisions_global = bodo.utils.typing.MetaType((38, 1, -1))
+        ctas_global = bodo.utils.typing.SnowflakeCreateTableMetaType(
+            table_comment="Records of notable events",
+            column_comments=("Index of events", None, "Date of notable event"),
+        )
+
+        def impl_write(df, conn):
+            writer = snowflake_writer_init(
+                -1,
+                conn,
+                write_table_name,
+                "PUBLIC",
+                "replace",
+                "",
+            )
+            T = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+                (),
+                keep_global,
+                3,
+            )
+            bodo.io.snowflake_write.snowflake_writer_append_table(
+                writer,
+                T,
+                name_global,
+                True,
+                0,
+                precisions_global,
+                ctas_global,
+            )
+
+        df = pd.DataFrame(
+            {
+                "A": [0, 1, 2, 3, 4],
+                "B": ["A", "B", "C", "D", "E"],
+                "C": [datetime.date.fromordinal(738800 + i**3) for i in range(2, 7)],
+            }
+        )
+        bodo.jit(cache=False)(impl_write)(df, conn)
+
+        # Request information about all of the columns of the table, then confirm
+        # that the desired ones have the specified comments.
+        column_info = pd.read_sql(f"DESCRIBE TABLE {write_table_name}", conn)
+        assert len(column_info == 3), "Wrong number of columns"
+        assert column_info["type"].to_list() == [
+            "NUMBER(38,0)",
+            "VARCHAR(1)",
+            "DATE",
+        ], "Wrong column types"
+        assert column_info["null?"].to_list() == [
+            "Y",
+            "Y",
+            "Y",
+        ], "Wrong column nullability"
+        assert column_info["comment"].to_list() == [
+            "Index of events",
+            None,
+            "Date of notable event",
+        ], "Wrong column comments"
+
+        # Request information about the overall table, then confirm that it has
+        # the desired comment.
+        table_info = pd.read_sql(
+            f"SHOW TABLES LIKE '{write_table_name}' IN SCHEMA PUBLIC", conn
+        )
+        assert len(table_info == 1), "Wrong number of tables found"
+        assert table_info["rows"][0] == 5, "Wrong number of rows"
+        assert (
+            table_info["comment"][0] == "Records of notable events"
+        ), "Wrong table comment"

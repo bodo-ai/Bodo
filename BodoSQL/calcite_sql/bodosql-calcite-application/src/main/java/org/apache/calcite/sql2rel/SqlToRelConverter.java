@@ -50,7 +50,6 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.core.LogicalTableCreate;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
@@ -4143,33 +4142,29 @@ public class SqlToRelConverter {
    * @return Relational expression
    */
   protected RelRoot convertQueryRecursive(SqlNode query, boolean top,
-      @Nullable RelDataType targetRowType) {
+                                          @Nullable RelDataType targetRowType) {
     final SqlKind kind = query.getKind();
     switch (kind) {
-    case SELECT:
-      return RelRoot.of(convertSelect((SqlSelect) query, top), kind);
-    case INSERT:
-      return RelRoot.of(convertInsert((SqlInsert) query), kind);
-    case DELETE:
-      return RelRoot.of(convertDelete((SqlDelete) query), kind);
-    case UPDATE:
-      return RelRoot.of(convertUpdate((SqlUpdate) query), kind);
-    case MERGE:
-      return RelRoot.of(convertMerge((SqlMerge) query), kind);
-    case UNION:
-    case INTERSECT:
-    case EXCEPT:
-      return RelRoot.of(convertSetOp((SqlCall) query), kind);
-    case WITH:
-      return convertWith((SqlWith) query, top);
-    case VALUES:
-      return RelRoot.of(convertValues((SqlCall) query, targetRowType), kind);
-    case CREATE_TABLE:
-      // Create table has to be the topmost relnode
-      assert top;
-      return RelRoot.of(convertCreateTable((SqlCreateTable) query), kind);
-    default:
-      throw new AssertionError("not a query: " + query);
+      case SELECT:
+        return RelRoot.of(convertSelect((SqlSelect) query, top), kind);
+      case INSERT:
+        return RelRoot.of(convertInsert((SqlInsert) query), kind);
+      case DELETE:
+        return RelRoot.of(convertDelete((SqlDelete) query), kind);
+      case UPDATE:
+        return RelRoot.of(convertUpdate((SqlUpdate) query), kind);
+      case MERGE:
+        return RelRoot.of(convertMerge((SqlMerge) query), kind);
+      case UNION:
+      case INTERSECT:
+      case EXCEPT:
+        return RelRoot.of(convertSetOp((SqlCall) query), kind);
+      case WITH:
+        return convertWith((SqlWith) query, top);
+      case VALUES:
+        return RelRoot.of(convertValues((SqlCall) query, targetRowType), kind);
+      default:
+        throw new AssertionError("not a query: " + query);
     }
   }
 
@@ -4609,67 +4604,6 @@ public class SqlToRelConverter {
         LogicalTableModify.Operation.DELETE, null, null, false);
   }
 
-
-  private RelNode convertCreateTableQuery(SqlNode createTableDef) {
-    SqlNode nonNullCreateTableDef = requireNonNull(createTableDef, "createTableDef");
-    RelRoot relRoot = convertQueryRecursive(nonNullCreateTableDef, false, null);
-    // Map the root to the final row type. This is needed to prune intermediate columns needed
-    // if the inner data requires intermediate columns. See testCreateTableOrderByExpr
-    // as an example.
-    RelDataType validatedRowType = this.validator().getValidatedNodeType(nonNullCreateTableDef);
-    RelNode topNode = relRoot.project();
-    return RelRoot.of(topNode, validatedRowType, nonNullCreateTableDef.getKind()).project();
-  }
-
-  private RelNode convertCreateTableIdentifier(
-      SqlNode createTableDef, SqlValidatorScope createTableScope) {
-    // The scope of the createTableCall should always just be the catalog scope,
-    // which we use to convert this table
-
-    final Blackboard bb = createBlackboard(createTableScope,
-        null, false);
-    convertIdentifier(bb, (SqlIdentifier) createTableDef, null, null);
-    final RelCollation emptyCollation =
-        cluster.traitSet().canonize(RelCollations.of());
-
-    //Create Table like creates a table with an identical schema, copies no rows.
-    //Therefore, we add a LIMIT 0 to the query.
-    return LogicalSort.create(bb.root(), emptyCollation,
-        null,
-        relBuilder.getRexBuilder().makeLiteral(
-            0, typeFactory.createSqlType(SqlTypeName.BIGINT),
-            false));
-  }
-
-  private RelNode convertCreateTableDefinition(
-      SqlNode createTableDef, SqlValidatorScope createTableScope) {
-
-    if (createTableDef instanceof SqlIdentifier) {
-      return convertCreateTableIdentifier(createTableDef, createTableScope);
-    } else {
-      return convertCreateTableQuery(createTableDef);
-    }
-  }
-
-  private RelNode convertCreateTable(SqlCreateTable call) {
-
-    // NOTE: We currently require a SqlCreateTable to have a query in validation,
-    // so the call to requireNonNull is valid here
-    final SqlNode createTableDef = requireNonNull(call.getQuery());
-    final RelNode inputRel = convertCreateTableDefinition(
-        createTableDef, requireNonNull(this.validator).getCreateTableScope(call));
-
-    return LogicalTableCreate.create(
-        inputRel,
-        // all these fields should be set in validation
-        requireNonNull(call.getOutputTableSchema()),
-        requireNonNull(call.getOutputTableName()),
-        // Failing if already exists is the default in SF
-        // TODO: support a dialect dependent default if/when merging to upstream Calcite
-        call.getReplace(),
-        call.getCreateTableType(),
-        requireNonNull(call.getOutputTableSchemaPath()));
-  }
 
   private RelNode convertUpdate(SqlUpdate call) {
     final SqlSelect sourceSelect =

@@ -3,7 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelRoot
-import org.apache.calcite.rel.core.LogicalTableCreate
+import org.apache.calcite.rel.core.TableCreate
 import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.sql.SqlKind
 import java.lang.AssertionError
@@ -46,7 +46,7 @@ fun RelRoot.pandasProject(): RelNode =
         // select. We need to check that the names and columns match the expectations
         // for the RelRoot.
         // TODO: Add other DDL operations?
-        if (this.rel !is LogicalTableCreate) {
+        if (this.rel !is TableCreate) {
             throw AssertionError("Input create sqlkind doesn't match a supported node")
         }
         // Insert the projection before the CREATE_TABLE
@@ -112,7 +112,7 @@ fun RelRoot.logicalProject(): RelNode =
         // select. We need to check that the names and columns match the expectations
         // for the RelRoot.
         // TODO: Add other DDL operations?
-        if (this.rel !is LogicalTableCreate) {
+        if (this.rel !is TableCreate) {
             throw AssertionError("Input create sqlkind doesn't match a supported node")
         }
         // Insert the projection before the CREATE_TABLE
@@ -142,7 +142,7 @@ fun RelRoot.calciteLogicalProject(): RelNode =
         // select. We need to check that the names and columns match the expectations
         // for the RelRoot.
         // TODO: Add other DDL operations?
-        if (this.rel !is LogicalTableCreate) {
+        if (this.rel !is TableCreate) {
             throw AssertionError("Input create sqlkind doesn't match a supported node")
         }
         // Insert the projection before the CREATE_TABLE

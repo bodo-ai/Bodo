@@ -169,6 +169,7 @@ def test_streaming_write(
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = sf_write_chunk_size
         bodo.io.snowflake.SF_WRITE_STREAMING_COPY_INTO_FILES = sf_write_num_files
+        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
 
         @bodo.jit(cache=False, distributed=["table", "reader0", "writer"])
         def impl_write(conn_r, conn_w):
@@ -209,7 +210,7 @@ def test_streaming_write(
 
                 t_writer_append = time.time()
                 snowflake_writer_append_table(
-                    writer, table, col_meta, all_is_last, None
+                    writer, table, col_meta, all_is_last, None, ctas_meta
                 )
                 t_writer_append = time.time() - t_writer_append
                 if verbose and t_writer_append >= 5e-4:

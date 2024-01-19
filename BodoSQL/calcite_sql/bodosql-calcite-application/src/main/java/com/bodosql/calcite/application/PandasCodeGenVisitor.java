@@ -61,6 +61,7 @@ import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
@@ -977,7 +978,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           this.generatedCode.add(
               new Op.Stmt(
                   outputSchemaAsCatalog.generateWriteCode(
-                      inDf, node.getTableName(), ifExists, createTableType)));
+                      this, inDf, node.getTableName(), ifExists, createTableType, node.getMeta())));
         });
   }
 
@@ -1045,12 +1046,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate append call
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
+            this,
             writerVar,
             inTable,
             colNamesGlobal,
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
-            columnPrecisions);
+            columnPrecisions,
+            node.getMeta());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
@@ -1244,7 +1247,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             this.generatedCode.add(
                 new Op.Stmt(
                     bodoSqlTable.generateWriteCode(
-                        castedAndRenamedWriteBackDfVar, this.fileListAndSnapshotIdArgs)));
+                        this, castedAndRenamedWriteBackDfVar, this.fileListAndSnapshotIdArgs)));
           }
         });
   }
@@ -1271,7 +1274,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           Variable castedAndRenamedDfVar = this.genDfVar();
           this.generatedCode.add(new Op.Assign(castedAndRenamedDfVar, castedAndRenamedDfExpr));
           this.generatedCode.add(
-              new Op.Stmt(bodoSqlTable.generateWriteCode(castedAndRenamedDfVar)));
+              new Op.Stmt(bodoSqlTable.generateWriteCode(this, castedAndRenamedDfVar)));
         });
   }
 
@@ -1333,12 +1336,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate append call
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
+            this,
             writerVar,
             inputTable,
             colNamesGlobal,
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
-            Expr.None.INSTANCE);
+            Expr.None.INSTANCE,
+            new SnowflakeCreateTableMetadata());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();

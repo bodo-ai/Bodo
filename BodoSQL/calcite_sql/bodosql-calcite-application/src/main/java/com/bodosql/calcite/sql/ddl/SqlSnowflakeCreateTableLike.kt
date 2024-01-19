@@ -18,7 +18,8 @@ class SqlSnowflakeCreateTableLike(
     val likeSource: SqlNode,
     val clusterExprs: SqlNodeList?,
     val copyGrants: Boolean,
-) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, likeSource) {
+    comment: SqlNode?,
+) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, likeSource, comment) {
 
     override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
         writer.keyword("LIKE")
