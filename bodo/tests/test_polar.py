@@ -9,14 +9,12 @@ from numpy.linalg import norm
 from scipy.fftpack import fft2, fftshift
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
 
-@pytest.mark.skipif(
-    bodo.get_size() > 1,
-    reason="[BSE-991] TODO: investigate parallel support for taylor function",
-)
+# TODO: [BSE-991] investigate parallel support for taylor function
+@pytest_mark_one_rank
 @pytest.mark.skip(
     reason="TODO: Retrieve data from https://s3.console.aws.amazon.com/s3/buckets/data"
 )
@@ -221,10 +219,8 @@ def test_division_bug(datapath, memory_leak_check):
     check_func(impl, (np.linspace(0, 10, 101),), convert_to_nullable_float=False)
 
 
-@pytest.mark.skipif(
-    bodo.get_size() > 1,
-    reason="[BSE-991] TODO: investigate parallel support for taylor function",
-)
+# TODO: [BSE-991] investigate parallel support for taylor function
+@pytest_mark_one_rank
 def test_taylor(memory_leak_check):
     def taylor(nsamples, S_L=43):
         xi = np.linspace(-0.5, 0.5, nsamples)

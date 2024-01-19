@@ -15,6 +15,7 @@ import bodo
 from bodo.tests.utils import (
     check_func,
     nullable_float_arr_maker,
+    pytest_mark_one_rank,
     pytest_slow_unless_codegen,
 )
 
@@ -1126,6 +1127,7 @@ def test_windowed_count_if(
         "max",
     ],
 )
+@pytest_mark_one_rank
 def test_windowed_non_numeric(
     func,
     dataset,
@@ -1142,10 +1144,6 @@ def test_windowed_non_numeric(
 
     def impl3(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_max(S, lower, upper))
-
-    if bodo.get_size() > 1:
-        # These kernels are only sequential
-        return
 
     data = window_kernel_all_types_data[dataset]
 

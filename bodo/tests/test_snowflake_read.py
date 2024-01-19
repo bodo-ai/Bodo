@@ -31,6 +31,7 @@ from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
+    pytest_mark_one_rank,
     pytest_snowflake,
     run_rank0,
     temp_env_override,
@@ -178,7 +179,7 @@ def cursor(snowflake_conn: "SnowflakeConnection"):
     cursor.close()
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_decimal_metadata_handling(cursor):
     """
     Test that Bodo's Snowflake schema inference can
@@ -208,7 +209,7 @@ def test_decimal_metadata_handling(cursor):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_array_metadata_handling(cursor):
     """
     Test that Array Columns are Properly Typed
@@ -232,7 +233,7 @@ def test_array_metadata_handling(cursor):
     assert pa_fields[0].equals(pa.field("A", pa.large_list(pa.date32()), nullable=True))
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_array_metadata_handling_err(cursor):
     """
     Test that an error is raised when an array item column
@@ -258,7 +259,7 @@ def test_array_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_map_metadata_handling(cursor):
     """
     Test that Object Columns are Properly Typed in Map
@@ -284,7 +285,7 @@ def test_map_metadata_handling(cursor):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_struct_metadata_handling(cursor):
     """
     Test that Object Columns are Typed in Struct when Map is Invalid
@@ -327,7 +328,7 @@ def test_struct_metadata_handling(cursor):
         assert stype.field(stype.get_field_index(f.name)).equals(f)
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_struct_metadata_handling_err_multiple_types(cursor):
     """
     Test that an error is raised when a object column has a field
@@ -352,7 +353,7 @@ def test_struct_metadata_handling_err_multiple_types(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_struct_metadata_handling_err_uncommon_field(cursor):
     """
     Test that an error is raised when a object column with heterogenous types
@@ -365,7 +366,7 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
             cursor,
             """
             with thousand as (
-                select 
+                select
                     OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', '1980-01-05', 'c', null) as A
                 from table(generator(ROWCOUNT=>1000))
             )
@@ -382,7 +383,7 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_variant_metadata_handling(cursor):
     """
     Test that Variant Columns are typed correctly, with the following original types:
@@ -398,12 +399,12 @@ def test_variant_metadata_handling(cursor):
     pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
         """
-        select 
-            ts_create::variant as V1, 
-            id::variant as V2, 
-            tusd::variant as V3, 
-            ifd::variant as V4, 
-            json_ffdubt as V5, 
+        select
+            ts_create::variant as V1,
+            id::variant as V2,
+            tusd::variant as V3,
+            ifd::variant as V4,
+            json_ffdubt as V5,
             json_rnks['b'] as V6,
             parse_json('[{"A": 42, "B": []}, {"A": -1, "B": ["C", null, "D"]}, {"A": null, "B": null}]') as V7
         from can_brod
@@ -439,7 +440,7 @@ def test_variant_metadata_handling(cursor):
         assert pa_fields[i].type == target_types[i]
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_float_array_metadata_handling(cursor):
     """
     Test that Numeric Array Columns, that may contain Integers, Floats, and Decimals
@@ -472,7 +473,7 @@ def test_float_array_metadata_handling(cursor):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_nested_in_array_metadata_handling(cursor):
     """
     Test that nested semi-structured data in Array Columns are properly typed
@@ -511,7 +512,7 @@ def test_nested_in_array_metadata_handling(cursor):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_array_in_array_metadata_handling_err(cursor):
     with pytest.raises(
         BodoError,
@@ -530,7 +531,7 @@ def test_array_in_array_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_map_in_array_metadata_handling_err(cursor):
     with pytest.raises(
         BodoError,
@@ -551,7 +552,7 @@ def test_map_in_array_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_struct_in_array_metadata_handling_err(cursor):
     with pytest.raises(
         BodoError,
@@ -563,7 +564,7 @@ def test_struct_in_array_metadata_handling_err(cursor):
             select ARRAY_CONSTRUCT(
                 OBJECT_CONSTRUCT_KEEP_NULL(
                     'a', ARRAY_CONSTRUCT(10, 10.0),
-                    'b', 'test' 
+                    'b', 'test'
                 ),
                 OBJECT_CONSTRUCT_KEEP_NULL('a', null, 'b', 10)
             ) as main
@@ -576,7 +577,7 @@ def test_struct_in_array_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_nested_in_map_metadata_handling(cursor):
     """
     Test that nested semi-structured data in Map Columns are properly typed
@@ -618,7 +619,7 @@ def test_nested_in_map_metadata_handling(cursor):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_array_in_map_metadata_handling_err(cursor):
     with pytest.raises(
         BodoError,
@@ -640,7 +641,7 @@ def test_array_in_map_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_struct_in_map_metadata_handling_err(cursor):
     with pytest.raises(
         BodoError,
@@ -652,7 +653,7 @@ def test_struct_in_map_metadata_handling_err(cursor):
             select OBJECT_CONSTRUCT_KEEP_NULL(
                 'bodo', OBJECT_CONSTRUCT_KEEP_NULL(
                     'name', ARRAY_CONSTRUCT(10, 10.0),
-                    'owner', 'test' 
+                    'owner', 'test'
                 ),
                 'data', OBJECT_CONSTRUCT_KEEP_NULL('name', 'data', 'owner', 'tester')
             ) as main
@@ -665,7 +666,7 @@ def test_struct_in_map_metadata_handling_err(cursor):
         )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+@pytest_mark_one_rank
 def test_nested_in_struct_metadata_handling(cursor):
     """
     Test that nested semi-structured data in Struct Columns are properly typed.
@@ -1098,9 +1099,9 @@ def test_read_string_array_col(memory_leak_check):
         union all
         select ARRAY_CONSTRUCT('why', 'does', 'snowflake', 'use') as A
         union all
-        
+
         select ARRAY_CONSTRUCT($$
-        test multiline \t  
+        test multiline \t
         string with junk
         $$) as A
 
@@ -3174,7 +3175,7 @@ def test_logged_queryid_read(memory_leak_check):
         check_logger_msg(stream, "Snowflake Query Submission (Read)")
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="This test is only designed for 1 rank")
+@pytest_mark_one_rank
 def test_disable_result_cache_session_param(memory_leak_check):
     """
     Test that our snowflake connection sets USE_CACHED_RESULT = False

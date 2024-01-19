@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     count_parfor_REPs,
     get_rank,
     get_start_end,
+    pytest_mark_one_rank,
     reduce_sum,
 )
 from bodo.utils.testing import ensure_clean
@@ -2568,11 +2569,8 @@ class TestIO(unittest.TestCase):
 
         check_func(test_impl, (), only_seq=True)
 
+    @pytest_mark_one_rank
     def write_csv(self, data_structure):
-        # only run on a single processor
-        if bodo.get_size() != 1:
-            return
-
         def test_impl(data_structure, fname):
             data_structure.to_csv(fname)
 

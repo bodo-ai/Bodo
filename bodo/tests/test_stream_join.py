@@ -23,6 +23,7 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
     check_func,
+    pytest_mark_one_rank,
     pytest_mark_snowflake,
     set_broadcast_join,
     temp_env_override,
@@ -1659,10 +1660,7 @@ def test_only_one_distributed(
     )
 
 
-@pytest.mark.skipif(
-    bodo.get_size() > 1,
-    reason="Only test with a single rank to simplify the checks",
-)
+@pytest_mark_one_rank
 def test_long_strings_chunked_table_builder(memory_leak_check):
     """
     Tests for the edge cases related to handling of long strings

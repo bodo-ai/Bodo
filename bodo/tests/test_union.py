@@ -7,7 +7,12 @@ from numba.core import types
 import bodo
 from bodo.hiframes.table import TableType
 from bodo.libs.stream_union import UnionStateType
-from bodo.tests.utils import check_func, pytest_mark_pandas, temp_env_override
+from bodo.tests.utils import (
+    check_func,
+    pytest_mark_one_rank,
+    pytest_mark_pandas,
+    temp_env_override,
+)
 from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
@@ -121,7 +126,7 @@ def test_union_nullable_boolean(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+@pytest_mark_one_rank
 def test_stream_union_integer_promotion(memory_leak_check):
     """
     Test Union Casting between:
@@ -157,7 +162,7 @@ def test_stream_union_integer_promotion(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+@pytest_mark_one_rank
 def test_stream_union_float_promotion(memory_leak_check):
     """
     Test Union Casting between:
@@ -194,7 +199,7 @@ def test_stream_union_float_promotion(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+@pytest_mark_one_rank
 def test_stream_union_decimal_promotion(memory_leak_check):
     """
     Test Union Casting between:
@@ -271,7 +276,7 @@ def test_stream_union_decimal_promotion(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+@pytest_mark_one_rank
 def test_stream_union_dict_encoding_combo(memory_leak_check):
     """
     Test Union Casting between:
@@ -303,7 +308,7 @@ def test_stream_union_dict_encoding_combo(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+@pytest_mark_one_rank
 def test_stream_union_null(memory_leak_check):
     """
     Test Union Casting between:

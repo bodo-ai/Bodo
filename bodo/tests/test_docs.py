@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 
 
+@pytest_mark_one_rank
 @pytest.mark.no_cover
 @pytest.mark.skipif(
     "AGENT_NAME" in os.environ, reason="only run in CI/not on azure"
@@ -15,9 +17,6 @@ import bodo
 def test_api_docs_generated(memory_leak_check):
     """Verify that `make gen_api` has been run over the current state of the
     docs directory"""
-    if bodo.get_size() != 1:
-        # Only run on np=1
-        return
     # Get the repository path
     repo_root = subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
     docs_dir = Path(repo_root.strip().decode()) / "docs"
