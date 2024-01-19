@@ -498,7 +498,13 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       argMap.put(paramNames.get(i), arguments.get(i));
     }
     RexNode result = sqlToRelConverter.convertExpression(validatedNode, argMap);
-    return rexBuilder.ensureType(returnType, result, false);
+    // Note: We can't use rexBuilder.ensureType because it will omit matching
+    // nullability for literals.
+    if (result.getType().equals(returnType)) {
+      return result;
+    } else {
+      return rexBuilder.makeCast(returnType, result, true, false);
+    }
   }
 
   /**
@@ -562,7 +568,13 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
           outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
       RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
       RexSubQuery subQuery = RexSubQuery.scalar(result);
-      return rexBuilder.ensureType(returnType, subQuery, false);
+      // Note: We can't use rexBuilder.ensureType because it will omit matching
+      // nullability for literals.
+      if (subQuery.getType().equals(returnType)) {
+        return subQuery;
+      } else {
+        return rexBuilder.makeCast(returnType, subQuery, true, false);
+      }
     } else {
       String msg =
           "BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a"

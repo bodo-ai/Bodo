@@ -79,53 +79,6 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
 
 
 @pytest_mark_one_rank
-def test_unsupported_query_udf(test_db_snowflake_catalog, memory_leak_check):
-    """
-    Test that Snowflake UDFs with a query function body (e.g. SELECT)
-    gives a message that they aren't supported yet,
-    which should differ from the default "access" issues.
-
-    QUERY_FUNCTION is manually defined inside TEST_DB.PUBLIC.
-    """
-
-    def impl(bc, query):
-        return bc.sql(query)
-
-    query = "select QUERY_FUNCTION() as OUTPUT"
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    check_func(
-        impl,
-        (bc, query),
-        py_output=pd.DataFrame({"OUTPUT": [1500000]}),
-        check_dtype=False,
-    )
-
-
-@pytest_mark_one_rank
-def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
-    """
-    Test that Snowflake UDFs with a query function body (e.g. SELECT)
-    that takes a argument gives a message that they aren't supported yet,
-    which should differ from the default "access" issues.
-
-    QUERY_PARAM_FUNCTION is manually defined inside TEST_DB.PUBLIC to take
-    one argument.
-    """
-
-    @bodo.jit
-    def impl(bc, query):
-        return bc.sql(query)
-
-    query = "select QUERY_PARAM_FUNCTION(1)"
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\. BodoSQL does not have support for Snowflake UDFs yet",
-    ):
-        impl(bc, query)
-
-
-@pytest_mark_one_rank
 def test_unsupported_udf_multiple_definitions(
     test_db_snowflake_catalog, memory_leak_check
 ):
