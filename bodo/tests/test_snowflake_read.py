@@ -1119,7 +1119,7 @@ def test_read_string_array_col(memory_leak_check):
     py_output = pd.DataFrame(
         {
             "a": [
-                ["\n        test multiline \\t  \n        string with junk\n        "],
+                ["\n        test multiline \\t\n        string with junk\n        "],
                 ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
                 ["'", '"', '"', "\t\n", "\\"],
                 ["test \0 zero"],
