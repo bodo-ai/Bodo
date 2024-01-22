@@ -27,6 +27,7 @@ def regexp_strings_df():
                     None,
                 ],
                 "B": [1, 2, 3, 1, 2, 3],
+                "P": [".*The.*", ".*\W+o\w*.*", None, "the.*", None, ".*\w+-\w+.*"],
             }
         )
     }
@@ -191,6 +192,39 @@ def test_regexp_like(regexp_strings_df, args, spark_info, memory_leak_check):
 @pytest.mark.parametrize(
     "args",
     [
+        (
+            "SELECT REGEXP_LIKE(A, P, 'i') FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [True, True, None, False, None, None],
+                        dtype=pd.BooleanDtype(),
+                    )
+                }
+            ),
+        ),
+        (
+            "SELECT CASE WHEN REGEXP_LIKE(A, P, '') THEN 'Y' ELSE 'N' END FROM table1",
+            pd.DataFrame({0: pd.Series(["N", "Y", "N", "N", "N", "N"])}),
+        ),
+    ],
+)
+def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_check):
+    """Test REGEXP_LIKE with a non-scalar pattern argument"""
+    query, answer = args
+    check_query(
+        query,
+        regexp_strings_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
         pytest.param(
             (
                 "SELECT REGEXP_COUNT(A, 'The') FROM table1",
@@ -235,6 +269,34 @@ def test_regexp_count(regexp_strings_df, args, spark_info, memory_leak_check):
         query,
         regexp_strings_df,
         spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        (
+            "SELECT REGEXP_COUNT(A, P) FROM table1",
+            pd.DataFrame(
+                {0: pd.Series([0, 1, None, 1, None, None], dtype=pd.Int32Dtype())}
+            ),
+        ),
+        (
+            "SELECT CASE WHEN REGEXP_COUNT(A, P, 1, 'i') > 0 THEN ':)' ELSE ':(' END FROM table1",
+            pd.DataFrame({0: pd.Series([":)", ":)", ":(", ":)", ":(", ":("])}),
+        ),
+    ],
+)
+def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_check):
+    """Test REGEXP_COUNT with a non-scalar pattern argument"""
+    query, answer = args
+    check_query(
+        query,
+        regexp_strings_df,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
