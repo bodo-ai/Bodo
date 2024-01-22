@@ -378,6 +378,22 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
     return _pat_findall_impl
 
 
+def re_count(p, string):  # pragma: no cover
+    pass
+
+
+@overload(re_count)
+def overload_regexp_count(p, string):
+    """Count the number of regex matches, used in BodoSQL regexp_count() kernel"""
+
+    def impl(p, string):  # pragma: no cover
+        with numba.objmode(m="int64"):
+            m = len(p.findall(string))
+        return m
+
+    return impl
+
+
 @overload_method(RePatternType, "subn", no_unliteral=True)
 def re_subn_overload(p, repl, string, count=0):
     def _re_subn_impl(p, repl, string, count=0):  # pragma: no cover

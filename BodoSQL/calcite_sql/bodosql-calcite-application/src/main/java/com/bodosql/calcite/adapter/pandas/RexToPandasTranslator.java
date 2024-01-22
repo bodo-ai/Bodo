@@ -1103,10 +1103,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           throw new BodoSQLCodegenException(
               "Error, invalid number of arguments passed to REGEXP_LIKE");
         }
-        if (!isScalar(fnOperation.operands.get(1))
-            || (operands.size() == 3 && !isScalar(fnOperation.operands.get(2)))) {
+        if (operands.size() == 3 && !isScalar(fnOperation.operands.get(2))) {
           throw new BodoSQLCodegenException(
-              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+              "Error, FLAG argument for REGEXP functions must be a scalar");
         }
         return generateRegexpLikeInfo(operands, streamingNamedArgs);
       case "REGEXP_COUNT":
@@ -1114,10 +1113,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           throw new BodoSQLCodegenException(
               "Error, invalid number of arguments passed to REGEXP_COUNT");
         }
-        if (!isScalar(fnOperation.operands.get(1))
-            || (operands.size() == 4 && !isScalar(fnOperation.operands.get(3)))) {
+        if (operands.size() == 4 && !isScalar(fnOperation.operands.get(3))) {
           throw new BodoSQLCodegenException(
-              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+              "Error, FLAG argument for REGEXP functions must be a scalar");
         }
         return generateRegexpCountInfo(operands, streamingNamedArgs);
       case "REGEXP_REPLACE":
@@ -1125,10 +1123,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           throw new BodoSQLCodegenException(
               "Error, invalid number of arguments passed to REGEXP_REPLACE");
         }
-        if (!isScalar(fnOperation.operands.get(1))
-            || (operands.size() == 6 && !isScalar(fnOperation.operands.get(5)))) {
+        if (operands.size() == 6 && !isScalar(fnOperation.operands.get(5))) {
           throw new BodoSQLCodegenException(
-              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+              "Error, FLAG argument for REGEXP functions must be a scalar");
         }
         return generateRegexpReplaceInfo(operands, streamingNamedArgs);
       case "REGEXP_SUBSTR":
