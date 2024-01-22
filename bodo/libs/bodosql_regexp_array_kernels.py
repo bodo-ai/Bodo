@@ -7,6 +7,7 @@ import re
 
 import numba
 from numba.core import types
+from numba.extending import register_jitable
 
 import bodo
 from bodo.libs.array import get_replace_regex, get_replace_regex_dict_state
@@ -19,6 +20,7 @@ from bodo.utils.typing import (
 )
 
 
+@register_jitable
 def posix_to_re(pattern):
     """Transforms POSIX regexp syntax to the variety that Python's re module uses
     by mapping character classes to the corresponding set of Python characters.
@@ -114,7 +116,7 @@ def regexp_count(arr, pattern, position, flags, dict_encoding_state=None, func_i
     ):  # pragma: no cover
         return regexp_count_util(
             arr,
-            numba.literally(pattern),
+            pattern,
             position,
             numba.literally(flags),
             dict_encoding_state,
@@ -209,7 +211,7 @@ def regexp_like(arr, pattern, flags, dict_encoding_state=None, func_id=-1):
     ):  # pragma: no cover
         return regexp_like_util(
             arr,
-            numba.literally(pattern),
+            pattern,
             numba.literally(flags),
             dict_encoding_state,
             func_id,
@@ -262,7 +264,7 @@ def regexp_replace(
     ):  # pragma: no cover
         return regexp_replace_util(
             arr,
-            numba.literally(pattern),
+            pattern,
             replacement,
             position,
             occurrence,
@@ -349,7 +351,7 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
         int series/scalar: the number of matches
     """
     verify_string_arg(arr, "REGEXP_COUNT", "arr")
-    verify_scalar_string_arg(pattern, "REGEXP_COUNT", "pattern")
+    verify_string_arg(pattern, "REGEXP_COUNT", "pattern")
     verify_int_arg(position, "REGEXP_COUNT", "position")
     verify_scalar_string_arg(flags, "REGEXP_COUNT", "flags")
 
@@ -364,8 +366,6 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
     arg_types = [arr, pattern, position, flags, dict_encoding_state, func_id]
     propagate_null = [True] * 4 + [False] * 2
 
-    pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
-    converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
     flag_bitvector = make_flag_bitvector(flag_str)
 
@@ -377,19 +377,24 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
         prefix_code += "if position <= 0: raise ValueError('REGEXP_COUNT requires a positive position')\n"
 
     extra_globals = None
-    if converted_pattern == "":
-        scalar_text += "res[i] = 0"
+
+    if bodo.utils.typing.is_overload_constant_str(pattern):
+        pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
+        converted_pattern = posix_to_re(pattern_str)
+
+        if converted_pattern == "":
+            scalar_text += "res[i] = 0"
+        else:
+            # Generate the compile at compile time to avoid an extra objmode
+            # step at runtime.
+            extra_globals = {
+                "r": re.compile(converted_pattern, flag_bitvector),
+            }
+            scalar_text += "res[i] = bodo.libs.re_ext.re_count(r, arg0[arg2-1:])"
     else:
-        # Generate the compile at compile time to avoid an extra objmode
-        # step at runtime.
-        extra_globals = {
-            "non_const_r": re.compile(converted_pattern, flag_bitvector),
-            "init_const_pattern": init_const_pattern,
-        }
-        prefix_code += (
-            f"r = init_const_pattern(non_const_r, {repr(converted_pattern)})\n"
-        )
-        scalar_text += "res[i] = len(r.findall(arg0[arg2-1:]))"
+        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
+        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bitvector)\n"
+        scalar_text += "res[i] = bodo.libs.re_ext.re_count(r, arg0[arg2-1:])"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
@@ -565,24 +570,35 @@ def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
         boolean series/scalar: whether or not the string(s) match
     """
     verify_string_arg(arr, "REGEXP_LIKE", "arr")
-    verify_scalar_string_arg(pattern, "REGEXP_LIKE", "pattern")
+    verify_string_arg(pattern, "REGEXP_LIKE", "pattern")
     verify_scalar_string_arg(flags, "REGEXP_LIKE", "flags")
 
     arg_names = ["arr", "pattern", "flags", "dict_encoding_state", "func_id"]
     arg_types = [arr, pattern, flags, dict_encoding_state, func_id]
     propagate_null = [True] * 3 + [False] * 2
-    pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
-    converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
     flag_bitvector = make_flag_bitvector(flag_str)
     extra_globals = None
-    if converted_pattern == "":
-        scalar_text = "res[i] = len(arg0) == 0"
+
+    if bodo.utils.typing.is_overload_constant_str(pattern):
+        pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
+        converted_pattern = posix_to_re(pattern_str)
+
+        if converted_pattern == "":
+            scalar_text = "res[i] = len(arg0) == 0"
+        else:
+            # Generate the compile at compile time to avoid an extra objmode
+            # step at runtime.
+            extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
+            scalar_text = "if r.fullmatch(arg0) is None:\n"
+            scalar_text += "   res[i] = False\n"
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = True\n"
     else:
-        # Generate the compile at compile time to avoid an extra objmode
-        # step at runtime.
-        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
-        scalar_text = "if r.fullmatch(arg0) is None:\n"
+        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
+        scalar_text = "converted_pattern = posix_to_re(arg1)\n"
+        scalar_text += "r = re.compile(converted_pattern, flag_bitvector)\n"
+        scalar_text += "if r.fullmatch(arg0) is None:\n"
         scalar_text += "   res[i] = False\n"
         scalar_text += "else:\n"
         scalar_text += "   res[i] = True\n"
@@ -601,6 +617,32 @@ def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
     )
+
+
+def _gen_regex_replace_body():
+    """generate scalar computation for regexp_replace kernel"""
+    scalar_text = "result = arg0[:arg3-1]\n"
+    scalar_text += "arg0 = arg0[arg3-1:]\n"
+    # If replacing everything, just use re.sub()
+    scalar_text += "if arg4 == 0:\n"
+    scalar_text += "   res[i] = result + r.sub(arg2, arg0)\n"
+    # Otherwise, repeatedly find matches and truncate, then replace the
+    # first match in the remaining suffix
+    scalar_text += "else:\n"
+    scalar_text += "   nomatch = False\n"
+    scalar_text += "   for j in range(arg4 - 1):\n"
+    scalar_text += "      match = r.search(arg0)\n"
+    scalar_text += "      if match is None:\n"
+    scalar_text += "         res[i] = result + arg0\n"
+    scalar_text += "         nomatch = True\n"
+    scalar_text += "         break\n"
+    scalar_text += "      _, end = match.span()\n"
+    scalar_text += "      result += arg0[:end]\n"
+    scalar_text += "      arg0 = arg0[end:]\n"
+    scalar_text += "   if nomatch == False:\n"
+    scalar_text += "      result += r.sub(arg2, arg0, count=1)\n"
+    scalar_text += "      res[i] = result"
+    return scalar_text
 
 
 @numba.generated_jit(nopython=True)
@@ -630,7 +672,7 @@ def regexp_replace_util(
         int series/scalar: the location of the matches
     """
     verify_string_arg(arr, "REGEXP_REPLACE", "arr")
-    verify_scalar_string_arg(pattern, "REGEXP_REPLACE", "pattern")
+    verify_string_arg(pattern, "REGEXP_REPLACE", "pattern")
     verify_string_arg(replacement, "REGEXP_REPLACE", "replacement")
     verify_int_arg(position, "REGEXP_REPLACE", "position")
     verify_int_arg(occurrence, "REGEXP_REPLACE", "occurrence")
@@ -657,71 +699,8 @@ def regexp_replace_util(
         func_id,
     ]
     propagate_null = [True] * 6 + [False, False]
-
-    pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
-    converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
     flag_bitvector = make_flag_bitvector(flag_str)
-    # Take an optimized path if the user has only provided the array, pattern,
-    # and replacement and its possible to handle the regex entirely in C++.
-    # TODO: We should be able to support additional arguments inside position
-    # and occurrence without being constant.
-    if (
-        bodo.utils.utils.is_array_typ(arr, True)
-        and not bodo.hiframes.series_str_impl.is_regex_unsupported(converted_pattern)
-        and (
-            not bodo.utils.utils.is_array_typ(replacement, True)
-            and not is_overload_none(replacement)
-        )
-        and is_overload_constant_int(position)
-        and get_overload_const_int(position) == 1
-        and is_overload_constant_int(occurrence)
-        and get_overload_const_int(occurrence) == 0
-        and flag_bitvector == 0
-    ):
-        # Optimized implementation just calls into C++ and has it handle the entire array.
-        use_dict_caching = arr == bodo.dict_str_arr_type and not is_overload_none(
-            dict_encoding_state
-        )
-        if use_dict_caching:
-
-            def impl_state(
-                arr,
-                pattern,
-                replacement,
-                position,
-                occurrence,
-                flags,
-                dict_encoding_state,
-                func_id,
-            ):  # pragma: no cover
-                utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
-                utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
-                out_arr = get_replace_regex_dict_state(
-                    arr, utf8_pattern, utf8_replacement, dict_encoding_state, func_id
-                )
-                return out_arr
-
-            return impl_state
-
-        else:
-
-            def impl(
-                arr,
-                pattern,
-                replacement,
-                position,
-                occurrence,
-                flags,
-                dict_encoding_state,
-                func_id,
-            ):  # pragma: no cover
-                utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
-                utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
-                out_arr = get_replace_regex(arr, utf8_pattern, utf8_replacement)
-                return out_arr
-
-            return impl
 
     prefix_code = "\n"
     scalar_text = ""
@@ -733,35 +712,90 @@ def regexp_replace_util(
         scalar_text += "if arg4 < 0: raise ValueError('REGEXP_REPLACE requires a non-negative occurrence')\n"
     else:
         prefix_code += "if occurrence < 0: raise ValueError('REGEXP_REPLACE requires a non-negative occurrence')\n"
-
     extra_globals = None
-    if converted_pattern == "":
-        scalar_text += "res[i] = arg0"
+
+    if bodo.utils.typing.is_overload_constant_str(pattern):
+        pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
+        converted_pattern = posix_to_re(pattern_str)
+        # Take an optimized path if the user has only provided the array, pattern,
+        # and replacement and its possible to handle the regex entirely in C++.
+        # TODO: We should be able to support additional arguments inside position
+        # and occurrence without being constant.
+        if (
+            bodo.utils.utils.is_array_typ(arr, True)
+            and not bodo.hiframes.series_str_impl.is_regex_unsupported(
+                converted_pattern
+            )
+            and (
+                not bodo.utils.utils.is_array_typ(replacement, True)
+                and not is_overload_none(replacement)
+            )
+            and is_overload_constant_int(position)
+            and get_overload_const_int(position) == 1
+            and is_overload_constant_int(occurrence)
+            and get_overload_const_int(occurrence) == 0
+            and flag_bitvector == 0
+        ):
+            # Optimized implementation just calls into C++ and has it handle the entire array.
+            use_dict_caching = arr == bodo.dict_str_arr_type and not is_overload_none(
+                dict_encoding_state
+            )
+            if use_dict_caching:
+
+                def impl_state(
+                    arr,
+                    pattern,
+                    replacement,
+                    position,
+                    occurrence,
+                    flags,
+                    dict_encoding_state,
+                    func_id,
+                ):  # pragma: no cover
+                    utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
+                    utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
+                    out_arr = get_replace_regex_dict_state(
+                        arr,
+                        utf8_pattern,
+                        utf8_replacement,
+                        dict_encoding_state,
+                        func_id,
+                    )
+                    return out_arr
+
+                return impl_state
+
+            else:
+
+                def impl(
+                    arr,
+                    pattern,
+                    replacement,
+                    position,
+                    occurrence,
+                    flags,
+                    dict_encoding_state,
+                    func_id,
+                ):  # pragma: no cover
+                    utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
+                    utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
+                    out_arr = get_replace_regex(arr, utf8_pattern, utf8_replacement)
+                    return out_arr
+
+                return impl
+
+        if converted_pattern == "":
+            scalar_text += "res[i] = arg0"
+        else:
+            # Generate the compile at compile time to avoid an extra objmode
+            # step at runtime.
+            extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
+            scalar_text += _gen_regex_replace_body()
     else:
-        # Generate the compile at compile time to avoid an extra objmode
-        # step at runtime.
-        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
-        scalar_text += "result = arg0[:arg3-1]\n"
-        scalar_text += "arg0 = arg0[arg3-1:]\n"
-        # If replacing everything, just use re.sub()
-        scalar_text += "if arg4 == 0:\n"
-        scalar_text += "   res[i] = result + r.sub(arg2, arg0)\n"
-        # Otherwise, repeatedly find matches and truncate, then replace the
-        # first match in the remaining suffix
-        scalar_text += "else:\n"
-        scalar_text += "   nomatch = False\n"
-        scalar_text += "   for j in range(arg4 - 1):\n"
-        scalar_text += "      match = r.search(arg0)\n"
-        scalar_text += "      if match is None:\n"
-        scalar_text += "         res[i] = result + arg0\n"
-        scalar_text += "         nomatch = True\n"
-        scalar_text += "         break\n"
-        scalar_text += "      _, end = match.span()\n"
-        scalar_text += "      result += arg0[:end]\n"
-        scalar_text += "      arg0 = arg0[end:]\n"
-        scalar_text += "   if nomatch == False:\n"
-        scalar_text += "      result += r.sub(arg2, arg0, count=1)\n"
-        scalar_text += "      res[i] = result"
+        # Non-constant pattern
+        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
+        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bitvector)\n"
+        scalar_text += _gen_regex_replace_body()
 
     out_dtype = bodo.string_array_type
 

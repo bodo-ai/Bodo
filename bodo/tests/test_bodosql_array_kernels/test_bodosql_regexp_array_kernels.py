@@ -285,6 +285,36 @@ def snowflake_to_python_re(pattern, flags):
     return pattern, flags
 
 
+def get_pattern_array(length):
+    """create an example pattern array with example length to use with regexp_strings"""
+    pattern = np.array(
+        [
+            r"[aeiou][a-z]*a",
+            r"[aeiou][a-z ]*" r"\b[A-Z]*a\b",
+            r"\b([A-Z]*)a\b",
+            r"\bs.*y\b",
+            r"^I.*",
+            r"^I.*[\.!]$",
+            r".*[[:punct:]]$",
+            r"[125678]{3,6}",
+            r"(1.0)|(5.1)",
+            None,
+            r"\b\d.*o\w*\b",
+            r"^I.*\.$",
+            r"^I.*\.$",
+            r"[[:ascii:]]{10,30}",
+            r"[[:cntrl:]]{1,2}",
+            None,
+            r"[[:digit:][:upper:]]{5,30}",
+            r"[[:xdigit:]]{1,10}",
+            r"[[:space:]]",
+        ],
+        object,
+    )
+    pattern = np.repeat(pattern, length // len(pattern) + 1)[:length]
+    return pattern
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -355,6 +385,37 @@ def test_regexp_count(regexp_strings, regexp_like_count_args):
             return len(re.findall(pattern, elem[position - 1 :], flags=flags))
 
     pattern, flags, position = regexp_like_count_args
+    args = (regexp_strings, pattern, position, flags)
+    regexp_count_answer = vectorized_sol(args, regexp_count_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=regexp_count_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_regexp_count_non_scalar(regexp_strings):
+    """Tests regexp_cout kernel with non-scalar pattern argument"""
+
+    pattern = get_pattern_array(len(regexp_strings))
+    flags = "i"
+    position = 1
+
+    def impl(arr, pattern, position, flags):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_count(arr, pattern, position, flags)
+        )
+
+    # Simulates REGEXP_COUNT on a single row
+    def regexp_count_scalar_fn(elem, pattern, position, flags):
+        if pd.isna(elem) or pd.isna(pattern) or pd.isna(position) or pd.isna(flags):
+            return None
+        else:
+            pattern, flags = snowflake_to_python_re(pattern, flags)
+            return len(re.findall(pattern, elem[position - 1 :], flags=flags))
+
     args = (regexp_strings, pattern, position, flags)
     regexp_count_answer = vectorized_sol(args, regexp_count_scalar_fn, None)
     check_func(
@@ -446,6 +507,67 @@ def test_regexp_like(regexp_strings, regexp_like_count_args):
     )
 
 
+def test_regexp_like_non_scalar(regexp_strings):
+    """Tests regexp_like kernel with non-scalar pattern argument"""
+
+    pattern = get_pattern_array(len(regexp_strings))
+    flags = "i"
+
+    def impl(arr, pattern, flags):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_like(arr, pattern, flags)
+        )
+
+    # Simulates REGEXP_LIKE on a single row
+    def regexp_like_scalar_fn(elem, pattern, flags):
+        if pd.isna(elem) or pd.isna(pattern) or pd.isna(flags):
+            return None
+        else:
+            pattern, flags = snowflake_to_python_re(pattern, flags)
+            return re.fullmatch(pattern, elem, flags=flags) is not None
+
+    args = (regexp_strings, pattern, flags)
+    regexp_like_answer = vectorized_sol(args, regexp_like_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=regexp_like_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+# Simulates REGEXP_REPLACE on a single row
+def regexp_replace_scalar_fn(elem, pattern, replacement, position, occurrence, flags):
+    if (
+        pd.isna(elem)
+        or pd.isna(pattern)
+        or pd.isna(replacement)
+        or pd.isna(position)
+        or pd.isna(occurrence)
+        or pd.isna(flags)
+    ):
+        return None
+    else:
+        pattern, flags = snowflake_to_python_re(pattern, flags)
+        if occurrence == 0:
+            return elem[: position - 1] + re.sub(
+                pattern, replacement, elem[position - 1 :], flags=flags
+            )
+        else:
+            result = elem[: position - 1]
+            elem = elem[position - 1 :]
+            for i in range(occurrence - 1):
+                match = re.search(pattern, elem, flags=flags)
+                if match is None:
+                    return result + elem
+                _, end = match.span()
+                result += elem[:end]
+                elem = elem[end:]
+            result += re.sub(pattern, replacement, elem, count=1, flags=flags)
+            return result
+
+
 def test_regexp_replace(regexp_strings, regexp_replace_args):
     def impl(arr, pattern, replacement, position, occurrence, flags):
         return pd.Series(
@@ -454,39 +576,34 @@ def test_regexp_replace(regexp_strings, regexp_replace_args):
             )
         )
 
-    # Simulates REGEXP_REPLACE on a single row
-    def regexp_replace_scalar_fn(
-        elem, pattern, replacement, position, occurrence, flags
-    ):
-        if (
-            pd.isna(elem)
-            or pd.isna(pattern)
-            or pd.isna(replacement)
-            or pd.isna(position)
-            or pd.isna(occurrence)
-            or pd.isna(flags)
-        ):
-            return None
-        else:
-            pattern, flags = snowflake_to_python_re(pattern, flags)
-            if occurrence == 0:
-                return elem[: position - 1] + re.sub(
-                    pattern, replacement, elem[position - 1 :], flags=flags
-                )
-            else:
-                result = elem[: position - 1]
-                elem = elem[position - 1 :]
-                for i in range(occurrence - 1):
-                    match = re.search(pattern, elem, flags=flags)
-                    if match is None:
-                        return result + elem
-                    _, end = match.span()
-                    result += elem[:end]
-                    elem = elem[end:]
-                result += re.sub(pattern, replacement, elem, count=1, flags=flags)
-                return result
-
     pattern, flags, replacement, position, occurrence = regexp_replace_args
+    args = (regexp_strings, pattern, replacement, position, occurrence, flags)
+    regexp_replace_answer = vectorized_sol(args, regexp_replace_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=regexp_replace_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_regexp_replace_non_scalar(regexp_strings):
+    """Tests regexp_replace kernel with non-scalar pattern argument"""
+
+    def impl(arr, pattern, replacement, position, occurrence, flags):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_replace(
+                arr, pattern, replacement, position, occurrence, flags
+            )
+        )
+
+    pattern = get_pattern_array(len(regexp_strings))
+    flags = "i"
+    replacement = "ABC"
+    occurrence = 0
+    position = 1
+
     args = (regexp_strings, pattern, replacement, position, occurrence, flags)
     regexp_replace_answer = vectorized_sol(args, regexp_replace_scalar_fn, None)
     check_func(
