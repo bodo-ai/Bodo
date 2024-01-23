@@ -264,6 +264,30 @@ public interface SqlValidatorScope {
     return this == scope2;
   }
 
+  // Bodo Change: Extensions to the interface
+
+  /** Returns the fullyQualify result of evaluating of the identifier
+   * in an ancestor scope which is a parameter scope. If the identifier
+   * cannot be found within the parameterized scope or if no
+   * parameterized scope exists as an ancestor then this returns null. */
+  default @Nullable SqlQualified fullyQualifyIdentifierIfParameter(SqlIdentifier identifier) {
+    return null;
+  }
+
+  /**
+   * Resolves a single identifier to a column, and returns the datatype of
+   * that column if it is a valid identifier in an ancestor scope which is
+   * a parameter scope. If the identifier cannot be found within the
+   * parameterized scope or if no parameterized scope exists as an ancestor
+   * then this returns null.
+   *
+   * @param name Name of column
+   * @param ctx  Context for exception
+   * @return Type of column, if found and unambiguous; null if not found
+   */
+  default @Nullable RelDataType resolveColumnIfParameter(String name, SqlNode ctx) { return null; }
+
+
   /** Callback from {@link SqlValidatorScope#resolve}. */
   interface Resolved {
     void found(SqlValidatorNamespace namespace, boolean nullable,
