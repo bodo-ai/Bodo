@@ -640,16 +640,3 @@ def overload_test_sql_unoptimized(bodo_sql_context, sql_str):
     (requires Bodo's untyped pass and typing pass)
     """
     bodo.utils.typing.raise_bodo_error("Invalid BodoSQLContext.sql() call")
-
-
-@overload_method(
-    BodoSQLContextType, "__gen_control_flow_fn", inline="always", no_unliteral=True
-)
-def overload_test_sql_control_flow(bodo_sql_context, fn_to_inline):
-    """
-    This is a temporary function that should only exist until
-    we've merged streaming into the main branch, and then should
-    be removed, along with test_bodosql_inline_control_flow in
-    BodoSQL/bodosql/tests/test_types/test_bodosql_context.py
-    """
-    bodo.utils.typing.raise_bodo_error("Invalid BodoSQLContext.sql() call")

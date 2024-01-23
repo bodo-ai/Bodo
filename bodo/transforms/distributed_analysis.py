@@ -3650,7 +3650,7 @@ class DistributedAnalysis:
                 assert isinstance(
                     shape_typ, types.BaseTuple
                 ), "np.reshape(): invalid shape argument"
-                shape_vars = find_build_tuple(self.func_ir, shape_var)
+                shape_vars = find_build_tuple(self.func_ir, shape_var, True)
             return self._analyze_call_np_reshape(
                 lhs, arr_var, shape_vars, array_dists, loc
             )
@@ -3755,7 +3755,7 @@ class DistributedAnalysis:
             shape_vars = args
             arg_typ = self.typemap[args[0].name]
             if isinstance(arg_typ, types.BaseTuple):
-                shape_vars = find_build_tuple(self.func_ir, args[0])
+                shape_vars = find_build_tuple(self.func_ir, args[0], True)
             return self._analyze_call_np_reshape(lhs, arr, shape_vars, array_dists, loc)
 
         if func_name == "all":
@@ -3790,10 +3790,18 @@ class DistributedAnalysis:
         if (
             self.typemap[arr.name].ndim == 1
             and len(shape_vars) == 2
-            and guard(
-                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            and (
+                (isinstance(shape_vars[1], int) and shape_vars[1] == 1)
+                or (
+                    guard(
+                        get_const_value_inner,
+                        self.func_ir,
+                        shape_vars[1],
+                        typemap=self.typemap,
+                    )
+                    == 1
+                )
             )
-            == 1
         ):
             self._meet_array_dists(lhs, arr.name, array_dists)
             return

@@ -2519,7 +2519,7 @@ class DistributedPass:
                 shape_vars = [args[1]]
             else:
                 isinstance(shape_typ, types.BaseTuple)
-                shape_vars = find_build_tuple(self.func_ir, args[1])
+                shape_vars = find_build_tuple(self.func_ir, args[1], True)
             return self._run_np_reshape(assign, args[0], shape_vars, equiv_set)
 
         if func_name in list_cumulative and self._is_1D_or_1D_Var_arr(args[0].name):
@@ -2566,7 +2566,7 @@ class DistributedPass:
             shape_vars = args
             arg_typ = self.typemap[args[0].name]
             if isinstance(arg_typ, types.BaseTuple):
-                shape_vars = find_build_tuple(self.func_ir, args[0])
+                shape_vars = find_build_tuple(self.func_ir, args[0], True)
             return self._run_np_reshape(assign, arr, shape_vars, equiv_set)
 
         # TODO: refactor
@@ -3005,6 +3005,26 @@ class DistributedPass:
     #     f_block.body = out + f_block.body
     #     return f_block.body[:-3]
 
+    def _const_to_var(self, v, nodes, scope, loc):
+        """Convert constant value to ir.Var if necessary.
+
+        Args:
+            v (int|ir.Var): input value (int or ir.Var)
+            nodes (list(ir.Stmt)): list of generated IR nodes for appending new nodes
+            scope (ir.Scope): IR scope object
+            loc (ir.Loc): IR loc object
+
+        Returns:
+            ir.Var: new variable for value v
+        """
+        if isinstance(v, ir.Var):
+            return v
+
+        new_var = ir.Var(scope, mk_unique_var("const_var"), loc)
+        self.typemap[new_var.name] = types.literal(v)
+        nodes.append(ir.Assign(ir.Const(v, loc), new_var, loc))
+        return new_var
+
     def _run_np_reshape(self, assign, in_arr, shape_vars, equiv_set):
         """distribute array reshape operation by finding new data offsets on every
         processor and exchanging data using alltoallv.
@@ -3036,14 +3056,24 @@ class DistributedPass:
         if (
             self.typemap[in_arr.name].ndim == 1
             and len(shape_vars) == 2
-            and guard(
-                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            and (
+                (isinstance(shape_vars[1], int) and shape_vars[1] == 1)
+                or (
+                    guard(
+                        get_const_value_inner,
+                        self.func_ir,
+                        shape_vars[1],
+                        typemap=self.typemap,
+                    )
+                    == 1
+                )
             )
-            == 1
         ):
             return compile_func_single_block(
                 eval("lambda A: A.reshape(len(A), 1)"), [in_arr], lhs, self
             )
+
+        shape_vars = [self._const_to_var(v, nodes, scope, loc) for v in shape_vars]
 
         # get local size for 1st dimension and allocate output array
         # shape_vars[0] is global size
