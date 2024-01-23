@@ -2388,6 +2388,9 @@ class SeriesPass:
             impl = bodo.utils.utils.overload_alloc_type(
                 *tuple(self.typemap[v.name] for v in rhs.args)
             )
+            dict_ref_type = (
+                self.typemap[rhs.args[3].name] if len(rhs.args) > 3 else types.none
+            )
             # create new functions for cases that need dtype since 'dtype' becomes a
             # freevar in overload and doesn't work properly currently.
             # TODO: fix freevar support
@@ -2395,28 +2398,45 @@ class SeriesPass:
             if isinstance(typ, types.TypeRef):
                 typ = typ.instance_type
             dtype = None
+            # Add dict_ref_arr=None to args if not provided to avoid errors
+            args = rhs.args
+            nodes = []
+            if len(args) == 3:
+                scope = assign.target.scope
+                none_var = ir.Var(scope, mk_unique_var("none_var"), rhs.loc)
+                self.typemap[none_var.name] = types.none
+                args.append(none_var)
+                nodes.append(ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc))
+
             # nullable int array
             if isinstance(typ, IntegerArrayType):  # pragma: no cover
                 dtype = typ.dtype
                 impl = eval(
-                    "lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                    "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
                 )
             elif isinstance(typ, FloatingArrayType):  # pragma: no cover
                 dtype = typ.dtype
                 impl = eval(
-                    "lambda n, t, s=None: bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)"
+                    "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)"
                 )
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
                 # avoid dt64 errors in np.empty, TODO: fix Numba
                 if dtype == types.NPDatetime("ns"):
                     dtype = np.dtype("datetime64[ns]")
-                impl = eval("lambda n, t, s=None: np.empty(n, _dtype)")
+                impl = eval(
+                    "lambda n, t, s=None, dict_ref_arr=None: np.empty(n, _dtype)"
+                )
             elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.dtype
-                impl = eval(
-                    "lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
-                )
+                if is_overload_none(dict_ref_type):
+                    impl = eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
+                    )
+                else:
+                    impl = eval(
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, bodo.libs.array_item_arr_ext.get_data(dict_ref_arr))"
+                    )
             elif isinstance(typ, CategoricalArrayType):
                 if isinstance(self.typemap[rhs.args[1].name], types.TypeRef):
                     # If we have a type ref we must have types that are compile time constants
@@ -2436,11 +2456,11 @@ class SeriesPass:
                     new_cats_tup = MetaType(tuple(new_cats_arr))
                     dtype = "bodo.hiframes.pd_categorical_ext.init_cat_dtype(bodo.utils.conversion.index_from_array(new_cats_arr), is_ordered, int_type, new_cats_tup)"
                     impl = eval(
-                        f"lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, {dtype})"
+                        f"lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, {dtype})"
                     )
-                    return compile_func_single_block(
+                    return nodes + compile_func_single_block(
                         impl,
-                        rhs.args,
+                        args,
                         assign.target,
                         self,
                         extra_globals={
@@ -2453,16 +2473,16 @@ class SeriesPass:
                 else:
                     # TODO: Fix the infrastructure so types will match when input-type == output-type
                     impl = eval(
-                        "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
                     )
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data
                 names = typ.names
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, s, _dtypes, _names)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, s, _dtypes, _names, dict_ref_arr)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes, "_names": names},
@@ -2471,22 +2491,22 @@ class SeriesPass:
                 struct_typ = StructArrayType(
                     (typ.key_arr_type, typ.value_arr_type), ("key", "value")
                 )
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.map_arr_ext.pre_alloc_map_array(n, s, _struct_type)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.map_arr_ext.pre_alloc_map_array(n, s, _struct_type, dict_ref_arr)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_struct_type": struct_typ},
                 )
             elif isinstance(typ, TupleArrayType):
                 dtypes = typ.data
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, s, _dtypes)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, s, _dtypes)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes},
@@ -2494,40 +2514,40 @@ class SeriesPass:
             elif isinstance(typ, DecimalArrayType):
                 precision = typ.dtype.precision
                 scale = typ.dtype.scale
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(n, _precision, _scale)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(n, _precision, _scale)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
                 )
             elif isinstance(typ, bodo.DatetimeArrayType):
                 tz = typ.tz
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, _tz)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, _tz)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_tz": tz},
                 )
             elif isinstance(typ, bodo.TimeArrayType):
                 precision = typ.precision
-                return compile_func_single_block(
+                return nodes + compile_func_single_block(
                     eval(
-                        "lambda n, t, s=None: bodo.hiframes.time_ext.alloc_time_array(n, _precision)"
+                        "lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, _precision)"
                     ),
-                    rhs.args,
+                    args,
                     assign.target,
                     self,
                     extra_globals={"_precision": precision},
                 )
 
-            return compile_func_single_block(
-                impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}
+            return nodes + compile_func_single_block(
+                impl, args, assign.target, self, extra_globals={"_dtype": dtype}
             )
 
         if isinstance(func_mod, ir.Var) and is_series_type(self.typemap[func_mod.name]):
