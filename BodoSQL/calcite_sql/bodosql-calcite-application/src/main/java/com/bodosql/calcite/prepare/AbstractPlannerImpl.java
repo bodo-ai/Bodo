@@ -554,19 +554,23 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     }
     SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
 
-    // We only can inline if there are no arguments.
-    // We need additional transformations/functionality to handle
-    // arguments with queries.
-    if (paramNames.isEmpty()) {
+    // We only can inline if there are no arguments that reference a column.
+    if (arguments.stream().allMatch(x -> RelOptUtil.InputFinder.bits(x).isEmpty())) {
+      // Create the arguments to replace
+      Map<String, RexNode> argMap = new HashMap<>();
+      for (int i = 0; i < paramNames.size(); i++) {
+        argMap.put(paramNames.get(i), arguments.get(i));
+      }
       // Create a new SQL to RelConvert for converting the query into a root and extracting
       // the plan. We need a new convert because it uses a separate catalog reader and validator.
       final RexBuilder rexBuilder = createRexBuilder();
       final RelOptCluster cluster =
           BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
       final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
+
       final SqlToRelConverter sqlToRelConverter =
           new BodoSqlToRelConverter(
-              this, validator, catalogReader, cluster, convertletTable, config, this);
+              this, validator, catalogReader, cluster, convertletTable, config, this, argMap);
 
       RelRoot outputRoot = sqlToRelConverter.convertQuery(validatedNode, false, false);
       final RelRoot outputRoot2 =
@@ -582,8 +586,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       }
     } else {
       String msg =
-          "BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a"
-              + " query.";
+          "BodoSQL does not support Snowflake UDFs with column arguments whose function body"
+              + " contains a query.";
       throw new RuntimeException(msg);
     }
   }

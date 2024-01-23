@@ -10,6 +10,7 @@ import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.calcite.plan.RelOptCluster;
@@ -54,6 +55,29 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   // Function expander used for inlining Snowflake UDFs.
   private final FunctionExpander functionExpander;
 
+  // Map used to pass to all blackboards so parameters when
+  // inlining UDFs can be globally referenced.
+  private final Map<String, RexNode> paramNameToNodeMap;
+
+  public BodoSqlToRelConverter(
+      final RelOptTable.ViewExpander viewExpander,
+      @Nullable final SqlValidator validator,
+      final Prepare.CatalogReader catalogReader,
+      final RelOptCluster cluster,
+      final SqlRexConvertletTable convertletTable,
+      final Config config,
+      final FunctionExpander functionExpander,
+      Map<String, RexNode> paramNameToNodeMap) {
+    super(viewExpander, validator, catalogReader, cluster, convertletTable, config);
+    this.relBuilder =
+        config
+            .getRelBuilderFactory()
+            .create(cluster, null)
+            .transform(config.getRelBuilderConfigTransform());
+    this.functionExpander = functionExpander;
+    this.paramNameToNodeMap = paramNameToNodeMap;
+  }
+
   public BodoSqlToRelConverter(
       final RelOptTable.ViewExpander viewExpander,
       @Nullable final SqlValidator validator,
@@ -62,13 +86,15 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       final SqlRexConvertletTable convertletTable,
       final Config config,
       final FunctionExpander functionExpander) {
-    super(viewExpander, validator, catalogReader, cluster, convertletTable, config);
-    this.relBuilder =
-        config
-            .getRelBuilderFactory()
-            .create(cluster, null)
-            .transform(config.getRelBuilderConfigTransform());
-    this.functionExpander = functionExpander;
+    this(
+        viewExpander,
+        validator,
+        catalogReader,
+        cluster,
+        convertletTable,
+        config,
+        functionExpander,
+        Map.of());
   }
 
   @Override
@@ -275,6 +301,25 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   @Override
   protected Blackboard createBlackboard(
       SqlValidatorScope scope, @Nullable Map<String, RexNode> nameToNodeMap, boolean top) {
-    return new BodoBlackboard(scope, nameToNodeMap, top);
+    if (paramNameToNodeMap.isEmpty()) {
+      return new BodoBlackboard(scope, nameToNodeMap, top);
+    } else if (nameToNodeMap == null) {
+      return new BodoBlackboard(scope, paramNameToNodeMap, top);
+    } else {
+      Map<String, RexNode> finalMap = new HashMap<>();
+      // Parameters, which occur when inlining a function,
+      // are given precedence over other names. In practice
+      // this shouldn't occur because most nodes don't set
+      // nameToNodeMap.
+      for (String key : paramNameToNodeMap.keySet()) {
+        finalMap.put(key, paramNameToNodeMap.get(key));
+      }
+      for (String key : nameToNodeMap.keySet()) {
+        if (!paramNameToNodeMap.containsKey(key)) {
+          finalMap.put(key, nameToNodeMap.get(key));
+        }
+      }
+      return new BodoBlackboard(scope, finalMap, top);
+    }
   }
 }
