@@ -1203,6 +1203,21 @@ def test_arr_reshape(dtype, memory_leak_check):
     check_func(impl8, (np.arange(12, dtype=dtype), 12), convert_to_nullable_float=False)
 
 
+def test_arr_reshape_consts(memory_leak_check):
+    """Test reshape with constant new shape values"""
+
+    def impl1(A):
+        return A.reshape((6, 3))
+
+    # Test optimized path for shape[1] == 1
+    def impl2(A):
+        return A.reshape((18, 1))
+
+    A = np.array([1, 2, 3, 4, 5, 6] * 3)
+    check_func(impl1, (A,))
+    check_func(impl2, (A,))
+
+
 @pytest.mark.parametrize(
     "nrows, ncols",
     [(1, 1), (1, 10), (3, 4), (10, 11), (1111, 33), (4321, 5432)],

@@ -3141,7 +3141,6 @@ class TypingTransforms:
             "sql",
             "_test_sql_unoptimized",
             "convert_to_pandas",
-            "__gen_control_flow_fn",
         ):  # pragma: no cover
             # Try import BodoSQL and check the type
             try:  # pragma: no cover
@@ -5535,23 +5534,6 @@ class TypingTransforms:
             ) = bodosql.context_ext._gen_pd_func_str_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
-        elif func_name == "__gen_control_flow_fn":
-            """This is a temporary function that should only exist until
-            we've merged streaming into the main branch, and then should
-            be removed, along with overload_test_sql_control_flow in
-            BodoSQL/bodosql/context_ext.py
-            """
-            fn_txt, fn_arg = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            func_text = get_overload_const_str(self.typemap[fn_txt.name])
-            values = [fn_arg]
-            loc_vars = {}
-            exec(
-                func_text,
-                {},
-                loc_vars,
-            )
-            impl = loc_vars["impl"]
-            additional_globals_to_lower = {}
 
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work

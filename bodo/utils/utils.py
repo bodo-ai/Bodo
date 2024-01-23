@@ -373,16 +373,27 @@ def is_alloc_callname(func_name, mod_name):
     )
 
 
-def find_build_tuple(func_ir, var):
+def find_build_tuple(func_ir, var, handle_const_tuple=False):
     """Check if a variable is constructed via build_tuple
     and return the sequence or raise GuardException otherwise.
+    The output sequence can be a list/tuple of ir.Vars or a tuple of constant values.
+    'handle_const_tuple=True' allows constant tuples to be returned. Otherwise,
+    only a sequence of ir.Vars can be returned (which may be a requirement in the
+    caller).
     """
     # variable or variable name
     require(isinstance(var, (ir.Var, str)))
     var_def = get_definition(func_ir, var)
-    require(isinstance(var_def, ir.Expr))
-    require(var_def.op == "build_tuple")
-    return var_def.items
+    if isinstance(var_def, ir.Expr):
+        require(var_def.op == "build_tuple")
+        return var_def.items
+
+    # Array analysis may convert tuples to an ir.Const expression:
+    # https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/parfors/array_analysis.py#L2186
+    require(handle_const_tuple)
+    require(isinstance(var_def, ir.Const))
+    require(isinstance(var_def.value, tuple))
+    return var_def.value
 
 
 # print function used for debugging that uses printf in C, instead of Numba's print that
