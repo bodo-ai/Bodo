@@ -214,6 +214,11 @@ public abstract class DelegatingScope implements SqlValidatorScope {
   }
 
   @Override public @Nullable RelDataType resolveColumn(String name, SqlNode ctx) {
+    // Bodo Change: Check for a parameter first.
+    @Nullable RelDataType paramType = resolveColumnIfParameter(name, ctx);
+    if (paramType != null) {
+      return paramType;
+    }
     return parent.resolveColumn(name, ctx);
   }
 
@@ -269,6 +274,12 @@ public abstract class DelegatingScope implements SqlValidatorScope {
   @Override public SqlQualified fullyQualify(SqlIdentifier identifier) {
     if (identifier.isStar()) {
       return SqlQualified.create(this, 1, null, identifier);
+    }
+
+    // Bodo Change: Check for a parameter first.
+    @Nullable SqlQualified paramIdentifier = fullyQualifyIdentifierIfParameter(identifier);
+    if (paramIdentifier != null) {
+      return paramIdentifier;
     }
 
     final SqlIdentifier previous = identifier;
@@ -688,5 +699,32 @@ public abstract class DelegatingScope implements SqlValidatorScope {
    */
   public SqlValidatorScope getParent() {
     return parent;
+  }
+
+  // Bodo Change: Extensions to the interface
+
+  /** Returns the fullyQualify result of evaluating of the identifier
+   * in an ancestor scope which is a parameter scope. If the identifier
+   * cannot be found within the parameterized scope or if no
+   * parameterized scope exists as an ancestor then this returns null. */
+  @Override
+  @Nullable
+  public SqlQualified fullyQualifyIdentifierIfParameter(SqlIdentifier identifier) {
+    return getParent().fullyQualifyIdentifierIfParameter(identifier);
+  }
+
+  /**
+   * Resolves a single identifier to a column, and returns the datatype of
+   * that column if it is a valid identifier in an ancestor scope which is
+   * a parameter scope. If the identifier cannot be found within the
+   * parameterized scope or if no parameterized scope exists as an ancestor
+   * then this returns null.
+   *
+   * @param name Name of column
+   * @param ctx  Context for exception
+   * @return Type of column, if found and unambiguous; null if not found
+   */
+  public @Nullable RelDataType resolveColumnIfParameter(String name, SqlNode ctx) {
+    return getParent().resolveColumnIfParameter(name, ctx);
   }
 }

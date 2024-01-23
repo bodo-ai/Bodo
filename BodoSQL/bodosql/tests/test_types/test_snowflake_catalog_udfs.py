@@ -2,6 +2,7 @@
 """
 Tests UDF operations with a Snowflake catalog.
 """
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -74,6 +75,276 @@ def test_unsupported_query_argument_udf(test_db_snowflake_catalog, memory_leak_c
     with pytest.raises(
         BodoError,
         match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_column_argument_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    FILTER_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in a filter
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select QUERY_PARAM_FUNCTION(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUERY_PARAM_FUNCTION\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_filter_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    FILTER_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in a filter
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select FILTER_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.FILTER_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_order_by_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    ORDER_BY_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in the order by clause.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select ORDER_BY_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.ORDER_BY_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_join_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    JOIN_COND_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in the join condition
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select JOIN_COND_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.JOIN_COND_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_partition_by_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    PARTITION_BY_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in the partition by of a window function.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select PARTITION_BY_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.PARTITION_BY_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_window_order_by_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    WINDOW_ORDER_BY_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in the order by of a window function.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select WINDOW_ORDER_BY_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.WINDOW_ORDER_BY_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_having_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    HAVING_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in a having clause.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select HAVING_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.HAVING_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_qualify_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    QUALIFY_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses it in a qualify clause.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select QUALIFY_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.QUALIFY_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+    ):
+        impl(bc, query)
+
+
+@pytest_mark_one_rank
+def test_unsupported_query_argument_nested_select_udf(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test that Snowflake UDFs with a query function body (e.g. SELECT)
+    that takes a argument gives a message that
+    they aren't supported yet, which should differ from the default
+    "access" issues.
+
+    NESTED_SELECT_QUERY_FUNC is manually defined inside TEST_DB.PUBLIC to take
+    one argument and uses an inner nested select statement.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select NESTED_SELECT_QUERY_FUNC(A) from table1"
+    bc = bodosql.BodoSQLContext(
+        {"table1": pd.DataFrame({"A": np.arange(10)})},
+        catalog=test_db_snowflake_catalog,
+    )
+    with pytest.raises(
+        BodoError,
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.NESTED_SELECT_QUERY_FUNC\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
     ):
         impl(bc, query)
 
@@ -281,7 +552,7 @@ def test_unsupported_udf_query_validation(test_db_snowflake_catalog, memory_leak
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\.\nCaused by: BodoSQL does not support Snowflake UDFs with arguments whose function bodies contain a query\\.",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.VALIDATION_ERROR_QUERY_FUNCTION\\.\nCaused by: .* No match found for function signature COMPRESS\\(<CHARACTER>, <CHARACTER>\\)",
     ):
         impl(bc, query)
 
