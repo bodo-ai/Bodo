@@ -4199,7 +4199,8 @@ class SeriesPass:
             tup_list = guard(find_build_tuple, self.func_ir, varname)
             if tup_list is not None:
                 for v in tup_list:
-                    self._set_add_if_df(updated_dfs, v.name)
+                    if isinstance(v, ir.Var):  # pragma: no cover
+                        self._set_add_if_df(updated_dfs, v.name)
 
     def _convert_series_calltype(self, call):
         sig = self.calltypes[call]
