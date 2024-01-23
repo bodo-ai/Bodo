@@ -208,7 +208,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
 
 
 def construct_struct_array(
-    context, builder, struct_arr_type, n_structs, n_elems, c=None
+    context, builder, struct_arr_type, n_structs, n_elems, dict_ref_arr=None, c=None
 ):
     """Creates meminfo and sets dtor, and allocates buffers for struct array"""
     # create payload type
@@ -233,7 +233,12 @@ def construct_struct_array(
     # alloc data
     arrs = []
     curr_count_ind = 0
-    for arr_typ in struct_arr_type.data:
+    ref_data = (
+        _get_struct_arr_payload(context, builder, struct_arr_type, dict_ref_arr).data
+        if dict_ref_arr
+        else None
+    )
+    for data_ind, arr_typ in enumerate(struct_arr_type.data):
         n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(arr_typ.dtype)
         n_all_elems = cgutils.pack_array(
             builder,
@@ -243,7 +248,8 @@ def construct_struct_array(
                 for i in range(curr_count_ind, curr_count_ind + n_nested_count_t)
             ],
         )
-        arr = gen_allocate_array(context, builder, arr_typ, n_all_elems, c)
+        ref_arg = builder.extract_value(ref_data, data_ind) if ref_data else None
+        arr = gen_allocate_array(context, builder, arr_typ, n_all_elems, ref_arg, c)
         arrs.append(arr)
         curr_count_ind += n_nested_count_t
 
@@ -329,7 +335,12 @@ def _fix_nested_counts(nested_counts, struct_arr_type, nested_counts_type, build
 
 @intrinsic(prefer_literal=True)
 def pre_alloc_struct_array(
-    typingctx, num_structs_typ, nested_counts_typ, dtypes_typ, names_typ=None
+    typingctx,
+    num_structs_typ,
+    nested_counts_typ,
+    dtypes_typ,
+    names_typ,
+    dict_ref_arr_typ,
 ):
     assert isinstance(num_structs_typ, types.Integer) and isinstance(
         dtypes_typ, types.BaseTuple
@@ -342,22 +353,25 @@ def pre_alloc_struct_array(
     struct_arr_type = StructArrayType(arr_typs, names)
 
     def codegen(context, builder, sig, args):
-        num_structs, nested_counts, _, _ = args
+        num_structs, nested_counts, _, _, dict_ref_arr = args
 
         nested_counts_type = sig.args[1]
         nested_counts = _fix_nested_counts(
             nested_counts, struct_arr_type, nested_counts_type, builder
         )
 
+        dict_ref_arg = None if is_overload_none(dict_ref_arr_typ) else dict_ref_arr
         meminfo, _, _ = construct_struct_array(
-            context, builder, struct_arr_type, num_structs, nested_counts
+            context, builder, struct_arr_type, num_structs, nested_counts, dict_ref_arg
         )
         struct_array = context.make_helper(builder, struct_arr_type)
         struct_array.meminfo = meminfo
         return struct_array._getvalue()
 
     return (
-        struct_arr_type(num_structs_typ, nested_counts_typ, dtypes_typ, names_typ),
+        struct_arr_type(
+            num_structs_typ, nested_counts_typ, dtypes_typ, names_typ, dict_ref_arr_typ
+        ),
         codegen,
     )
 
@@ -369,7 +383,7 @@ def pre_alloc_struct_array_equiv(
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 4 and not kws
+    assert len(args) > 0
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
@@ -1328,7 +1342,7 @@ def overload_scalar_to_struct_array(scalar_val, length, _arr_typ):
     names = arr_type.names
 
     def impl(scalar_val, length, _arr_typ):  # pragma: no cover
-        out_arr = pre_alloc_struct_array(length, (-1,), dtypes, names)
+        out_arr = pre_alloc_struct_array(length, (-1,), dtypes, names, None)
         for i in range(length):
             out_arr[i] = scalar_val
         return out_arr

@@ -2814,7 +2814,7 @@ def overload_resize_and_copy(A, old_size, new_len):
 
     # generic copy for const sized arrays
     def impl(A, old_size, new_len):  # pragma: no cover
-        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype, (-1,))
+        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype, (-1,), A)
         out_arr[:old_size] = A[:old_size]
         return out_arr
 

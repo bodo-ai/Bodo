@@ -1051,7 +1051,7 @@ def overload_object_insert_util(
         scalar_text += "    n_keys -= 1\n"
         scalar_text += "    key_exists = True\n"
         scalar_text += "    break\n"
-        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keys, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keys, (-1,), struct_typ_tuple, ('key', 'value'), None)\n"
 
         # Copy over all the existing key value pairs, except any that match the update key.
         scalar_text += "write_idx = 0\n"

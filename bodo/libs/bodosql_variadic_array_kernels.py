@@ -214,7 +214,7 @@ def overload_object_construct(values, names, scalars):
     # Based on the number to be kept, allocate a struct array to store that many
     # key-value pairs.
     scalar_text += "n_keep = pairs_to_keep.sum()\n"
-    scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+    scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'), None)\n"
     # For each pair, if it is to be kept, write a struct containing that pair
     # into he struct array.
     scalar_text += "write_idx = 0\n"
@@ -958,7 +958,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
         extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
             ("key", "value")
         )
-        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'), None)\n"
 
         # 3. For each key-value pair that is to be kept, determine if the
         # value is null by doing a lookup in the original map array, then

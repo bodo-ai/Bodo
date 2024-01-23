@@ -1670,8 +1670,6 @@ def _infer_ndarray_obj_dtype(val):
     elif isinstance(first_val, (dict, Dict)):
         key_arr_type = numba.typeof(_value_to_array(list(first_val.keys())))
         value_arr_type = numba.typeof(_value_to_array(list(first_val.values())))
-        key_arr_type = to_str_arr_if_dict_array(key_arr_type)
-        value_arr_type = to_str_arr_if_dict_array(value_arr_type)
         # TODO: handle 2D ndarray case
         return MapArrayType(key_arr_type, value_arr_type)
     elif isinstance(first_val, tuple):
@@ -1762,6 +1760,9 @@ def _get_struct_value_arr_type(v):
     # use nullable arrays for integer/bool values since there could be None objects
     if isinstance(v, (int, bool)):
         arr_typ = to_nullable_type(arr_typ)
+
+    if _use_dict_str_type and arr_typ == string_array_type:
+        arr_typ = bodo.dict_str_arr_type
 
     return arr_typ
 

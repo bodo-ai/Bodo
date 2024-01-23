@@ -485,10 +485,12 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
     return builder.load(counts)
 
 
-def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
+def gen_allocate_array(context, builder, arr_type, n_elems, dict_arr_ref, c=None):
     """gen array allocation for type 'arr_type'.
     'n_elems' is a tuple of all counts needed for allocation, e.g. (3, 5) for array item
     that has 3 arrays and 5 primitive elements.
+    'dict_arr_ref' is the reference array for allocating dictionary-encoded arrays if
+    available (otherwise None).
     'c' is boxing/unboxing context and can be None if not in boxing/unboxing steps.
     When in boxing/unboxing, 'call_jit_code' is used to handle Python error model.
     """
@@ -505,11 +507,18 @@ def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
     else:
         n_nested_elems = context.get_dummy_value()
         nested_counts_typ = types.none
+
     # call alloc_type
     t_ref = types.TypeRef(arr_type)
-    sig = arr_type(types.int64, t_ref, nested_counts_typ)
-    args = [length, context.get_dummy_value(), n_nested_elems]
-    impl = lambda n, t, s: bodo.utils.utils.alloc_type(n, t, s)
+    dict_arr_ref_typ = types.none if dict_arr_ref is None else arr_type
+    dict_arr_ref_val = (
+        context.get_dummy_value() if dict_arr_ref is None else dict_arr_ref
+    )
+    sig = arr_type(types.int64, t_ref, nested_counts_typ, dict_arr_ref_typ)
+    args = [length, context.get_dummy_value(), n_nested_elems, dict_arr_ref_val]
+    impl = lambda n, t, s, dict_arr_ref: bodo.utils.utils.alloc_type(
+        n, t, s, dict_arr_ref
+    )
     if c:
         _is_error, out_arr = c.pyapi.call_jit_code(impl, sig, args)
     else:

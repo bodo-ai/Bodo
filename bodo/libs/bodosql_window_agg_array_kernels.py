@@ -1169,7 +1169,7 @@ def overload_windowed_object_agg(K, V):
             )
         n_keep = pairs_to_keep.sum()
         struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-            n_keep, (-1,), struct_typ_tuple, ("key", "value")
+            n_keep, (-1,), struct_typ_tuple, ("key", "value"), None
         )
 
         # Copy over the elements of K and V into the struct array, skipping
