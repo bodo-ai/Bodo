@@ -544,15 +544,20 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
               "Failure when parsing function body: Multiple statements were encountered.");
       throw new RuntimeException(msg);
     }
-    // We only check validation (to give a more detailed error) if there are no arguments.
-    // We need to extend the validator to properly handle the parameter scope with queries.
-    if (paramNames.isEmpty()) {
-      // Create the validator. We need the function path for any tables and/or any functions.
-      final CalciteCatalogReader catalogReader =
-          createCatalogReaderWithDefaultPath(functionPath.subList(0, 2));
-      final SqlValidator validator = createSqlValidator(catalogReader);
-      SqlNode validatedNode = validator.validateParameterizedExpression(node, Map.of());
+    // Create the validator. We need the function path for any tables and/or any functions.
+    final CalciteCatalogReader catalogReader =
+        createCatalogReaderWithDefaultPath(functionPath.subList(0, 2));
+    final SqlValidator validator = createSqlValidator(catalogReader);
+    Map<String, RelDataType> paramNameToTypeMap = new HashMap<>();
+    for (int i = 0; i < paramNames.size(); i++) {
+      paramNameToTypeMap.put(paramNames.get(i), arguments.get(i).getType());
+    }
+    SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
 
+    // We only can inline if there are no arguments.
+    // We need additional transformations/functionality to handle
+    // arguments with queries.
+    if (paramNames.isEmpty()) {
       // Create a new SQL to RelConvert for converting the query into a root and extracting
       // the plan. We need a new convert because it uses a separate catalog reader and validator.
       final RexBuilder rexBuilder = createRexBuilder();

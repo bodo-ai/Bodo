@@ -72,6 +72,11 @@ public class OrderByScope extends DelegatingScope {
   }
 
   @Override public SqlQualified fullyQualify(SqlIdentifier identifier) {
+    // Bodo Change: Check for a parameter first.
+    @Nullable SqlQualified paramIdentifier = fullyQualifyIdentifierIfParameter(identifier);
+    if (paramIdentifier != null) {
+      return paramIdentifier;
+    }
     // If it's a simple identifier, look for an alias.
     if (identifier.isSimple()
         && validator.config().conformance().isSortByAlias()) {
@@ -146,6 +151,12 @@ public class OrderByScope extends DelegatingScope {
   }
 
   @Override public @Nullable RelDataType resolveColumn(String name, SqlNode ctx) {
+    // Bodo Change: Check for a parameter first.
+    @Nullable RelDataType paramType = resolveColumnIfParameter(name, ctx);
+    if (paramType != null) {
+      return paramType;
+    }
+
     final SqlValidatorNamespace selectNs = validator.getNamespaceOrThrow(select);
     final RelDataType rowType = selectNs.getRowType();
     final SqlNameMatcher nameMatcher = validator.catalogReader.nameMatcher();

@@ -381,6 +381,8 @@
                                         <exclude>org/apache/calcite/sql/util/SqlShuttle$CallCopyingArgHandler.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/SqlShuttle.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/SqlVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/AggChecker$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/AggChecker.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope.class</exclude>
@@ -390,6 +392,7 @@
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config$InitShim.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/ListScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/OrderByScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ParameterScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SchemaNamespace.class</exclude>

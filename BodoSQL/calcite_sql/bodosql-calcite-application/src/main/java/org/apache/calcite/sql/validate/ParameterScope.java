@@ -78,4 +78,36 @@ public class ParameterScope extends EmptyScope {
   @Override public @Nullable RelDataType resolveColumn(String name, SqlNode ctx) {
     return nameToTypeMap.get(name);
   }
+
+  // Bodo Change: Extensions to the interface
+
+  /** Returns the fullyQualify result of evaluating of the identifier
+   * in this parameter scope. If the identifier
+   * cannot be found within this scope then this returns null. */
+  @Override
+  @Nullable
+  public SqlQualified fullyQualifyIdentifierIfParameter(SqlIdentifier identifier) {
+    if (identifier.isSimple() && nameToTypeMap.containsKey(identifier.getSimple())) {
+      return fullyQualify(identifier);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Resolves a single identifier to a column, and returns the datatype of
+   * that column if it is a valid identifier in this parameter scope.
+   * If the identifier cannot be found within this scope then this returns null.
+   *
+   * @param name Name of column
+   * @param ctx  Context for exception
+   * @return Type of column, if found and unambiguous; null if not found
+   */
+  public @Nullable RelDataType resolveColumnIfParameter(String name, SqlNode ctx) {
+    if (nameToTypeMap.containsKey(name)) {
+      return resolveColumn(name, ctx);
+    } else {
+      return null;
+    }
+  }
 }
