@@ -396,6 +396,12 @@ public class SqlIdentifier extends SqlNode {
     if (call != null) {
       return call.getMonotonicity(scope);
     }
+    // Check for parameters, which won't have a namespace.
+    if (scope.fullyQualifyIdentifierIfParameter(this) != null) {
+      // Although each iteration is "constant" we don't want to risk altering
+      // all iterations for one iteration.
+      return SqlMonotonicity.NOT_MONOTONIC;
+    }
     final SqlQualified qualified = scope.fullyQualify(this);
     assert qualified.namespace != null : "namespace must not be null in " + qualified;
     final SqlIdentifier fqId = qualified.identifier;
