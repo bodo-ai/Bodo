@@ -958,9 +958,7 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
         }
         case bodo_array_type::DICT: {
             if (!in_arr->child_arrays[0]->is_globally_replicated) {
-                throw std::runtime_error(
-                    "shuffle_array: input dictionary array doesn't have a "
-                    "global dictionary");
+                make_dictionary_global_and_unique(in_arr, is_parallel);
             }
             out_arr = create_dict_string_array(
                 in_arr->child_arrays[0],
@@ -1661,10 +1659,7 @@ std::shared_ptr<array_info> reverse_shuffle_array(
         out_arr = alloc_map(child_arr->length, child_arr);
     } else if (arr_type == bodo_array_type::DICT) {
         if (!in_arr->child_arrays[0]->is_globally_replicated) {
-            throw std::runtime_error(
-                "reverse_shuffle_table: input dictionary array doesn't "
-                "have a "
-                "global dictionary");
+            make_dictionary_global_and_unique(in_arr, true);
         }
         // in_arr <- indices array, to simplify code below
         in_arr = in_arr->child_arrays[1];

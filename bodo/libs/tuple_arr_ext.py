@@ -107,7 +107,9 @@ def box_tuple_arr(typ, val, c):
 @numba.njit
 def pre_alloc_tuple_array(n, nested_counts, dtypes):  # pragma: no cover
     return init_tuple_arr(
-        bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, nested_counts, dtypes, None)
+        bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+            n, nested_counts, dtypes, None, None
+        )
     )
 
 

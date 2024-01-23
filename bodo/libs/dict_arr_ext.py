@@ -51,6 +51,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.utils.typing import (
     BodoArrayIterator,
+    is_list_like_index_type,
     is_overload_none,
     raise_bodo_error,
 )
@@ -534,7 +535,29 @@ def dict_arr_setitem(A, idx, val):
     if not isinstance(A, DictionaryArrayType):
         return
 
-    raise_bodo_error("DictionaryArrayType is read-only and doesn't support setitem yet")
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    # Setitem is supported if input array has the same dictionary as target array.
+    # NOTE: checking dictionary values to be the same can be slow so the setitem caller
+    # needs to make sure this is the case.
+    if val == dict_str_arr_type and (
+        (
+            is_list_like_index_type(idx)
+            and (isinstance(idx.dtype, types.Integer) or idx.dtype == types.bool_)
+        )
+        or isinstance(idx, types.SliceType)
+    ):
+
+        def impl_dict_arr_setitem(A, idx, val):  # pragma: no cover
+            A._indices[idx] = val._indices
+
+        return impl_dict_arr_setitem
+
+    raise_bodo_error(
+        f"DictionaryArrayType setitem not supported for idx type {idx} and value type {val}"
+    )
 
 
 @numba.njit(no_cpython_wrapper=True)

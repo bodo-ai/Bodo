@@ -33,7 +33,12 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
-from bodo.utils.typing import BodoError, is_list_like_index_type, unwrap_typeref
+from bodo.utils.typing import (
+    BodoError,
+    is_list_like_index_type,
+    is_overload_none,
+    unwrap_typeref,
+)
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import array_ext, hdist  # isort:skip
@@ -168,12 +173,39 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_init_map_arr
 
 
-@numba.njit
-def pre_alloc_map_array(num_maps, nested_counts, struct_typ):
-    data = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-        num_maps, nested_counts, struct_typ
-    )
-    return init_map_arr(data)
+def pre_alloc_map_array(
+    num_maps, nested_counts, struct_typ, dict_ref_arr=None
+):  # pragma: no cover
+    pass
+
+
+@overload(pre_alloc_map_array)
+def overload_pre_alloc_map_array(
+    num_maps, nested_counts, struct_typ, dict_ref_arr=None
+):
+    if not is_overload_none(dict_ref_arr):
+
+        def impl_pre_alloc_map_array(
+            num_maps, nested_counts, struct_typ, dict_ref_arr=None
+        ):  # pragma: no cover
+            data = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                num_maps,
+                nested_counts,
+                bodo.libs.array_item_arr_ext.get_data(dict_ref_arr._data),
+            )
+            return init_map_arr(data)
+
+        return impl_pre_alloc_map_array
+
+    def impl_pre_alloc_map_array(
+        num_maps, nested_counts, struct_typ, dict_ref_arr=None
+    ):  # pragma: no cover
+        data = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+            num_maps, nested_counts, struct_typ
+        )
+        return init_map_arr(data)
+
+    return impl_pre_alloc_map_array
 
 
 def pre_alloc_map_array_equiv(
@@ -183,7 +215,7 @@ def pre_alloc_map_array_equiv(
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 3 and not kws
+    assert len(args) > 0
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
@@ -278,7 +310,7 @@ def map_arr_setitem(arr, ind, val):
             # To simplify this limited use case, we copy the data twice.
             # TODO: Replace the struct array allocation with modifying the underlying array_item_array directly
             struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-                len(val), (-1,), typ_tuple, ("key", "value")
+                len(val), (-1,), typ_tuple, ("key", "value"), None
             )
             for i, key in enumerate(keys):
                 # Struct arrays are organized as a tuple of arrays, 1 per field.

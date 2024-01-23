@@ -285,3 +285,44 @@ def test_copy(array_item_arr_value, memory_leak_check):
         return A.copy()
 
     check_func(test_impl, (array_item_arr_value,))
+
+
+def test_nested_arr_dict_getitem(memory_leak_check):
+    """Make sure dictionary-encoded arrays inside nested arrays support allocation and
+    setitem that are necessary for operations like array(item) bool getitem
+    """
+
+    def test_impl(A, ind):
+        return A[ind]
+
+    # Struct array
+    A1 = pd.arrays.ArrowExtensionArray(
+        pa.array(
+            [[{"A": "a1", "B": 2}], [{"A": "a1", "B": 2}, {"A": "a2", "B": 2}]],
+            pa.large_list(
+                pa.struct([pa.field("A", pa.large_string()), pa.field("B", pa.int64())])
+            ),
+        )
+    )
+    # Map array
+    A2 = pd.arrays.ArrowExtensionArray(
+        pa.array(
+            [
+                [{1: "abc", 4: "h"}],
+                [
+                    {1: "aa", 3: "m"},
+                    {1: "abc", 4: "abc"},
+                ],
+            ],
+            pa.large_list(pa.map_(pa.int64(), pa.large_string())),
+        )
+    )
+    B = np.array([False, True], np.bool_)
+
+    orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    bodo.hiframes.boxing._use_dict_str_type = True
+    try:
+        check_func(test_impl, (A1, B), only_seq=True)
+        check_func(test_impl, (A2, B), only_seq=True)
+    finally:
+        bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type

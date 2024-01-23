@@ -158,7 +158,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
 
 
 def construct_array_item_array(
-    context, builder, array_item_type, n_arrays, n_elems, c=None
+    context, builder, array_item_type, n_arrays, n_elems, dict_arr_ref, c=None
 ):
     """Creates meminfo and sets dtor, and allocates buffers for array(item) array"""
     # create payload type
@@ -198,7 +198,7 @@ def construct_array_item_array(
 
     # alloc data
     payload.data = gen_allocate_array(
-        context, builder, array_item_type.dtype, n_elems, c
+        context, builder, array_item_type.dtype, n_elems, dict_arr_ref, c
     )
 
     # alloc offsets
@@ -267,7 +267,7 @@ def box_array_item_arr(typ, val, c):
 
 def lower_pre_alloc_array_item_array(context, builder, sig, args):
     array_item_type = sig.return_type
-    num_arrs, num_values, _ = args
+    num_arrs, num_values, dtype = args
     # make sure 'num_values' has -1 for all unknown alloc counts
     n_elem_alloc_counts = bodo.utils.transform.get_type_alloc_counts(
         array_item_type.dtype
@@ -287,8 +287,9 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
                 for _ in range(n_elem_alloc_counts - n_elems_type.count)
             ],
         )
+    dict_arr_ref = None if isinstance(sig.args[2], types.TypeRef) else dtype
     meminfo, _, _, _ = construct_array_item_array(
-        context, builder, array_item_type, num_arrs, num_values
+        context, builder, array_item_type, num_arrs, num_values, dict_arr_ref
     )
     array_item_array = context.make_helper(builder, array_item_type)
     array_item_array.meminfo = meminfo
@@ -296,9 +297,12 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
 
 
 @intrinsic(prefer_literal=True)
-def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ=None):
-    assert isinstance(num_arrs_typ, types.Integer)
-    array_item_type = ArrayItemArrayType(dtype_typ.instance_type)
+def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ):
+    assert isinstance(
+        num_arrs_typ, types.Integer
+    ), "pre_alloc_array_item_array: num_arrs should be integer"
+
+    array_item_type = ArrayItemArrayType(unwrap_typeref(dtype_typ))
     num_values_typ = types.unliteral(num_values_typ)  # avoid e.g. (int64, literal(0))
     return (
         array_item_type(types.int64, num_values_typ, dtype_typ),
@@ -349,7 +353,7 @@ def overload_array_to_repeated_array_item_array(scalar_arr, length, data_arr_typ
         nested_counts = init_nested_counts(data_arr_type)
         for i in range(length):
             nested_counts = add_nested_counts(nested_counts, scalar_arr)
-        out_arr = pre_alloc_array_item_array(length, nested_counts, data_arr_type)
+        out_arr = pre_alloc_array_item_array(length, nested_counts, scalar_arr)
         for i in range(length):
             out_arr[i] = scalar_arr
         return out_arr
@@ -657,7 +661,7 @@ def array_item_arr_getitem_array(arr, ind):
                     arr_item = arr[i]
                     nested_counts = add_nested_counts(nested_counts, arr_item)
 
-            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, data_arr_type)
+            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, get_data(arr))
             out_null_bitmap = get_null_bitmap(out_arr)
 
             # write output
@@ -690,7 +694,7 @@ def array_item_arr_getitem_array(arr, ind):
                 arr_item = arr[i]
                 nested_counts = add_nested_counts(nested_counts, arr_item)
 
-            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, data_arr_type)
+            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, get_data(arr))
             out_null_bitmap = get_null_bitmap(out_arr)
 
             for kk in range(n):
