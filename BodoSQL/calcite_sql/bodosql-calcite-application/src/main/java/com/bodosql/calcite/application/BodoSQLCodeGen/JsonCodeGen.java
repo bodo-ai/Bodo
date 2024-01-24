@@ -109,4 +109,19 @@ public class JsonCodeGen {
     List<Pair<String, Expr>> namedArgs = List.of(isScalarArrArg, isScalarIndArg);
     return ExprKt.BodoSQLKernel("arr_get", operands, namedArgs);
   }
+
+  public static Expr visitGetIgnoreCaseOp(List<Expr> operands, List<Boolean> arg_scalars) {
+    Boolean mapScalar = arg_scalars.get(0);
+    Boolean indexScalar = arg_scalars.get(1);
+
+    kotlin.Pair isScalarArrArg =
+        new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(mapScalar));
+
+    kotlin.Pair isScalarIndArg =
+        new kotlin.Pair("is_scalar_idx", new Expr.BooleanLiteral(indexScalar));
+
+    List<Pair<String, Expr>> namedArgs = List.of(isScalarArrArg, isScalarIndArg);
+
+    return ExprKt.BodoSQLKernel("get_ignore_case", operands, namedArgs);
+  }
 }

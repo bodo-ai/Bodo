@@ -3308,12 +3308,19 @@ Bodo currently supports the following functions that operate on columns of array
 -   `#!sql arr[idx]`
 -   `#!sql object[field]`
 
-    Returns the element found at the specified index in the array, or the specified field of an object. 
-    
+    Returns the element found at the specified index in the array, or the specified field of an object.
+
     When indexing into an array: indexing is 0 based, not 1 based. Returns `#!sql NULL` if the index is outside of the boundaries of the array. The index must be an integer.
-    
+
     When retrieving a field from an object: the field name must be a string. If the object is a struct, the field name must be a string literal. If the object is a map, it can be a non-constant string. Returns `#!sql NULL` if the field name is not found. Field name
     matching is case-sensitive.
+
+
+#### GET_IGNORE_CASE
+-   `#!sql GET_IGNORE_CASE(object, idx)`
+
+    Returns the value for the key in the map/struct, ignoring case. Returns NULL if the key does not exist
+    inside the map/struct.
 
 
 #### ARRAY_TO_STRING
@@ -3470,7 +3477,7 @@ BodoSQL currently supports the following Object functions:
 #### OBJECT_CONSTRUCT
 -   `#!sql OBJECT_CONSTRUCT(key1, value1[, key2, value2, ...])`
 
-    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value 
+    The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value
     (e.g. `value1`, `value2`, ...) is null have that key-value pair dropped from the row's final JSON output.
 
     !!! note
@@ -3571,7 +3578,7 @@ BodoSQL currently supports the following Object functions:
     - `#!sql PARSE_JSON('{"A": 0, "B": 3.1}')` is equivalent to `#!sql TO_VARIANT({"A": 0, "B": 3.1})`
 
     !!! note
-        Currently only supported under limited conditions where it is possible to rewrite 
+        Currently only supported under limited conditions where it is possible to rewrite
         the call to `PARSE_JSON` as a sequence of Parse-Extract-Cast
         operations, where the output of `PARSE_JSON` immediately has an extraction
         operation like GET/GET_PATH called on it, and the result is casted to a
