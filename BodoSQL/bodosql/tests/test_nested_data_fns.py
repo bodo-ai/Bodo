@@ -223,147 +223,139 @@ the SQL object type in A will always have two fields, "id" and "value".
 id is always an integer, but value may vary between the returned tables.
 """
 
-#List of data types represented as a pa map array
+# List of data types represented as a pa map array
 map_object_params = [
     pytest.param(
-            {
-                "TABLE1": pd.DataFrame(
-                    {
-                        "A": pd.array(
-                            [
-                                {"id": 1, "value": 10},
-                                {"id": 1, "value": 20},
-                            ],
-                            dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
-                        ),
-                        "B": pd.Series(["id", "value"]),
-                    }
-                ),
-            },
-            id="int_map",
-        ),
-        pytest.param(
-            {
-                "TABLE1": pd.DataFrame({
-                "A": pd.Series([{
-                        "id": 1,
-                        "value": 10
-                    },
-                    None,
-                    {
-                        "id": 1,
-                        "value": -10
-                    },
-                    {
-                        "id": 1,
-                        "value": 0
-                    },
-                    ] * 2,
-                    dtype = pd.ArrowDtype(pa.map_(pa.string(), pa.int64()))
-                ),
-                "B": pd.Series(["random_key", "id", "value", None] * 2),
-            })
-            },
-            id="map_array"
-        ),
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            {"id": 1, "value": 10},
+                            {"id": 1, "value": 20},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
+                    "B": pd.Series(["id", "value"]),
+                }
+            ),
+        },
+        id="int_map",
+    ),
+    pytest.param(
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            {"id": 1, "value": 10},
+                            None,
+                            {"id": 1, "value": -10},
+                            {"id": 1, "value": 0},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
+                    "B": pd.Series(["random_key", "id", "value", None] * 2),
+                }
+            )
+        },
+        id="map_array",
+    ),
 ]
 
-#List of data types represented as a pa struct array
+# List of data types represented as a pa struct array
 struct_object_params = [
     pytest.param(
-            {
-                "TABLE1": pd.DataFrame(
-                    {
-                        "A": pd.array(
-                            [
-                                {"id": 1, "value": 10},
-                                {"id": 1, "value": 20},
-                            ],
-                            dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.int32())),
-                        ),
-                        "B": pd.Series(["id", "value"]),
-                    }
-                ),
-            },
-            id="int_struct",
-        ),
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            {"id": 1, "value": 10},
+                            {"id": 1, "value": 20},
+                        ],
+                        dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.int32())),
+                    ),
+                    "B": pd.Series(["id", "value"]),
+                }
+            ),
+        },
+        id="int_struct",
+    ),
     pytest.param(
-            {
-                "TABLE1": pd.DataFrame(
-                    {
-                        "A": pd.array(
-                            [
-                                {
-                                    "id": 1,
-                                    "value": pd.Timestamp("2020-01-01"),
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            {
+                                "id": 1,
+                                "value": pd.Timestamp("2020-01-01"),
+                            },
+                            {
+                                "id": 1,
+                                "value": pd.Timestamp("2020-01-02"),
+                            },
+                        ],
+                        dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.timestamp("ns"))),
+                    ),
+                    "B": pd.Series(["id", "value"]),
+                }
+            ),
+        },
+        id="timestamp",
+    ),
+    pytest.param(
+        {
+            "TABLE1": pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            {
+                                "id": 1,
+                                "value": {
+                                    "X": "VFD",
+                                    "Y": [1.2],
+                                    "Z": [[], [3, 1]],
+                                    "W": {"A": 1, "B": "AA"},
                                 },
-                                {
-                                    "id": 1,
-                                    "value": pd.Timestamp("2020-01-02"),
+                            },
+                            {
+                                "id": 1,
+                                "value": {
+                                    "X": "D",
+                                    "Y": [4.0, np.nan],
+                                    "Z": [[1], None],
+                                    "W": {"A": 1, "B": ""},
                                 },
-                            ],
-                            dtype=pd.ArrowDtype(wrapped_in_id_typ(pa.timestamp("ns"))),
-                        ),
-                        "B": pd.Series(["id", "value"]),
-                    }
-                ),
-            },
-            id="timestamp",
-        ),
-        pytest.param(
-            {
-                "TABLE1": pd.DataFrame(
-                    {
-                        "A": pd.array(
-                            [
-                                {
-                                    "id": 1,
-                                    "value": {
-                                        "X": "VFD",
-                                        "Y": [1.2],
-                                        "Z": [[], [3, 1]],
-                                        "W": {"A": 1, "B": "AA"},
-                                    },
-                                },
-                                {
-                                    "id": 1,
-                                    "value": {
-                                        "X": "D",
-                                        "Y": [4.0, np.nan],
-                                        "Z": [[1], None],
-                                        "W": {"A": 1, "B": ""},
-                                    },
-                                },
-                            ],
-                            dtype=pd.ArrowDtype(wrapped_in_id_typ(mixed_struct_type)),
-                        ),
-                        "B": pd.Series(["id", "value"]),
-                    }
-                ),
-            },
-            id="nested_nested_struct",
-        ),
-        pytest.param(
-            {
-                "TABLE1": nested_nested_df,
-            },
-            id="nested_nested_struct",
-            marks=pytest.mark.slow,
-        ),
+                            },
+                        ],
+                        dtype=pd.ArrowDtype(wrapped_in_id_typ(mixed_struct_type)),
+                    ),
+                    "B": pd.Series(["id", "value"]),
+                }
+            ),
+        },
+        id="nested_nested_struct",
+    ),
+    pytest.param(
+        {
+            "TABLE1": nested_nested_df,
+        },
+        id="nested_nested_struct",
+        marks=pytest.mark.slow,
+    ),
 ]
 
 
-@pytest.fixture(
-    params= map_object_params + struct_object_params
-)
+@pytest.fixture(params=map_object_params + struct_object_params)
 def sql_object_array_values(request):
     "Tables containing sql object types that can either be struct or map internally"
     return request.param
 
 
-@pytest.fixture(
-    params = map_object_params
-)
+@pytest.fixture(params=map_object_params)
 def map_array_values(request):
     "Tables containing sql object types that are map internally"
     return request.param
@@ -2279,7 +2271,11 @@ def test_map_index_column_scalar(sql_object_array_values, syntax, memory_leak_ch
 
     if isinstance(input_col.dtype.pyarrow_dtype, pa.MapType):
         for row in input_col:
-            if row is None or (isinstance(row, list) and pd.isna(row).all()) or (not isinstance(row, list) and pd.isna(row)):
+            if (
+                row is None
+                or (isinstance(row, list) and pd.isna(row).all())
+                or (not isinstance(row, list) and pd.isna(row))
+            ):
                 output_col.append(None)
             else:
                 output_col.append(row[1][1])
@@ -2483,7 +2479,11 @@ def test_map_index_scalar_scalar(sql_object_array_values, syntax, memory_leak_ch
 
     if isinstance(input_col.dtype.pyarrow_dtype, pa.MapType):
         for row in input_col:
-            if row is None or (isinstance(row, list) and pd.isna(row).all()) or (not isinstance(row, list) and pd.isna(row)):
+            if (
+                row is None
+                or (isinstance(row, list) and pd.isna(row).all())
+                or (not isinstance(row, list) and pd.isna(row))
+            ):
                 output_col.append(None)
             else:
                 output_col.append(row[1][1])
@@ -2505,7 +2505,6 @@ def test_map_index_scalar_scalar(sql_object_array_values, syntax, memory_leak_ch
         sort_output=False,
         expected_output=py_out,
     )
-
 
 
 @pytest.mark.parametrize(
@@ -2550,6 +2549,7 @@ def test_map_index_scalar_column(map_array_values, syntax, memory_leak_check):
         sort_output=False,
         expected_output=py_out,
     )
+
 
 @pytest.mark.parametrize(
     "syntax",
@@ -2658,6 +2658,56 @@ def test_map_index_nested(memory_leak_check):
             ),
         }
     )
+
+    check_query(
+        query,
+        sql_object_array_values,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_out,
+    )
+
+
+@pytest.mark.parametrize(
+    "with_case",
+    [
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+        pytest.param(False, id="without_case"),
+    ],
+)
+def test_get_ignore_case(sql_object_array_values, with_case, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data types in a case statement
+    """
+
+    if with_case:
+        query = f"SELECT CASE WHEN A['id'] > 0 THEN GET_IGNORE_CASE(A, 'VaLUe') ELSE NULL END as out_col FROM TABLE1"
+    else:
+        query = f"SELECT GET_IGNORE_CASE(A, 'vAlUE') as out_col FROM TABLE1"
+
+    input_col = sql_object_array_values["TABLE1"]["A"]
+    output_col = []
+
+    if isinstance(input_col.dtype.pyarrow_dtype, pa.MapType):
+        for row in input_col:
+            if (
+                row is None
+                or (isinstance(row, list) and pd.isna(row).all())
+                or (not isinstance(row, list) and pd.isna(row))
+            ):
+                output_col.append(None)
+            else:
+                output_col.append(row[1][1])
+    else:
+        for row in input_col:
+            if row is None or pd.isna(row):
+                output_col.append(None)
+            else:
+                output_col.append(row["value"])
+
+    py_out = pd.DataFrame({"out_col": pd.array(output_col)})
 
     check_query(
         query,

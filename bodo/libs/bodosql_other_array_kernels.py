@@ -1197,11 +1197,12 @@ def overload_arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx):
         scalar_text += "else:\n"
         scalar_text += "   res[i] = arg0[arg1]"
     elif is_valid_object_get(arr, ind, is_scalar_arr_bool, is_scalar_idx_bool):
-        # Handle map[str_idx] case
+
         def impl(arr, ind, is_scalar_arr, is_scalar_idx):
-            return get_field(arr, ind, is_scalar_arr)
+            return get_field(arr, ind, is_scalar_arr, False)
 
         return impl
+
     else:
         # In all other cases, return null
         out_dtype = bodo.null_array_type
@@ -1215,6 +1216,88 @@ def overload_arr_get_util(arr, ind, is_scalar_arr, is_scalar_idx):
         out_dtype,
         are_arrays=[not is_scalar_arr_bool, not is_scalar_idx_bool, False, False],
     )
+
+
+def get_ignore_case(
+    arr, ind, is_scalar_arr=False, is_scalar_idx=True
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(get_ignore_case, no_unliteral=True)
+def overload_get_ignore_case(arr, ind, is_scalar_arr=False, is_scalar_idx=True):
+    """Handles cases where GET_IGNORE_CASE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [arr, ind]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.get_ignore_case",
+                ["arr", "ind", "is_scalar_arr", "is_scalar_idx"],
+                i,
+                default_map={"is_scalar_arr": False, "is_scalar_idx": True},
+            )
+
+    def impl(arr, ind, is_scalar_arr=False, is_scalar_idx=True):  # pragma: no cover
+        return get_ignore_case_util(arr, ind, is_scalar_arr, is_scalar_idx)
+
+    return impl
+
+
+def get_ignore_case_util(arr, ind, is_scalar_arr, is_scalar_idx):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(get_ignore_case_util, no_unliteral=True)
+def overload_get_ignore_case_util(arr, ind, is_scalar_arr, is_scalar_idx):
+    """
+    A dedicated kernel for the SQL function GET_IGNORE_CASE which takes in an map
+    and an key, and returns the element for that key (case insensitive).
+    For invalid inputs, null/null array is returned.
+
+    Args:
+        map (object/column of objects): the data array
+        ind (string/variant column): the index/indices. Null is returned if ind is not a valid key.
+        is_scalar_arr: if true, treats the array input as a scalar arrays i.e. a single element of an array of arrays
+        is_scalar_idx: if true, treats the index as a scalar index i.e. a single element of an array of arrays said values
+
+    Returns:
+        the value(s) of the map for the specified key(s) of the data arr
+    """
+
+    arg_names = ["arr", "ind", "is_scalar_arr", "is_scalar_idx"]
+    arg_types = [arr, ind, is_scalar_arr, is_scalar_idx]
+    propagate_null = [True, True, False, False]
+
+    is_scalar_arr_bool = get_overload_const_bool(
+        is_scalar_arr, "arr_get", "is_scalar_arr"
+    )
+
+    is_scalar_idx_bool = get_overload_const_bool(
+        is_scalar_idx, "arr_get", "is_scalar_arr"
+    )
+
+    # GET_IGNORE_CASE only works for object type
+    if is_valid_object_get(arr, ind, is_scalar_arr_bool, is_scalar_idx_bool):
+
+        def impl(arr, ind, is_scalar_arr, is_scalar_idx):
+            return get_field(arr, ind, is_scalar_arr, True)
+
+        return impl
+    else:
+        # In all other cases, return null
+        out_dtype = bodo.null_array_type
+        scalar_text = "bodo.libs.array_kernels.setna(res, i)\n"
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            are_arrays=[not is_scalar_arr_bool, not is_scalar_idx_bool, False, False],
+        )
 
 
 def is_valid_array_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):

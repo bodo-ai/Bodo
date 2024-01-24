@@ -87,6 +87,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
   // val[idx] syntax
   public static final SqlOperator ARRAY_MAP_GET_BRACKET = new BodoSqlItemOperatorBracketsSyntax();
 
+  public static final SqlOperator GET_IGNORE_CASE = new GetIgnoreCaseFn();
+
   /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
   public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
@@ -191,7 +193,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_CONTAINS,
           ARRAY_POSITION,
           ARRAY_MAP_GET,
-          ARRAY_MAP_GET_BRACKET);
+          ARRAY_MAP_GET_BRACKET,
+          GET_IGNORE_CASE);
 
   @Override
   public void lookupOperatorOverloads(
