@@ -265,7 +265,7 @@ def minio_server():
     for proc in psutil.process_iter():
         if proc.name() == "minio":
             proc.kill()
-            shutil.rmtree(cwd + "/Data")
+            shutil.rmtree(cwd + "/Data", ignore_errors=True)
             time.sleep(1)
 
     # Session level environment variables used for S3 Testing.
@@ -304,7 +304,7 @@ def minio_server():
         if bodo.get_rank() == 0:
             if proc is not None:
                 proc.kill()
-            shutil.rmtree(cwd + "/Data")
+            shutil.rmtree(cwd + "/Data", ignore_errors=True)
 
 
 @pytest.fixture(scope="function")
