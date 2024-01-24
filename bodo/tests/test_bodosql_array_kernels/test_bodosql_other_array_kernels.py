@@ -2029,335 +2029,308 @@ internal_struct_type = pa.struct(
 )
 
 
-@pytest.mark.parametrize(
-    "map, ind, is_scalar_map, expected",
-    [
+@pytest.fixture(
+    params=[
         pytest.param(
-            {"A": 0, "B": 1},
-            "A",
-            True,
-            0,
+            (
+                {"A": 0, "B": 1},
+                "A",
+                True,
+                0,
+            ),
             id="int_map-scalar-scalar",
         ),
         pytest.param(
-            {"A": "B", "B": "C"},
-            "B",
-            True,
-            "C",
+            (
+                {"A": "B", "B": "C"},
+                "B",
+                True,
+                "C",
+            ),
             id="string_map-scalar-scalar",
         ),
         pytest.param(
-            {"A": 1, "B": "2", "C": 1.23},
-            "C",
-            True,
-            1.23,
+            (
+                {"A": 1, "B": "2", "C": 1.23},
+                "C",
+                True,
+                1.23,
+            ),
             id="mixed_map-scalar-scalar",
             marks=pytest.mark.skip(
                 "Needs mixed value type scalar map type: https://bodo.atlassian.net/browse/BSE-2320"
             ),
         ),
         pytest.param(
-            {"A": 0, "B": 1, "C": None},
-            pd.Series(["A", "B", "C", "D"]),
-            True,
-            pd.Series([0, 1, None, None], dtype=pd.Int32Dtype()),
+            (
+                {"A": 0, "B": 1, "C": None},
+                pd.Series(["A", "B", "C", "D"]),
+                True,
+                pd.Series([0, 1, None, None], dtype=pd.Int32Dtype()),
+            ),
             id="int_map-scalar-vector",
             marks=pytest.mark.skip(
                 "Causes a memory leak: https://bodo.atlassian.net/browse/BSE-2440"
             ),
         ),
         pytest.param(
-            pd.array(
-                [
-                    {"A": 0, "B": 1, "C": 2},
-                    {"A": 0, "B": 1, "C": 2},
-                    None,
-                    {"D": 0, "C": 1, "B": 2},
-                ],
-                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            (
+                pd.array(
+                    [
+                        {"A": 0, "B": 1, "C": 2},
+                        {"A": 0, "B": 1, "C": 2},
+                        None,
+                        {"D": 0, "C": 1, "B": 2},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                pd.Series(["A", "D", "C", "D"]),
+                False,
+                pd.Series([0, None, None, 0], dtype=pd.Int32Dtype()),
             ),
-            pd.Series(["A", "D", "C", "D"]),
-            False,
-            pd.Series([0, None, None, 0], dtype=pd.Int32Dtype()),
             id="int_map-vector-vector",
         ),
         pytest.param(
-            pd.array(
-                [
-                    {"A": "A", "B": "B", "C": "C"},
-                    {"A": "A", "B": "B", "C": "C"},
-                    None,
-                    {"D": "D", "C": "C", "B": "B"},
-                ],
-                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            (
+                pd.array(
+                    [
+                        {"A": "A", "B": "B", "C": "C"},
+                        {"A": "A", "B": "B", "C": "C"},
+                        None,
+                        {"D": "D", "C": "C", "B": "B"},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+                ),
+                pd.Series(["D", "B", "C", "D"]),
+                False,
+                pd.Series([None, "B", None, "D"]),
             ),
-            pd.Series(["D", "B", "C", "D"]),
-            False,
-            pd.Series([None, "B", None, "D"]),
             id="string_map-vector-vector",
         ),
         pytest.param(
-            pd.array(
-                [
-                    {
-                        "A": 1,
-                        "B": "2",
-                        "C": 1.23,
-                        "D": -1,
-                        "E": 123,
-                        "F": True,
-                        "G": pd.Timestamp("2023-11-27"),
-                    },
-                    {
-                        "A": -2,
-                        "B": "3",
-                        "C": 12.3,
-                        "D": 0,
-                        "E": -321,
-                        "F": False,
-                        "G": pd.Timestamp("2000-01-01"),
-                    },
-                    {
-                        "A": 1,
-                        "B": "-100",
-                        "C": -123.45,
-                        "D": 100,
-                        "E": -101,
-                        "F": False,
-                        "G": pd.Timestamp("2111-11-11"),
-                    },
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", pa.int64()),
-                            pa.field("B", pa.string()),
-                            pa.field("C", pa.float32()),
-                            pa.field("D", pa.int64()),
-                            pa.field("E", pa.int64()),
-                            pa.field("F", pa.bool_()),
-                            pa.field("G", pa.timestamp("ns")),
-                        ]
-                    )
+            (
+                pd.array(
+                    [
+                        {
+                            "A": 1,
+                            "B": "2",
+                            "C": 1.23,
+                            "D": -1,
+                            "E": 123,
+                            "F": True,
+                            "G": pd.Timestamp("2023-11-27"),
+                        },
+                        {
+                            "A": -2,
+                            "B": "3",
+                            "C": 12.3,
+                            "D": 0,
+                            "E": -321,
+                            "F": False,
+                            "G": pd.Timestamp("2000-01-01"),
+                        },
+                        {
+                            "A": 1,
+                            "B": "-100",
+                            "C": -123.45,
+                            "D": 100,
+                            "E": -101,
+                            "F": False,
+                            "G": pd.Timestamp("2111-11-11"),
+                        },
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int64()),
+                                pa.field("B", pa.string()),
+                                pa.field("C", pa.float32()),
+                                pa.field("D", pa.int64()),
+                                pa.field("E", pa.int64()),
+                                pa.field("F", pa.bool_()),
+                                pa.field("G", pa.timestamp("ns")),
+                            ]
+                        )
+                    ),
                 ),
+                "B",
+                False,
+                pd.Series(["2", "3", "-100"] * 3),
             ),
-            "B",
-            False,
-            pd.Series(["2", "3", "-100"] * 3),
             id="mixed_map-vector-scalar-string-output",
         ),
         pytest.param(
-            pd.array(
-                [
-                    {
-                        "A": 1,
-                        "B": "2",
-                        "C": 1.23,
-                        "D": -1,
-                        "E": 123,
-                        "F": True,
-                        "G": pd.Timestamp("2023-11-27"),
-                    },
-                    {
-                        "A": -2,
-                        "B": "3",
-                        "C": 12.3,
-                        "D": 0,
-                        "E": -321,
-                        "F": False,
-                        "G": pd.Timestamp("2000-01-01"),
-                    },
-                    {
-                        "A": 1,
-                        "B": "-100",
-                        "C": -123.45,
-                        "D": 100,
-                        "E": -101,
-                        "F": False,
-                        "G": pd.Timestamp("2111-11-11"),
-                    },
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", pa.int64()),
-                            pa.field("B", pa.string()),
-                            pa.field("C", pa.float32()),
-                            pa.field("D", pa.int64()),
-                            pa.field("E", pa.int64()),
-                            pa.field("F", pa.bool_()),
-                            pa.field("G", pa.timestamp("ns")),
-                        ]
-                    )
+            (
+                pd.array(
+                    [
+                        {
+                            "A": 1,
+                            "B": "2",
+                            "C": 1.23,
+                            "D": -1,
+                            "E": 123,
+                            "F": True,
+                            "G": pd.Timestamp("2023-11-27"),
+                        },
+                        {
+                            "A": -2,
+                            "B": "3",
+                            "C": 12.3,
+                            "D": 0,
+                            "E": -321,
+                            "F": False,
+                            "G": pd.Timestamp("2000-01-01"),
+                        },
+                        {
+                            "A": 1,
+                            "B": "-100",
+                            "C": -123.45,
+                            "D": 100,
+                            "E": -101,
+                            "F": False,
+                            "G": pd.Timestamp("2111-11-11"),
+                        },
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int64()),
+                                pa.field("B", pa.string()),
+                                pa.field("C", pa.float32()),
+                                pa.field("D", pa.int64()),
+                                pa.field("E", pa.int64()),
+                                pa.field("F", pa.bool_()),
+                                pa.field("G", pa.timestamp("ns")),
+                            ]
+                        )
+                    ),
                 ),
+                "C",
+                False,
+                pd.Series([1.23, 12.3, -123.45] * 3),
             ),
-            "C",
-            False,
-            pd.Series([1.23, 12.3, -123.45] * 3),
             id="mixed_map-vector-scalar-float-output",
         ),
         pytest.param(
-            pd.array(
-                [
-                    {
-                        "A": 1,
-                        "B": "2",
-                        "C": 1.23,
-                        "D": -1,
-                        "E": 123,
-                        "F": True,
-                        "G": pd.Timestamp("2023-11-27"),
-                    },
-                    {
-                        "A": -2,
-                        "B": "3",
-                        "C": 12.3,
-                        "D": 0,
-                        "E": -321,
-                        "F": False,
-                        "G": pd.Timestamp("2000-01-01"),
-                    },
-                    {
-                        "A": 1,
-                        "B": "-100",
-                        "C": -123.45,
-                        "D": 100,
-                        "E": -101,
-                        "F": False,
-                        "G": pd.Timestamp("2111-11-11"),
-                    },
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", pa.int64()),
-                            pa.field("B", pa.string()),
-                            pa.field("C", pa.float32()),
-                            pa.field("D", pa.int64()),
-                            pa.field("E", pa.int64()),
-                            pa.field("F", pa.bool_()),
-                            pa.field("G", pa.timestamp("ns")),
-                        ]
-                    )
+            (
+                pd.array(
+                    [
+                        {
+                            "A": 1,
+                            "B": "2",
+                            "C": 1.23,
+                            "D": -1,
+                            "E": 123,
+                            "F": True,
+                            "G": pd.Timestamp("2023-11-27"),
+                        },
+                        {
+                            "A": -2,
+                            "B": "3",
+                            "C": 12.3,
+                            "D": 0,
+                            "E": -321,
+                            "F": False,
+                            "G": pd.Timestamp("2000-01-01"),
+                        },
+                        {
+                            "A": 1,
+                            "B": "-100",
+                            "C": -123.45,
+                            "D": 100,
+                            "E": -101,
+                            "F": False,
+                            "G": pd.Timestamp("2111-11-11"),
+                        },
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int64()),
+                                pa.field("B", pa.string()),
+                                pa.field("C", pa.float32()),
+                                pa.field("D", pa.int64()),
+                                pa.field("E", pa.int64()),
+                                pa.field("F", pa.bool_()),
+                                pa.field("G", pa.timestamp("ns")),
+                            ]
+                        )
+                    ),
                 ),
+                pd.Series(["A", "E", "D"] * 3),
+                False,
+                pd.Series([1, -321, -101] * 3),
             ),
-            pd.Series(["A", "E", "D"] * 3),
-            False,
-            pd.Series([1, -321, -101] * 3),
             marks=pytest.mark.slow,
             id="mixed_map-vector-vector-int-output",
         ),
         pytest.param(
-            pd.array(
-                [
-                    {
-                        "A": 1,
-                        "B": "2",
-                        "C": 1.23,
-                        "D": -1,
-                        "E": 123,
-                        "F": True,
-                        "G": pd.Timestamp("2023-11-27"),
-                    },
-                    {
-                        "A": -2,
-                        "B": "3",
-                        "C": 12.3,
-                        "D": 0,
-                        "E": -321,
-                        "F": False,
-                        "G": pd.Timestamp("2000-01-01"),
-                    },
-                    {
-                        "A": 1,
-                        "B": "-100",
-                        "C": -123.45,
-                        "D": 100,
-                        "E": -101,
-                        "F": False,
-                        "G": pd.Timestamp("2111-11-11"),
-                    },
-                ]
-                * 3,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", pa.int64()),
-                            pa.field("B", pa.string()),
-                            pa.field("C", pa.float32()),
-                            pa.field("D", pa.int64()),
-                            pa.field("E", pa.int64()),
-                            pa.field("F", pa.bool_()),
-                            pa.field("G", pa.timestamp("ns")),
-                        ]
-                    )
+            (
+                pd.array(
+                    [
+                        {
+                            "A": 1,
+                            "B": "2",
+                            "C": 1.23,
+                            "D": -1,
+                            "E": 123,
+                            "F": True,
+                            "G": pd.Timestamp("2023-11-27"),
+                        },
+                        {
+                            "A": -2,
+                            "B": "3",
+                            "C": 12.3,
+                            "D": 0,
+                            "E": -321,
+                            "F": False,
+                            "G": pd.Timestamp("2000-01-01"),
+                        },
+                        {
+                            "A": 1,
+                            "B": "-100",
+                            "C": -123.45,
+                            "D": 100,
+                            "E": -101,
+                            "F": False,
+                            "G": pd.Timestamp("2111-11-11"),
+                        },
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int64()),
+                                pa.field("B", pa.string()),
+                                pa.field("C", pa.float32()),
+                                pa.field("D", pa.int64()),
+                                pa.field("E", pa.int64()),
+                                pa.field("F", pa.bool_()),
+                                pa.field("G", pa.timestamp("ns")),
+                            ]
+                        )
+                    ),
                 ),
-            ),
-            pd.Series(["G"] * 9),
-            False,
-            pd.Series(
-                [
-                    pd.Timestamp("2023-11-27"),
-                    pd.Timestamp("2000-01-01"),
-                    pd.Timestamp("2111-11-11"),
-                ]
-                * 9
+                pd.Series(["G"] * 9),
+                False,
+                pd.Series(
+                    [
+                        pd.Timestamp("2023-11-27"),
+                        pd.Timestamp("2000-01-01"),
+                        pd.Timestamp("2111-11-11"),
+                    ]
+                    * 9
+                ),
             ),
             marks=pytest.mark.slow,
             id="mixed_map-vector-vector-ts-output",
         ),
         pytest.param(
-            {
-                "A": {
-                    "X": "AB",
-                    "Y": [1.1, 2.2],
-                    "Z": [[1], None, [3, None]],
-                    "W": {"A": 1, "B": "A"},
-                },
-                "B": {
-                    "X": "C",
-                    "Y": [1.1],
-                    "Z": [[11], None],
-                    "W": {"A": 1, "B": "ABC"},
-                },
-                "C": {
-                    "X": "D",
-                    "Y": [4.0, np.nan],
-                    "Z": [[1], None],
-                    "W": {"A": 1, "B": ""},
-                },
-                "D": {
-                    "X": "VFD",
-                    "Y": [1.2],
-                    "Z": [[], [3, 1]],
-                    "W": {"A": 1, "B": "AA"},
-                },
-                "E": {
-                    "X": "LMMM",
-                    "Y": [9.0, 1.2, 3.1],
-                    "Z": [[10, 11], [11, 0, -3, -5]],
-                    "W": {"A": 1, "B": "DFG"},
-                },
-            },
-            "D",
-            True,
-            {
-                "X": "VFD",
-                "Y": [1.2],
-                "Z": [[], [3, 1]],
-                "W": {"A": 1, "B": "AA"},
-            },
-            id="nested_map-scalar-scalar",
-            marks=pytest.mark.skip(
-                "Needs mixed value type scalar map type: https://bodo.atlassian.net/browse/BSE-2320"
-            ),
-        ),
-        pytest.param(
-            {
-                "A": {
+            (
+                {
                     "A": {
                         "X": "AB",
                         "Y": [1.1, 2.2],
@@ -2370,8 +2343,74 @@ internal_struct_type = pa.struct(
                         "Z": [[11], None],
                         "W": {"A": 1, "B": "ABC"},
                     },
+                    "C": {
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    "D": {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                    "E": {
+                        "X": "LMMM",
+                        "Y": [9.0, 1.2, 3.1],
+                        "Z": [[10, 11], [11, 0, -3, -5]],
+                        "W": {"A": 1, "B": "DFG"},
+                    },
                 },
-                "C": {
+                "D",
+                True,
+                {
+                    "X": "VFD",
+                    "Y": [1.2],
+                    "Z": [[], [3, 1]],
+                    "W": {"A": 1, "B": "AA"},
+                },
+            ),
+            id="nested_map-scalar-scalar",
+            marks=pytest.mark.skip(
+                "Needs mixed value type scalar map type: https://bodo.atlassian.net/browse/BSE-2320"
+            ),
+        ),
+        pytest.param(
+            (
+                {
+                    "A": {
+                        "A": {
+                            "X": "AB",
+                            "Y": [1.1, 2.2],
+                            "Z": [[1], None, [3, None]],
+                            "W": {"A": 1, "B": "A"},
+                        },
+                        "B": {
+                            "X": "C",
+                            "Y": [1.1],
+                            "Z": [[11], None],
+                            "W": {"A": 1, "B": "ABC"},
+                        },
+                    },
+                    "C": {
+                        "C": {
+                            "X": "D",
+                            "Y": [4.0, np.nan],
+                            "Z": [[1], None],
+                            "W": {"A": 1, "B": ""},
+                        },
+                        "D": {
+                            "X": "VFD",
+                            "Y": [1.2],
+                            "Z": [[], [3, 1]],
+                            "W": {"A": 1, "B": "AA"},
+                        },
+                    },
+                },
+                "C",
+                True,
+                {
                     "C": {
                         "X": "D",
                         "Y": [4.0, np.nan],
@@ -2385,170 +2424,164 @@ internal_struct_type = pa.struct(
                         "W": {"A": 1, "B": "AA"},
                     },
                 },
-            },
-            "C",
-            True,
-            {
-                "C": {
-                    "X": "D",
-                    "Y": [4.0, np.nan],
-                    "Z": [[1], None],
-                    "W": {"A": 1, "B": ""},
-                },
-                "D": {
-                    "X": "VFD",
-                    "Y": [1.2],
-                    "Z": [[], [3, 1]],
-                    "W": {"A": 1, "B": "AA"},
-                },
-            },
+            ),
             id="nested_nested_map-scalar-scalar",
             marks=pytest.mark.skip(
                 "Needs mixed value type scalar map type: https://bodo.atlassian.net/browse/BSE-2320"
             ),
         ),
         pytest.param(
-            pd.array(
-                [
-                    {
-                        "A": {
-                            "X": "AB",
-                            "Y": [1.1, 2.2],
-                            "Z": [[1], None, [3, None]],
-                            "W": {"A": 1, "B": "A"},
-                        },
-                        "B": {
-                            "X": "C",
-                            "Y": [1.1],
-                            "Z": [[11], None],
-                            "W": {"A": 1, "B": "ABC"},
-                        },
-                    },
-                    {
-                        "A": {
-                            "X": "D",
-                            "Y": [4.0, np.nan],
-                            "Z": [[1], None],
-                            "W": {"A": 1, "B": ""},
-                        },
-                        "B": {
-                            "X": "VFD",
-                            "Y": [1.2],
-                            "Z": [[], [3, 1]],
-                            "W": {"A": 1, "B": "AA"},
-                        },
-                    },
-                    None,
-                ]
-                * 2,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", internal_struct_type),
-                            pa.field("B", internal_struct_type),
-                        ]
-                    )
-                ),
-            ),
-            "B",
-            False,
-            pd.Series(
+            (
                 pd.array(
                     [
                         {
-                            "X": "C",
-                            "Y": [1.1],
-                            "Z": [[11], None],
-                            "W": {"A": 1, "B": "ABC"},
+                            "A": {
+                                "X": "AB",
+                                "Y": [1.1, 2.2],
+                                "Z": [[1], None, [3, None]],
+                                "W": {"A": 1, "B": "A"},
+                            },
+                            "B": {
+                                "X": "C",
+                                "Y": [1.1],
+                                "Z": [[11], None],
+                                "W": {"A": 1, "B": "ABC"},
+                            },
                         },
                         {
-                            "X": "VFD",
-                            "Y": [1.2],
-                            "Z": [[], [3, 1]],
-                            "W": {"A": 1, "B": "AA"},
+                            "A": {
+                                "X": "D",
+                                "Y": [4.0, np.nan],
+                                "Z": [[1], None],
+                                "W": {"A": 1, "B": ""},
+                            },
+                            "B": {
+                                "X": "VFD",
+                                "Y": [1.2],
+                                "Z": [[], [3, 1]],
+                                "W": {"A": 1, "B": "AA"},
+                            },
                         },
                         None,
                     ]
                     * 2,
-                    dtype=pd.ArrowDtype(internal_struct_type),
-                )
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", internal_struct_type),
+                                pa.field("B", internal_struct_type),
+                            ]
+                        )
+                    ),
+                ),
+                "B",
+                False,
+                pd.Series(
+                    pd.array(
+                        [
+                            {
+                                "X": "C",
+                                "Y": [1.1],
+                                "Z": [[11], None],
+                                "W": {"A": 1, "B": "ABC"},
+                            },
+                            {
+                                "X": "VFD",
+                                "Y": [1.2],
+                                "Z": [[], [3, 1]],
+                                "W": {"A": 1, "B": "AA"},
+                            },
+                            None,
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(internal_struct_type),
+                    )
+                ),
             ),
             marks=pytest.mark.slow,
             id="nested_map-vector-scalar",
         ),
         pytest.param(
-            pd.array(
+            (
+                pd.array(
+                    [
+                        {
+                            "A": {
+                                "X": "AB",
+                                "Y": [1.1, 2.2],
+                                "Z": [[1], None, [3, None]],
+                                "W": {"A": 1, "B": "A"},
+                            },
+                            "B": {
+                                "X": "C",
+                                "Y": [1.1],
+                                "Z": [[11], None],
+                                "W": {"A": 1, "B": "ABC"},
+                            },
+                        },
+                        {
+                            "A": {
+                                "X": "D",
+                                "Y": [4.0, np.nan],
+                                "Z": [[1], None],
+                                "W": {"A": 1, "B": ""},
+                            },
+                            "B": {
+                                "X": "VFD",
+                                "Y": [1.2],
+                                "Z": [[], [3, 1]],
+                                "W": {"A": 1, "B": "AA"},
+                            },
+                        },
+                        None,
+                    ]
+                    * 2,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", internal_struct_type),
+                                pa.field("B", internal_struct_type),
+                            ]
+                        )
+                    ),
+                ),
+                pd.Series(
+                    ["B", "A", "A"] + [None, None, None],
+                    dtype=pd.ArrowDtype(pa.string()),
+                ),
+                False,
                 [
                     {
-                        "A": {
-                            "X": "AB",
-                            "Y": [1.1, 2.2],
-                            "Z": [[1], None, [3, None]],
-                            "W": {"A": 1, "B": "A"},
-                        },
-                        "B": {
-                            "X": "C",
-                            "Y": [1.1],
-                            "Z": [[11], None],
-                            "W": {"A": 1, "B": "ABC"},
-                        },
+                        "X": "C",
+                        "Y": [1.1],
+                        "Z": [[11], None],
+                        "W": {"A": 1, "B": "ABC"},
                     },
                     {
-                        "A": {
-                            "X": "D",
-                            "Y": [4.0, np.nan],
-                            "Z": [[1], None],
-                            "W": {"A": 1, "B": ""},
-                        },
-                        "B": {
-                            "X": "VFD",
-                            "Y": [1.2],
-                            "Z": [[], [3, 1]],
-                            "W": {"A": 1, "B": "AA"},
-                        },
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
                     },
                     None,
                 ]
-                * 2,
-                dtype=pd.ArrowDtype(
-                    pa.struct(
-                        [
-                            pa.field("A", internal_struct_type),
-                            pa.field("B", internal_struct_type),
-                        ]
-                    )
-                ),
+                + [None, None, None],
             ),
-            pd.Series(
-                ["B", "A", "A"] + [None, None, None], dtype=pd.ArrowDtype(pa.string())
-            ),
-            False,
-            [
-                {
-                    "X": "C",
-                    "Y": [1.1],
-                    "Z": [[11], None],
-                    "W": {"A": 1, "B": "ABC"},
-                },
-                {
-                    "X": "D",
-                    "Y": [4.0, np.nan],
-                    "Z": [[1], None],
-                    "W": {"A": 1, "B": ""},
-                },
-                None,
-            ]
-            + [None, None, None],
             marks=pytest.mark.slow,
             id="nested_map-vector-vector",
         ),
     ],
 )
-def test_map_get(map, ind, is_scalar_map, expected, memory_leak_check):
+def map_get_values(request):
+    return request.param
+
+
+def test_map_get(map_get_values, memory_leak_check):
     """Tests the functionality of the GET kernel on map values, for valid maps/indices."""
 
-    is_scalar_ind = not isinstance(ind, pd.Series)
+    map, ind, is_scalar_map, expected = map_get_values
 
+    is_scalar_ind = not isinstance(ind, pd.Series)
     if (not is_scalar_ind) and (
         is_scalar_map or isinstance(map.dtype.pyarrow_dtype, pa.StructType)
     ):
@@ -2611,6 +2644,105 @@ def test_map_get(map, ind, is_scalar_map, expected, memory_leak_check):
         def impl(map, ind):
             return pd.Series(
                 bodo.libs.bodosql_array_kernels.arr_get(
+                    map, ind, is_scalar_map, is_scalar_ind
+                )
+            )
+
+    check_func(
+        impl,
+        (map, ind),
+        py_output=expected,
+        check_dtype=False,
+        distributed=no_scalar,
+        is_out_distributed=no_scalar,
+        dist_test=no_scalar,
+    )
+
+
+def test_get_ignore_case(map_get_values, memory_leak_check):
+    """Tests the functionality of the GET kernel on map values, for valid maps/indices."""
+
+    map, ind, is_scalar_map, expected = map_get_values
+    is_scalar_ind = not isinstance(ind, pd.Series)
+
+    is_scalar_ind = not isinstance(ind, pd.Series)
+
+    if (not is_scalar_ind) and (
+        is_scalar_map or isinstance(map.dtype.pyarrow_dtype, pa.StructType)
+    ):
+        pytest.skip(
+            "TODO: Support non-constant indices for map_get with pyarrow struct types"
+        )
+    else:
+        # Reverse the idx's capitalization
+        def reverseCapitalization(s):
+            newStr = ""
+            for c in s:
+                if c.isupper():
+                    newStr += c.lower()
+                else:
+                    newStr += c.upper()
+            return newStr
+
+        if is_scalar_ind:
+            ind = reverseCapitalization(ind)
+        else:
+            ind = ind.apply(lambda s: reverseCapitalization(s))
+
+    both_scalar = is_scalar_map and is_scalar_ind
+    no_scalar = not is_scalar_map and not is_scalar_ind
+
+    def convertMapScalarHelper(map):
+        pass
+
+    @overload(convertMapScalarHelper)
+    def convertMapScalarHelperUtil(map):
+        if isinstance(map, types.DictType):
+
+            def impl(map):
+                return pd.Series([map])[0]
+
+        else:
+
+            def impl(map):
+                return map
+
+        return impl
+
+    if both_scalar:
+        ind_lowered_as_global = ind
+
+        def impl(map, ind):
+            map = convertMapScalarHelper(map)
+            return bodo.libs.bodosql_array_kernels.get_ignore_case(
+                map, ind_lowered_as_global, is_scalar_map, is_scalar_ind
+            )
+
+    elif is_scalar_ind:
+        ind_lowered_as_global = ind
+
+        def impl(map, ind):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.get_ignore_case(
+                    map, ind_lowered_as_global, is_scalar_map, is_scalar_ind
+                )
+            )
+
+    elif is_scalar_map:
+
+        def impl(map, ind):
+            map = convertMapScalarHelper(map)
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.get_ignore_case(
+                    map, ind, is_scalar_map, is_scalar_ind
+                )
+            )
+
+    else:
+
+        def impl(map, ind):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.get_ignore_case(
                     map, ind, is_scalar_map, is_scalar_ind
                 )
             )

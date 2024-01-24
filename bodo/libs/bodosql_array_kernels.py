@@ -147,6 +147,7 @@ broadcasted_fixed_arg_functions = {
     "get_timezone_offset",
     "get_weekofyear",
     "get_year",
+    "get_ignore_case",
     "getbit",
     "greater_than",
     "greater_than_or_equal",

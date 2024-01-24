@@ -719,45 +719,48 @@ def overload_get_path_util(data, path, is_scalar):
     return impl
 
 
-def get_field(data, key, is_scalar):  # pragma: no cover
+def get_field(data, key, is_scalar, ignore_case=False):  # pragma: no cover
     """dummy method for overload"""
     pass
 
 
 @overload(get_field, no_unliteral=True)
-def overload_get_field(data, field, is_scalar):  # pragma: no cover
-    args = [data, field, is_scalar]
+def overload_get_field(data, field, is_scalar, ignore_case=False):  # pragma: no cover
+    args = [data, field, is_scalar, ignore_case]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.get_field",
-                ["data", "field", "is_scalar"],
+                ["data", "field", "is_scalar", "ignore_case"],
                 i,
+                default_map={"ignore_case": False},
             )
 
-    def impl(data, field, is_scalar):
+    def impl(data, field, is_scalar, ignore_case=False):
         return bodo.libs.bodosql_json_array_kernels.get_field_util(
-            data, field, is_scalar
+            data, field, is_scalar, ignore_case
         )
 
     return impl
 
 
-def get_field_util(data, field, is_scalar):  # pragma: no cover
+def get_field_util(data, field, is_scalar, ignore_case):  # pragma: no cover
     """dummy method for overload"""
     pass
 
 
 @overload(get_field_util, no_unliteral=True)
-def overload_get_field_util(data, field, is_scalar):
+def overload_get_field_util(data, field, is_scalar, ignore_case):
     """BodoSQL Implementation of accessing a field from a MAP type (map/struct/etc). If the input is not a map type, returns NULL"""
     json_type = data
     if bodo.hiframes.pd_series_ext.is_series_type(json_type):
         json_type = json_type.data
 
-    arg_names = ["data", "field", "is_scalar"]
-    arg_types = [data, field, is_scalar]
-    propagate_null = [True, True, False]
+    arg_names = ["data", "field", "is_scalar", "ignore_case"]
+    arg_types = [data, field, is_scalar, ignore_case]
+    propagate_null = [True, True, False, False]
+
+    ignore_case_bool = get_overload_const_bool(ignore_case)
 
     struct_mode = False
     map_mode = False
@@ -777,13 +780,24 @@ def overload_get_field_util(data, field, is_scalar):
                 "Only constant path expressions are supported at this time"
             )
         key_str = get_overload_const_str(field)
+        if ignore_case_bool:
+            key_str = key_str.lower()
         field_pos = None
         n_fields = len(json_type.data)
         for i in range(n_fields):
             name = json_type.names[i]
-            if name == key_str:  # pragma: no cover
-                field_pos = i
-                break
+            if ignore_case_bool:
+                if name.lower() == key_str:  # pragma: no cover
+                    field_pos = i
+                    # Set the key_str equal to the actual field name
+                    # so that the indexing in the later scalar func text
+                    # will work properly
+                    key_str = name
+                    break
+            else:
+                if name == key_str:  # pragma: no cover
+                    field_pos = i
+                    break
         if field_pos == None:
             out_dtype = bodo.null_array_type
             scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
@@ -796,14 +810,37 @@ def overload_get_field_util(data, field, is_scalar):
     elif map_mode:
         out_dtype = bodo.utils.typing.to_nullable_type(json_type.value_arr_type)
         scalar_text += "keys = list(arg0)\n"
-        scalar_text += "if arg1 in keys:\n"
-        scalar_text += "  value = arg0[arg1]\n"
-        scalar_text += "  if value is None:\n"
-        scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
-        scalar_text += "  else:\n"
-        scalar_text += "    res[i] = value\n"
-        scalar_text += "else:\n"
-        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+        if ignore_case_bool:
+            scalar_text += "lowered_keys = [key.lower() for key in keys]\n"
+            scalar_text += "lowered_arg1 = arg1.lower()\n"
+            # For loop is needed here as using lowered_keys.index(lowered_arg1)
+            # with exception catching causes an error
+            scalar_text += "index_value = -1\n"
+            scalar_text += (
+                "for iter_val_not_used_in_gen_vec in range(len(lowered_keys)):\n"
+            )
+            scalar_text += (
+                "  if lowered_keys[iter_val_not_used_in_gen_vec] == lowered_arg1:\n"
+            )
+            scalar_text += "    index_value = iter_val_not_used_in_gen_vec\n"
+            scalar_text += "    break\n"
+            scalar_text += "if index_value >= 0:\n"
+            scalar_text += "  value = arg0[keys[index_value]]\n"
+            scalar_text += "  if value is None:\n"
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "  else:\n"
+            scalar_text += "    res[i] = value\n"
+            scalar_text += "else:\n"
+            scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+        else:
+            scalar_text += "if arg1 in keys:\n"
+            scalar_text += "  value = arg0[arg1]\n"
+            scalar_text += "  if value is None:\n"
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "  else:\n"
+            scalar_text += "    res[i] = value\n"
+            scalar_text += "else:\n"
+            scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
     else:
         out_dtype = bodo.null_array_type
         scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
@@ -817,6 +854,7 @@ def overload_get_field_util(data, field, is_scalar):
         are_arrays=[
             not get_overload_const_bool(is_scalar),
             bodo.utils.utils.is_array_typ(field),
+            False,
             False,
         ],
     )

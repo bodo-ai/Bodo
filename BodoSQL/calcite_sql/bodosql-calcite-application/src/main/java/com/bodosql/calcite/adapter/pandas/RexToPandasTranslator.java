@@ -41,6 +41,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.getObjectConstructKeepNullCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.visitGetIgnoreCaseOp;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.visitJsonFunc;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.genFloorCeilCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
@@ -1954,6 +1955,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ARRAY_SLICE":
           case "ARRAY_TO_STRING":
             return visitNestedArrayFunc(fnName, operands, argScalars);
+          case "GET_IGNORE_CASE":
+            return visitGetIgnoreCaseOp(operands, argScalars);
           case "PARSE_JSON":
             throw new BodoSQLCodegenException(
                 "Internal Error: PARSE_JSON currently only supported when it can be rewritten as"
