@@ -994,8 +994,27 @@ def parse_dtype(dtype, func_name=None):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
-    # input is array dtype already
-    if isinstance(dtype, types.Number) or dtype == bodo.string_type:
+    # input is array dtype already (see dtype_to_array_type)
+    if isinstance(
+        dtype,
+        (
+            types.Number,
+            bodo.Decimal128Type,
+            bodo.StructType,
+            bodo.MapScalarType,
+            bodo.TimeType,
+            bodo.hiframes.pd_categorical_ext.PDCategoricalDtype,
+            bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+        ),
+    ) or dtype in (
+        bodo.string_type,
+        bodo.bytes_type,
+        bodo.datetime_date_type,
+        bodo.datetime_timedelta_type,
+        bodo.null_dtype,
+        bodo.pd_timestamp_tz_naive_type,
+        bodo.pd_timedelta_type,
+    ):
         return dtype
 
     try:

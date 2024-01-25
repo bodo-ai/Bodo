@@ -232,3 +232,18 @@ def test_nullarray_invalid_cast():
 
     with pytest.raises(numba.TypingError, match="Cannot unify"):
         bodo.jit(impl)(3, True)
+
+
+def test_nullable_decimal_cast(memory_leak_check):
+    """
+    Tests casting a nullable array to a decimal array.
+    """
+    dtype = bodo.Decimal128Type(30, 10)
+
+    def impl(n):
+        null_arr = bodo.libs.null_arr_ext.init_null_array(n)
+        return null_arr.astype(dtype)
+
+    n = 10
+    arr = np.array([None] * n, dtype=object)
+    check_func(impl, [n], py_output=arr)
