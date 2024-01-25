@@ -774,16 +774,21 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
         // If this Project has correlated reference, create value generator
         // and produce the correlated variables in the new output.
-        if (cm.mapRefRelToCorRef.containsKey(rel)) {
+        // Bodo Change: Don't mark as processed if there is a window function.
+        if (cm.mapRefRelToCorRef.containsKey(rel) && !rel.containsOver()) {
             frame = decorrelateInputWithValueGenerator(rel, frame);
         }
 
         // Project projects the original expressions
         final Map<Integer, Integer> mapOldToNewOutputs = new HashMap<>();
         int newPos;
+        // Bodo Change:
+        // If the current node contains a window function we can't modify
+        // the expressions.
+        boolean containsOver = rel.containsOver();
         for (newPos = 0; newPos < oldProjects.size(); newPos++) {
             projects.add(newPos,
-                decorrelateExpr(requireNonNull(currentRel, "currentRel"),
+                containsOver ? oldProjects.get(newPos) : decorrelateExpr(requireNonNull(currentRel, "currentRel"),
                     map, cm, oldProjects.get(newPos)),
             relOutput.get(newPos).getName());
             mapOldToNewOutputs.put(newPos, newPos);
@@ -1160,19 +1165,27 @@ public class RelDecorrelator implements ReflectiveVisitor {
         // If this Filter has correlated reference, create value generator
         // and produce the correlated variables in the new output.
         if (false) {
-            if (cm.mapRefRelToCorRef.containsKey(rel)) {
+            // Bodo Change: Don't mark as processed if there is a window function.
+            if (cm.mapRefRelToCorRef.containsKey(rel) && !rel.containsOver()) {
                 frame = decorrelateInputWithValueGenerator(rel, frame);
             }
         } else {
-            frame = maybeAddValueGenerator(rel, frame);
+            // Bodo Change: Don't mark as processed if there is a window function.
+            if (!rel.containsOver()) {
+                frame = maybeAddValueGenerator(rel, frame);
+            }
         }
 
         final CorelMap cm2 = new CorelMapBuilder().build(rel);
 
         // Replace the filter expression to reference output of the join
         // Map filter to the new filter over join
+        // Bodo Change:
+        // If the current node contains a window function we can't modify
+        // the expressions.
+        boolean containsOver = rel.containsOver();
         relBuilder.push(frame.r)
-                .filter(decorrelateExpr(castNonNull(currentRel), map, cm2, rel.getCondition()));
+                .filter(containsOver ? rel.getCondition() : decorrelateExpr(castNonNull(currentRel), map, cm2, rel.getCondition()));
 
         // Filter does not change the input ordering.
         // Filter rel does not permute the input.
@@ -1208,7 +1221,9 @@ public class RelDecorrelator implements ReflectiveVisitor {
             return null;
         }
 
-        if (rightFrame.corDefOutputs.isEmpty()) {
+        // Bodo Change: Enable pruning a Correlation that doesn't have required columns
+        // anymore.
+        if (!rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty()) {
             return null;
         }
 
@@ -1403,18 +1418,20 @@ public class RelDecorrelator implements ReflectiveVisitor {
      * Pulls project above the join from its RHS input. Enforces nullability
      * for join output.
      *
-     * @param join          Join
+     * @param join          Join or correlate
      * @param project       Original project as the right-hand input of the join
      * @param nullIndicatorPos Position of null indicator
+     * @param joinType      Type of join.
      * @return the subtree with the new Project at the root
      */
+    // Bodo Change: Generalize to BiRel to support both Join and Correlate as the join input.
     private RelNode projectJoinOutputWithNullability(
-            Join join,
+            BiRel join,
             Project project,
-            int nullIndicatorPos) {
+            int nullIndicatorPos,
+            JoinRelType joinType) {
         final RelDataTypeFactory typeFactory = join.getCluster().getTypeFactory();
         final RelNode left = join.getLeft();
-        final JoinRelType joinType = join.getJoinType();
 
         RexInputRef nullIndicator =
                 new RexInputRef(
@@ -1970,8 +1987,9 @@ public class RelDecorrelator implements ReflectiveVisitor {
                             b0.operand(Correlate.class).inputs(
                                     b1 -> b1.operand(RelNode.class).anyInputs(),
                                     b2 -> b2.operand(Aggregate.class).oneInput(b3 ->
-                                            b3.operand(Project.class).oneInput(b4 ->
-                                                    b4.operand(RelNode.class).anyInputs()))))
+                                            // Bodo Change: Don't match on window functions
+                                            b3.operand(Project.class).predicate(x -> !x.containsOver())
+                                                    .oneInput(b4 -> b4.operand(RelNode.class).anyInputs()))))
                     .withDecorrelator(decorrelator)
                     .build();
         }
@@ -2152,15 +2170,44 @@ public class RelDecorrelator implements ReflectiveVisitor {
                 return;
             }
 
-            // make the new join rel
-            final Join join = (Join) d.relBuilder.push(left).push(right)
-                    .join(joinType, joinCond).build();
+            // Bodo Change:
+            // Prune the required nodes to any remaining RelNode
+            // components.
+            ImmutableBitSet.Builder requireColumns = ImmutableBitSet.builder();
+            for (RelNode node: d.cm.mapRefRelToCorRef.keySet()) {
+                if (node.equals(project)) {
+                    continue;
+                }
+                Collection<CorRef> references = d.cm.mapRefRelToCorRef.get(node);
+                for (CorRef ref : references) {
+                    if (ref.corr == correlate.getCorrelationId()) {
+                        requireColumns.set(ref.field);
+                    }
+                }
+            }
+            ImmutableBitSet requiredColumns = requireColumns.build();
+            final RelNode newProject;
+            // Bodo Change: Only make the join if there are no remaining columns
+            if (requiredColumns.isEmpty()) {
+                // make the new join rel
+                final Join join = (Join) d.relBuilder.push(left).push(right)
+                        .join(joinType, joinCond).build();
 
-            RelNode newProject =
-                    d.projectJoinOutputWithNullability(join, project, nullIndicatorPos);
+                newProject = d.projectJoinOutputWithNullability(join, project, nullIndicatorPos, join.getJoinType());
+            } else {
+                // Make a new correlation.
+                List<RexNode> requiredNodes =
+                        requiredColumns.asList().stream()
+                                .map(ord -> d.relBuilder.getRexBuilder().makeInputRef(correlate, ord))
+                                .collect(Collectors.toList());
+                Correlate newCorrelate = (Correlate) d.relBuilder.push(left)
+                        .push(right).correlate(joinType, correlate.getCorrelationId(), requiredNodes).build();
 
+                // Create the projection
+                newProject = d.projectJoinOutputWithNullability(newCorrelate, project, nullIndicatorPos, correlate.getJoinType());
+
+            }
             call.transformTo(newProject);
-
             d.removeCorVarFromTree(correlate);
         }
 
@@ -2190,11 +2237,13 @@ public class RelDecorrelator implements ReflectiveVisitor {
                     .withOperandSupplier(b0 ->
                             b0.operand(Correlate.class).inputs(
                                     b1 -> b1.operand(RelNode.class).anyInputs(),
-                                    b2 -> b2.operand(Project.class).oneInput(b3 ->
-                                            b3.operand(Aggregate.class)
+                                    // Bodo Change: Don't allow window functions
+                                    b2 -> b2.operand(Project.class).predicate(x -> !x.containsOver())
+                                            .oneInput(b3 -> b3.operand(Aggregate.class)
                                                     .predicate(Aggregate::isSimple).oneInput(b4 ->
-                                                            b4.operand(Project.class).oneInput(b5 ->
-                                                                    b5.operand(RelNode.class).anyInputs())))))
+                                                            // Bodo Change: Don't allow window functions
+                                                            b4.operand(Project.class).predicate(x -> !x.containsOver())
+                                                                    .oneInput(b5 -> b5.operand(RelNode.class).anyInputs())))))
                     .withDecorrelator(d)
                     .build();
         }
@@ -2265,8 +2314,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
                 }
             }
 
+            // Bodo Change: Mark which path is taken.
+            final boolean useRight;
             if ((right instanceof Filter)
                     && d.cm.mapRefRelToCorRef.containsKey(right)) {
+                useRight = true;
                 // rightInput has this shape:
                 //
                 //       Filter (references corVar)
@@ -2380,6 +2432,7 @@ public class RelDecorrelator implements ReflectiveVisitor {
                 // first change the filter condition into a join condition
                 joinCond = d.removeCorrelationExpr(filter.getCondition(), false);
             } else if (d.cm.mapRefRelToCorRef.containsKey(aggInputProject)) {
+                useRight = false;
                 // check rightInput contains no correlation
                 if (RelOptUtil.getVariablesUsed(right).size() > 0) {
                     return;
@@ -2454,12 +2507,42 @@ public class RelDecorrelator implements ReflectiveVisitor {
                 d.createProjectWithAdditionalExprs(right,
                     PairList.of(rexBuilder.makeLiteral(true), "nullIndicator"));
 
-            Join join =
-                (Join) d.relBuilder
-                    .push(left)
-                    .push(right)
-                    .join(joinType, joinCond)
-                    .build();
+            // Bodo Change:
+            // Prune the required nodes to any remaining RelNode
+            // components.
+            final RelNode corrNode = useRight ? right : aggInputProject;
+            ImmutableBitSet.Builder requireColumns = ImmutableBitSet.builder();
+            for (RelNode node: d.cm.mapRefRelToCorRef.keySet()) {
+                if (node.equals(corrNode)) {
+                    continue;
+                }
+                Collection<CorRef> references = d.cm.mapRefRelToCorRef.get(node);
+                for (CorRef ref : references) {
+                    if (ref.corr == correlate.getCorrelationId()) {
+                        requireColumns.set(ref.field);
+                    }
+                }
+            }
+
+            ImmutableBitSet requiredColumns = requireColumns.build();
+            final RelNode join;
+            // Bodo Change: Only make the join if there are no remaining columns
+            if (requiredColumns.isEmpty()) {
+                // make the new join rel
+                join = d.relBuilder
+                            .push(left)
+                            .push(right)
+                            .join(joinType, joinCond)
+                            .build();
+            } else {
+                // Make a new correlation.
+                List<RexNode> requiredNodes =
+                        requiredColumns.asList().stream()
+                                .map(ord -> d.relBuilder.getRexBuilder().makeInputRef(correlate, ord))
+                                .collect(Collectors.toList());
+                join = d.relBuilder.push(left)
+                        .push(right).correlate(joinType, correlate.getCorrelationId(), requiredNodes).build();
+            }
 
             // To the consumer of joinOutputProjRel, nullIndicator is located
             // at the end
@@ -2588,8 +2671,9 @@ public class RelDecorrelator implements ReflectiveVisitor {
                             b0.operand(Correlate.class).inputs(
                                     b1 -> b1.operand(RelNode.class).anyInputs(),
                                     b2 -> flavor
-                                            ? b2.operand(Project.class).oneInput(b3 ->
-                                            b3.operand(Aggregate.class).anyInputs())
+                                            // Bodo Change: Don't match on Window functions
+                                            ? b2.operand(Project.class).predicate(x -> !x.containsOver())
+                                            .oneInput(b3 -> b3.operand(Aggregate.class).anyInputs())
                                             : b2.operand(Aggregate.class).anyInputs()))
                     .withFlavor(flavor)
                     .withDecorrelator(decorrelator)
@@ -2692,8 +2776,22 @@ public class RelDecorrelator implements ReflectiveVisitor {
             //     Aggregate(groupby (0), agg0(), agg1()...)
             //
             final RexBuilder rexBuilder = d.relBuilder.getRexBuilder();
+            // Bodo Change: Prune the required nodes to any remaining RelNode
+            // components.
+            ImmutableBitSet.Builder requireColumns = ImmutableBitSet.builder();
+            for (RelNode node: d.cm.mapRefRelToCorRef.keySet()) {
+                if (node.equals(aggOutputProject)) {
+                    continue;
+                }
+                Collection<CorRef> references = d.cm.mapRefRelToCorRef.get(node);
+                for (CorRef ref: references) {
+                    if (ref.corr == correlate.getCorrelationId()){
+                        requireColumns.set(ref.field);
+                    }
+                }
+            }
             List<RexNode> requiredNodes =
-                    correlate.getRequiredColumns().asList().stream()
+                    requireColumns.build().asList().stream()
                             .map(ord -> rexBuilder.makeInputRef(correlate, ord))
                             .collect(Collectors.toList());
             Correlate newCorrelate = (Correlate) d.relBuilder.push(leftInput)

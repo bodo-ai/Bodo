@@ -589,7 +589,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     private final List<RexNode> reducedValues;
     private final List<Boolean> addCasts;
 
-    RexReplacer(
+    public RexReplacer(
         RexBuilder builder,
         List<RexNode> reducibleExps,
         List<RexNode> reducedValues,
@@ -598,6 +598,11 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       this.reducibleExps = reducibleExps;
       this.reducedValues = reducedValues;
       this.addCasts = addCasts;
+    }
+
+    public RexReplacer(
+        RexBuilder builder, List<RexNode> reducibleExps, List<RexNode> reducedValues) {
+      this(builder, reducibleExps, reducedValues, Collections.nCopies(reducibleExps.size(), false));
     }
 
     @Override

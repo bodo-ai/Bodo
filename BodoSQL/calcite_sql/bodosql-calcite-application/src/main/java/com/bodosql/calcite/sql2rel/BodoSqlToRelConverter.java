@@ -2,6 +2,7 @@ package com.bodosql.calcite.sql2rel;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule;
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
 import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
@@ -9,10 +10,12 @@ import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.ViewExpanders;
@@ -21,9 +24,14 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
@@ -37,9 +45,14 @@ import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.util.SqlBasicVisitor;
+import org.apache.calcite.sql.validate.ListScope;
+import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.sql.validate.SqlQualified;
 import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorException;
+import org.apache.calcite.sql.validate.SqlValidatorNamespace;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.sql2rel.RelStructuredTypeFlattener;
 import org.apache.calcite.sql2rel.SqlRexConvertletTable;
@@ -283,17 +296,124 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             }
             // Get the expected return type for casting the output
             RelDataType returnType = snowflakeUdf.getReturnType(typeFactory);
+            // Generate correlated variables in case we have a query that references
+            // the input row.
+            CorrMapVisitor visitor = new CorrMapVisitor();
+            call.accept(visitor);
+            BodoSQLReduceExpressionsRule.RexReplacer replacer =
+                new BodoSQLReduceExpressionsRule.RexReplacer(
+                    rexBuilder, visitor.getInputRefs(), visitor.getFieldRefs());
+            List<RexNode> correlatedArguments =
+                arguments.stream().map(x -> x.accept(replacer)).collect(Collectors.toList());
             return functionExpander.expandFunction(
                 snowflakeUdf.getBody(),
                 snowflakeUdf.getFunctionPath(),
                 names,
                 arguments,
-                returnType);
+                correlatedArguments,
+                returnType,
+                cluster);
           }
         }
       }
       // Bodo extension to handle Snowflake UDFs
       return super.convertExpression(expr);
+    }
+
+    /** SqlBasicVisitor for preparing and updating the correlated variable arguments to a */
+    protected class CorrMapVisitor extends SqlBasicVisitor<Void> {
+      List<RexNode> inputRefs;
+      List<RexNode> fieldRefs;
+
+      CorrMapVisitor() {
+        this.inputRefs = new ArrayList();
+        this.fieldRefs = new ArrayList();
+      }
+
+      @Override
+      public Void visit(SqlCall call) {
+        // Don't recurse on the parameter name of an argument as an identifier.
+        if (call.getKind() == SqlKind.ARGUMENT_ASSIGNMENT) {
+          return call.getOperandList().get(0).accept(this);
+        } else {
+          return super.visit(call);
+        }
+      }
+
+      @Override
+      public Void visit(SqlIdentifier id) {
+        // Add the input ref
+        RexNode convertedNode = BodoBlackboard.this.convertExpression(id);
+        if (!(convertedNode instanceof RexInputRef)) {
+          return null;
+        }
+        RexInputRef inputRef = (RexInputRef) convertedNode;
+        // Create the correlation ID
+        CorrelationId correlId = cluster.createCorrel();
+        // Find the corresponding table type.
+        SqlQualified qualified = scope.fullyQualify(id);
+
+        // Resolve the id's expression and find the from location. This is
+        // needed to properly handle joins and is largely copied from lookupExp.
+        final SqlNameMatcher nameMatcher = scope.getValidator().getCatalogReader().nameMatcher();
+        final SqlValidatorScope.ResolvedImpl resolved = new SqlValidatorScope.ResolvedImpl();
+        scope.resolve(qualified.prefix(), nameMatcher, false, resolved);
+        if (resolved.count() != 1) {
+          throw new AssertionError(
+              "no unique expression found for " + qualified + "; count is " + resolved.count());
+        }
+        final SqlValidatorScope.Resolve resolve = resolved.only();
+        final RelDataType rowType = resolve.rowType();
+
+        // Build the type from the potential from list
+        final RelDataType finalRowType;
+        if (resolve.path.steps().get(0).i < 0) {
+          finalRowType = rowType;
+        } else {
+          // We may have multiple sources. We need to build the row type from the columns
+          // in the inputs. This is particular relevant if we are the output of a join
+          // or a union.
+          final RelDataTypeFactory.Builder builder = typeFactory.builder();
+          final ListScope ancestorScope1 =
+              (ListScope) requireNonNull(resolve.scope, "resolve.scope");
+          final ImmutableMap.Builder<String, Integer> fields = ImmutableMap.builder();
+          int i = 0;
+          // The child namespaces build the type for this namespace.
+          for (SqlValidatorNamespace c : ancestorScope1.getChildren()) {
+            if (ancestorScope1.isChildNullable(i)) {
+              for (final RelDataTypeField f : c.getRowType().getFieldList()) {
+                builder.add(f.getName(), typeFactory.createTypeWithNullability(f.getType(), true));
+              }
+            } else {
+              builder.addAll(c.getRowType().getFieldList());
+            }
+            ++i;
+          }
+          // Make sure field names don't conflict.
+          finalRowType = builder.uniquify().build();
+        }
+        // Create the correlation variable for rewriting the arguments
+        RexNode correlVariable = rexBuilder.makeCorrel(finalRowType, correlId);
+        RexFieldAccess fieldAccess =
+            (RexFieldAccess) rexBuilder.makeFieldAccess(correlVariable, inputRef.getIndex());
+
+        // Update the outputs
+        this.inputRefs.add(inputRef);
+        this.fieldRefs.add(fieldAccess);
+        // Update the maps for tracking correlation variables.
+        mapCorrelToDeferred.put(
+            correlId, new DeferredLookup(BodoBlackboard.this, qualified.identifier.names.get(0)));
+        mapCorrelateToRex.put(correlId, fieldAccess);
+        return null;
+      }
+
+      public List<RexNode> getInputRefs() {
+        return this.inputRefs;
+      }
+
+      public List<RexNode> getFieldRefs() {
+        return this.fieldRefs;
+      }
     }
   }
 

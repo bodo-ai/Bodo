@@ -5,6 +5,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoSubQueryRemaining
 import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
@@ -34,7 +35,6 @@ import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.plan.hep.HepMatchOrder
 import org.apache.calcite.plan.hep.HepPlanner
-import org.apache.calcite.plan.hep.HepProgram
 import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
@@ -176,7 +176,7 @@ object BodoPrograms {
      * This will run the set of planner rules that we use to optimize
      * the relational expression before we perform code generation.
      */
-    private class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>) : Program {
+    private open class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>) : Program {
         private val program = HepProgramBuilder().also { b ->
             for (rule in ruleSet) {
                 b.addRuleInstance(rule)
@@ -245,6 +245,8 @@ object BodoPrograms {
         ConvertTableFunctionProgram(),
         // Remove subqueries and correlation nodes from the query.
         SubQueryRemoveProgram(),
+        RewriteProgram(),
+        DecorrelateProgram(),
         FlattenCaseExpressionsProgram,
         // Convert calcite logical nodes to bodo logical nodes
         // when necessary.
@@ -254,28 +256,29 @@ object BodoPrograms {
     /**
      * This program removes subqueries from the query.
      */
-    private class SubQueryRemoveProgram : Program by Programs.sequence(
-        // Remove subqueries and convert to correlations when necessary.
-        Programs.of(
-            HepProgram.builder()
-                .addRuleCollection(
-                    Iterables.concat(
-                        SUB_QUERY_REMOVAL_RULES,
-                        listOf(
-                            // TODO: Remove
-                            JoinExtractOverRule.Config.DEFAULT.toRule(),
-                            // TODO: Move to the normal HEP step and operate on our logical
-                            // nodes instead of the default.
-                            ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
-                        ),
-                    ).toList(),
-                )
-                .build(),
-            true,
-            BodoRelMetadataProvider(),
+    private class SubQueryRemoveProgram : HepOptimizerProgram(SUB_QUERY_REMOVAL_RULES) {
+
+        override fun run(
+            planner: RelOptPlanner?,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet?,
+            materializations: List<RelOptMaterialization>?,
+            lattices: List<RelOptLattice>?,
+        ): RelNode {
+            val result = super.run(planner, rel, requiredOutputTraits, materializations, lattices)
+            verifyNoSubQueryRemaining(result)
+            return result
+        }
+    }
+
+    private class RewriteProgram : Program by HepOptimizerProgram(
+        // TODO: Move to the normal HEP step and operate on our logical
+        // nodes instead of the default.
+        listOf(
+            JoinExtractOverRule.Config.DEFAULT.toRule(),
+            ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
         ),
-        // Remove correlations.
-        DecorrelateProgram(),
+
     )
 
     /**
@@ -677,7 +680,7 @@ object BodoPrograms {
      * Simple program that does nothing but dump the output to stdout.
      * Should only be used for debugging
      */
-    class PrintDebugProgram(val prefixMessage: String = "") : Program {
+    class PrintDebugProgram(private val prefixMessage: String = "") : Program {
         override fun run(
             planner: RelOptPlanner?,
             rel: RelNode,

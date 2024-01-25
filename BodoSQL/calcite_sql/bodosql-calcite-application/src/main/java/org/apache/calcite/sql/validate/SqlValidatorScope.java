@@ -200,7 +200,7 @@ public interface SqlValidatorScope {
   /**
    * Returns the scope within which operands to a call are to be validated.
    * Usually it is this scope, but when the call is to an aggregate function
-   * and this is an aggregating scope, it will be a a different scope.
+   * and this is an aggregating scope, it will be a different scope.
    *
    * @param call Call
    * @return Scope within which to validate arguments to call.

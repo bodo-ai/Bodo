@@ -2,6 +2,7 @@ package com.bodosql.calcite.schema;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -23,7 +24,11 @@ public interface FunctionExpander {
    * @param functionPath Path of the function.
    * @param paramNames The name of the function parameters.
    * @param arguments The RexNode argument inputs to the function.
+   * @param correlatedArguments The arguments after replacing any input references with field
+   *     accesses to a correlated variable.
    * @param returnType The expected function return type.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
    * @return The body of the function as a RexNode. This should either be a scalar sub-query or a
    *     simple expression.
    */
@@ -32,5 +37,7 @@ public interface FunctionExpander {
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
       @NonNull List<@NonNull RexNode> arguments,
-      @NonNull RelDataType returnType);
+      @NonNull List<@NonNull RexNode> correlatedArguments,
+      @NonNull RelDataType returnType,
+      @NonNull RelOptCluster cluster);
 }
