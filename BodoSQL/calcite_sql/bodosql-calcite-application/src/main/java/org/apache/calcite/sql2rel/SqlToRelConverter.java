@@ -146,7 +146,6 @@ import org.apache.calcite.sql.SqlValuesOperator;
 import org.apache.calcite.sql.SqlWindow;
 import org.apache.calcite.sql.SqlWith;
 import org.apache.calcite.sql.SqlWithItem;
-import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BasicSqlType;
@@ -289,7 +288,8 @@ public class SqlToRelConverter {
   /**
    * Fields used in name resolution for correlated sub-queries.
    */
-  private final Map<CorrelationId, DeferredLookup> mapCorrelToDeferred =
+  // Bodo Change: Switch to protected so our Blackboard can access the inputs.
+  protected final Map<CorrelationId, DeferredLookup> mapCorrelToDeferred =
       new HashMap<>();
 
   /**
@@ -299,7 +299,7 @@ public class SqlToRelConverter {
   private final Deque<String> datasetStack = new ArrayDeque<>();
 
   /** Stack that contains the SqlInsert operator that is currently being
-   * processed. It is used used for resolving DEFAULT expressions. */
+   * processed. It is used for resolving DEFAULT expressions. */
   private final Deque<SqlCall> callStack = new ArrayDeque<>();
 
   /**
@@ -3250,6 +3250,13 @@ public class SqlToRelConverter {
     SqlValidatorNamespace prevNs = null;
 
     for (CorrelationId correlName : correlatedVariables) {
+      // Bodo Change: This structure of getCorrelationUse() only supports
+      // the correlation variable being directly defined by the calling
+      // node. With inlining UDFs the variable could be defined in a separate
+      // location. As a result, we ignore any variables that are not registered.
+      if (!mapCorrelToDeferred.containsKey(correlName)) {
+        continue;
+      }
       DeferredLookup lookup =
           requireNonNull(mapCorrelToDeferred.get(correlName),
               () -> "correlation variable is not found: " + correlName);
@@ -3820,7 +3827,7 @@ public class SqlToRelConverter {
       // then it would be a map of 0 -> 2, 1 -> 4, 2 -> 3
       // IE, mapping the group by expressions to their index in the select list
       // Maybe not? the only place I see this used is in getCorrelationUse (and register, to
-      // a smaller extent), and it's a private atribute, with no getters/setters, initialized to
+      // a smaller extent), and it's a private attribute, with no getters/setters, initialized to
       // empty
 
       bb.mapRootRelToFieldProjection.put(bb.root(), r.groupExprProjection);
@@ -5987,8 +5994,9 @@ public class SqlToRelConverter {
     public final SqlValidatorScope scope;
     private final @Nullable Map<String, RexNode> nameToNodeMap;
     public @Nullable RelNode root;
-    private @Nullable List<RelNode> inputs;
-    private final Map<CorrelationId, RexFieldAccess> mapCorrelateToRex =
+    // Bodo Change: Switch to protected so our Blackboard can access the inputs.
+    protected @Nullable List<RelNode> inputs;
+    protected final Map<CorrelationId, RexFieldAccess> mapCorrelateToRex =
         new HashMap<>();
     private List<RegisterArgs> registered = new ArrayList<>();
 
@@ -6280,11 +6288,14 @@ public class SqlToRelConverter {
         SqlQualified qualified) {
       if (nameToNodeMap != null && qualified.prefixLength == 1) {
         RexNode node = nameToNodeMap.get(qualified.identifier.names.get(0));
-        if (node == null) {
-          throw new AssertionError("Unknown identifier '" + qualified.identifier
-              + "' encountered while expanding expression");
+        // Bodo Change: No longer throw an assertion error. The nameToNodeMap == null
+        // was allowing this to only match on parameters, but this doesn't generalize
+        // with our other changes.
+        //
+        // Instead, if we don't find the ID fall back to the other code path.
+        if (node != null) {
+          return Pair.of(node, null);
         }
-        return Pair.of(node, null);
       }
       final SqlNameMatcher nameMatcher =
           scope.getValidator().getCatalogReader().nameMatcher();
@@ -6885,11 +6896,13 @@ public class SqlToRelConverter {
   /**
    * Deferred lookup.
    */
-  private static class DeferredLookup {
+  // Bodo Change: Make protected so BodoSqlToRelConverter
+  // can access it.
+  protected static class DeferredLookup {
     final Blackboard bb;
     final String originalRelName;
 
-    DeferredLookup(Blackboard bb, String originalRelName) {
+    public DeferredLookup(Blackboard bb, String originalRelName) {
       this.bb = bb;
       this.originalRelName = originalRelName;
     }

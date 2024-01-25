@@ -19,6 +19,7 @@ package com.bodosql.calcite.prepare;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
+import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
@@ -37,20 +38,25 @@ import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.config.CalciteSystemProperty;
+import org.apache.calcite.plan.BodoRelOptUtil;
 import org.apache.calcite.plan.Context;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCostFactory;
+import org.apache.calcite.plan.RelOptCostImpl;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable.ViewExpander;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitDef;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.plan.hep.HepPlanner;
+import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
@@ -66,7 +72,6 @@ import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.sql2rel.SqlRexConvertletTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.tools.FrameworkConfig;
@@ -297,7 +302,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     RelRoot root = sqlToRelConverter.convertQuery(validatedSqlNode, false, true);
     root = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
     final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
-    root = root.withRel(RelDecorrelator.decorrelateQuery(root.rel, relBuilder));
+    root = root.withRel(BodoRelDecorrelator.decorrelateQuery(root.rel, relBuilder));
     state = State.STATE_5_CONVERTED;
     return root;
   }
@@ -348,11 +353,17 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     final RelRoot root = sqlToRelConverter.convertQuery(sqlNode, true, false);
     final RelRoot root2 = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
     final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
-    final RelRoot root3 = root2.withRel(BodoRelDecorrelator.decorrelateQuery(root.rel, relBuilder));
+    final RelRoot root3 = root2.withRel(removeNestedSubQueries(root2.rel, List.of()));
+    SubQueryRemoveRule.verifyNoSubQueryRemaining(root3.rel);
+    final RelRoot root4 =
+        root3.withRel(BodoRelDecorrelator.decorrelateQuery(root3.rel, relBuilder));
+    // Enforce that there are no correlations and if there are don't inline the view.
+    // [BSE-2512] [BSE-2513] Support returning correlated results.
+    BodoRelDecorrelator.verifyNoCorrelationsRemaining(root4.rel);
     // Bodo Change: Make sure the final result is cast to the row type.
-    return RelRoot.of(root3.rel, rowType, root3.kind)
-        .withCollation(root3.collation)
-        .withHints(root3.hints);
+    return RelRoot.of(root4.rel, rowType, root4.kind)
+        .withCollation(root4.collation)
+        .withHints(root4.hints);
   }
 
   /**
@@ -369,17 +380,23 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    * @param functionPath Path of the function.
    * @param paramNames The name of the function parameters.
    * @param arguments The RexNode argument inputs to the function.
+   * @param correlatedArguments The arguments after replacing any input references with field
+   *     accesses to a correlated variable.
    * @param returnType The expected function return type.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
    * @return The body of the function as a RexNode. This should either be a scalar sub-query or a
    *     simple expression.
    */
   @Override
   public RexNode expandFunction(
-      String functionBody,
-      ImmutableList<String> functionPath,
+      @NonNull String functionBody,
+      @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
       @NonNull List<@NonNull RexNode> arguments,
-      @NonNull RelDataType returnType) {
+      @NonNull List<@NonNull RexNode> correlatedArguments,
+      @NonNull RelDataType returnType,
+      @NonNull RelOptCluster cluster) {
     // Base to use for several exception conditions.
     String baseErrorMessage =
         String.format(
@@ -412,12 +429,13 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       SqlParseException secondException;
       try {
         return expandExpressionFunction(
-            functionBody, functionPath, paramNames, arguments, returnType);
+            functionBody, functionPath, paramNames, arguments, returnType, cluster);
       } catch (SqlParseException e) {
         firstException = e;
       }
       try {
-        return expandQueryFunction(functionBody, functionPath, paramNames, arguments, returnType);
+        return expandQueryFunction(
+            functionBody, functionPath, paramNames, correlatedArguments, returnType, cluster);
       } catch (SqlParseException e) {
         secondException = e;
       }
@@ -454,6 +472,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    * @param paramNames The name of the function parameters.
    * @param arguments The RexNode argument inputs to the function.
    * @param returnType The expected function return type.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
    * @return The RexNode output after expanding the function.
    */
   private RexNode expandExpressionFunction(
@@ -461,16 +481,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
       @NonNull List<@NonNull RexNode> arguments,
-      @NonNull RelDataType returnType)
+      @NonNull RelDataType returnType,
+      @NonNull RelOptCluster cluster)
       throws SqlParseException {
-
-    // Ensure the planner is initialized.
-    RelOptPlanner planner = this.planner;
-    if (planner == null) {
-      ready();
-      planner = requireNonNull(this.planner, "planner");
-    }
-
     SqlParser parser = SqlParser.create(functionBody, parserConfig);
     SqlNode node = parser.parseExpression();
 
@@ -485,9 +498,6 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     }
     SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
 
-    final RexBuilder rexBuilder = createRexBuilder();
-    final RelOptCluster cluster =
-        BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new BodoSqlToRelConverter(
@@ -503,7 +513,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     if (result.getType().equals(returnType)) {
       return result;
     } else {
-      return rexBuilder.makeCast(returnType, result, true, false);
+      return cluster.getRexBuilder().makeCast(returnType, result, true, false);
     }
   }
 
@@ -513,8 +523,11 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    * @param functionBody Body of the function.
    * @param functionPath Path of the function.
    * @param paramNames The name of the function parameters.
-   * @param arguments The RexNode argument inputs to the function.
+   * @param arguments The RexNode argument inputs to the function these have replaced an input
+   *     references with field accesses to a correlation variable.
    * @param returnType The expected function return type.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
    * @return The compiled output as a RexSubQuery.
    */
   private RexNode expandQueryFunction(
@@ -522,16 +535,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
       @NonNull List<@NonNull RexNode> arguments,
-      @NonNull RelDataType returnType)
+      @NonNull RelDataType returnType,
+      @NonNull RelOptCluster cluster)
       throws SqlParseException {
-
-    // Ensure the planner is initialized.
-    RelOptPlanner planner = this.planner;
-    if (planner == null) {
-      ready();
-      planner = requireNonNull(this.planner, "planner");
-    }
-
     SqlParser parser = SqlParser.create(functionBody, parserConfig);
     final SqlNode node;
     List<SqlNode> stmtList = parser.parseStmtList();
@@ -554,42 +560,78 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     }
     SqlNode validatedNode = validator.validateParameterizedExpression(node, paramNameToTypeMap);
 
-    // We only can inline if there are no arguments that reference a column.
-    if (arguments.stream().allMatch(x -> RelOptUtil.InputFinder.bits(x).isEmpty())) {
-      // Create the arguments to replace
-      Map<String, RexNode> argMap = new HashMap<>();
-      for (int i = 0; i < paramNames.size(); i++) {
-        argMap.put(paramNames.get(i), arguments.get(i));
-      }
-      // Create a new SQL to RelConvert for converting the query into a root and extracting
-      // the plan. We need a new convert because it uses a separate catalog reader and validator.
-      final RexBuilder rexBuilder = createRexBuilder();
-      final RelOptCluster cluster =
-          BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
-      final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
-
-      final SqlToRelConverter sqlToRelConverter =
-          new BodoSqlToRelConverter(
-              this, validator, catalogReader, cluster, convertletTable, config, this, argMap);
-
-      RelRoot outputRoot = sqlToRelConverter.convertQuery(validatedNode, false, false);
-      final RelRoot outputRoot2 =
-          outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
-      RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
-      RexSubQuery subQuery = RexSubQuery.scalar(result);
-      // Note: We can't use rexBuilder.ensureType because it will omit matching
-      // nullability for literals.
-      if (subQuery.getType().equals(returnType)) {
-        return subQuery;
-      } else {
-        return rexBuilder.makeCast(returnType, subQuery, true, false);
-      }
-    } else {
-      String msg =
-          "BodoSQL does not support Snowflake UDFs with column arguments whose function body"
-              + " contains a query.";
-      throw new RuntimeException(msg);
+    // Create the arguments to replace
+    Map<String, RexNode> argMap = new HashMap<>();
+    for (int i = 0; i < paramNames.size(); i++) {
+      argMap.put(paramNames.get(i), arguments.get(i));
     }
+
+    // Create a new SQL to RelConvert for converting the query into a root and extracting
+    // the plan. We need a new convert because it uses a separate catalog reader and validator.
+    final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
+
+    final SqlToRelConverter sqlToRelConverter =
+        new BodoSqlToRelConverter(
+            this, validator, catalogReader, cluster, convertletTable, config, this, argMap);
+
+    RelRoot outputRoot = sqlToRelConverter.convertQuery(validatedNode, false, false);
+    final RelRoot outputRoot2 =
+        outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
+    RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
+    // Find the correlation ids in the arguments.
+    BodoRelOptUtil.CorrelationRexFinder finder = new BodoRelOptUtil.CorrelationRexFinder();
+    for (RexNode arg : arguments) {
+      arg.accept(finder);
+    }
+    Set<CorrelationId> correlationIds = finder.getSeenIds();
+    RelNode updatedResult = removeNestedSubQueries(result, correlationIds);
+    RexSubQuery subQuery = RexSubQuery.scalar(updatedResult);
+    // Note: We can't use rexBuilder.ensureType because it will omit matching
+    // nullability for literals.
+    if (subQuery.getType().equals(returnType)) {
+      return subQuery;
+    } else {
+      return cluster.getRexBuilder().makeCast(returnType, subQuery, true, false);
+    }
+  }
+
+  private static RelNode removeNestedSubQueries(RelNode root, Iterable<CorrelationId> skippedIds) {
+    HepProgram program =
+        HepProgram.builder()
+            .addRuleInstance(
+                com.bodosql
+                    .calcite
+                    .application
+                    .logicalRules
+                    .SubQueryRemoveRule
+                    .Config
+                    .FILTER
+                    .withSkippedIds(skippedIds)
+                    .toRule())
+            .addRuleInstance(
+                com.bodosql
+                    .calcite
+                    .application
+                    .logicalRules
+                    .SubQueryRemoveRule
+                    .Config
+                    .PROJECT
+                    .withSkippedIds(skippedIds)
+                    .toRule())
+            .addRuleInstance(
+                com.bodosql
+                    .calcite
+                    .application
+                    .logicalRules
+                    .SubQueryRemoveRule
+                    .Config
+                    .JOIN
+                    .withSkippedIds(skippedIds)
+                    .toRule())
+            .build();
+    HepPlanner planner = new HepPlanner(program, null, true, null, RelOptCostImpl.FACTORY);
+    planner.setRoot(root);
+    return planner.findBestExp();
   }
 
   // CalciteCatalogReader is stateless; no need to store one

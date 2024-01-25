@@ -311,7 +311,10 @@
                                         <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
+                                        <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexBuilder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
@@ -447,7 +450,6 @@
                                         <exclude>org/apache/calcite/sql/validate/TableIdentifierWithIDNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/TableNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WindowedAggChecker.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/WindowedSelectScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WithScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercion.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$1.class</exclude>

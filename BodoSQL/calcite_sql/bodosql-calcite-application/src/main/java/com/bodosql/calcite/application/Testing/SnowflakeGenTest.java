@@ -66,15 +66,20 @@ public class SnowflakeGenTest {
     ColumnDataTypeInfo dataTypeInfo = new ColumnDataTypeInfo(dataType, true);
     BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataTypeInfo);
     arr.add(column);
-    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataTypeInfo);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("B", dataTypeInfo);
     arr.add(column2);
     BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataTypeInfo);
     arr.add(column3);
 
     BodoSqlTable table =
         new LocalTable(
-            "LOCALTABLE", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
+            "LOCAL_TABLE", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
     schema.addTable(table);
+    // Second table to use for testing joins
+    BodoSqlTable table2 =
+        new LocalTable(
+            "LOCAL_TABLE2", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
+    schema.addTable(table2);
 
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(
