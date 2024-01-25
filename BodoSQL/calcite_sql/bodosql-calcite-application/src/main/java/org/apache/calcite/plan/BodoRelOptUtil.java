@@ -1,12 +1,30 @@
 package org.apache.calcite.plan;
 
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelShuttleImpl;
+import org.apache.calcite.rel.RelVisitor;
+import org.apache.calcite.rel.core.CorrelationId;
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.logical.LogicalCalc;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable;
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class BodoRelOptUtil {
   /**
@@ -51,6 +69,69 @@ public class BodoRelOptUtil {
       return SqlStdOperatorTable.IS_NOT_DISTINCT_FROM;
     default:
       return operator;
+    }
+  }
+
+  /**
+   * Find all correlation variables that are used in a RexNode.
+   */
+  public static class CorrelationRexFinder extends RexVisitorImpl<Void> {
+
+    private Set<CorrelationId> seenIds;
+    public CorrelationRexFinder() {
+      super(true);
+      seenIds = new HashSet<>();
+    }
+
+    @Override public Void visitSubQuery(RexSubQuery subQuery) {
+      // Iterate over the operands
+      for (RexNode operand : subQuery.operands) {
+        operand.accept(this);
+      }
+      // Iterate over the body of the sub query.
+      subQuery.rel.accept(new CorrelationRelFinder(this));
+      return null;
+    }
+
+    @Override
+    public Void visitCorrelVariable(RexCorrelVariable correlVariable) {
+      seenIds.add(correlVariable.id);
+      return null;
+    }
+
+    public Set<CorrelationId> getSeenIds() {
+      return seenIds;
+    }
+  }
+
+  /**
+   * Find all correlation variables that are used in a plan.
+   * This applies the CorrelationRexFinder to a Filter,
+   * Projection, or Join. If additional nodes can accept correlation
+   * variables this should be updated.
+   */
+  public static class CorrelationRelFinder extends RelShuttleImpl {
+
+    private final CorrelationRexFinder rexFinder;
+    CorrelationRelFinder(CorrelationRexFinder rexFinder) {
+      this.rexFinder = rexFinder;
+    }
+
+    @Override public RelNode visit(LogicalFilter filter) {
+      filter.getCondition().accept(rexFinder);
+      return super.visit(filter);
+    }
+
+    @Override public RelNode visit(LogicalProject project) {
+      project.getProjects().stream().forEach(x -> x.accept(rexFinder));
+      return super.visit(project);
+    }
+
+    @Override public RelNode visit(LogicalJoin join) {
+      if (join.getCondition() != null) {
+        join.getCondition().accept(rexFinder);
+      }
+      return super.visit(join);
     }
   }
 }

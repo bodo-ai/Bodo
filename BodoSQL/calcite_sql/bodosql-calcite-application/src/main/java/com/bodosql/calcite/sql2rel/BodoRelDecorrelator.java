@@ -21,16 +21,17 @@ import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
 import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
-import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -44,7 +45,6 @@ import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.MappingType;
 import org.apache.calcite.util.mapping.Mappings;
@@ -76,6 +76,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                     .withOperandSupplier(
                         b0 ->
                             b0.operand(Filter.class)
+                                .predicate(x -> !x.containsOver())
                                 .oneInput(b1 -> b1.operand(Join.class).anyInputs()))
                     .withDescription("FilterJoinRule:filter")
                     .as(FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.class)
@@ -90,9 +91,11 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                     .as(FilterProjectTransposeRule.Config.class)
                     .withOperandFor(
                         Filter.class,
-                        filter -> !RexUtil.containsCorrelation(filter.getCondition()),
+                        filter ->
+                            !RexUtil.containsCorrelation(filter.getCondition())
+                                && !filter.containsOver(),
                         Project.class,
-                        project -> true)
+                        project -> !project.containsOver())
                     .withCopyFilter(true)
                     .withCopyProject(true)
                     .toRule())
@@ -104,6 +107,9 @@ public class BodoRelDecorrelator extends RelDecorrelator {
             .addRuleInstance(RemoveCorrelationForFlattenRule.config(this, f).toRule())
             .addRuleInstance(
                 FilterFlattenCorrelatedConditionRule.Config.DEFAULT
+                    .withOperandSupplier(
+                        op ->
+                            op.operand(Filter.class).predicate(x -> !x.containsOver()).anyInputs())
                     .withRelBuilderFactory(f)
                     .toRule())
             .build();
@@ -213,11 +219,11 @@ public class BodoRelDecorrelator extends RelDecorrelator {
 
   // New Function: verifies that no correlations or correlated variables remain
   // anywhere in the plan
-  public static void verifyNoCorrelationsRemaining(RelNode rel) throws Exception {
+  public static void verifyNoCorrelationsRemaining(RelNode rel) {
     NoCorrelationRelVisitor relVisitor = new NoCorrelationRelVisitor();
     relVisitor.go(rel);
     if (relVisitor.foundCorrelatedVariable) {
-      throw new Exception("Found correlation in plan:\n" + RelOptUtil.toString(rel));
+      throw new RuntimeException("Found correlation in plan:\n" + RelOptUtil.toString(rel));
     }
   }
 
@@ -275,8 +281,8 @@ public class BodoRelDecorrelator extends RelDecorrelator {
    *    LogicalCorrelate()
    *      LogicalProject(A=$0 f1=/($1, 10))
    *        TableScan(...)
-   *  LogicalProject($cor0.$f1)
-   *    LogicalValues({0})
+   *    LogicalProject($cor0.$f1)
+   *      LogicalValues({0})
    * </pre>
    *
    * </blockquote>
@@ -306,9 +312,11 @@ public class BodoRelDecorrelator extends RelDecorrelator {
               b0 ->
                   b0.operand(Correlate.class)
                       .inputs(
-                          b1 -> b1.operand(Project.class).anyInputs(),
+                          b1 -> b1.operand(RelNode.class).anyInputs(),
                           b2 ->
+                              // Bodo Change: Don't match on window functions
                               b2.operand(Project.class)
+                                  .predicate(x -> !x.containsOver())
                                   .oneInput(b3 -> b3.operand(Values.class).noInputs())))
           .build();
     }
@@ -324,13 +332,17 @@ public class BodoRelDecorrelator extends RelDecorrelator {
     @Override
     public void onMatch(RelOptRuleCall call) {
       final Correlate correlate = call.rel(0);
-      final Project left = call.rel(1);
+      final RelNode left = call.rel(1);
       final Project project = call.rel(2);
       final Values values = call.rel(3);
 
       // The rule only matches if the VALUES clause is a singleton, otherwise
       // a join will be required.
       if (values.tuples.size() != 1) {
+        return;
+      }
+      // This rule only works for inner joins on the correlation
+      if (correlate.getJoinType() != JoinRelType.INNER) {
         return;
       }
 
@@ -341,35 +353,35 @@ public class BodoRelDecorrelator extends RelDecorrelator {
         return;
       }
 
-      // Verify that all the entries in the rhs are correlation variable references, as
-      // opposed to a computation that may depend on the values clause.
+      // Verify that no entries contain inputRefs so we can prune the values clause.
+      RelOptUtil.InputFinder inputFinder = new RelOptUtil.InputFinder();
       for (RexNode proj : project.getProjects()) {
-        if (!(proj instanceof RexFieldAccess)
-            || !(((RexFieldAccess) proj).getReferenceExpr() instanceof RexCorrelVariable)) {
-          return;
-        }
+        proj.accept(inputFinder);
+      }
+      ImmutableBitSet usedColumns = inputFinder.build();
+      if (!usedColumns.isEmpty()) {
+        return;
       }
 
-      // Add every field from the lhs project to the output
-      final List<RelDataTypeField> fieldList = left.getRowType().getFieldList();
-      List<Pair<RexNode, String>> projects = new ArrayList<>();
-      for (int projIdx = 0; projIdx < left.getProjects().size(); projIdx++) {
-        projects.add(Pair.of(left.getProjects().get(projIdx), fieldList.get(projIdx).getName()));
-      }
-      // For each correlated ref field in the rhs project, re-add the corresponding
-      // field from the lhs to the output.
-      List<CorRef> refs = new ArrayList(d.cm.mapRefRelToCorRef.get(project));
-      for (int projIdx = 0; projIdx < refs.size(); projIdx++) {
-        CorRef ref = refs.get(projIdx);
+      // Add every field from the lhs to the output
+      RelBuilder builder = call.builder();
+      RexBuilder rexBuilder = builder.getRexBuilder();
+
+      List<RexNode> projects = new ArrayList();
+      RelDataType leftType = left.getRowType();
+      // Add the fields on the LHS
+      for (int projIdx = 0; projIdx < leftType.getFieldCount(); projIdx++) {
         projects.add(
-            Pair.of(
-                left.getProjects().get(ref.field),
-                project.getRowType().getFieldNames().get(projIdx)));
+            rexBuilder.makeInputRef(leftType.getFieldList().get(projIdx).getType(), projIdx));
+      }
+      // Decorrelate the project inputs.
+      for (RexNode expr : project.getProjects()) {
+        projects.add(d.removeCorrelationExpr(expr, false));
       }
       RelNode newProject =
           d.relBuilder
-              .push(left.getInput(0))
-              .projectNamed(Pair.left(projects), Pair.right(projects), true)
+              .push(left)
+              .projectNamed(projects, correlate.getRowType().getFieldNames(), true)
               .build();
 
       call.transformTo(newProject);
@@ -424,6 +436,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                           b1 -> b1.operand(RelNode.class).anyInputs(),
                           b2 ->
                               b2.operand(Project.class)
+                                  .predicate(x -> !x.containsOver())
                                   .oneInput(b3 -> b3.operand(Flatten.class).anyInputs())))
           .build();
     }
@@ -441,7 +454,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       final Project project = call.rel(2);
       final Flatten flatten = call.rel(3);
 
-      List<Integer> usedOutputCols = new ArrayList<Integer>();
+      List<Integer> usedOutputCols = new ArrayList();
       for (RexNode proj : project.getProjects()) {
         if (proj instanceof RexInputRef) {
           int idx = ((RexInputRef) proj).getIndex();
@@ -523,6 +536,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                                   .oneInput(
                                       b3 ->
                                           b3.operand(Project.class)
+                                              .predicate(x -> !x.containsOver())
                                               .oneInput(
                                                   b4 -> b4.operand(Values.class).noInputs()))))
           .build();
@@ -560,9 +574,9 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       // from the left input as well as all the terms from the rhs that were
       // operands to the flatten call.
       RexCall oldFlattenCall = flatten.getCall();
-      List<RexNode> flattenOperands = new ArrayList<RexNode>();
-      List<RexNode> projectTerms = new ArrayList<RexNode>();
-      List<Integer> repeatCols = new ArrayList<Integer>();
+      List<RexNode> flattenOperands = new ArrayList();
+      List<RexNode> projectTerms = new ArrayList();
+      List<Integer> repeatCols = new ArrayList();
 
       // Add all elements from the lhs to the new projection
       for (int i = 0; i < left.getRowType().getFieldCount(); i++) {
@@ -607,7 +621,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
 
       // Build a new projection on top of the flatten node that reshuffles
       // the outputs of the flatten node so the replicated columns come first
-      List<RexNode> newOrder = new ArrayList<RexNode>();
+      List<RexNode> newOrder = new ArrayList();
       int numUsed = flatten.getUsedColOutputs().cardinality();
       for (int i : newFlatten.getRepeatColumns()) {
         newOrder.add(
@@ -685,8 +699,10 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                           b2 ->
                               b2.operand(Filter.class)
                                   .predicate(
-                                      PullFilterAboveFlattenCorrelationRule
-                                          ::isFilterAncestorOfFlatten)
+                                      x ->
+                                          !x.containsOver()
+                                              && !RexUtil.containsCorrelation(x.getCondition())
+                                              && isFilterAncestorOfFlatten(x))
                                   .oneInput(b3 -> b3.operand(RelNode.class).anyInputs())))
           .build();
     }

@@ -83,6 +83,7 @@ public class BodoFilterCorrelateRule extends FilterCorrelateRule {
       return withOperandSupplier(
               b0 ->
                   b0.operand(filterClass)
+                      .predicate(x -> !x.containsOver())
                       .oneInput(
                           b1 ->
                               b1.operand(correlateClass)

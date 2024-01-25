@@ -671,9 +671,9 @@ object BodoRules {
      * These are rules to remove sub-queries.
      */
     val SUB_QUERY_REMOVAL_RULES: List<RelOptRule> = listOf(
-        SubQueryRemoveRule.Config.FILTER.toRule(),
-        SubQueryRemoveRule.Config.PROJECT.toRule(),
-        SubQueryRemoveRule.Config.JOIN.toRule(),
+        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.FILTER.toRule(),
+        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.PROJECT.toRule(),
+        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.JOIN.toRule(),
     )
 
     /**
