@@ -3,9 +3,11 @@
 """
 
 import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core.utils import PYVERSION
 
@@ -17,7 +19,7 @@ pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(
-    "args, distinct",
+    "args, scalars, distinct",
     [
         pytest.param(
             (
@@ -29,6 +31,7 @@ pytestmark = pytest_slow_unless_codegen
                     dtype=pd.Int32Dtype(),
                 ),
             ),
+            (False,),
             3987,
             id="int32",
         ),
@@ -45,6 +48,7 @@ pytestmark = pytest_slow_unless_codegen
                     dtype=pd.BooleanDtype(),
                 ),
             ),
+            (False, False),
             (661 if PYVERSION == (3, 11) else 1308),
             id="string-bool",
         ),
@@ -62,6 +66,7 @@ pytestmark = pytest_slow_unless_codegen
                     ]
                 ),
             ),
+            (False,),
             (745 if PYVERSION == (3, 11) else 1479),
             id="binary",
         ),
@@ -81,6 +86,7 @@ pytestmark = pytest_slow_unless_codegen
                     ]
                 ),
             ),
+            (False, False, False),
             2359,
             id="time-float-date",
         ),
@@ -101,6 +107,7 @@ pytestmark = pytest_slow_unless_codegen
                 ),
                 None,
             ),
+            (False, False, True),
             4096,
             id="naive-timezone-null",
         ),
@@ -118,12 +125,70 @@ pytestmark = pytest_slow_unless_codegen
                 ),
                 datetime.date(2020, 7, 3),
             ),
+            (True, False, True, True, False, False, True),
             (1873 if PYVERSION == (3, 11) else 3564),
             id="mixed",
         ),
+        pytest.param(
+            (
+                pd.array(
+                    [
+                        [],
+                        [1],
+                        [1, 2],
+                        [2, 1, None],
+                        [1, None],
+                        [2, 1],
+                        [None, 1],
+                        [1, 1],
+                        [0, 1, 2, None, 1],
+                        None,
+                    ]
+                    * 1_000,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int8())),
+                ),
+                pd.array(
+                    [
+                        {
+                            "id": (i // 1000) % 100,
+                            "tag": None
+                            if ((i // 1000) % 10) == 7
+                            else str((i // 1000) % 10),
+                        }
+                        for i in range(10_000)
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("id", pa.int32()), pa.field("tag", pa.string())]
+                        )
+                    ),
+                ),
+                pd.array(
+                    [
+                        [
+                            {},
+                            {"A": 0},
+                            {"A": 0, "B": 1},
+                            {"A": 1, "B": 1},
+                            {"A": 0, "B": 0},
+                            {"A": 1, "B": 0},
+                            {"A": 0, "B": None},
+                            {"A": None, "B": None},
+                            {"A": 1, "B": 0, "C": 2},
+                            None,
+                        ][(i // 10) % 10]
+                        for i in range(10_000)
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+            ),
+            (False, False, False),
+            1000,
+            id="semi_structured",
+        ),
     ],
 )
-def test_sql_hash_qualities(args, distinct, memory_leak_check):
+def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
     """
     Tests the quality of the sql HASH kernel by verifying that the number of
     distinct hashes matches the number of distinct inputs and that the hashes
@@ -154,9 +219,7 @@ def test_sql_hash_qualities(args, distinct, memory_leak_check):
     # of distinct hash values. Uses abs() so that the highest order bit does
     # not mess with the sign of the ratios.
     test_impl = f"def impl({params_str}):\n"
-    test_impl += (
-        f"  H = pd.Series(bodo.libs.bodosql_array_kernels.sql_hash(({args_str})))\n"
-    )
+    test_impl += f"  H = pd.Series(bodo.libs.bodosql_array_kernels.sql_hash(({args_str}), scalars))\n"
     test_impl += f"  distinct_hashes = pd.Series(H.unique())\n"
     test_impl += f"  masks = []\n"
     test_impl += f"  L = []\n"
@@ -170,7 +233,11 @@ def test_sql_hash_qualities(args, distinct, memory_leak_check):
     test_impl += f"      L.append(abs(mask_both.mean()))\n"
     test_impl += f"  return len(distinct_hashes), pd.Series(L)\n"
     impl_vars = {}
-    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    exec(
+        test_impl,
+        {"bodo": bodo, "pd": pd, "scalars": bodo.utils.typing.MetaType(scalars)},
+        impl_vars,
+    )
     impl = impl_vars["impl"]
 
     # 2016 = number of combinations of i & j
@@ -228,6 +295,11 @@ def test_sql_hash_qualities(args, distinct, memory_leak_check):
             (1852596461571890431 if PYVERSION == (3, 11) else -4192600820579827718),
             id="binary",
         ),
+        pytest.param(
+            (Decimal("20.31"),),
+            2905488202071118327,
+            id="decimal",
+        ),
     ],
 )
 def test_sql_hash_determinism(args, expected_hash, memory_leak_check):
@@ -236,6 +308,7 @@ def test_sql_hash_determinism(args, expected_hash, memory_leak_check):
     combination of inputs every time, including for equivalent values
     of different types"
     """
+    scalars = bodo.utils.typing.MetaType((True,) * len(args))
     n_args = len(args)
     args_str = ", ".join([f"A{i}" for i in range(n_args)])
     params_str = args_str
@@ -243,8 +316,10 @@ def test_sql_hash_determinism(args, expected_hash, memory_leak_check):
         args_str += ","
 
     test_impl = f"def impl({params_str}):\n"
-    test_impl += f"  return bodo.libs.bodosql_array_kernels.sql_hash(({args_str}))"
+    test_impl += (
+        f"  return bodo.libs.bodosql_array_kernels.sql_hash(({args_str}), scalars)"
+    )
     impl_vars = {}
-    exec(test_impl, {"bodo": bodo}, impl_vars)
+    exec(test_impl, {"bodo": bodo, "scalars": scalars}, impl_vars)
     impl = impl_vars["impl"]
     check_func(impl, args, py_output=expected_hash)
