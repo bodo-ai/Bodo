@@ -1292,6 +1292,20 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
             new_cols.push_back(std::make_shared<arrow::ChunkedArray>(chunks));
         }
 
+        // Parse null array
+        else if ((act_type->id() == Type::STRING ||
+                  act_type->id() == Type::LARGE_STRING) &&
+                 exp_type->id() == Type::NA) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            std::transform(
+                col->chunks().begin(), col->chunks().end(),
+                std::back_inserter(chunks),
+                [](std::shared_ptr<arrow::Array> chunk) {
+                    return std::make_shared<arrow::NullArray>(chunk->length());
+                });
+            new_cols.push_back(std::make_shared<arrow::ChunkedArray>(chunks));
+        }
+
         // Parse Array of JSON Strings into Map Array
         else if ((act_type->id() == Type::STRING ||
                   act_type->id() == Type::LARGE_STRING) &&
