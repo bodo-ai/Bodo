@@ -1080,9 +1080,15 @@ def get_variant_type_from_metadata(
 
     # Gather all of the distinct types of the reduced rows to infer the correct row type.
     probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({narrowed_query})"
-    # Send the probe query until we breach the timeout, in case we are unlucky with sampling.
+    # Send the probe query until we breach the timeout (or at most 5 times),
+    # in case we are unlucky with sampling.
     start_time = time.time()
-    while (time.time() - start_time) < SF_READ_SCHEMA_PROBE_TIMEOUT:
+    max_tries = 5
+    tries = 0
+    while (
+        time.time() - start_time
+    ) < SF_READ_SCHEMA_PROBE_TIMEOUT and tries < max_tries:
+        tries += 1
         probe_res = execute_query(
             cursor,
             probe_query,
@@ -1093,11 +1099,32 @@ def get_variant_type_from_metadata(
     # If the query failed or did not produce any type strings, indicate failure since
     # it will not be possible to infer the correct type.
     if probe_res is None or len(types_df) == 0:
-        raise BodoError(
-            f"Snowflake Probe Query Failed or Timed out While Typing List Content in Column {source_colname}. "
-            f"It is currently statically typed as VARIANT in the Source:\n"
-            f"{sql_query}"
+        # However, before failing, first check to see if there were any non-null rows.
+        # If there were not, return a null datatype.
+        null_query = f"SELECT COUNT({cur_colname}) as NON_NULL_COUNT FROM {sql_query}"
+        count_res = execute_query(
+            cursor,
+            null_query,
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
         )
+        if (
+            count_res is not None
+            and len(count_df := count_res.fetch_pandas_all()) > 0
+            and count_df["NON_NULL_COUNT"].iloc[0] == 0
+        ):
+            if bodo.get_rank() == 0:
+                warnings.warn(
+                    BodoWarning(
+                        f"The column {source_colname} is typed as a null array since the source is a variant column with no non-null entries."
+                    )
+                )
+            return pa.null()
+        else:
+            raise BodoError(
+                f"Snowflake Probe Query Failed or Timed out While Typing List Content in Column {source_colname}. "
+                f"It is currently statically typed as VARIANT in the Source:\n"
+                f"{sql_query}"
+            )
 
     value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
     pa_type = snowflake_type_str_to_pyarrow_datatype(

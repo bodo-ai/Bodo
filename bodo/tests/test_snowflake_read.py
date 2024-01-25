@@ -1346,6 +1346,51 @@ def test_read_variant_col(memory_leak_check):
     check_func(impl, (query, conn), py_output=py_output, check_dtype=False)
 
 
+def test_read_null_variant_col_correctness(memory_leak_check):
+    """
+    Test reading a variant column from Snowflake that is all-null.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT to_variant(null) as V
+    FROM table(generator(rowcount=>500))
+    """
+    py_output = pd.DataFrame({"v": pd.array([None] * 500)})
+
+    check_func(impl, (query, conn), py_output=py_output, check_dtype=False)
+
+
+@pytest_mark_one_rank
+def test_read_null_variant_col_warning(memory_leak_check):
+    """
+    Verify that the example from test_read_null_variant_col causes a warning.
+    """
+
+    @bodo.jit
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT to_variant(null) as V
+    FROM table(generator(rowcount=>500))
+    """
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        with pytest.warns(
+            BodoWarning,
+            match=r"The column V is typed as a null array since the source is a variant column with no non-null entries.",
+        ):
+            impl(query, conn)
+
+
 def test_read_nested_in_array_col(memory_leak_check):
     """
     Basic test to read nested semi-structured data in Array Columns
