@@ -67,13 +67,13 @@ End of directly copied functions
 """
 
 
-def sql_hash(A):  # pragma: no cover
+def sql_hash(A, scalars):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(sql_hash)
-def overload_sql_hash(A):
+def overload_sql_hash(A, scalars):
     """Handles cases where HASH receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
@@ -86,14 +86,14 @@ def overload_sql_hash(A):
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.sql_hash",
-                ["A"],
+                ["A", "scalars"],
                 0,
                 container_arg=i,
                 container_length=len(A),
             )
 
-    def impl(A):  # pragma: no cover
-        return sql_hash_util(A)
+    def impl(A, scalars):  # pragma: no cover
+        return sql_hash_util(A, scalars)
 
     return impl
 
@@ -243,9 +243,10 @@ def overload_tuple_hash(tup):
     def impl(tup):  # pragma: no cover
         tl = len(tup)
         acc = _PyHASH_XXPRIME_5
+        hash_negative_1 = _Py_uhash_t(-1)
         for x in literal_unroll(tup):
             lane = consistent_hash(x)
-            if lane == _Py_uhash_t(-1):
+            if lane == hash_negative_1:
                 return -1
             acc += lane * _PyHASH_XXPRIME_2
             acc = _PyHASH_XXROTATE(acc)
@@ -253,10 +254,101 @@ def overload_tuple_hash(tup):
 
         acc += tl ^ (_PyHASH_XXPRIME_5 ^ _Py_uhash_t(3527539))
 
-        if acc == _Py_uhash_t(-1):
+        if acc == hash_negative_1:
             return process_return(1546275796)
 
         return process_return(acc)
+
+    return impl
+
+
+def array_hash(t):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_hash)
+def overload_array_hash(arr):
+    """
+    A variant of tuple_hash for scalar arrays.
+    """
+
+    def impl(arr):  # pragma: no cover
+        n = len(arr)
+        acc = _PyHASH_XXPRIME_5
+        hash_negative_1 = _Py_uhash_t(-1)
+        for i in range(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                lane = -1
+            else:
+                lane = consistent_hash(arr[i])
+            if lane == hash_negative_1:
+                return -1
+            acc += lane * _PyHASH_XXPRIME_2
+            acc = _PyHASH_XXROTATE(acc)
+            acc *= _PyHASH_XXPRIME_1
+
+        acc += n ^ (_PyHASH_XXPRIME_5 ^ _Py_uhash_t(3527539))
+
+        if acc == hash_negative_1:
+            return process_return(1546275796)
+
+        return process_return(acc)
+
+    return impl
+
+
+def struct_hash(struct):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(struct_hash)
+def overload_struct_hash(struct):
+    """
+    Handler for consistent_hash on structs: hashes each field,
+    hashes all the names, then hashes a tuple of all the hashes combined.
+    """
+
+    args = []
+    for idx, name in enumerate(struct.names):
+        args.append(f"consistent_hash({repr(name)})")
+        args.append(
+            f"consistent_hash(get_struct_data(struct)[{idx}]) if get_struct_null_bitmap(struct)[{idx}] else -1"
+        )
+    func_text = "def impl(struct):\n"
+    func_text += f"  return consistent_hash(({', '.join(args)}))\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "consistent_hash": consistent_hash,
+            "get_struct_data": bodo.libs.struct_arr_ext.get_struct_data,
+            "get_struct_null_bitmap": bodo.libs.struct_arr_ext.get_struct_null_bitmap,
+        },
+        loc_vars,
+    )
+    return loc_vars["impl"]
+
+
+def map_hash(map_scalar):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(map_hash)
+def overload_map_hash(map_scalar):
+    """
+    Handler for consistent_hash on map scalars: hashes the
+    key array, the value array, then hashes the tuple of
+    the two combined.
+    """
+
+    def impl(map_scalar):  # pragma: no cover
+        key_hash = consistent_hash(map_scalar._keys)
+        val_hash = consistent_hash(map_scalar._values)
+        return consistent_hash((key_hash, val_hash))
 
     return impl
 
@@ -283,62 +375,83 @@ def overload_consistent_hash(val):  # pragma: no cover
         - Date
         - Timestamp (with or without a timezone)
         - Time
-        - A tuple of values of any of the types above
+        - Decimal
+        - A tuple, struct, map scalar, or array of values of any of the types above
 
     Returns:
         int64: a deterministic hash value for val with all of the expected
         properties of a hash function.
     """
-    if is_valid_int_arg(val):
+    if bodo.utils.utils.is_array_typ(val, False):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
+            return array_hash(val)
+
+    elif is_valid_int_arg(val):
+
+        def impl(val):  # pragma: no cover
             return int_hash(val)
 
     elif is_valid_boolean_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return int_hash(int(val))
 
     elif is_valid_float_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return float_hash(val)
 
     elif is_valid_string_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return unicode_hash(val)
 
     elif is_valid_binary_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return bytes_hash(val._data, len(val), False)
 
     elif is_valid_date_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return int_hash(
                 bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int(val)
             )
 
     elif is_valid_time_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return int_hash(val.value)
 
     elif is_valid_tz_naive_datetime_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return int_hash(bodo.utils.conversion.unbox_if_tz_naive_timestamp(val))
 
     elif is_valid_tz_aware_datetime_arg(val):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return int_hash(val.value)
+
+    elif isinstance(val, bodo.Decimal128Type):
+
+        def impl(val):  # pragma: no cover
+            return consistent_hash(str(val))
+
+    elif isinstance(val, bodo.libs.struct_arr_ext.StructType):
+
+        def impl(val):  # pragma: no cover
+            return struct_hash(val)
+
+    elif isinstance(val, bodo.libs.map_arr_ext.MapScalarType):
+
+        def impl(val):  # pragma: no cover
+            return map_hash(val)
 
     elif isinstance(val, types.UniTuple):
 
-        def impl(val):
+        def impl(val):  # pragma: no cover
             return tuple_hash(val)
 
     else:
@@ -352,13 +465,14 @@ def sql_hash_util(A):  # pragma: no cover
 
 
 @overload(sql_hash_util, no_unliteral=True)
-def overload_sql_hash_util(A):
+def overload_sql_hash_util(A, scalars):
     """A dedicated kernel for the SQL function HASH which takes in 1+ values
        of any type and outputs a hash produced by their combined values such
        that NULL is treated as a distinct value in its own right.
 
     Args:
         A (any array/scalar tuple): the tuple of values to be hashed together
+        scalars (boolean tuple): which of the arguments are scalars
 
     Raises:
         BodoError: if there are 0 columns
@@ -378,6 +492,9 @@ def overload_sql_hash_util(A):
     if len(A) == 0:  # pragma: no cover
         raise_bodo_error("Cannot hash 0 columns")
 
+    scalars = bodo.utils.typing.unwrap_typeref(scalars).meta
+    are_arrays = [not scalars[i] for i in range(len(scalars))]
+
     arg_names = []
     arg_types = []
 
@@ -391,7 +508,7 @@ def overload_sql_hash_util(A):
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
 
     # Create the mapping from the tuple to the local variable.
-    arg_string = "A"
+    arg_string = "A, scalars"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
 
     scalar_text = ""
@@ -421,4 +538,5 @@ def overload_sql_hash_util(A):
         arg_string,
         arg_sources,
         extra_globals=extra_globals,
+        are_arrays=are_arrays,
     )

@@ -1114,6 +1114,19 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
             id="join_star_multiple",
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
+            (34 if PYVERSION == (3, 11) else 44),
+            id="join_star_multiple",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT HASH(STRTOK_TO_ARRAY(A || LEAD(A) OVER (PARTITION BY NULL ORDER BY NULL), 'AEIOU')) AS H FROM S",
+            # There are 24 distinct values but for some reason only 16 distinct hashes are produced
+            (16 if PYVERSION == (3, 11) else 24),
+            id="array",
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_hash(raw_query, expected_hashes, memory_leak_check):

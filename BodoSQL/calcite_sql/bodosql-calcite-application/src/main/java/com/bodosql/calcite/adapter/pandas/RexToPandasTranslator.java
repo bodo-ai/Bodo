@@ -903,7 +903,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         }
         return visitNestedArrayFunc("ARRAY_COMPACT", List.of(result), List.of(isScalar));
       case "HASH":
-        result = visitHash(fnName, codeExprs);
+        result = visitHash(codeExprs, argScalars, visitor);
         break;
       default:
         throw new BodoSQLCodegenException("Internal Error: reached unreachable code");

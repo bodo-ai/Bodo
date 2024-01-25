@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
@@ -88,18 +89,20 @@ public class CondOpCodeGen {
   /**
    * Return a pandas expression that replicates a call to the SQL functions HASH.
    *
-   * @param codeExprs the Python strings that calculate each of the arguments
+   * @param codeExprs the Python strings that calculate each of the arguments.
+   * @param argScalars Whether each argument is a scalar or a column.
+   * @param visitor A visitor used to lower globals.
    * @return Expr containing the code generated for the relational expression.
    */
-  public static Expr visitHash(String fnName, List<Expr> codeExprs) {
-    String kernelName;
-    if (equivalentFnMap.containsKey(fnName)) {
-      kernelName = equivalentFnMap.get(fnName);
-    } else {
-      // If we made it here, something has gone very wrong
-      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+  public static Expr visitHash(
+      List<Expr> codeExprs, List<Boolean> argScalars, PandasCodeGenVisitor visitor) {
+    ArrayList<Expr> scalarExprs = new ArrayList();
+    for (Boolean isScalar : argScalars) {
+      scalarExprs.add(new Expr.BooleanLiteral(isScalar));
     }
-    return ExprKt.BodoSQLKernel(kernelName, List.of(new Expr.Tuple(codeExprs)), List.of());
+    Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
+    return ExprKt.BodoSQLKernel(
+        "sql_hash", List.of(new Expr.Tuple(codeExprs), scalarGlobal), List.of());
   }
 
   /**
