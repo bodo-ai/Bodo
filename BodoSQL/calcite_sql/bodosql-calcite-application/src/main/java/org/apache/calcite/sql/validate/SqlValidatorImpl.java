@@ -8307,18 +8307,24 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
 
     @Override public @Nullable SqlNode visit(SqlIdentifier id) {
+
       if (!id.isSimple()) {
         return super.visit(id);
       }
 
+      //Handle expanding columns in the USING clause if needed
       final boolean replaceAliases = clause.shouldReplaceAliases(validator.config);
+      final SelectScope scope = validator.getRawSelectScopeNonNull(select);
+      final SqlNode node = expandCommonColumn(select, id, scope, validator);
       if (!replaceAliases) {
-        final SelectScope scope = validator.getRawSelectScopeNonNull(select);
-        SqlNode node = expandCommonColumn(select, id, scope, validator);
         if (node != id) {
           return node;
         }
         return super.visit(id);
+      } else {
+        if (node != id) {
+          return node.accept(this);
+        }
       }
 
       try {
