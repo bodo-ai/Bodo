@@ -119,3 +119,22 @@ Bodo 2024.1 Release (Date: 01/05/2024) {#January_2024}
 
 
 - Fixed behavior of `#!sql LISTAGG` when all data is null to match Snowflake.
+
+
+## 2024.1.5 New Features and Improvements
+
+
+### New Features:
+- Support for inlining some Snowflake UDFs with query bodies that do not reference columns.
+- Throws a more detailed error message if a Snowflake UDF contains query functionality that we do not support yet.
+- Support comments for the entire table or individual columns in CREATE TABLE AS SELECT statements.
+- Support non-constant regexp pattern arguments for `REGEXP_LIKE`, `REGEX_COUNT` and `REGEXP_REPLACE`, as well as their function aliases.
+- Increased support for dictionary encoded strings inside of semi-structured columns.
+- Support for GET_IGNORE_CASE
+
+### Dependency Upgrades:
+- Upgrade PyArrow to v14.0.2
+
+### Bug Fixes:
+- Handle constant tuples in Numpy array reshape operations properly
+
