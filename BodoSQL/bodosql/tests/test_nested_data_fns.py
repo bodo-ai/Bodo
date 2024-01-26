@@ -10,7 +10,12 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import pytest_slow_unless_codegen
+from bodo.tests.utils import (
+    _get_dist_arg,
+    check_func,
+    pytest_mark_one_rank,
+    pytest_slow_unless_codegen,
+)
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
@@ -2599,8 +2604,6 @@ def test_map_index_column_column(map_array_values, syntax, memory_leak_check):
 def test_map_index_nested(memory_leak_check):
     """
     Making sure that map indexing works for nested maps
-    // TODO: extend these tests after #7041 merges
-    // https://bodo.atlassian.net/browse/BSE-2434
     """
 
     sql_object_array_values = {
@@ -2666,6 +2669,59 @@ def test_map_index_nested(memory_leak_check):
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        expected_output=py_out,
+    )
+
+
+# Don't want to test on more than one rank to avoid empty ranks
+@pytest_mark_one_rank
+@pytest.mark.parametrize("use_struct", [True, False])
+def test_map_index_nested_2(use_struct, memory_leak_check):
+    # Stress test to insure that GET can handle arbitrary nesting
+
+    def make_nested_struct_df(n_layers):
+        if n_layers <= 0:
+            return ({"A": 1}, pa.struct([pa.field("A", pa.int32())]))
+        else:
+            inner_value, inner_type = make_nested_struct_df(n_layers - 1)
+            new_typ = pa.struct([pa.field("A", inner_type)])
+            return ({"A": inner_value}, new_typ)
+
+    def make_nested_map_df(n_layers):
+        if n_layers <= 0:
+            return ({"A": 1}, pa.map_(pa.string(), pa.int32()))
+        else:
+            inner_value, inner_type = make_nested_map_df(n_layers - 1)
+            new_typ = pa.map_(pa.string(), inner_type)
+            return ({"A": inner_value}, new_typ)
+
+    if use_struct:
+        n = 10
+        value, typ = make_nested_struct_df(n)
+    else:
+        # map version takes a significant amount of time to run for higher levels
+        # of nesting, exact reason is unknown.
+        # https://bodo.atlassian.net/browse/BSE-2561
+        n = 4
+        value, typ = make_nested_map_df(n)
+
+    ctx = {"TABLE1": pd.DataFrame({"A": pd.array([value], dtype=pd.ArrowDtype(typ))})}
+
+    idx_str = "['A']" * (n + 1)
+    query = f"""
+    SELECT
+        A{idx_str} as out_col
+    from
+    TABLE1
+    """
+
+    py_out = pd.DataFrame({"OUT_COL": [1]})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
         expected_output=py_out,
     )
 
