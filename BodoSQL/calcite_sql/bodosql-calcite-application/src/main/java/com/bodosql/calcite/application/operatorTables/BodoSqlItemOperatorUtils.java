@@ -76,13 +76,18 @@ public class BodoSqlItemOperatorUtils {
     // All other types should be cast to string.
     RelDataTypeFactory typeFactory = callBinding.getTypeFactory();
     RelDataType arg1CastType;
-    if (SqlTypeFamily.NUMERIC.contains(callBinding.getOperandType(1))) {
-      // Need to inject a call to make sure that value is properly rounded up
-      List<SqlNode> args = new ArrayList();
-      args.add(callBinding.operand(1));
-      SqlCall roundedArg1 =
-          SqlStdOperatorTable.ROUND.createCall(callBinding.getCall().getParserPosition(), args);
-      callBinding.getCall().setOperand(1, roundedArg1);
+    RelDataType arg1InitialType = callBinding.getOperandType(1);
+    if (SqlTypeFamily.NUMERIC.contains(arg1InitialType)) {
+
+      if (!SqlTypeFamily.INTEGER.contains(arg1InitialType)) {
+        // Need to inject a call to make sure that value is properly rounded up
+        List<SqlNode> args = new ArrayList();
+        args.add(callBinding.operand(1));
+        SqlCall roundedArg1 =
+            SqlStdOperatorTable.ROUND.createCall(callBinding.getCall().getParserPosition(), args);
+        callBinding.getCall().setOperand(1, roundedArg1);
+      }
+
       arg1CastType =
           typeFactory.createTypeWithNullability(
               typeFactory.createSqlType(SqlTypeName.BIGINT),
@@ -91,8 +96,7 @@ public class BodoSqlItemOperatorUtils {
       // Cast to string
       arg1CastType =
           typeFactory.createTypeWithNullability(
-              typeFactory.createSqlType(SqlTypeName.VARCHAR),
-              callBinding.getOperandType(1).isNullable());
+              typeFactory.createSqlType(SqlTypeName.VARCHAR), arg1InitialType.isNullable());
     }
     callBinding.getTypeFactory().getTypeSystem();
 
