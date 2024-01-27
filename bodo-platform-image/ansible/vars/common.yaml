@@ -6,5 +6,6 @@ COMMON_PACKAGES:
   - s3fs-fuse
   - nvme-cli
   - dstat
+  - tmux
 
 CLUSTER_USER: bodo
