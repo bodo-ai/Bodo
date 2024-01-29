@@ -51,10 +51,7 @@ def assume_iam_role():
         sts_client = boto3.client("sts")
         # Get the role arn to assume from an environment variable.
         # If environment variable is not set, use the default role.
-        role_arn = os.environ.get(
-            "BODO_E2E_TEST_ROLE_ARN_TO_ASSUME",
-            "arn:aws:iam::427443013497:role/BodoEngineNightlyRole",
-        )
+        role_arn = "arn:aws:iam::427443013497:role/BodoEngineNightlyRole"
         # Get temporary credentials. These should be valid for 1hr
         # by default, which should be long enough for any one test.
         assumed_role_object = sts_client.assume_role(
