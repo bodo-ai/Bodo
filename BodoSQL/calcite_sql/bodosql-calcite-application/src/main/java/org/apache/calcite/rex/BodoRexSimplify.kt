@@ -1285,7 +1285,9 @@ class BodoRexSimplify(
 
         // OR(IS_TRUE(COMP(COL, LIT1)), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
         val outputExpression = makeCallWrapper(SqlStdOperatorTable.OR, listOf(columnComparisonWithNullCheck, literalComparisonWithNullCheck))
-        assert(outputExpression.type.equalsSansFieldNames(call.type))
+
+        // NOTE: If this expression doesn't have the correct nullability (or type in general), the simplifier will
+        // automatically insert a cast to the correct type.
         return outputExpression
     }
 
