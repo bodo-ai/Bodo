@@ -1,0 +1,83 @@
+name: Nightly E2E CI
+on:
+  # Run Every Weekday on Develop Branch at 2AM EST
+  schedule:
+    - cron: '00 7 * * 1,2,3,4,5'
+  # Manual Trigger
+  workflow_dispatch:
+    inputs:
+      pytest_addopts:
+        description: 'Value to Pass to PYTEST_ADDOPTS Env: https://docs.pytest.org/en/stable/reference/reference.html#envvar-PYTEST_ADDOPTS'
+        required: false
+        type: string
+        default: ''
+
+# Recommended with setup-micromamba
+# https://github.com/mamba-org/setup-micromamba#about-login-shells
+defaults:
+  run:
+    shell: bash -lexo pipefail {0}
+
+jobs:
+  run-e2e:
+    name: Run E2E Tests
+    runs-on: [self-hosted, xlarge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: ci-env
+          environment-file: buildscripts/envs/conda-lock.yml
+          # Include Dev Dependencies
+          create-args: --category main --category dev
+          cache-environment: true
+          cache-downloads: true
+          generate-run-shell: true
+          init-shell: bash
+          condarc: |
+            channels:
+              - conda-forge
+            remote_max_retries: 5
+            remote_backoff_factor: 60
+            aggressive_update_packages: []
+    
+      - name: Print Environment Specs
+        run: |
+          micromamba list
+          micromamba env export
+          pip list
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEngineNightlySession
+          role-skip-session-tagging: true
+
+      # TODO: Once stable, inline all the scripts
+      - name: Install Bodo Packages
+        run: |
+          # Main Packages Install
+          ./buildscripts/build.sh
+          # Azure SAS Provider Install
+          ./buildscripts/install_azurefs_sas_token_provider.sh
+
+      - name: Disable AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with: 
+          unset-current-credentials: true
+          aws-region: us-east-2
+
+      - name: Run Tests
+        run: |
+          ./buildscripts/aws/run_nightly_tests.sh
+        env:
+          PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_AZURE_USERNAME: ${{ secrets.SF_AZURE_USERNAME }}
+          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          NESSIE_AUTH_TOKEN: ${{ secrets.NESSIE_AUTH_TOKEN }}
