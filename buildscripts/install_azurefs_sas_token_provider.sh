@@ -1,19 +1,21 @@
 #!/bin/bash
 set -exo pipefail
 
-export PATH=$HOME/mambaforge/bin:$PATH
+if [[ "$CI_SOURCE" == "AWS" ]]; then
+    export PATH=$HOME/mambaforge/bin:$PATH
 
-
-# ---- Create Conda Env ----
-# Deactivate if another script has already activated the env
-set +x
-source deactivate || true
-source activate $CONDA_ENV
-set -x
+    # ---- Activate Conda Env ----
+    # Deactivate if another script has already activated the env
+    set +x
+    source deactivate || true
+    source activate $CONDA_ENV
+    set -x
+fi
 
 # Setup Hadoop
-wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /opt
-export HADOOP_HOME=/opt/hadoop-3.3.2
+wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /tmp
+
+export HADOOP_HOME=/tmp/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME
 export HADOOP_MAPRED_HOME=$HADOOP_HOME
 export HADOOP_COMMON_HOME=$HADOOP_HOME
