@@ -3357,6 +3357,44 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.skipif(
+    bodo.get_size() == 1,
+    reason="Test should only run on more than one rank",
+)
+def test_groupby_apply_global_dict(memory_leak_check):
+    """make sure returning dictionary-encoded arrays to output with input's
+    global dictionary doesn't cause hangs.
+    See https://bodo.atlassian.net/browse/BSE-2566
+    """
+
+    def impl(in_df):
+        def _bodo_f(df):
+            arr = df["B"]
+            return pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": arr,
+                },
+                index=df.index,
+            )
+
+        return in_df.groupby(["A"], as_index=False, dropna=False).apply(_bodo_f)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 1],
+            "B": ["A", "A", "B", "B"],
+        }
+    )
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        use_dict_encoded_strings=True,
+        only_1D=True,
+    )
+
+
 @pytest.mark.parametrize(
     "array",
     [

@@ -795,6 +795,28 @@ def cat_dict_str_overload(arrs, sep):
     return impl
 
 
+def unset_dict_global(arr):  # pragma: no cover
+    pass
+
+
+@overload(unset_dict_global)
+def overload_unset_global_dict(arr):
+    """Unset global dictionary flag if input is a dictionary-encoded array"""
+    if arr != dict_str_arr_type:
+        return lambda arr: arr  # pragma: no cover
+
+    def impl_unset_global_dict(arr):  # pragma: no cover
+        return init_dict_arr(
+            arr._data,
+            arr._indices,
+            False,
+            arr._has_unique_local_dictionary,
+            arr._dict_id,
+        )
+
+    return impl_unset_global_dict
+
+
 @lower_cast(DictionaryArrayType, StringArrayType)
 def cast_dict_str_arr_to_str_arr(context, builder, fromty, toty, val):
     """
