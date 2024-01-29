@@ -21,6 +21,7 @@ import org.apache.calcite.linq4j.function.Functions;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.Prepare;
+import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.type.DynamicRecordType;
 import org.apache.calcite.rel.type.RelCrossType;
 import org.apache.calcite.rel.type.RelDataType;
@@ -512,17 +513,77 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     return false;
   }
 
+
   private static SqlNode expandExprFromJoin(SqlJoin join,
-      SqlIdentifier identifier, SelectScope scope) {
-    if (join.getConditionType() != JoinConditionType.USING) {
-      return identifier;
+      SqlIdentifier identifier, JoinScope scope, SqlValidatorImpl validator) {
+
+    // BODO CHANGE:
+    // Several changes were made to this function to enable properly expanding
+    // USING columns.
+
+    //List of joinChildren that have not yet been traversed when looking for instances of identifier
+    final List<ScopeChild> joinChildrenToBeTraversed = new ArrayList<>(requireNonNull(scope, "scope").children);
+    //List of possible expansions of the input identifier
+    final List<SqlNode> qualifiedNode = new ArrayList<>();
+
+    // Recursively visit both the left and right subjoins (if they exist)
+    if ((join.getLeft() instanceof SqlJoin)) {
+      SqlJoin leftSubJoin = (SqlJoin) join.getLeft();
+      //Join scope is a ListScope, so this should always be valid
+      JoinScope leftSubJoinScope = (JoinScope) validator.getJoinScope(leftSubJoin);
+      SqlNode unExpandedOutput = expandExprFromJoin(leftSubJoin, identifier, leftSubJoinScope, validator);
+      if (identifier != unExpandedOutput) {
+        qualifiedNode.add(unExpandedOutput);
+        // Remove the already traversed children from joinChildrenToBeTraversed
+        for (int i = 0; i < leftSubJoinScope.getChildren().size(); i++){
+          //Left children are always first
+          joinChildrenToBeTraversed.remove(0);
+        }
+      }
+    }
+    if ((join.getRight() instanceof SqlJoin)) {
+      SqlJoin rightSubJoin = (SqlJoin) join.getRight();
+      //Join scope is a ListScope, so this should always be valid
+      JoinScope rightSubJoinScope = (JoinScope) validator.getJoinScope(rightSubJoin);
+      identifier = (SqlIdentifier) expandExprFromJoin(rightSubJoin, identifier, rightSubJoinScope, validator);
+      SqlNode unExpandedOutput = expandExprFromJoin(rightSubJoin, identifier, rightSubJoinScope, validator);
+      if (identifier != unExpandedOutput){
+        qualifiedNode.add(unExpandedOutput);
+        for (int i = 0; i < rightSubJoinScope.getChildren().size(); i++){
+          //right children are always last
+          joinChildrenToBeTraversed.remove(joinChildrenToBeTraversed.size() - 1);
+        }
+      }
     }
 
+    if (join.getConditionType() != JoinConditionType.USING) {
+      //Confirm that the identifier does not exist on both sides of the table
+
+      for (ScopeChild child : joinChildrenToBeTraversed) {
+        if (child.namespace.getRowType().getFieldNames().contains(identifier.getSimple())) {
+          qualifiedNode.add(identifier);
+        }
+      }
+
+      if (qualifiedNode.size() > 1) {
+        throw validator.newValidationError(identifier, RESOURCE.columnAmbiguous(identifier.toString()));
+      } else if (qualifiedNode.size() == 1) {
+        return qualifiedNode.get(0);
+      } else {
+        //This could be an alias that has yet to be expanded, so just return the input identifier
+        // and let the later code throw the error if needed
+        return identifier;
+      }
+    }
+
+    // USING join case.
+    // Iterate through all of the children that we haven't already visited,
+    // and find all instances of the identifier.
     for (String name
         : SqlIdentifier.simpleNames((SqlNodeList) getCondition(join))) {
       if (identifier.getSimple().equals(name)) {
-        final List<SqlNode> qualifiedNode = new ArrayList<>();
-        for (ScopeChild child : requireNonNull(scope, "scope").children) {
+
+        for (ScopeChild child : joinChildrenToBeTraversed) {
           if (child.namespace.getRowType().getFieldNames().contains(name)) {
             final SqlIdentifier exp =
                 new SqlIdentifier(
@@ -532,12 +593,20 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           }
         }
 
+        //If we have more than two instances, we have an ambiguous column.
+        if (qualifiedNode.size() != 2){
+          throw validator.newValidationError(identifier, RESOURCE.columnAmbiguous(identifier.toString()));
+        }
+
+
+        //coalesce is necessary to properly handle outer joins.
         assert qualifiedNode.size() == 2;
         return SqlStdOperatorTable.AS.createCall(SqlParserPos.ZERO,
             SqlStdOperatorTable.COALESCE.createCall(SqlParserPos.ZERO,
                 qualifiedNode.get(0),
                 qualifiedNode.get(1)),
             new SqlIdentifier(name, SqlParserPos.ZERO));
+
       }
     }
 
@@ -545,7 +614,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // since it is always left-deep join.
     final SqlNode node = join.getLeft();
     if (node instanceof SqlJoin) {
-      return expandExprFromJoin((SqlJoin) node, identifier, scope);
+      return expandExprFromJoin((SqlJoin) node, identifier, scope, validator);
     } else {
       return identifier;
     }
@@ -595,7 +664,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       return selectItem;
     }
 
-    return expandExprFromJoin((SqlJoin) from, identifier, scope);
+    assert validator.getJoinScope(from) instanceof JoinScope: "Error in expandCommonColumn: scope is not a JoinScope";
+    return expandExprFromJoin((SqlJoin) from, identifier, (JoinScope) validator.getJoinScope(from), validator);
   }
 
   private static void validateQualifiedCommonColumn(SqlJoin join,
