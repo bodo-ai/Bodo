@@ -895,18 +895,34 @@ class NestedLoopJoinState : public JoinState {
                     probe_parallel_, output_batch_size_,
                     sync_iter_),  // NestedLoopJoin is only used when
                                   // n_keys is 0
-          build_table_buffer(std::make_unique<ChunkedTableBuilder>(
-              build_arr_c_types, build_arr_array_types,
-              build_table_dict_builders,
-              DEFAULT_BLOCK_SIZE_BYTES /
-                  get_row_bytes(
-                      build_arr_array_types,
-                      build_arr_c_types),  // each chunk has a single block
-              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES)),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
         this->sync_iter =
             this->sync_iter == -1 ? DEFAULT_SYNC_ITERS : this->sync_iter;
+
+        // Use the default block size unless the env var is set.
+        // The env var is primarily used for testing purposes for verifying
+        // correct behavior when there are multiple chunks in the build
+        // table buffer. Setting the env var to a small value allows us to
+        // do this even with a small input.
+        int64_t block_size_bytes = DEFAULT_BLOCK_SIZE_BYTES;
+        char* block_size = std::getenv("BODO_CROSS_JOIN_BLOCK_SIZE");
+        if (block_size) {
+            block_size_bytes = std::stoi(block_size);
+        }
+        if (block_size_bytes <= 0) {
+            throw std::runtime_error(
+                "NestedLoopJoinState: block_size_bytes <= 0");
+        }
+        size_t chunk_size = std::ceil(
+            ((float)(block_size_bytes)) /
+            ((float)get_row_bytes(this->build_arr_array_types,
+                                  this->build_arr_c_types)));  // each chunk has
+                                                               // a single block
+        this->build_table_buffer = std::make_unique<ChunkedTableBuilder>(
+            this->build_arr_c_types, this->build_arr_array_types,
+            this->build_table_dict_builders, chunk_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 
     tracing::ResumableEvent join_event;
@@ -918,6 +934,22 @@ class NestedLoopJoinState : public JoinState {
      *
      */
     void FinalizeBuild() override;
+
+    /**
+     * @brief Process a probe chunk and add the output
+     * to the output buffer.
+     *
+     * NOTE: Must be called on all ranks when doing a outer
+     * join on the probe side (i.e. either full-outer or probe-outer)
+     * and the build side is distributed.
+     *
+     * @param probe_table The probe table chunk to process.
+     * @param build_kept_cols The build table columns to keep in the output.
+     * @param probe_kept_cols The probe table columns to keep in the output.
+     */
+    void ProcessProbeChunk(std::shared_ptr<table_info> probe_table,
+                           const std::vector<uint64_t>& build_kept_cols,
+                           const std::vector<uint64_t>& probe_kept_cols);
 };
 
 /**
