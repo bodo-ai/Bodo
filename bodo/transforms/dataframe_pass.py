@@ -2435,6 +2435,16 @@ class DataFramePass:
         func_text += f"  out_idx_arr_all = bodo.libs.array_kernels.concat(arrs_index)\n"
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, out_idx_arr_all), ({index_names},), None)\n"
 
+        # Unset global flag of output dictionary-encoded arrays in case map_func
+        # kernel reuses input dictionaries which are global after shuffle.
+        # The ranks with empty data won't have the global flag on which causes a hang
+        # in reverse shuffle below.
+        # See https://bodo.atlassian.net/browse/BSE-2566
+        for i in range(n_out_cols):
+            func_text += (
+                f"  out_arr{i} = bodo.libs.dict_arr_ext.unset_dict_global(out_arr{i})\n"
+            )
+
         # reorder output to match input if UDF Index is same as input
         func_text += "  if _is_parallel:\n"
         # synchronize since some ranks may avoid mutation due to corner cases
