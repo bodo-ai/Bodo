@@ -1,6 +1,8 @@
 import math
 import random
 import string
+from contextlib import contextmanager
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -483,14 +485,41 @@ nested_loop_join_test_params = [
 ]
 
 
+@contextmanager
+def set_cross_join_block_size(block_size_bytes: Optional[int] = None):
+    """
+    Set the block size for streaming nested loop join's block size.
+    If set to None, we unset the env var and let it use the default
+    (typically 500KiB).
+
+    Args:
+        block_size_bytes (Optional[int], optional): Block size to use.
+            Defaults to None.
+    """
+    with temp_env_override(
+        {
+            "BODO_CROSS_JOIN_BLOCK_SIZE": (
+                str(block_size_bytes) if block_size_bytes is not None else None
+            )
+        }
+    ):
+        yield
+
+
 @pytest_mark_snowflake
 @pytest.mark.parametrize(
     "build_outer,probe_outer,expected_df",
     nested_loop_join_test_params,
 )
 @pytest.mark.parametrize("use_dict_encoding", [True, False])
+@pytest.mark.parametrize("block_size", [None, 16])
 def test_nested_loop_join(
-    build_outer, probe_outer, expected_df, use_dict_encoding, memory_leak_check
+    build_outer,
+    probe_outer,
+    expected_df,
+    use_dict_encoding,
+    block_size,
+    memory_leak_check,
 ):
     """
     Test streaming nested loop join
@@ -590,7 +619,8 @@ def test_nested_loop_join(
     )
     try:
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
-        out_df = test_nested_loop_join(conn_str)
+        with set_cross_join_block_size(block_size):
+            out_df = test_nested_loop_join(conn_str)
     finally:
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
             saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
@@ -607,7 +637,10 @@ def test_nested_loop_join(
 
 @pytest_mark_snowflake
 @pytest.mark.parametrize("use_dict_encoding", [True, False])
-def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_check):
+@pytest.mark.parametrize("block_size", [None, 16])
+def test_broadcast_nested_loop_join(
+    use_dict_encoding, broadcast, block_size, memory_leak_check
+):
     """
     Test streaming broadcast nested loop join
     """
@@ -721,7 +754,7 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
     )
     try:
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
-        with set_broadcast_join(broadcast):
+        with set_broadcast_join(broadcast), set_cross_join_block_size(block_size):
             out_df = test_nested_loop_join(conn_str)
     finally:
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
