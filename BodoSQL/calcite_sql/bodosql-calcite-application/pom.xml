@@ -591,6 +591,10 @@
                         <version>5.9.2</version>
                     </dependency>
                 </dependencies>
+                <configuration>
+                    <forkCount>3</forkCount>
+                    <reuseForks>false</reuseForks>
+                </configuration>
             </plugin>
         </plugins>
     </build>
