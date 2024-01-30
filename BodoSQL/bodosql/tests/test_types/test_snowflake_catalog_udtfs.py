@@ -616,14 +616,10 @@ def test_exploding_function(test_db_snowflake_catalog, memory_leak_check):
         impl(bc, query)
 
 
-@pytest_mark_one_rank
 def test_exploding_function_param(test_db_snowflake_catalog, memory_leak_check):
     """
-    Tests that a UDTF containing a row exploding function and a named param fails
-    to inline due to an unsupported correlation.
-
-    Note: Snowflake produces a message "Unsupported subquery type cannot be evaluated"
-    for the same reason.
+    Tests that a UDTF containing a row exploding function and a named param
+    can be inlined.
     """
 
     def impl(bc, query):
