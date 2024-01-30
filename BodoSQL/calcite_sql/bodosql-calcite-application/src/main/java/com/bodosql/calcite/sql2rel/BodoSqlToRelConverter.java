@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.ViewExpanders;
 import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelCollation;
@@ -36,13 +37,16 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
+import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
+import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.util.SqlBasicVisitor;
@@ -50,6 +54,7 @@ import org.apache.calcite.sql.validate.ListScope;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.SqlQualified;
 import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorException;
 import org.apache.calcite.sql.validate.SqlValidatorNamespace;
@@ -267,20 +272,12 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
           SqlUserDefinedFunction udf = (SqlUserDefinedFunction) call.getOperator();
           Function function = udf.getFunction();
           if (function instanceof SnowflakeUserDefinedFunction) {
-            SnowflakeUserDefinedFunction snowflakeUdf = (SnowflakeUserDefinedFunction) function;
-            Resources.ExInst<SqlValidatorException> exInst = snowflakeUdf.errorOrWarn();
-            if (exInst != null) {
-              throw validator.newValidationError(expr, exInst);
-            }
-            // Expand the call to add default values.
-            SqlCall extendedCall = new SqlCallBinding(validator, scope, call).permutedCall();
-            Resources.ExInst<SqlValidatorException> defaultExInst =
-                snowflakeUdf.errorOnDefaults(extendedCall.getOperandList());
-            if (defaultExInst != null) {
-              throw validator.newValidationError(expr, defaultExInst);
-            }
+            SnowflakeUserDefinedFunction snowflakeScalarUdf =
+                (SnowflakeUserDefinedFunction) function;
+            SqlCall extendedCall =
+                validateSnowflakeUDFOperands(call, snowflakeScalarUdf, validator, scope);
             // Construct parameter type information.
-            List<FunctionParameter> parameters = snowflakeUdf.getParameters();
+            List<FunctionParameter> parameters = snowflakeScalarUdf.getParameters();
             List<SqlNode> operands = extendedCall.getOperandList();
             List<String> names = new ArrayList<>();
             List<RexNode> arguments = new ArrayList<>();
@@ -295,7 +292,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
               arguments.add(convertedOperand);
             }
             // Get the expected return type for casting the output
-            RelDataType returnType = snowflakeUdf.getReturnType(typeFactory);
+            RelDataType returnType = snowflakeScalarUdf.getReturnType(typeFactory);
             // Generate correlated variables in case we have a query that references
             // the input row.
             CorrMapVisitor visitor = new CorrMapVisitor();
@@ -306,8 +303,8 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             List<RexNode> correlatedArguments =
                 arguments.stream().map(x -> x.accept(replacer)).collect(Collectors.toList());
             return functionExpander.expandFunction(
-                snowflakeUdf.getBody(),
-                snowflakeUdf.getFunctionPath(),
+                snowflakeScalarUdf.getBody(),
+                snowflakeScalarUdf.getFunctionPath(),
                 names,
                 arguments,
                 correlatedArguments,
@@ -441,5 +438,76 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       }
       return new BodoBlackboard(scope, finalMap, top);
     }
+  }
+
+  /**
+   * Handle converting table function calls from SQL nodes to RelNodes. This currently only provides
+   * support for inlining Snowflake UDTFs.
+   *
+   * @param bb The blackboard used the convert expressions.
+   * @param call The SQLCall.
+   */
+  @Override
+  protected void convertCollectionTable(Blackboard bb, SqlCall call) {
+    final SqlOperator operator = call.getOperator();
+    if (operator instanceof SqlUserDefinedTableFunction) {
+      SqlUserDefinedTableFunction udf = (SqlUserDefinedTableFunction) call.getOperator();
+      Function function = udf.getFunction();
+      if (udf instanceof SqlUserDefinedTableFunction) {
+        replaceSubQueries(bb, call, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
+        SnowflakeUserDefinedTableFunction snowflakeTableUdf =
+            (SnowflakeUserDefinedTableFunction) function;
+        SqlCall extendedCall =
+            validateSnowflakeUDFOperands(call, snowflakeTableUdf, validator, bb.scope);
+        List<String> names =
+            snowflakeTableUdf.getParameters().stream()
+                .map(x -> x.getName())
+                .collect(Collectors.toList());
+        List<RexNode> arguments =
+            extendedCall.getOperandList().stream()
+                .map(x -> bb.convertExpression(x))
+                .collect(Collectors.toList());
+        RelNode expandedFunction =
+            functionExpander.expandTableFunction(
+                snowflakeTableUdf.getBody(),
+                snowflakeTableUdf.getFunctionPath(),
+                names,
+                arguments,
+                snowflakeTableUdf.getRowType(typeFactory, List.of()),
+                cluster);
+        bb.setRoot(expandedFunction, true);
+        return;
+      }
+    }
+    super.convertCollectionTable(bb, call);
+  }
+
+  /**
+   * Perform the necessary error checks on a Snowflake User defined function and return the fully
+   * expanded SQLOperands
+   *
+   * @param call The SQLCall expression we aim to expand.
+   * @param snowflakeUdf The Snowflake UDF operator.
+   * @param validator The validator used to validate the call.
+   * @param scope The scope for evaluating the call.
+   * @return The expanded SQLOperands that insert any values like defaults.
+   */
+  private static SqlCall validateSnowflakeUDFOperands(
+      SqlCall call,
+      SnowflakeUserDefinedBaseFunction snowflakeUdf,
+      SqlValidator validator,
+      SqlValidatorScope scope) {
+    Resources.ExInst<SqlValidatorException> exInst = snowflakeUdf.errorOrWarn();
+    if (exInst != null) {
+      throw validator.newValidationError(call, exInst);
+    }
+    // Expand the call to add default values.
+    SqlCall extendedCall = new SqlCallBinding(validator, scope, call).permutedCall();
+    Resources.ExInst<SqlValidatorException> defaultExInst =
+        snowflakeUdf.errorOnDefaults(extendedCall.getOperandList());
+    if (defaultExInst != null) {
+      throw validator.newValidationError(call, defaultExInst);
+    }
+    return extendedCall;
   }
 }

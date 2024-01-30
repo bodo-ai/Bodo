@@ -2499,6 +2499,13 @@ SqlNode TableRef3(ExprContext exprContext, boolean lateral) :
         [ tableRef = Snapshot(tableRef) ]
         [ tableRef = MatchRecognize(tableRef) ]
     |
+        LOOKAHEAD(3)
+        <LATERAL> { lateral = true; }
+        <LPAREN>
+        tableRef = TableFunctionCall()
+        <RPAREN>
+        tableRef = addLateral(tableRef, lateral)
+    |
         LOOKAHEAD(2)
         [ <LATERAL> { lateral = true; } ]
         tableRef = ParenthesizedExpression(exprContext)
@@ -2756,7 +2763,7 @@ SqlNode TableFunctionCall() :
             return SqlBodoParserUtil.createSplitToTable(pos, s.end(this), list);
         }
     |
-        // Bodo Change: Add support for FLATTEN as a builtin table function with <TABLE>
+        // Bodo Change: Add support for FLATTEN as a builtin table function without <TABLE>
         <FLATTEN> {s = span(); }
         {
             funcName = "FLATTEN";
