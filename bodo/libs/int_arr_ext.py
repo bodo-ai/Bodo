@@ -564,7 +564,9 @@ def int_arr_setitem(A, idx, val):
     # Float currently. Numpy allows floats.
     # See test_bitwise.py::test_bitshiftright[vector_scalar_uint64_case]
     # TODO(Nick): Verify inputs can be safely cast to an integer
-    is_scalar = isinstance(val, (types.Integer, types.Boolean, types.Float))
+    is_scalar = isinstance(
+        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+    )
 
     # scalar case
     if isinstance(idx, types.Integer):
