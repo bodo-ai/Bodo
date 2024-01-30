@@ -511,7 +511,9 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
 
     typ_err_msg = f"setitem for FloatingArray with indexing type {idx} received an incorrect 'value' type {val}."
 
-    is_scalar = isinstance(val, (types.Integer, types.Boolean, types.Float))
+    is_scalar = isinstance(
+        val, (types.Integer, types.Boolean, types.Float, bodo.Decimal128Type)
+    )
 
     # scalar case
     if isinstance(idx, types.Integer):
@@ -522,14 +524,6 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
             return impl_scalar
-
-        elif isinstance(val, bodo.Decimal128Type):
-
-            def impl_decimal(A, idx, val):  # pragma: no cover
-                A._data[idx] = float(val)
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
-
-            return impl_decimal
 
         else:
             raise BodoError(typ_err_msg)

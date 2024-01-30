@@ -5,6 +5,7 @@
 #include <numpy/arrayobject.h>
 #include <iostream>
 
+#include <arrow/compute/cast.h>
 #include <fmt/format.h>
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
@@ -78,6 +79,44 @@ double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     auto high = static_cast<uint64_t>(val.high);
     auto low = static_cast<uint64_t>(val.low);
     return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+}
+
+/**
+ * @brief Convert decimal value to int64 (unsafe cast)
+ *
+ * @param val input decimal value
+ * @param precision input's precision
+ * @param scale input's scale
+ * @return int64_t input converted to int64
+ */
+int64_t decimal_to_int64_py_entry(decimal_value val, uint8_t precision,
+                                  uint8_t scale) {
+    try {
+        // NOTE: using cast to allow unsafe cast (Rescale/ToInteger may throw
+        // data loss error)
+        arrow::Decimal128 arrow_decimal(val.high, val.low);
+        arrow::Decimal128Scalar val_scalar(arrow_decimal,
+                                           arrow::decimal128(precision, scale));
+
+        auto res = arrow::compute::Cast(val_scalar, arrow::int64(),
+                                        arrow::compute::CastOptions::Unsafe(),
+                                        bodo::default_buffer_exec_context());
+
+        if (!res.ok()) {
+            std::string err_msg = "Arrow decimal to int64 failed for " +
+                                  arrow_decimal.ToString(scale) + "\n";
+            throw std::runtime_error(err_msg);
+        }
+
+        std::shared_ptr<arrow::Int64Scalar> out =
+            std::static_pointer_cast<arrow::Int64Scalar>(
+                res.ValueOrDie().scalar());
+
+        return out->value;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return 0;
+    }
 }
 
 decimal_value int64_to_decimal(int64_t value) {
@@ -332,6 +371,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, decimal_to_str);
     SetAttrStringFromVoidPtr(m, str_to_decimal);
     SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
+    SetAttrStringFromVoidPtr(m, decimal_to_int64_py_entry);
     SetAttrStringFromVoidPtr(m, int64_to_decimal);
 
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_py_entry);

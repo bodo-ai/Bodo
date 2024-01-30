@@ -8,7 +8,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
 
@@ -463,3 +463,30 @@ def test_decimal_comparison_error_checking():
 
     with pytest.raises(BodoError, match=r"Invalid decimal comparison with"):
         bodo.jit(impl)(arr, other)
+
+
+@pytest_mark_one_rank
+def test_setitem_cast_decimal(memory_leak_check):
+    """Test automatic cast of decimal to int/float in array setitem"""
+
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    # Int case
+    arr = pd.array([1, 2, 3, 4, 5], "Int64")
+    val = Decimal("123")
+    # Pandas doesn't support Decimal setitem yet so create output manually
+    out = arr.copy()
+    out[2] = int(val)
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
+
+    # Float case
+    arr = pd.array([1.2, 2.3, 3.1, 4.1, 5.4], "Float32")
+    val = Decimal("12.3")
+    # Pandas doesn't support Decimal setitem yet so create output manually
+    out = arr.copy()
+    out[2] = float(val)
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
