@@ -154,6 +154,20 @@ $$
     select sum(QUERY_PARAM_FUNCTION(A) + N) from COUNT_TABLE
 $$
 
+REPEAT_FUNCTION:
+
+create or replace function repeat_function(s VARCHAR) returns VARCHAR as
+$$
+repeat(s, 2)
+$$
+
+REPEAT_FUNCTION:
+
+create or replace function repeat_function(s VARCHAR, n NUMBER) returns VARCHAR as
+$$
+repeat(s, n)
+$$
+
 In our azure account we have also defined the following UDFs:
 
 PYTHON_ADD_ONE:
@@ -527,7 +541,7 @@ def test_unsupported_udf_multiple_definitions(
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO\\. BodoSQL only supports Snowflake UDFs with a single definition\\. Found 2 definitions",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO\\. BodoSQL only supports Snowflake UDFs with a definition for a given number of arguments\\. Found multiple definitions that accept 1 argument\\(s\\)\\.",
     ):
         impl(bc, query)
 
@@ -1296,6 +1310,36 @@ def test_nested_correlation_function_udf(test_db_snowflake_catalog, memory_leak_
         py_output=pd.DataFrame(
             {"OUTPUT": [234, 288, 342, 396, 450, 504, 558, 612, 666, 720]}
         ),
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_multiple_definitions_udfs(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that a UDF with multiple definitions that are distinct in the total
+    number of arguments can be successfully inlined.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query1 = "select repeat_function('abc') as output"
+    check_func(
+        impl,
+        (bc, query1),
+        py_output=pd.DataFrame({"OUTPUT": ["abcabc"]}),
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query2 = "select repeat_function('abc', 4) as output"
+    check_func(
+        impl,
+        (bc, query2),
+        py_output=pd.DataFrame({"OUTPUT": ["abcabcabcabc"]}),
         check_dtype=False,
         sort_output=True,
         reset_index=True,
