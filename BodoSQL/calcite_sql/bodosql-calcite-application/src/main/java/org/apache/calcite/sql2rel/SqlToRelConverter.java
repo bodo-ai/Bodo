@@ -1200,10 +1200,12 @@ public class SqlToRelConverter {
     bb.setRoot(r, false);
   }
 
-  private void replaceSubQueries(
-      final Blackboard bb,
-      final SqlNode expr,
-      RelOptUtil.Logic logic) {
+  // Bodo Change: Make protected so we can properly extend
+  // convertCollectionTable.
+  protected void replaceSubQueries(
+          final Blackboard bb,
+          final SqlNode expr,
+          RelOptUtil.Logic logic) {
     replaceSubQueries(bb, expr, logic, null);
   }
 

@@ -49,6 +49,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
+import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNodeList;
@@ -928,19 +929,34 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         int numOptional = functionInfo.numOptional;
         String returns = functionInfo.returns;
         String body = functionInfo.body;
-        SnowflakeUserDefinedFunction function =
-            SnowflakeUserDefinedFunction.create(
-                functionPath,
-                args,
-                numOptional,
-                returns,
-                body,
-                isTable,
-                isSecure,
-                isExternal,
-                language,
-                isMemoizable,
-                tzInfo);
+        final org.apache.calcite.schema.Function function;
+        if (isTable) {
+          function =
+              SnowflakeUserDefinedTableFunction.create(
+                  functionPath,
+                  args,
+                  numOptional,
+                  returns,
+                  body,
+                  isSecure,
+                  isExternal,
+                  language,
+                  isMemoizable,
+                  tzInfo);
+        } else {
+          function =
+              SnowflakeUserDefinedFunction.create(
+                  functionPath,
+                  args,
+                  numOptional,
+                  returns,
+                  body,
+                  isSecure,
+                  isExternal,
+                  language,
+                  isMemoizable,
+                  tzInfo);
+        }
         functions.add(function);
       }
     } catch (SQLException e) {

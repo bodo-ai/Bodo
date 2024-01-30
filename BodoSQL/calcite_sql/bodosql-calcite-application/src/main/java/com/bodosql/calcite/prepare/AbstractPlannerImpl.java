@@ -367,14 +367,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
   }
 
   /**
-   * Inline the body of a function. This API is responsible for parsing the function body as a query
-   * and validating the contents query for type stability.
-   *
-   * <p>This API is still under active development, so the return type is not yet finalized and
-   * additional arguments are likely to be added.
-   *
-   * <p>Currently, this function can only fully handle bodies that are expressions. It can do some
-   * error checking for functions with query bodies, but cannot inline those yet.
+   * Inline the body of a function. This API is responsible for parsing the function body,
+   * validating its contents for type stability, and compiling the query body into a scalar sub
+   * query.
    *
    * @param functionBody Body of the function.
    * @param functionPath Path of the function.
@@ -538,6 +533,41 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       @NonNull RelDataType returnType,
       @NonNull RelOptCluster cluster)
       throws SqlParseException {
+    RelNode compiledResult =
+        queryBodyToRelNode(functionBody, functionPath, paramNames, arguments, cluster, null);
+    RexSubQuery subQuery = RexSubQuery.scalar(compiledResult);
+    // Note: We can't use rexBuilder.ensureType because it will omit matching
+    // nullability for literals.
+    if (subQuery.getType().equals(returnType)) {
+      return subQuery;
+    } else {
+      return cluster.getRexBuilder().makeCast(returnType, subQuery, true, false);
+    }
+  }
+
+  /**
+   * Expand the contents of a UDF or UDTF with a query body to a RelNode. Depending on the caller
+   * additional work must be done to provide the corresponding type information.
+   *
+   * @param functionBody Body of the function.
+   * @param functionPath Path of the function.
+   * @param paramNames The name of the function parameters.
+   * @param arguments The RexNode argument inputs to the function these have replaced an input
+   *     references with field accesses to a correlation variable.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
+   * @param outputType The output type for which the table must be cast. If null then no casting is
+   *     inserted.
+   * @return The compiled output as a RelNode.
+   */
+  private RelNode queryBodyToRelNode(
+      @NonNull String functionBody,
+      @NonNull ImmutableList<@NonNull String> functionPath,
+      @NonNull List<@NonNull String> paramNames,
+      @NonNull List<@NonNull RexNode> arguments,
+      @NonNull RelOptCluster cluster,
+      @Nullable RelDataType outputType)
+      throws SqlParseException {
     SqlParser parser = SqlParser.create(functionBody, parserConfig);
     final SqlNode node;
     List<SqlNode> stmtList = parser.parseStmtList();
@@ -575,6 +605,13 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
             this, validator, catalogReader, cluster, convertletTable, config, this, argMap);
 
     RelRoot outputRoot = sqlToRelConverter.convertQuery(validatedNode, false, false);
+    // Cast the output type if necessary.
+    if (outputType != null) {
+      outputRoot =
+          RelRoot.of(outputRoot.rel, outputType, outputRoot.kind)
+              .withCollation(outputRoot.collation)
+              .withHints(outputRoot.hints);
+    }
     final RelRoot outputRoot2 =
         outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
     RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
@@ -584,14 +621,68 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       arg.accept(finder);
     }
     Set<CorrelationId> correlationIds = finder.getSeenIds();
-    RelNode updatedResult = removeNestedSubQueries(result, correlationIds);
-    RexSubQuery subQuery = RexSubQuery.scalar(updatedResult);
-    // Note: We can't use rexBuilder.ensureType because it will omit matching
-    // nullability for literals.
-    if (subQuery.getType().equals(returnType)) {
-      return subQuery;
-    } else {
-      return cluster.getRexBuilder().makeCast(returnType, subQuery, true, false);
+    return removeNestedSubQueries(result, correlationIds);
+  }
+
+  /**
+   * Inline the body of a function. This API is responsible for parsing the function body,
+   * validating its contents for type stability, and compiling the query body into a RelNode tree.
+   *
+   * @param functionBody Body of the function.
+   * @param functionPath Path of the function.
+   * @param paramNames The name of the function parameters.
+   * @param arguments The RexNode argument inputs to the function.
+   * @param returnType The expected function return type.
+   * @param cluster The cluster used for generating Rex/RelNodes. This is shared with the caller so
+   *     correlation ids are consistently updated.
+   * @return The body of the function as a RexNode. This should either be a scalar sub-query or a
+   *     simple expression.
+   */
+  public RelNode expandTableFunction(
+      @NonNull String functionBody,
+      @NonNull ImmutableList<@NonNull String> functionPath,
+      @NonNull List<@NonNull String> paramNames,
+      @NonNull List<@NonNull RexNode> arguments,
+      @NonNull RelDataType returnType,
+      @NonNull RelOptCluster cluster) {
+    // Base to use for several exception conditions.
+    String baseErrorMessage =
+        String.format(
+            Locale.ROOT,
+            "Unable to resolve function: %s.%s.%s.",
+            functionPath.get(0),
+            functionPath.get(1),
+            functionPath.get(2));
+    if (inProgressFunctionExpansion.contains(functionPath)) {
+      // Check the function to avoid recursion causing an infinite loop.
+      // Note: This code path should not be reachable because SF can detect cycles
+      // and disallows recursive function, but we add this as defensive programming.
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "%s Detected that function %s.%s.%s is a recursive or mutually recursive function,"
+                  + " which BodoSQL cannot support yet.",
+              baseErrorMessage,
+              functionPath.get(0),
+              functionPath.get(1),
+              functionPath.get(2));
+      throw new RuntimeException(msg);
+    }
+    // Record the function to avoid recursion causing an infinite loop.
+    inProgressFunctionExpansion.add(functionPath);
+    try {
+      return queryBodyToRelNode(
+          functionBody, functionPath, paramNames, arguments, cluster, returnType);
+    } catch (Exception e) {
+      // If we have failed to inline then clear the in progress functions to ensure we can't impact
+      // future queries
+      // or tests if the planner is somehow reused.
+      inProgressFunctionExpansion.clear();
+      // Wrap an exceptions with an indication that we couldn't inline the UDF.
+      throw new RuntimeException(baseErrorMessage, e);
+    } finally {
+      // Remove from the in progress functions
+      inProgressFunctionExpansion.remove(functionPath);
     }
   }
 
