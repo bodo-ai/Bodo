@@ -42,6 +42,7 @@ ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
+ll.add_symbol("decimal_to_int64", decimal_ext.decimal_to_int64_py_entry)
 ll.add_symbol("int64_to_decimal", decimal_ext.int64_to_decimal)
 
 ll.add_symbol("arrow_compute_cmp_py_entry", decimal_ext.arrow_compute_cmp_py_entry)
@@ -473,6 +474,48 @@ def overload_float_ctor_from_dec(dec):
 
     def impl(dec):  # pragma: no cover
         return decimal_to_float64(dec)
+
+    return impl
+
+
+@intrinsic
+def decimal_to_int64(typingctx, val_t):
+    """convert decimal128 to int"""
+    assert isinstance(val_t, Decimal128Type), "Decimal128Type expected"
+
+    def codegen(context, builder, sig, args):
+        (val,) = args
+        precision = context.get_constant(types.int8, sig.args[0].precision)
+        scale = context.get_constant(types.int8, sig.args[0].scale)
+
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(128),
+                lir.IntType(8),
+                lir.IntType(8),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="decimal_to_int64"
+        )
+        ret = builder.call(fn, [val, precision, scale])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.int64(val_t), codegen
+
+
+@overload(int)
+def overload_int_ctor_from_dec(dec):
+    """
+    Convert a decimal value to an int value
+    """
+    if not isinstance(dec, Decimal128Type):  # pragma: no cover
+        return
+
+    def impl(dec):  # pragma: no cover
+        return decimal_to_int64(dec)
 
     return impl
 
@@ -935,6 +978,37 @@ def decimal_arr_getitem(A, ind):
     # We only expect to reach this case if more idx options are added.
     raise BodoError(
         f"getitem for DecimalArray with indexing type {ind} not supported."
+    )  # pragma: no cover
+
+
+@overload(operator.setitem, no_unliteral=True)
+def np_arr_setitem_decimal(A, idx, val):
+    """Make sure decimal scalar can be stored in int/float arrays by casting to
+    int/float
+    """
+    if not (
+        isinstance(A, types.Array)
+        and isinstance(idx, types.Integer)
+        and isinstance(val, Decimal128Type)
+    ):
+        return
+
+    if isinstance(A.dtype, types.Float):
+
+        def impl_decimal_setitem_float(A, idx, val):  # pragma: no cover
+            A[idx] = float(val)
+
+        return impl_decimal_setitem_float
+
+    if isinstance(A.dtype, types.Integer):
+
+        def impl_decimal_setitem_int(A, idx, val):  # pragma: no cover
+            A[idx] = int(val)
+
+        return impl_decimal_setitem_int
+
+    raise BodoError(
+        f"setitem for array type {A} with indexing type {idx} and scalar type {val} not supported."
     )  # pragma: no cover
 
 
