@@ -81,6 +81,12 @@
       <artifactId>iceberg-nessie</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-snowflake -->
+    <dependency>
+      <groupId>org.apache.iceberg</groupId>
+      <artifactId>iceberg-snowflake</artifactId>
+      <version>${iceberg.version}</version>
+    </dependency>
 
     <!-- Hive Catalog Runtime Dependencies -->
     <!-- https://mvnrepository.com/artifact/org.apache.hive/hive-standalone-metastore -->
