@@ -187,7 +187,7 @@ public interface BodoSQLColumn {
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision);
           break;
         case TZ_AWARE_TIMESTAMP:
-          assert tzInfo != null;
+          assert tzInfo != null : "Internal error: TZ_AWARE_TIMESTAMP must have non-null TzInfo";
           temp = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo, precision);
           break;
         case TIMEDELTA:
