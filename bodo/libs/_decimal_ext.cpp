@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include <arrow/compute/cast.h>
+#include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
@@ -131,6 +132,17 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
                          uint8_t* null_bitmap);
 void unbox_decimal(PyObject* obj, uint8_t* data);
+
+PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
+    // convert input to Arrow scalar
+    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    std::shared_ptr<arrow::Decimal128Scalar> scalar =
+        std::make_shared<arrow::Decimal128Scalar>(
+            arrow_decimal, arrow::decimal128(precision, scale));
+
+    // convert Arrow C++ to PyArrow
+    return arrow::py::wrap_scalar(scalar);
+}
 
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale);
@@ -367,6 +379,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, box_decimal_array);
     SetAttrStringFromVoidPtr(m, unbox_decimal_array);
     SetAttrStringFromVoidPtr(m, unbox_decimal);
+    SetAttrStringFromVoidPtr(m, box_decimal);
 
     SetAttrStringFromVoidPtr(m, decimal_to_str);
     SetAttrStringFromVoidPtr(m, str_to_decimal);
@@ -442,12 +455,12 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 }
 
 /**
- * @brief unbox a single Decimal object into a native Decimal128Type
+ * @brief unbox a PyArrow Decimal128Scalar object into a native Decimal128Type
  *
- * @param obj single decimal object
- * @param data pointer to 128-bit data
+ * @param pa_decimal_obj PyArrow Decimal128Scalar input
+ * @param data pointer to 128-bit data for Decimal128Type
  */
-void unbox_decimal(PyObject* obj, uint8_t* data_ptr) {
+void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
 #undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -462,23 +475,15 @@ void unbox_decimal(PyObject* obj, uint8_t* data_ptr) {
 
     auto gilstate = PyGILState_Ensure();
 
-    PyObject* decimal_mod = PyImport_ImportModule("decimal");
-    CHECK(decimal_mod, "importing decimal module failed");
-    PyObject* str_obj = PyObject_Str(obj);
-    CHECK(str_obj, "str(decimal) failed");
-    // extracting the 128 integer
-    arrow::Decimal128 d128, d128_18;
-    int32_t precision;
-    int32_t scale;
-    arrow::Status status = arrow::Decimal128::FromString(
-        (const char*)PyUnicode_DATA(str_obj), &d128, &precision, &scale);
-    CHECK(status.ok(), "decimal rescale faild");
-    // rescale decimal to 18 (default scale converting from Python)
-    CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, PY_DECIMAL_SCALE),
-                           "decimal rescale error", d128_18);
-    d128_18.ToBytes(data_ptr);
-    Py_DECREF(str_obj);
-    Py_DECREF(decimal_mod);
+    // unwrap pyarrow Decimal128Scalar to C++
+    std::shared_ptr<arrow::Scalar> scalar;
+    arrow::Result<std::shared_ptr<arrow::Scalar>> res =
+        arrow::py::unwrap_scalar(pa_decimal_obj);
+    CHECK_ARROW_AND_ASSIGN(res, "unwrap_scalar", scalar);
+
+    arrow::Decimal128 decimal_scalar =
+        std::static_pointer_cast<arrow::Decimal128Scalar>(scalar)->value;
+    decimal_scalar.ToBytes(data_ptr);
 
     PyGILState_Release(gilstate);
 }

@@ -15,6 +15,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -22,6 +23,7 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -38,6 +40,7 @@ from bodo.libs import decimal_ext
 
 ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
 ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
+ll.add_symbol("box_decimal", decimal_ext.box_decimal)
 ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
@@ -82,6 +85,17 @@ from bodo.utils.typing import (
 
 int128_type = types.Integer("int128", 128)
 
+int_to_decimal_precision = {
+    types.int8: 2,
+    types.int16: 4,
+    types.int32: 9,
+    types.int64: 18,
+    types.uint8: 2,
+    types.uint16: 4,
+    types.uint32: 9,
+    types.uint64: 19,
+}
+
 
 class Decimal128Type(types.Type):
     """data type for Decimal128 values similar to Arrow's Decimal128"""
@@ -96,6 +110,15 @@ class Decimal128Type(types.Type):
         self.scale = scale
         self.bitwidth = 128  # needed for using IntegerModel
 
+    def unify(self, typingctx, other):
+        """Allow casting int/decimal if scale is 0"""
+        if isinstance(other, types.Integer) and self.scale == 0:
+            other = types.unliteral(other)
+            # return integer if it's wider
+            if int_to_decimal_precision[other] >= self.precision:
+                return other
+            return self
+
 
 # For the processing of the data we have to put a precision and scale.
 # As it turn out when reading boxed data we may certainly have precision not 38
@@ -105,6 +128,12 @@ class Decimal128Type(types.Type):
 @typeof_impl.register(Decimal)
 def typeof_decimal_value(val, c):
     return Decimal128Type(38, 18)
+
+
+@typeof_impl.register(pa.Decimal128Scalar)
+def typeof_decimal_value(val, c):
+    t = val.type
+    return Decimal128Type(t.precision, t.scale)
 
 
 register_model(Decimal128Type)(models.IntegerModel)
@@ -520,16 +549,29 @@ def overload_int_ctor_from_dec(dec):
     return impl
 
 
+def to_pa_decimal_scalar(a):
+    """convert scalar 'a' to a PyArrow Decimal128Scalar if not already."""
+    if isinstance(a, pa.Decimal128Scalar):
+        return a
+
+    assert isinstance(a, Decimal), "to_pa_decimal_scalar: Decimal value expected"
+    return pa.scalar(a, pa.decimal128(38, 18))
+
+
 @unbox(Decimal128Type)
 def unbox_decimal(typ, val, c):
     """
-    Unbox a decimal.Decimal object into native Decimal128Type
-    typ = Decimal128Type(38, 18)
-    val is a Python object of type decimal.Decimal that is fed into
-    the function. We need to return a Decimal128Type data type.
-    Passing val as input to the function appears to be a correct move.
-
+    Unbox a PyArrow Decimal128Scalar or a decimal.Decimal object into native
+    Decimal128Type
     """
+
+    # val = to_pa_decimal_scalar(val)
+    to_pa_decimal_scalar_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(to_pa_decimal_scalar)
+    )
+    val = c.pyapi.call_function_objargs(to_pa_decimal_scalar_obj, [val])
+    c.pyapi.decref(to_pa_decimal_scalar_obj)
+
     fnty = lir.FunctionType(
         lir.VoidType(),
         [
@@ -545,22 +587,49 @@ def unbox_decimal(typ, val, c):
     )
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     res_ret = c.builder.load(res)
+
+    # decref since val is output of to_pa_decimal_scalar() and not coming from user
+    # context
+    c.pyapi.decref(val)
+
     return NativeValue(res_ret, is_error=is_error)
 
 
 @box(Decimal128Type)
 def box_decimal(typ, val, c):
-    dec_str = decimal_to_str_codegen(
-        c.context, c.builder, bodo.string_type(typ), (val,), typ.scale
+    """Box Decimal128Type to PyArrow Decimal128Scalar"""
+
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer(),
+        [
+            lir.IntType(128),
+            lir.IntType(8),
+            lir.IntType(8),
+        ],
     )
-    dec_str_obj = c.pyapi.from_native_value(bodo.string_type, dec_str, c.env_manager)
-    #
-    mod_name = c.context.insert_const_string(c.builder.module, "decimal")
-    decimal_class_obj = c.pyapi.import_module_noblock(mod_name)
-    res = c.pyapi.call_method(decimal_class_obj, "Decimal", (dec_str_obj,))
-    c.pyapi.decref(dec_str_obj)
-    c.pyapi.decref(decimal_class_obj)
-    return res
+    fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="box_decimal")
+
+    precision = c.context.get_constant(types.int8, typ.precision)
+    scale = c.context.get_constant(types.int8, typ.scale)
+
+    return c.builder.call(
+        fn,
+        [val, precision, scale],
+    )
+
+
+@lower_cast(types.Integer, Decimal128Type)
+def cast_int_to_decimal(context, builder, fromty, toty, val):
+    assert toty.scale == 0, "cast_int_to_decimal: scale 0 expected"
+    # Convert int value to int128 using sign extend
+    return builder.sext(val, lir.IntType(128))
+
+
+@lower_cast(Decimal128Type, types.Integer)
+def cast_decimal_to_int(context, builder, fromty, toty, val):
+    assert fromty.scale == 0, "cast_decimal_to_int: scale 0 expected"
+    # Truncate int128 to target integer
+    return builder.trunc(val, lir.IntType(types.unliteral(toty).bitwidth))
 
 
 @overload_method(Decimal128Type, "__hash__", no_unliteral=True)
