@@ -199,7 +199,7 @@ def test_decimal_constant_lowering(decimal_value, memory_leak_check):
 
     bodo_f = bodo.jit(f)
     val_ret = bodo_f()
-    assert val_ret == decimal_value
+    assert val_ret == pa.scalar(decimal_value, pa.decimal128(38, 18))
 
 
 def test_join(decimal_arr_value, memory_leak_check):
@@ -228,9 +228,11 @@ def test_constructor(memory_leak_check):
     def test_impl3():
         return Decimal(1)
 
-    check_func(test_impl1, ())
-    check_func(test_impl2, ())
-    check_func(test_impl3, ())
+    check_func(
+        test_impl1, (), py_output=pa.scalar(Decimal("1.1"), pa.decimal128(38, 18))
+    )
+    check_func(test_impl2, (), py_output=pa.scalar(Decimal(), pa.decimal128(38, 18)))
+    check_func(test_impl3, (), py_output=pa.scalar(Decimal(1), pa.decimal128(38, 18)))
 
 
 # TODO: fix memory leak and add memory_leak_check
@@ -463,6 +465,35 @@ def test_decimal_comparison_error_checking():
 
     with pytest.raises(BodoError, match=r"Invalid decimal comparison with"):
         bodo.jit(impl)(arr, other)
+
+
+@pytest_mark_one_rank
+def test_decimal_scalar_int_cast(memory_leak_check):
+    """Test casting decimal scalars to integers"""
+
+    def impl(a, b, flag):
+        if flag:
+            c = a
+        else:
+            c = b
+        return c
+
+    # cast to decimal type since wider
+    a = pa.scalar(-123, pa.decimal128(20, 0))
+    b = np.int32(-3)
+    check_func(impl, (a, b, True), py_output=a, only_seq=True)
+    check_func(
+        impl,
+        (a, b, False),
+        py_output=pa.scalar(int(b), pa.decimal128(20, 0)),
+        only_seq=True,
+    )
+
+    # cast to int type since wider
+    a = pa.scalar(-123, pa.decimal128(3, 0))
+    b = -3
+    check_func(impl, (a, b, True), py_output=a.cast(pa.int64()).as_py(), only_seq=True)
+    check_func(impl, (a, b, False), py_output=b, only_seq=True)
 
 
 @pytest_mark_one_rank
