@@ -198,7 +198,7 @@ def test_unsupported_udtf_multiple_definitions(
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO_TABLE\\. BodoSQL only supports Snowflake UDFs with a single definition\\. Found 2 definitions",
+        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO_TABLE\\. BodoSQL only supports Snowflake UDFs with a definition for a given number of arguments\\. Found multiple definitions that accept 1 argument\\(s\\)\\.",
     ):
         impl(bc, query)
 
@@ -641,5 +641,13 @@ def test_exploding_function_param(test_db_snowflake_catalog, memory_leak_check):
         }
     )
     check_func(
-        impl, (bc, query), py_output=py_output, reset_index=True, sort_output=True
+        impl,
+        (bc, query),
+        py_output=py_output,
+        reset_index=True,
+        sort_output=True,
+        # Note: Since this test doesn't have any actual table inputs our infrastructure
+        # doesn't successfully set the result to replicated. As a result, we only run this
+        # test as distributed data.
+        only_1DVar=True,
     )
