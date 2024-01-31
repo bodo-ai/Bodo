@@ -131,7 +131,9 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
             true,
             config.matchNullability(),
             config.treatDynamicCallsAsConstant())) {
-          assert expList.size() == 1;
+          assert expList.size() == 1
+              : "Internal error, expList not expected size in FilterReduceExpressionsRule";
+          ;
           newConditionExp =
               expList.get(0).accept(new RexNormalizer(call.builder().getRexBuilder()));
           // Check if we have changed anything. The reduction may ping pong with normalization

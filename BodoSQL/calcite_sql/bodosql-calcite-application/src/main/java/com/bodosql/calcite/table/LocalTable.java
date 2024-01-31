@@ -123,7 +123,8 @@ public class LocalTable extends BodoSqlTable {
    * @return The generated code to write the table.
    */
   public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
-    assert this.isWriteable;
+    assert this.isWriteable
+        : "Internal error: Local table not writeable in call to generateWriteCode";
     return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), extraArgs));
   }
 
