@@ -575,6 +575,10 @@ public abstract class DelegatingScope implements SqlValidatorScope {
         // following query is invalid:
         //   SELECT schema.emp.deptno FROM schema.emp AS e
         identifier = identifier.getComponent(i - 1, identifier.names.size());
+        //BODO CHANGE:
+        // "i" should equal the length of the prefix. Since we're removing everything i-1 elements from
+        // the prefix, the number of elements left in the prefix is now always 1
+        i = 1;
       }
 
       if (!previous.equals(identifier)) {
