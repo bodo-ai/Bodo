@@ -138,3 +138,21 @@ Bodo 2024.1 Release (Date: 01/05/2024) {#January_2024}
 ### Bug Fixes:
 - Handle constant tuples in Numpy array reshape operations properly
 
+
+## 2024.1.6 New Features and Improvements
+
+### New Features:
+- Support for inlining UDFs with a unique definition where the body is a query and the arguments are columns.
+- Support for inlining UDTFs with a unique definition.
+- Support HASH on remaining datatypes (decimal, array, object).
+- Unreserved more keywords (including all aggregation function names), allowing them as column names.
+
+### Performance Improvements:
+- Minor speedup for GET with integer index value.
+
+### Bug Fixes:
+- Prevent compilation failures while trying to infer the Bodo type of a Snowflake variant column that is all-null.
+- Fixes a bug in Join that could lead to a hang and/or incorrect output.
+- Fixed a bug where columns in the USING clause of a join would incorrectly be marked as ambiguous
+- Fixed a bug where an interaction between coalesce and outer join could result in a failure to compile a SQL plan
+
