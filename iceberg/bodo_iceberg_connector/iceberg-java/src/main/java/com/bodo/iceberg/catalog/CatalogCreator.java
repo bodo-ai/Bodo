@@ -54,6 +54,9 @@ public class CatalogCreator {
       case "hadoop-s3":
         catalog = HadoopBuilder.create(uriBuilder.removeQuery().build().toString(), conf, params);
         break;
+      case "snowflake":
+        catalog = SnowflakeBuilder.create(conf, params);
+        break;
       default:
         throw new UnsupportedOperationException("Should never occur. Captured in Python");
     }
