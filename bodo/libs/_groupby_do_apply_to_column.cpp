@@ -1512,15 +1512,12 @@ void apply_to_column_nullable(
 }
 
 /**
- * @brief Apply the given aggregation function to an input array item array.
+ * @brief Apply the first aggregation function to an input array item array.
  *
- * Currently only supported for first, which is used to implement ANY_VALUE.
  *
- * @tparam ftype The function type.
- * @param[in] in_col The input column. This must be a nullable array type.
- * @param[in, out] out_col The output column.
- * @param[in, out] aux_cols Auxiliary columns used to for certain operations
- * that require multiple columns (e.g. mean).
+ * @param[in] in_col The input column. This must be an array item array.
+ * @param[in, out] out_col The output column. This must be an array item array.
+ * @param[in, out] aux_cols unused
  * @param[in] grp_info The grouping information.
  * @param pool Memory pool to use for allocations during the execution of this
  * function.
@@ -1546,7 +1543,7 @@ void apply_to_column_array_item(
     size_t n_groups = grp_info.num_groups;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
         // If we already have a value for the group, skip it
-        if (out_col->get_null_bit(i_grp)) {
+        if (out_col->get_null_bit<bodo_array_type::ARRAY_ITEM>(i_grp)) {
             continue;
         }
         size_t i = grp_info.group_to_first_row[i_grp];
@@ -1560,7 +1557,7 @@ void apply_to_column_array_item(
             }
         }
         if (found_match) {
-            out_col->set_null_bit(i_grp, true);
+            out_col->set_null_bit<bodo_array_type::ARRAY_ITEM>(i_grp, true);
             // If the row is non-null, then the group will map to this inner
             // array entry.
             offset_t start_offset = in_offset_buffer[i];
@@ -1579,15 +1576,43 @@ void apply_to_column_array_item(
 }
 
 /**
- * @brief Apply the given aggregation function to an input struct array.
+ * @brief Apply the count aggregation function to an input array item array.
  *
- * Currently only supported for first, which is used to implement ANY_VALUE.
  *
- * @tparam ftype The function type.
- * @param[in] in_col The input column. This must be a nullable array type.
- * @param[in, out] out_col The output column.
- * @param[in, out] aux_cols Auxiliary columns used to for certain operations
- * that require multiple columns (e.g. mean).
+ * @param[in] in_col The input column. This must be an array item array .
+ * @param[in, out] out_col The output column. This must be a numpy int64 array.
+ * @param[in, out] aux_cols unused
+ * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
+ */
+template <int ftype>
+    requires(ftype == Bodo_FTypes::count)
+void apply_to_column_array_item(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    for (size_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = get_group_for_row(grp_info, i);
+        if ((i_grp != -1) &&
+            in_col->get_null_bit<bodo_array_type::ARRAY_ITEM>(i)) {
+            // Note: int is unused since we would only use an NA check.
+            count_agg<int, Bodo_CTypes::LIST>::apply(
+                getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+        }
+    }
+}
+
+/**
+ * @brief Apply the first aggregation function to an input struct array.
+ *
+ * @param[in] in_col The input column. This must be a struct array.
+ * @param[in, out] out_col The output column. This must be a struct array.
+ * @param[in, out] aux_cols unused
  * @param[in] grp_info The grouping information.
  * @param pool Memory pool to use for allocations during the execution of this
  * function.
@@ -1606,7 +1631,7 @@ void apply_to_column_struct(
     std::vector<int64_t> rows_to_copy;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
         // If we already have a value for the group, skip it
-        if (out_col->get_null_bit(i_grp)) {
+        if (out_col->get_null_bit<bodo_array_type::STRUCT>(i_grp)) {
             continue;
         }
         size_t i = grp_info.group_to_first_row[i_grp];
@@ -1621,7 +1646,7 @@ void apply_to_column_struct(
         }
         if (found_match) {
             rows_to_copy.push_back(i);
-            out_col->set_null_bit(i_grp, true);
+            out_col->set_null_bit<bodo_array_type::STRUCT>(i_grp, true);
         }
     }
     for (size_t i = 0; i < in_col->child_arrays.size(); ++i) {
@@ -1630,6 +1655,37 @@ void apply_to_column_struct(
         // Copy over the desired subset of the inner array
         *out_inner_arr =
             *(RetrieveArray_SingleColumn(in_inner_arr, rows_to_copy));
+    }
+}
+
+/**
+ * @brief Apply the count aggregation function to an input struct array.
+ *
+ * @tparam ftype The function type.
+ * @param[in] in_col The input column. This must be a struct array.
+ * @param[in, out] out_col The output column. This must be a numpy int64 array.
+ * @param[in, out] aux_cols unused
+ * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
+ */
+template <int ftype>
+    requires(ftype == Bodo_FTypes::count)
+void apply_to_column_struct(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    for (size_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = get_group_for_row(grp_info, i);
+        if ((i_grp != -1) && in_col->get_null_bit<bodo_array_type::STRUCT>(i)) {
+            // Note: int is unused since we would only use an NA check.
+            count_agg<int, Bodo_CTypes::STRUCT>::apply(
+                getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+        }
     }
 }
 /**
@@ -1700,12 +1756,37 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                                       pool, std::move(mm));                \
     }
 #endif
+
+    if (ftype == Bodo_FTypes::size) {
+        // SIZE
+        // size operation is the same regardless of type of data so this should
+        // come before the rest of the checks Hence, just compute number of rows
+        // per group here.
+        // TODO: Move to a helper function to simplify this code?
+        for (size_t i = 0; i < in_col->length; i++) {
+            int64_t i_grp = grp_info.row_to_group[i];
+            if (i_grp != -1) {
+                size_agg<int64_t, Bodo_CTypes::INT64>::apply(
+                    getv<int64_t>(out_col, i_grp), getv<int64_t>(in_col, i));
+            }
+        }
+        return;
+    }
     // Handle nested array cases separately
     if (in_col->arr_type == bodo_array_type::ARRAY_ITEM) {
         switch (ftype) {
             case Bodo_FTypes::first: {
                 return apply_to_column_array_item<Bodo_FTypes::first>(
                     in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
+            }
+            case Bodo_FTypes::count: {
+                return apply_to_column_array_item<Bodo_FTypes::count>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
+            }
+            default: {
+                throw std::runtime_error(
+                    "_groupby_do_apply_to_column: invalid ftype for ARRAY_ITEM "
+                    "array");
             }
         }
     } else if (in_col->arr_type == bodo_array_type::MAP) {
@@ -1715,11 +1796,25 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                     in_col->child_arrays[0], out_col->child_arrays[0], aux_cols,
                     grp_info, pool, std::move(mm));
             }
+            case Bodo_FTypes::count: {
+                return apply_to_column_array_item<Bodo_FTypes::count>(
+                    in_col->child_arrays[0], out_col, aux_cols, grp_info, pool,
+                    std::move(mm));
+            }
+            default: {
+                throw std::runtime_error(
+                    "_groupby_do_apply_to_column: invalid ftype for MAP "
+                    "array");
+            }
         }
     } else if (in_col->arr_type == bodo_array_type::STRUCT) {
         switch (ftype) {
             case Bodo_FTypes::first: {
                 return apply_to_column_struct<Bodo_FTypes::first>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
+            }
+            case Bodo_FTypes::count: {
+                return apply_to_column_struct<Bodo_FTypes::count>(
                     in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             }
             default: {
@@ -1794,20 +1889,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
     // NOTE: only min/max/first/last are supported for time.
     // Other types are restricted in Python.
     switch (ftype) {
-        case Bodo_FTypes::size:
-            // SIZE
-            // size operation is the same regardless of type of data.
-            // Hence, just compute number of rows per group here.
-            // TODO: Move to a helper function to simplify this code?
-            for (size_t i = 0; i < in_col->length; i++) {
-                int64_t i_grp = grp_info.row_to_group[i];
-                if (i_grp != -1) {
-                    size_agg<int64_t, Bodo_CTypes::INT64>::apply(
-                        getv<int64_t>(out_col, i_grp),
-                        getv<int64_t>(in_col, i));
-                }
-            }
-            return;
         case Bodo_FTypes::count:
             // Count
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::count, Bodo_CTypes::FLOAT32)
