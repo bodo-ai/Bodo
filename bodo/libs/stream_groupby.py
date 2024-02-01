@@ -479,15 +479,16 @@ def init_groupby_state(
             output_type._f_in_cols[output_type.f_in_offsets[i]]
         ]
 
+        supported_nested_agg_funcs = ["first", "count", "size"]
         if (
             isinstance(
                 col_arr_type,
                 (bodo.MapArrayType, bodo.ArrayItemArrayType, bodo.StructArrayType),
             )
-            and fname != "first"
+            and fname not in supported_nested_agg_funcs
         ):
             raise BodoError(
-                "Groupby does not support semi-structured arrays for aggregations other than first"
+                f"Groupby does not support semi-structured arrays for aggregations other than {', '.join(supported_nested_agg_funcs[:-1])} and {supported_nested_agg_funcs[-1]}."
             )
     ftypes_arr = np.array(ftypes, np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)

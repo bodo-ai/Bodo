@@ -767,10 +767,15 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
     ],
 )
 @pytest.mark.parametrize(
-    "check_error",
-    [pytest.param(True, id="check_error"), pytest.param(False, id="no_error")],
+    "fstr",
+    [
+        pytest.param("sum", id="check_error"),
+        pytest.param("first", id="first"),
+        pytest.param("count", id="count"),
+        pytest.param("size", id="size"),
+    ],
 )
-def test_groupby_nested_array_data(memory_leak_check, df, check_error):
+def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     """
     Tests support for streaming groupby with nested array data.
     """
@@ -780,7 +785,6 @@ def test_groupby_nested_array_data(memory_leak_check, df, check_error):
     num_cols = len(df.columns)
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
-    fstr = "sum" if check_error else "first"
     fnames = bodo.utils.typing.MetaType(tuple([fstr]) * (num_cols - 1))
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
@@ -820,13 +824,23 @@ def test_groupby_nested_array_data(memory_leak_check, df, check_error):
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
 
-    expected_df = df.groupby("A", as_index=False).agg(
-        {column: "first" for column in df.columns}
-    )
-    if check_error:
+    match fstr:
+        case ("count"):
+            expected_df = df.groupby("A", as_index=False, dropna=False).count()
+        case ("first"):
+            expected_df = df.groupby("A", as_index=False, dropna=False).agg(
+                {column: "first" for column in df.columns[1:]}
+            )
+        case ("size"):
+            expected_df = df.groupby("A", as_index=False, dropna=False).agg(
+                {column: lambda x: len(x) for column in df.columns[1:]}
+            )
+        case ("sum"):
+            expected_df = pd.DataFrame()
+    if fstr == "sum":
         with pytest.raises(
             BodoError,
-            match="Groupby does not support semi-structured arrays for aggregations other than first",
+            match="Groupby does not support semi-structured arrays for aggregations other than first, count and size",
         ):
             bodo.jit(test_groupby)(df)
     else:

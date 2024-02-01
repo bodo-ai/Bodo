@@ -354,9 +354,16 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
     # [BE-416] Support with list
     # [BE-433] Support with tuples
     elif (
-        func_name in {"last", "sum", "prod", "min", "max", "count", "nunique", "head"}
+        func_name in {"last", "sum", "prod", "min", "max", "nunique", "head"}
     ) and isinstance(
         arr_type, (ArrayItemArrayType, TupleArrayType)
+    ):  # pragma: no cover
+        return (
+            None,
+            f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
+        )
+    elif func_name in {"count"} and isinstance(
+        arr_type, TupleArrayType
     ):  # pragma: no cover
         return (
             None,
