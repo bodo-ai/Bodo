@@ -688,3 +688,17 @@ def test_dollar_strings(datapath, memory_leak_check):
         only_jit_seq=True,
         is_out_distributed=False,
     )
+
+
+def test_null_variant_literal(memory_leak_check):
+    answer = pd.DataFrame({"0": [None]})
+    check_query(
+        "SELECT NULL::VARIANT",
+        {},
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        only_jit_seq=True,
+        is_out_distributed=False,
+    )

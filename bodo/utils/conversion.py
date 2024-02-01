@@ -439,6 +439,12 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     """
     # The array type always needs to be nullable for the gen_na_array case.
     _arr_typ = to_nullable_type(unwrap_typeref(arr_type))
+
+    # If we were supplied unknown as the type, then we should instead use the
+    # type of the scalar as the type to construct.
+    if _arr_typ == types.unknown:
+        _arr_typ = to_nullable_type(dtype_to_array_type(scalar))
+
     if _arr_typ == bodo.null_array_type:
         return lambda scalar, length, arr_type, dict_encode=True: bodo.libs.null_arr_ext.init_null_array(
             length
@@ -2093,7 +2099,14 @@ def overload_list_to_array(lst, arr_type, parallel=False):
     func_text += "    copy_len = bodo.libs.distributed_api.get_node_portion(global_len, n_pes, rank)\n"
     func_text += "  else:\n"
     func_text += "    start, copy_len = 0, global_len\n"
-    glbls = {"bodo": bodo}
+
+    # If we were supplied unknown as the type, then we should instead use the
+    # type of the list as the type to construct.
+    real_arr_type = arr_type
+    if unwrap_typeref(arr_type) == types.unknown:
+        real_arr_type = dtype_to_array_type(to_nullable_type(lst.dtype))
+    glbls = {"bodo": bodo, "real_arr_type": real_arr_type}
+
     if arr_type == bodo.dict_str_arr_type:
         # For dictionary encoded arrays create a naive array containing duplicates.
         glbls["data_arr_type"] = bodo.string_array_type
@@ -2102,7 +2115,7 @@ def overload_list_to_array(lst, arr_type, parallel=False):
         func_text += "  indices_arr = bodo.utils.utils.alloc_type(copy_len, indices_arr_type, (-1,))\n"
     else:
         func_text += (
-            "  out_arr = bodo.utils.utils.alloc_type(copy_len, arr_type, (-1,))\n"
+            "  out_arr = bodo.utils.utils.alloc_type(copy_len, real_arr_type, (-1,))\n"
         )
     func_text += "  for i in range(start, start + copy_len):\n"
     if arr_type == bodo.dict_str_arr_type:
