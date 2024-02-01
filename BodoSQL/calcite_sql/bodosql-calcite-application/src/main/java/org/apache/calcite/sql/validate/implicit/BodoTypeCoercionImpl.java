@@ -369,5 +369,4 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     // Call super to handle potential need to unify precisions etc.
     return coalesceCoercionDefaultImpl(callBinding) || coerced;
   }
-
 }
