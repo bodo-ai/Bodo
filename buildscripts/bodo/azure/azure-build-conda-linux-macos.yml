@@ -117,7 +117,7 @@ jobs:
   - script: |
       set -exo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
-      mamba create -y -n bodo_build boa anaconda-client conda-verify 'python=3.11' 'python-libarchive-c=4.0' -c conda-forge
+      mamba create -y -n bodo_build conda-build anaconda-client conda-verify 'python=3.11' 'python-libarchive-c=4.0' -c conda-forge
     displayName: 'Create Mamba Env'
 
   # It was taken from code in the Numba feedstock that handles cross compiling,
@@ -212,7 +212,7 @@ jobs:
         export BUILD_PY_VERSION=""
       fi
 
-      conda mambabuild . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG $BUILD_PY_VERSION
+      conda build . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG $BUILD_PY_VERSION
 
       # Copy Build Folder to Working Directory
       cp -r $HOME/mambaforge/envs/bodo_build/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/

@@ -1,5 +1,99 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "setuptools_scm[toml]>=8",
+    "scikit-build-core[pyproject]",
+    "cython",
+    "numpy>=1.23,<1.27",
+    "pyarrow==14.0.2",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "bodo"
+dynamic = ["version"]
+description = "The Python Supercomputing Analytics Platform"
+readme = "README_pypi.md"
+requires-python = ">=3.9,<3.12"
+keywords = ["data", "analytics", "cluster"]
+authors = [{name = "Bodo.ai"}]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    "numba==0.58.1",
+    "pyarrow==14.0.2",
+    "pandas>=2,<2.1",
+    "numpy>=1.23,<1.27",
+    # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
+    "fsspec>=2021.09",
+    "mpi4py_mpich==3.1.2",  
+]
+
+[project.optional-dependencies]
+HDF5 = ["h5py"]
+
+[project.urls]
+Homepage = "https://bodo.ai"
+Documentation = "https://docs.bodo.ai"
+
+# Must be Included to Enable
 [tool.setuptools_scm]
 
+[tool.scikit-build]
+cmake.version = ">=3.23"
+strict-config = true
+experimental = false
+ninja.make-fallback = false
+cmake.build-type = "Release"
+
+cmake.verbose = false
+logging.level = "INFO"
+
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+build-dir = "build/{wheel_tag}"
+# Exclude bodo/transforms since it should be Cythonized in production builds
+wheel.exclude = [
+    "bodo/**/*.h",
+    "bodo/**/*.cpp",
+    "bodo/**/*.c",
+    "bodo/**/*.pxd",
+    "bodo/**/*.pyx",
+    "bodo/tests/data/**/*.crc",
+    "bodo/libs/HashLibs/TSL",
+    "bodo/bench",
+    "bodo/transforms",
+]
+
+# When building for Conda, set different
+# arguments for CMake
+[[tool.scikit-build.overrides]]
+if.state = "editable"
+cmake.build-type = "RelWithDebInfo"
+wheel.exclude = [
+    "bodo/**/*.h",
+    "bodo/**/*.cpp",
+    "bodo/**/*.c",
+    "bodo/**/*.pxd",
+    "bodo/**/*.pyx",
+    "bodo/tests/data/**/*.crc",
+    "bodo/libs/HashLibs/TSL",
+    "bodo/bench",
+]
+
+# -------------------------------------- Dev Tools -------------------------------------- #
 [tool.black]
 exclude = 'demo/.*'
 

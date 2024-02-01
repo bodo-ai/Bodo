@@ -19,13 +19,20 @@ requirements:
 
   host:
     - python
+    - pip
+
+    # Build Dependencies
     - setuptools >=64
+    - cython <3.0
     - setuptools_scm >=8
+    - scikit-build-core
+    - cmake
+    - ninja
+
     - numba 0.58.1
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.23,<1.27
-    - cython <3.0
     - pandas >=2,<2.1
     - fsspec >=2021.09
     - pyarrow =14.0.2
@@ -61,14 +68,11 @@ requirements:
   # run constrained will not install these packages when building,
   # but will restrict them if they are present in the conda env.
   # currently matplotlib is an optional dependency, and we only
-  # support up to 3.5.1
+  # support up to 3.6.1
   run_constrained:
-    - matplotlib <= 3.5.1
-  run_constrained:
+    - matplotlib <= 3.6.1
     - numpy >=1.23,<1.27
-  run_constrained:
     - scikit-learn =1.1.*
-  run_constrained:
     - s3fs >=2022.1.0
 
 test:
