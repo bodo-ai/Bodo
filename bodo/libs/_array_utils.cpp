@@ -2404,7 +2404,7 @@ std::shared_ptr<table_info> concat_tables(
     for (std::shared_ptr<table_info> table : table_chunks) {
         n_total_rows += table->nrows();
     }
-    assert(table_chunks->size() > 0);
+    assert(table_chunks.size() > 0);
     TableBuilder table_builder(table_chunks[0], n_total_rows);
     for (std::shared_ptr<table_info> table : table_chunks) {
         table_builder.append(bodo_table_to_arrow(table));

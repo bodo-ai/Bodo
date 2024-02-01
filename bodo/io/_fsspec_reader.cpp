@@ -13,6 +13,7 @@
 #include "_bodo_file_reader.h"
 
 // Silence warnings from including generated code
+PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
 PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
 #include "pyfs.cpp"
 POP_IGNORED_COMPILER_ERROR()

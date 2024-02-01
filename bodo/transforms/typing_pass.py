@@ -7,7 +7,7 @@ import itertools
 import operator
 import warnings
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -94,6 +94,10 @@ from bodo.utils.utils import (
     is_call_assign,
     is_expr,
 )
+
+if TYPE_CHECKING:
+    from numba.core.utils import UniqueDict
+
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -355,10 +359,10 @@ class TypingTransforms:
 
     def __init__(
         self,
-        func_ir,
+        func_ir: ir.FunctionIR,
         typingctx,
         targetctx,
-        typemap: Dict[str, types.Type],
+        typemap: "UniqueDict",
         calltypes,
         arg_types,
         _locals,

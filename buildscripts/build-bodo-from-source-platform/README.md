@@ -13,7 +13,7 @@
 1. Activate the environment: `conda activate DEV`
 1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
-1. Build Bodo: `psh python setup.py develop`
+1. Build Bodo: `psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
 
 It's recommended to create a working branch while testing. You can push changes to this branch from your
@@ -21,7 +21,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Checkout the branch (only required once): `psh git checkout working-branch`.
 1. Pull latest changes (do this after every push): `psh git pull`.
-1. Re-build: `psh python setup.py develop && cd BodoSQL && psh python setup.py develop && cd ..`.
+1. Re-build: `psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
 
 ## Using Bodo/BodoSQL
 

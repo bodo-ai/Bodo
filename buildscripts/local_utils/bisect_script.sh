@@ -10,7 +10,7 @@
 set -exo pipefail
 
 #Build everything
-python setup.py develop; cd iceberg; python setup.py develop; cd ../BodoSQL; python setup.py develop; cd ..;
+pip install --no-deps --no-build-isolation -ve .; cd iceberg; python setup.py develop; cd ../BodoSQL; python setup.py develop; cd ..;
 
 #Run the testing command supplied by the user
 $@
