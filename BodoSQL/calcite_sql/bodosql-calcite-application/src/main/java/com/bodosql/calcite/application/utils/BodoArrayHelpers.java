@@ -83,6 +83,9 @@ public class BodoArrayHelpers {
     // TODO: Create type exprs
     final String typeName;
     switch (type.getSqlTypeName()) {
+      case OTHER:
+        typeName = "numba.types.unknown";
+        break;
       case NULL:
         typeName = "bodo.null_array_type";
         break;
