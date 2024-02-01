@@ -22,25 +22,29 @@ if [[ "$CI_SOURCE" == "AWS" ]]; then
 fi
 
 # Enable Sccache to use and save C/C++ cache to S3
+# TODO: Should we move directly into CMake?
 export SCCACHE_BUCKET=engine-codebuild-cache
 export SCCACHE_REGION=us-east-2
 export SCCACHE_S3_USE_SSL=true
 export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+export CCACHE_PREFIX=sccache
 
-# Bodo install
-python setup.py develop --no-ccache
+# Bodo Install
+pip install --no-deps --no-build-isolation -ve .
+# Old setuptools method
+# python setup.py develop --no-ccache
 
 # NOTE: we need to cd into the directory before building,
 # as the run leaves behind a .egg-info in the working directory,
 # and if we have multiple of these in the same directory,
 # we can run into conda issues.
+
+# Bodo-Iceberg Install
 cd iceberg
-# bodo iceberg install
 python setup.py develop
 cd ..
 
-
-# bodosql install
+# BodoSQL Install
 cd BodoSQL
 python setup.py develop
 cd ..

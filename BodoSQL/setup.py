@@ -80,11 +80,6 @@ def build_libs(obj):
         obj.error("maven build failed with error:", e)
 
 
-def readme():
-    with open("README.md") as f:
-        return f.read()
-
-
 class CustomDevelopCommand(develop):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""

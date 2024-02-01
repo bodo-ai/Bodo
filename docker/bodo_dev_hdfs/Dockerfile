@@ -51,7 +51,7 @@ RUN echo "export JAVA_HOME=/root/mambaforge/envs/BODODEV" >> ${HADOOP_HOME}/etc/
 
 # build bodo
 RUN echo "cd /Bodo" >> ~/.bashrc
-RUN echo "python setup.py develop" >> ~/.bashrc
+RUN echo "pip install --no-deps --no-build-isolation -ve ." >> ~/.bashrc
 
 # environment variables for arrow
 RUN echo "export hdfs=3.3.2" >> ~/.bashrc
