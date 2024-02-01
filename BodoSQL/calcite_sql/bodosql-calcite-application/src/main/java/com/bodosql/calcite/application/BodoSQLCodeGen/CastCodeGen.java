@@ -43,6 +43,13 @@ public class CastCodeGen {
       PandasCodeGenVisitor visitor) {
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
+    // Currently we elide the cast if the input and output type names are the
+    // same, however this will be insufficient when we support casts between
+    // different types of arrays (e.g. ARRAY[DOUBLE], ARRAY[STRING]), or other
+    // semi-structured types.
+    if (inputTypeName == outputTypeName) {
+      return arg;
+    }
     final String fnName;
     // Create the args. Some function paths may have multiple args.
     List<Expr> args = new ArrayList<>();
