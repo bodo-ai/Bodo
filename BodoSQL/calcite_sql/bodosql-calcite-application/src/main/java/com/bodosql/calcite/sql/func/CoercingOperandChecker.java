@@ -44,8 +44,8 @@ public class CoercingOperandChecker implements SqlOperandTypeChecker {
     argRanges = SqlOperandCountRanges.between(minArgs, maxArgs);
   }
 
-  final private static int INIT_OVERLOAD_INDEX = -1;
-  final private static int INVALID_OVERLOAD_INDEX = -2;
+  private static final int INIT_OVERLOAD_INDEX = -1;
+  private static final int INVALID_OVERLOAD_INDEX = -2;
 
   protected boolean typesAreEqual(SqlTypeName a, SqlTypeName b) {
     // For now simple equality will suffice, but we may want to extend this to consider the type
@@ -79,7 +79,7 @@ public class CoercingOperandChecker implements SqlOperandTypeChecker {
             // first.
             RelDataType targetType =
                 callBinding.getTypeFactory().createSqlType(signatureArgs.get(i));
-            if (BodoCoercionUtil.Companion.coercable(operandTypes.get(i), targetType)) {
+            if (BodoCoercionUtil.Companion.canCastFromUDF(operandTypes.get(i), targetType, true)) {
               // We don't want to do the cast yet, because some other argument may not match, and a
               // different set of arguments might need to be selected instead.
               requiresCast = true;

@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql;
 
+import com.bodosql.calcite.sql.BodoSqlUtil;
 import org.apache.calcite.avatica.util.ByteString;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.function.Functions;
@@ -32,6 +33,7 @@ import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.sql.fun.SqlInOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlOperandMetadata;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
@@ -600,7 +602,13 @@ public abstract class SqlUtil {
     // or UDF whose operands can make type coercion.
     final List<SqlOperator> list = Lists.newArrayList(routines);
     routines = list.iterator();
-    if (list.size() < 2 || coerce) {
+    // Bodo Change: Add custom logic for filtering the routines
+    // with coercion. The caller just selects the first option.
+    if (list.size() < 2) {
+      return routines;
+    }
+    if (coerce) {
+      routines = BodoSqlUtil.filterRoutinesByScore(typeFactory, routines, argTypes, argNames, nameMatcher);
       return routines;
     }
 
@@ -723,7 +731,9 @@ public abstract class SqlUtil {
             final RelDataType paramType = p.left;
             if (argType != null
                 && paramType != null
-                && !SqlTypeUtil.canCastFrom(paramType, argType, coerce)) {
+                // Bodo Change: Replace SqlTypeUtil.canCastFrom with
+                // BodoSQlTypeUtil.canCastFromWrapper for custom UDF rules
+                && !BodoSqlTypeUtil.canCastFromWrapper(function, paramType, argType, coerce)) {
               return false;
             }
           }
@@ -734,10 +744,10 @@ public abstract class SqlUtil {
   /**
    * Permutes argument types to correspond to the order of parameter names.
    *
-   * Bodo Change: Pass the SQL name matcher.
+   * Bodo Change: Pass the SQL name matcher and change to public
    *
    */
-  private static @Nullable List<@Nullable RelDataType> permuteArgTypes(List<String> paramNames,
+  public static @Nullable List<@Nullable RelDataType> permuteArgTypes(List<String> paramNames,
       List<String> argNames, List<RelDataType> argTypes, final SqlNameMatcher nameMatcher) {
     // Arguments passed by name. Make sure that the function has
     // parameters of all of these names.

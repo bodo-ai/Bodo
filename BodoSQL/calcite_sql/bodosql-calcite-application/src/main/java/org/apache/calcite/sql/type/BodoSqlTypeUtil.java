@@ -1,15 +1,21 @@
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.sql.validate.BodoCoercionUtil;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelRecordType;
+import org.apache.calcite.schema.Function;
+import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
 import org.apache.calcite.sql.SqlBasicTypeNameSpec;
 import org.apache.calcite.sql.SqlCollectionTypeNameSpec;
+import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlMapTypeNameSpec;
 import org.apache.calcite.sql.SqlRowTypeNameSpec;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.apache.calcite.sql.SqlDataTypeSpec;
 import org.apache.calcite.sql.SqlTypeNameSpec;
@@ -146,4 +152,26 @@ public class BodoSqlTypeUtil {
     }
   }
 
+  /**
+   * Wrapper around SqlTypeUtil.canCastFrom
+   * with specialized behavior for SnowflakeUDFs.
+   */
+  public static boolean canCastFromWrapper(
+          SqlFunction function,
+          RelDataType toType,
+          RelDataType fromType,
+          boolean coerce) {
+    if (function instanceof SqlUserDefinedFunction) {
+      Function functionImpl = ((SqlUserDefinedFunction) function).getFunction();
+      if (functionImpl instanceof SnowflakeUserDefinedBaseFunction) {
+        return BodoCoercionUtil.Companion.canCastFromUDF(fromType, toType, coerce);
+      }
+    } else if (function instanceof  SqlUserDefinedTableFunction) {
+      Function functionImpl = ((SqlUserDefinedTableFunction) function).getFunction();
+      if (functionImpl instanceof SnowflakeUserDefinedBaseFunction) {
+        return BodoCoercionUtil.Companion.canCastFromUDF(fromType, toType, coerce);
+      }
+    }
+    return SqlTypeUtil.canCastFrom(toType, fromType, coerce);
+  }
 }

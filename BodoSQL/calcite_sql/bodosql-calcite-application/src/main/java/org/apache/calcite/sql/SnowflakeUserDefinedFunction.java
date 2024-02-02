@@ -33,8 +33,8 @@ public class SnowflakeUserDefinedFunction extends SnowflakeUserDefinedBaseFuncti
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
      */
-    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
-        super("UDF", functionPath, args, numOptional, body, isSecure, isExternal, language, isMemoizable, tzInfo);
+    protected SnowflakeUserDefinedFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
+        super("UDF", functionPath, args, numOptional, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
         this.returnTypeInfo = snowflakeTypeNameToTypeInfo(returns, true, tzInfo);
     }
 
@@ -51,7 +51,7 @@ public class SnowflakeUserDefinedFunction extends SnowflakeUserDefinedBaseFuncti
     }
 
     // -- static creators
-    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
-        return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo);
+    public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
+        return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
     }
 }

@@ -522,28 +522,73 @@ def test_query_argument_nested_select_udf(test_db_snowflake_catalog, memory_leak
 
 
 @pytest_mark_one_rank
-def test_unsupported_udf_multiple_definitions(
-    test_db_snowflake_catalog, memory_leak_check
-):
+def test_udf_multiple_definitions(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDFs give a message that they aren't supported yet because
-    there are multiple definitions of the UDF.
+    Test that Snowflake with multiple definitions select the correct implementation.
+    We only run this on 1 rank because we also test a type that cannot be cast.
 
     TIMES_TWO is manually defined inside TEST_DB.PUBLIC twice, once on strings and
     once on numbers.
     """
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select TIMES_TWO(1)"
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    local_table = pd.DataFrame(
+        {
+            # Number
+            "A": np.arange(10),
+            # String
+            "B": [str(i) for i in range(10)],
+            # Double which casts to string. Note all types prioritize
+            # string over number except for number.
+            "C": [np.float64(i) for i in np.arange(1, 11)],
+            # Binary which cannot be supported
+            "D": [str(i).encode("utf-8") for i in range(10)],
+        }
+    )
+    bc = bodosql.BodoSQLContext(
+        {"LOCAL_TABLE": local_table},
+        catalog=test_db_snowflake_catalog,
+    )
+    query1 = "select TIMES_TWO(A) as OUTPUT from local_table"
+    py_output1 = pd.DataFrame({"OUTPUT": local_table["A"] * 2})
+    check_func(
+        impl,
+        (bc, query1),
+        py_output=py_output1,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query2 = "select TIMES_TWO(B) as OUTPUT from local_table"
+    py_output2 = pd.DataFrame({"OUTPUT": local_table["B"] + local_table["B"]})
+    check_func(
+        impl,
+        (bc, query2),
+        py_output=py_output2,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query3 = "select TIMES_TWO(C) as OUTPUT from local_table"
+    # Bodo always uses 6 decimal places right now.
+    float_to_str = local_table["C"].astype(str) + "00000"
+    py_output3 = pd.DataFrame({"OUTPUT": float_to_str + float_to_str})
+    check_func(
+        impl,
+        (bc, query3),
+        py_output=py_output3,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query4 = "select TIMES_TWO(D) as OUTPUT from local_table"
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO\\. BodoSQL only supports Snowflake UDFs with a definition for a given number of arguments\\. Found multiple definitions that accept 1 argument\\(s\\)\\.",
+        match="No match found for function signature TIMES_TWO\\(<BINARY>\\)",
     ):
-        impl(bc, query)
+        bodo.jit(impl)(bc, query4)
 
 
 @pytest_mark_one_rank
