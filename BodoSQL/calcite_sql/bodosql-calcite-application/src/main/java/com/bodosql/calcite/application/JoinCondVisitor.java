@@ -201,7 +201,9 @@ public class JoinCondVisitor {
 
         // If we have an equality with two InputRefs that are the same
         // mark the columns as merged.
-        if (binOp.getKind() == SqlKind.EQUALS && operands.get(i) instanceof RexInputRef) {
+        if (binOp.getKind() == SqlKind.EQUALS
+            && operands.get(i) instanceof RexInputRef
+            && operands.get(0) instanceof RexInputRef) {
           String col1 = val1.emit().split("\\.")[1];
           // need to trim here to remove whitespace
           // TODO: remove technical debt.
