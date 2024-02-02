@@ -1759,10 +1759,6 @@ def test_count_size_args(memory_leak_check):
 @pytest.mark.parametrize(
     "df",
     [
-        # [BE-416] Support with list
-        pd.DataFrame(
-            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
-        ),
         # Tuple
         pd.DataFrame(
             {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
