@@ -1976,12 +1976,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitCorrelVariable(RexCorrelVariable correlVariable) {
-    throw unsupportedNode();
+    throw unsupportedNode("RexCorrelVariable");
   }
 
   @Override
   public Expr visitDynamicParam(RexDynamicParam dynamicParam) {
-    throw unsupportedNode();
+    throw unsupportedNode("RexDynamicParam");
   }
 
   private Expr visitNamedParam(RexNamedParam namedParam) {
@@ -1993,17 +1993,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitRangeRef(RexRangeRef rangeRef) {
-    throw unsupportedNode();
+    throw unsupportedNode("RexRangeRef");
   }
 
   @Override
   public Expr visitFieldAccess(RexFieldAccess fieldAccess) {
-    throw unsupportedNode();
+    throw unsupportedNode("RexFieldAccess");
   }
 
   @Override
   public Expr visitSubQuery(RexSubQuery subQuery) {
-    throw unsupportedNode();
+    throw unsupportedNode("RexSubQuery");
   }
 
   @Override
@@ -2110,8 +2110,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  protected BodoSQLCodegenException unsupportedNode() {
+  protected BodoSQLCodegenException unsupportedNode(String nodeType) {
     return new BodoSQLCodegenException(
-        "Internal Error: Calcite Plan Produced an Unsupported RexNode");
+        "Internal Error: Calcite Plan Produced an Unsupported RexNode: " + nodeType);
   }
 }
