@@ -977,6 +977,37 @@ def is_valid_boolean_arg(arg):  # pragma: no cover
     )
 
 
+def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an array
+       (scalar or vector)
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        is_scalar (boolean): if True, checks if arg is any array,
+        if False checks if it is an array item array.
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+    raises: BodoError if the argument is not a array scalar, array column, or null
+    """
+    if arg == bodo.none or arg == bodo.null_array_type:
+        return
+    if is_scalar:
+        if not bodo.utils.utils.is_array_typ(arg, False):
+            raise_bodo_error(
+                f"{f_name} {a_name} argument must be an array scalar, array column, or null, but was {arg}"
+            )
+    else:
+        if not (
+            isinstance(arg, bodo.ArrayItemArrayType)
+            or (
+                bodo.hiframes.pd_series_ext.is_series_type(arg)
+                and isinstance(arg.data, bodo.ArrayItemArrayType)
+            )
+        ):
+            raise_bodo_error(
+                f"{f_name} {a_name} argument must be an array scalar, array column, or null, but was {arg}"
+            )
+
+
 def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a string
        (scalar or vector)
