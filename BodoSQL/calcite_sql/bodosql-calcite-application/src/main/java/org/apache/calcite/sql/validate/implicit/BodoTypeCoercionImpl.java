@@ -3,15 +3,20 @@ package org.apache.calcite.sql.validate.implicit;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable;
+import com.bodosql.calcite.sql.validate.BodoCoercionUtil;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function4;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
+import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
+import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlDynamicParam;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
@@ -22,10 +27,13 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.MapSqlType;
+import org.apache.calcite.sql.type.SqlOperandMetadata;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.type.VariantSqlType;
+import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 
@@ -368,5 +376,60 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     // Finally,
     // Call super to handle potential need to unify precisions etc.
     return coalesceCoercionDefaultImpl(callBinding) || coerced;
+  }
+
+  /**
+   * Our implicit casting implementation for Snowflake UDFs.
+   */
+  @Override public boolean userDefinedFunctionCoercion(SqlValidatorScope scope,
+                                                       SqlCall call, SqlFunction function) {
+    if (!((function instanceof SqlUserDefinedFunction && ((SqlUserDefinedFunction) function).getFunction() instanceof SnowflakeUserDefinedBaseFunction) || (function instanceof SqlUserDefinedTableFunction && ((SqlUserDefinedTableFunction) function).getFunction() instanceof SnowflakeUserDefinedFunction))) {
+      // Use the Calcite default for any non-Snowflake UDFs.
+      return super.userDefinedFunctionCoercion(scope, call, function);
+    }
+    final SqlOperandMetadata operandMetadata =
+            requireNonNull((SqlOperandMetadata) function.getOperandTypeChecker(),
+                    () -> "getOperandTypeChecker is not defined for " + function);
+    final List<RelDataType> paramTypes =
+            operandMetadata.paramTypes(scope.getValidator().getTypeFactory());
+    boolean coerced = false;
+    for (int i = 0; i < call.operandCount(); i++) {
+      SqlNode operand = call.operand(i);
+      final SqlNode castOperand;
+      final RelDataType targetType;
+      final SqlCall callToUpdate;
+      final int updateIndex;
+      if (operand.getKind() == SqlKind.ARGUMENT_ASSIGNMENT) {
+        final List<SqlNode> operandList = ((SqlCall) operand).getOperandList();
+        String name = ((SqlIdentifier) operandList.get(1)).getSimple();
+        final List<String> paramNames = operandMetadata.paramNames();
+        int formalIndex = paramNames.indexOf(name);
+        if (formalIndex < 0) {
+          return false;
+        }
+        castOperand = operandList.get(0);
+        targetType = paramTypes.get(formalIndex);
+        callToUpdate = (SqlCall) operand;
+        // We update inside the named calling convention
+        updateIndex = 0;
+      } else {
+        castOperand = operand;
+        targetType = paramTypes.get(i);
+        callToUpdate = call;
+        updateIndex = i;
+      }
+      RelDataType operandType = validator.deriveType(scope, castOperand);
+      boolean willCoerceArg = !BodoCoercionUtil.Companion.canCastFromUDF(operandType, targetType, false);
+      if (willCoerceArg) {
+        coerced = true;
+        // Generate the cast function.
+        SqlOperator castFunction = BodoCoercionUtil.Companion.getCastFunction(targetType);
+        // Create the new operand
+        SqlNode newOperand = castFunction.createCall(castOperand.getParserPosition(), castOperand);
+        // Update the previous node.
+        callToUpdate.setOperand(updateIndex, newOperand);
+      }
+    }
+    return coerced;
   }
 }

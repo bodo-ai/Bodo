@@ -903,33 +903,11 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               schemaName);
       ResultSet results = executeSnowflakeQuery(query, 5);
       BodoTZInfo tzInfo = getDefaultTimezone();
-      Set<Integer> seenArgs = new HashSet();
       while (results.next()) {
         // See the return values here:
         // https://docs.snowflake.com/en/sql-reference/sql/show-functions
         // Note: JDBC makes things 1-indexed.
-        // Minimum number of arguments (column 8)
-        int minArgs = results.getInt(7);
-        // Maximum number of arguments (column 8)
-        int maxArgs = results.getInt(8);
-        // Check that this is a distinct definition. We currently
-        // support functions with multiple definitions so long as
-        // each definition supports a different number of arguments.
-        for (int i = minArgs; i < maxArgs + 1; i++) {
-          if (seenArgs.contains(i)) {
-            throw new RuntimeException(
-                String.format(
-                    Locale.ROOT,
-                    "Unable to resolve function: %s.%s.%s. BodoSQL only supports Snowflake UDFs"
-                        + " with a definition for a given number of arguments. Found multiple"
-                        + " definitions that accept %d argument(s).",
-                    databaseName,
-                    schemaName,
-                    functionName,
-                    i));
-          }
-          seenArgs.add(i);
-        }
+        java.sql.Timestamp createdOn = results.getTimestamp(1);
         // Function args + return value, not names (column 9)
         String arguments = results.getString(9);
         // Is this a table function? (column 12)
@@ -965,7 +943,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   isExternal,
                   language,
                   isMemoizable,
-                  tzInfo);
+                  tzInfo,
+                  createdOn);
         } else {
           function =
               SnowflakeUserDefinedFunction.create(
@@ -978,7 +957,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   isExternal,
                   language,
                   isMemoizable,
-                  tzInfo);
+                  tzInfo,
+                  createdOn);
         }
         functions.add(function);
       }

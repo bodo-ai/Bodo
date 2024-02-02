@@ -40,6 +40,9 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
     // performance concerns.
     private final SnowflakeUserDefinedFunction.SnowflakeUserDefinedFunctionErrorInfo errorInfo;
 
+    // When was the UDF created in Snowflake.
+    private final java.sql.Timestamp createdOn;
+
     /**
      * Creates a new Function for a call to a Snowflake User Defined Function.
      *
@@ -52,14 +55,17 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
      * @param isExternal           Is the function an external function?
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
+     * @param tzInfo               What is the Timezone for type generation.
+     * @param createdOn            When was the UDF created?
      */
-    SnowflakeUserDefinedBaseFunction(String functionType, ImmutableList<String> functionPath, String args, int numOptional, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
+    SnowflakeUserDefinedBaseFunction(String functionType, ImmutableList<String> functionPath, String args, int numOptional, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
         this.functionType = functionType;
         this.functionPath = functionPath;
         this.parameters = parseParameters(args, numOptional, tzInfo);
         // Assume nullable for now
         this.body = body;
         this.errorInfo = new SnowflakeUserDefinedBaseFunction.SnowflakeUserDefinedFunctionErrorInfo(isSecure, isExternal, language, isMemoizable);
+        this.createdOn = createdOn;
     }
 
     // Abstract methods
@@ -76,6 +82,10 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
 
     public List<FunctionParameter> getParameters() {
         return parameters;
+    }
+
+    public java.sql.Timestamp getCreatedOn() {
+        return createdOn;
     }
 
     // Implemented methods
