@@ -579,8 +579,6 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
     )
 
 
-# Restricted to one rank until we figure out the correctness issue.
-@pytest_mark_one_rank
 @pytest.mark.parametrize(
     "df",
     [
@@ -828,11 +826,30 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
 
     match fstr:
         case ("count"):
-            expected_df = df.groupby("A", as_index=False, dropna=False).count()
+            expected_df = df.groupby(
+                "A", as_index=False, dropna=False, sort=True
+            ).count()
         case ("first"):
-            expected_df = df.groupby("A", as_index=False, dropna=False).agg(
+            expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
                 {column: "first" for column in df.columns[1:]}
             )
+
+            # We don't care if the value is actually the first element,
+            # so we set df to have the same data value for each instance of a group key.
+            cols = {"A": df["A"]}
+            cols.update(
+                {
+                    col: pd.Series(
+                        # This works because df.groupby is sorted and
+                        # the keys are 0,1,2 so we can use them as an index.
+                        # If the sequence isn't consecutive, this wouldn't work.
+                        df["A"].apply(lambda x: expected_df[col][x]),
+                        dtype=df[col].dtype,
+                    )
+                    for col in expected_df.columns[1:]
+                }
+            )
+            df = pd.DataFrame(cols)
         case ("size"):
             expected_df = df.groupby("A", as_index=False, dropna=False).agg(
                 {column: lambda x: len(x) for column in df.columns[1:]}
