@@ -2499,6 +2499,13 @@ SqlNode TableRef3(ExprContext exprContext, boolean lateral) :
         [ tableRef = Snapshot(tableRef) ]
         [ tableRef = MatchRecognize(tableRef) ]
     |
+        // Bodo Change: Allow parenthesized table names
+        LOOKAHEAD(5)
+        <LPAREN>
+        tableName = CompoundTableIdentifier()
+        ( tableRef = TableHints(tableName) | { tableRef = tableName; } )
+        <RPAREN>
+    |
         LOOKAHEAD(3)
         <LATERAL> { lateral = true; }
         <LPAREN>
