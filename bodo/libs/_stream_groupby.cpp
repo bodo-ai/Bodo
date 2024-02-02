@@ -1395,8 +1395,11 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
+    std::unique_ptr<bodo::Schema> build_table_schema =
+        bodo::Schema::Deserialize(build_arr_array_types, build_arr_c_types);
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        if (build_arr_array_types[i] == bodo_array_type::DICT) {
+        if (build_table_schema->column_types[i]->array_type ==
+            bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->key_dict_builders[i] =
@@ -1409,8 +1412,10 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     std::vector<std::shared_ptr<DictionaryBuilder>>
         build_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in build table:
-    for (size_t i = this->n_keys; i < build_arr_array_types.size(); i++) {
-        if (build_arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = this->n_keys; i < build_table_schema->column_types.size();
+         i++) {
+        if (build_table_schema->column_types[i]->array_type ==
+            bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             build_table_non_key_dict_builders.emplace_back(
