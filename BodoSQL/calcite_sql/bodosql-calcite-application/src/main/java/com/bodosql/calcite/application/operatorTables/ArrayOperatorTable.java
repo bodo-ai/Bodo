@@ -12,6 +12,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -40,7 +41,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
       SqlNullPolicyFunction.createAnyPolicy(
           "ARRAY_COMPACT",
           ReturnTypes.ARG0_NULLABLE,
-          OperandTypes.ARRAY,
+          OperandTypes.ARRAY.or(BodoOperandTypes.VARIANT),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_CONSTRUCT =
@@ -77,7 +78,12 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // The input can be any data type.
           OperandTypes.sequence(
-              "ARRAY_TO_STRING(ARRAY, STRING)", OperandTypes.ARRAY, OperandTypes.STRING),
+              "ARRAY_TO_STRING(ARRAY, STRING)",
+              // Should be ARRAY/VARIANT, but cannot have OR clauses if we want
+              // to be able to do implicit casting on the 2nd argument, so leaving
+              // the check of the first argument for Bodo.
+              OperandTypes.ANY,
+              OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -131,7 +137,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
           // The input can be any data type.
-          OperandTypes.ARRAY,
+          OperandTypes.ARRAY.or(BodoOperandTypes.VARIANT),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -163,7 +169,18 @@ public class ArrayOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction ARRAY_INTERSECTION = ARRAY_EXCEPT.withName("ARRAY_INTERSECTION");
 
-  public static final SqlFunction ARRAY_CAT = ARRAY_EXCEPT.withName("ARRAY_CAT");
+  public static final SqlBasicFunction ARRAY_CAT =
+      SqlBasicFunction.create(
+          "ARRAY_CAT",
+          // What Value should the return type be
+          ReturnTypes.ARG0_NULLABLE,
+          // The input can be any data type.
+          OperandTypes.sequence(
+              "ARRAY_CAT(ARRAY, ARRAY)",
+              OperandTypes.ARRAY.or(BodoOperandTypes.VARIANT),
+              OperandTypes.ARRAY.or(BodoOperandTypes.VARIANT)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_SLICE =
       SqlBasicFunction.create(

@@ -53,6 +53,15 @@ internal class VariantCastTable {
             }
         }
 
+        // Converts the second argument to an array
+        private val arg1ArrayCast = {
+                inType: RelDataType, factory: RelDataTypeFactory, idx: Int, _: List<RelDataType> ->
+            when (idx) {
+                1 -> makeArrayType(factory, inType.isNullable)
+                else -> inType
+            }
+        }
+
         // Converts the first argument to an array and the rest to number(9, 0)
         // Note: uses INTEGER for now
         private val arg0ArrayRestNumber9Cast = {
@@ -571,6 +580,7 @@ internal class VariantCastTable {
             StringOperatorTable.CHR to anyArgIntegerCast,
             StringOperatorTable.SPACE to anyArgIntegerCast,
             StringOperatorTable.SPLIT to anyArgVarcharCast,
+            ObjectOperatorTable.PARSE_JSON to anyArgVarcharCast,
             StringOperatorTable.STRTOK to varcharVarcharIntegerCast,
             StringOperatorTable.STRTOK_TO_ARRAY to anyArgVarcharCast,
             StringOperatorTable.SPLIT_PART to varcharVarcharIntegerCast,
@@ -656,6 +666,9 @@ internal class VariantCastTable {
             ObjectOperatorTable.OBJECT_DELETE to objectPickDeleteCast,
             ArrayOperatorTable.ARRAY_MAP_GET to arg1StringCast,
             ArrayOperatorTable.ARRAY_MAP_GET_BRACKET to arg1StringCast,
+            ArrayOperatorTable.ARRAY_POSITION to arg1ArrayCast,
+            ArrayOperatorTable.ARRAY_CONTAINS to arg1ArrayCast,
+            ArrayOperatorTable.ARRAY_TO_STRING to arg1StringCast,
         ).mapKeys { it.key.name }
     }
 }
