@@ -12,7 +12,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
 
@@ -579,6 +579,8 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
     )
 
 
+# Restricted to one rank until we figure out the correctness issue.
+@pytest_mark_one_rank
 @pytest.mark.parametrize(
     "df",
     [
@@ -851,7 +853,6 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
             reset_index=True,
             convert_columns_to_pandas=True,
             sort_output=True,
-            only_seq=True,
         )
 
 
@@ -996,5 +997,4 @@ def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
-        only_seq=True,
     )
