@@ -179,12 +179,10 @@ def test_unsupported_metadata_error_udtf(test_db_snowflake_catalog, memory_leak_
 
 
 @pytest_mark_one_rank
-def test_unsupported_udtf_multiple_definitions(
-    test_db_snowflake_catalog, memory_leak_check
-):
+def test_udtf_multiple_definitions(test_db_snowflake_catalog, memory_leak_check):
     """
-    Test that Snowflake UDTFs give a message that they aren't supported yet because
-    there are multiple definitions of the UDTF.
+    Test that Snowflake UDTFs with multiple definitions can be properly
+    inlined and select the correct implementation.
 
     TIMES_TWO_TABLE is manually defined inside TEST_DB.PUBLIC twice, once on strings and
     once on numbers.
@@ -194,13 +192,76 @@ def test_unsupported_udtf_multiple_definitions(
     def impl(bc, query):
         return bc.sql(query)
 
-    query = "select * from TABLE(TIMES_TWO_TABLE(1))"
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    def impl(bc, query):
+        return bc.sql(query)
+
+    local_table = pd.DataFrame(
+        {
+            # Number
+            "A": np.arange(10),
+            # String
+            "B": [str(i) for i in range(10)],
+            # Double which casts to string. Note all types prioritize
+            # string over number except for number.
+            "C": [np.float64(i) for i in np.arange(1, 11)],
+            # Binary which cannot be supported
+            "D": [str(i).encode("utf-8") for i in range(10)],
+        }
+    )
+    bc = bodosql.BodoSQLContext(
+        {"LOCAL_TABLE": local_table},
+        catalog=test_db_snowflake_catalog,
+    )
+    r_name_column = ["AFRICA", "AMERICA", "ASIA", "EUROPE", "MIDDLE EAST"]
+    repeated_r_name_column = [x + x for x in r_name_column]
+    query1 = "select t1.A, t2.value, t2.r_name from local_table t1, lateral(table(times_two_table(A))) t2"
+    left_table = pd.DataFrame({"A": local_table["A"], "VALUE": local_table["A"] * 2})
+    right_table = pd.DataFrame({"R_NAME": repeated_r_name_column})
+    py_output1 = pd.merge(left_table, right_table, how="cross")
+    check_func(
+        impl,
+        (bc, query1),
+        py_output=py_output1,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query2 = "select t1.B, t2.value, t2.r_name from local_table t1, lateral(table(times_two_table(B))) t2"
+    left_table = pd.DataFrame(
+        {"B": local_table["B"], "VALUE": local_table["B"] + local_table["B"]}
+    )
+    right_table = pd.DataFrame({"R_NAME": repeated_r_name_column})
+    py_output2 = pd.merge(left_table, right_table, how="cross")
+    check_func(
+        impl,
+        (bc, query2),
+        py_output=py_output2,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query3 = "select t1.C, t2.value, t2.r_name from local_table t1, lateral(table(times_two_table(C))) t2"
+    # Bodo always uses 6 decimal places right now.
+    float_to_str = local_table["C"].astype(str) + "00000"
+    left_table = pd.DataFrame(
+        {"C": local_table["C"], "VALUE": float_to_str + float_to_str}
+    )
+    right_table = pd.DataFrame({"R_NAME": repeated_r_name_column})
+    py_output3 = pd.merge(left_table, right_table, how="cross")
+    check_func(
+        impl,
+        (bc, query3),
+        py_output=py_output3,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+    query4 = "select t1.D, t2.value, t2.r_name from local_table t1, lateral(table(times_two_table(D))) t2"
     with pytest.raises(
         BodoError,
-        match="Unable to resolve function: TEST_DB\\.PUBLIC\\.TIMES_TWO_TABLE\\. BodoSQL only supports Snowflake UDFs with a definition for a given number of arguments\\. Found multiple definitions that accept 1 argument\\(s\\)\\.",
+        match="No match found for function signature TIMES_TWO_TABLE\\(<BINARY>\\)",
     ):
-        impl(bc, query)
+        bodo.jit(impl)(bc, query4)
 
 
 @pytest_mark_one_rank

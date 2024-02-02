@@ -37,8 +37,8 @@ public class SnowflakeUserDefinedTableFunction extends SnowflakeUserDefinedBaseF
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
      */
-    protected SnowflakeUserDefinedTableFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
-        super("UDTF", functionPath, args, numOptional, body, isSecure, isExternal, language, isMemoizable, tzInfo);
+    protected SnowflakeUserDefinedTableFunction(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
+        super("UDTF", functionPath, args, numOptional, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
         this.returnTypeInfo = parseReturnString(returns, tzInfo);
     }
 
@@ -125,7 +125,7 @@ public class SnowflakeUserDefinedTableFunction extends SnowflakeUserDefinedBaseF
     }
 
     // -- static creators
-    public static SnowflakeUserDefinedTableFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo) {
-        return new SnowflakeUserDefinedTableFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo);
+    public static SnowflakeUserDefinedTableFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
+        return new SnowflakeUserDefinedTableFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
     }
 }
