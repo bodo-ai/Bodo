@@ -3195,8 +3195,8 @@ def test_array_size_array(array, answer, memory_leak_check):
 @pytest.mark.parametrize(
     "array,answer",
     [
-        pytest.param(pd.Series(["A", "BC", None]), 3, id="null_string"),
-        pytest.param(pd.Series([1, 2, None, 3]), 4, id="null_int"),
+        pytest.param(pd.array(["A", "BC", None]), 3, id="null_string"),
+        pytest.param(pd.array([1, 2, None, 3]), 4, id="null_int"),
         pytest.param(None, None, id="null"),
     ],
 )
