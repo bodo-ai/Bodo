@@ -2318,8 +2318,9 @@ SqlNode FromClause() :
     SqlLiteral joinType;
 }
 {
-    e = Join()
+    e = Join(false)
     (
+
         // Comma joins should only occur at top-level in the FROM clause.
         // Valid:
         //  * FROM a, b
@@ -2328,7 +2329,7 @@ SqlNode FromClause() :
         //  * FROM a CROSS JOIN (b, c)
         LOOKAHEAD(1)
         <COMMA> { joinType = JoinType.COMMA.symbol(getPos()); }
-        e2 = Join() {
+        e2 = Join(true) {
             e = new SqlJoin(joinType.getParserPosition(),
                 e,
                 SqlLiteral.createBoolean(false, joinType.getParserPosition()),
@@ -2341,12 +2342,14 @@ SqlNode FromClause() :
     { return e; }
 }
 
-SqlNode Join() :
+// BODO CHANGE: added isFirstTable argument, and changed the TableRef1 production
+// to a TableRef3 that uses the isFirstTable argument.
+SqlNode Join(boolean isFirstTable) :
 {
     SqlNode e;
 }
 {
-    e = TableRef1(ExprContext.ACCEPT_QUERY_OR_JOIN)
+    e = TableRef3(ExprContext.ACCEPT_QUERY_OR_JOIN, false, isFirstTable)
     (
         LOOKAHEAD(2)
         e = JoinTable(e)
@@ -2379,7 +2382,10 @@ SqlNode JoinTable(SqlNode e) :
     LOOKAHEAD(3)
     natural = Natural()
     joinType = JoinType()
-    e2 = TableRef1(ExprContext.ACCEPT_QUERY_OR_JOIN)
+    // BODO CHANGE: changed these calls to use tableRef3, instead of the wrapper
+    // calls
+
+    e2 = TableRef3(ExprContext.ACCEPT_QUERY_OR_JOIN, false, true)
     (
         <ON> { on = JoinConditionType.ON.symbol(getPos()); }
         condition = Expression(ExprContext.ACCEPT_SUB_QUERY) {
@@ -2457,7 +2463,7 @@ SqlNode TableRef() :
     final SqlNode e;
 }
 {
-    e = TableRef3(ExprContext.ACCEPT_QUERY, false) { return e; }
+    e = TableRef3(ExprContext.ACCEPT_QUERY, false, false) { return e; }
 }
 
 SqlNode TableRef1(ExprContext exprContext) :
@@ -2465,21 +2471,23 @@ SqlNode TableRef1(ExprContext exprContext) :
     final SqlNode e;
 }
 {
-    e = TableRef3(exprContext, false) { return e; }
+    e = TableRef3(exprContext, false, false) { return e; }
 }
 
 /**
- * Parses a table reference in a FROM clause.
+ * Parses a table reference in a FROM clause. (Never the first table in the from clause, only the subsequent)
  */
 SqlNode TableRef2(boolean lateral) :
 {
     final SqlNode e;
 }
 {
-    e = TableRef3(ExprContext.ACCEPT_QUERY, lateral) { return e; }
+    // BODO CHANGE: this function now assumes lateral for table function arguments
+    e = TableRef3(ExprContext.ACCEPT_QUERY, lateral, true) { return e; }
 }
 
-SqlNode TableRef3(ExprContext exprContext, boolean lateral) :
+// BODO CHANGE: added assumeLateralIfTableFunction argument, and derivative logic
+SqlNode TableRef3(ExprContext exprContext, boolean lateral, boolean assumeLateralIfTableFunction) :
 {
     final SqlIdentifier tableName;
     SqlNode tableRef;
@@ -2531,7 +2539,10 @@ SqlNode TableRef3(ExprContext exprContext, boolean lateral) :
             tableRef = unnestOp.createCall(s.end(this), (List<SqlNode>) args);
         }
     |
+        // BODO CHANGE: Snowflake implicitly inserts "lateral"
+        // for joins on table functions.
         [ <LATERAL> { lateral = true; } ]
+        { lateral = lateral || assumeLateralIfTableFunction; }
         tableRef = TableFunctionCall()
         tableRef = addLateral(tableRef, lateral)
     |
