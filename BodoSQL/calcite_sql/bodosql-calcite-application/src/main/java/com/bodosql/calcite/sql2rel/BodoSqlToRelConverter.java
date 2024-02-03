@@ -37,6 +37,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
+import org.apache.calcite.sql.SnowflakeNamedArgumentSqlCatalogTableFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
@@ -453,7 +454,10 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
     if (operator instanceof SqlUserDefinedTableFunction) {
       SqlUserDefinedTableFunction udf = (SqlUserDefinedTableFunction) call.getOperator();
       Function function = udf.getFunction();
-      if (udf instanceof SqlUserDefinedTableFunction) {
+      if (function instanceof SnowflakeNamedArgumentSqlCatalogTableFunction) {
+        super.convertCollectionTable(bb, call);
+        return;
+      } else if (udf instanceof SqlUserDefinedTableFunction) {
         replaceSubQueries(bb, call, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
         SnowflakeUserDefinedTableFunction snowflakeTableUdf =
             (SnowflakeUserDefinedTableFunction) function;

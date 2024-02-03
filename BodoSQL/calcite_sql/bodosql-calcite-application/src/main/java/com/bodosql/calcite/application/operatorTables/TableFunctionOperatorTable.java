@@ -1,11 +1,19 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import com.bodosql.calcite.catalog.SnowflakeCatalog;
+import com.bodosql.calcite.schema.SnowflakeCatalogFunctionParameter;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
+import kotlin.Pair;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.schema.FunctionParameter;
+import org.apache.calcite.sql.SnowflakeNamedArgumentSqlCatalogTableFunction;
 import org.apache.calcite.sql.SnowflakeNamedArgumentSqlTableFunction;
 import org.apache.calcite.sql.SnowflakeSqlTableFunction;
 import org.apache.calcite.sql.SqlFunction;
@@ -133,6 +141,56 @@ public class TableFunctionOperatorTable implements SqlOperatorTable {
           SnowflakeSqlTableFunction.FunctionType.GENERATOR,
           0,
           TableCharacteristic.Semantics.ROW);
+
+  private static final SnowflakeNamedOperandMetadataImpl EXTERNAL_TABLE_FILES_OPERAND_METADATA =
+      SnowflakeNamedOperandMetadataImpl.create(
+          List.of(SqlTypeFamily.CHARACTER),
+          List.of("TABLE_NAME"),
+          1,
+          List.of(true),
+          (SqlLiteral literal, int argNumber) -> true,
+          (RexBuilder builder, int i) -> null);
+
+  public static final String EXTERNAL_TABLE_FILES_NAME = "EXTERNAL_TABLE_FILES";
+
+  // Returns a new EXTERNAL_TABLE_FILES function given a catalog and path definition
+  public static final SnowflakeNamedArgumentSqlCatalogTableFunction makeExternalTableFiles(
+      SnowflakeCatalog catalog, List<String> functionPath) {
+    List<FunctionParameter> parameters =
+        List.of(
+            new SnowflakeCatalogFunctionParameter(
+                "TABLE_NAME", 0, (factory) -> factory.createSqlType(SqlTypeName.CHAR), true));
+    Function<RelDataTypeFactory, RelDataType> charFunc =
+        (factory) ->
+            factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.VARCHAR, -1), false);
+    Function<RelDataTypeFactory, RelDataType> intFunc =
+        (factory) ->
+            factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.BIGINT), false);
+    Function<RelDataTypeFactory, RelDataType> ltzFunc =
+        (factory) ->
+            factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE), false);
+    List<Pair<String, Function<RelDataTypeFactory, RelDataType>>> outputs =
+        List.of(
+            new Pair("FILE_NAME", charFunc),
+            new Pair("REGISTERED_ON", ltzFunc),
+            new Pair("FILE_SIZE", intFunc),
+            new Pair("LAST_MODIFIED", ltzFunc),
+            new Pair("ETAG", charFunc),
+            new Pair("MD5", charFunc));
+    return SnowflakeNamedArgumentSqlCatalogTableFunction.create(
+        EXTERNAL_TABLE_FILES_NAME,
+        BodoReturnTypes.EXTERNAL_TABLE_FILES_RETURN_TYPE,
+        EXTERNAL_TABLE_FILES_OPERAND_METADATA,
+        SnowflakeSqlTableFunction.FunctionType.EXTERNAL_TABLE_FILES,
+        0,
+        TableCharacteristic.Semantics.ROW,
+        parameters,
+        outputs,
+        catalog,
+        functionPath);
+  }
 
   private List<SqlOperator> functionList = Arrays.asList(FLATTEN, GENERATOR);
 

@@ -1,13 +1,17 @@
 package org.apache.calcite.sql;
 
+import com.bodosql.calcite.schema.SnowflakeUDFFunctionParameter;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.schema.Function;
+import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.sql.type.SnowflakeNamedOperandMetadataImpl;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;

@@ -88,6 +88,7 @@ public class SnowflakeSqlTableFunction extends SqlFunction
         DEFAULT,
         FLATTEN,
         GENERATOR,
+        EXTERNAL_TABLE_FILES,
     }
 
     /**

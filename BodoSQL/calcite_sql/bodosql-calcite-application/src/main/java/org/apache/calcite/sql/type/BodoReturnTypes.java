@@ -107,6 +107,7 @@ public class BodoReturnTypes {
                 List<String> names = List.of("SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS");
                 return factory.createStructType(types, names);
             };
+
     /**
      * Defines the return type for GENERATOR
      */
@@ -114,6 +115,31 @@ public class BodoReturnTypes {
             (opBinding) -> {
                 RelDataTypeFactory factory = opBinding.getTypeFactory();
                 return factory.createStructType(List.of(), List.of());
+            };
+
+
+    /**
+     * Defines the return type for EXTERNAL_TABLE_FILES
+     */
+    public static final SqlReturnTypeInference EXTERNAL_TABLE_FILES_RETURN_TYPE =
+            (opBinding) -> {
+                RelDataTypeFactory factory = opBinding.getTypeFactory();
+                // EXTERNAL_TABLE_FILES returns a table with 6 values.
+                // FILE_NAME : VARCHAR NOT NULL
+                // REGISTERED_ON : TIMESTAMP_LTZ NOT NULL
+                // FILE_SIZE : BIGINT NOT NULL
+                // LAST_MODIFIED: TIMESTAMP_LTZ NOT NULL
+                // ETAG: VARCHAR NOT NULL
+                // MD5: VARCHAR NOT NULL
+                RelDataType type0 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.VARCHAR), false);
+                RelDataType type1 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE), false);
+                RelDataType type2 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.BIGINT), false);
+                RelDataType type3 = type1;
+                RelDataType type4 = type0;
+                RelDataType type5 = type0;
+                List<RelDataType> types = List.of(type0, type1, type2, type3, type4, type5);
+                List<String> names = List.of("FILE_NAME", "REGISTERED_ON", "FILE_SIZE", "LAST_MODIFIED", "ETAG", "MD5");
+                return factory.createStructType(types, names);
             };
 
     /**
