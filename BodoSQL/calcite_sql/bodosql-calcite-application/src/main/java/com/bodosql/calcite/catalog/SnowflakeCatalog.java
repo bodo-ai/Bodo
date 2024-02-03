@@ -5,6 +5,7 @@ import static com.bodosql.calcite.adapter.snowflake.SnowflakeUtils.snowflakeYesN
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_THREE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
+import static com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable.EXTERNAL_TABLE_FILES_NAME;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
@@ -13,6 +14,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
+import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable;
 import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -825,6 +827,24 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return getFunctionNamesImpl(schemaPath.get(0), schemaPath.get(1), isConnectionCached());
   }
 
+  // Adds supported builtin UDF/UDTF function names from Snowflake, like EXTERNAL_TABLE_FILES
+  protected void addBuiltinFunctionNames(
+      String databaseName, String schemaName, HashSet<String> functionNames) {
+    if (schemaName.equals("INFORMATION_SCHEMA")) {
+      functionNames.add(EXTERNAL_TABLE_FILES_NAME);
+    }
+  }
+
+  // Adds supported builtin UDF/UDTF functions from Snowflake, like EXTERNAL_TABLE_FILES
+  protected void addBuiltinFunctions(
+      String databaseName, String schemaName, List<org.apache.calcite.schema.Function> functions) {
+    if (schemaName.equals("INFORMATION_SCHEMA")) {
+      functions.add(
+          TableFunctionOperatorTable.makeExternalTableFiles(
+              this, List.of(databaseName, schemaName)));
+    }
+  }
+
   /**
    * Implementation of getFunctionNames that enables retrying if a cached connection fails
    *
@@ -847,6 +867,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getFunctions
         tableNames.add(tableInfo.getString(3));
       }
+      // Add builtin Snowflake UDF/UDFT names
+      addBuiltinFunctionNames(databaseName, schemaName, tableNames);
       return tableNames;
     } catch (SQLException e) {
       String errorMsg =
@@ -962,6 +984,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         }
         functions.add(function);
       }
+      // Add builtin Snowflake UDFs/UDFTs
+      addBuiltinFunctions(databaseName, schemaName, functions);
     } catch (SQLException e) {
       String errorMsg =
           String.format(
