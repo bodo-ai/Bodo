@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
+import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable.EXTERNAL_TABLE_FILES_NAME
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.StateVariable
@@ -13,6 +14,8 @@ import org.apache.calcite.rel.metadata.RelColumnMapping
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexLiteral
+import org.apache.calcite.sql.SnowflakeNamedArgumentSqlCatalogTableFunction
+import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction
 import java.lang.reflect.Type
 import java.math.BigDecimal
 
@@ -28,6 +31,8 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
                 ctx ->
             if ((call as RexCall).operator.name == TableFunctionOperatorTable.GENERATOR.name) {
                 emitGenerator(ctx, call as RexCall)
+            } else if ((call as RexCall).operator.name == EXTERNAL_TABLE_FILES_NAME) {
+                emitExternalTableFiles(ctx, call as RexCall)
             } else {
                 throw BodoSQLCodegenException("Flatten node does not currently support codegen for operation $call")
             }
@@ -38,7 +43,7 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
      * Emits the code necessary to calculate a call to the GENERATOR function.
      *
      * @param ctx the build context
-     * @param flattenCall the function call to FLATTEN
+     * @param generatorCall the function call to GENERATOR
      * @return the variable that represents this relational expression.
      */
     fun emitGenerator(ctx: PandasRel.BuildContext, generatorCall: RexCall): BodoEngineTable {
@@ -46,6 +51,33 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
         val rowCountLiteral = generatorCall.operands[0] as RexLiteral
         val rowCountExpr = Expr.IntegerLiteral(rowCountLiteral.getValueAs(BigDecimal::class.java)!!.toInt())
         return ctx.returns(Expr.Call("bodo.hiframes.table.generate_empty_table_with_rows", listOf(rowCountExpr), listOf()))
+    }
+
+    /**
+     * Emits the code necessary to calculate a call to the EXTERNAL_TABLE_FILES function.
+     *
+     * @param ctx the build context
+     * @param etfCall the function call to EXTERNAL_TABLE_FILES
+     * @return the variable that represents this relational expression.
+     */
+    private fun emitExternalTableFiles(ctx: PandasRel.BuildContext, etfCall: RexCall): BodoEngineTable {
+        // This is a defensive check since it should always be true by the manner in which
+        // a  call to EXTERNAL_TABLE_FILES is constructed.
+        return if (etfCall.op is SqlUserDefinedTableFunction && etfCall.op.function is
+            SnowflakeNamedArgumentSqlCatalogTableFunction
+        ) {
+            val function = etfCall.op.function as SnowflakeNamedArgumentSqlCatalogTableFunction
+            val catalog = function.catalog
+            val databaseName = if (function.functionPath.size < 2) catalog.getDefaultSchema(0)[0] else function.functionPath[0]
+            val connStr = Expr.StringLiteral(catalog.generatePythonConnStr(databaseName, ""))
+            val tableName = (etfCall.operands[0] as RexLiteral).getValueAs(String::class.java)!!
+            val query = Expr.StringLiteral("SELECT * FROM TABLE(\"$databaseName\".\"INFORMATION_SCHEMA\".\"EXTERNAL_TABLE_FILES\"(TABLE_NAME=>$$$tableName$$))")
+            val args = listOf(query, connStr)
+            val kwargs = listOf("_bodo_read_as_table" to Expr.BooleanLiteral(true))
+            return ctx.returns(Expr.Call("pd.read_sql", args, kwargs))
+        } else {
+            throw BodoSQLCodegenException("Cannot call EXTERNAL_TABLE_FILES without an associated SnowflakeCatalog")
+        }
     }
 
     /**
