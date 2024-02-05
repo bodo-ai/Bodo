@@ -117,6 +117,7 @@ data: {
       "COPY",
       "GRANTS",
       "TIMESTAMP_LTZ",
+      "TIMESTAMPLTZ",
       "LAST_DAY",
       # Tokens for Date/Time Intervals
       "Y",
@@ -367,9 +368,15 @@ data: {
         "TIME",
         "TIMESTAMP",
         "TIMESTAMP_LTZ",
+        # Note TIMESTAMPLTZ is a valid alias for TIMESTAMP_LTZ
+        "TIMESTAMPLTZ",
         "TIMESTAMP_NTZ",
+        # Note TIMESTAMPNTZ is a valid alias for TIMESTAMP_NTZ
+        "TIMESTAMPNTZ",
         # TIMESTAMP_TZ is not registered as a token yet
         # "TIMESTAMP_TZ",
+        # TIMESTAMPTZ is not registered as a token yet
+        # "TIMESTAMPTZ",
         "TINYINT",
         "VARBINARY",
         "VARCHAR",
