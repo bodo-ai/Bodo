@@ -200,6 +200,44 @@ def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
     )
 
 
+def test_mrnf_all_ties(memory_leak_check):
+    """
+    Test that the MRNF output is correct when all the values in the order-by
+    column are the same.
+    """
+    df = pd.DataFrame(
+        {
+            "B": pd.array(list(np.arange(50)) * 2, dtype="Int32"),
+            "C": pd.Series([True] * 100, dtype="bool"),
+        }
+    )
+    query = f"""
+    SELECT
+        B, C
+    FROM
+        (   
+            SELECT
+                B, C,
+                ROW_NUMBER() OVER(PARTITION BY B ORDER BY C ASC NULLS FIRST) as rn
+            FROM table1
+        )
+    WHERE rn = 1
+    """
+
+    def py_mrnf(x: pd.DataFrame):
+        return x.sort_values(by=["C"], ascending=True, na_position="first").iloc[0]
+
+    expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    ctx = {"TABLE1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_df,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.parametrize(
     "input_arrs",
     [
