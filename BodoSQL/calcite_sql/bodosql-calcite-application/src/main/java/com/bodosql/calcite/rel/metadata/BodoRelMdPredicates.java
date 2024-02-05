@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.metadata;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
 import com.bodosql.calcite.rel.core.RowSample;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -72,6 +73,11 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
   public RelOptPredicateList getPredicates(RowSample sample, RelMetadataQuery mq) {
     RelNode input = sample.getInput();
     return mq.getPulledUpPredicates(input);
+  }
+
+  /** Infers predicates for a MinRowNumberFilter node */
+  public RelOptPredicateList getPredicates(PandasMinRowNumberFilter mrnf, RelMetadataQuery mq) {
+    return ((BodoRelMetadataQuery) mq).getPulledUpPredicates(mrnf.asPandasProjectFilter());
   }
 
   /**

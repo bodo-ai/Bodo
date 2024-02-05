@@ -11,6 +11,9 @@ class PandasRules private constructor() {
         val PANDAS_FILTER_RULE: RelOptRule = PandasFilterRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
+        val PANDAS_MIN_ROW_NUMBER_FILTER_RULE: RelOptRule = PandasMinRowNumberFilterRule.DEFAULT_CONFIG.toRule()
+
+        @JvmField
         val PANDAS_AGGREGATE_RULE: RelOptRule = PandasAggregateRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
@@ -39,6 +42,9 @@ class PandasRules private constructor() {
 
         @JvmField
         val PANDAS_FLATTEN_RULE: RelOptRule = PandasFlattenRule.DEFAULT_CONFIG.toRule()
+
+        @JvmField
+        val PANDAS_WINDOW_RULE: RelOptRule = PandasWindowRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
         val PANDAS_TABLE_FUNCTION_SCAN_RULE: RelOptRule = PandasTableFunctionScanRule.DEFAULT_CONFIG.toRule()
@@ -77,11 +83,13 @@ class PandasRules private constructor() {
             PANDAS_SAMPLE_RULE,
             PANDAS_ROW_SAMPLE_RULE,
             PANDAS_FLATTEN_RULE,
+            PANDAS_WINDOW_RULE,
             PANDAS_TABLE_MODIFY_RULE,
             PANDAS_TABLE_CREATE_RULE,
             PANDAS_TABLE_SCAN,
             PANDAS_TARGET_TABLE_SCAN,
             PANDAS_TABLE_FUNCTION_SCAN_RULE,
+            PANDAS_MIN_ROW_NUMBER_FILTER_RULE,
         )
 
         fun rules(): List<RelOptRule> = PANDAS_RULES

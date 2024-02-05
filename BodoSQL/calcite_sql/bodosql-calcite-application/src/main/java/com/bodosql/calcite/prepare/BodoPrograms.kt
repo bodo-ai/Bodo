@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasRules
+import com.bodosql.calcite.adapter.pandas.PandasWindow
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
@@ -145,6 +146,7 @@ object BodoPrograms {
             NoopProgram
         },
         AnalysisSuite.multiJoinAnalyzer,
+        WindowConversionProgram(),
         MetadataPreprocessProgram(),
         RuleSetProgram(
             Iterables.concat(
@@ -155,6 +157,8 @@ object BodoPrograms {
         // This analysis pass has to come after VOLCANO_MINIMAL_RULE_SET which
         // contains the filterPushdown step.
         AnalysisSuite.filterPushdownAnalysis,
+        // Convert Window nodes back to Project nodes
+        WindowProjectTransformProgram,
         // Add a final trim step.
         TrimFieldsProgram(true),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
@@ -607,6 +611,24 @@ object BodoPrograms {
                     else -> super.visit(scan)
                 }
             }
+        }
+    }
+
+    // Converts RelNodes containing RexOver calls to a sequence of
+    // Window RelNodes, possibly interleaved with Project nodes.
+    private class WindowConversionProgram : Program by HepOptimizerProgram(
+        BodoRules.WINDOW_CONVERSION_RULES,
+    )
+
+    // Converts PandasWindow rel nodes back to PandasProject for codegen purposes
+    object WindowProjectTransformProgram : Program by ShuttleProgram(Visitor) {
+        private object Visitor : RelShuttleImpl() {
+            override fun visit(other: RelNode): RelNode =
+                if (other is PandasWindow) {
+                    other.convertToProject().accept(this)
+                } else {
+                    super.visit(other)
+                }
         }
     }
 

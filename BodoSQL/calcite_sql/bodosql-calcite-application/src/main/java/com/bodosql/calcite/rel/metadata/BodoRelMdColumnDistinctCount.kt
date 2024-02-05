@@ -5,6 +5,8 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.rel.core.Flatten
+import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
+import com.bodosql.calcite.rel.core.WindowBase
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
@@ -21,10 +23,12 @@ import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexOver
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
+import java.math.BigDecimal
 
 class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     override fun getDef(): MetadataDef<ColumnDistinctCount> {
@@ -45,6 +49,112 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             mq.getRowCount(rel)
         } else {
             null
+        }
+    }
+
+    /**
+     * Get column distinct count for a column produced by a window rel node. This takes one of
+     * two paths:
+     * - If the requested column is a pass-through reference, forward the distinctness request to
+     *   the corresponding column of the child RelNode.
+     * - If the requested column is a window function call, attempt to approximate its distinctness.
+     */
+    fun getColumnDistinctCount(window: WindowBase, mq: RelMetadataQuery, column: Int): Double? {
+        val numPassThroughCols = window.inputsToKeep.cardinality()
+        return if (column < numPassThroughCols) {
+            (mq as BodoRelMetadataQuery).getColumnDistinctCount(window.input, window.inputsToKeep.nth(column))
+        } else {
+            val asExpr = window.convertToProjExprs()[column]
+            if (asExpr is RexOver) {
+                getWindowCallDistinctCount(window.input, asExpr, (mq as BodoRelMetadataQuery))
+            } else {
+                null
+            }
+        }
+    }
+
+    /**
+     * Return a guess for the number of distinct rows produced by a window function call if possible.
+     * Currently supported on a limited number of functions depending on the nature of the
+     * window group.
+     *
+     * @param input The child RelNode that all input refs refer to
+     * @param over The window function call having its distinctness checked
+     * @param mq The metadata query handler
+     * @return An approximate guess for the number of distinct rows produced by the window function call,
+     * or null if not one of the supported forms.
+     */
+    fun getWindowCallDistinctCount(input: RelNode, over: RexOver, mq: BodoRelMetadataQuery): Double? {
+        return when (over.operator.kind) {
+            SqlKind.MIN,
+            SqlKind.MAX,
+            SqlKind.MODE,
+            SqlKind.FIRST_VALUE,
+            SqlKind.ANY_VALUE,
+            SqlKind.LAST_VALUE,
+            SqlKind.NTH_VALUE,
+            -> {
+                /**
+                 * FIRST_VALUE, LAST_VALUE, ANY_VALUE, NTH_VALUE, MIN, MAX, MODE without a window frame
+                 *   select 1 value per partition, so the distinct count is the minimum of the original
+                 *   distinct count & the number of distinct partitions. For first/last/any, only checks
+                 *   the relevant side of the bound.
+                 *   */
+                val inputColumn = over.operands[0]
+                val lowerCheck = listOf(SqlKind.LAST_VALUE).contains(over.operator.kind) || over.window.lowerBound.isUnbounded
+                val upperCheck = listOf(SqlKind.FIRST_VALUE, SqlKind.ANY_VALUE, SqlKind.NTH_VALUE).contains(over.operator.kind) || over.window.upperBound.isUnbounded
+                if (inputColumn is RexInputRef && lowerCheck && upperCheck) {
+                    val partitionKeys = over.window.partitionKeys.map {
+                        if (it is RexInputRef) {
+                            it.index
+                        } else {
+                            throw Exception("Malformed window call $over")
+                        }
+                    }
+                    val distinctRows = mq.getDistinctRowCount(input, ImmutableBitSet.of(partitionKeys), null)
+                    val distinctInputs = mq.getColumnDistinctCount(input, inputColumn.index)
+                    distinctInputs?.let { di -> distinctRows?.let { dr -> minOf(di, dr) } }
+                } else {
+                    null
+                }
+            }
+            SqlKind.NTILE -> {
+                // NTILE(n) always has n unique outputs
+                val nBins = over.operands[0]
+                if (nBins is RexLiteral) {
+                    return nBins.getValueAs(BigDecimal::class.java)?.toDouble()
+                } else {
+                    null
+                }
+            }
+            SqlKind.LEAD,
+            SqlKind.LAG,
+            -> {
+                // LEAD and LAG approximately maintain distinctness (except for values cut off at the ends)
+                val inputColumn = over.operands[0]
+                return if (inputColumn is RexInputRef) {
+                    mq.getColumnDistinctCount(input, inputColumn.index)
+                } else {
+                    null
+                }
+            }
+            SqlKind.ROW_NUMBER -> {
+                // ROW_NUMBER has at most as many distinct values as the largest partition
+                // size, which can be approximated by rowCount divided by # of partitions
+                val partitionKeys = over.window.partitionKeys.map {
+                    if (it is RexInputRef) {
+                        it.index
+                    } else {
+                        throw Exception("Malformed window call $over")
+                    }
+                }
+                val distinctRows = mq.getDistinctRowCount(input, ImmutableBitSet.of(partitionKeys), null)
+                val inRows = mq.getRowCount(input)
+                distinctRows?.let { inRows / distinctRows }
+            }
+            // MIN_ROW_NUMBER_FILTER is a boolean, so it can only be true/false
+            SqlKind.MIN_ROW_NUMBER_FILTER -> 2.0
+            else -> null
         }
     }
 
@@ -77,6 +187,27 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
             val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
             return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
+        }
+    }
+
+    fun getColumnDistinctCount(rel: MinRowNumberFilterBase, mq: RelMetadataQuery, column: Int): Double? {
+        val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
+        return if (distinctCount != null) {
+            distinctCount
+        } else {
+            // First, transform the column to account for inputsToKeep
+            val newColumn = rel.inputsToKeep.nth(column)
+            val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, newColumn)
+            val outputRowCount = mq.getRowCount(rel)
+            val inputRowCount = mq.getRowCount(rel.input)
+            if (rel.partitionColSet.get(newColumn)) {
+                // If the column is a partition column, its distinct count does not decrease
+                return distinctInput?.let { minOf(it, outputRowCount) }
+            } else {
+                // For default filters assume the ratio remains the same after filtering.
+                val ratio = outputRowCount / inputRowCount
+                return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
+            }
         }
     }
 
