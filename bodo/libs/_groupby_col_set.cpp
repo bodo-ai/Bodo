@@ -1812,6 +1812,46 @@ void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
     head_row_list = row_list;
 }
 
+// ########################## Streaming MRNF ##########################
+
+StreamingMRNFColSet::StreamingMRNFColSet(std::vector<bool>& _asc,
+                                         std::vector<bool>& _na_pos,
+                                         bool use_sql_rules)
+    : BasicColSet(nullptr, Bodo_FTypes::min_row_number_filter,
+                  /*combine_step*/ false, use_sql_rules),
+      asc(_asc),
+      na_pos(_na_pos) {
+    // Decide the array type (NULLABLE or NUMPY) of the index column
+    // to allocate and the ftype to use during the update step.
+    std::tie(this->update_ftype, this->update_idx_arr_type) =
+        get_update_ftype_idx_arr_type_for_mrnf(this->asc.size(), this->asc,
+                                               this->na_pos);
+}
+
+StreamingMRNFColSet::~StreamingMRNFColSet() {}
+
+void StreamingMRNFColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Allocate intermediate buffer to store the index of the min element for
+    // each group.
+    out_cols.push_back(alloc_array_top_level(
+        num_groups, 1, 1, this->update_idx_arr_type, Bodo_CTypes::UINT64, -1, 0,
+        0, false, false, false, pool, std::move(mm)));
+}
+
+void StreamingMRNFColSet::update(const std::vector<grouping_info>& grp_infos,
+                                 bodo::IBufferPool* const pool,
+                                 std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> idx_col = this->update_cols[0];
+    const grouping_info& grp_info = grp_infos[0];
+    // Use the common helper (between streaming and non-streaming) to populate
+    // 'idx_col' based on the order-by columns.
+    min_row_number_filter_no_sort(idx_col, this->orderby_cols, grp_info,
+                                  this->asc, this->na_pos, this->update_ftype,
+                                  this->use_sql_rules, pool, std::move(mm));
+}
+
 // ############################## Window ##############################
 
 WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
@@ -1951,8 +1991,9 @@ std::unique_ptr<BasicColSet> makeColSet(
     bool use_sql_rules) {
     BasicColSet* colset;
 
-    if ((ftype != Bodo_FTypes::window && ftype != Bodo_FTypes::listagg &&
-         ftype != Bodo_FTypes::array_agg &&
+    if ((ftype != Bodo_FTypes::window &&
+         ftype != Bodo_FTypes::min_row_number_filter &&
+         ftype != Bodo_FTypes::listagg && ftype != Bodo_FTypes::array_agg &&
          ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc &&
@@ -1960,9 +2001,8 @@ std::unique_ptr<BasicColSet> makeColSet(
         in_cols.size() != 1) {
         throw std::runtime_error(
             "Only listagg, array_agg, percentile_cont, percentile_disc, "
-            "object_agg and "
-            "window functions can have multiple input "
-            "columns");
+            "object_agg, window functions and min_row_number_filter can have "
+            "multiple input columns.");
     }
     switch (ftype) {
         case Bodo_FTypes::udf:
@@ -2038,6 +2078,10 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::ngroup:
             colset = new NgroupColSet(in_cols[0], is_parallel, use_sql_rules);
+            break;
+        case Bodo_FTypes::min_row_number_filter:
+            colset = new StreamingMRNFColSet(window_ascending,
+                                             window_na_position, use_sql_rules);
             break;
         case Bodo_FTypes::window:
             colset = new WindowColSet(

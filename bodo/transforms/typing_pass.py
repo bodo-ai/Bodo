@@ -5069,7 +5069,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 rhs.args,
                 dict(rhs.kws),
-                6,
+                10,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5112,7 +5112,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 groupby_def.args,
                 dict(groupby_def.kws),
-                6,
+                10,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5133,7 +5133,11 @@ class TypingTransforms:
                     output_type.fnames,
                     output_type.f_in_offsets,
                     output_type.f_in_cols,
-                    input_table_type,
+                    output_type.mrnf_sort_col_inds,
+                    output_type.mrnf_sort_col_asc,
+                    output_type.mrnf_sort_col_na,
+                    output_type.mrnf_col_inds_keep,
+                    build_table_type=input_table_type,
                 )
 
                 params = [
@@ -5146,12 +5150,36 @@ class TypingTransforms:
 
                 args = groupby_def.args[:5]
 
+                # Handle the optional MRNF arguments.
+                mrnf_vals = {}
+                for argname, idx in [
+                    ("mrnf_sort_col_inds", 5),
+                    ("mrnf_sort_col_asc", 6),
+                    ("mrnf_sort_col_na", 7),
+                    ("mrnf_col_inds_keep", 8),
+                ]:
+                    arg_var = get_call_expr_arg(
+                        "init_groupby_state",
+                        groupby_def.args,
+                        dict(groupby_def.kws),
+                        idx,
+                        argname,
+                        default=None,
+                        use_default=True,
+                    )
+                    if arg_var is not None:
+                        params.append(argname)
+                        args.append(arg_var)
+                        mrnf_vals[argname] = argname
+                    else:
+                        mrnf_vals[argname] = "None"
+
                 # Fetch the op_pool_size_bytes argument
                 op_pool_size_bytes_var = get_call_expr_arg(
                     "init_groupby_state",
                     groupby_def.args,
                     dict(groupby_def.kws),
-                    5,
+                    9,
                     "op_pool_size_bytes",
                     default=None,
                     use_default=True,
@@ -5173,6 +5201,10 @@ class TypingTransforms:
                         ftypes,
                         f_in_offsets,
                         f_in_cols,
+                        mrnf_sort_col_inds={mrnf_vals['mrnf_sort_col_inds']},
+                        mrnf_sort_col_asc={mrnf_vals['mrnf_sort_col_asc']},
+                        mrnf_sort_col_na={mrnf_vals['mrnf_sort_col_na']},
+                        mrnf_col_inds_keep={mrnf_vals['mrnf_col_inds_keep']},
                         op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                     )
