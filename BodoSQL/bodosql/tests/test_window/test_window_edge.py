@@ -299,3 +299,163 @@ def test_row_number_without_partition(orders, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
+
+
+def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
+    """
+    Tests a query that will result in a plan with multiple layers
+    of projection, filter & window nodes, with complex rel trimming
+    behavior.
+    """
+    query = """
+    SELECT A, E, P3, O4, W1, W5, W8
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
+        FROM (
+            SELECT 
+                A, B, E,
+                P1, P3, O4, P5, O5,
+                W1,
+                LEAD(W1 - A) OVER (PARTITION BY P1 ORDER BY O2) as W6,
+                W3,
+                LEAD(W3 + C, 1, -1) OVER (PARTITION BY P3 ORDER BY O2) as W7,
+                W4,
+                LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
+                W5
+            FROM (
+                SELECT 
+                    P1, P2, P3, P4, P5,
+                    O1, O2, O3, O4, O5,
+                    LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
+                    A,
+                    LEAD(B, 2) OVER (PARTITION BY P2 ORDER BY O1+O2) as W2,
+                    B,
+                    LEAD(C) OVER (PARTITION BY P3-P1 ORDER BY O3-O5) as W3,
+                    C,
+                    LEAD(D) OVER (PARTITION BY P4 ORDER BY O4) as W4,
+                    D,
+                    LEAD(E) OVER (PARTITION BY P5 ORDER BY O5) as W5,
+                    E
+                FROM TABLE1
+                WHERE O1 >= O2
+            )
+            QUALIFY RANK() OVER (PARTITION BY P1 ORDER BY O2) = DENSE_RANK() OVER (PARTITION BY P1 ORDER BY O2)
+        )
+    )
+    WHERE RN = 1
+    """
+    spark_query = """
+    SELECT A, E, P3, O4, W1, W5, W8
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
+        FROM (
+            SELECT 
+                A, B, E,
+                P1, P3, O4, P5, O5,
+                W1,
+                LEAD(W1 - A) OVER (PARTITION BY P1 ORDER BY O2) as W6,
+                W3,
+                LEAD(W3 + C, 1, -1) OVER (PARTITION BY P3 ORDER BY O2) as W7,
+                W4,
+                LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
+                W5
+            FROM (
+                SELECT 
+                    P1, P2, P3, P4, P5,
+                    O1, O2, O3, O4, O5,
+                    LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
+                    A,
+                    LEAD(B, 2) OVER (PARTITION BY P2 ORDER BY O1+O2) as W2,
+                    B,
+                    LEAD(C) OVER (PARTITION BY P3-P1 ORDER BY O3-O5) as W3,
+                    C,
+                    LEAD(D) OVER (PARTITION BY P4 ORDER BY O4) as W4,
+                    D,
+                    LEAD(E) OVER (PARTITION BY P5 ORDER BY O5) as W5,
+                    E,
+                    RANK() OVER (PARTITION BY P1 ORDER BY O2) = DENSE_RANK() OVER (PARTITION BY P1 ORDER BY O2) as COND
+                FROM TABLE1
+                WHERE O1 >= O2
+            )
+            WHERE cond
+        )
+    )
+    WHERE RN = 1
+    """
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "P1": [0] * 5,
+                "P2": [1] * 5,
+                "P3": [2] * 5,
+                "P4": [3] * 5,
+                "P5": [4] * 5,
+                "O1": [0, 1, 2, 3, 4],
+                "O2": [0, 1, 2, 3, 4],
+                "O3": [0, 1, 2, 3, 4],
+                "O4": [0, 1, 2, 3, 4],
+                "O5": [0, 1, 2, 3, 4],
+                "A": pd.array([2**i for i in range(5)], dtype=pd.Int16Dtype()),
+                "B": pd.array([3**i for i in range(5)], dtype=pd.Int16Dtype()),
+                "C": pd.array([4**i for i in range(5)], dtype=pd.Int16Dtype()),
+                "D": pd.array([5**i for i in range(5)], dtype=pd.Int16Dtype()),
+                "E": pd.array([6**i for i in range(5)], dtype=pd.Int16Dtype()),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
+def test_window_pruning_single_layer(spark_info, memory_leak_check):
+    """
+    Variant of test_window_pruning_multiple_layers but with a simpler query
+    with only 1 layer of window calls.
+    """
+    query = """
+    SELECT 
+        A,
+        B,
+        W2,
+        P1,
+        O2
+    FROM (
+        SELECT
+            A,
+            B,
+            LEAD(A, 1) OVER (PARTITION BY P1 ORDER BY O1) as W1,
+            LAG(B, 1, 0) OVER (PARTITION BY P2 ORDER BY O2) as W2,
+            P1,
+            P2,
+            O1,
+            O2
+        FROM TABLE1
+    )
+    """
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "P1": [0] * 5,
+                "P2": [1] * 5,
+                "O1": [1, 2, 3, 4, 5],
+                "O2": [10, 20, 30, 40, 50],
+                "A": pd.array([2**i for i in range(5)], dtype=pd.Int16Dtype()),
+                "B": pd.array([3**i for i in range(5)], dtype=pd.Int16Dtype()),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )

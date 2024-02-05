@@ -3,6 +3,7 @@ package com.bodosql.calcite.rel.metadata
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.rel.core.Flatten
+import com.bodosql.calcite.rel.core.WindowBase
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
@@ -179,12 +180,17 @@ class BodoMetadataRestrictionScan {
                 if (cols.isNotEmpty()) {
                     cols.forEach {
                         val proj = node.projects[it]
-                        getColumnForDistinctness(proj)?.let {
-                                col ->
+                        getColumnForDistinctness(proj)?.let { col ->
                             newCols.add(col)
                         }
                     }
                 }
+                findColumnsThatCanBeRequested(node.inputs[0], newCols)
+            } else if (node is WindowBase) {
+                // For a window, forward all distinctness requests that do not
+                // come from a window argument.
+                val nPassThroughCols = node.inputsToKeep.cardinality()
+                val newCols = cols.filter { it < nPassThroughCols }.toSet()
                 findColumnsThatCanBeRequested(node.inputs[0], newCols)
             } else if (node is MultiJoin) {
                 /**

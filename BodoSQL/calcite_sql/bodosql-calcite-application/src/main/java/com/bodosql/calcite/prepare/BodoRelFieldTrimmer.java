@@ -1,5 +1,6 @@
 package com.bodosql.calcite.prepare;
 
+import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
 import com.bodosql.calcite.adapter.pandas.PandasRowSample;
 import com.bodosql.calcite.adapter.pandas.PandasSample;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
@@ -529,6 +530,77 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // return fields that the consumer didn't ask for, because the filter
     // needs them for its condition.
     return result(relBuilder.build(), inputMapping, filter);
+  }
+
+  public TrimResult trimFields(
+      PandasMinRowNumberFilter filter,
+      ImmutableBitSet fieldsUsed,
+      Set<RelDataTypeField> extraFields) {
+    // Same idea as the Filter implementation, but uses the MRNF node
+    // and allows usage of the inputsToKeep field
+    final RelDataType rowType = filter.getRowType();
+    final int fieldCount = rowType.getFieldCount();
+    final RexNode conditionExpr = filter.getCondition();
+    final RelNode input = filter.getInput();
+
+    // inputsToKeep should include every field before this point
+    if (filter.getInputsToKeep().cardinality() != fieldCount) {
+      throw new RuntimeException(
+          "PandasMinRowNumberFilter node does not support pruning via inputsToKeep before rel"
+              + " trimming");
+    }
+
+    // We use the fields used by the consumer, plus any fields used in the
+    // filter.
+    final Set<RelDataTypeField> inputExtraFields = new LinkedHashSet<>(extraFields);
+    RelOptUtil.InputFinder inputFinder = new RelOptUtil.InputFinder(inputExtraFields, fieldsUsed);
+    conditionExpr.accept(inputFinder);
+    final ImmutableBitSet inputFieldsUsed = inputFinder.build();
+
+    // Create input with trimmed columns.
+    TrimResult incompleteTrimResult = trimChild(filter, input, inputFieldsUsed, inputExtraFields);
+
+    // Bodo change, always prune all unused input columns
+    final TrimResult trimResult =
+        insertPruningProjection(incompleteTrimResult, inputFieldsUsed, inputExtraFields);
+
+    RelNode newInput = trimResult.left;
+    final Mapping inputMapping = trimResult.right;
+
+    // If the input is unchanged, and we need to project all columns,
+    // there's nothing we can do.
+    if (newInput == input && fieldsUsed.cardinality() == fieldCount) {
+      return result(filter, Mappings.createIdentity(fieldCount));
+    }
+
+    // Build new project expressions, and populate the mapping.
+    final RexVisitor<RexNode> shuttle = new RexPermuteInputsShuttle(inputMapping, newInput);
+    RexNode newConditionExpr = conditionExpr.accept(shuttle);
+
+    // Build another mapping to account for the fact that not every field needs to be kept
+    // afterward, and build which of the child columns we have to keep.
+    ImmutableBitSet.Builder newInputsToKeep = ImmutableBitSet.builder();
+    Mapping mapping =
+        Mappings.create(
+            MappingType.INVERSE_SURJECTION,
+            inputMapping.getSourceCount(),
+            fieldsUsed.cardinality());
+    int keptIdx = 0;
+    for (int i : fieldsUsed) {
+      newInputsToKeep.set(inputMapping.getTarget(i));
+      mapping.set(i, keptIdx);
+      keptIdx++;
+    }
+
+    // Make a new filter with trimmed input and condition.
+    PandasMinRowNumberFilter newFilter =
+        PandasMinRowNumberFilter.Companion.create(
+            filter.getCluster(), newInput, newConditionExpr, newInputsToKeep.build());
+
+    // The result has the same mapping as the input gave us. Sometimes we
+    // return fields that the consumer didn't ask for, because the filter
+    // needs them for its condition.
+    return result(newFilter, mapping, filter);
   }
 
   public TrimResult trimFields(

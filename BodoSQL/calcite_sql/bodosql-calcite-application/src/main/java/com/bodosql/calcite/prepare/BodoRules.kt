@@ -8,7 +8,10 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
+import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
+import com.bodosql.calcite.application.logicalRules.BodoProjectToWindowRule
+import com.bodosql.calcite.application.logicalRules.BodoProjectWindowTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.ExtractPushableExpressionsJoin
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
@@ -18,6 +21,8 @@ import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
 import com.bodosql.calcite.application.logicalRules.FilterSetOpTransposeRuleNoWindow
+import com.bodosql.calcite.application.logicalRules.FilterWindowEjectRule
+import com.bodosql.calcite.application.logicalRules.FilterWindowMrnfRule
 import com.bodosql.calcite.application.logicalRules.FilterWindowSplitRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
@@ -37,17 +42,21 @@ import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_LEFT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_RIGHT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.PROJECT_MULTI_JOIN_MERGE
 import com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER
+import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
+import com.bodosql.calcite.rel.logical.BodoLogicalWindow
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.plan.RelRule.OperandBuilder
 import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
@@ -56,6 +65,7 @@ import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.CoreRules
 import org.apache.calcite.rel.rules.FilterJoinRule
+import org.apache.calcite.rel.rules.FilterWindowTransposeRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
@@ -65,7 +75,6 @@ import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 import org.apache.calcite.rel.rules.PruneEmptyRules
 import org.apache.calcite.rel.rules.SortProjectTransposeRule
-import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rel.rules.UnionMergeRule
 import org.apache.calcite.rex.RexNode
 
@@ -422,7 +431,7 @@ object BodoRules {
     //
     @JvmField
     val JOIN_PROJECT_LEFT_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
-        com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
+        BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
             .withIncludeOuter(true)
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .withOperandSupplier { b0: OperandBuilder ->
@@ -438,7 +447,7 @@ object BodoRules {
     //
     @JvmField
     val JOIN_PROJECT_RIGHT_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
-        com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
+        BodoJoinProjectTransposeNoCSEUndoRule.Config.DEFAULT
             .withIncludeOuter(true)
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .withOperandSupplier { b0: OperandBuilder ->
@@ -513,6 +522,30 @@ object BodoRules {
             .toRule()
 
     /**
+     * Rule that tries to push parts of a filter below a window node if the filter components only
+     * apply to the partition keys.
+     */
+    @JvmField
+    val FILTER_WINDOW_TRANSPOSE_RULE: RelOptRule =
+        FilterWindowTransposeRule.Config.DEFAULT
+            .withOperandSupplier { b0 ->
+                b0.operand(BodoLogicalFilter::class.java).oneInput { b1 ->
+                    b1.operand(BodoLogicalWindow::class.java).anyInputs()
+                }
+            }
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Rule that tries to push parts of a project below a window node.
+     */
+    @JvmField
+    val PROJECT_WINDOW_TRANSPOSE_RULE: RelOptRule =
+        BodoProjectWindowTransposeRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
      * Rule that tries to push filter expressions into a join condition and into the inputs of the join.
      */
     @JvmField
@@ -522,6 +555,12 @@ object BodoRules {
                 when (join) {
                     is PandasJoin -> BodoJoinConditionUtil.isValidNode(exp)
                     else -> true
+                }
+            }.withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(Filter::class.java).predicate { f -> f !is MinRowNumberFilterBase }.oneInput { b1: OperandBuilder ->
+                    b1.operand(
+                        Join::class.java,
+                    ).anyInputs()
                 }
             }
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
@@ -661,6 +700,24 @@ object BodoRules {
      */
     @JvmStatic
     val SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE: RelOptRule = SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()
+
+    @JvmField
+    val PROJECT_TO_WINDOW_RULE: RelOptRule =
+        BodoProjectToWindowRule.BodoProjectToLogicalProjectAndWindowRule.BodoProjectToLogicalProjectAndWindowRuleConfig.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val FILTER_WINDOW_EJECT: RelOptRule =
+        FilterWindowEjectRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val FILTER_WINDOW_MRNF_RULE: RelOptRule =
+        FilterWindowMrnfRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
 
     @JvmStatic
     val PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE: RelOptRule = PartialJoinConditionIntoChildrenRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
@@ -877,6 +934,12 @@ object BodoRules {
 
     )
 
+    /**
+     * Rules that are used in the window conversion pass.
+     */
+    @JvmField
+    val WINDOW_CONVERSION_RULES = listOf(PROJECT_TO_WINDOW_RULE, FILTER_WINDOW_EJECT, FILTER_WINDOW_MRNF_RULE, PROJECT_REMOVE_RULE, FILTER_PROJECT_TRANSPOSE_RULE)
+
     // OPTIMIZER GROUPS
     @JvmField
     val VOLCANO_MINIMAL_RULE_SET: List<RelOptRule> = Iterables.concat(
@@ -918,5 +981,8 @@ object BodoRules {
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
         UNION_MERGE_RULE,
+        FILTER_WINDOW_TRANSPOSE_RULE,
+        PROJECT_WINDOW_TRANSPOSE_RULE,
+        FILTER_WINDOW_MRNF_RULE,
     )
 }

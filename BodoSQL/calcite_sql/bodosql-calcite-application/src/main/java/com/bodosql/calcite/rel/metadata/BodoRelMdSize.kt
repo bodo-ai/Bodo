@@ -1,6 +1,7 @@
 package com.bodosql.calcite.rel.metadata
 
 import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
+import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.metadata.RelMdSize
 import org.apache.calcite.rel.metadata.RelMetadataQuery
@@ -14,6 +15,11 @@ class BodoRelMdSize : RelMdSize() {
      * based on the column type.
      */
     override fun averageColumnSizes(rel: RelNode, mq: RelMetadataQuery): List<Double?> =
+        rel.rowType.fieldList.map { rowType ->
+            averageTypeValueSize(rowType.type)
+        }
+
+    fun averageColumnSizes(rel: PandasMinRowNumberFilter, mq: RelMetadataQuery): List<Double?> =
         rel.rowType.fieldList.map { rowType ->
             averageTypeValueSize(rowType.type)
         }

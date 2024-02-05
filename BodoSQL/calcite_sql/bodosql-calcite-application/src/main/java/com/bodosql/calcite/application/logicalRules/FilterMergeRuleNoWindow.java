@@ -18,6 +18,7 @@ package com.bodosql.calcite.application.logicalRules;
  */
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.core.MinRowNumberFilterBase;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.core.Filter;
@@ -77,7 +78,11 @@ public class FilterMergeRuleNoWindow extends RelRule<FilterMergeRuleNoWindow.Con
               b0 ->
                   b0.operand(filterClass)
                       .predicate(f -> !f.containsOver())
-                      .oneInput(b1 -> b1.operand(filterClass).anyInputs()))
+                      .oneInput(
+                          b1 ->
+                              b1.operand(filterClass)
+                                  .predicate(f -> !(f instanceof MinRowNumberFilterBase))
+                                  .anyInputs()))
           .as(FilterMergeRuleNoWindow.Config.class);
     }
   }

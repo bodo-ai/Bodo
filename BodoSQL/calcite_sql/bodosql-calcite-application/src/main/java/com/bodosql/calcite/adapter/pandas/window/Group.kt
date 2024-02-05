@@ -82,18 +82,27 @@ internal class Group(
      * One of these three will be used. Versions 2 and 3 require a partition key because
      * the resulting code only works if there is at least one group.
      */
-    private fun emit(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<Int>> {
+    private fun emit(ctx: PandasRel.BuildContext, inPartitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<Int>> {
         // TODO(jsternberg): Refactor this into something more generic.
         // Row number is supported without a partition which means it doesn't have to go
         // through the groupby pipeline. More aggregations may be included in the future.
-        if (aggregates.size == 1 && partitionKeys.isEmpty() && aggregates.first().kind == SqlKind.ROW_NUMBER) {
-            return emitRowNumber(ctx, partitionKeys, orderKeys, fields)
+        if (aggregates.size == 1 && inPartitionKeys.isEmpty() && aggregates.first().kind == SqlKind.ROW_NUMBER) {
+            // If the order keys were pruned because they are constant, insert a dummy
+            val newOrderKeys = if (orderKeys.isEmpty()) {
+                val dummy = cluster.rexBuilder.makeLiteral(false)
+                listOf(OrderKey("ORDERBY_COL_DUMMY", true, true, ctx.arrayRexTranslator(input).apply(dummy)))
+            } else {
+                orderKeys
+            }
+            return emitRowNumber(ctx, inPartitionKeys, newOrderKeys, fields)
         }
 
-        // Following the above, we require partition key.
-        if (partitionKeys.isEmpty()) {
-            val aggregateNames = aggregates.map { it.op.name }
-            throw BodoSQLCodegenException("Windowed aggregates $aggregateNames require a partition key")
+        // Following the above, we require partition key, so we can just insert a dummy constant.
+        val partitionKeys = if (inPartitionKeys.isEmpty()) {
+            val dummy = cluster.rexBuilder.makeLiteral(false)
+            listOf(PartitionKey("GRPBY_COL_DUMMY", ctx.arrayRexTranslator(input).apply(dummy)))
+        } else {
+            inPartitionKeys
         }
 
         // Determine if we can use the groupby.window function with specialized kernels.
