@@ -832,3 +832,117 @@ def test_mrnf_err_handling(memory_leak_check):
         ),
     ):
         bodo.jit((bodo.typeof(semi_df),))(test_mrnf)
+
+
+@pytest.mark.parametrize(
+    "sort_col_dtypes",
+    [
+        pytest.param(["bool"], id="bool"),
+        pytest.param(["int32"], marks=pytest.mark.slow, id="int32"),
+        pytest.param(["Int64"], marks=pytest.mark.slow, id="Int64"),
+        pytest.param(["string"], marks=pytest.mark.slow, id="string"),
+        pytest.param(["bool", "Int64"], marks=pytest.mark.slow, id="bool_Int64"),
+        pytest.param(
+            ["string", "int32", "bool"], marks=pytest.mark.slow, id="string_int32_bool"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "sort_na_last",
+    [
+        pytest.param(False, id="na_first"),
+        pytest.param(True, marks=pytest.mark.slow, id="na_last"),
+    ],
+)
+@pytest.mark.parametrize(
+    "sort_asc",
+    [
+        pytest.param(False, id="desc"),
+        pytest.param(True, marks=pytest.mark.slow, id="asc"),
+    ],
+)
+@pytest.mark.parametrize(
+    "all_na",
+    [
+        pytest.param(False, id="not_all_na"),
+        pytest.param(True, id="all_na"),
+    ],
+)
+def test_mrnf_all_ties(
+    sort_col_dtypes: list[str],
+    all_na: bool,
+    sort_na_last: bool,
+    sort_asc: bool,
+    memory_leak_check,
+):
+    """
+    Test that the output is correct even when all the sort values are the
+    same, i.e. it's all ties.
+    """
+
+    # Construct a dataframe with the specified sort column(s):
+    df_cols = {"A": pd.array(list(np.arange(10)) * 10, dtype="Int32")}
+    for i, col_dtype in enumerate(sort_col_dtypes):
+        if col_dtype == "bool":
+            if all_na:
+                df_cols[f"orderby_{i}"] = pd.Series([pd.NA] * 100, dtype="boolean")
+            else:
+                df_cols[f"orderby_{i}"] = pd.Series([True] * 100, dtype="bool")
+        elif col_dtype == "Int64":
+            if all_na:
+                df_cols[f"orderby_{i}"] = pd.Series([pd.NA] * 100, dtype="Int64")
+            else:
+                df_cols[f"orderby_{i}"] = pd.Series([657] * 100, dtype="Int64")
+        elif col_dtype == "string":
+            if all_na:
+                df_cols[f"orderby_{i}"] = pd.Series([None] * 100, dtype="string")
+            else:
+                df_cols[f"orderby_{i}"] = pd.Series(["abc"] * 100, dtype="string")
+        elif col_dtype == "int32":
+            if all_na:
+                df_cols[f"orderby_{i}"] = pd.Series([pd.NA] * 100, dtype="Int32")
+            else:
+                df_cols[f"orderby_{i}"] = pd.Series([907] * 100, dtype="int32")
+        else:
+            raise ValueError(f"Unsupported dtype: {col_dtype}!")
+    df_cols["PT"] = pd.Series(["train"] * 100)
+
+    # Construct the MRNF args:
+    df = pd.DataFrame(df_cols)
+    n_cols = len(df.columns)
+    col_names = list(df.columns)
+    n_sort_cols = len(sort_col_dtypes)
+    sort_cols_list = [f"orderby_{i}" for i in range(n_sort_cols)]
+    key_inds_list = [0]
+    sort_inds_list = [i + 1 for i in range(n_sort_cols)]
+    sort_asc_list = [sort_asc] * n_sort_cols
+    sort_na_list = [sort_na_last] * n_sort_cols
+    keep_inds_list = list(range(n_cols))
+    f_in_cols_list = list(range(1, n_cols))
+    f_in_offsets_list = [0, n_cols - 1]
+
+    def py_mrnf(x: pd.DataFrame):
+        return x.sort_values(
+            by=sort_cols_list,
+            ascending=sort_asc_list,
+            na_position=("last" if sort_na_last else "first"),
+        ).iloc[0]
+
+    expected_df = df.groupby(["A"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[list(np.take(list(df.columns), keep_inds_list))]
+
+    _test_mrnf_helper(
+        df,
+        expected_df,
+        MetaType(tuple(key_inds_list)),
+        MetaType(("min_row_number_filter",)),
+        MetaType(tuple(f_in_offsets_list)),
+        MetaType(tuple(f_in_cols_list)),
+        MetaType(tuple(sort_inds_list)),
+        MetaType(tuple(sort_asc_list)),
+        MetaType(tuple(sort_na_list)),
+        MetaType(tuple(keep_inds_list)),
+        MetaType(tuple(range(n_cols))),
+        20,
+        ColNamesMetaType(tuple(np.take(col_names, keep_inds_list))),
+    )
