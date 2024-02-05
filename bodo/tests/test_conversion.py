@@ -3,8 +3,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize(
     "scalar",
     [
@@ -25,6 +27,7 @@ def test_coerce_scalar_to_array_unknown(memory_leak_check, scalar):
     assert f()[0] == scalar
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize(
     "scalar",
     [
