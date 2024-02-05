@@ -6770,17 +6770,17 @@ SqlTypeNameSpec DateTimeTypeName() :
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
 |
-    (<TIMESTAMP_NTZ> | <DATETIME>) {
+    (<TIMESTAMPNTZ> | <TIMESTAMP_NTZ> | <DATETIME>) {
         s = span();
         precision = PrecisionOpt(9);
         typeName = SqlTypeName.TIMESTAMP;
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
 |
-    <TIMESTAMP_LTZ> {
+    (<TIMESTAMPLTZ> | <TIMESTAMP_LTZ>) {
         s = span();
         precision = PrecisionOpt(9);
-        typeName = SqlTypeName.TIMESTAMP;
+        typeName = SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
         return new SqlTzAwareTypeNameSpec(new SqlIdentifier(typeName.name(), s.end(this)), precision);
     }
 }
@@ -9347,6 +9347,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TIME_DIFF: "TIME_DIFF" >
 |   < TIME_TRUNC: "TIME_TRUNC" >
 |   < TIMESTAMP: "TIMESTAMP" >
+|   < TIMESTAMPNTZ: "TIMESTAMPNTZ" >
 |   < TIMESTAMP_NTZ: "TIMESTAMP_NTZ" >
 |   < TIMESTAMPADD: "TIMESTAMPADD" >
 |   < TIMESTAMPDIFF: "TIMESTAMPDIFF" >
