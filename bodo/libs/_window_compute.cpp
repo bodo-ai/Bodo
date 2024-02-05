@@ -63,27 +63,31 @@ void min_row_number_filter_no_sort(
     // idxmin/idxmax based on the orderby columns. Then in the output
     // array those locations will have the value true. We have already
     // initialized all other locations to false.
+
+    // We initialize the indices to the first row in group. There *must* be one
+    // output per partition, so initializing with any row in the  group is
+    // correct since we will eventually end up with the correct value once we go
+    // over all the rows. This initialization also handles the all tie case,
+    // i.e. the value in data_col never needs to get "updated". e.g. If we are
+    // doing this on a boolean column and all boolean values for a group are the
+    // same as the initial value, we'd never end up updating the row-id in
+    // idx_col. If we had initialized all entries in idx-col with say 0, that
+    // would give the incorrect output since we'd just end up with all 0s.
+    // However, initializing all partitions with a valid row in the partition
+    // leads to the correct result.
+    if (idx_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // Set all entries to NOT NA since we will be setting all of them
+        // to valid values.
+        InitializeBitMask((uint8_t*)(idx_col->null_bitmask()), idx_col->length,
+                          true);
+    }
+    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+        getv<int64_t>(idx_col, group_idx) =
+            grp_info.group_to_first_row[group_idx];
+    }
+
     if (orderby_cols.size() == 1) {
-        // We generate an optimized and templated path for 1 column.
-
-        // Initialize the index column.
-        if (update_ftype == Bodo_FTypes::idxmin ||
-            update_ftype == Bodo_FTypes::idxmax) {
-            // Initialize indices to first row in group to handle all NA
-            // case in idxmin/idxmax.
-            for (size_t group_idx = 0; group_idx < idx_col->length;
-                 group_idx++) {
-                getv<int64_t>(idx_col, group_idx) =
-                    grp_info.group_to_first_row[group_idx];
-            }
-        } else {
-            // This is 0 initialized and will not initialize the null
-            // values. idxmin_na_first/idxmax_na_first handle the all NA
-            // case during computation.
-            aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
-                                      use_sql_rules);
-        }
-
+        /// We generate an optimized and templated path for 1 column.
         // Create an array to store min/max value
         std::shared_ptr<array_info> orderby_arr = orderby_cols[0];
         std::shared_ptr<array_info> data_col = alloc_array_top_level(
@@ -103,7 +107,6 @@ void min_row_number_filter_no_sort(
         do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
                            update_ftype, pool, std::move(mm));
     } else {
-        aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
         // Call the idx_n_columns function path.
         idx_n_columns_apply(idx_col, orderby_cols, asc, na_pos, grp_info,
                             update_ftype);
