@@ -602,6 +602,13 @@ struct Schema {
      * @return (arr_array_types, arr_c_types) Serialization vectors
      */
     std::pair<std::vector<int8_t>, std::vector<int8_t>> Serialize();
+
+    /**
+     * @brief Get string representation of a Schema.
+     *
+     * @return std::string
+     */
+    std::string ToString();
 };
 
 }  // namespace bodo

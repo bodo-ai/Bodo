@@ -468,6 +468,106 @@ class WindowColSet : public BasicColSet {
 };
 
 /**
+ * @brief ColSet for the specialized Min-Row Filter
+ * case in streaming groupby.
+ *
+ */
+class StreamingMRNFColSet : public BasicColSet {
+   public:
+    /**
+     * @brief Construct a new MRNF col set.
+     *
+     * @param _asc Are the sort columns ascending on the input column.
+     * @param _na_pos Are NAs last in the sort columns
+     * @param use_sql_rules Do we use SQL or Pandas null handling rules.
+     */
+    StreamingMRNFColSet(std::vector<bool>& _asc, std::vector<bool>& _na_pos,
+                        bool use_sql_rules);
+    virtual ~StreamingMRNFColSet();
+
+    /**
+     * @brief Set the orderby columns for computation.
+     *
+     * @param new_in_cols Vector of the orderby columns.
+     *  These won't be modified.
+     */
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) {
+        this->orderby_cols = new_in_cols;
+    }
+
+    /**
+     * @brief Allocate intermediate buffer to store the index of the min element
+     * for each group. This will be used in the update step.
+     *
+     * @param num_groups Number of groups found in the input table.
+     * @param[in, out] out_cols The allocated column will be appended to this
+     * vector.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
+     */
+    virtual void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
+
+    /**
+     * @brief Perform the update step. This will populate the index
+     * column (update_cols[0]) with the index of the output row
+     * for each group.
+     *
+     * @param grp_infos Information about the groups.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
+     */
+    virtual void update(
+        const std::vector<grouping_info>& grp_infos,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
+
+    /**
+     * @brief Get the output columns. In this case, this is simply
+     * the index column containing the index of the output row
+     * for each group.
+     *
+     * @return const std::vector<std::shared_ptr<array_info>> Vector
+     *  with a single column containing the indices of the output rows.
+     */
+    virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns() {
+        return this->update_cols;
+    }
+
+    /**
+     * @brief Clear all state of this column set (used in streaming groupby).
+     * This will release the references to the order-by columns, any update
+     * columns that have been allocated, etc.
+     *
+     */
+    virtual void clear() {
+        BasicColSet::clear();
+        this->orderby_cols.clear();
+    }
+
+   private:
+    /// Static state:
+    const std::vector<bool> asc;
+    const std::vector<bool> na_pos;
+    // Ftype to use during update. This is decided based on the number of
+    // order-by columns, 'asc' and 'na'.
+    int64_t update_ftype;
+    // Array type of the index column to allocate during update.
+    // This will be either NULLABLE or NUMPY.
+    bodo_array_type::arr_type_enum update_idx_arr_type;
+
+    /// Ephemeral streaming state:
+    std::vector<std::shared_ptr<array_info>> orderby_cols;
+};
+
+/**
  * @brief Colset for idxmin and idxmax operations
  *
  */

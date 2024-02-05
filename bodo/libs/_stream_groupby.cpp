@@ -1,4 +1,5 @@
 #include "_stream_groupby.h"
+#include <fmt/format.h>
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
@@ -7,6 +8,7 @@
 #include "_groupby_common.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
+#include "_window_compute.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
 #define MAX_SHUFFLE_HASHTABLE_SIZE 50 * 1024 * 1024
@@ -65,6 +67,79 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
 #pragma region  // Update -> Combine -> Eval helpers
 
 /**
+ * @brief Helper for 'get_update_table' to get the grouping_infos
+ * for creating the update table.
+ *
+ * @tparam is_acc_case Is the function being called in the
+ * accumulating code path. This allows us to specialize certain operations for
+ * the large input case.
+ * @param in_table Input batch table in the agg case. Entire input table in the
+ * acc case.
+ * @param n_keys Number of key columns for this groupby operation.
+ * @param req_extended_group_info Whether we need to collect extended group
+ * information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function. See description of 'get_update_table' for a more detailed
+ * explanation.
+ * @return std::vector<grouping_info> Grouping Infos for the update step.
+ *  This is a vector with a single 'grouping_info' object.
+ */
+template <bool is_acc_case>
+std::vector<grouping_info> get_grouping_infos_for_update_table(
+    std::shared_ptr<table_info> in_table, const uint64_t n_keys,
+    const bool req_extended_group_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
+    // Allocate the memory for hashes through the pool.
+    std::shared_ptr<uint32_t[]> batch_hashes_groupby =
+        bodo::make_shared_arr<uint32_t>(in_table->nrows(), pool);
+    // Compute and fill hashes into allocated memory.
+    hash_keys_table(batch_hashes_groupby, in_table, n_keys,
+                    SEED_HASH_GROUPBY_SHUFFLE, false);
+
+    std::vector<std::shared_ptr<table_info>> tables = {in_table};
+
+    size_t nunique_hashes = 0;
+    if (is_acc_case) {
+        // In the accumulating code path case, we have the entire input, so
+        // it's better to get an actual estimate using HLL.
+        // The HLL only uses ~1MiB of memory, so we don't really need it to
+        // go through the pool.
+        nunique_hashes = get_nunique_hashes(
+            batch_hashes_groupby, in_table->nrows(), /*is_parallel*/ false);
+    } else {
+        // In the case of streaming groupby, we don't need to estimate the
+        // number of unique hashes. We can just use the number of rows in the
+        // input table since the batches are so small. This has been tested to
+        // be faster than estimating the number of unique hashes based on
+        // previous batches as well as using HLL.
+        nunique_hashes = in_table->nrows();
+    }
+
+    std::vector<grouping_info> grp_infos;
+
+    if (req_extended_group_info) {
+        // TODO[BSE-578]: set to true when handling cumulative operations that
+        // need the list of NA row indexes.
+        get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
+                               grp_infos, n_keys, /*consider_missing*/ false,
+                               /*key_dropna*/ false, /*is_parallel*/ false,
+                               pool);
+    } else {
+        get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
+                       n_keys, /*check_for_null_keys*/ true,
+                       /*key_dropna*/ false, /*is_parallel*/ false, pool);
+    }
+
+    // get_group_info_iterate / get_group_info always reset the pointer,
+    // so this should be a NOP, but we're adding it just to be safe.
+    batch_hashes_groupby.reset();
+
+    grouping_info& grp_info = grp_infos[0];
+    grp_info.mode = 1;
+    return grp_infos;
+}
+
+/**
  * @brief Call groupby update function on new input batch data and return the
  * output update table
  *
@@ -113,53 +188,13 @@ std::shared_ptr<table_info> get_update_table(
     // similar to update() function of GroupbyPipeline:
     // https://github.com/Bodo-inc/Bodo/blob/58f995dec2507a84afefbb27af01d67bd40fabb4/bodo/libs/_groupby.cpp#L546
 
-    // Allocate the memory for hashes through the pool.
-    std::shared_ptr<uint32_t[]> batch_hashes_groupby =
-        bodo::make_shared_arr<uint32_t>(in_table->nrows(), pool);
-    // Compute and fill hashes into allocated memory.
-    hash_keys_table(batch_hashes_groupby, in_table, n_keys,
-                    SEED_HASH_GROUPBY_SHUFFLE, false);
-
+    // Get the grouping_info:
+    std::vector<grouping_info> grp_infos =
+        get_grouping_infos_for_update_table<is_acc_case>(
+            in_table, n_keys, req_extended_group_info, pool);
+    grouping_info& grp_info = grp_infos[0];
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
 
-    size_t nunique_hashes = 0;
-    if (is_acc_case) {
-        // In the accumulating code path case, we have the entire input, so
-        // it's better to get an actual estimate using HLL.
-        // The HLL only uses ~1MiB of memory, so we don't really need it to
-        // go through the pool.
-        nunique_hashes = get_nunique_hashes(
-            batch_hashes_groupby, in_table->nrows(), /*is_parallel*/ false);
-    } else {
-        // In the case of streaming groupby, we don't need to estimate the
-        // number of unique hashes. We can just use the number of rows in the
-        // input table since the batches are so small. This has been tested to
-        // be faster than estimating the number of unique hashes based on
-        // previous batches as well as using HLL.
-        nunique_hashes = in_table->nrows();
-    }
-
-    std::vector<grouping_info> grp_infos;
-
-    if (req_extended_group_info) {
-        // TODO[BSE-578]: set to true when handling cumulative operations that
-        // need the list of NA row indexes.
-        get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
-                               grp_infos, n_keys, /*consider_missing*/ false,
-                               /*key_dropna*/ false, /*is_parallel*/ false,
-                               pool);
-    } else {
-        get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
-                       n_keys, /*check_for_null_keys*/ true,
-                       /*key_dropna*/ false, /*is_parallel*/ false, pool);
-    }
-
-    // get_group_info_iterate / get_group_info always reset the pointer,
-    // so this should be a NOP, but we're adding it just to be safe.
-    batch_hashes_groupby.reset();
-
-    grouping_info& grp_info = grp_infos[0];
-    grp_info.mode = 1;
     size_t num_groups = grp_info.num_groups;
     int64_t update_col_len = num_groups;
     std::shared_ptr<table_info> update_table = std::make_shared<table_info>();
@@ -372,6 +407,125 @@ std::shared_ptr<table_info> eval_groupby_funcs_helper(
 }
 
 #pragma endregion  // Update -> Combine -> Eval helpers
+/* ------------------------------------------------------------------------ */
+
+/* --------------------- Min Row-Number Filter Helpers -------------------- */
+#pragma region  // Min Row-Number Filter Helpers
+
+/**
+ * @brief Helper function to validate that the GroupbyState arguments
+ * are as expected in the MRNF case.
+ *
+ * @param ftypes There should be a single function.
+ * @param f_in_cols Must include all columns expect the partitioning columns.
+ * @param f_in_offsets Must be length 2 and must be [0, f_in_cols.size()].
+ * @param mrnf_sort_asc Must be the same length as mrnf_sort_na.
+ * @param mrnf_sort_na Must be the same length as mrnf_sort_asc.
+ * @param mrnf_sort_cols_to_keep Must be the same length as mrnf_sort_asc.
+ * @param mrnf_part_cols_to_keep Must be of length n_keys.
+ * @param in_arr_n_cols Number of columns in the input table.
+ * @param n_keys Number of partitioning keys.
+ * @param caller Name of the caller function. Used in runtime-errors.
+ */
+void validate_mrnf_args(const std::vector<int32_t>& ftypes,
+                        const std::vector<int32_t>& f_in_cols,
+                        const std::vector<int32_t>& f_in_offsets,
+                        const std::vector<bool>& mrnf_sort_asc,
+                        const std::vector<bool>& mrnf_sort_na,
+                        const std::vector<bool>& mrnf_sort_cols_to_keep,
+                        const std::vector<bool>& mrnf_part_cols_to_keep,
+                        size_t in_arr_n_cols, uint64_t n_keys,
+                        std::string caller) {
+    if (ftypes.size() != 1) {
+        throw std::runtime_error(
+            fmt::format("{}: Min Row-Number Filter cannot be "
+                        "combined with other aggregate functions.",
+                        caller));
+    }
+    if ((mrnf_sort_asc.size() == 0) ||
+        (mrnf_sort_asc.size() != mrnf_sort_na.size()) ||
+        (mrnf_sort_asc.size() != mrnf_sort_cols_to_keep.size())) {
+        throw std::runtime_error(
+            fmt::format("{}: Min Row-Number Filter arguments "
+                        "are not the correct size.",
+                        caller));
+    }
+    if (mrnf_part_cols_to_keep.size() != n_keys) {
+        throw std::runtime_error(
+            fmt::format("{}: Size of bitmask "
+                        "specifying partition columns to retain is not the "
+                        "correct size. Expected {} but got {} instead.",
+                        caller, n_keys, mrnf_part_cols_to_keep.size()));
+    }
+    // f_in_cols should be:
+    //   [<n_keys>, <n_keys+1>, ..., <in_arr_n_cols-1>]
+    if (f_in_cols.size() != (in_arr_n_cols - n_keys)) {
+        throw std::runtime_error(
+            fmt::format("{}: f_in_cols expected to "
+                        "have {} entries in the Min Row-Number Filter "
+                        "case, but got {} instead.",
+                        caller, (in_arr_n_cols - n_keys), f_in_cols.size()));
+    }
+    // f_in_offsets should be: [0, <f_in_cols.size()>]
+    if ((f_in_offsets.size() != 2) || (f_in_offsets[0] != 0) ||
+        (f_in_offsets[1] != static_cast<int32_t>(f_in_cols.size()))) {
+        throw std::runtime_error(
+            fmt::format("{}: f_in_offsets is not as expected "
+                        "for Min Row-Number Filter!",
+                        caller));
+    }
+}
+
+/**
+ * @brief Helper function to get a bitmask specifying the columns
+ * to keep in the output in the Min Row-Number Filter case.
+ * We assume that the columns are in the order:
+ * - Partition columns
+ * - Order-By columns
+ * - Remaining columns
+ * We will keep the partition columns corresponding to
+ * true bits in the mrnf_part_cols_to_keep bitmask.
+ * Similarly for the order-by columns using mrnf_sort_cols_to_keep.
+ * All remaining columns will be retained.
+ * The output is essentially:
+ * mrnf_part_cols_to_keep.extend(mrnf_sort_cols_to_keep).extend(
+ *  [True] * (n_cols - len(mrnf_part_cols_to_keep) -
+ *  len(mrnf_sort_cols_to_keep))
+ * )
+ *
+ * @param mrnf_part_cols_to_keep Bitmask of the partition columns to retain.
+ * @param mrnf_sort_cols_to_keep Bitmask of the order-by columns to retain.
+ * @param n_cols Total number of columns.
+ * @return std::vector<bool> Combined bitmask of the columns to retain.
+ */
+std::vector<bool> get_mrnf_cols_to_keep_bitmask(
+    const std::vector<bool>& mrnf_part_cols_to_keep,
+    const std::vector<bool>& mrnf_sort_cols_to_keep, const size_t n_cols) {
+    std::vector<bool> cols_to_keep(n_cols, false);
+    // Set bitmask to true for partition columns to keep based on
+    // mrnf_part_cols_to_keep.
+    for (size_t i = 0; i < mrnf_part_cols_to_keep.size(); i++) {
+        if (mrnf_part_cols_to_keep[i]) {
+            cols_to_keep[i] = true;
+        }
+    }
+    // Set bitmask to true for order-by columns to keep based on
+    // mrnf_sort_cols_to_keep.
+    for (size_t i = 0; i < mrnf_sort_cols_to_keep.size(); i++) {
+        if (mrnf_sort_cols_to_keep[i]) {
+            cols_to_keep[mrnf_part_cols_to_keep.size() + i] = true;
+        }
+    }
+    // Set bitmask to true for all the remaining columns.
+    for (size_t i =
+             (mrnf_part_cols_to_keep.size() + mrnf_sort_cols_to_keep.size());
+         i < n_cols; i++) {
+        cols_to_keep[i] = true;
+    }
+    return cols_to_keep;
+}
+
+#pragma endregion  // Min Row-Number Filter Helpers
 /* ------------------------------------------------------------------------ */
 
 /* --------------------------- GroupbyPartition --------------------------- */
@@ -972,6 +1126,75 @@ void GroupbyPartition::ActivatePartition() {
     this->is_active = true;
 }
 
+void GroupbyPartition::FinalizeMrnf(
+    const std::vector<bool>& mrnf_part_cols_to_keep,
+    const std::vector<bool>& mrnf_sort_cols_to_keep,
+    const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
+    // Make sure this partition is active. This is idempotent
+    // and hence a NOP if the partition is already active.
+    this->ActivatePartition();
+
+    // MRNF always uses the ACC path.
+    std::vector<grouping_info> grp_infos =
+        get_grouping_infos_for_update_table</*is_acc_case*/ true>(
+            this->build_table_buffer->data_table, n_keys,
+            this->req_extended_group_info, this->op_scratch_pool);
+    grouping_info& grp_info = grp_infos[0];
+
+    // Construct a vector with the order-by columns.
+    std::vector<std::shared_ptr<array_info>> orderby_arrs(
+        this->build_table_buffer->data_table->columns.begin() + this->n_keys,
+        this->build_table_buffer->data_table->columns.begin() + this->n_keys +
+            mrnf_sort_cols_to_keep.size());
+
+    // In the MRNF case, there's a single colset.
+    assert(this->col_sets.size() == 1);
+    const std::shared_ptr<BasicColSet>& col_set = this->col_sets[0];
+    std::vector<std::shared_ptr<array_info>> list_arr;
+    // Compute the output index column using this colset:
+    col_set->setInCol(orderby_arrs);
+    col_set->alloc_update_columns(grp_info.num_groups, list_arr,
+                                  /*alloc_out_if_no_combine*/ false,
+                                  this->op_scratch_pool, this->op_scratch_mm);
+    col_set->update(grp_infos, this->op_scratch_pool, this->op_scratch_mm);
+    const std::vector<std::shared_ptr<array_info>> out_cols =
+        col_set->getOutputColumns();
+    const std::shared_ptr<array_info>& idx_col = out_cols[0];
+    col_set->clear();
+
+    // Create an insertion bitmask for the output.
+    // XXX Use bodo::vector instead?
+    std::vector<bool> out_bitmask(this->build_table_buffer->data_table->nrows(),
+                                  false);
+    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+        int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
+        out_bitmask[row_one_idx] = true;
+    }
+
+    // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
+    // the columns to skip from build_table_buffer.
+    size_t n_cols = this->build_table_buffer->data_table->columns.size();
+    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+        mrnf_part_cols_to_keep, mrnf_sort_cols_to_keep, n_cols);
+    std::vector<std::shared_ptr<array_info>> cols_to_keep;
+
+    for (size_t i = 0; i < n_cols; i++) {
+        if (cols_to_keep_bitmask[i]) {
+            cols_to_keep.push_back(
+                this->build_table_buffer->data_table->columns[i]);
+        }
+    }
+    std::shared_ptr<table_info> data_table_w_cols_to_keep =
+        std::make_shared<table_info>(cols_to_keep);
+
+    // Append this "pruned" table to the output buffer using the bitmask.
+    output_buffer->AppendBatch(data_table_w_cols_to_keep, out_bitmask);
+
+    // Since we have added the output to the output buffer, we don't need the
+    // build state anymore and can release that memory.
+    this->ClearBuildState();
+}
+
 std::shared_ptr<table_info> GroupbyPartition::Finalize() {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
@@ -1126,14 +1349,15 @@ void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
 /* ----------------------------- GroupbyState ----------------------------- */
 #pragma region  // GroupbyState
 
-GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
-                           std::vector<int8_t> in_arr_array_types,
-                           std::vector<int32_t> ftypes,
-                           std::vector<int32_t> f_in_offsets_,
-                           std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                           int64_t output_batch_size_, bool parallel_,
-                           int64_t sync_iter_, int64_t op_id_,
-                           int64_t op_pool_size_bytes)
+GroupbyState::GroupbyState(
+    std::vector<int8_t> in_arr_c_types, std::vector<int8_t> in_arr_array_types,
+    std::vector<int32_t> ftypes, std::vector<int32_t> f_in_offsets_,
+    std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
+    std::vector<bool> mrnf_sort_asc_vec_, std::vector<bool> mrnf_sort_na_pos_,
+    std::vector<bool> mrnf_part_cols_to_keep_,
+    std::vector<bool> mrnf_sort_cols_to_keep_, int64_t output_batch_size_,
+    bool parallel_, int64_t sync_iter_, int64_t op_id_,
+    int64_t op_pool_size_bytes)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -1159,6 +1383,10 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
       output_batch_size(output_batch_size_),
       f_in_offsets(std::move(f_in_offsets_)),
       f_in_cols(std::move(f_in_cols_)),
+      mrnf_sort_asc(std::move(mrnf_sort_asc_vec_)),
+      mrnf_sort_na(std::move(mrnf_sort_na_pos_)),
+      mrnf_part_cols_to_keep(std::move(mrnf_part_cols_to_keep_)),
+      mrnf_sort_cols_to_keep(std::move(mrnf_sort_cols_to_keep_)),
       sync_iter(sync_iter_),
       groupby_event("Groupby") {
     // Partitioning is enabled by default:
@@ -1226,7 +1454,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             ftype == Bodo_FTypes::transform || ftype == Bodo_FTypes::ngroup ||
             ftype == Bodo_FTypes::window || ftype == Bodo_FTypes::listagg ||
             ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::head ||
-            ftype == Bodo_FTypes::gen_udf) {
+            ftype == Bodo_FTypes::gen_udf ||
+            ftype == Bodo_FTypes::min_row_number_filter) {
             this->accumulate_before_update = true;
         }
         if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
@@ -1237,6 +1466,18 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             ftype == Bodo_FTypes::nunique) {
             this->req_extended_group_info = true;
         }
+        if (ftype == Bodo_FTypes::min_row_number_filter) {
+            this->mrnf_only = true;
+        }
+    }
+
+    // Validate MRNF arguments in the MRNF case:
+    if (this->mrnf_only) {
+        validate_mrnf_args(
+            ftypes, this->f_in_cols, this->f_in_offsets, this->mrnf_sort_asc,
+            this->mrnf_sort_na, this->mrnf_sort_cols_to_keep,
+            this->mrnf_part_cols_to_keep, in_arr_schema->column_types.size(),
+            this->n_keys, "GroupbyState::GroupbyState");
     }
 
     // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
@@ -1251,8 +1492,6 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
     bool skip_na_data = true;
     bool use_sql_rules = true;
-    std::vector<bool> window_ascending_vect;
-    std::vector<bool> window_na_position_vect;
 
     // First, get the input column types for each function.
     std::vector<std::vector<std::shared_ptr<array_info>>> local_input_cols_vec(
@@ -1336,8 +1575,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             // In the streaming multi-partition scenario, it's
             // safer to mark things as *not* parallel to avoid
             // any synchronization and hangs.
-            {0}, 0, /*is_parallel*/ false, window_ascending_vect,
-            window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
+            {0}, 0, /*is_parallel*/ false, this->mrnf_sort_asc,
+            this->mrnf_sort_na, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
             use_sql_rules);
 
         // get update/combine type info to initialize build state
@@ -1461,24 +1700,24 @@ GroupbyState::getRunningValueColumnTypes(
     std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
     std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype) {
     std::shared_ptr<BasicColSet> col_set =
-        makeColSet(local_input_cols,  // in_cols
-                   nullptr,           // index_col
-                   ftype,             // ftype
-                   true,              // do_combine
-                   true,              // skip_na_data
-                   0,                 // period
-                   {0},               // transform_funcs
-                   0,                 // n_udf
-                   false,             // parallel
-                   {true},            // window_ascending
-                   {true},            // window_na_position
-                   {nullptr},         // window_args
-                   0,                 // n_input_cols
-                   nullptr,           // udf_n_redvars
-                   nullptr,           // udf_table
-                   0,                 // udf_table_idx
-                   nullptr,           // nunique_table
-                   true               // use_sql_rules
+        makeColSet(local_input_cols,     // in_cols
+                   nullptr,              // index_col
+                   ftype,                // ftype
+                   true,                 // do_combine
+                   true,                 // skip_na_data
+                   0,                    // period
+                   {0},                  // transform_funcs
+                   0,                    // n_udf
+                   false,                // parallel
+                   this->mrnf_sort_asc,  // window_ascending
+                   this->mrnf_sort_na,   // window_na_position
+                   {nullptr},            // window_args
+                   0,                    // n_input_cols
+                   nullptr,              // udf_n_redvars
+                   nullptr,              // udf_table
+                   0,                    // udf_table_idx
+                   nullptr,              // nunique_table
+                   true                  // use_sql_rules
         );
 
     // get update/combine type info to initialize build state
@@ -1493,24 +1732,24 @@ std::vector<std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
 GroupbyState::getSeparateOutputColumns(
     std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype) {
     std::shared_ptr<BasicColSet> col_set =
-        makeColSet(local_input_cols,  // in_cols
-                   nullptr,           // index_col
-                   ftype,             // ftype
-                   true,              // do_combine
-                   true,              // skip_na_data
-                   0,                 // period
-                   {0},               // transform_funcs
-                   0,                 // n_udf
-                   false,             // parallel
-                   {true},            // window_ascending
-                   {true},            // window_na_position
-                   {nullptr},         // window_args
-                   0,                 // n_input_cols
-                   nullptr,           // udf_n_redvars
-                   nullptr,           // udf_table
-                   0,                 // udf_table_idx
-                   nullptr,           // nunique_table
-                   true               // use_sql_rules
+        makeColSet(local_input_cols,     // in_cols
+                   nullptr,              // index_col
+                   ftype,                // ftype
+                   true,                 // do_combine
+                   true,                 // skip_na_data
+                   0,                    // period
+                   {0},                  // transform_funcs
+                   0,                    // n_udf
+                   false,                // parallel
+                   this->mrnf_sort_asc,  // window_ascending
+                   this->mrnf_sort_na,   // window_na_position
+                   {nullptr},            // window_args
+                   0,                    // n_input_cols
+                   nullptr,              // udf_n_redvars
+                   nullptr,              // udf_table
+                   0,                    // udf_table_idx
+                   nullptr,              // nunique_table
+                   true                  // use_sql_rules
         );
 
     auto seperate_out_cols = col_set->getSeparateOutputColumnType();
@@ -1936,10 +2175,47 @@ void GroupbyState::AppendBuildBatch(
     }
 }
 
+void GroupbyState::InitOutputBufferMrnf(
+    const std::shared_ptr<table_info>& dummy_build_table) {
+    assert(this->mrnf_only);
+
+    // Skip if already initialized.
+    if (this->output_buffer != nullptr) {
+        return;
+    }
+
+    size_t n_cols = dummy_build_table->columns.size();
+    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep, n_cols);
+
+    // List of column types in the output.
+    std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
+    for (size_t i = 0; i < n_cols; i++) {
+        if (cols_to_keep_bitmask[i]) {
+            output_column_types.push_back(
+                dummy_build_table->columns[i]->data_type());
+            // We can re-use existing dictionaries.
+            this->out_dict_builders.push_back(
+                this->build_table_dict_builders[i]);
+        }
+    }
+
+    // Build the output schema from the output column types.
+    std::unique_ptr<bodo::Schema> output_schema =
+        std::make_unique<bodo::Schema>(std::move(output_column_types));
+    // Initialize the output buffer using this schema.
+    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
+        output_schema, this->out_dict_builders,
+        /*chunk_size*/ this->output_batch_size,
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+}
+
 void GroupbyState::InitOutputBuffer(
     const std::shared_ptr<table_info>& dummy_table) {
+    assert(!this->mrnf_only);
     auto [arr_c_types, arr_array_types] =
         get_dtypes_arr_types_from_table(dummy_table);
+
     // This is not initialized until this point. Resize it to the required
     // size.
     this->out_dict_builders.resize(dummy_table->columns.size(), nullptr);
@@ -2086,7 +2362,20 @@ void GroupbyState::FinalizeBuild() {
                 // Finalize the partition and get output from it.
                 // TODO: Write output directly into the GroupybyState's
                 // output buffer instead of returning the output.
-                output_table = this->partitions[i_part]->Finalize();
+                if (this->mrnf_only) {
+                    // Initialize output buffer if this is the first
+                    // partition.
+                    if (i_part == 0) {
+                        this->InitOutputBufferMrnf(
+                            this->partitions[i_part]
+                                ->build_table_buffer->data_table);
+                    }
+                    this->partitions[i_part]->FinalizeMrnf(
+                        this->mrnf_part_cols_to_keep,
+                        this->mrnf_sort_cols_to_keep, this->output_buffer);
+                } else {
+                    output_table = this->partitions[i_part]->Finalize();
+                }
                 exception_caught = false;
             } catch (
                 bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
@@ -2116,15 +2405,18 @@ void GroupbyState::FinalizeBuild() {
                 // Since we have generated the output, we don't need the
                 // partition anymore, so we can release that memory.
                 this->partitions[i_part].reset();
-                if (i_part == 0) {
-                    this->InitOutputBuffer(output_table);
+                if (!this->mrnf_only) {
+                    if (i_part == 0) {
+                        this->InitOutputBuffer(output_table);
+                    }
+                    // XXX TODO UnifyOutputDictionaryArrays needs a version that
+                    // can take the shared_ptr without reference and free
+                    // individual columns early.
+                    output_table =
+                        this->UnifyOutputDictionaryArrays(output_table);
+                    this->output_buffer->AppendBatch(output_table);
+                    output_table.reset();
                 }
-                // XXX TODO UnifyOutputDictionaryArrays needs a version that
-                // can take the shared_ptr without reference and free
-                // individual columns early.
-                output_table = this->UnifyOutputDictionaryArrays(output_table);
-                this->output_buffer->AppendBatch(output_table);
-                output_table.reset();
                 if (this->debug_partitioning) {
                     std::cerr << "[DEBUG] GroupbyState::FinalizeBuild: "
                                  "Successfully finalized partition "
@@ -2509,6 +2801,19 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
  * (bodo_array_type ints)
  * @param n_build_arrs number of build table columns
  * @param n_keys number of groupby keys
+ * @param mrnf_sort_asc Boolean bitmask specifying sort-direction for MRNF
+ *  order-by columns. It should be 'mrnf_n_sort_keys' elements long.
+ * @param mrnf_sort_na Boolean bitmask specifying whether nulls should be
+ *  considered 'last' for the order-by columns of MRNF. It should be
+ * 'mrnf_n_sort_keys' elements long.
+ * @param mrnf_n_sort_keys Number of MRNF order-by columns. If this is
+ *  >0, we will use MRNF specific code.
+ * @param mrnf_part_cols_to_keep Bitmask specifying the partition columns
+ * to keep in the MRNF case. In the MRNF case, it must have n_keys elements.
+ * Otherwise, it can be nullptr since it won't be read.
+ * @param mrnf_sort_cols_to_keep Bitmask specifying the order-by columns
+ * to keep in the MRNF case. In the MRNF case, it must have mrnf_n_sort_keys
+ * elements. Otherwise, it can be nullptr since it won't be read.
  * @param output_batch_size Batch size for reading output.
  * @param op_pool_size_bytes Size of the operator buffer pool for this join
  * operator. If it's set to -1, we will get the budget from the operator
@@ -2519,6 +2824,8 @@ GroupbyState* groupby_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int32_t* ftypes,
     int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs, uint64_t n_keys,
+    bool* mrnf_sort_asc, bool* mrnf_sort_na, uint64_t mrnf_n_sort_keys,
+    bool* mrnf_part_cols_to_keep, bool* mrnf_sort_cols_to_keep,
     int64_t output_batch_size, bool parallel, int64_t sync_iter,
     int64_t op_pool_size_bytes) {
     // If the memory budget has not been explicitly set, then ask the
@@ -2527,6 +2834,23 @@ GroupbyState* groupby_state_init_py_entry(
         op_pool_size_bytes =
             OperatorComptroller::Default()->GetOperatorBudget(operator_id);
     }
+
+    // Create vectors for the MRNF arguments from the raw pointer arrays.
+    std::vector<bool> mrnf_sort_asc_vec(mrnf_n_sort_keys, false);
+    std::vector<bool> mrnf_sort_na_vec(mrnf_n_sort_keys, false);
+    std::vector<bool> mrnf_part_cols_to_keep_vec(n_keys, true);
+    std::vector<bool> mrnf_sort_cols_to_keep_vec(mrnf_n_sort_keys, true);
+    if (mrnf_n_sort_keys > 0) {
+        for (size_t i = 0; i < n_keys; i++) {
+            mrnf_part_cols_to_keep_vec[i] = mrnf_part_cols_to_keep[i];
+        }
+        for (size_t i = 0; i < mrnf_n_sort_keys; i++) {
+            mrnf_sort_asc_vec[i] = mrnf_sort_asc[i];
+            mrnf_sort_na_vec[i] = mrnf_sort_na[i];
+            mrnf_sort_cols_to_keep_vec[i] = mrnf_sort_cols_to_keep[i];
+        }
+    }
+
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -2536,8 +2860,9 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(ftypes, ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
-        n_keys, output_batch_size, parallel, sync_iter, operator_id,
-        op_pool_size_bytes);
+        n_keys, mrnf_sort_asc_vec, mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
+        mrnf_sort_cols_to_keep_vec, output_batch_size, parallel, sync_iter,
+        operator_id, op_pool_size_bytes);
 }
 
 /**
