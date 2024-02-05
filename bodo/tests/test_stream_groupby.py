@@ -585,16 +585,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [
-                        1,
-                        2,
-                        1,
-                        0,
-                        2,
-                        1,
-                        2,
-                        2,
-                    ],
+                    "A": [1, 2, 1, 0, 2, 1, 2, 2],
                     "B": np.array(
                         [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
                     ),
@@ -621,16 +612,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [
-                        1,
-                        2,
-                        1,
-                        0,
-                        2,
-                        1,
-                        2,
-                        2,
-                    ],
+                    "A": [1, 2, 1, 0, 2, 1, 2, 2],
                     "B": pd.array(
                         [
                             {
@@ -707,24 +689,9 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [
-                        1,
-                        2,
-                        1,
-                        0,
-                        2,
-                        1,
-                        2,
-                        2,
-                    ],
+                    "A": [1, 2, 1, 0, 2, 1, 2, 2],
                     "B": pd.Series(
-                        [
-                            {1: 1.4, 2: 3.1},
-                            None,
-                            {},
-                            {11: 3.4, 21: 3.1, 9: 8.1},
-                        ]
-                        * 2,
+                        [{1: 1.4, 2: 3.1}, None, {}, {11: 3.4, 21: 3.1, 9: 8.1}] * 2,
                         dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
                     ),
                     "C": pd.Series(
@@ -746,16 +713,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [
-                        1,
-                        2,
-                        1,
-                        0,
-                        2,
-                        1,
-                        2,
-                        2,
-                    ],
+                    "A": [1, 2, 1, 0, 2, 1, 2, 2],
                     "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
                 }
             ),

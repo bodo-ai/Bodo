@@ -292,6 +292,33 @@ class GroupbyPartition {
      */
     std::shared_ptr<table_info> Finalize();
 
+    /**
+     * @brief Finalize the partition in the MRNF case.
+     * The computation is similar to that in 'get_update_table', except
+     * it's slightly modified for the MRNF case.
+     * In particular, unlike the regular case where we return an output table
+     * that is then appended into the output buffer, this will append the output
+     * directly into the 'output_buffer'. We can do this since we're just
+     * appending certain rows (filter) from the 'build_table_buffer' and no
+     * other transformation is required.
+     *
+     * This will also clear the build state (i.e. all memory associated with the
+     * logical hash table).
+     *
+     * NOTE: Only active partitions are supported at this point.
+     * Support for inactive partitions will be added in the future.
+     *
+     * @param mrnf_part_cols_to_keep Bitmask specifying the partition columns to
+     * retain in the output.
+     * @param mrnf_sort_cols_to_keep Bitmask specifying the order-by columns to
+     * retain in the output.
+     * @param output_buffer The output buffer to append the generated output to.
+     */
+    void FinalizeMrnf(
+        const std::vector<bool>& mrnf_part_cols_to_keep,
+        const std::vector<bool>& mrnf_sort_cols_to_keep,
+        const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
+
    private:
     const size_t num_top_bits = 0;
     const uint32_t top_bitmask = 0ULL;
@@ -505,7 +532,16 @@ class GroupbyState {
     // these are the offsets in the build_table_buffer directly.
     // In the ACC case, these are the offsets into the update
     // table returned by 'get_update_table</*is_acc_case*/ true>'.
+    // This is not used in the MRNF case since MRNF goes through
+    // a special Finalize path.
     std::vector<int32_t> f_running_value_offsets;
+
+    // Min-Row Number Filter (MRNF) specific attributes.
+    bool mrnf_only = false;
+    const std::vector<bool> mrnf_sort_asc;
+    const std::vector<bool> mrnf_sort_na;
+    const std::vector<bool> mrnf_part_cols_to_keep;
+    const std::vector<bool> mrnf_sort_cols_to_keep;
 
     // The number of iterations between syncs (adjusted by
     // shuffle_state)
@@ -573,6 +609,10 @@ class GroupbyState {
                  std::vector<int32_t> ftypes,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
+                 std::vector<bool> mrnf_sort_asc_vec_,
+                 std::vector<bool> mrnf_sort_na_pos_,
+                 std::vector<bool> mrnf_part_cols_to_keep_,
+                 std::vector<bool> mrnf_sort_cols_to_keep_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
                  int64_t op_id_, int64_t op_pool_size_bytes);
 
@@ -695,6 +735,23 @@ class GroupbyState {
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
+
+    /**
+     * @brief Initialize the output buffer in the MRNF case using
+     * the schema of the dummy_build_table. The dummy_build_table
+     * is the 'build_table_buffer' from any of the GroupbyPartitions in this
+     * GroupbyState.
+     * We will use 'mrnf_part_cols_to_keep' and 'mrnf_sort_cols_to_keep' to
+     * determine the columns to retain.
+     *
+     * NOTE: The function is idempotent and only initializes once. All
+     * calls after the first one are ignored.
+     *
+     * @param dummy_build_table Underlying table_info of 'build_table_buffer'
+     * from any of the partitions.
+     */
+    void InitOutputBufferMrnf(
+        const std::shared_ptr<table_info>& dummy_build_table);
 
     /**
      * @brief Initialize the output buffer using schema information

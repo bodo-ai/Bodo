@@ -3,6 +3,7 @@
 #include <arrow/array.h>
 #include <complex>
 
+#include <fmt/format.h>
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
@@ -341,6 +342,17 @@ std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() {
     }
 
     return std::pair(arr_array_types, arr_c_types);
+}
+
+std::string Schema::ToString() {
+    std::string out;
+    for (size_t i = 0; i < this->column_types.size(); i++) {
+        if (i > 0) {
+            out += "\n";
+        }
+        out += fmt::format("{}: {}", i, this->column_types[i]->ToString());
+    }
+    return out;
 }
 
 }  // namespace bodo

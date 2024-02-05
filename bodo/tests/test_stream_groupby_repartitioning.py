@@ -44,7 +44,12 @@ def groupby_common_impl(
 
     def impl(df, op_pool_size_bytes):
         groupby_state = init_groupby_state(
-            -1, keys_inds, fnames, f_in_offsets, f_in_cols, op_pool_size_bytes
+            -1,
+            keys_inds,
+            fnames,
+            f_in_offsets,
+            f_in_cols,
+            op_pool_size_bytes=op_pool_size_bytes,
         )
         is_last1 = False
         _iter_1 = 0

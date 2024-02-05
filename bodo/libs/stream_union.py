@@ -214,6 +214,12 @@ def init_union_state(
         f_in_offsets = np.array([1], np.int32)
         f_in_cols = np.array([], np.int32)
 
+        mrnf_sort_asc = np.array([], dtype=np.bool_)
+        mrnf_sort_na = np.array([], dtype=np.bool_)
+        mrnf_part_cols_to_keep = np.array([], dtype=np.bool_)
+        mrnf_sort_cols_to_keep = np.array([], dtype=np.bool_)
+        mrnf_n_sort_keys = 0
+
         def impl(
             operator_id,
             all=False,
@@ -229,6 +235,11 @@ def init_union_state(
                 f_in_offsets.ctypes,
                 f_in_cols.ctypes,
                 0,
+                mrnf_sort_asc.ctypes,
+                mrnf_sort_na.ctypes,
+                mrnf_n_sort_keys,
+                mrnf_part_cols_to_keep.ctypes,
+                mrnf_sort_cols_to_keep.ctypes,
                 -1,  # op_pool_size_bytes
                 output_type,
                 parallel,
