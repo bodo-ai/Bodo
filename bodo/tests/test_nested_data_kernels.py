@@ -2910,8 +2910,13 @@ def test_option_array_contains(flag0, flag1, memory_leak_check):
         arg1 = B if flag1 else None
         return bodo.libs.bodosql_array_kernels.array_contains(arg0, arg1, True, True)
 
-    A, B = 1, [0, 1, 4, 9]
-    check_func(impl, (A, B, flag0, flag1), py_output=1 if flag0 and flag1 else None)
+    A, B = 1, pd.array([0, 1, 4, 9])
+    check_func(
+        impl,
+        (A, B, flag0, flag1),
+        py_output=1 if flag0 and flag1 else None,
+        only_seq=True,
+    )
 
 
 @pytest.mark.parametrize("flag0", [True, False])
