@@ -16,6 +16,7 @@ import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
+import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import java.util.*
 
 /**
@@ -177,8 +178,9 @@ open class SnowflakeCatalogTable(
             // Verify that we can read before inlining.
             if (canRead(rel)) {
                 return rel
+            } else {
+                throw BODO_SQL_RESOURCE.noReadPermissionExpandingView(qualifiedName).ex()
             }
-            // TODO: FIX the else with an error.
         } catch (e: Exception) {
             // Log the failure
             val message = String.format(

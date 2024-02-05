@@ -62,4 +62,7 @@ public interface BodoSQLResource {
 
    @Resources.BaseMessage("Function \"{0}\".\"{1}\".\"{2}\" uses default arguments, which are not supported on Snowflake UDFs because the default values cannot be found in Snowflake metadata. Missing argument(s): {3}")
    Resources.ExInst<SqlValidatorException> snowflakeUDFContainsDefaultArguments(String databaseName, String schemaName, String functionName, String argumentList);
+
+   @Resources.BaseMessage("Encountered a table without read permissions when attempting to expand {0}.")
+   Resources.ExInst<SqlValidatorException> noReadPermissionExpandingView(String viewQualifiedName);
 }
