@@ -1,0 +1,81 @@
+package com.bodosql.calcite.adapter.pandas
+
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import org.apache.calcite.plan.RelOptCluster
+import org.apache.calcite.plan.RelTraitSet
+import org.apache.calcite.rel.RelCollationTraitDef
+import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.metadata.RelMdCollation
+import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.util.ImmutableBitSet
+
+class PandasMinRowNumberFilter(
+    cluster: RelOptCluster,
+    traitSet: RelTraitSet,
+    child: RelNode,
+    condition: RexNode,
+    inputsToKeep: ImmutableBitSet,
+) : MinRowNumberFilterBase(cluster, traitSet.replace(PandasRel.CONVENTION), child, condition, inputsToKeep), PandasRel {
+
+    fun asPandasProjectFilter(): PandasRel {
+        val asPandasFilter = PandasFilter(cluster, traitSet, input, condition)
+        return if (inputsToKeep.cardinality() == input.rowType.fieldCount) {
+            asPandasFilter
+        } else {
+            val projExprs = inputsToKeep.map {
+                RexInputRef(it, input.rowType.fieldList[it].type)
+            }
+            val parentProject = PandasProject(cluster, traitSet, asPandasFilter, projExprs, rowType)
+            parentProject
+        }
+    }
+
+    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): PandasMinRowNumberFilter {
+        return PandasMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
+    }
+
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
+        // TODO: replace with codegen for the real MRNF implementation
+        return asPandasProjectFilter().emit(implementor)
+    }
+
+    /**
+     * Function to create the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO()
+    }
+
+    /**
+     * Function to delete the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        TODO()
+    }
+
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.filterProperty(condition)
+    }
+
+    companion object {
+        fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode, inputsToKeep: ImmutableBitSet): PandasMinRowNumberFilter {
+            val mq = cluster.metadataQuery
+            val traitSet = cluster.traitSet().replaceIfs(RelCollationTraitDef.INSTANCE) {
+                RelMdCollation.filter(mq, input)
+            }
+            return PandasMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
+        }
+
+        fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode): PandasMinRowNumberFilter {
+            val inputsToKeep = ImmutableBitSet.range(input.rowType.fieldCount)
+            return create(cluster, input, condition, inputsToKeep)
+        }
+    }
+}
