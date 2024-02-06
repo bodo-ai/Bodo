@@ -158,6 +158,7 @@ import org.apache.calcite.sql.util.SqlVisitor;
 import org.apache.calcite.sql.validate.AggregatingSelectScope;
 import org.apache.calcite.sql.validate.CollectNamespace;
 import org.apache.calcite.sql.validate.DelegatingScope;
+import org.apache.calcite.sql.validate.IdentifierNamespace;
 import org.apache.calcite.sql.validate.ListScope;
 import org.apache.calcite.sql.validate.MatchRecognizeScope;
 import org.apache.calcite.sql.validate.ParameterScope;
@@ -231,6 +232,7 @@ import static org.apache.calcite.sql.SqlUtil.getAliasedString;
 import static org.apache.calcite.sql.SqlUtil.stripAs;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 /**
  * Converts a SQL parse tree (consisting of
@@ -3286,10 +3288,22 @@ public class SqlToRelConverter {
       if (prevNs == null) {
         prevNs = foundNs;
       } else {
-        assert prevNs == foundNs : "All correlation variables should resolve"
-            + " to the same namespace."
-            + " Prev ns=" + prevNs
-            + ", new ns=" + foundNs;
+        // Bodo Change: Replace an assert with an actual exception.
+        if (prevNs != foundNs) {
+          final String prevNsString;
+          if (prevNs instanceof IdentifierNamespace) {
+            prevNsString = ((IdentifierNamespace) prevNs).getId().toString();
+          } else {
+            prevNsString = prevNs.toString();
+          }
+          final String foundNsString;
+          if (foundNs instanceof IdentifierNamespace) {
+            foundNsString = ((IdentifierNamespace) foundNs).getId().toString();
+          } else {
+            foundNsString = foundNs.toString();
+          }
+          throw BODO_SQL_RESOURCE.conflictCorrelationVariable(prevNsString, foundNsString).ex();
+        }
       }
 
       int namespaceOffset = 0;
