@@ -618,3 +618,37 @@ def test_str_to_date_columns_format(memory_leak_check):
             }
         ),
     )
+
+
+def test_date_minus_double(memory_leak_check):
+    input_ = pd.DataFrame(
+        {"A": [datetime.date(2020, 1, 5), None, datetime.date(2020, 1, 1)]}
+    )
+    output_ = pd.DataFrame(
+        {
+            "A": [datetime.date(2020, 1, 3), None, datetime.date(2019, 12, 30)],
+            "B": [datetime.date(2020, 1, 4), None, datetime.date(2019, 12, 31)],
+            "C": [datetime.date(2020, 1, 4), None, datetime.date(2019, 12, 31)],
+        }
+    )
+
+    ctx = {"TABLE1": input_}
+    query = "SELECT A - 1.5::NUMBER(10, 2) as A, A - 1.4::NUMBER(10, 2) as B, A - 1::NUMBER(10, 2) as C FROM table1"
+    check_query(query, ctx, None, expected_output=output_)
+
+
+def test_date_plus_double(memory_leak_check):
+    input_ = pd.DataFrame(
+        {"A": [datetime.date(2020, 1, 5), None, datetime.date(2020, 1, 1)]}
+    )
+    output_ = pd.DataFrame(
+        {
+            "A": [datetime.date(2020, 1, 7), None, datetime.date(2020, 1, 3)],
+            "B": [datetime.date(2020, 1, 6), None, datetime.date(2020, 1, 2)],
+            "C": [datetime.date(2020, 1, 6), None, datetime.date(2020, 1, 2)],
+        }
+    )
+
+    ctx = {"TABLE1": input_}
+    query = "SELECT A + 1.5::NUMBER(10, 2) as A, A + 1.4::NUMBER(10, 2) as B, A + 1::NUMBER(10, 2) as C FROM table1"
+    check_query(query, ctx, None, expected_output=output_)

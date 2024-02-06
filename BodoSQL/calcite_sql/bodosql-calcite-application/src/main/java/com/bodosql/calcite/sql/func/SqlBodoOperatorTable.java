@@ -96,7 +96,7 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
           SqlKind.PLUS,
           40,
           true,
-          ReturnTypes.NULLABLE_SUM,
+          BodoReturnTypes.NULLABLE_SUM,
           InferTypes.FIRST_KNOWN,
           BodoOperandTypes.PLUS_OPERATOR);
 
