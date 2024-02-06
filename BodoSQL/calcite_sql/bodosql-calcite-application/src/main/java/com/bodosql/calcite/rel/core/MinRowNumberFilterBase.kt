@@ -24,7 +24,7 @@ open class MinRowNumberFilterBase(
     val inputsToKeep: ImmutableBitSet,
 ) : FilterBase(cluster, traits, child, condition) {
     val partitionColSet: ImmutableBitSet
-    val orderColSet: ImmutableBitSet
+    val orderColSet: List<Int>
     val ascendingList: List<Boolean>
     val nullPosList: List<Boolean>
     init {
@@ -38,16 +38,14 @@ open class MinRowNumberFilterBase(
                     }
                 },
             )
-            orderColSet = ImmutableBitSet.of(
-                condition.window.orderKeys.map {
-                    val lhs = it.left
-                    if (lhs is RexInputRef) {
-                        (lhs as RexInputRef).index
-                    } else {
-                        throw Exception("Malformed MinRowNumberFilter condition: $condition")
-                    }
-                },
-            )
+            orderColSet = condition.window.orderKeys.map {
+                val lhs = it.left
+                if (lhs is RexInputRef) {
+                    (lhs as RexInputRef).index
+                } else {
+                    throw Exception("Malformed MinRowNumberFilter condition: $condition")
+                }
+            }
             ascendingList = condition.window.orderKeys.map {
                 it.direction == RelFieldCollation.Direction.ASCENDING
             }

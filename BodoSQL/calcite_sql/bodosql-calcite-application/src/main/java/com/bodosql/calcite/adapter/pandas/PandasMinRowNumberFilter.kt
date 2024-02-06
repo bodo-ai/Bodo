@@ -10,6 +10,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.metadata.RelMdCollation
+import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.util.ImmutableBitSet
@@ -40,8 +41,7 @@ class PandasMinRowNumberFilter(
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
-        // TODO: replace with codegen for the real MRNF implementation
-        return asPandasProjectFilter().emit(implementor)
+        TODO("Not yet implemented")
     }
 
     /**
@@ -49,7 +49,7 @@ class PandasMinRowNumberFilter(
      * This should be called from emit.
      */
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
-        TODO()
+        TODO("Not yet implemented")
     }
 
     /**
@@ -57,11 +57,20 @@ class PandasMinRowNumberFilter(
      * This should be called from emit.
      */
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
-        TODO()
+        TODO("Not yet implemented")
     }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.filterProperty(condition)
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+    }
+
+    /**
+     * Get memory estimate for memory budget comptroller.
+     */
+    fun estimateBuildMemory(mq: RelMetadataQuery): Int {
+        val averageBuildRowSize = mq.getAverageRowSize(this.getInput()) ?: 8.0
+        val inRows = mq.getRowCount(this.getInput())
+        return (averageBuildRowSize * inRows).toInt()
     }
 
     companion object {

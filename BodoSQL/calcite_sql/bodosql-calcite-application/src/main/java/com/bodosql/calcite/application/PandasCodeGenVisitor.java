@@ -34,6 +34,7 @@ import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator;
 import com.bodosql.calcite.adapter.pandas.PandasAggregate;
 import com.bodosql.calcite.adapter.pandas.PandasIntersect;
 import com.bodosql.calcite.adapter.pandas.PandasJoin;
+import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
 import com.bodosql.calcite.adapter.pandas.PandasMinus;
 import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.adapter.pandas.PandasRowSample;
@@ -432,6 +433,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.visitPandasSort((PandasSort) node);
     } else if (node instanceof PandasAggregate) {
       this.visitPandasAggregate((PandasAggregate) node);
+    } else if (node instanceof PandasMinRowNumberFilter) {
+      this.visitPandasMinRowNumberFilter((PandasMinRowNumberFilter) node);
     } else if (node instanceof PandasUnion) {
       this.visitPandasUnion((PandasUnion) node);
     } else if (node instanceof PandasIntersect) {
@@ -1833,6 +1836,177 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     return exprAndAdditionalGeneratedCode;
+  }
+
+  /** Visitor for MinRowNumberFilter. */
+  public void visitPandasMinRowNumberFilter(PandasMinRowNumberFilter node) {
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
+    } else {
+      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+        visitStreamingPandasMinRowNumberFilter(node);
+      } else {
+        // If non-streaming, fall back to regular PandasFilter codegen
+        RelNode asProjectFilter = node.asPandasProjectFilter();
+        this.visitPandasRel((PandasRel) asProjectFilter);
+      }
+    }
+  }
+
+  /** Visitor for MinRowNumberFilter with streaming. */
+  private void visitStreamingPandasMinRowNumberFilter(PandasMinRowNumberFilter node) {
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+
+    // Visit the input node
+    this.visit(node.getInput(), 0, node);
+    timerInfo.initializeTimer();
+    Variable buildTable = tableGenStack.pop();
+
+    // Create the state var.
+    int operatorID = generatedCode.newOperatorID();
+    StateVariable groupbyStateVar = genStateVar();
+
+    // Generate the global variables for the partition keys
+    List<Expr> partitionKeys = new ArrayList<>();
+    List<Integer> partitionColsIntegers = new ArrayList<>();
+    for (int i : node.getPartitionColSet()) {
+      partitionKeys.add(new Expr.IntegerLiteral(i));
+      partitionColsIntegers.add(i);
+    }
+    Variable partitionGlobal = this.lowerAsMetaType(new Expr.Tuple(partitionKeys));
+
+    // Generate the global variables for the order keys, ascending tuple, and null position tuple
+    List<Expr> orderKeys = new ArrayList<>();
+    List<Expr> ascendingKeys = new ArrayList<>();
+    List<Expr> nullPosKeys = new ArrayList<>();
+    for (int i : node.getOrderColSet()) {
+      orderKeys.add(new Expr.IntegerLiteral(i));
+    }
+    for (boolean b : node.getAscendingList()) {
+      ascendingKeys.add(new Expr.BooleanLiteral(b));
+    }
+    for (boolean b : node.getNullPosList()) {
+      nullPosKeys.add(new Expr.BooleanLiteral(b));
+    }
+    Variable orderGlobal = this.lowerAsMetaType(new Expr.Tuple(orderKeys));
+    Variable ascendingGlobal = this.lowerAsMetaType(new Expr.Tuple(ascendingKeys));
+    Variable nullPosGlobal = this.lowerAsMetaType(new Expr.Tuple(nullPosKeys));
+
+    // Generate the global variables for the inputs to keep
+    List<Expr> keepKeys = new ArrayList<>();
+    for (int i : node.getInputsToKeep()) {
+      keepKeys.add(new Expr.IntegerLiteral(i));
+    }
+    Variable keepGlobal = this.lowerAsMetaType(new Expr.Tuple(keepKeys));
+
+    // Generate the global variables for regular streaming groupby
+    List<Integer> inColsList = new ArrayList();
+    for (int i = 0; i < node.getInput().getRowType().getFieldCount(); i++) {
+      if (!partitionColsIntegers.contains(i)) {
+        inColsList.add(i);
+      }
+    }
+    List<Expr> inColsExprs = new ArrayList();
+    for (int i : inColsList) {
+      inColsExprs.add(new Expr.IntegerLiteral(i));
+    }
+    Variable inColsGlobal = this.lowerAsMetaType(new Expr.Tuple(inColsExprs));
+    Variable inOffsetsGlobal =
+        this.lowerAsMetaType(
+            new Expr.Tuple(Expr.Companion.getZero(), new Expr.IntegerLiteral(inColsList.size())));
+    Variable fnamesGlobal =
+        this.lowerAsMetaType(new Expr.Tuple(new Expr.StringLiteral("min_row_number_filter")));
+
+    // Fetch the streaming pipeline
+    StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
+    timerInfo.insertStateStartTimer();
+    RelMetadataQuery mq = node.getCluster().getMetadataQuery();
+
+    // Insert the state initialization call
+    List<Expr> positionalArgs = new ArrayList<>();
+    positionalArgs.add(new Expr.IntegerLiteral(operatorID));
+    positionalArgs.add(partitionGlobal);
+    positionalArgs.add(fnamesGlobal);
+    positionalArgs.add(inOffsetsGlobal);
+    positionalArgs.add(inColsGlobal);
+
+    List<kotlin.Pair<String, Expr>> keywordArgs = new ArrayList<>();
+    keywordArgs.add(new kotlin.Pair("mrnf_sort_col_inds", orderGlobal));
+    keywordArgs.add(new kotlin.Pair("mrnf_sort_col_asc", ascendingGlobal));
+    keywordArgs.add(new kotlin.Pair("mrnf_sort_col_na", nullPosGlobal));
+    keywordArgs.add(new kotlin.Pair("mrnf_col_inds_keep", keepGlobal));
+    Expr.Call stateCall =
+        new Expr.Call("bodo.libs.stream_groupby.init_groupby_state", positionalArgs, keywordArgs);
+    Op.Assign mrnfInit = new Op.Assign(groupbyStateVar, stateCall);
+    inputPipeline.initializeStreamingState(
+        operatorID, mrnfInit, OperatorType.GROUPBY, node.estimateBuildMemory(mq));
+
+    // Insert the consume code at the end of the current pipeline
+    timerInfo.insertStateEndTimer();
+    Variable batchExitCond = inputPipeline.getExitCond();
+    Variable newExitCond = genGenericTempVar();
+    inputPipeline.endSection(newExitCond);
+
+    // is_final_pipeline is always True in the regular MinRowNumberFilter case.
+    Expr.Call batchCall =
+        new Expr.Call(
+            "bodo.libs.stream_groupby.groupby_build_consume_batch",
+            List.of(
+                groupbyStateVar,
+                buildTable,
+                batchExitCond,
+                /*is_final_pipeline*/
+                new Expr.BooleanLiteral(true)));
+    timerInfo.insertLoopOperationStartTimer();
+    generatedCode.add(new Op.Assign(newExitCond, batchCall));
+    timerInfo.insertLoopOperationEndTimer();
+
+    // Finalize and add the batch pipeline.
+    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
+    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+
+    // Only MRNF build needs a memory budget since output only has a ChunkedTableBuilder
+    generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
+
+    // Create a new pipeline
+    Variable newFlag = genGenericTempVar();
+    Variable iterVar = genIterVar();
+    generatedCode.startStreamingPipelineFrame(newFlag, iterVar);
+    StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
+
+    // Add the output side
+    Variable outTable = genTableVar();
+    Variable outputControl = genOutputControlVar();
+    outputPipeline.addOutputControl(outputControl);
+    Expr.Call outputCall =
+        new Expr.Call(
+            "bodo.libs.stream_groupby.groupby_produce_output_batch",
+            List.of(groupbyStateVar, outputControl));
+    timerInfo.insertLoopOperationStartTimer();
+    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    BodoEngineTable table = new BodoEngineTable(outTable.emit(), node);
+    timerInfo.insertLoopOperationEndTimer();
+
+    // Append the code to delete the state
+    Op.Stmt deleteState =
+        new Op.Stmt(
+            new Expr.Call(
+                "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
+    outputPipeline.addTermination(deleteState);
+    // Add the table to the stack
+    tableGenStack.push(table);
+    // Update the cache.
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    operatorCache.tryCacheNode(node, table);
+    timerInfo.terminateTimer();
   }
 
   /**

@@ -158,7 +158,9 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
         pytest.param(False, marks=pytest.mark.slow),
     ],
 )
-def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
+def test_min_row_number_filter_simple(
+    memory_leak_check, input_df, ascending, nulls_last
+):
     """
     Tests queries involving `where row_number() = 1`. This query
     will generate a special filter function that ensures the ROW_NUMBER()
@@ -197,6 +199,62 @@ def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
         ctx,
         None,
         expected_output=py_output,
+    )
+
+
+def test_min_row_number_filter_complex(memory_leak_check, spark_info):
+    """
+    A variant of test_min_row_number_filter_simple with a more complex
+    min row number filter with more involved column pruning behavior,
+    more pass-through columns, and more tie-checking between various
+    orderby columns.
+    """
+    query = """
+    SELECT A, B, D, E, G, H
+    FROM TABLE1
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY A, I, G
+        ORDER BY D ASC NULLS FIRST, B ASC NULLS LAST, F DESC NULLS FIRST, H DESC NULLS LAST) = 1
+    """
+    spark_query = """
+    SELECT A, B, D, E, G, H
+    FROM (
+        SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY A, I, G
+            ORDER BY D ASC NULLS FIRST, B ASC NULLS LAST, F DESC NULLS FIRST, H DESC NULLS LAST) as rn
+        FROM table1
+    )
+    WHERE rn = 1
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array([str(i)[0] for i in range(2000)], dtype=pd.Int64Dtype()),
+            "B": pd.array(
+                [["Alpha", "Alpha", "Beta", "", None][i % 5] for i in range(2000)]
+            ),
+            "C": pd.array([i for i in range(2000)], dtype=pd.Int64Dtype()),
+            "D": pd.array(
+                [[1, -1, None][i % 3] for i in range(2000)], dtype=pd.Int64Dtype()
+            ),
+            "E": pd.array([str(i) for i in range(2000)], dtype=pd.Int64Dtype()),
+            "F": pd.array(
+                [None if i % 10 < 9 else i**2 for i in range(2000)],
+                dtype=pd.Int64Dtype(),
+            ),
+            "G": pd.array(
+                [round(i**0.5) ** 2 == i for i in range(2000)],
+                dtype=pd.BooleanDtype(),
+            ),
+            "H": pd.array([-i for i in range(2000)], dtype=pd.Int64Dtype()),
+            "I": pd.array(
+                [min(i % 6, i % 7, i % 11) for i in range(2000)], dtype=pd.Int64Dtype()
+            ),
+            "J": pd.array([i for i in range(2000)], dtype=pd.Int64Dtype()),
+        }
+    )
+    ctx = {"TABLE1": df}
+    check_query(
+        query, ctx, spark_info, equivalent_spark_query=spark_query, check_dtype=False
     )
 
 
