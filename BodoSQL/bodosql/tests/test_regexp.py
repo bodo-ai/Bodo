@@ -410,7 +410,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
-                "SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\\\\\2-\\\\\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\\\\\1[\\\\\\\\4,\\\\\\\\3,\\\\\\\\2]', 6) END FROM table1",
+                "SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\\\2-\\\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\\\1[\\\\4,\\\\3,\\\\2]', 6) END FROM table1",
                 pd.DataFrame(
                     {
                         0: pd.Series(
@@ -431,12 +431,12 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
     ],
 )
-def test_regexp_replace(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
