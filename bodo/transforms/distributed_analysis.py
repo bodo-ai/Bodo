@@ -1691,6 +1691,13 @@ class DistributedAnalysis:
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
+        if fdef == (
+            "iceberg_writer_append_table",
+            "bodo.io.stream_iceberg_write",
+        ):  # pragma: no cover
+            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
         if fdef in (
             ("init_groupby_state", "bodo.libs.stream_groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),

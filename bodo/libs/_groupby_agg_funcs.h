@@ -82,7 +82,7 @@ struct casted_aggfunc {
      * @param[in,out] v1: current aggregate value, holds the result
      * @param[in] v2: other input value.
      */
-    static void apply(T_out& v1, T_in& v2);
+    static void apply(T_out& v1, T_in& v2) {}
 };
 
 /**
@@ -97,7 +97,7 @@ struct bool_aggfunc {
      * @param[in] other input value.
      */
     static void apply(const std::shared_ptr<array_info>& arr, int64_t idx,
-                      T& v2);
+                      T& v2) {}
 };
 
 /**
