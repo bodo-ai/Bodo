@@ -327,8 +327,8 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE = VARCHAR_UNKNOWN_PRECISION.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     /**
-     * Type-inference strategy whereby the result type of a call is an integer
-     * if both operands are date.
+     * Type-inference strategy whereby either result type of call is an INTEGER
+     * if both operands are DATE, or if the left argument is a DATE and the right argument is NUMERIC, then the result is a DATE.
      */
     public static final SqlReturnTypeInference DATE_SUB = opBinding -> {
         RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
@@ -337,6 +337,13 @@ public class BodoReturnTypes {
         if (type1.getSqlTypeName() == SqlTypeName.DATE
                 && type2.getSqlTypeName() == SqlTypeName.DATE) {
             return typeFactory.createSqlType(SqlTypeName.INTEGER);
+        }
+
+        // Accept DATE - NUMERIC as a DATE
+        if (SqlTypeFamily.DATE.contains(type1) && SqlTypeFamily.NUMERIC.contains(type2)) {
+            return type1;
+        } else if (SqlTypeFamily.DATE.contains(type2) && SqlTypeFamily.NUMERIC.contains(type1)) {
+            return type2;
         }
         // This rule doesn't apply
         return null;
@@ -359,6 +366,29 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference NULLABLE_SUB =
             new SqlReturnTypeInferenceChain(
                     ReturnTypes.DECIMAL_SUM_NULLABLE, DATE_SUB_NULLABLE, ReturnTypes.LEAST_RESTRICTIVE);
+
+    /**
+     * Type-inference for sums involving DATEs and NUMERICs
+     */
+    public static final SqlReturnTypeInference DATE_SUM = opBinding -> {
+        RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+        RelDataType type1 = opBinding.getOperandType(0);
+        RelDataType type2 = opBinding.getOperandType(1);
+
+        // Accept DATE + NUMERIC as a DATE
+        if (SqlTypeFamily.DATE.contains(type1) && SqlTypeFamily.NUMERIC.contains(type2)) {
+            return type1;
+        } else if (SqlTypeFamily.DATE.contains(type2) && SqlTypeFamily.NUMERIC.contains(type1)) {
+            return type2;
+        }
+        // This rule doesn't apply
+        return null;
+    };
+
+    public static final SqlReturnTypeInference DATE_SUM_NULLABLE =
+            DATE_SUM.andThen(SqlTypeTransforms.TO_NULLABLE);
+    public static final SqlReturnTypeInference NULLABLE_SUM =
+            new SqlReturnTypeInferenceChain(DATE_SUM_NULLABLE, ReturnTypes.NULLABLE_SUM);
 
     public static final SqlReturnTypeInference TZAWARE_TIMESTAMP =
             new SqlReturnTypeInference() {

@@ -15,8 +15,8 @@ public class BodoOperandTypes {
 
   public static final SqlSingleOperandTypeChecker VARIANT = VariantOperandChecker.INSTANCE;
 
-  public static final SqlSingleOperandTypeChecker DATE_INTEGER =
-      OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.INTEGER);
+  public static final SqlSingleOperandTypeChecker DATE_NUMERIC =
+      OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.NUMERIC);
   public static final SqlSingleOperandTypeChecker INTEGER_DATE =
       OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.DATE);
   public static final SqlSingleOperandTypeChecker DATE_DATE =
@@ -24,11 +24,11 @@ public class BodoOperandTypes {
 
   public static final SqlSingleOperandTypeChecker PLUS_OPERATOR =
       OperandTypes.or(OperandTypes.NUMERIC_NUMERIC, OperandTypes.INTERVAL_SAME_SAME, OperandTypes.DATETIME_INTERVAL,
-          OperandTypes.INTERVAL_DATETIME, DATE_INTEGER, INTEGER_DATE);
+          OperandTypes.INTERVAL_DATETIME, DATE_NUMERIC, INTEGER_DATE);
 
   public static final SqlSingleOperandTypeChecker MINUS_OPERATOR =
       OperandTypes.or(
-          OperandTypes.NUMERIC_NUMERIC, OperandTypes.INTERVAL_SAME_SAME, OperandTypes.DATETIME_INTERVAL, DATE_INTEGER,
+          OperandTypes.NUMERIC_NUMERIC, OperandTypes.INTERVAL_SAME_SAME, OperandTypes.DATETIME_INTERVAL, DATE_NUMERIC,
           DATE_DATE
       );
 
