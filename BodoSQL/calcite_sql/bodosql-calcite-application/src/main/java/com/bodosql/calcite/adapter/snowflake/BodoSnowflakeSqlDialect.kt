@@ -267,7 +267,12 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         }
 
         val compValue = SqlLiteral.createBoolean(targetValue, SqlParserPos.ZERO)
-        val newCall = newOp.createCall(call.parserPosition, listOf(call.operand(0), compValue))
+        // The alternate syntax: newOp.createCall(call.parserPosition, listOf(call.operand(0), compValue))
+        // raises a strange error for certain SQL files (ex RadialWash):
+        // java.lang.ArrayStoreException: org.apache.calcite.sql.SqlIdentifier
+        // I'm not sure why this is, there's a followup issue to investigate:
+        // https://bodo.atlassian.net/browse/BSE-2608
+        val newCall = newOp.createCall(call.parserPosition, call.operand(0), compValue)
         newCall.unparse(writer, leftPrec, rightPrec)
     }
 
