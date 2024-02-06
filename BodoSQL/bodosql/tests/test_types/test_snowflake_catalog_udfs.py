@@ -1095,6 +1095,7 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
     one argument.
     """
 
+    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
@@ -1109,7 +1110,9 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
         },
         catalog=test_db_snowflake_catalog,
     )
-    # Note: This isn't working yet (correlation plan generation bug)
+    # TODO [BSE-2593]: Support this query.
+    # Note: This isn't working yet (gap in support using multiple namespaces
+    # in producing correlation variables).
     if outer:
         py_output = pd.DataFrame(
             {
@@ -1122,14 +1125,11 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
     else:
         py_output = pd.DataFrame({"OUTPUT": [14, 14, 14, 14, 14, 14, 14, 14]})
 
-    check_func(
-        impl,
-        (bc, query),
-        py_output=py_output,
-        check_dtype=False,
-        sort_output=True,
-        reset_index=True,
-    )
+    with pytest.raises(
+        BodoError,
+        match="All correlation variables should resolve to the same namespace",
+    ):
+        impl(bc, query)
 
 
 def test_window_partition_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
