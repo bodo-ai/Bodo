@@ -476,3 +476,98 @@ def test_null_array_to_timezone_aware(memory_leak_check):
         expected_output=df,
         check_names=False,
     )
+
+
+def test_case_proper_character_escape(memory_leak_check):
+    """Tests that the case statement properly handles escaping characters"""
+
+    df = pd.DataFrame(
+        {
+            "PRODUCT_ID": [
+                None,
+                '""',
+                "   ",
+                "12345",
+                " 12345 ",
+                "",
+            ]
+            * 5
+        }
+    )
+    ctx = {"TABLE1": df}
+
+    expected_out = df = pd.DataFrame(
+        {
+            "PRODUCT_ID": [
+                None,
+                None,
+                None,
+                "12345",
+                " 12345 ",
+                None,
+            ]
+            * 5
+        }
+    )
+
+    query = """
+    SELECT
+        CASE WHEN PRODUCT_ID='""' OR REPLACE(PRODUCT_ID,' ','')='' THEN NULL ELSE PRODUCT_ID END AS PRODUCT_ID
+    FROM table1
+    """
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_out,
+        check_names=False,
+    )
+
+
+def test_case_proper_character_escape_regex(memory_leak_check):
+    """Tests that the case statement properly handles escaping regex characters if needed"""
+
+    orig_web_url_list = [
+        None,
+        "https://bodo.atlassian.net/jira/software/c/projects/BSE/boards/25?assignee=60a3bbae47ba02006f1f8fbb&selectedIssue=BSE-2523",
+        "https://bodo.atlassian.net/jira/software/c/projects/BSE/boards/25?assignee=60a3bbae47ba02006f1f8fbb&selectedIssue=BSE-2583",
+        "https://www.merriam-webster.com/dictionary/test",
+        " 12345 ",
+        "",
+        "BSE-2523",
+    ] * 5
+
+    df = pd.DataFrame({"WEB_URL": orig_web_url_list})
+    ctx = {"TABLE1": df}
+
+    expected_out = df = pd.DataFrame(
+        {
+            "WEB_URL": orig_web_url_list,
+            "EXTRACTED_VALUE": [
+                None,
+                "2523",
+                "2583",
+                None,
+                None,
+                None,
+                None,
+            ]
+            * 5,
+        }
+    )
+
+    query = """
+    SELECT
+        WEB_URL,
+        CASE WHEN STARTSWITH(WEB_URL, 'https://bodo.atlassian.net/') THEN REGEXP_SUBSTR(WEB_URL, 'selectedIssue=BSE-(\\d+)', 1::BIGINT, 1::BIGINT, 'e', 1::BIGINT) ELSE NULL END AS PRODUCT_ID
+    FROM table1
+    """
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_out,
+        check_names=False,
+    )

@@ -912,7 +912,10 @@ def regexp_substr_util(
             f"r = init_const_pattern(non_const_r, {repr(converted_pattern)})\n"
         )
 
-        if "e" in flag_str:
+        # FROM https://docs.snowflake.com/en/sql-reference/functions/regexp_substr:
+        #  If a group_num is specified, Snowflake allows extraction even if
+        #  the 'e' option was not also specified. The 'e' is implied.
+        if "e" in flag_str and not is_overload_none(group):
             scalar_text += "matches = r.findall(arg0[arg2-1:])\n"
             scalar_text += f"if len(matches) < arg3:\n"
             scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"

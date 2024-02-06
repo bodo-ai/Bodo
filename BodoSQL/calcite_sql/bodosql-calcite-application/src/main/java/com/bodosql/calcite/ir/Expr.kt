@@ -316,7 +316,11 @@ abstract class Expr {
             arg.emit(doc)
             // Generate the body
             val body = doc.toString().replace("\"\"\"", """\"\"\"""")
-            return "\"\"\"$body\"\"\""
+            // Need to perform an additional level of escaping, because we need to escape the nested
+            // strings within this triple quoted string
+            val escapedBody = body.replace("\\", "\\\\", false)
+
+            return "\"\"\"$escapedBody\"\"\""
         }
     }
 
