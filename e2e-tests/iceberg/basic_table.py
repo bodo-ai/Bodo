@@ -1,14 +1,17 @@
 import argparse
+import functools
+import logging
 import os
 import sys
 from datetime import datetime
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import boto3
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow.fs as pafs
+import snowflake
 from mpi4py import MPI
 from pyspark.sql import SparkSession
 
@@ -22,6 +25,8 @@ BUCKET_NAME = "engine-e2e-tests-iceberg"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_REGION"] = "us-east-1"
 comm = MPI.COMM_WORLD
+
+logger = logging.getLogger(__name__)
 
 
 def get_spark_iceberg(nessie_token):
@@ -84,20 +89,74 @@ def cleanup_hadoop():
     fs.delete_dir_contents(f"{BUCKET_NAME}/hadoop")
 
 
+def cleanup_snowflake(table_name: str):
+    conn = snowflake.connector.connect(
+        user=os.environ["SF_USERNAME"],
+        password=os.environ["SF_PASSWORD"],
+        account=os.environ["SF_ACCOUNT"],
+        warehouse="DEMO_WH",
+        database="TEST_DB",
+        schema="PUBLIC",
+    )
+    cur = conn.cursor()
+    cur.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+
+# ------------------------ Snowflake Write Impl ----------------
+def snowflake_write_impl(df, table_name):
+    SF_USERNAME = os.environ["SF_USERNAME"]
+    SF_PASSWORD = os.environ["SF_PASSWORD"]
+    SF_ACCOUNT = os.environ["SF_ACCOUNT"]
+    bodo.jit(
+        lambda df, SF_USERNAME, SF_PASSWORD, SF_ACCOUNT: df.to_sql(
+            f"{table_name}_non_iceberg",
+            f"snowflake://{SF_USERNAME}:{SF_PASSWORD}@{SF_ACCOUNT}/TEST_DB/PUBLIC?warehouse=DEMO_WH",
+        ),
+        distributed=["df"],
+        cache=True,
+    )(df, SF_USERNAME, SF_PASSWORD, SF_ACCOUNT)
+    if bodo.get_rank() == 0:
+        conn = snowflake.connector.connect(
+            user=SF_USERNAME,
+            password=SF_PASSWORD,
+            account=SF_ACCOUNT,
+            warehouse="DEMO_WH",
+            database="TEST_DB",
+            schema="PUBLIC",
+        )
+        cur = conn.cursor()
+        cur.execute(
+            f'CREATE OR REPLACE ICEBERG TABLE {table_name} ("bools" boolean, "bytes" BINARY, "ints" bigint, "floats" float, "strings" string, "lists" array(number(2, 0)), "timestamps" timestamp_ntz) CATALOG=\'SNOWFLAKE\' EXTERNAL_VOLUME=EXVOL BASE_LOCATION={table_name} AS SELECT bools, bytes, ints, floats, strings, lists::ARRAY(NUMBER(2,0)) as lists, timestamps FROM {table_name}_non_iceberg'
+        ).fetchall()
+        cur.execute(f"DROP TABLE {table_name}_non_iceberg").fetchall()
+        cur.close()
+    bodo.barrier()
+
+
 # ------------------------ Test Code ------------------------
 def test_builder(
-    conn: str, db_name: str, table_name: str
+    conn: str,
+    db_name: str,
+    table_name: str,
+    write_impl: Optional[Callable[[pd.DataFrame], None]] = None,
+    read_back_impl: Optional[Callable[[], pd.DataFrame]] = None,
 ) -> Tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
-    @bodo.jit(distributed=["df"], cache=True)
-    def write_impl(df):
-        print("starting write...")
-        df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
+    if write_impl is None:
 
-    @bodo.jit(cache=True)
-    def read_back_impl():
-        print("starting read...")
-        out_df = pd.read_sql_table(table_name, conn, schema=db_name)
-        return out_df
+        def write_impl_def(df):
+            print("starting write...")
+            df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
+
+        write_impl = bodo.jit(write_impl_def, distributed=["df"], cache=True)
+
+    if read_back_impl is None:
+
+        def read_back_impl_def():
+            print("starting read...")
+            out_df = pd.read_sql_table(table_name, conn, schema=db_name)
+            return out_df
+
+        read_back_impl = bodo.jit(read_back_impl_def, cache=True)
 
     return write_impl, read_back_impl
 
@@ -120,13 +179,19 @@ s3_tests = lambda table_name: test_builder(
     f"iceberg+s3://{BUCKET_NAME}", "hadoop", table_name
 )
 
+snowflake_tests = lambda table_name: test_builder(
+    f"iceberg+snowflake://{os.environ['SF_ACCOUNT']}.snowflakecomputing.com/?warehouse=DEMO_WH&user={os.environ['SF_USERNAME']}&password={os.environ['SF_PASSWORD']}",
+    "TEST_DB.PUBLIC",
+    table_name,
+    write_impl=functools.partial(snowflake_write_impl, table_name=table_name),
+)
 
 # ------------------------ Test Case ------------------------
 df = pd.DataFrame(
     {
         "bools": np.array([True, False, True, True, False] * 10, dtype=np.bool_),
         "bytes": np.array([1, 1, 0, 1, 0] * 10).tobytes(),
-        "ints": np.array([1, 2, 3, 4, 5] * 10, dtype=np.int32),
+        "ints": np.arange(50, dtype=np.int32),
         "floats": np.array([1, 2, 3, 4, 5] * 10, dtype=np.float32),
         "strings": np.array(["A", "B", "C", "D", "E"] * 10),
         "lists": pd.Series(
@@ -166,6 +231,7 @@ if __name__ == "__main__":
         # "Nessie": nessie_tests(nessie_token, table_name),
         "Glue": glue_tests(table_name),
         "S3": s3_tests(table_name),
+        "Snowflake": snowflake_tests(table_name),
     }
 
     passed = 0
@@ -175,8 +241,10 @@ if __name__ == "__main__":
             write_test_func(_get_dist_arg(df))
             out_df = read_test_func()
             out_df = bodo.allgatherv(out_df)
-            pd.testing.assert_frame_equal(out_df, df, check_dtype=False)
+            out_df_to_cmp = out_df.sort_values("ints", ignore_index=True)
+            df_to_cmp = df.sort_values("ints", ignore_index=True)
 
+            pd.testing.assert_frame_equal(out_df_to_cmp, df_to_cmp, check_dtype=False)
             if args.require_cache:
                 if isinstance(write_test_func, numba.core.dispatcher.Dispatcher):
                     assert (
@@ -190,8 +258,8 @@ if __name__ == "__main__":
             passed += 1
             print(f"Finished {key} Test successfully...")
         except Exception as e:
-            print(f"Error During {key} Test\n{e}")
-
+            print(f"Error During {key} Test")
+            logging.exception(e)
     # Cleanup of Test Cases
     bodo.barrier()
     cleanup_failed = False
@@ -202,6 +270,8 @@ if __name__ == "__main__":
             cleanup_hadoop()
             print("Cleaning up Glue...")
             cleanup_glue(table_name)
+            print("Cleaning up Snowflake...")
+            cleanup_snowflake(table_name)
             # TODO[BSE-1408]: enable Nessie tests after fixing issues
             # print("Cleaning up Nessie...")
             # cleanup_nessie(nessie_token, table_name)
