@@ -20,7 +20,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -31,14 +30,11 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
 import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexCorrelVariable;
-import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql2rel.CorrelationReferenceFinder;
 import org.apache.calcite.sql2rel.RelFieldTrimmer;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ImmutableBitSet;
@@ -63,38 +59,6 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     super(validator, relBuilder);
     this.relBuilder = relBuilder;
     this.pruneEverything = pruneEverything;
-  }
-
-  @Override
-  protected TrimResult trimChild(
-      RelNode rel,
-      RelNode input,
-      final ImmutableBitSet fieldsUsed,
-      Set<RelDataTypeField> extraFields) {
-    final ImmutableBitSet.Builder fieldsUsedBuilder = fieldsUsed.rebuild();
-
-    // Bodo Change: We remove the section that requires avoiding pruning collation
-    // columns. This should be safe because none of our implementations rely on this
-    // collation information. In the future we could explore integrating this into
-    // individual nodes we care about (or only the physical step).
-
-    // Correlating variables are a means for other relational expressions to use
-    // fields.
-    for (final CorrelationId correlation : rel.getVariablesSet()) {
-      rel.accept(
-          new CorrelationReferenceFinder() {
-            @Override
-            protected RexNode handle(RexFieldAccess fieldAccess) {
-              final RexCorrelVariable v = (RexCorrelVariable) fieldAccess.getReferenceExpr();
-              if (v.id.equals(correlation)) {
-                fieldsUsedBuilder.set(fieldAccess.getField().getIndex());
-              }
-              return fieldAccess;
-            }
-          });
-    }
-
-    return dispatchTrimFields(input, fieldsUsedBuilder.build(), extraFields);
   }
 
   /**
