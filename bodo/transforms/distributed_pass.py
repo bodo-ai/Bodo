@@ -564,6 +564,13 @@ class DistributedPass:
             return [assign]
 
         if fdef == (
+            "iceberg_writer_init",
+            "bodo.io.stream_iceberg_write",
+        ) and self._is_1D_or_1D_Var_arr(lhs):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
+        if fdef == (
             "init_groupby_state",
             "bodo.libs.stream_groupby",
         ) and self._is_1D_or_1D_Var_arr(lhs):

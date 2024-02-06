@@ -1626,6 +1626,23 @@ class SeriesPass:
             ):
                 set_2nd_to_last_arg_to_true(self, state_def)
 
+        if fdef == (
+            "iceberg_writer_append_table",
+            "bodo.io.stream_iceberg_write",
+        ):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("iceberg_writer_init", "bodo.io.stream_iceberg_write"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-2] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_2nd_to_last_arg_to_true(self, state_def)
+
         # support matplot lib calls
         if "bodo.libs.matplotlib_ext" in sys.modules:
             # matplotlib.pyplot functions

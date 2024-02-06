@@ -243,25 +243,25 @@ void iceberg_pq_write(const char *table_data_loc,
         std::shared_ptr<table_info> new_table =
             std::make_shared<table_info>(new_cols);
 
-        // Convert all local dictionaries to global (and with sorted indices)
-        // for all dict columns (not just transformed columns).
-        // `sort_values_table` actually does this as well (call
-        // make_dictionary_global_and_unique), but it then doesn't incref the
-        // new arrays, so we need to convert them to global dictionaries here,
-        // incref the new global dictionary appropriately and then call
-        // sort_values_table.
+        // Make all local dictionaries unique
+        // NOTE: can't make them global since streaming write isn't bulk
+        // synchronous
         for (auto a : new_cols) {
             if (a->arr_type == bodo_array_type::DICT) {
                 // Note: Sorting is an optimization but not required. This
                 // is equivalent to the parquet_write
-                make_dictionary_global_and_unique(a, is_parallel, true);
+                drop_duplicates_local_dictionary(a, true);
             }
         }
 
+        // NOTE: we can't sort in parallel since streaming write is not bulk
+        // synchronous
+        // TODO[BSE-2614]: explore adding a global sort in the planner if table
+        // has sort order
         std::shared_ptr<table_info> sorted_new_table = sort_values_table(
             new_table, transform_cols.size(), vect_ascending.data(),
             na_position.data(), /*dead_keys=*/nullptr, /*out_n_rows=*/nullptr,
-            /*bounds=*/nullptr, is_parallel);
+            /*bounds=*/nullptr, false);
 
         // Remove the unused transform columns
         // TODO Optimize to not remove if they can be reused for partition spec
@@ -360,16 +360,14 @@ void iceberg_pq_write(const char *table_data_loc,
         }
         Py_DECREF(partition_spec_iter);
 
-        // Convert all local dictionaries to global for dict columns.
-        // to enable hashing.
+        // Make all local dictionaries unique to enable hashing.
         // This can only happen in the case of identity transform or
         // truncate transform on DICT arrays.
-        // In case of identity transform, since transformed column is
-        // just the original column, the original column will also
-        // get a global dictionary.
+        // NOTE: can't make them global since streaming write isn't bulk
+        // synchronous
         for (auto a : transform_cols) {
             if (a->arr_type == bodo_array_type::DICT) {
-                make_dictionary_global_and_unique(a, is_parallel);
+                drop_duplicates_local_dictionary(a);
             }
         }
 
@@ -396,7 +394,7 @@ void iceberg_pq_write(const char *table_data_loc,
                                    is_parallel);
         const uint32_t seed = SEED_HASH_PARTITION;
         std::shared_ptr<uint32_t[]> hashes =
-            hash_keys(transform_cols, seed, is_parallel);
+            hash_keys(transform_cols, seed, is_parallel, false);
         bodo::unord_map_container<multi_col_key, partition_write_info,
                                   multi_col_key_hash>
             key_to_partition;
@@ -557,11 +555,6 @@ PyObject *iceberg_pq_write_py_entry(
     PyObject *sort_order, const char *compression, bool is_parallel,
     const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
     PyObject *iceberg_arrow_schema_py) {
-    // Return value and exception string are captured to force all ranks
-    // to raise an exception.
-    PyObject *ret_val = nullptr;
-    std::optional<const char *> err_str;
-
     try {
         std::shared_ptr<table_info> table =
             std::shared_ptr<table_info>(in_table);
@@ -583,28 +576,9 @@ PyObject *iceberg_pq_write_py_entry(
                          row_group_size, iceberg_metadata,
                          iceberg_files_info_py, iceberg_schema);
 
-        Py_DECREF(iceberg_arrow_schema_py);
-        ret_val = iceberg_files_info_py;
+        return iceberg_files_info_py;
     } catch (const std::exception &e) {
-        err_str = e.what();
-    }
-
-    // Parquet write occurs in parallel without any synchronization. Thus
-    // we need to check if any rank threw an exception, and ensure all ranks
-    // stop. Each rank can fail for unique reasons, so we use a helper
-    // message on ranks that didn't originally throw an exception.
-    // TODO: Move to helper function so this can be used anywhere
-    auto has_err_local = err_str.has_value();
-    auto has_err_global = false;
-    MPI_Allreduce(&has_err_local, &has_err_global, 1, MPI_C_BOOL, MPI_LOR,
-                  MPI_COMM_WORLD);
-
-    // If any rank has an error
-    if (has_err_global) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        err_str.value_or("See other ranks for runtime error"));
+        PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
-
-    return ret_val;
 }

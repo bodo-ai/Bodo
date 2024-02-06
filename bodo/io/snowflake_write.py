@@ -26,6 +26,10 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import TableType
+from bodo.io.helpers import (
+    _get_stream_writer_payload,
+    stream_writer_alloc_codegen,
+)
 from bodo.io.parquet_pio import parquet_write_table_cpp
 from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
@@ -155,49 +159,6 @@ class SnowflakeWriterModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-def define_snowflake_writer_dtor(
-    context, builder, snowflake_writer_type, payload_type
-):  # pragma: no cover
-    """
-    Define destructor for Snowflake writer type if not already defined
-    """
-    mod = builder.module
-    # Declare dtor
-    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
-    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.snowflake_writer")
-
-    # End early if the dtor is already defined
-    if not fn.is_declaration:
-        return fn
-
-    fn.linkage = "linkonce_odr"
-    # Populate the dtor
-    builder = lir.IRBuilder(fn.append_basic_block())
-    base_ptr = fn.args[0]  # void*
-
-    # Get payload struct
-    ptrty = context.get_value_type(payload_type).as_pointer()
-    payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
-
-    # Decref each payload field
-    for attr, fe_type in snowflake_writer_payload_members:
-        context.nrt.decref(builder, fe_type, getattr(payload, attr))
-
-    # Delete table builder state
-    c_fnty = lir.FunctionType(
-        lir.VoidType(),
-        [lir.IntType(8).as_pointer()],
-    )
-    fn_tp = cgutils.get_or_insert_function(
-        builder.module, c_fnty, name="delete_table_builder_state"
-    )
-    builder.call(fn_tp, [payload.batches])
-
-    builder.ret_void()
-    return fn
-
-
 @intrinsic(prefer_literal=True)
 def sf_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
     expected_state_type = unwrap_typeref(expected_state_type_t)
@@ -208,50 +169,15 @@ def sf_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
 
     def codegen(context, builder, sig, args):  # pragma: no cover
         """Creates meminfo and sets dtor for Snowflake writer"""
-        # Create payload type
-        payload_type = snowflake_writer_payload_type
-        alloc_type = context.get_value_type(payload_type)
-        alloc_size = context.get_abi_sizeof(alloc_type)
-
-        # Define dtor
-        dtor_fn = define_snowflake_writer_dtor(
-            context, builder, snowflake_writer_type, payload_type
+        return stream_writer_alloc_codegen(
+            context,
+            builder,
+            snowflake_writer_payload_type,
+            snowflake_writer_type,
+            snowflake_writer_payload_members,
         )
-
-        # Create meminfo
-        meminfo = context.nrt.meminfo_alloc_dtor(
-            builder, context.get_constant(types.uintp, alloc_size), dtor_fn
-        )
-        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-        meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
-
-        # Alloc values in payload. Note: garbage values will be stored in all
-        # fields until sf_writer_setattr is called for the first time
-        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-        builder.store(payload._getvalue(), meminfo_data_ptr)
-
-        # Construct Snowflake writer from payload
-        snowflake_writer = context.make_helper(builder, snowflake_writer_type)
-        snowflake_writer.meminfo = meminfo
-        return snowflake_writer._getvalue()
 
     return snowflake_writer_type(expected_state_type_t), codegen
-
-
-def _get_snowflake_writer_payload(
-    context, builder, writer_typ, writer
-):  # pragma: no cover
-    """Get payload struct proxy for a Snowflake writer value"""
-    snowflake_writer = context.make_helper(builder, writer_typ, writer)
-    payload_type = snowflake_writer_payload_type
-    meminfo_void_ptr = context.nrt.meminfo_data(builder, snowflake_writer.meminfo)
-    meminfo_data_ptr = builder.bitcast(
-        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
-    )
-    payload = cgutils.create_struct_proxy(payload_type)(
-        context, builder, builder.load(meminfo_data_ptr)
-    )
-    return payload, meminfo_data_ptr
 
 
 @intrinsic(prefer_literal=True)
@@ -272,7 +198,9 @@ def sf_writer_getattr(typingctx, writer_typ, attr_typ):  # pragma: no cover
 
     def codegen(context, builder, sig, args):  # pragma: no cover
         writer, _ = args
-        payload, _ = _get_snowflake_writer_payload(context, builder, writer_typ, writer)
+        payload, _ = _get_stream_writer_payload(
+            context, builder, writer_typ, snowflake_writer_payload_type, writer
+        )
         return impl_ret_borrowed(
             context, builder, sig.return_type, getattr(payload, attr)
         )
@@ -298,8 +226,8 @@ def sf_writer_setattr(typingctx, writer_typ, attr_typ, val_typ):  # pragma: no c
 
     def codegen(context, builder, sig, args):  # pragma: no cover
         writer, _, val = args
-        payload, meminfo_data_ptr = _get_snowflake_writer_payload(
-            context, builder, writer_typ, writer
+        payload, meminfo_data_ptr = _get_stream_writer_payload(
+            context, builder, writer_typ, snowflake_writer_payload_type, writer
         )
         context.nrt.decref(builder, val_typ, getattr(payload, attr))
         context.nrt.incref(builder, val_typ, val)

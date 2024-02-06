@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, List
 import numba
 import numpy as np
 import pyarrow as pa
+from llvmlite import ir as lir
 from mpi4py import MPI
-from numba.core import types
+from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
     NativeValue,
@@ -832,3 +833,101 @@ def sync_and_reraise_error(err, _is_parallel=False):  # pragma: no cover
     else:
         if err is not None:
             raise err
+
+
+def _get_stream_writer_payload(
+    context, builder, writer_typ, payload_type, writer
+):  # pragma: no cover
+    """Get payload struct proxy for a stream writer value (Snowflake or Iceberg)"""
+    stream_writer = context.make_helper(builder, writer_typ, writer)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, stream_writer.meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
+    )
+    payload = cgutils.create_struct_proxy(payload_type)(
+        context, builder, builder.load(meminfo_data_ptr)
+    )
+    return payload, meminfo_data_ptr
+
+
+def define_stream_writer_dtor(
+    context, builder, payload_type, writer_payload_members
+):  # pragma: no cover
+    """
+    Define destructor for stream writer type if not already defined
+    (Snowflake or Iceberg stream writer)
+    """
+    mod = builder.module
+    # Declare dtor
+    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
+    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.stream_writer")
+
+    # End early if the dtor is already defined
+    if not fn.is_declaration:
+        return fn
+
+    fn.linkage = "linkonce_odr"
+    # Populate the dtor
+    builder = lir.IRBuilder(fn.append_basic_block())
+    base_ptr = fn.args[0]  # void*
+
+    # Get payload struct
+    ptrty = context.get_value_type(payload_type).as_pointer()
+    payload_ptr = builder.bitcast(base_ptr, ptrty)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
+
+    # Decref each payload field
+    for attr, fe_type in writer_payload_members:
+        context.nrt.decref(builder, fe_type, getattr(payload, attr))
+
+    # Delete table builder state
+    c_fnty = lir.FunctionType(
+        lir.VoidType(),
+        [lir.IntType(8).as_pointer()],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, c_fnty, name="delete_table_builder_state"
+    )
+    builder.call(fn_tp, [payload.batches])
+
+    builder.ret_void()
+    return fn
+
+
+def stream_writer_alloc_codegen(
+    context,
+    builder,
+    stream_writer_payload_type,
+    stream_writer_type,
+    stream_writer_payload_members,
+):
+    """Codegen for stream writer allocation intrinsics (Snowflake or Iceberg)"""
+    # Create payload type
+    payload_type = stream_writer_payload_type
+    alloc_type = context.get_value_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # Define dtor
+    dtor_fn = define_stream_writer_dtor(
+        context,
+        builder,
+        payload_type,
+        stream_writer_payload_members,
+    )
+
+    # Create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # Alloc values in payload. Note: garbage values will be stored in all
+    # fields until writer_setattr is called for the first time
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    # Construct stream writer from payload
+    stream_writer = context.make_helper(builder, stream_writer_type)
+    stream_writer.meminfo = meminfo
+    return stream_writer._getvalue()
