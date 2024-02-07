@@ -4,7 +4,7 @@ requires = [
     "setuptools_scm[toml]>=8",
     "scikit-build-core[pyproject]",
     "cython",
-    "numpy>=1.23,<1.27",
+    "numpy>=1.24,<1.27",
     "pyarrow==14.0.2",
 ]
 build-backend = "scikit_build_core.build"
@@ -36,7 +36,7 @@ dependencies = [
     "numba==0.58.1",
     "pyarrow==14.0.2",
     "pandas>=2,<2.1",
-    "numpy>=1.23,<1.27",
+    "numpy>=1.24,<1.27",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",
     "mpi4py_mpich==3.1.2",  

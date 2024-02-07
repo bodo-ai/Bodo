@@ -29,6 +29,10 @@ dependencies:
   - gcc_linux-64>=9        #[linux64]
   - gxx_linux-64>=9        #[linux64]
 
+  # Build Tools
+  - clang-tools =16        #[osx64]
+  - clang-tools =16        #[arm64]
+
   # C++ Deps
   - boost-cpp =1.84
   - fmt =10.1

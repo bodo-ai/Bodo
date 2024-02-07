@@ -29,7 +29,7 @@ requirements:
     - cython <3.0                           # [build_platform != target_platform]
     - cmake                                 # [build_platform != target_platform]
     - ninja                                 # [build_platform != target_platform]
-    - numpy >=1.23                          # [build_platform != target_platform]
+    - numpy >=1.24                          # [build_platform != target_platform]
     - libarrow =14.0.2                      # [build_platform != target_platform]
     - pyarrow =14.0.2                       # [build_platform != target_platform]
     - numba 0.58.1
@@ -46,7 +46,7 @@ requirements:
 
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.23,<1.27
+    - numpy >=1.24,<1.27
     - pandas >=2,<2.1
     - fsspec >=2021.09
     - libarrow =14.0.2
@@ -84,7 +84,7 @@ requirements:
   # support up to 3.6.1
   run_constrained:
     - matplotlib <= 3.6.1
-    - numpy >=1.23,<1.27
+    - numpy >=1.24,<1.27
     - scikit-learn =1.1.*
     - s3fs >=2022.1.0
 
