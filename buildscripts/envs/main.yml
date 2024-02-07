@@ -14,7 +14,7 @@ dependencies:
 
   # Core
   - numba =0.58.1
-  - numpy >=1.23,<1.27
+  - numpy >=1.24,<1.27
   - pandas >=2,<2.1
 
   # HDFS
@@ -33,11 +33,11 @@ dependencies:
   # FFT
   - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
 
-  # Data Science 
+  # Data Science
   - scipy
   - scikit-learn=1.1.*
   - matplotlib<=3.6.1
-  
+
   # IO
   - pyarrow =14.0.2=*_cpu
   - fsspec >=2021.09
@@ -57,7 +57,7 @@ dependencies:
   - sqlalchemy
 
   # Snowflake
-  - snowflake-connector-python 
+  - snowflake-connector-python
   - snowflake-sqlalchemy
 
   # Additional?
@@ -65,5 +65,4 @@ dependencies:
   - libaio #[linux64]
 
   # IPython
-  - ipython==8.16.1 
-
+  - ipython==8.16.1
