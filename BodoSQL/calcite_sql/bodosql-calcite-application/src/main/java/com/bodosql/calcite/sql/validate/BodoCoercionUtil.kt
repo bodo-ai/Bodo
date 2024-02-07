@@ -53,7 +53,10 @@ class BodoCoercionUtil {
          * in a UDF.
          */
         private fun assignableInUDF(input: RelDataType, target: RelDataType): Boolean {
-            if (target is ArraySqlType) {
+            if (input.sqlTypeName == SqlTypeName.NULL || input.sqlTypeName == SqlTypeName.ANY) {
+                // Null and Any should always match
+                return true
+            } else if (target is ArraySqlType) {
                 // Array
                 return input is ArraySqlType
             } else if (SqlTypeFamily.BINARY.contains(target)) {
