@@ -4435,20 +4435,6 @@ SqlOperator periodOperator() :
 }
 
 /**
- * Parses a COLLATE clause
- */
-SqlCollation CollateClause() :
-{
-}
-{
-    <COLLATE> <COLLATION_ID>
-    {
-        return new SqlCollation(
-            getToken(0).image, SqlCollation.Coercibility.EXPLICIT);
-    }
-}
-
-/**
  * Numeric literal or parameter; used in LIMIT, OFFSET and FETCH clauses.
  */
 SqlNode UnsignedNumericLiteralOrParam() :
@@ -9852,13 +9838,6 @@ MORE :
 
 <DEFAULT, DQID, BTID, BQID, BQHID> TOKEN :
 {
-    < COLLATION_ID:
-    (<LETTER_EXCLUDING_DOLLAR>|<DIGIT>)+ (<LETTER>|<DIGIT>|":"|"."|"-"|"_")*
-    "$"
-    (<LETTER>|"_")+
-    ("$" (<LETTER>|<DIGIT>|"_")+)?
-    >
-|
     < UNICODE_QUOTED_IDENTIFIER: "U" "&" <QUOTED_IDENTIFIER> >
 |
     < #LETTER:
