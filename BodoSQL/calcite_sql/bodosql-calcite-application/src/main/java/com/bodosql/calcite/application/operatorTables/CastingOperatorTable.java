@@ -278,6 +278,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // argument.
           OperandTypes.NUMERIC
               .or(OperandTypes.STRING)
+              .or(BodoOperandTypes.VARIANT)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
