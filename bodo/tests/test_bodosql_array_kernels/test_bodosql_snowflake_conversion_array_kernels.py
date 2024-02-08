@@ -512,6 +512,78 @@ def test_to_char(input, is_scalar, expected):
 
 
 @pytest.mark.parametrize(
+    "input, expected",
+    [
+        pytest.param(
+            pd.array([1, None, 4, None, 16, None, 64], dtype=pd.Int32Dtype()),
+            pd.array([1.0, None, 4.0, None, 16.0, None, 64.0], dtype=pd.Float64Dtype()),
+            id="nullable_int",
+        ),
+        pytest.param(
+            np.array([1, -2, 4, -8, 16, -32, 64], dtype=np.int64()),
+            np.array([1.0, -2.0, 4.0, -8.0, 16.0, -32.0, 64.0], dtype=np.float64()),
+            id="numpy_int",
+        ),
+        pytest.param(
+            pd.array([1.0, -0.3, None, 3.14, 2.718281828], dtype=pd.Float64Dtype()),
+            pd.array([1.0, -0.3, None, 3.14, 2.718281828], dtype=pd.Float64Dtype()),
+            id="float",
+        ),
+        pytest.param(
+            pd.array([True, False, None] * 2, dtype=pd.BooleanDtype()),
+            pd.array([1.0, 0.0, None] * 2, dtype=pd.Float64Dtype()),
+            id="boolean",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "0",
+                    "0.5",
+                    "-144",
+                    None,
+                    "-2.71",
+                    "72.315",
+                    "inf",
+                    "-inf",
+                    "2.024e3",
+                    "-1e-5",
+                ]
+            ),
+            pd.array(
+                [
+                    1.0,
+                    0.0,
+                    0.5,
+                    "-144",
+                    None,
+                    -2.71,
+                    72.315,
+                    np.inf,
+                    -np.inf,
+                    2024.0,
+                    -0.00001,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="string",
+        ),
+    ],
+)
+def test_to_double(input, expected):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.to_double(arr, None)
+
+    check_func(
+        impl,
+        (input,),
+        py_output=expected,
+        check_dtype=False,
+        reset_index=False,
+    )
+
+
+@pytest.mark.parametrize(
     "arr, format_str, is_scalar_arr, expected",
     [
         pytest.param(

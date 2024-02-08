@@ -912,6 +912,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
     is_string = is_valid_string_arg(val)
     is_float = is_valid_float_arg(val)
     is_int = is_valid_int_arg(val)
+    is_bool = is_valid_boolean_arg(val)
     _try = get_overload_const_bool(_try)
 
     if _try:  # pragma: no cover
@@ -937,7 +938,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         scalar_text += f"  {on_fail}\n"
     elif is_float:  # pragma: no cover
         scalar_text = f"res[i] = arg0\n"
-    elif is_int:  # pragma: no cover
+    elif is_int or is_bool:  # pragma: no cover
         scalar_text = f"res[i] = np.float64(arg0)\n"
     else:  # pragma: no cover
         raise raise_bodo_error(
