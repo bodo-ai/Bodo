@@ -298,6 +298,7 @@
                                         <exclude>org/apache/calcite/plan/RelOptTable$ToRelContext.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable$ViewExpander.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable.class</exclude>
+                                        <exclude>org/apache/calcite/prepare/CalciteCatalogReader.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$2.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$3.class</exclude>
