@@ -1996,6 +1996,9 @@ def test_merge_with_subqueries_in_insert_condition(
     )
 
 
+@pytest.mark.skip(
+    "Temporarily skipped to avoid CI Hang: https://bodo.atlassian.net/browse/BSE-2660"
+)
 @pytest.mark.slow
 def test_merge_with_target_columns_in_insert_conditions(
     iceberg_database, iceberg_table_conn, table_name
