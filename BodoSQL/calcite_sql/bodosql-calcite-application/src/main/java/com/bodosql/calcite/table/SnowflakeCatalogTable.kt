@@ -361,6 +361,10 @@ open class SnowflakeCatalogTable(
         return statistic
     }
 
+    fun isIcebergTable(): Boolean {
+        return catalog.isIcebergTable(this.fullPath)
+    }
+
     private inner class StatisticImpl : Statistic {
         private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
 

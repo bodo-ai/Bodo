@@ -1846,7 +1846,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
    * @return Do we have read support.
    */
-  public @Nullable boolean canReadTable(List<String> names) {
+  public @NotNull boolean canReadTable(List<String> names) {
     return canReadTableFn.apply(names);
   }
 
@@ -1870,6 +1870,36 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               "Unable to read table '%s' from Snowflake. Error message: %s",
               dotTableName, e.getMessage());
       VERBOSE_LEVEL_TWO_LOGGER.info(errorMsg);
+      return false;
+    }
+  }
+
+  /** Determine if the provided Snowflake table is actually an Iceberg table inside Snowflake. */
+  public @NotNull boolean isIcebergTable(List<String> names) {
+    return isIcebergTableFn.apply(names);
+  }
+
+  private final Function<List<String>, Boolean> isIcebergTableFn =
+      Memoizer.memoize(this::isIcebergTableImpl);
+
+  /**
+   * The actual implementation for isIcebergTable including calls to Snowflake. We add an extra
+   * layer of indirection to ensure this function is cached.
+   */
+  private @NotNull boolean isIcebergTableImpl(List<String> names) {
+    if (!RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
+      return false;
+    }
+    String qualifiedName = String.join(".", names);
+    try {
+      final String query = String.format(Locale.ROOT, "DESCRIBE ICEBERG TABLE %s;", qualifiedName);
+      executeSnowflakeQuery(query, 5);
+
+      // If the query errors just return and log.
+      String successMsg = String.format("Can read table '%s' as an Iceberg table", qualifiedName);
+      VERBOSE_LEVEL_TWO_LOGGER.info(successMsg);
+      return true;
+    } catch (SQLException e) {
       return false;
     }
   }
