@@ -90,6 +90,36 @@ def get_proxy_uri_from_env_vars():
     )
 
 
+def validate_s3fs_installed():
+    """
+    Validate that s3fs is installed. An error is raised
+    when this is not the case.
+    """
+    try:
+        import s3fs  # noqa
+    except ImportError:
+        raise BodoError(
+            "Couldn't import s3fs, which is required for certain types of S3 access."
+            " s3fs can be installed by calling"
+            " 'conda install -c conda-forge s3fs'.\n"
+        )
+
+
+def validate_gcsfs_installed():
+    """
+    Validate that gcsfs is installed. An error is raised
+    when this is not the case.
+    """
+    try:
+        import gcsfs  # noqa
+    except ImportError:
+        raise BodoError(
+            "Couldn't import gcsfs, which is required for Google cloud access."
+            " gcsfs can be installed by calling"
+            " 'conda install -c conda-forge gcsfs'.\n"
+        )
+
+
 def get_s3_fs(region=None, storage_options=None):
     """
     initialize S3FileSystem with credentials

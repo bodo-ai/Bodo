@@ -1,17 +1,24 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+from __future__ import annotations
+
 import os
+import random
+import time
 import warnings
 from collections import defaultdict
 from glob import has_magic
-from typing import List, Optional
-from urllib.parse import urlparse
+from typing import Any, List, Optional
+from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pyarrow  # noqa
 import pyarrow as pa  # noqa
+import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
+from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
     NativeValue,
@@ -31,7 +38,12 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
 )
-from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
+from bodo.io.fs_io import (
+    get_hdfs_fs,
+    get_s3_fs_from_path,
+    validate_gcsfs_installed,
+    validate_s3fs_installed,
+)
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import get_end, get_start
@@ -48,7 +60,7 @@ REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # below which we read as dictionary-encoded string array
 READ_STR_AS_DICT_THRESHOLD = 1.0
 
-list_of_files_error_msg = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
+LIST_OF_FILES_ERROR_MSG = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
 
 
 class ParquetPredicateType(types.Type):
@@ -329,6 +341,575 @@ class ParquetPiece(object):
         return self.frag.num_row_groups
 
 
+def glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
+    """
+    Return a list of path names that match glob pattern
+    given by path.
+
+    Args:
+        protocol (str): Protocol for the path. e.g.
+            "" -> local
+            "s3" -> S3
+        fs (pa.fs.FileSystem | None): Filesystem to use
+            for getting list of files. This can be None
+            in the local filesystem case, i.e. protocol
+            is an empty string.
+        path (str): Glob pattern.
+
+    Returns:
+        list[str]: List of files returned by expanding the glob
+            pattern.
+    """
+    if not protocol and fs is None:
+        from fsspec.implementations.local import LocalFileSystem
+
+        fs = LocalFileSystem()
+    elif fs is None:
+        raise ValueError(
+            f"glob: 'fs' cannot be None in the non-local ({protocol}) filesystem case!"
+        )
+
+    if isinstance(fs, pa.fs.FileSystem):
+        from fsspec.implementations.arrow import ArrowFSWrapper
+
+        fs = ArrowFSWrapper(fs)
+
+    try:
+        files = fs.glob(path)
+    except:  # pragma: no cover
+        raise BodoError(f"glob pattern expansion not supported for {protocol}")
+
+    return files
+
+
+def getfs(
+    fpath: str | list[str],
+    protocol: str,
+    storage_options: Optional[dict] = None,
+    parallel: bool = False,
+) -> PyFileSystem | pa.fs.FileSystem:
+    """
+    Get filesystem for the provided file path(s).
+
+    Args:
+        fpath (str | list[str]): Filename or list of filenames.
+        protocol (str): Protocol for the filesystem. e.g. "" (for local), "s3", etc.
+        storage_options (Optional[dict], optional): Optional storage_options to
+            use when building the filesystem. Only supported in the S3 case
+            at this time. Defaults to None.
+        parallel (bool, optional): Whether this function is being called in parallel.
+            Defaults to False.
+
+    Returns:
+        Filesystem implementation. This is either a PyFileSystem wrapper over
+        s3fs/gcsfs or a native PyArrow filesystem.
+    """
+    # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
+    if (
+        protocol == "s3"
+        and storage_options
+        and ("anon" not in storage_options or len(storage_options) > 1)
+    ):
+        # "anon" is the only storage_options supported by PyArrow
+        # If other storage_options fields are given,
+        # we need to use S3Fs to read instead
+        import s3fs
+
+        sopts = storage_options.copy()
+        if "AWS_S3_ENDPOINT" in os.environ and "endpoint_url" not in sopts:
+            sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
+        s3_fs = s3fs.S3FileSystem(**sopts)
+        return PyFileSystem(FSSpecHandler(s3_fs))
+    elif protocol == "s3":
+        return (
+            get_s3_fs_from_path(
+                fpath, parallel=parallel, storage_options=storage_options
+            )
+            if not isinstance(fpath, list)
+            else get_s3_fs_from_path(
+                fpath[0], parallel=parallel, storage_options=storage_options
+            )
+        )
+
+    if storage_options is not None and len(storage_options) > 0:
+        raise BodoError(
+            f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
+        )
+
+    if protocol in {"gcs", "gs"}:
+        import gcsfs
+
+        # TODO pass storage_options to GCSFileSystem
+        google_fs = gcsfs.GCSFileSystem(token=None)
+        return PyFileSystem(FSSpecHandler(google_fs))
+    elif protocol == "http":
+        import fsspec
+
+        return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
+    elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+        return (
+            get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
+        )
+    else:
+        return pa.fs.LocalFileSystem()
+
+
+def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, str]:
+    """
+    Parse a filepath and extract properties such as the relevant
+    protocol, scheme, netloc, etc.
+    In case it's a list of filepaths, this validates that properties
+    such as the protocol and netloc (i.e. the bucket in the S3 case)
+    are the same for all filepaths in the list.
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths to parse.
+
+    Returns:
+        tuple[str | list[str], ParseResult, str]:
+            - str: Sanitized version of the filepath(s).
+            - ParseResult: ParseResult object containing the
+                scheme, netloc, etc.
+            - str: The protocol associate with the filepath(s).
+                e.g. "" (local), "s3" (S3), etc.
+    """
+
+    if isinstance(fpath, list):
+        # list of file paths
+        parsed_url = urlparse(fpath[0])
+        protocol = parsed_url.scheme
+        bucket_name = parsed_url.netloc  # netloc can be empty string (e.g. non s3)
+        for i in range(len(fpath)):
+            f = fpath[i]
+            u_p = urlparse(f)
+            # make sure protocol and bucket name of every file matches
+            if u_p.scheme != protocol:
+                raise BodoError(
+                    "All parquet files must use the same filesystem protocol"
+                )
+            if u_p.netloc != bucket_name:
+                raise BodoError("All parquet files must be in the same S3 bucket")
+            fpath[i] = f.rstrip("/")
+    else:
+        parsed_url: ParseResult = urlparse(fpath)
+        protocol = parsed_url.scheme
+        fpath = fpath.rstrip("/")
+
+    return fpath, parsed_url, protocol
+
+
+def get_fpath_without_protocol_prefix(
+    fpath: str | list[str], protocol: str, parsed_url: ParseResult
+) -> tuple[str | list[str], str]:
+    """
+    Get the filepath(s) without the prefix associated with
+    the protocol. e.g. in the s3 case, this will remove the
+    "s3://" from the start of the path(s).
+
+    Args:
+        fpath (str | list[str]): Filepath or list of filepaths.
+        protocol (str): Protocol being used for the paths.
+            e.g. "" (local), "s3" (S3), etc.
+        parsed_url (ParseResult): Properties such as scheme and netloc
+            parsed from the filepath(s). This is typically the
+            output of the 'parse_fpath' function.
+
+    Returns:
+        tuple[str | list[str], str]: Filepath(s) without the prefix
+            and the prefix itself.
+    """
+    prefix = ""
+    if protocol == "s3":
+        prefix = "s3://"
+    elif protocol in {"hdfs", "abfs", "abfss"}:
+        # HDFS filesystem is initialized with host:port info. Once
+        # initialized, the filesystem needs the <protocol>://<host><port>
+        # prefix removed to query and access files
+        prefix = f"{protocol}://{parsed_url.netloc}"
+    elif protocol in {"gcs", "gs"}:
+        prefix = f"{protocol}://"
+
+    if prefix:
+        if isinstance(fpath, list):
+            fpath_noprefix = [f[len(prefix) :] for f in fpath]
+        else:
+            fpath_noprefix = fpath[len(prefix) :]
+    else:
+        fpath_noprefix = fpath
+    return fpath_noprefix, prefix
+
+
+def get_bodo_pq_dataset_from_fpath(
+    fpath: str | list[str],
+    protocol: str,
+    parsed_url: ParseResult,
+    fs: Any,
+    partitioning: str | None,
+    dnf_filters=None,
+    typing_pa_schema: Optional[pa.Schema] = None,
+) -> ParquetDataset | Exception:
+    """
+    Get a ParquetDataset object for a filepath (or a list of filepaths).
+    If provided, the dnf_filters will be applied to prune the list
+    of parquet files. Otherwise, all files are included in the dataset.
+    This is used at both compile time and runtime.
+
+    NOTE: This must be called on a single rank. The function will temporarily
+    increase the number of IO threads PyArrow can use for parallelization.
+
+    Args:
+        fpath (str | list[str]): Filepath(s) for the dataset.
+        protocol (str): Filesystem protocol.
+        parsed_url (ParseResult): Details such as the scheme, netloc (i.e. the
+            bucket in the S3 case), etc.
+        fs (Any): Filesystem to use for reading data/metadata.
+        partitioning (str | None): Partitioning scheme to use. Only 'hive'
+            and None are supported.
+        dnf_filters (str, optional): Filters to apply to prune the set of
+            files. Defaults to None.
+        typing_pa_schema (Optional[pa.Schema], optional): Provide a schema
+            to use. This is used at runtime to enforce the scheme
+            inferred at compile-time. Defaults to None.
+
+    Returns:
+        ParquetDataset | Exception: Parquet dataset object with the relevant
+            files. In case of an exception, the exception is returned so that
+            the caller can handle error synchronization (since this function
+            should be called from a single rank).
+    """
+
+    nthreads = 1  # Number of threads to use on this rank to collect metadata
+    cpu_count = os.cpu_count()
+    if cpu_count is not None and cpu_count > 1:
+        nthreads = cpu_count // 2
+    pa_default_io_thread_count = pa.io_thread_count()
+
+    try:
+        ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
+        if tracing.is_tracing():
+            # only do the work of converting dnf_filters to string
+            # if tracing is enabled
+            ev_pq_ds.add_attribute("g_dnf_filter", str(dnf_filters))
+        pa.set_io_thread_count(nthreads)
+
+        fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
+            fpath, protocol, parsed_url
+        )
+
+        if isinstance(fpath_noprefix, list):
+            # Expand any glob strings in the list in order to generate a
+            # single list of fully realized paths to parquet files.
+            # For example: ["A/a.pq", "B/*.pq"] might expand to
+            # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
+            new_fpath = []
+            for p in fpath_noprefix:
+                if has_magic(p):
+                    new_fpath += glob(protocol, fs, p)
+                else:
+                    new_fpath.append(p)
+            fpath_noprefix = new_fpath
+            if len(fpath_noprefix) == 0:
+                raise BodoError("No files found matching glob pattern")
+        elif has_magic(fpath_noprefix):
+            fpath_noprefix = glob(protocol, fs, fpath_noprefix)
+            if len(fpath_noprefix) == 0:
+                raise BodoError("No files found matching glob pattern")
+
+        dataset = pq.ParquetDataset(
+            fpath_noprefix,
+            filesystem=fs,
+            use_legacy_dataset=False,  # Use ParquetDatasetV2
+            partitioning=partitioning,
+            filters=dnf_filters,
+        )
+
+        num_files_before_filter = len(dataset.files)
+        # If there are dnf_filters files are filtered in ParquetDataset constructor
+        dataset = ParquetDataset(dataset, prefix)
+
+        # If typing schema is available, then use that as the baseline
+        # schema to unify with, else get it from the dataset.
+        # This is important for getting understandable errors in cases where
+        # files have different schemas, some of which may or may not match
+        # the iceberg schema. `get_dataset_schema` essentially gets the
+        # schema of the first file. So, starting with that schema will
+        # raise errors such as
+        # "pyarrow.lib.ArrowInvalid: No match for FieldRef.Name(TY)"
+        # where TY is a column that originally had a different name.
+        # Therefore, it's better to start with the expected schema,
+        # and then raise the errors correctly after validation.
+        if typing_pa_schema:
+            # NOTE: typing_pa_schema must include partitions
+            dataset.schema = typing_pa_schema
+
+        if dnf_filters is not None:
+            ev_pq_ds.add_attribute("num_pieces_before_filter", num_files_before_filter)
+            ev_pq_ds.add_attribute("num_pieces_after_filter", len(dataset.pieces))
+        ev_pq_ds.finalize()
+
+        return dataset
+    except Exception as e:
+        # See note in s3_list_dir_fnames
+        # In some cases, OSError/FileNotFoundError can propagate
+        # back to numba and come back as an InternalError.
+        # where numba errors are hidden from the user.
+        # See [BE-1188] for an example
+        # Raising a BodoError lets messages come back and be seen by the user.
+        if isinstance(e, IsADirectoryError):
+            # We supress Arrow's error message since it doesn't apply to Bodo
+            # (the bit about doing a union of datasets)
+            e = BodoError(LIST_OF_FILES_ERROR_MSG)
+        elif isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
+            e = BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
+        else:
+            e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
+        return e
+    finally:
+        # Restore pyarrow default IO thread count
+        pa.set_io_thread_count(pa_default_io_thread_count)
+
+
+def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
+    """
+    Unify the dataset schema across all ranks.
+    The dataset will be updated in place.
+
+    Args:
+        dataset (ParquetDataset): ParquetDataset whose schema
+            should be unified and updated.
+        total_rows_chunk (int): Number of rows in the row groups
+            that the files allocated to this rank will read.
+
+    Raises:
+        BodoError: If schemas couldn't be unified.
+    """
+    ev = tracing.Event("unify_schemas_across_ranks")
+    error = None
+
+    comm = MPI.COMM_WORLD
+    try:
+        dataset.schema, _ = comm.allreduce(
+            (dataset.schema, total_rows_chunk),
+            bodo.io.helpers.pa_schema_unify_mpi_op,
+        )
+    except Exception as e:
+        error = e
+
+    # synchronize error state
+    if comm.allreduce(error is not None, op=MPI.LOR):
+        for error in comm.allgather(error):
+            if error:
+                msg = f"Schema in some files were different.\n" + str(error)
+                raise BodoError(msg)
+    ev.finalize()
+
+
+def populate_row_counts_in_pq_dataset_pieces(
+    dataset: ParquetDataset,
+    fpath: str | list[str],
+    protocol: str,
+    validate_schema: bool,
+    expr_filters: Optional[pc.Expression] = None,
+):
+    """
+    Populate the row counts for each piece in a ParquetDataset
+    by applying the filters. This uses the PyArrow dataset
+    APIs to look at the metadata to do row-group level
+    filtering and get the exact row counts. This may lead
+    to some data read, however, Arrow tries to limit it to a
+    minimum wherever possible.
+
+    NOTE: This function must be called on all ranks.
+
+    Args:
+        dataset (ParquetDataset): ParquetDataset object with details
+            about the schema, files, etc.
+        fpath (str | list[str]): Original filepath(s) used to create
+            the dataset. Note that these are only used in some warning
+            messages and not used for actual file discovery.
+            XXX TODO Explore getting rid of this dependency and using
+            the file paths from the dataset directly.
+        protocol (str): Filesystem protocol. Used for warning messages
+            when using remote filesystems.
+        validate_schema (bool): Whether the schema should be validated
+            for each file in the dataset. If set to true, it will
+            also update the dataset schema to be the unification of
+            the original schema and the schemas of the files. Note that
+            this will only validate schema for the set of files its
+            processing.
+        expr_filters (pc.Expression, optional): Arrow expression filters
+            to apply. Defaults to None.
+    """
+    ev_row_counts = tracing.Event("get_row_counts")
+    # getting row counts and validating schema requires reading
+    # the file metadata from the parquet files and is very expensive
+    # for datasets consisting of many files, so we do this in parallel
+    if tracing.is_tracing():
+        ev_row_counts.add_attribute("g_num_pieces", len(dataset.pieces))
+        ev_row_counts.add_attribute("g_expr_filters", str(expr_filters))
+    ds_scan_time = 0.0
+    num_pieces = len(dataset.pieces)
+    start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
+    end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
+    total_rows_chunk = 0
+    total_row_groups_chunk = 0
+    total_row_groups_size_chunk = 0
+
+    if expr_filters is not None:
+        random.seed(37)
+        pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
+    else:
+        pieces = dataset.pieces
+
+    fpaths = [p.path for p in pieces[start:end]]
+    # Presumably the work is partitioned more or less equally among ranks,
+    # and we are mostly (or just) reading metadata, so we assign four IO
+    # threads to every rank
+    nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
+    pa_default_io_thread_count = pa.io_thread_count()
+    pa.set_io_thread_count(nthreads)
+    pa.set_cpu_count(nthreads)
+    # Use dataset scanner API to get exact row counts when
+    # filter is applied. Arrow will try to calculate this by
+    # by reading only the file's metadata, and if it needs to
+    # access data it will read as less as possible (only the
+    # required columns and only subset of row groups if possible)
+    error = None
+    try:
+        dataset_ = ds.dataset(
+            fpaths,
+            filesystem=dataset.filesystem,
+            partitioning=dataset.partitioning,
+        )
+
+        for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
+            # The validation (and unification) step needs to happen before the
+            # scan on the fragment since otherwise it will fail in case the
+            # file schema doesn't match the dataset schema exactly.
+            # Currently this is only applicable for Iceberg reads.
+            if validate_schema:
+                # Two files are compatible if arrow can unify their schemas.
+                file_schema = frag.metadata.schema.to_arrow_schema()
+                fileset_schema_names = set(file_schema.names)
+                # Check the names are the same because pa.unify_schemas
+                # will unify a schema where a column is in 1 file but not
+                # another.
+                dataset_schema_names = set(dataset.schema.names) - set(
+                    dataset.partition_names
+                )
+                # File schema can only be a (potentially) more restrictive
+                # version of the starting schema, therefore, the file shouldn't
+                # have extra columns. Any columns that are expected but are
+                # missing from the file will be filled with nulls at read time.
+                added_columns = fileset_schema_names - dataset_schema_names
+                if added_columns:
+                    msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
+                    raise BodoError(msg)
+                try:
+                    dataset.schema = unify_schemas([dataset.schema, file_schema])
+                except Exception as e:
+                    msg = f"Schema in {piece} was different.\n" + str(e)
+                    raise BodoError(msg)
+
+            t0 = time.time()
+            # We use the expected schema instead of the file schema. This schema
+            # should be a less-restrictive superset of the file schema (after the
+            # unification step above), so it should be valid.
+            row_count = frag.scanner(
+                schema=dataset.schema,
+                filter=expr_filters,
+                use_threads=True,
+            ).count_rows()
+            ds_scan_time += time.time() - t0
+            piece._bodo_num_rows = row_count
+            total_rows_chunk += row_count
+            total_row_groups_chunk += frag.num_row_groups
+            total_row_groups_size_chunk += sum(
+                rg.total_byte_size for rg in frag.row_groups
+            )
+
+    except Exception as e:
+        error = e
+    finally:
+        # Restore pyarrow default IO thread count
+        pa.set_io_thread_count(pa_default_io_thread_count)
+
+    # synchronize error state
+    comm = MPI.COMM_WORLD
+    if comm.allreduce(error is not None, op=MPI.LOR):
+        for error in comm.allgather(error):
+            if error:
+                if isinstance(fpath, list) and isinstance(
+                    error, (OSError, FileNotFoundError)
+                ):
+                    raise BodoError(str(error) + LIST_OF_FILES_ERROR_MSG)
+                raise error
+
+    # Now unify the schemas across all ranks.
+    if validate_schema:
+        unify_schemas_across_ranks(dataset, total_rows_chunk)
+
+    dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
+    total_num_row_groups = comm.allreduce(total_row_groups_chunk, op=MPI.SUM)
+    total_row_groups_size = comm.allreduce(total_row_groups_size_chunk, op=MPI.SUM)
+    pieces_rows = np.array([p._bodo_num_rows for p in dataset.pieces])
+    # communicate row counts to everyone
+    pieces_rows = comm.allreduce(pieces_rows, op=MPI.SUM)
+    for p, nrows in zip(dataset.pieces, pieces_rows):
+        p._bodo_num_rows = nrows
+    if (
+        bodo.get_rank() == 0
+        and total_num_row_groups < bodo.get_size()
+        and total_num_row_groups != 0
+    ):
+        if isinstance(fpath, list) and len(fpath) > 5:
+            fpath_tidbit = "[{}, ... {} more files]".format(
+                ", ".join(fpath[:5]), len(fpath) - 5
+            )
+        else:
+            fpath_tidbit = fpath
+
+        warnings.warn(
+            BodoWarning(
+                f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
+                f"For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
+            )
+        )
+
+    # print a warning if average row group size < 1 MB and reading from remote filesystem
+    if total_num_row_groups == 0:
+        avg_row_group_size_bytes = 0
+    else:
+        avg_row_group_size_bytes = total_row_groups_size // total_num_row_groups
+    if (
+        bodo.get_rank() == 0
+        and total_row_groups_size >= 20 * 1048576
+        and avg_row_group_size_bytes < 1048576
+        and protocol in REMOTE_FILESYSTEMS
+    ):
+        warnings.warn(
+            BodoWarning(
+                f"Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"
+            )
+        )
+    if tracing.is_tracing():
+        ev_row_counts.add_attribute("g_total_num_row_groups", total_num_row_groups)
+        ev_row_counts.add_attribute("total_scan_time", ds_scan_time)
+        # get 5-number summary for rowcounts:
+        # (min, max, 25, 50 -median-, 75 percentiles)
+        data = np.array([p._bodo_num_rows for p in dataset.pieces])
+        quartiles = np.percentile(data, [25, 50, 75])
+        ev_row_counts.add_attribute("g_row_counts_min", data.min())
+        ev_row_counts.add_attribute("g_row_counts_Q1", quartiles[0])
+        ev_row_counts.add_attribute("g_row_counts_median", quartiles[1])
+        ev_row_counts.add_attribute("g_row_counts_Q3", quartiles[2])
+        ev_row_counts.add_attribute("g_row_counts_max", data.max())
+        ev_row_counts.add_attribute("g_row_counts_mean", data.mean())
+        ev_row_counts.add_attribute("g_row_counts_std", data.std())
+        ev_row_counts.add_attribute("g_row_counts_sum", data.sum())
+    ev_row_counts.finalize()
+
+
 def get_parquet_dataset(
     fpath,
     get_row_counts: bool = True,
@@ -382,141 +963,27 @@ def get_parquet_dataset(
     if storage_options:
         storage_options.pop("bodo_dummy", None)
 
-    import time
-
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-    from mpi4py import MPI
-
     comm = MPI.COMM_WORLD
 
-    if isinstance(fpath, list):
-        # list of file paths
-        parsed_url = urlparse(fpath[0])
-        protocol = parsed_url.scheme
-        bucket_name = parsed_url.netloc  # netloc can be empty string (e.g. non s3)
-        for i in range(len(fpath)):
-            f = fpath[i]
-            u_p = urlparse(f)
-            # make sure protocol and bucket name of every file matches
-            if u_p.scheme != protocol:
-                raise BodoError(
-                    "All parquet files must use the same filesystem protocol"
-                )
-            if u_p.netloc != bucket_name:
-                raise BodoError("All parquet files must be in the same S3 bucket")
-            fpath[i] = f.rstrip("/")
-    else:
-        parsed_url = urlparse(fpath)
-        protocol = parsed_url.scheme
-        fpath = fpath.rstrip("/")
+    fpath, parsed_url, protocol = parse_fpath(fpath)
 
     if protocol in {"gcs", "gs"}:
-        try:
-            import gcsfs
-        except ImportError:
-            raise BodoError(
-                "Couldn't import gcsfs, which is required for Google cloud access."
-                " gcsfs can be installed by calling"
-                " 'conda install -c conda-forge gcsfs'.\n"
-            )
-
-    if protocol == "http":
-        # fsspec is a required Bodo dependency
-        # We don't need a try-catch in case its not installed
-        import fsspec
+        validate_gcsfs_installed()
 
     if (
         protocol == "s3"
         and storage_options
         and ("anon" not in storage_options or len(storage_options) > 1)
     ):
-        try:
-            import s3fs
-        except ImportError:
-            raise BodoError(
-                "Couldn't import s3fs, which is required for certain types of S3 access."
-                " s3fs can be installed by calling"
-                " 'conda install -c conda-forge s3fs>=2022.1.0'.\n"
-            )
+        validate_s3fs_installed()
 
-        if s3fs.__version__ < "2022.1":
-            raise BodoError(
-                "s3fs version must be >=2022.1.0. Please upgrade s3fs by calling"
-                " 'conda install -c conda-forge s3fs>=2022.1.0'.\n"
-            )
+    fs = None
 
-    fs = []
-
-    def getfs(parallel=False):
-        # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
-        if len(fs) == 1:
-            return fs[0]
-        if (
-            protocol == "s3"
-            and storage_options
-            and ("anon" not in storage_options or len(storage_options) > 1)
-        ):
-            # "anon" is the only storage_options supported by PyArrow
-            # If other storage_options fields are given,
-            # we need to use S3Fs to read instead
-            sopts = storage_options.copy()
-            if "AWS_S3_ENDPOINT" in os.environ and "endpoint_url" not in sopts:
-                sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
-            s3_fs = s3fs.S3FileSystem(**sopts)
-            fs.append(PyFileSystem(FSSpecHandler(s3_fs)))
-            return fs[0]
-        elif protocol == "s3":
-            fs.append(
-                get_s3_fs_from_path(
-                    fpath, parallel=parallel, storage_options=storage_options
-                )
-                if not isinstance(fpath, list)
-                else get_s3_fs_from_path(
-                    fpath[0], parallel=parallel, storage_options=storage_options
-                )
-            )
-            return fs[0]
-
-        if storage_options is not None and len(storage_options) > 0:
-            raise BodoError(
-                f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
-            )
-
-        if protocol in {"gcs", "gs"}:
-            # TODO pass storage_options to GCSFileSystem
-            google_fs = gcsfs.GCSFileSystem(token=None)
-            fs.append(PyFileSystem(FSSpecHandler(google_fs)))
-        elif protocol == "http":
-            fs.append(PyFileSystem(FSSpecHandler(fsspec.filesystem("http"))))
-        elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-            fs.append(
-                get_hdfs_fs(fpath)
-                if not isinstance(fpath, list)
-                else get_hdfs_fs(fpath[0])
-            )
-        else:
-            fs.append(pa.fs.LocalFileSystem())
-        return fs[0]
-
-    def glob(protocol, fs, path):
-        """Return a possibly-empty list of path names that match glob pattern
-        given by path"""
-        if not protocol and fs is None:
-            from fsspec.implementations.local import LocalFileSystem
-
-            fs = LocalFileSystem()
-        if isinstance(fs, pa.fs.FileSystem):
-            from fsspec.implementations.arrow import ArrowFSWrapper
-
-            fs = ArrowFSWrapper(fs)
-        try:
-            files = fs.glob(path)
-        except:  # pragma: no cover
-            raise BodoError(f"glob pattern expansion not supported for {protocol}")
-        if len(files) == 0:
-            raise BodoError("No files found matching glob pattern")
-        return files
+    def get_fs_cached(parallel=False):
+        nonlocal fs
+        if fs is None:
+            fs = getfs(fpath, protocol, storage_options, parallel)
+        return fs
 
     validate_schema = False
     if get_row_counts:
@@ -528,348 +995,58 @@ def get_parquet_dataset(
         # broadcasting the filesystem adds extra time, so instead we initialize
         # the filesystem before the broadcast. That way all ranks do it in parallel
         # at the same time.
-        _ = getfs(parallel=True)
+        _ = get_fs_cached(parallel=True)
         validate_schema = bodo.parquet_validate_schema
 
+    dataset_or_err: ParquetDataset | Exception | None = None
     if bodo.get_rank() == 0:
-        nthreads = 1  # number of threads to use on rank 0 to collect metadata
-        cpu_count = os.cpu_count()
-        if cpu_count is not None and cpu_count > 1:
-            nthreads = cpu_count // 2
         try:
-            if get_row_counts:
-                ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
-                if tracing.is_tracing():
-                    # only do the work of converting dnf_filters to string
-                    # if tracing is enabled
-                    ev_pq_ds.add_attribute("g_dnf_filter", str(dnf_filters))
-            pa_default_io_thread_count = pa.io_thread_count()
-            pa.set_io_thread_count(nthreads)
-
-            prefix = ""
-            if protocol == "s3":
-                prefix = "s3://"
-            elif protocol in {"hdfs", "abfs", "abfss"}:
-                # HDFS filesystem is initialized with host:port info. Once
-                # initialized, the filesystem needs the <protocol>://<host><port>
-                # prefix removed to query and access files
-                prefix = f"{protocol}://{parsed_url.netloc}"
-            if prefix:
-                if isinstance(fpath, list):
-                    fpath_noprefix = [f[len(prefix) :] for f in fpath]
-                else:
-                    fpath_noprefix = fpath[len(prefix) :]
-            else:
-                fpath_noprefix = fpath
-
-            if isinstance(fpath_noprefix, list):
-                # Expand any glob strings in the list in order to generate a
-                # single list of fully realized paths to parquet files.
-                # For example: ["A/a.pq", "B/*.pq"] might expand to
-                # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
-                new_fpath = []
-                for p in fpath_noprefix:
-                    if has_magic(p):
-                        new_fpath += glob(protocol, getfs(), p)
-                    else:
-                        new_fpath.append(p)
-                fpath_noprefix = new_fpath
-            elif has_magic(fpath_noprefix):
-                fpath_noprefix = glob(protocol, getfs(), fpath_noprefix)
-
-            dataset = pq.ParquetDataset(
-                fpath_noprefix,
-                filesystem=getfs(),
-                filters=None,  # we pass filters manually below because of Arrow bug
-                use_legacy_dataset=False,  # Use ParquetDatasetV2
-                partitioning=partitioning,
-            )
-            if dnf_filters is not None:
-                # XXX This is actually done inside _ParquetDatasetV2 constructor,
-                # but a bug in Arrow prevents passing compute expression filters.
-                # We can remove this and pass the filters to ParquetDataset
-                # constructor once the bug is fixed.
-                dataset._filters = dnf_filters
-                dataset._filter_expression = pq._filters_to_expression(dnf_filters)
-
-            num_files_before_filter = len(dataset.files)
-            # If there are dnf_filters files are filtered in ParquetDataset constructor
-            dataset = ParquetDataset(dataset, prefix)
-            # restore pyarrow default IO thread count
-            pa.set_io_thread_count(pa_default_io_thread_count)
-
-            # If typing schema is available, then use that as the baseline
-            # schema to unify with, else get it from the dataset.
-            # This is important for getting understandable errors in cases where
-            # files have different schemas, some of which may or may not match
-            # the iceberg schema. `get_dataset_schema` essentially gets the
-            # schema of the first file. So, starting with that schema will
-            # raise errors such as
-            # "pyarrow.lib.ArrowInvalid: No match for FieldRef.Name(TY)"
-            # where TY is a column that originally had a different name.
-            # Therefore, it's better to start with the expected schema,
-            # and then raise the errors correctly after validation.
-            if typing_pa_schema:
-                # NOTE: typing_pa_schema must include partitions
-                dataset.schema = typing_pa_schema
-
-            if get_row_counts:
-                if dnf_filters is not None:
-                    ev_pq_ds.add_attribute(
-                        "num_pieces_before_filter", num_files_before_filter
-                    )
-                    ev_pq_ds.add_attribute(
-                        "num_pieces_after_filter", len(dataset.pieces)
-                    )
-                ev_pq_ds.finalize()
+            get_fs_cached()
         except Exception as e:
-            # See note in s3_list_dir_fnames
-            # In some cases, OSError/FileNotFoundError can propagate back to numba and comes back as InternalError.
-            # where numba errors are hidden from the user.
-            # See [BE-1188] for an example
-            # Raising a BodoError lets message comes back and seen by the user.
-            if isinstance(e, IsADirectoryError):
-                # We supress Arrow's error message since it doesn't apply to Bodo
-                # (the bit about doing a union of datasets)
-                e = BodoError(list_of_files_error_msg)
-            elif isinstance(fpath, list) and isinstance(
-                e, (OSError, FileNotFoundError)
-            ):
-                e = BodoError(str(e) + list_of_files_error_msg)
-            else:
-                e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
-            comm.bcast(e)
-            raise e
+            dataset_or_err = e
+        else:
+            dataset_or_err = get_bodo_pq_dataset_from_fpath(
+                fpath,
+                protocol,
+                parsed_url,
+                get_fs_cached(),
+                partitioning,
+                dnf_filters,
+                typing_pa_schema,
+            )
+    if get_row_counts:
+        ev_bcast = tracing.Event("bcast dataset")
+    dataset_or_err = comm.bcast(dataset_or_err)
+    if get_row_counts:
+        ev_bcast.finalize()
 
-        if get_row_counts:
-            ev_bcast = tracing.Event("bcast dataset")
-        dataset = comm.bcast(dataset)
-    else:
-        if get_row_counts:
-            ev_bcast = tracing.Event("bcast dataset")
-        dataset = comm.bcast(None)
-        if isinstance(dataset, Exception):  # pragma: no cover
-            error = dataset
-            raise error
+    if isinstance(dataset_or_err, Exception):  # pragma: no cover
+        error = dataset_or_err
+        raise error
+    dataset: ParquetDataset = dataset_or_err
 
     # As mentioned above, we don't want to broadcast the filesystem because it
     # adds time (so initially we didn't include it in the dataset). We add
     # it to the dataset now that it's been broadcasted
-    dataset.set_fs(getfs())
-
-    if get_row_counts:
-        ev_bcast.finalize()
+    dataset.set_fs(get_fs_cached())
 
     if get_row_counts and tot_rows_to_read == 0:
         get_row_counts = validate_schema = False
 
-    total_rows_chunk = 0
-    total_row_groups_chunk = 0
-    total_row_groups_size_chunk = 0
-    if get_row_counts or validate_schema:
-        # getting row counts and validating schema requires reading
-        # the file metadata from the parquet files and is very expensive
-        # for datasets consisting of many files, so we do this in parallel
-        if get_row_counts and tracing.is_tracing():
-            ev_row_counts = tracing.Event("get_row_counts")
-            ev_row_counts.add_attribute("g_num_pieces", len(dataset.pieces))
-            ev_row_counts.add_attribute("g_expr_filters", str(expr_filters))
-        ds_scan_time = 0.0
-        num_pieces = len(dataset.pieces)
-        start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
-        end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
-
-        valid = True  # True if schema of all parquet files match
-        if expr_filters is not None:
-            import random
-
-            random.seed(37)
-            pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
-        else:
-            pieces = dataset.pieces
-
-        fpaths = [p.path for p in pieces[start:end]]
-        # Presumably the work is partitioned more or less equally among ranks,
-        # and we are mostly (or just) reading metadata, so we assign four IO
-        # threads to every rank
-        nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
-        pa.set_io_thread_count(nthreads)
-        pa.set_cpu_count(nthreads)
-        # Use dataset scanner API to get exact row counts when
-        # filter is applied. Arrow will try to calculate this by
-        # by reading only the file's metadata, and if it needs to
-        # access data it will read as less as possible (only the
-        # required columns and only subset of row groups if possible)
-        error = None
-        try:
-            dataset_ = ds.dataset(
-                fpaths,
-                filesystem=dataset.filesystem,
-                partitioning=dataset.partitioning,
-            )
-
-            for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
-                # The validation (and unification) step needs to happen before the
-                # scan on the fragment since otherwise it will fail in case the
-                # file schema doesn't match the dataset schema exactly.
-                # Currently this is only applicable for Iceberg reads.
-                if validate_schema:
-                    # Two files are compatible if arrow can unify their schemas.
-                    file_schema = frag.metadata.schema.to_arrow_schema()
-                    fileset_schema_names = set(file_schema.names)
-                    # Check the names are the same because pa.unify_schemas
-                    # will unify a schema where a column is in 1 file but not
-                    # another.
-                    dataset_schema_names = set(dataset.schema.names) - set(
-                        dataset.partition_names
-                    )
-                    if dataset_schema_names != fileset_schema_names:
-                        added_columns = fileset_schema_names - dataset_schema_names
-                        missing_columns = dataset_schema_names - fileset_schema_names
-
-                        msg = f"Schema in {piece} was different.\n"
-                        if typing_pa_schema is not None:
-                            if added_columns:
-                                msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
-                                raise BodoError(msg)
-                        else:
-                            if added_columns:
-                                msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
-                            if missing_columns:
-                                msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
-                            raise BodoError(msg)
-                    try:
-                        dataset.schema = unify_schemas([dataset.schema, file_schema])
-                    except Exception as e:
-                        msg = f"Schema in {piece} was different.\n" + str(e)
-                        raise BodoError(msg)
-
-                t0 = time.time()
-                row_count = frag.scanner(
-                    schema=dataset_.schema,
-                    filter=expr_filters,
-                    use_threads=True,
-                ).count_rows()
-                ds_scan_time += time.time() - t0
-                piece._bodo_num_rows = row_count
-                total_rows_chunk += row_count
-                total_row_groups_chunk += frag.num_row_groups
-                total_row_groups_size_chunk += sum(
-                    rg.total_byte_size for rg in frag.row_groups
-                )
-
-        except Exception as e:
-            error = e
-
-        # synchronize error state
-        if comm.allreduce(error is not None, op=MPI.LOR):
-            for error in comm.allgather(error):
-                if error:
-                    if isinstance(fpath, list) and isinstance(
-                        error, (OSError, FileNotFoundError)
-                    ):
-                        raise BodoError(str(error) + list_of_files_error_msg)
-                    raise error
-
-        if validate_schema:
-            valid = comm.allreduce(valid, op=MPI.LAND)
-            if not valid:  # pragma: no cover
-                raise BodoError("Schema in parquet files don't match")
-
-        if get_row_counts:
-            dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
-            total_num_row_groups = comm.allreduce(total_row_groups_chunk, op=MPI.SUM)
-            total_row_groups_size = comm.allreduce(
-                total_row_groups_size_chunk, op=MPI.SUM
-            )
-            pieces_rows = np.array([p._bodo_num_rows for p in dataset.pieces])
-            # communicate row counts to everyone
-            pieces_rows = comm.allreduce(pieces_rows, op=MPI.SUM)
-            for p, nrows in zip(dataset.pieces, pieces_rows):
-                p._bodo_num_rows = nrows
-            if (
-                is_parallel
-                and bodo.get_rank() == 0
-                and total_num_row_groups < bodo.get_size()
-                and total_num_row_groups != 0
-            ):
-                if isinstance(fpath, list) and len(fpath) > 5:
-                    fpath_tidbit = "[{}, ... {} more files]".format(
-                        ", ".join(fpath[:5]), len(fpath) - 5
-                    )
-                else:
-                    fpath_tidbit = fpath
-
-                warnings.warn(
-                    BodoWarning(
-                        f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
-                        f"For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
-                    )
-                )
-
-            # print a warning if average row group size < 1 MB and reading from remote filesystem
-            if total_num_row_groups == 0:
-                avg_row_group_size_bytes = 0
-            else:
-                avg_row_group_size_bytes = total_row_groups_size // total_num_row_groups
-            if (
-                bodo.get_rank() == 0
-                and total_row_groups_size >= 20 * 1048576
-                and avg_row_group_size_bytes < 1048576
-                and protocol in REMOTE_FILESYSTEMS
-            ):
-                warnings.warn(
-                    BodoWarning(
-                        f"Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"
-                    )
-                )
-            if tracing.is_tracing():
-                ev_row_counts.add_attribute(
-                    "g_total_num_row_groups", total_num_row_groups
-                )
-                ev_row_counts.add_attribute("total_scan_time", ds_scan_time)
-                # get 5-number summary for rowcounts:
-                # (min, max, 25, 50 -median-, 75 percentiles)
-                data = np.array([p._bodo_num_rows for p in dataset.pieces])
-                quartiles = np.percentile(data, [25, 50, 75])
-                ev_row_counts.add_attribute("g_row_counts_min", data.min())
-                ev_row_counts.add_attribute("g_row_counts_Q1", quartiles[0])
-                ev_row_counts.add_attribute("g_row_counts_median", quartiles[1])
-                ev_row_counts.add_attribute("g_row_counts_Q3", quartiles[2])
-                ev_row_counts.add_attribute("g_row_counts_max", data.max())
-                ev_row_counts.add_attribute("g_row_counts_mean", data.mean())
-                ev_row_counts.add_attribute("g_row_counts_std", data.std())
-                ev_row_counts.add_attribute("g_row_counts_sum", data.sum())
-                ev_row_counts.finalize()
+    if get_row_counts:
+        populate_row_counts_in_pq_dataset_pieces(
+            dataset,
+            fpath,
+            protocol,
+            validate_schema,
+            expr_filters,
+        )
 
     if read_categories:
         _add_categories_to_pq_dataset(dataset)
 
     if get_row_counts:
         ev.finalize()
-
-    if validate_schema:
-        if tracing.is_tracing():
-            ev_unify_schemas = tracing.Event("unify_schemas_across_ranks")
-        error = None
-
-        try:
-            dataset.schema, _ = comm.allreduce(
-                (dataset.schema, total_rows_chunk),
-                bodo.io.helpers.pa_schema_unify_mpi_op,
-            )
-        except Exception as e:
-            error = e
-
-        if tracing.is_tracing():
-            ev_unify_schemas.finalize()
-
-        # synchronize error state
-        if comm.allreduce(error is not None, op=MPI.LOR):
-            for error in comm.allgather(error):
-                if error:
-                    msg = f"Schema in some files were different.\n" + str(error)
-                    raise BodoError(msg)
 
     return dataset
 
