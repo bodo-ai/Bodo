@@ -32,6 +32,7 @@ import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.PartialJoinConditionIntoChildrenRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
+import com.bodosql.calcite.application.logicalRules.SingleValuePruneRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
@@ -486,6 +487,11 @@ object BodoRules {
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
+    // Remove any SINGLE_VALUE calls that are unnecssary.
+    @JvmField
+    val SINGLE_VALUE_REMOVE_RULE: RelOptRule =
+        SingleValuePruneRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
     // For two projections separated by a filter, determine if any computation in
     // the uppermost filter can be removed by referencing a column in the innermost
     // projection. See the rule docstring for more detail.
@@ -782,6 +788,7 @@ object BodoRules {
     val REWRITE_RULES: List<RelOptRule> = listOf(
         FILTER_EXTRACT_CASE_RULE,
         MIN_ROW_NUMBER_FILTER_RULE,
+        SINGLE_VALUE_REMOVE_RULE,
     )
 
     /**
