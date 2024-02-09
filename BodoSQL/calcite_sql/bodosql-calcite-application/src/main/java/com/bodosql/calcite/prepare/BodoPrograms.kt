@@ -39,7 +39,6 @@ import org.apache.calcite.plan.hep.HepPlanner
 import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.RelShuttle
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.core.TableScan
@@ -521,7 +520,7 @@ object BodoPrograms {
     class ConvertTableFunctionProgram : Program {
         private class Visitor(private var builder: RelBuilder) : RelShuttleImpl() {
             override fun visit(other: RelNode): RelNode {
-                // Note: LogicalTableFunctionScan doesn't have accept implemented, so we have to match on other.
+                // Note: LogicalTableFunctionScan doesn't have .accept() implemented, so we have to match on other.
                 if (other is LogicalTableFunctionScan) {
                     if (other.call is RexCall) {
                         // Verify we have a Snowflake table call that is one of the supported functions:
@@ -662,16 +661,6 @@ object BodoPrograms {
             }
             return BodoRelFieldTrimmer(null, relBuilder, isPhysical).trim(rel)
         }
-    }
-
-    private class ShuttleProgram(private val shuttle: RelShuttle) : Program {
-        override fun run(
-            planner: RelOptPlanner,
-            rel: RelNode,
-            requiredOutputTraits: RelTraitSet,
-            materializations: MutableList<RelOptMaterialization>,
-            lattices: MutableList<RelOptLattice>,
-        ): RelNode = rel.accept(shuttle)
     }
 
     private class BatchingPropertyProgram() : Program {

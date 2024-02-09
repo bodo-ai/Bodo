@@ -419,6 +419,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
                     bodo.bodosql_try_inline_views,
+                    bodo.enable_snowflake_iceberg,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
@@ -429,6 +430,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
                     bodo.bodosql_try_inline_views,
+                    bodo.enable_snowflake_iceberg,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace

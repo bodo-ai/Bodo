@@ -111,6 +111,9 @@ stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", -1))
 default_stream_loop_sync_iters = 1000
 # If BodoSQL encounters a view should it attempt to inline it?
 bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "1") != "0"
+# If BodoSQL encounters a Snowflake Table that is also an Iceberg table should
+# it attempt to read it as an Iceberg table?
+enable_snowflake_iceberg = os.environ.get("BODO_ENABLE_SNOWFLAKE_ICEBERG", "1") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
 

@@ -1155,6 +1155,7 @@ class BodoSQLContext:
                 bodo.bodosql_streaming_batch_size,
                 hide_credentials,
                 bodo.bodosql_try_inline_views,
+                bodo.enable_snowflake_iceberg,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
@@ -1164,6 +1165,7 @@ class BodoSQLContext:
             bodo.bodosql_streaming_batch_size,
             hide_credentials,
             bodo.bodosql_try_inline_views,
+            bodo.enable_snowflake_iceberg,
         )
         return generator
 
