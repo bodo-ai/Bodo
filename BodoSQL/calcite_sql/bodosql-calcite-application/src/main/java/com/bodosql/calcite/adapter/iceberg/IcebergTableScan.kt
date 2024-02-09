@@ -1,9 +1,8 @@
-package com.bodosql.calcite.adapter.snowflake
+package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -14,8 +13,8 @@ import org.apache.calcite.rel.type.RelDataTypeField
 import org.apache.calcite.rel.type.RelRecordType
 import org.apache.calcite.util.ImmutableBitSet
 
-class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable, val keptColumns: ImmutableBitSet, private val catalogTable: SnowflakeCatalogTable) :
-    TableScan(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), table), SnowflakeRel {
+class IcebergTableScan constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable, val keptColumns: ImmutableBitSet, private val catalogTable: SnowflakeCatalogTable) :
+    TableScan(cluster, traitSet.replace(IcebergRel.CONVENTION), ImmutableList.of(), table), IcebergRel {
 
     /**
      * This exists to set the type to the original names rather than
@@ -33,26 +32,25 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         val columnNames = deriveRowType().fieldNames
         return super.explainTerms(pw)
             .item("Columns", columnNames)
-            .itemIf("View", true, catalogTable.isAccessibleView())
-            .itemIf("Iceberg", true, catalogTable.isIcebergTable())
+            .item("Iceberg", true)
     }
 
     override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): SnowflakeTableScan {
+    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): IcebergTableScan {
         return copy(traitSet, keptColumns)
     }
 
-    private fun copy(traitSet: RelTraitSet, keptColumns: ImmutableBitSet): SnowflakeTableScan {
-        return SnowflakeTableScan(cluster, traitSet, table, keptColumns, catalogTable)
+    private fun copy(traitSet: RelTraitSet, keptColumns: ImmutableBitSet): IcebergTableScan {
+        return IcebergTableScan(cluster, traitSet, table, keptColumns, catalogTable)
     }
 
     /**
-     * Create a new SnowflakeTableScan but pruning the existing columns. KeptColumns
+     * Create a new IcebergTableScan but pruning the existing columns. KeptColumns
      * will be given as the ImmutableBitSet of the current type, so we cannot simply
      * Intersect the two Bitsets.
      */
-    fun cloneWithProject(newKeptColumns: ImmutableBitSet): SnowflakeTableScan {
+    fun cloneWithProject(newKeptColumns: ImmutableBitSet): IcebergTableScan {
         // Map column numbers to the original column numbers.
         // Convert to a list for fast lookup.
         val liveColumns = keptColumns.asList()
@@ -65,36 +63,19 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
     }
 
     /**
-     * Get the original column index in the source table for the index
-     * in the current type.
-     */
-    fun getOriginalColumnIndex(newIndex: Int): Int {
-        // TODO(njriasan): Refactor to be more efficient
-        // and/or cache the list.
-        return keptColumns.asList()[newIndex]
-    }
-
-    /**
      * Does this table scan include column pruning
      */
     fun prunesColumns(): Boolean {
         return keptColumns.cardinality() != table.getRowType().fieldCount
     }
 
-    override fun register(planner: RelOptPlanner) {
-        planner.addRule(SnowflakeRules.TO_PANDAS)
-        for (rule in SnowflakeRules.rules()) {
-            planner.addRule(rule)
-        }
-    }
-
     companion object {
         @JvmStatic
-        fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: SnowflakeCatalogTable): SnowflakeTableScan {
+        fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: SnowflakeCatalogTable): IcebergTableScan {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val rowType = table.getRowType()
             val keptColumns = ImmutableBitSet.range(rowType.fieldCount)
-            return SnowflakeTableScan(cluster, cluster.traitSet(), table, keptColumns, catalogTable)
+            return IcebergTableScan(cluster, cluster.traitSet(), table, keptColumns, catalogTable)
         }
     }
 }

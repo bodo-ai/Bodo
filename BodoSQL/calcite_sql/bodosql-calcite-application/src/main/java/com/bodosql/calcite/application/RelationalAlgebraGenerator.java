@@ -102,6 +102,9 @@ public class RelationalAlgebraGenerator {
   /** Should we try inline views? */
   public static boolean tryInlineViews = true;
 
+  /** Should we try read Snowflake tables as Iceberg tables? */
+  public static boolean enableSnowflakeIcebergTables = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
@@ -146,7 +149,8 @@ public class RelationalAlgebraGenerator {
       int verboseLevel,
       int streamingBatchSize,
       boolean hideCredentials,
-      boolean tryInlineViews) {
+      boolean tryInlineViews,
+      boolean enableSnowflakeIcebergTables) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -162,6 +166,7 @@ public class RelationalAlgebraGenerator {
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
   }
 
   public static final int VOLCANO_PLANNER = 0;
@@ -184,13 +189,15 @@ public class RelationalAlgebraGenerator {
       int verboseLevel,
       int streamingBatchSize,
       boolean hideCredentials,
-      boolean tryInlineViews) {
+      boolean tryInlineViews,
+      boolean enableSnowflakeIcebergTables) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     System.setProperty("calcite.default.charset", "UTF-8");
     String currentDatabase = catalog.getDefaultSchema(0).get(0);
     List<SchemaPlus> defaultSchemas =
