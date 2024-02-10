@@ -70,6 +70,8 @@ class RootSchema {
             tableName: String?,
             ifExists: ifExistsBehavior,
             createTableType: CreateTableType,
+            colNamesGlobal: Variable,
+            icebergBase: String,
         ): Expr? {
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
         }
@@ -83,6 +85,8 @@ class RootSchema {
             iterVarName: Variable,
             columnPrecision: Expr,
             meta: SnowflakeCreateTableMetadata,
+            ifExists: ifExistsBehavior,
+            createTableType: CreateTableType,
         ): Expr? {
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
         }

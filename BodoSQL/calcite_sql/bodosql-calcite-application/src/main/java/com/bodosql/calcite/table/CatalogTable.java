@@ -16,6 +16,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -126,7 +127,9 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta) {
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
     return catalog.generateStreamingWriteAppendCode(
         visitor,
         stateVarName,
@@ -135,7 +138,9 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
         isLastVarName,
         iterVarName,
         columnPrecisions,
-        meta);
+        meta,
+        ifExists,
+        createTableType);
   }
 
   /**

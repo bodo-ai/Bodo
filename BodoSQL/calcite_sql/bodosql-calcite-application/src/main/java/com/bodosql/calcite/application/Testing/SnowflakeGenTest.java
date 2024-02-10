@@ -57,7 +57,8 @@ public class SnowflakeGenTest {
             (String) envVars.get("SF_ACCOUNT"),
             (String) envVars.get("SF_DATABASE"),
             "DEMO_WH",
-            prop);
+            prop,
+            null);
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
 
     // Add a local table to also resolve
