@@ -151,13 +151,17 @@ public interface BodoSQLCatalog {
    *     table.
    * @param ifExists Behavior to perform if the table already exists
    * @param createTableType Type of table to create if it doesn't exist
+   * @param colNamesGlobal Column names of table to write
+   * @param icebergBase path for writing Iceberg table data (excluding volume bucket path)
    * @return The generated code to produce the write-initialization code
    */
   Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
       List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType);
+      SqlCreateTable.CreateTableType createTableType,
+      Variable colNamesGlobal,
+      String icebergBase);
 
   /**
    * Generates the code necessary to produce code to append tables to the streaming writer of the
@@ -169,6 +173,9 @@ public interface BodoSQLCatalog {
    * @param isLastVarName Name of the variable indicating the is_last flag
    * @param iterVarName Name of the variable storing the loop iteration
    * @param columnPrecisions Name of the metatype tuple storing the precision of each column.
+   * @param meta Metadata of table to write (e.g. comments).
+   * @param ifExists Behavior if table exists (e.g. replace).
+   * @param createTableType type of table to create (e.g. transient).
    * @return The generated code to produce the write-appending code
    */
   Expr generateStreamingWriteAppendCode(
@@ -179,7 +186,9 @@ public interface BodoSQLCatalog {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta);
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.

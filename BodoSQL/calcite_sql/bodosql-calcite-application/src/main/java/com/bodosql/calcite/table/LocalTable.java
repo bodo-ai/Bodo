@@ -4,6 +4,7 @@ import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
@@ -14,6 +15,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -146,7 +148,9 @@ public class LocalTable extends BodoSqlTable {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta) {
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
     throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
   }
 

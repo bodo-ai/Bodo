@@ -66,6 +66,7 @@ import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 
 public class SnowflakeCatalog implements BodoSQLCatalog {
   /**
@@ -84,6 +85,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   // Account info contains the username and password information
   private final Properties accountInfo;
+
+  // Snowflake external volume (e.g. S3/ADLS) for writing Iceberg data if available
+  private final @Nullable String icebergVolume;
 
   // Combination of accountInfo and username + password.
   // These are separate because the Java and Python connection
@@ -127,6 +131,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param defaultDatabaseName Name of the default database (catalog in Snowflake terminology). In
    *     the future this should become optional.
    * @param accountInfo Any extra properties to pass to Snowflake.
+   * @param icebergVolume Snowflake object storage volume for writing Iceberg tables if available.
    */
   public SnowflakeCatalog(
       String username,
@@ -134,7 +139,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String accountName,
       String defaultDatabaseName,
       String warehouseName,
-      Properties accountInfo) {
+      Properties accountInfo,
+      @Nullable String icebergVolume) {
     this.username = username;
     this.password = password;
     this.accountName = accountName;
@@ -142,6 +148,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     this.connectionString =
         String.format("jdbc:snowflake://%s.snowflakecomputing.com/", accountName);
     this.accountInfo = accountInfo;
+    this.icebergVolume = icebergVolume;
     this.totalProperties = new Properties();
     // Add the user and password to the properties for JDBC
     this.totalProperties.put("user", username);
@@ -1205,11 +1212,85 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return new Expr.Method(varName, "to_sql", args, kwargs);
   }
 
+  /**
+   * Check if using Iceberg write is possible (Iceberg volume is provided, table type is default,
+   * and we can get Iceberg base URL from Snowflake volume)
+   *
+   * @param ifExists Behavior if table exists (e.g. replace).
+   * @param createTableType type of table to create (e.g. transient).
+   * @return Iceberg write flag
+   */
+  private boolean useIcebergWrite(
+      BodoSQLCatalog.ifExistsBehavior ifExists, SqlCreateTable.CreateTableType createTableType) {
+    if (icebergVolume == null) {
+      return false;
+    }
+    if ((ifExists == ifExistsBehavior.APPEND)
+        || (createTableType != SqlCreateTable.CreateTableType.DEFAULT)) {
+      String reason =
+          (ifExists == ifExistsBehavior.APPEND) ? "table inserts." : "non-default tables.";
+      VERBOSE_LEVEL_ONE_LOGGER.warning("Iceberg write not supported for " + reason);
+      return false;
+    }
+
+    if (getIcebergBaseURL(icebergVolume) == null) {
+      VERBOSE_LEVEL_ONE_LOGGER.warning("Cannot get Iceberg base URL");
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Get object storage base path for writing Iceberg tables from Snowflake external volume (e.g.
+   * s3://bucket_name/).
+   *
+   * @return storage path
+   */
+  private String getIcebergBaseURL(String icebergVolume_) {
+    return getIcebergBaseURLFn.apply(icebergVolume_);
+  }
+
+  private final Function<String, String> getIcebergBaseURLFn =
+      Memoizer.memoize(this::getIcebergBaseURLImpl);
+
+  private String getIcebergBaseURLImpl(String icebergVolume_) {
+    String storage_base_url = null;
+    // TODO[BSE-2666]: Add robust error checking
+    try {
+      ResultSet describeResults =
+          executeSnowflakeQuery("describe external volume " + icebergVolume_, 5);
+      while (describeResults.next()) {
+        String parent_property = describeResults.getString(1);
+        String property = describeResults.getString(2);
+        String property_type = describeResults.getString(3);
+        String property_value = describeResults.getString(4);
+        if (parent_property.equals("STORAGE_LOCATIONS")
+            && property.startsWith("STORAGE_LOCATION")
+            && property_type.equals("String")) {
+          JSONObject p_json = (JSONObject) new JSONParser().parse(property_value);
+          storage_base_url = (String) p_json.get("STORAGE_BASE_URL");
+          if (!storage_base_url.endsWith("/")) {
+            storage_base_url += "/";
+          }
+        }
+      }
+    } catch (Exception e) {
+      VERBOSE_LEVEL_TWO_LOGGER.warning(
+          "Getting Snowflake Iceberg volume base URL failed: " + e.getMessage());
+    }
+    return storage_base_url;
+  }
+
   @Override
   public Expr generateStreamingAppendWriteInitCode(
       Expr.IntegerLiteral operatorID, List<String> tableName) {
     return generateStreamingWriteInitCode(
-        operatorID, tableName, ifExistsBehavior.APPEND, SqlCreateTable.CreateTableType.DEFAULT);
+        operatorID,
+        tableName,
+        ifExistsBehavior.APPEND,
+        SqlCreateTable.CreateTableType.DEFAULT,
+        null,
+        null);
   }
 
   @Override
@@ -1217,7 +1298,21 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       Expr.IntegerLiteral operatorID,
       List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
+      SqlCreateTable.CreateTableType createTableType,
+      Variable colNamesGlobal,
+      String icebergBase) {
+    if (useIcebergWrite(ifExists, createTableType)) {
+      assert colNamesGlobal != null;
+      String iceberg_path = "iceberg+" + getIcebergBaseURL(icebergVolume) + icebergBase;
+      return new Expr.Call(
+          "bodo.io.stream_iceberg_write.iceberg_writer_init",
+          operatorID,
+          new Expr.StringLiteral(iceberg_path),
+          new Expr.StringLiteral(tableName.get(2)),
+          new Expr.StringLiteral(tableName.get(1)),
+          colNamesGlobal,
+          new Expr.StringLiteral(ifExists.asToSqlKwArgument()));
+    }
     return new Expr.Call(
         "bodo.io.snowflake_write.snowflake_writer_init",
         operatorID,
@@ -1237,13 +1332,23 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta) {
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+
     List<Expr> args = new ArrayList<>();
     args.add(stateVarName);
     args.add(tableVarName);
     args.add(colNamesGlobal);
     args.add(isLastVarName);
     args.add(iterVarName);
+
+    // Use Iceberg write if possible
+    // TODO[BSE-2667]: Support table/column comments
+    if (useIcebergWrite(ifExists, createTableType)) {
+      return new Expr.Call("bodo.io.stream_iceberg_write.iceberg_writer_append_table", args);
+    }
+
     args.add(columnPrecisions);
 
     List<kotlin.Pair<String, Expr>> ctasMetaKwargs = new ArrayList<>();
@@ -1268,6 +1373,32 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     Expr ctasMetaGlobal = visitor.lowerAsGlobal(ctasMetaCall);
     args.add(ctasMetaGlobal);
     return new Expr.Call("bodo.io.snowflake_write.snowflake_writer_append_table", args);
+  }
+
+  /**
+   * Generate call to convert Iceberg table to Snowflake-managed table
+   *
+   * @param tableName table name
+   * @param icebergBase base storage path for Iceberg table (excluding volume bucket)
+   * @param ifExists Behavior if table exists (e.g. replace)
+   * @param createTableType table type to create (e.g. default)
+   * @return Expr.Call for generated call
+   */
+  public Expr generateIcebergToSnowflakeTable(
+      List<String> tableName,
+      String icebergBase,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+    if (!useIcebergWrite(ifExists, createTableType)) {
+      return null;
+    }
+    return new Expr.Call(
+        "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
+        new Expr.StringLiteral(generatePythonConnStr(tableName.get(0), tableName.get(1))),
+        new Expr.StringLiteral(icebergBase),
+        new Expr.StringLiteral(icebergVolume),
+        new Expr.StringLiteral(tableName.get(1)),
+        new Expr.StringLiteral(tableName.get(2)));
   }
 
   /**

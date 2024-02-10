@@ -210,9 +210,16 @@ public class CatalogSchema extends BodoSqlSchema {
       Expr.IntegerLiteral operatorID,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
+      SqlCreateTable.CreateTableType createTableType,
+      Variable colNamesGlobal,
+      String icebergBase) {
     return this.catalog.generateStreamingWriteInitCode(
-        operatorID, createTablePath(tableName), ifExists, createTableType);
+        operatorID,
+        createTablePath(tableName),
+        ifExists,
+        createTableType,
+        colNamesGlobal,
+        icebergBase);
   }
 
   public Expr generateStreamingWriteAppendCode(
@@ -223,7 +230,9 @@ public class CatalogSchema extends BodoSqlSchema {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecision,
-      SnowflakeCreateTableMetadata meta) {
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
     return this.catalog.generateStreamingWriteAppendCode(
         visitor,
         stateVarName,
@@ -232,7 +241,9 @@ public class CatalogSchema extends BodoSqlSchema {
         isLastVarName,
         iterVarName,
         columnPrecision,
-        meta);
+        meta,
+        ifExists,
+        createTableType);
   }
 
   /** @return The catalog for the schema. */
