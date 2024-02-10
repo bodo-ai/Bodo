@@ -13,7 +13,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.iceberg
@@ -1565,6 +1565,8 @@ def test_merge_with_non_existing_columns(
 
 
 @pytest.mark.slow
+# Run on single rank since we can't throw errors on all ranks synchronously yet
+@pytest_mark_one_rank
 def test_merge_with_invalid_columns_in_insert(
     iceberg_database,
     iceberg_table_conn,
@@ -1996,9 +1998,6 @@ def test_merge_with_subqueries_in_insert_condition(
     )
 
 
-@pytest.mark.skip(
-    "Temporarily skipped to avoid CI Hang: https://bodo.atlassian.net/browse/BSE-2660"
-)
 @pytest.mark.slow
 def test_merge_with_target_columns_in_insert_conditions(
     iceberg_database, iceberg_table_conn, table_name
