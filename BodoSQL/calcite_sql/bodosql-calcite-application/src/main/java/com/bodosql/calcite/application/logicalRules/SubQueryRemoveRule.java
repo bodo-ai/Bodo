@@ -58,6 +58,7 @@ import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Util;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.immutables.value.Value;
 
@@ -911,21 +912,186 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
     call.transformTo(builder.build());
   }
 
+  /**
+   * Visitor that throws {@link org.apache.calcite.util.Util.FoundOne} if applied to an expression
+   * that contains a specific {@link RexSubQuery}.
+   */
+  public static class ExactSubQueryFinder extends RexVisitorImpl<Void> {
+    final RexSubQuery targetSubQuery;
+
+    public ExactSubQueryFinder(RexSubQuery targetSubQuery) {
+      super(true);
+      this.targetSubQuery = targetSubQuery;
+    }
+
+    @Override
+    public Void visitSubQuery(RexSubQuery subQuery) {
+      if (subQuery.equals(targetSubQuery)) {
+        throw new Util.FoundOne(subQuery);
+      }
+      return super.visitSubQuery(subQuery);
+    }
+
+    public boolean containsTarget(RexNode node) {
+      try {
+        node.accept(this);
+        return false;
+      } catch (Util.FoundOne e) {
+        return true;
+      }
+    }
+  }
+
+  /**
+   * Returns whether it is safe to pull a subquery out of a join condition into a parent filter.
+   * Currently only supported on IN terms where the input being checked comes from a side of the
+   * join that is not outer.
+   *
+   * @param join The join that the condition is being pulled out of.
+   * @param subquery The subquery attempting to be pulled.
+   * @param conditionsToPull list to populate with conjunctions from the join condition that contain
+   *     the subquery and can be safely pulled upward.
+   * @return True if it is safe to pull up, false otherwise.
+   */
+  private static boolean canPullUpSubqueryCondition(
+      Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
+    switch (join.getJoinType()) {
+      case INNER:
+        return canPullUpSubqueryConditionFromInner(join, subquery, conditionsToPull);
+      case LEFT:
+        return canPullUpSubqueryConditionFromLeft(join, subquery, conditionsToPull);
+      case RIGHT:
+        return canPullUpSubqueryConditionFromRight(join, subquery, conditionsToPull);
+      default:
+        return false;
+    }
+  }
+
+  // Helper for canPullUpSubqueryCondition on INNER joins
+  private static boolean canPullUpSubqueryConditionFromInner(
+      Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
+    // This functionality is currently only allowed for IN subquery conditions.
+    if (subquery.getKind() != SqlKind.IN) return false;
+
+    // Create a RexVisitor that can determine if a conjunciton
+    // contains a query.
+    ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
+
+    // For each condition, if it contains the subquery, add it
+    // to conditionsToPull.
+    for (RexNode cond : RelOptUtil.conjunctions(join.getCondition())) {
+      // Skip if the condition does not contain the subquery we are attempting to pull
+      if (!hunter.containsTarget(cond)) continue;
+      conditionsToPull.add(cond);
+    }
+    return true;
+  }
+
+  // Helper for canPullUpSubqueryCondition on LEFT joins
+  private static boolean canPullUpSubqueryConditionFromLeft(
+      Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
+    // This functionality is currently only allowed for IN subquery conditions.
+    if (subquery.getKind() != SqlKind.IN) return false;
+
+    // Create a RexVisitor that can determine if a conjunciton
+    // contains a query.
+    ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
+    int leftFields = join.getLeft().getRowType().getFieldCount();
+
+    // For each condition, if it contains the subquery, determine if
+    // all the columns used are from the left table. If so, they
+    // can all be pulled up to a parent filter.
+    List<RexNode> pullIfLhs = new ArrayList<>();
+    for (RexNode cond : RelOptUtil.conjunctions(join.getCondition())) {
+      // Skip if the condition does not contain the subquery we are attempting to pull
+      if (!hunter.containsTarget(cond)) continue;
+      ImmutableBitSet columnsUsedByCond = RelOptUtil.InputFinder.bits(cond);
+
+      // If the condition only uses columns from the left input, add it to the list of conditions
+      // that can be pulled up in a left join, otherwise indicate that it is no longer possible
+      // to pull up the subquery on a left join.
+      boolean lhs =
+          (columnsUsedByCond.isEmpty()
+              || columnsUsedByCond.nth(columnsUsedByCond.cardinality() - 1) < leftFields);
+      if (!lhs) return false;
+      pullIfLhs.add(cond);
+    }
+
+    // If all the conjunctions were pullable, add them to conditionsToPull
+    conditionsToPull.addAll(pullIfLhs);
+    return true;
+  }
+
+  // Helper for canPullUpSubqueryCondition on RIGHT joins
+  private static boolean canPullUpSubqueryConditionFromRight(
+      Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
+    // This functionality is currently only allowed for IN subquery conditions.
+    if (subquery.getKind() != SqlKind.IN) return false;
+
+    // Create a RexVisitor that can determine if a conjunciton
+    // contains a query.
+    ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
+    int leftFields = join.getLeft().getRowType().getFieldCount();
+
+    // For each condition, if it contains the subquery, determine if
+    // all the columns used are from the right table. If so, they
+    // can all be pulled up to a parent filter.
+    List<RexNode> pullIfRhs = new ArrayList<>();
+    for (RexNode cond : RelOptUtil.conjunctions(join.getCondition())) {
+      // Skip if the condition does not contain the subquery we are attempting to pull
+      if (!hunter.containsTarget(cond)) continue;
+      ImmutableBitSet columnsUsedByCond = RelOptUtil.InputFinder.bits(cond);
+
+      // If the condition only uses columns from the right input, add it to the list of conditions
+      // that can be pulled up in a right join, otherwise indicate that it is no longer possible
+      // to pull up the subquery on a right join.
+      boolean rhs = (columnsUsedByCond.isEmpty() || columnsUsedByCond.nth(0) >= leftFields);
+      if (!rhs) return false;
+      pullIfRhs.add(cond);
+    }
+
+    // If all the conjunctions were pullable, add them to conditionsToPull
+    conditionsToPull.addAll(pullIfRhs);
+    return true;
+  }
+
   private static void matchJoin(SubQueryRemoveRule rule, RelOptRuleCall call) {
     final Join join = call.rel(0);
     final RelBuilder builder = call.builder();
     final RexSubQuery e = RexUtil.SubQueryFinder.find(join.getCondition());
     assert e != null;
-    final RelOptUtil.Logic logic =
-        LogicVisitor.find(RelOptUtil.Logic.TRUE, ImmutableList.of(join.getCondition()), e);
     builder.push(join.getLeft());
     builder.push(join.getRight());
-    final int fieldCount = join.getRowType().getFieldCount();
-    final Set<CorrelationId> variablesSet = RelOptUtil.getVariablesUsed(e.rel);
-    final RexNode target = rule.apply(e, variablesSet, logic, builder, 2, fieldCount, 0, true);
-    final RexShuttle shuttle = new SubQueryRemoveRule.ReplaceSubQueryShuttle(e, target);
-    builder.join(join.getJoinType(), shuttle.apply(join.getCondition()));
-    builder.project(fields(builder, join.getRowType().getFieldCount()));
+    // BODO CHANGE: if possible, eject the subquery condition into a parent filter so
+    // that matchFilter can handle it, due to flaws with the IN implementation when
+    // there are 2 inputs.
+    List<RexNode> conditionsToPush = new ArrayList<>();
+    if (canPullUpSubqueryCondition(join, e, conditionsToPush)) {
+      List<RexNode> remainingConditions = new ArrayList<>();
+      // Join the inputs on all the conditions that were not possible to pull
+      // into the parent.
+      for (RexNode condition : RelOptUtil.conjunctions(join.getCondition())) {
+        if (!conditionsToPush.contains(condition)) {
+          remainingConditions.add(condition);
+        }
+      }
+      builder.join(join.getJoinType(), remainingConditions);
+      // Then filter on all the conditions that were possible to pull.
+      builder.filter(conditionsToPush);
+    } else {
+      // If not possible, use the existing implementation. This implementation has
+      // known bugs when the subquery is an IN condition that are nontrivial to fix.
+      // [BSE-2662] Fix this join bug for the types of joins that could not use
+      // the new codepath.
+      final RelOptUtil.Logic logic =
+          LogicVisitor.find(RelOptUtil.Logic.TRUE, ImmutableList.of(join.getCondition()), e);
+      final int fieldCount = join.getRowType().getFieldCount();
+      final Set<CorrelationId> variablesSet = RelOptUtil.getVariablesUsed(e.rel);
+      final RexNode target = rule.apply(e, variablesSet, logic, builder, 2, fieldCount, 0, true);
+      final RexShuttle shuttle = new SubQueryRemoveRule.ReplaceSubQueryShuttle(e, target);
+      builder.join(join.getJoinType(), shuttle.apply(join.getCondition()));
+      builder.project(fields(builder, join.getRowType().getFieldCount()));
+    }
     RelNode result = builder.build();
     call.transformTo(result);
   }
