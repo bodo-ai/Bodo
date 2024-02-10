@@ -45,6 +45,8 @@ class CatalogRootSchema(catalog: BodoSQLCatalog?) : CatalogSchema(rootName, 0, I
         tableName: String?,
         ifExists: ifExistsBehavior?,
         createTableType: CreateTableType?,
+        colNamesGlobal: Variable?,
+        icebergBase: String?,
     ): Expr? {
         throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
     }
@@ -58,6 +60,8 @@ class CatalogRootSchema(catalog: BodoSQLCatalog?) : CatalogSchema(rootName, 0, I
         iterVarName: Variable?,
         columnPrecision: Expr?,
         meta: SnowflakeCreateTableMetadata,
+        ifExists: ifExistsBehavior?,
+        createTableType: CreateTableType?,
     ): Expr? {
         throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
     }

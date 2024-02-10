@@ -6,6 +6,7 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
@@ -23,6 +24,7 @@ import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 public abstract class BodoSqlTable implements ExtensibleTable {
   /**
@@ -240,7 +242,9 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta);
+      SnowflakeCreateTableMetadata meta,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely

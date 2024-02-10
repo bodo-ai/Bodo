@@ -1002,6 +1002,86 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
             drop_snowflake_table(table_name, db, schema)
 
 
+def test_snowflake_catalog_iceberg_write(memory_leak_check):
+    """tests that writing tables using Iceberg works"""
+
+    # Create a catalog with iceberg_volume specified
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "E2E_TESTS_DB",
+        connection_params={"schema": "PUBLIC"},
+        iceberg_volume="exvol",
+    )
+    db = "E2E_TESTS_DB"
+    schema = "PUBLIC"
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    # TODO[BSE-2665]: Support and test Snowflake Iceberg write for all types
+    in_df = pd.DataFrame({"A": ["abc", "df"] * 100})
+    bc = bc.add_or_replace_view("TABLE1", in_df)
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id("bodosql_catalog_write_iceberg_table")
+    table_name = comm.bcast(table_name)
+
+    success_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select A from __bodolocal__.table1"
+    exception_occurred_in_test_body = False
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
+
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            output_df.columns = output_df.columns.str.upper()
+
+        output_df = comm.bcast(output_df)
+        assert_tables_equal(output_df, in_df)
+
+        # Make sure the table is a managed Iceberg table
+        output_table_type = None
+        if bodo.get_rank() == 0:
+            output_table_type = pd.read_sql(
+                f"SHOW ICEBERG TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
+                conn_str,  # type: ignore
+            )["iceberg_table_type"][0]
+
+        output_table_type = comm.bcast(output_table_type)
+        assert (
+            output_table_type == "MANAGED"
+        ), f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+
+    except Exception as e:
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occurred_in_test_body = True
+        raise e
+    finally:
+        if exception_occurred_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
+
+
 def test_snowflake_catalog_create_table_does_not_already_exists(
     test_db_snowflake_catalog, use_default_schema, memory_leak_check
 ):

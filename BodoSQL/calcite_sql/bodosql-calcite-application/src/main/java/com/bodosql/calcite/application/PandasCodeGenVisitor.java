@@ -53,6 +53,7 @@ import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.catalog.SnowflakeCatalog;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
@@ -75,6 +76,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Stack;
+import java.util.UUID;
 import java.util.function.Supplier;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
@@ -1023,11 +1025,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.getTimerType());
     timerInfo.initializeTimer();
 
+    // Get column names for write calls
+    List<String> colNames = node.getRowType().getFieldNames();
+    List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
+    Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
+
+    // Generate storage base address to write Iceberg data in Snowflake volume
+    String icebergBase = "bodo_write_temp/" + node.getTableName() + "_" + UUID.randomUUID();
+
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer();
     Expr writeInitCode =
         outputSchemaAsCatalog.generateStreamingWriteInitCode(
-            new Expr.IntegerLiteral(operatorID), node.getTableName(), ifExists, createTableType);
+            new Expr.IntegerLiteral(operatorID),
+            node.getTableName(),
+            ifExists,
+            createTableType,
+            colNamesGlobal,
+            icebergBase);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1040,13 +1055,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertLoopOperationStartTimer();
     BodoEngineTable inTable = tableGenStack.pop();
 
-    // Get column names for write append call
-    List<String> colNames = node.getRowType().getFieldNames();
-    List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
-    Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
-    Variable globalIsLast = genGenericTempVar();
-
     // Generate append call
+    Variable globalIsLast = genGenericTempVar();
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
             this,
@@ -1056,7 +1066,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
             columnPrecisions,
-            node.getMeta());
+            node.getMeta(),
+            ifExists,
+            createTableType);
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
@@ -1066,6 +1078,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
     this.generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
+
+    // Create Snowflake-managed Iceberg table if using Iceberg
+    // NOTE: update when other catalogs support writing tables
+    SnowflakeCatalog catalog = (SnowflakeCatalog) outputSchemaAsCatalog.getCatalog();
+    @Nullable
+    Expr icebergConvertCall =
+        catalog.generateIcebergToSnowflakeTable(
+            outputSchemaAsCatalog.createTablePath(node.getTableName()),
+            icebergBase,
+            ifExists,
+            createTableType);
+    if (icebergConvertCall != null) {
+      this.generatedCode.add(new Op.Assign(genGenericTempVar(), icebergConvertCall));
+    }
   }
 
   public void visitLogicalTableCreate(PandasTableCreate node) {
@@ -1346,7 +1372,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
             Expr.None.INSTANCE,
-            new SnowflakeCreateTableMetadata());
+            new SnowflakeCreateTableMetadata(),
+            BodoSQLCatalog.ifExistsBehavior.APPEND,
+            SqlCreateTable.CreateTableType.DEFAULT);
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
