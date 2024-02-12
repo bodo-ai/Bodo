@@ -21,7 +21,6 @@ import org.apache.calcite.linq4j.function.Functions;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.Prepare;
-import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.type.DynamicRecordType;
 import org.apache.calcite.rel.type.RelCrossType;
 import org.apache.calcite.rel.type.RelDataType;
@@ -74,6 +73,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlOrderBy;
+import org.apache.calcite.sql.SqlOverOperator;
 import org.apache.calcite.sql.SqlPivot;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlSelect;
@@ -5022,6 +5022,14 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * @param select Select statement
    */
   protected void validateOrderList(SqlSelect select) {
+    // Bodo Change: Remove ORDER BYs following a non-window aggregation with no GROUP BY
+    // This is because the ORDER BY is meaningless since there
+    // is only one row in the result. In some queries we've observed, such ORDER BY clauses reference columns that are not selected, making the query fail to validate.
+    @Nullable SqlCall agg = aggOrOverFinder.findAgg(select.getSelectList());
+    boolean selectIsNonWindowAgg = agg != null && !(agg.getOperator() instanceof SqlOverOperator);
+    if (selectIsNonWindowAgg && select.hasOrderBy() && select.getGroup() == null) {
+        select.setOrderBy(null);
+    }
     // ORDER BY is validated in a scope where aliases in the SELECT clause
     // are visible. For example, "SELECT empno AS x FROM emp ORDER BY x"
     // is valid.
