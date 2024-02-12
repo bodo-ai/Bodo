@@ -244,10 +244,10 @@ object BodoPrograms {
      * removes the correlation nodes that it produces.
      */
     private class PreprocessorProgram : Program by Programs.sequence(
-        // Convert specialized table functions to their appropriate RelNodes
-        ConvertTableFunctionProgram(),
         // Remove subqueries and correlation nodes from the query.
         SubQueryRemoveProgram(),
+        // Convert specialized table functions to their appropriate RelNodes
+        ConvertTableFunctionProgram(),
         RewriteProgram(),
         DecorrelateProgram(),
         FlattenCaseExpressionsProgram,
