@@ -247,39 +247,47 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
      *   <li>Right Outer Joins are handled in an analogous manner.
      *   <li>For Full Outer Joins no predicates are pulledUp or inferred.
      * </ol>
+     *
+     * Bodo Change: We have extended this functionality in the case the join condition is always
+     * True to fully support outer joins
      */
     public RelOptPredicateList inferPredicates(boolean includeEqualityInference) {
       final List<RexNode> inferredPredicates = new ArrayList<>();
       final Set<RexNode> allExprs = new HashSet<>(this.allExprs);
       final JoinRelType joinType = joinRel.getJoinType();
-      switch (joinType) {
-        case SEMI:
-        case INNER:
-        case LEFT:
-        case ANTI:
-          infer(
-              leftChildPredicates,
-              allExprs,
-              inferredPredicates,
-              includeEqualityInference,
-              joinType == JoinRelType.LEFT ? rightFieldsBitSet : allFieldsBitSet);
-          break;
-        default:
-          break;
-      }
-      switch (joinType) {
-        case SEMI:
-        case INNER:
-        case RIGHT:
-          infer(
-              rightChildPredicates,
-              allExprs,
-              inferredPredicates,
-              includeEqualityInference,
-              joinType == JoinRelType.RIGHT ? leftFieldsBitSet : allFieldsBitSet);
-          break;
-        default:
-          break;
+      // Bodo Change: If we know the join condition is always true we there
+      // is nothing to infer from the join condition.
+      boolean keepAllPredicates = joinRel.getCondition().isAlwaysTrue();
+      if (!keepAllPredicates) {
+        switch (joinType) {
+          case SEMI:
+          case INNER:
+          case LEFT:
+          case ANTI:
+            infer(
+                leftChildPredicates,
+                allExprs,
+                inferredPredicates,
+                includeEqualityInference,
+                joinType == JoinRelType.LEFT ? rightFieldsBitSet : allFieldsBitSet);
+            break;
+          default:
+            break;
+        }
+        switch (joinType) {
+          case SEMI:
+          case INNER:
+          case RIGHT:
+            infer(
+                rightChildPredicates,
+                allExprs,
+                inferredPredicates,
+                includeEqualityInference,
+                joinType == JoinRelType.RIGHT ? leftFieldsBitSet : allFieldsBitSet);
+            break;
+          default:
+            break;
+        }
       }
 
       Mappings.TargetMapping rightMapping =
@@ -335,6 +343,24 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       }
 
       final RexBuilder rexBuilder = joinRel.getCluster().getRexBuilder();
+      // Bodo Change: An outer join that always evaluates to True can pull up
+      // all predicates from its children because all rows match.
+      if (keepAllPredicates) {
+        switch (joinType) {
+          case LEFT:
+          case RIGHT:
+          case FULL:
+            // Note: If the join condition is always True, then we never have any
+            // inferred predicates.
+            Iterable<RexNode> pulledUpPredicates =
+                Iterables.concat(
+                    RelOptUtil.conjunctions(leftChildPredicates),
+                    RelOptUtil.conjunctions(rightChildPredicates));
+            return RelOptPredicateList.of(rexBuilder, pulledUpPredicates);
+          default:
+            break;
+        }
+      }
       switch (joinType) {
         case SEMI:
           Iterable<RexNode> pulledUpPredicates;
@@ -354,12 +380,16 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
               rexBuilder, pulledUpPredicates, leftInferredPredicates, rightInferredPredicates);
         case LEFT:
         case ANTI:
+          // Note: For Left join leftInferredPredicates will
+          // always be empty.
           return RelOptPredicateList.of(
               rexBuilder,
               RelOptUtil.conjunctions(leftChildPredicates),
               leftInferredPredicates,
               rightInferredPredicates);
         case RIGHT:
+          // For right joins any inferred predicates
+          // must refer to the left side.
           return RelOptPredicateList.of(
               rexBuilder,
               RelOptUtil.conjunctions(rightChildPredicates),
@@ -385,7 +415,6 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         List<RexNode> inferredPredicates,
         boolean includeEqualityInference,
         ImmutableBitSet inferringFields) {
-      List<RexNode> localInferredPredicates = new ArrayList<>();
       for (RexNode r : RelOptUtil.conjunctions(predicates)) {
         if (!includeEqualityInference && equalityPredicates.contains(r)) {
           continue;
