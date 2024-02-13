@@ -106,10 +106,8 @@ class GroupbyPartition {
 
     explicit GroupbyPartition(
         size_t num_top_bits_, uint32_t top_bitmask_,
-        const std::vector<int8_t>& build_arr_c_types_,
-        const std::vector<int8_t>& build_arr_array_types_,
-        const std::vector<int8_t>& separate_out_cols_c_types_,
-        const std::vector<int8_t>& separate_out_cols_array_types_,
+        const std::shared_ptr<bodo::Schema> build_table_schema_,
+        const std::shared_ptr<bodo::Schema> separate_out_cols_schema_,
         const uint64_t n_keys_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             build_table_dict_builders_,
@@ -123,9 +121,8 @@ class GroupbyPartition {
         bodo::OperatorScratchPool* op_scratch_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
 
-    // The types of the columns in the build table.
-    const std::vector<int8_t> build_arr_c_types;
-    const std::vector<int8_t> build_arr_array_types;
+    // The schema of the build table.
+    std::shared_ptr<bodo::Schema> build_table_schema;
     // Dictionary builders (shared by all partitions)
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
 
@@ -157,8 +154,7 @@ class GroupbyPartition {
     std::unique_ptr<ChunkedTableBuilder> build_table_buffer_chunked;
 
     // The types of the columns in the separate_out_cols table.
-    std::vector<int8_t> separate_out_cols_c_types;
-    std::vector<int8_t> separate_out_cols_array_types;
+    std::shared_ptr<bodo::Schema> separate_out_cols_schema;
     // Separate output columns with one column for each colset
     // that requires them. Only used in the AGG case.
     std::unique_ptr<TableBuildBuffer> separate_out_cols;
@@ -408,8 +404,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     /**
      * @brief Constructor. Same as the base class constructor.
      *
-     * @param arr_c_types_ Array types of the shuffle table.
-     * @param arr_array_types_ CTypes of the shuffle table.
+     * @param shuffle_table_schema_ Schema of the shuffle table.
      * @param dict_builders_ Dictionary builders for the top level columns.
      * @param n_keys_ Number of key columns (to shuffle based off of).
      * @param curr_iter_ Reference to the iteration counter from parent
@@ -423,8 +418,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * case.
      */
     GroupbyIncrementalShuffleState(
-        const std::vector<int8_t>& arr_c_types_,
-        const std::vector<int8_t>& arr_array_types_,
+        const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
         int64_t op_id_, const bool nunique_only_);
@@ -604,9 +598,8 @@ class GroupbyState {
 
     tracing::ResumableEvent groupby_event;
 
-    GroupbyState(std::vector<int8_t> in_arr_c_types,
-                 std::vector<int8_t> in_arr_array_types,
-                 std::vector<int32_t> ftypes,
+    GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
+                 std::vector<int32_t> ftypes_,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  std::vector<bool> mrnf_sort_asc_vec_,
@@ -614,7 +607,7 @@ class GroupbyState {
                  std::vector<bool> mrnf_part_cols_to_keep_,
                  std::vector<bool> mrnf_sort_cols_to_keep_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_id_, int64_t op_pool_size_bytes);
+                 int64_t op_id_, int64_t op_pool_size_bytes_);
 
     /**
      * @brief Unify dictionaries of input table with build table
@@ -821,12 +814,9 @@ class GroupbyState {
      * dummy colset, and calls getRunningValueColumnTypes on it. This is pretty
      * ugly, but it works for now.
      */
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
-        std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype);
+        std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype);
 
     /**
      * Helper function that gets the output column types for a given function.

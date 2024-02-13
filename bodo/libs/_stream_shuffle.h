@@ -1,5 +1,6 @@
 #pragma once
 
+#include "_bodo_common.h"
 #include "_table_builder.h"
 
 #define DEFAULT_SHUFFLE_THRESHOLD 50 * 1024 * 1024  // 50MiB
@@ -41,7 +42,7 @@ const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
 class IncrementalShuffleState {
    public:
     /// @brief Schema of the shuffle table
-    const std::unique_ptr<bodo::Schema> schema;
+    const std::shared_ptr<bodo::Schema> schema;
     /// @brief Dictionary builder for the dictionary-encoded columns. Note that
     /// these are only for top-level dictionaries and not for dictionary-encoded
     /// fields within nested data types.
@@ -49,6 +50,25 @@ class IncrementalShuffleState {
     /// @brief Shuffle data buffer.
     std::unique_ptr<TableBuildBuffer> table_buffer;
 
+    /**
+     * @brief Constructor for new IncrementalShuffleState
+     *
+     * @param schema_ Schema of the shuffle table
+     * @param dict_builders_ Dictionary builders for the top level columns.
+     * @param n_keys_ Number of key columns (to shuffle based off of).
+     * @param curr_iter_ Reference to the iteration counter from parent
+     * operator. e.g. In Groupby, this is 'build_iter'. For HashJoin, this could
+     * be either 'build_iter' or 'probe_iter' based on whether it's the
+     * build_shuffle_state or probe_shuffle_state, respectively.
+     * @param sync_freq_ Reference to the synchronization frequency variable of
+     * the parent state. This will be modified by this state adaptively (if
+     * enabled).
+     */
+    IncrementalShuffleState(
+        std::shared_ptr<bodo::Schema> schema_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
+        int64_t parent_op_id_);
     /**
      * @brief Constructor for new IncrementalShuffleState
      *

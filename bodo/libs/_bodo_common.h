@@ -491,6 +491,8 @@ struct DataType {
     DataType(bodo_array_type::arr_type_enum array_type,
              Bodo_CTypes::CTypeEnum c_type)
         : array_type(array_type), c_type(c_type) {}
+    // Use copy instead
+    DataType(const DataType& other) = delete;
 
     virtual ~DataType() = default;
 
@@ -503,13 +505,13 @@ struct DataType {
     }
 
     /// @brief Is the Array a Nested Array?
-    bool is_array() { return array_type == bodo_array_type::ARRAY_ITEM; }
+    bool is_array() const { return array_type == bodo_array_type::ARRAY_ITEM; }
 
     /// @brief If the Array a Struct Array?
-    bool is_struct() { return array_type == bodo_array_type::STRUCT; }
+    bool is_struct() const { return array_type == bodo_array_type::STRUCT; }
 
     /// @brief If the Array a Map Array?
-    bool is_map() { return array_type == bodo_array_type::MAP; }
+    bool is_map() const { return array_type == bodo_array_type::MAP; }
 
     /// @brief Helper Function to Generate the Output of ToString()
     virtual void to_string_inner(std::string& out);
@@ -523,7 +525,11 @@ struct DataType {
 
     ///@brief Serialize a bodo::Schema to a Python <-> C++ communication format
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
-                           std::vector<int8_t>& arr_c_types);
+                           std::vector<int8_t>& arr_c_types) const;
+
+    ///@brief Deep copy the Datatype, returns the proper child type if
+    /// appropriate
+    std::unique_ptr<DataType> copy() const;
 };
 
 /// @brief Wrapper class for Representing the Type of ArrayItem Arrays
@@ -531,14 +537,14 @@ struct ArrayType final : public DataType {
     const std::unique_ptr<DataType> value_type;
 
     /// @brief Construct a new ArrayType given the Inner Array DataType
-    ArrayType(std::unique_ptr<DataType>& _value_type)
+    ArrayType(std::unique_ptr<DataType>&& _value_type)
         : DataType(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST),
           value_type(std::move(_value_type)) {}
 
     void to_string_inner(std::string& out) override;
 
     void Serialize(std::vector<int8_t>& arr_array_types,
-                   std::vector<int8_t>& arr_c_types) override;
+                   std::vector<int8_t>& arr_c_types) const override;
 };
 
 /// @brief Wrapper class for Representing the Type of Struct Arrays
@@ -546,14 +552,14 @@ struct StructType final : public DataType {
     std::vector<std::unique_ptr<DataType>> child_types;
 
     /// @brief Construct a new StructType given the Inner Array DataTypes
-    StructType(std::vector<std::unique_ptr<DataType>>& _child_types)
+    StructType(std::vector<std::unique_ptr<DataType>>&& _child_types)
         : DataType(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT),
           child_types(std::move(_child_types)) {}
 
     void to_string_inner(std::string& out) override;
 
     void Serialize(std::vector<int8_t>& arr_array_types,
-                   std::vector<int8_t>& arr_c_types) override;
+                   std::vector<int8_t>& arr_c_types) const override;
 };
 
 /// @brief Wrapper class for representing the type of Map Arrays
@@ -562,8 +568,8 @@ struct MapType final : public DataType {
     std::unique_ptr<DataType> value_type;
 
     /// @brief Construct a new MapType given the key and value types
-    MapType(std::unique_ptr<DataType>& _key_type,
-            std::unique_ptr<DataType>& _value_type)
+    MapType(std::unique_ptr<DataType>&& _key_type,
+            std::unique_ptr<DataType>&& _value_type)
         : DataType(bodo_array_type::MAP, Bodo_CTypes::MAP),
           key_type(std::move(_key_type)),
           value_type(std::move(_value_type)) {}
@@ -571,7 +577,7 @@ struct MapType final : public DataType {
     void to_string_inner(std::string& out) override;
 
     void Serialize(std::vector<int8_t>& arr_array_types,
-                   std::vector<int8_t>& arr_c_types) override;
+                   std::vector<int8_t>& arr_c_types) const override;
 };
 
 /**
@@ -580,6 +586,48 @@ struct MapType final : public DataType {
  */
 struct Schema {
     std::vector<std::unique_ptr<DataType>> column_types;
+    Schema();
+    Schema(const Schema& other);
+    Schema(Schema&& other);
+    Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_);
+    /** @brief Return the number of columns in the schema
+     *
+     * @return void The number of columns in the schema
+     */
+    size_t ncols() const;
+
+    /** @brief Insert a column to the schema
+     * @param col The column to insert
+     * @param idx The index to insert the column
+     * @return void
+     */
+    void insert_column(std::unique_ptr<DataType>&& col, const size_t idx);
+
+    /** @brief Insert a column to the schema
+     * @param arr_array_type the array type of the column to insert
+     * @param arr_c_type the c type of the column to insert
+     * @param size_t the index to insert to
+     * @return void
+     */
+    void insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
+                       const size_t idx);
+    /** @brief Append a column to the schema
+     * @param col The column to append
+     * @return void
+     */
+    void append_column(std::unique_ptr<DataType>&& col);
+    /** @brief Append a column to the schema
+     * @param arr_array_type the array type of the column to append
+     * @param arr_c_type the c type of the column to append
+     * @return void
+     */
+    void append_column(const int8_t arr_array_type, const int8_t arr_c_type);
+
+    /** @brief Append a schema to the current schema
+     * @param other The schema to append
+     * @return void
+     */
+    void append_schema(std::unique_ptr<Schema>&& other);
 
     /**
      * @brief Construct a bodo::Schema from a serialized schema from Python.
@@ -601,7 +649,7 @@ struct Schema {
      *
      * @return (arr_array_types, arr_c_types) Serialization vectors
      */
-    std::pair<std::vector<int8_t>, std::vector<int8_t>> Serialize();
+    std::pair<std::vector<int8_t>, std::vector<int8_t>> Serialize() const;
 
     /**
      * @brief Get string representation of a Schema.
@@ -1108,13 +1156,13 @@ struct array_info {
     std::unique_ptr<bodo::DataType> data_type() {
         if (arr_type == bodo_array_type::ARRAY_ITEM) {
             auto inner = child_arrays[0]->data_type();
-            return std::make_unique<bodo::ArrayType>(inner);
+            return std::make_unique<bodo::ArrayType>(std::move(inner));
         } else if (arr_type == bodo_array_type::STRUCT) {
             std::vector<std::unique_ptr<bodo::DataType>> child_types;
             for (auto const& child : child_arrays) {
                 child_types.push_back(child->data_type());
             }
-            return std::make_unique<bodo::StructType>(child_types);
+            return std::make_unique<bodo::StructType>(std::move(child_types));
         } else if (arr_type == bodo_array_type::MAP) {
             std::shared_ptr<array_info> inner_struct =
                 child_arrays[0]->child_arrays[0];
@@ -1122,7 +1170,8 @@ struct array_info {
                 inner_struct->child_arrays[0]->data_type();
             std::unique_ptr<bodo::DataType> value_type =
                 inner_struct->child_arrays[1]->data_type();
-            return std::make_unique<bodo::MapType>(key_type, value_type);
+            return std::make_unique<bodo::MapType>(std::move(key_type),
+                                                   std::move(value_type));
         } else {
             return std::make_unique<bodo::DataType>(arr_type, dtype);
         }
@@ -1577,7 +1626,7 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
  * @param schema Schema of the table.
  * @return size_t Estimated total size of the row
  */
-size_t get_row_bytes(const std::unique_ptr<bodo::Schema>& schema);
+size_t get_row_bytes(const std::shared_ptr<bodo::Schema>& schema);
 
 /**
  * Calculate the size of one row. The schema is provided in the legacy

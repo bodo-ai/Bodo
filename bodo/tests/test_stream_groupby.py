@@ -17,9 +17,11 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.parametrize(
-    "func_name", ["sum", "median", "mean", "nunique", "var", "std", "kurtosis", "skew"]
+    "func_name",
+    ["sum", "median", "mean", "nunique", "var", "std", "kurtosis", "skew", "first"],
 )
-def test_groupby_basic(func_name, memory_leak_check):
+@pytest.mark.parametrize("use_np_data", [True, False])
+def test_groupby_basic(func_name, use_np_data, memory_leak_check):
     """
     Tests support for the basic streaming groupby functionality.
     """
@@ -69,10 +71,14 @@ def test_groupby_basic(func_name, memory_leak_check):
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
 
+    groups = [1, 2, 1, 1, 2, 0, 1, 2]
+    # First is nondeterministic on multiple ranks so set the data equal to the groups
+    # so each group only has one unique value
+    data = [1, 3, 5, 11, 1, 3, 5, 3] if func_name != "first" else groups
     df = pd.DataFrame(
         {
-            "A": [1, 2, 1, 1, 2, 0, 1, 2],
-            "B": [1, 3, 5, 11, 1, 3, 5, 3],
+            "A": groups,
+            "B": np.array(data, dtype=np.int32) if use_np_data else data,
         }
     )
 

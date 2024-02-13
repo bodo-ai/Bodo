@@ -1883,3 +1883,41 @@ def test_array_unique_agg(call, expected, memory_leak_check):
         expected_output=expected,
         convert_columns_to_pandas=True,
     )
+
+
+@pytest.mark.slow
+def test_mixed_nested_agg(memory_leak_check):
+    query = f"SELECT A, AVG(B), COUNT(C), COUNT(D), SUM(E) from table1 GROUP BY A"
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "A": [1, 2, 3, 4, 5, 1, 2, 3, 4, 5],
+                "B": np.arange(10),
+                "C": pd.Series(
+                    [[1, 2, 3], [2]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int32()))
+                ),
+                "D": pd.Series(
+                    [{"a": 1, "b": 2, "c": 3}] * 10,
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "E": np.arange(10),
+            }
+        )
+    }
+    expected = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5],
+            "EXPR$1": [(x + (x + 5)) / 2 for x in range(5)],
+            "EXPR$2": [2] * 5,
+            "EXPR$3": [2] * 5,
+            "EXPR$4": [x + (x + 5) for x in range(5)],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+    )

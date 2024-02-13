@@ -533,10 +533,8 @@ std::vector<bool> get_mrnf_cols_to_keep_bitmask(
 
 GroupbyPartition::GroupbyPartition(
     size_t num_top_bits_, uint32_t top_bitmask_,
-    const std::vector<int8_t>& build_arr_c_types_,
-    const std::vector<int8_t>& build_arr_array_types_,
-    const std::vector<int8_t>& separate_out_col_c_types_,
-    const std::vector<int8_t>& separate_out_col_array_types_,
+    const std::shared_ptr<bodo::Schema> build_table_schema_,
+    const std::shared_ptr<bodo::Schema> separate_out_cols_schema_,
     const uint64_t n_keys_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>&
         build_table_dict_builders_,
@@ -549,16 +547,14 @@ GroupbyPartition::GroupbyPartition(
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
-    : build_arr_c_types(build_arr_c_types_),
-      build_arr_array_types(build_arr_array_types_),
+    : build_table_schema(std::move(build_table_schema_)),
       build_table_dict_builders(build_table_dict_builders_),
       build_hash_table(std::make_unique<hash_table_t>(
           0, HashGroupbyTable<true>(this, nullptr),
           KeyEqualGroupbyTable<true>(this, nullptr, n_keys_),
           op_scratch_pool_)),
       build_table_groupby_hashes(op_pool_),
-      separate_out_cols_c_types(separate_out_col_c_types_),
-      separate_out_cols_array_types(separate_out_col_array_types_),
+      separate_out_cols_schema(std::move(separate_out_cols_schema_)),
       col_sets(col_sets_),
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
@@ -575,21 +571,19 @@ GroupbyPartition::GroupbyPartition(
       op_scratch_mm(op_scratch_mm_) {
     if (this->is_active) {
         this->build_table_buffer = std::make_unique<TableBuildBuffer>(
-            this->build_arr_c_types, this->build_arr_array_types,
-            this->build_table_dict_builders, this->op_pool, this->op_mm);
+            this->build_table_schema, this->build_table_dict_builders,
+            this->op_pool, this->op_mm);
         this->separate_out_cols = std::make_unique<TableBuildBuffer>(
-            this->separate_out_cols_c_types,
-            this->separate_out_cols_array_types,
+            this->separate_out_cols_schema,
             std::vector<std::shared_ptr<DictionaryBuilder>>(
-                this->separate_out_cols_array_types.size(), nullptr),
+                this->separate_out_cols_schema->ncols(), nullptr),
             // The out columns can be freed before repartitioning and should
             // therefore be considered scratch.
             this->op_scratch_pool, this->op_scratch_mm);
     } else {
         this->build_table_buffer_chunked =
             std::make_unique<ChunkedTableBuilder>(
-                this->build_arr_c_types, this->build_arr_array_types,
-                this->build_table_dict_builders,
+                this->build_table_schema, this->build_table_dict_builders,
                 INACTIVE_PARTITION_TABLE_CHUNK_SIZE,
                 DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
@@ -875,26 +869,22 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
     std::shared_ptr<GroupbyPartition> new_part1 =
         std::make_shared<GroupbyPartition>(
             this->num_top_bits + 1, (this->top_bitmask << 1),
-            this->build_arr_c_types, this->build_arr_array_types,
-            this->separate_out_cols_c_types,
-            this->separate_out_cols_array_types, this->n_keys,
-            this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
-            this->f_in_cols, this->f_running_value_offsets, is_active,
-            this->accumulate_before_update, this->req_extended_group_info,
-            this->op_pool, this->op_mm, this->op_scratch_pool,
-            this->op_scratch_mm);
+            this->build_table_schema, this->separate_out_cols_schema,
+            this->n_keys, this->build_table_dict_builders, this->col_sets,
+            this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
+            is_active, this->accumulate_before_update,
+            this->req_extended_group_info, this->op_pool, this->op_mm,
+            this->op_scratch_pool, this->op_scratch_mm);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
             this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
-            this->build_arr_c_types, this->build_arr_array_types,
-            this->separate_out_cols_c_types,
-            this->separate_out_cols_array_types, this->n_keys,
-            this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
-            this->f_in_cols, this->f_running_value_offsets, false,
-            this->accumulate_before_update, this->req_extended_group_info,
-            this->op_pool, this->op_mm, this->op_scratch_pool,
-            this->op_scratch_mm);
+            this->build_table_schema, this->separate_out_cols_schema,
+            this->n_keys, this->build_table_dict_builders, this->col_sets,
+            this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
+            false, this->accumulate_before_update,
+            this->req_extended_group_info, this->op_pool, this->op_mm,
+            this->op_scratch_pool, this->op_scratch_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -1065,15 +1055,15 @@ void GroupbyPartition::ActivatePartition() {
 
     // Initialize build_table_buffer
     this->build_table_buffer = std::make_unique<TableBuildBuffer>(
-        this->build_arr_c_types, this->build_arr_array_types,
-        this->build_table_dict_builders, this->op_pool, this->op_mm);
+        this->build_table_schema, this->build_table_dict_builders,
+        this->op_pool, this->op_mm);
 
     // Initialize separate output columns
     // NOTE: separate_out_cols cannot be STRING or DICT arrays.
     this->separate_out_cols = std::make_unique<TableBuildBuffer>(
-        this->separate_out_cols_c_types, this->separate_out_cols_array_types,
+        this->separate_out_cols_schema,
         std::vector<std::shared_ptr<DictionaryBuilder>>(
-            this->separate_out_cols_array_types.size(), nullptr),
+            this->separate_out_cols_schema->ncols(), nullptr),
         this->op_scratch_pool, this->op_scratch_mm);
 
     if (this->accumulate_before_update) {
@@ -1261,13 +1251,12 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 #pragma region  // GroupbyIncrementalShuffleState
 
 GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
-    const std::vector<int8_t>& arr_c_types_,
-    const std::vector<int8_t>& arr_array_types_,
+    const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
     int64_t op_id_, const bool nunique_only_)
-    : IncrementalShuffleState(arr_c_types_, arr_array_types_, dict_builders_,
-                              n_keys_, curr_iter_, sync_freq_, op_id_),
+    : IncrementalShuffleState(shuffle_table_schema_, dict_builders_, n_keys_,
+                              curr_iter_, sync_freq_, op_id_),
       hash_table(std::make_unique<shuffle_hash_table_t>(
           0, HashGroupbyTable<false>(nullptr, this),
           KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
@@ -1349,15 +1338,17 @@ void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
 /* ----------------------------- GroupbyState ----------------------------- */
 #pragma region  // GroupbyState
 
-GroupbyState::GroupbyState(
-    std::vector<int8_t> in_arr_c_types, std::vector<int8_t> in_arr_array_types,
-    std::vector<int32_t> ftypes, std::vector<int32_t> f_in_offsets_,
-    std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-    std::vector<bool> mrnf_sort_asc_vec_, std::vector<bool> mrnf_sort_na_pos_,
-    std::vector<bool> mrnf_part_cols_to_keep_,
-    std::vector<bool> mrnf_sort_cols_to_keep_, int64_t output_batch_size_,
-    bool parallel_, int64_t sync_iter_, int64_t op_id_,
-    int64_t op_pool_size_bytes)
+GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
+                           std::vector<int32_t> ftypes,
+                           std::vector<int32_t> f_in_offsets_,
+                           std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
+                           std::vector<bool> mrnf_sort_asc_vec_,
+                           std::vector<bool> mrnf_sort_na_pos_,
+                           std::vector<bool> mrnf_part_cols_to_keep_,
+                           std::vector<bool> mrnf_sort_cols_to_keep_,
+                           int64_t output_batch_size_, bool parallel_,
+                           int64_t sync_iter_, int64_t op_id_,
+                           int64_t op_pool_size_bytes)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -1425,17 +1416,13 @@ GroupbyState::GroupbyState(
 
     // Add key column types to running value buffer types (same type as
     // input)
-    std::vector<int8_t> build_arr_array_types;
-    std::vector<int8_t> build_arr_c_types;
-    std::unique_ptr<bodo::Schema> in_arr_schema =
-        bodo::Schema::Deserialize(in_arr_array_types, in_arr_c_types);
+    std::shared_ptr<bodo::Schema> build_table_schema =
+        std::make_shared<bodo::Schema>();
     for (size_t i = 0; i < n_keys; ++i) {
-        in_arr_schema->column_types[i]->Serialize(build_arr_array_types,
-                                                  build_arr_c_types);
+        build_table_schema->append_column(in_schema_->column_types[i]->copy());
     }
-
-    std::vector<int8_t> separate_out_col_array_types;
-    std::vector<int8_t> separate_out_col_c_types;
+    std::unique_ptr<bodo::Schema> separate_out_cols_schema =
+        std::make_unique<bodo::Schema>();
 
     // Get offsets of update and combine columns for each function since
     // some functions have multiple update/combine columns
@@ -1473,11 +1460,11 @@ GroupbyState::GroupbyState(
 
     // Validate MRNF arguments in the MRNF case:
     if (this->mrnf_only) {
-        validate_mrnf_args(
-            ftypes, this->f_in_cols, this->f_in_offsets, this->mrnf_sort_asc,
-            this->mrnf_sort_na, this->mrnf_sort_cols_to_keep,
-            this->mrnf_part_cols_to_keep, in_arr_schema->column_types.size(),
-            this->n_keys, "GroupbyState::GroupbyState");
+        validate_mrnf_args(ftypes, this->f_in_cols, this->f_in_offsets,
+                           this->mrnf_sort_asc, this->mrnf_sort_na,
+                           this->mrnf_sort_cols_to_keep,
+                           this->mrnf_part_cols_to_keep, in_schema_->ncols(),
+                           this->n_keys, "GroupbyState::GroupbyState");
     }
 
     // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
@@ -1496,18 +1483,15 @@ GroupbyState::GroupbyState(
     // First, get the input column types for each function.
     std::vector<std::vector<std::shared_ptr<array_info>>> local_input_cols_vec(
         ftypes.size());
-    std::vector<std::vector<bodo_array_type::arr_type_enum>> in_arr_types_vec(
-        ftypes.size());
-    std::vector<std::vector<Bodo_CTypes::CTypeEnum>> in_dtypes_vec(
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec(
         ftypes.size());
     for (size_t i = 0; i < ftypes.size(); i++) {
         // Get the input columns, array types, and dtypes for the current
         // function
         std::vector<std::shared_ptr<array_info>>& local_input_cols =
             local_input_cols_vec.at(i);
-        std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
+        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
             in_arr_types_vec.at(i);
-        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes = in_dtypes_vec.at(i);
         for (size_t logical_input_ind = (size_t)f_in_offsets[i];
              logical_input_ind < (size_t)f_in_offsets[i + 1];
              logical_input_ind++) {
@@ -1515,10 +1499,8 @@ GroupbyState::GroupbyState(
             // set dummy input columns in ColSet since will be replaced by
             // input batches
             local_input_cols.push_back(nullptr);
-            in_arr_types.push_back((bodo_array_type::arr_type_enum)
-                                       in_arr_array_types[physical_input_ind]);
-            in_dtypes.push_back(
-                (Bodo_CTypes::CTypeEnum)in_arr_c_types[physical_input_ind]);
+            in_arr_types.push_back(
+                (in_schema_->column_types[physical_input_ind])->copy());
         }
     }
 
@@ -1528,14 +1510,16 @@ GroupbyState::GroupbyState(
     for (size_t i = 0; i < ftypes.size(); i++) {
         std::vector<std::shared_ptr<array_info>>& local_input_cols =
             local_input_cols_vec.at(i);
-        std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
+        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
             in_arr_types_vec.at(i);
-        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes = in_dtypes_vec.at(i);
+        std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+        for (const auto& t : in_arr_types) {
+            in_arr_types_copy.push_back(t->copy());
+        }
 
-        std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                   std::vector<Bodo_CTypes::CTypeEnum>>
-            running_value_arr_types = this->getRunningValueColumnTypes(
-                local_input_cols, in_arr_types, in_dtypes, ftypes[i]);
+        std::unique_ptr<bodo::Schema> running_values_schema =
+            this->getRunningValueColumnTypes(
+                local_input_cols, std::move(in_arr_types_copy), ftypes[i]);
 
         auto seperate_out_cols =
             this->getSeparateOutputColumns(local_input_cols, ftypes[i]);
@@ -1543,8 +1527,8 @@ GroupbyState::GroupbyState(
             bodo_array_type::STRING, bodo_array_type::DICT,
             bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
             bodo_array_type::MAP};
-        for (auto t : std::get<0>(running_value_arr_types)) {
-            if (force_acc_types.contains(t)) {
+        for (const auto& t : (running_values_schema->column_types)) {
+            if (force_acc_types.contains(t->array_type)) {
                 this->accumulate_before_update = true;
                 break;
             }
@@ -1566,9 +1550,12 @@ GroupbyState::GroupbyState(
     for (size_t i = 0; i < ftypes.size(); i++) {
         std::vector<std::shared_ptr<array_info>>& local_input_cols =
             local_input_cols_vec.at(i);
-        std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
+        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
             in_arr_types_vec.at(i);
-        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes = in_dtypes_vec.at(i);
+        std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+        for (const auto& t : in_arr_types) {
+            in_arr_types_copy.push_back(t->copy());
+        }
 
         std::shared_ptr<BasicColSet> col_set = makeColSet(
             local_input_cols, index_col, ftypes[i], do_combine, skip_na_data, 0,
@@ -1580,18 +1567,13 @@ GroupbyState::GroupbyState(
             use_sql_rules);
 
         // get update/combine type info to initialize build state
-        std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                   std::vector<Bodo_CTypes::CTypeEnum>>
-            running_values_arr_types =
-                col_set->getRunningValueColumnTypes(in_arr_types, in_dtypes);
+        std::unique_ptr<bodo::Schema> running_values_schema =
+            col_set->getRunningValueColumnTypes(
+                std::make_shared<bodo::Schema>(std::move(in_arr_types_copy)));
+        size_t n_running_value_types = running_values_schema->ncols();
 
         if (!this->accumulate_before_update) {
-            for (auto t : std::get<0>(running_values_arr_types)) {
-                build_arr_array_types.push_back(t);
-            }
-            for (auto t : std::get<1>(running_values_arr_types)) {
-                build_arr_c_types.push_back(t);
-            }
+            build_table_schema->append_schema(std::move(running_values_schema));
 
             // Determine what separate output columns are necessary.
             // This is only required in the AGG case.
@@ -1602,15 +1584,13 @@ GroupbyState::GroupbyState(
                         "GroupbyState::GroupbyState Colsets with multiple "
                         "separate output columns not supported");
                 }
-                separate_out_col_array_types.push_back(
-                    std::get<0>(separate_out_col_type[0]));
-                separate_out_col_c_types.push_back(
+                separate_out_cols_schema->append_column(
+                    std::get<0>(separate_out_col_type[0]),
                     std::get<1>(separate_out_col_type[0]));
             }
         }
 
-        curr_running_value_offset +=
-            std::get<0>(running_values_arr_types).size();
+        curr_running_value_offset += n_running_value_types;
         this->f_running_value_offsets.push_back(curr_running_value_offset);
 
         this->col_sets.push_back(col_set);
@@ -1627,15 +1607,12 @@ GroupbyState::GroupbyState(
 
     // build buffer types are same as input if just accumulating batches
     if (this->accumulate_before_update) {
-        build_arr_array_types = in_arr_array_types;
-        build_arr_c_types = in_arr_c_types;
+        build_table_schema = std::make_shared<bodo::Schema>(*in_schema_);
     }
 
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
-    std::unique_ptr<bodo::Schema> build_table_schema =
-        bodo::Schema::Deserialize(build_arr_array_types, build_arr_c_types);
     for (uint64_t i = 0; i < this->n_keys; i++) {
         if (build_table_schema->column_types[i]->array_type ==
             bodo_array_type::DICT) {
@@ -1674,15 +1651,13 @@ GroupbyState::GroupbyState(
         build_table_non_key_dict_builders.end());
 
     this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
-        build_arr_c_types, build_arr_array_types,
-        this->build_table_dict_builders, this->n_keys, this->build_iter,
-        this->sync_iter, op_id_, this->nunique_only);
+        build_table_schema, this->build_table_dict_builders, this->n_keys,
+        this->build_iter, this->sync_iter, op_id_, this->nunique_only);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
-        0, 0, build_arr_c_types, build_arr_array_types,
-        separate_out_col_c_types, separate_out_col_array_types, this->n_keys,
-        this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
-        this->f_in_cols, this->f_running_value_offsets,
+        0, 0, build_table_schema, std::move(separate_out_cols_schema),
+        this->n_keys, this->build_table_dict_builders, this->col_sets,
+        this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
         /*is_active*/ true, this->accumulate_before_update,
         this->req_extended_group_info, this->op_pool.get(), this->op_mm,
         this->op_scratch_pool.get(), this->op_scratch_mm));
@@ -1693,12 +1668,9 @@ GroupbyState::GroupbyState(
     this->append_row_to_build_table.reserve(output_batch_size_);
 }
 
-std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-           std::vector<Bodo_CTypes::CTypeEnum>>
-GroupbyState::getRunningValueColumnTypes(
+std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
     std::vector<std::shared_ptr<array_info>> local_input_cols,
-    std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype) {
+    std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,     // in_cols
                    nullptr,              // index_col
@@ -1721,11 +1693,12 @@ GroupbyState::getRunningValueColumnTypes(
         );
 
     // get update/combine type info to initialize build state
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-        running_value_arr_types =
-            col_set->getRunningValueColumnTypes(in_arr_types, in_dtypes);
-    return running_value_arr_types;
+    std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+    for (const auto& t : in_dtypes) {
+        in_arr_types_copy.push_back(t->copy());
+    }
+    return col_set->getRunningValueColumnTypes(
+        std::make_shared<bodo::Schema>(std::move(in_arr_types_copy)));
 }
 
 std::vector<std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
@@ -2201,8 +2174,8 @@ void GroupbyState::InitOutputBufferMrnf(
     }
 
     // Build the output schema from the output column types.
-    std::unique_ptr<bodo::Schema> output_schema =
-        std::make_unique<bodo::Schema>(std::move(output_column_types));
+    std::shared_ptr<bodo::Schema> output_schema =
+        std::make_shared<bodo::Schema>(std::move(output_column_types));
     // Initialize the output buffer using this schema.
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
         output_schema, this->out_dict_builders,
@@ -2213,8 +2186,7 @@ void GroupbyState::InitOutputBufferMrnf(
 void GroupbyState::InitOutputBuffer(
     const std::shared_ptr<table_info>& dummy_table) {
     assert(!this->mrnf_only);
-    auto [arr_c_types, arr_array_types] =
-        get_dtypes_arr_types_from_table(dummy_table);
+    auto schema = dummy_table->schema();
 
     // This is not initialized until this point. Resize it to the required
     // size.
@@ -2237,7 +2209,7 @@ void GroupbyState::InitOutputBuffer(
         }
     }
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        arr_c_types, arr_array_types, this->out_dict_builders,
+        std::move(schema), this->out_dict_builders,
         /*chunk_size*/ this->output_batch_size,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 }
@@ -2852,10 +2824,11 @@ GroupbyState* groupby_state_init_py_entry(
     }
 
     return new GroupbyState(
-        std::vector<int8_t>(build_arr_c_types,
-                            build_arr_c_types + n_build_arrs),
-        std::vector<int8_t>(build_arr_array_types,
-                            build_arr_array_types + n_build_arrs),
+        bodo::Schema::Deserialize(
+            std::vector<int8_t>(build_arr_array_types,
+                                build_arr_array_types + n_build_arrs),
+            std::vector<int8_t>(build_arr_c_types,
+                                build_arr_c_types + n_build_arrs)),
 
         std::vector<int32_t>(ftypes, ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),

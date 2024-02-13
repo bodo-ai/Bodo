@@ -404,17 +404,14 @@ void BoolXorColSet::eval(const grouping_info& grp_info,
                        Bodo_FTypes::boolxor_eval, pool, std::move(mm));
 }
 
-std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-           std::vector<Bodo_CTypes::CTypeEnum>>
-BoolXorColSet::getRunningValueColumnTypes(
-    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
-    return std::tuple(
-        std::vector<bodo_array_type::arr_type_enum>{
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL},
-        std::vector<Bodo_CTypes::CTypeEnum>{Bodo_CTypes::_BOOL,
-                                            Bodo_CTypes::_BOOL});
+std::unique_ptr<bodo::Schema> BoolXorColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
+    std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL));
+    return std::make_unique<bodo::Schema>(std::move(datatypes));
 }
 
 // ############################## Var/Std ##############################
@@ -578,20 +575,19 @@ void VarStdColSet::eval(const grouping_info& grp_info,
     }
 }
 
-std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-           std::vector<Bodo_CTypes::CTypeEnum>>
-VarStdColSet::getRunningValueColumnTypes(
-    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
+std::unique_ptr<bodo::Schema> VarStdColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
     // var/std's update columns are always uint64 for count and float64 for
     // mean and m2 data. See VarStdColSet::alloc_running_value_columns()
-    return std::tuple(
-        std::vector<bodo_array_type::arr_type_enum>{
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL},
-        std::vector<Bodo_CTypes::CTypeEnum>{
-            Bodo_CTypes::UINT64, Bodo_CTypes::FLOAT64, Bodo_CTypes::FLOAT64});
+
+    std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    return std::make_unique<bodo::Schema>(std::move(datatypes));
 }
 
 // ############################## Skew ##############################
@@ -745,22 +741,20 @@ void SkewColSet::eval(const grouping_info& grp_info,
                        Bodo_FTypes::skew_eval, pool, std::move(mm));
 }
 
-std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-           std::vector<Bodo_CTypes::CTypeEnum>>
-SkewColSet::getRunningValueColumnTypes(
-    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
+std::unique_ptr<bodo::Schema> SkewColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
     // Skew's update columns are always uint64 for count and float64 for
     // m1/m2/m3 data. See SkewColSet::alloc_running_value_columns()
-    return std::tuple(
-        std::vector<bodo_array_type::arr_type_enum>{
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL},
-        std::vector<Bodo_CTypes::CTypeEnum>{
-            Bodo_CTypes::UINT64, Bodo_CTypes::FLOAT64, Bodo_CTypes::FLOAT64,
-            Bodo_CTypes::FLOAT64});
+    std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    return std::make_unique<bodo::Schema>(std::move(datatypes));
 }
 
 // ############################## Listagg ##############################
@@ -1413,23 +1407,22 @@ void KurtColSet::combine(const grouping_info& grp_info,
                  grp_info);
 }
 
-std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-           std::vector<Bodo_CTypes::CTypeEnum>>
-KurtColSet::getRunningValueColumnTypes(
-    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
+std::unique_ptr<bodo::Schema> KurtColSet::getRunningValueColumnTypes(
+    const std::shared_ptr<bodo::Schema>& in_schema) const {
     // Kurt's update columns are always uint64 for count and float64 for
     // m1/m2/m3/m4 data. See KurtColSet::alloc_running_value_columns()
-    return std::tuple(
-        std::vector<bodo_array_type::arr_type_enum>{
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL,
-            bodo_array_type::NULLABLE_INT_BOOL},
-        std::vector<Bodo_CTypes::CTypeEnum>{
-            Bodo_CTypes::UINT64, Bodo_CTypes::FLOAT64, Bodo_CTypes::FLOAT64,
-            Bodo_CTypes::FLOAT64, Bodo_CTypes::FLOAT64});
+    std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    datatypes.push_back(std::make_unique<bodo::DataType>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+    return std::make_unique<bodo::Schema>(std::move(datatypes));
 }
 
 // ############################## UDF ##############################

@@ -37,7 +37,16 @@ IncrementalShuffleState::IncrementalShuffleState(
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
     int64_t parent_op_id_)
-    : schema(bodo::Schema::Deserialize(arr_array_types_, arr_c_types_)),
+    : IncrementalShuffleState(
+          bodo::Schema::Deserialize(arr_array_types_, arr_c_types_),
+          dict_builders_, n_keys_, curr_iter_, sync_freq_, parent_op_id_){};
+
+IncrementalShuffleState::IncrementalShuffleState(
+    std::shared_ptr<bodo::Schema> schema_,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+    const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
+    int64_t parent_op_id_)
+    : schema(std::move(schema_)),
       dict_builders(dict_builders_),
       table_buffer(std::make_unique<TableBuildBuffer>(this->schema,
                                                       this->dict_builders)),

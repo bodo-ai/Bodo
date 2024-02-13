@@ -1024,7 +1024,7 @@ struct TableBuildBuffer {
      * @param mm MemoryManager for the 'pool'.
      */
     TableBuildBuffer(
-        const std::unique_ptr<bodo::Schema>& schema,
+        const std::shared_ptr<bodo::Schema>& schema,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =

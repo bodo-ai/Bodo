@@ -213,6 +213,29 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
 
 namespace bodo {
 
+std::unique_ptr<DataType> DataType::copy() const {
+    if (this->is_array()) {
+        const ArrayType* this_as_array = static_cast<const ArrayType*>(this);
+        return std::make_unique<ArrayType>(this_as_array->value_type->copy());
+
+    } else if (this->is_map()) {
+        const MapType* this_as_map = static_cast<const MapType*>(this);
+        return std::make_unique<MapType>(this_as_map->key_type->copy(),
+                                         this_as_map->value_type->copy());
+    } else if (this->is_struct()) {
+        const StructType* this_as_struct = static_cast<const StructType*>(this);
+        std::vector<std::unique_ptr<DataType>> new_child_types;
+        new_child_types.reserve(this_as_struct->child_types.size());
+        for (const auto& t : this_as_struct->child_types) {
+            new_child_types.push_back(t->copy());
+        }
+        return std::make_unique<StructType>(std::move(new_child_types));
+
+    } else {
+        return std::make_unique<DataType>(this->array_type, this->c_type);
+    }
+}
+
 void DataType::to_string_inner(std::string& out) {
     out += arr_type_to_str(this->array_type);
     out += "[";
@@ -253,20 +276,20 @@ void MapType::to_string_inner(std::string& out) {
 }
 
 void DataType::Serialize(std::vector<int8_t>& arr_array_types,
-                         std::vector<int8_t>& arr_c_types) {
+                         std::vector<int8_t>& arr_c_types) const {
     arr_array_types.push_back(array_type);
     arr_c_types.push_back(c_type);
 }
 
 void ArrayType::Serialize(std::vector<int8_t>& arr_array_types,
-                          std::vector<int8_t>& arr_c_types) {
+                          std::vector<int8_t>& arr_c_types) const {
     arr_array_types.push_back(array_type);
     arr_c_types.push_back(c_type);
     value_type->Serialize(arr_array_types, arr_c_types);
 }
 
 void StructType::Serialize(std::vector<int8_t>& arr_array_types,
-                           std::vector<int8_t>& arr_c_types) {
+                           std::vector<int8_t>& arr_c_types) const {
     arr_array_types.push_back(array_type);
     arr_c_types.push_back(c_type);
     arr_array_types.push_back(child_types.size());
@@ -278,7 +301,7 @@ void StructType::Serialize(std::vector<int8_t>& arr_array_types,
 }
 
 void MapType::Serialize(std::vector<int8_t>& arr_array_types,
-                        std::vector<int8_t>& arr_c_types) {
+                        std::vector<int8_t>& arr_c_types) const {
     arr_array_types.push_back(array_type);
     arr_c_types.push_back(c_type);
     key_type->Serialize(arr_array_types, arr_c_types);
@@ -295,7 +318,7 @@ static std::unique_ptr<DataType> from_byte_helper(
 
     if (array_type == bodo_array_type::ARRAY_ITEM) {
         auto inner_arr = from_byte_helper(arr_array_types, arr_c_types, i);
-        return std::make_unique<ArrayType>(inner_arr);
+        return std::make_unique<ArrayType>(std::move(inner_arr));
 
     } else if (array_type == bodo_array_type::STRUCT) {
         std::vector<std::unique_ptr<DataType>> child_types;
@@ -306,22 +329,66 @@ static std::unique_ptr<DataType> from_byte_helper(
             child_types.push_back(
                 from_byte_helper(arr_array_types, arr_c_types, i));
         }
-        return std::make_unique<StructType>(child_types);
+        return std::make_unique<StructType>(std::move(child_types));
     } else if (array_type == bodo_array_type::MAP) {
         std::unique_ptr<DataType> key_arr =
             from_byte_helper(arr_array_types, arr_c_types, i);
         std::unique_ptr<DataType> value_arr =
             from_byte_helper(arr_array_types, arr_c_types, i);
-        return std::make_unique<MapType>(key_arr, value_arr);
+        return std::make_unique<MapType>(std::move(key_arr),
+                                         std::move(value_arr));
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
 }
 
+Schema::Schema() : column_types() {}
+Schema::Schema(const Schema& other) {
+    this->column_types.reserve(other.column_types.size());
+    for (const auto& t : other.column_types) {
+        this->column_types.push_back(t->copy());
+    }
+}
+
+Schema::Schema(Schema&& other) {
+    this->column_types = std::move(other.column_types);
+}
+
+Schema::Schema(std::vector<std::unique_ptr<bodo::DataType>>&& column_types_)
+    : column_types(std::move(column_types_)) {}
+void Schema::insert_column(const int8_t arr_array_type, const int8_t arr_c_type,
+                           const size_t idx) {
+    size_t i = 0;
+    this->insert_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
+                                         std::vector<int8_t>({arr_c_type}), i),
+                        idx);
+}
+
+void Schema::insert_column(std::unique_ptr<DataType>&& col, const size_t idx) {
+    this->column_types.insert(column_types.begin() + idx, std::move(col));
+}
+
+void Schema::append_column(std::unique_ptr<DataType>&& col) {
+    this->column_types.emplace_back(std::move(col));
+}
+void Schema::append_column(const int8_t arr_array_type,
+                           const int8_t arr_c_type) {
+    size_t i = 0;
+    this->append_column(from_byte_helper(std::vector<int8_t>({arr_array_type}),
+                                         std::vector<int8_t>({arr_c_type}), i));
+}
+
+void Schema::append_schema(std::unique_ptr<Schema>&& other_schema) {
+    for (auto& col : other_schema->column_types) {
+        this->column_types.push_back(std::move(col));
+    }
+}
+size_t Schema::ncols() const { return this->column_types.size(); }
+
 std::unique_ptr<Schema> Schema::Deserialize(
     const std::span<const int8_t> arr_array_types,
     const std::span<const int8_t> arr_c_types) {
-    auto schema = std::make_unique<Schema>();
+    std::unique_ptr<Schema> schema = std::make_unique<Schema>();
     schema->column_types.reserve(arr_array_types.size());
     size_t i = 0;
 
@@ -333,7 +400,7 @@ std::unique_ptr<Schema> Schema::Deserialize(
     return schema;
 }
 
-std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() {
+std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() const {
     std::vector<int8_t> arr_array_types;
     std::vector<int8_t> arr_c_types;
 
@@ -1154,7 +1221,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
     }
 }
 
-size_t get_row_bytes(const std::unique_ptr<bodo::Schema>& schema) {
+size_t get_row_bytes(const std::shared_ptr<bodo::Schema>& schema) {
     size_t row_bits = 0;
     for (const std::unique_ptr<bodo::DataType>& data_type :
          schema->column_types) {
