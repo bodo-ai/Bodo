@@ -717,7 +717,7 @@ void ArrayBuildBuffer::Reset() {
 /* -------------------------- TableBuildBuffer ---------------------------- */
 
 TableBuildBuffer::TableBuildBuffer(
-    const std::unique_ptr<bodo::Schema>& schema,
+    const std::shared_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate empty initial table with provided data types
@@ -740,9 +740,8 @@ TableBuildBuffer::TableBuildBuffer(
     const std::vector<int8_t>& arr_array_types,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
-    : TableBuildBuffer(
-          std::move(bodo::Schema::Deserialize(arr_array_types, arr_c_types)),
-          dict_builders, pool, mm) {}
+    : TableBuildBuffer(bodo::Schema::Deserialize(arr_array_types, arr_c_types),
+                       dict_builders, pool, mm) {}
 
 size_t TableBuildBuffer::EstimatedSize() const {
     size_t size = 0;

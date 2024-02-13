@@ -17,6 +17,7 @@ static bodo::tests::suite tests([] {
 
         auto schema = bodo::Schema::Deserialize(arr_array_types, arr_c_types);
         bodo::tests::check(schema->column_types.size() == 5);
+        bodo::tests::check(schema->ncols() == 5);
 
         bodo::tests::check(schema->column_types[0]->array_type ==
                            bodo_array_type::NULLABLE_INT_BOOL);
@@ -213,5 +214,78 @@ static bodo::tests::suite tests([] {
             bodo::tests::check(out_array_types[i] == arr_array_types[i]);
             bodo::tests::check(out_c_types[i] == arr_c_types[i]);
         }
+    });
+
+    bodo::tests::test("test_insert", [] {
+        bodo::Schema schema;
+        schema.insert_column(std::make_unique<bodo::DataType>(
+                                 bodo_array_type::STRING, Bodo_CTypes::STRING),
+                             0);
+        schema.insert_column(static_cast<uint8_t>(bodo_array_type::NUMPY),
+                             static_cast<uint8_t>(Bodo_CTypes::_BOOL), 0);
+        bodo::tests::check(schema.ncols() == 2);
+        bodo::tests::check(schema.column_types[0]->array_type ==
+                           bodo_array_type::NUMPY);
+        bodo::tests::check(schema.column_types[0]->c_type ==
+                           Bodo_CTypes::_BOOL);
+        bodo::tests::check(schema.column_types[1]->array_type ==
+                           bodo_array_type::STRING);
+        bodo::tests::check(schema.column_types[1]->c_type ==
+                           Bodo_CTypes::STRING);
+    });
+
+    bodo::tests::test("test_append_column", [] {
+        bodo::Schema schema;
+        schema.append_column(std::make_unique<bodo::DataType>(
+            bodo_array_type::STRING, Bodo_CTypes::STRING));
+        schema.append_column(static_cast<uint8_t>(bodo_array_type::NUMPY),
+                             static_cast<uint8_t>(Bodo_CTypes::_BOOL));
+        bodo::tests::check(schema.ncols() == 2);
+        bodo::tests::check(schema.column_types[0]->array_type ==
+                           bodo_array_type::STRING);
+        bodo::tests::check(schema.column_types[0]->c_type ==
+                           Bodo_CTypes::STRING);
+        bodo::tests::check(schema.column_types[1]->array_type ==
+                           bodo_array_type::NUMPY);
+        bodo::tests::check(schema.column_types[1]->c_type ==
+                           Bodo_CTypes::_BOOL);
+    });
+
+    bodo::tests::test("test_append_schema", [] {
+        std::vector<std::unique_ptr<bodo::DataType>> types;
+        types.push_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::STRING, Bodo_CTypes::STRING));
+        types.push_back(std::make_unique<bodo::DataType>(bodo_array_type::NUMPY,
+                                                         Bodo_CTypes::_BOOL));
+        std::vector<std::unique_ptr<bodo::DataType>> types2;
+        for (const auto& type : types) {
+            types2.push_back(type->copy());
+        }
+        bodo::Schema schema1(std::move(types));
+        auto schema2 = std::make_unique<bodo::Schema>(std::move(types2));
+        bodo::tests::check(schema1.ncols() == 2);
+        bodo::tests::check(schema2->ncols() == 2);
+        bodo::tests::check(schema1.column_types[0].get() !=
+                           schema2->column_types[0].get());
+
+        schema1.append_schema(std::move(schema2));
+        std::cout << schema1.ncols() << std::endl;
+        bodo::tests::check(schema1.ncols() == 4);
+        bodo::tests::check(schema1.column_types[0]->array_type ==
+                           bodo_array_type::STRING);
+        bodo::tests::check(schema1.column_types[0]->c_type ==
+                           Bodo_CTypes::STRING);
+        bodo::tests::check(schema1.column_types[1]->array_type ==
+                           bodo_array_type::NUMPY);
+        bodo::tests::check(schema1.column_types[1]->c_type ==
+                           Bodo_CTypes::_BOOL);
+        bodo::tests::check(schema1.column_types[2]->array_type ==
+                           bodo_array_type::STRING);
+        bodo::tests::check(schema1.column_types[2]->c_type ==
+                           Bodo_CTypes::STRING);
+        bodo::tests::check(schema1.column_types[3]->array_type ==
+                           bodo_array_type::NUMPY);
+        bodo::tests::check(schema1.column_types[3]->c_type ==
+                           Bodo_CTypes::_BOOL);
     });
 });

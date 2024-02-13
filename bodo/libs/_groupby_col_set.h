@@ -209,22 +209,19 @@ class BasicColSet {
      * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
      * std::vector<Bodo_CTypes::CTypeEnum>> update column array types and dtypes
      */
-    virtual std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
+    virtual std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const {
         // TODO[BSE-578]: implement getRunningValueColumnTypes() for other
         // colsets that can have more update columns
         std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
-            out_arr_type =
-                get_groupby_output_dtype(ftype, in_arr_types[0], in_dtypes[0]);
-        return std::tuple(
-            std::vector<bodo_array_type::arr_type_enum>{
-                std::get<0>(out_arr_type)},
-            std::vector<Bodo_CTypes::CTypeEnum>{std::get<1>(out_arr_type)});
+            out_arr_type = get_groupby_output_dtype(
+                ftype, in_schema->column_types[0]->array_type,
+                in_schema->column_types[0]->c_type);
+        std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+        datatypes.push_back(std::make_unique<bodo::DataType>(
+            std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
+        return std::make_unique<bodo::Schema>(std::move(datatypes));
     }
-
     /**
      * @brief Set update columns to allow calling combine with new data batch
      * (used in streaming groupby)
@@ -305,21 +302,18 @@ class FirstColSet : public BasicColSet {
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
 
-    virtual std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override {
-        auto arr_types = in_arr_types;
-        auto dtypes = in_dtypes;
-        for (size_t i = 0; i < in_arr_types.size(); ++i) {
-            auto arr_type = in_arr_types[i];
-            if (arr_type == bodo_array_type::NUMPY) {
-                arr_types.push_back(bodo_array_type::NULLABLE_INT_BOOL);
-                dtypes.push_back(Bodo_CTypes::_BOOL);
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override {
+        assert(in_schema->ncols() == 1);
+        auto out_schema = std::make_unique<bodo::Schema>(*in_schema);
+        for (size_t i = 0; i < in_schema->ncols(); ++i) {
+            if (in_schema->column_types[i]->array_type ==
+                bodo_array_type::NUMPY) {
+                out_schema->append_column(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::_BOOL);
             }
         }
-        return {arr_types, dtypes};
+        return out_schema;
     }
 
     virtual void combine(const grouping_info& grp_info,
@@ -357,19 +351,17 @@ class MeanColSet : public BasicColSet {
               std::shared_ptr<::arrow::MemoryManager> mm =
                   bodo::default_buffer_memory_manager()) override;
 
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override {
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override {
         // Mean's update columns are always float64 for sum data and uint64 for
         // count data. See MeanColSet::alloc_update_columns()
-        return std::tuple(
-            std::vector<bodo_array_type::arr_type_enum>{
-                bodo_array_type::NULLABLE_INT_BOOL,
-                bodo_array_type::NULLABLE_INT_BOOL},
-            std::vector<Bodo_CTypes::CTypeEnum>{Bodo_CTypes::FLOAT64,
-                                                Bodo_CTypes::UINT64});
+
+        std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+        datatypes.push_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+        datatypes.push_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
+        return std::make_unique<bodo::Schema>(std::move(datatypes));
     }
 };
 
@@ -659,11 +651,8 @@ class BoolXorColSet : public BasicColSet {
               std::shared_ptr<::arrow::MemoryManager> mm =
                   bodo::default_buffer_memory_manager()) override;
 
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override;
 };
 
 /**
@@ -711,11 +700,8 @@ class VarStdColSet : public BasicColSet {
         return {out_col};
     }
 
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -794,11 +780,8 @@ class SkewColSet : public BasicColSet {
         return {out_col};
     }
 
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -930,11 +913,8 @@ class KurtColSet : public BasicColSet {
         return {out_col};
     }
 
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getRunningValueColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
+    std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
+        const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
