@@ -2018,9 +2018,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * layer of indirection to ensure this function is cached.
    */
   private @NotNull boolean isIcebergTableImpl(List<String> names) {
-    if (!RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
-      return false;
-    }
     String qualifiedName = String.join(".", names);
     try {
       final String query = String.format(Locale.ROOT, "DESCRIBE ICEBERG TABLE %s;", qualifiedName);
