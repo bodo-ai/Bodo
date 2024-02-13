@@ -11,6 +11,7 @@ import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
+import com.bodosql.calcite.prepare.BodoRules.SINGLE_VALUE_REMOVE_RULE
 import com.bodosql.calcite.prepare.BodoRules.SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
@@ -248,8 +249,8 @@ object BodoPrograms {
         SubQueryRemoveProgram(),
         // Convert specialized table functions to their appropriate RelNodes
         ConvertTableFunctionProgram(),
-        RewriteProgram(),
         DecorrelateProgram(),
+        RewriteProgram(),
         FlattenCaseExpressionsProgram,
         // Convert calcite logical nodes to bodo logical nodes
         // when necessary.
@@ -280,6 +281,7 @@ object BodoPrograms {
         listOf(
             JoinExtractOverRule.Config.DEFAULT.toRule(),
             ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
+            SINGLE_VALUE_REMOVE_RULE,
         ),
 
     )
