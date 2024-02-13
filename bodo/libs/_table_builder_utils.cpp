@@ -39,7 +39,7 @@ std::unique_ptr<array_info> alloc_empty_array(
 }
 
 std::shared_ptr<table_info> alloc_table(
-    const std::unique_ptr<bodo::Schema>& schema, bodo::IBufferPool* const pool,
+    const std::shared_ptr<bodo::Schema>& schema, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> arrays;
 
@@ -58,7 +58,7 @@ std::shared_ptr<table_info> alloc_table(
     const std::span<const int8_t> c_types_span{arr_c_types};
 
     auto schema = bodo::Schema::Deserialize(arr_types_span, c_types_span);
-    return alloc_table(schema, pool, mm);
+    return alloc_table(std::move(schema), pool, mm);
 }
 
 std::shared_ptr<table_info> alloc_table_like(

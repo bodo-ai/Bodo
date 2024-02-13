@@ -812,7 +812,7 @@ def init_groupby_state(
                             bodo.StructArrayType,
                         ),
                     )
-                    and fname not in supported_nested_agg_funcs
+                    and output_type.fnames[i] not in supported_nested_agg_funcs
                 ):
                     raise BodoError(
                         f"Groupby does not support semi-structured arrays for aggregations other than {', '.join(supported_nested_agg_funcs[:-1])} and {supported_nested_agg_funcs[-1]}."

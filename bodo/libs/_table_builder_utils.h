@@ -14,7 +14,7 @@
  * @return std::shared_ptr<table_info> allocated table
  */
 std::shared_ptr<table_info> alloc_table(
-    const std::unique_ptr<bodo::Schema>& schema,
+    const std::shared_ptr<bodo::Schema>& schema,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());

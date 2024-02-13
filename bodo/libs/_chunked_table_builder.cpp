@@ -516,7 +516,7 @@ ChunkedTableBuilder::ChunkedTableBuilder(
           max_resize_count_for_variable_size_dtypes_) {}
 
 ChunkedTableBuilder::ChunkedTableBuilder(
-    const std::unique_ptr<bodo::Schema>& schema,
+    const std::shared_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)
     : active_chunk(alloc_table(schema)),
