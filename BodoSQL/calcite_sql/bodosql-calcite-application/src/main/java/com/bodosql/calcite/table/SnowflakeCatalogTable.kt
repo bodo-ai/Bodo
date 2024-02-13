@@ -232,9 +232,10 @@ open class SnowflakeCatalogTable(
             parentFullPath,
             fullPath,
         )
-        // Check the cache.
+        // Check the cache. We can only use the cache if the clusters
+        // are the same.
         val result: RelNode?
-        if (inlineViewCache.containsKey(input)) {
+        if (inlineViewCache.containsKey(input) && inlineViewCache[input]?.cluster == toRelContext.cluster) {
             result = inlineViewCache[input]
         } else {
             result = inlineViewImpl(toRelContext, input)
@@ -362,6 +363,11 @@ open class SnowflakeCatalogTable(
     }
 
     fun isIcebergTable(): Boolean {
+        // Note: This needs to be outside catalog.isIcebergTable so
+        // the result isn't cached.
+        if (!RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
+            return false
+        }
         return catalog.isIcebergTable(this.fullPath)
     }
 
