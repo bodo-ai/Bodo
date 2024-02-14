@@ -22,10 +22,9 @@ import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
 import org.apache.calcite.rex.RexInputRef
-import java.lang.RuntimeException
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
-    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits, input), PandasRel {
+    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return SnowflakeToPandasConverter(cluster, traitSet, sole(inputs))

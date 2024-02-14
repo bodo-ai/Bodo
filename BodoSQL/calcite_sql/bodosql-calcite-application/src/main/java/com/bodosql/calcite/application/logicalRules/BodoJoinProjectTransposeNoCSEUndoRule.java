@@ -318,7 +318,7 @@ public class BodoJoinProjectTransposeNoCSEUndoRule
 
     relBuilder.push(joinChild);
     relBuilder.projectPlus(newProjectsToBeMergedIntoJoinChild);
-    relBuilder.project(newProjectOnTopOfJoinChild, project.getRowType().getFieldNames());
+    relBuilder.project(newProjectOnTopOfJoinChild, project.getRowType().getFieldNames(), true);
 
     Project newProject = (Project) relBuilder.build();
     RelNode newJoinChild = newProject.getInput();

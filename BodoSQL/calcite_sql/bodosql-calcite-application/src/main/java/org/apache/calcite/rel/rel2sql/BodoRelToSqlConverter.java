@@ -1,6 +1,5 @@
 package org.apache.calcite.rel.rel2sql;
 
-import com.bodosql.calcite.adapter.pandas.window.Result;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.google.common.collect.ImmutableList;

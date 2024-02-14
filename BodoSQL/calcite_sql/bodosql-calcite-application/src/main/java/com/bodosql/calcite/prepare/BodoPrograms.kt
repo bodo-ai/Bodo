@@ -12,6 +12,7 @@ import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.SINGLE_VALUE_REMOVE_RULE
+import com.bodosql.calcite.prepare.BodoRules.SNOWFLAKE_CLEANUP_RULES
 import com.bodosql.calcite.prepare.BodoRules.SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
@@ -159,6 +160,10 @@ object BodoPrograms {
         AnalysisSuite.filterPushdownAnalysis,
         // Convert Window nodes back to Project nodes
         WindowProjectTransformProgram,
+        // Cleanup Snowflake Nodes in preparation of Iceberg Conversion
+        SnowflakeCleanupProgram,
+        // Update Iceberg Nodes
+        IcebergConvertProgram,
         // Add a final trim step.
         TrimFieldsProgram(true),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
@@ -285,6 +290,12 @@ object BodoPrograms {
         ),
 
     )
+
+    /**
+     * Simplify Snowflake sections in a way to creates a simpler
+     * plan for Iceberg Conversion.
+     */
+    private object SnowflakeCleanupProgram : Program by HepOptimizerProgram(SNOWFLAKE_CLEANUP_RULES)
 
     /**
      * The decorrelate program will convert Correlate nodes to
