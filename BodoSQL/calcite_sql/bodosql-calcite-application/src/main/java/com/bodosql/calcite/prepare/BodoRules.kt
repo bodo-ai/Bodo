@@ -2,8 +2,11 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasRules
+import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
+import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeLimitLockRule
+import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
@@ -43,6 +46,7 @@ import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_LEFT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_RIGHT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.PROJECT_MULTI_JOIN_MERGE
 import com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER
+import com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER
 import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
@@ -349,16 +353,12 @@ object BodoRules {
     @JvmField
     val FILTER_PROJECT_TRANSPOSE_RULE: RelOptRule =
         FilterProjectTransposeNoCaseRule.Config.DEFAULT
-            .withOperandSupplier(
-                OperandTransform { b0: OperandBuilder ->
-                    b0.operand(BodoLogicalFilter::class.java)
-                        .oneInput(
-                            OperandTransform { b1: OperandBuilder ->
-                                b1.operand(BodoLogicalProject::class.java).anyInputs()
-                            },
-                        )
-                },
-            )
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(BodoLogicalFilter::class.java)
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(BodoLogicalProject::class.java).anyInputs()
+                    }
+            }
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -728,6 +728,116 @@ object BodoRules {
     @JvmStatic
     val PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE: RelOptRule = PartialJoinConditionIntoChildrenRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
+    /**
+     * Planner rule that combines two SnowflakeFilters.
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_FILTER_MERGE_RULE: RelOptRule =
+        FilterMergeRuleNoWindow.Config.DEFAULT
+            .withOperandSupplier { b0 ->
+                b0.operand(SnowflakeFilter::class.java)
+                    .predicate { f: SnowflakeFilter -> f.getCatalogTable().isIcebergTable() }
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(SnowflakeFilter::class.java)
+                            .predicate { f: SnowflakeFilter -> f.getCatalogTable().isIcebergTable() }
+                            .anyInputs()
+                    }
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Planner rule that pushes a SnowflakeFilter past a SnowflakeProject.
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_FILTER_PROJECT_TRANSPOSE_RULE: RelOptRule =
+        FilterProjectTransposeNoCaseRule.Config.DEFAULT
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeFilter::class.java)
+                    .predicate { f: SnowflakeFilter -> f.getCatalogTable().isIcebergTable() }
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(SnowflakeProject::class.java)
+                            .predicate { p: SnowflakeProject -> p.getCatalogTable().isIcebergTable() }
+                            .anyInputs()
+                    }
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
+     * This reduces expressions inside of the conditions of Snowflake filter statements
+     * Ex condition($0 = 1 and $0 = 2) ==> condition(FALSE).
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_FILTER_REDUCE_EXPRESSIONS_RULE: RelOptRule =
+        BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeFilter::class.java)
+                    .predicate { f: SnowflakeFilter -> f.getCatalogTable().isIcebergTable() }
+                    .anyInputs()
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Planner rule that pushes a SnowflakeFilter past a SnowflakeAggregate.
+     * This rule should only fire for pushing past distinct clauses.
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_FILTER_AGGREGATE_TRANSPOSE_RULE: RelOptRule =
+        FilterAggregateTransposeRuleNoWindow.Config.DEFAULT
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeFilter::class.java)
+                    .predicate { f: SnowflakeFilter -> f.getCatalogTable().isIcebergTable() }
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(SnowflakeAggregate::class.java)
+                            .predicate { a: SnowflakeAggregate -> a.getCatalogTable().isIcebergTable() }
+                            .anyInputs()
+                    }
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Planner rule that merges a SnowflakeProject into another SnowflakeProject,
+     * provided the projects aren't projecting identical sets of input references.
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_PROJECT_MERGE_RULE: RelOptRule =
+        ProjectMergeRule.Config.DEFAULT
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeProject::class.java)
+                    .predicate { p: SnowflakeProject -> p.getCatalogTable().isIcebergTable() }
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(SnowflakeProject::class.java)
+                            .predicate { p: SnowflakeProject -> p.getCatalogTable().isIcebergTable() }
+                            .anyInputs()
+                    }
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Planner rule that, given a Physical Project node that merely returns its input,
+     * converts the node into its child.
+     * This rule only fires on Snowflake nodes atop Iceberg tables.
+     */
+    @JvmField
+    val SNOWFLAKE_PROJECT_REMOVE_RULE: RelOptRule =
+        ProjectRemoveRule.Config.DEFAULT
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeProject::class.java)
+                    .predicate { p: SnowflakeProject -> ProjectRemoveRule.isTrivial(p) && p.getCatalogTable().isIcebergTable() }
+                    .anyInputs()
+            }
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
     // RULE GROUPINGS
 
     /**
@@ -945,6 +1055,14 @@ object BodoRules {
      */
     @JvmField
     val WINDOW_CONVERSION_RULES = listOf(PROJECT_TO_WINDOW_RULE, FILTER_WINDOW_EJECT, FILTER_WINDOW_MRNF_RULE, PROJECT_REMOVE_RULE, FILTER_PROJECT_TRANSPOSE_RULE)
+
+    /**
+     * Rules that are used to clean up a Snowflake section into a standard form
+     * for conversion into Iceberg. All of these rules only fire on Iceberg tables
+     * to avoid possible regressions.
+     */
+    @JvmField
+    val SNOWFLAKE_CLEANUP_RULES = listOf(SNOWFLAKE_FILTER_MERGE_RULE, SNOWFLAKE_FILTER_PROJECT_TRANSPOSE_RULE, SNOWFLAKE_FILTER_REDUCE_EXPRESSIONS_RULE, SNOWFLAKE_FILTER_AGGREGATE_TRANSPOSE_RULE, SNOWFLAKE_PROJECT_MERGE_RULE, SNOWFLAKE_PROJECT_REMOVE_RULE)
 
     // OPTIMIZER GROUPS
     @JvmField

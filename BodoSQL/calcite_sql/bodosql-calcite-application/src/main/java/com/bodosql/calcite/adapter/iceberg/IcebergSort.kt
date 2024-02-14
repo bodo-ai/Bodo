@@ -6,22 +6,34 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
+import org.apache.calcite.rel.RelCollation
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
 
-class IcebergFilter private constructor(
+class IcebergSort private constructor(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     input: RelNode,
-    condition: RexNode,
+    collation: RelCollation,
+    offset: RexNode?,
+    fetch: RexNode?,
     private val catalogTable: SnowflakeCatalogTable,
-) : Filter(cluster, traitSet.replace(IcebergRel.CONVENTION), input, condition), IcebergRel {
+) :
+    Sort(cluster, traitSet.replace(IcebergRel.CONVENTION), input, collation, offset, fetch), IcebergRel {
 
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): Filter {
-        return IcebergFilter(cluster, traitSet, input, condition, catalogTable)
+    override fun copy(
+        traitSet: RelTraitSet,
+        newInput: RelNode,
+        newCollation: RelCollation,
+        offset: RexNode?,
+        fetch: RexNode?,
+    ): Sort {
+        return IcebergSort(cluster, traitSet, newInput, newCollation, offset, fetch, catalogTable)
     }
+
+    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
@@ -34,12 +46,12 @@ class IcebergFilter private constructor(
             cluster: RelOptCluster,
             traitSet: RelTraitSet,
             input: RelNode,
-            condition: RexNode,
+            collation: RelCollation,
+            offset: RexNode?,
+            fetch: RexNode?,
             catalogTable: SnowflakeCatalogTable,
-        ): IcebergFilter {
-            return IcebergFilter(cluster, traitSet, input, condition, catalogTable)
+        ): IcebergSort {
+            return IcebergSort(cluster, traitSet, input, collation, offset, fetch, catalogTable)
         }
     }
-
-    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 }

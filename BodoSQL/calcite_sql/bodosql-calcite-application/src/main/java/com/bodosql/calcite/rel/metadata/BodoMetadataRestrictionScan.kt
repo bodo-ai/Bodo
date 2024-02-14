@@ -1,5 +1,7 @@
 package com.bodosql.calcite.rel.metadata
 
+import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
+import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.rel.core.Flatten
@@ -151,17 +153,21 @@ class BodoMetadataRestrictionScan {
          *
          */
         fun findColumnsThatCanBeRequested(node: RelNode, cols: Set<Int>) {
-            if (node is SnowflakeTableScan) {
+            if (node is SnowflakeTableScan || node is IcebergTableScan) {
                 // Once we have reached a scan, add every column from cols to
                 // the set of columns that are pre-cleared for metadata requests.
-                val table = node.getCatalogTable()
+                val table = if (node is SnowflakeTableScan) {
+                    node.getCatalogTable()
+                } else {
+                    (node as IcebergTableScan).getCatalogTable()
+                }
                 val names = node.getRowType().fieldNames
                 cols.forEach {
                     val columnName = names[it]
                     val tablePath = table.fullPath.joinToString(".")
                     columnsAllowedToRequest.add("$tablePath.$columnName".uppercase(Locale.ROOT))
                 }
-            } else if (node is SetOp || node is Filter || node is SnowflakeToPandasConverter) {
+            } else if (node is SetOp || node is Filter || node is SnowflakeToPandasConverter || node is IcebergToPandasConverter) {
                 // For these types of RelNodes, forward the scan onto all the children un-modified.
                 node.inputs.forEach { findColumnsThatCanBeRequested(it, cols) }
             } else if (node is Aggregate) {
