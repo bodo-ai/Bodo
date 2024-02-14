@@ -14,6 +14,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pyspark.sql.types as spark_types
 import pytest
 import pytz
@@ -22,7 +23,8 @@ from numba.core import types
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.io.iceberg import ICEBERG_FIELD_ID_MD_KEY
+from bodo.tests.iceberg_database_helpers import schema_evolution_eg_table, spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,
 )
@@ -1415,6 +1417,312 @@ def test_basic_write_new_append(
     assert spark_n == n_pes
 
 
+def _verify_pq_schema_in_files(
+    warehouse_loc: str,
+    db_schema: str,
+    table_name: str,
+    data_files_before_write: set[str],
+    expected_schema: pa.Schema,
+):
+    """
+    Helper function to validate that the parquet
+    files written by Bodo have the expected schema,
+    including the metadata fields.
+    """
+    passed = 1
+    err = "Parquet field schema metadata validation failed. See error on rank 0"
+    if bodo.get_rank() == 0:
+        try:
+            # Get List of files (only the ones written after Bodo write)
+            data_files = glob.glob(
+                os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+            )
+            data_files = list(set(data_files) - data_files_before_write)
+            assert all(os.path.isfile(file) for file in data_files)
+
+            # Verify that all the parquet files have the correct metadata:
+            for data_file in data_files:
+                pq_file = pq.ParquetFile(data_file)
+                file_schema = pq_file.schema.to_arrow_schema()
+                assert expected_schema.equals(
+                    file_schema, check_metadata=True
+                ), data_file
+        except Exception as e:
+            err = "".join(traceback.format_exception(None, e, e.__traceback__))
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), err
+
+
+def _setup_test_iceberg_field_ids_in_pq_schema(
+    warehouse_loc: str,
+    db_schema: str,
+    table_name: str,
+    mode: str,
+    pa_schema: pa.Schema,
+    df: pd.DataFrame,
+    sql_schema: list[tuple[str, str, bool]],
+) -> tuple[set[str], pa.Schema]:
+    """
+    Helper function for test_iceberg_field_ids_in_pq_schema. This is
+    used for testing both the streaming and non-streaming versions.
+    """
+    passed = 1
+    err = "Setup step failed. See error on rank 0"
+    if bodo.get_rank() == 0:
+        try:
+            if mode == "replace":
+                # Create a dummy table with a completely different schema using Spark.
+                # This will verify that Bodo doesn't use the existing schema when
+                # writing new files.
+                df_, sql_schema_ = SIMPLE_TABLES_MAP["BOOL_BINARY_TABLE"]
+                create_iceberg_table(df_, sql_schema_, table_name)
+            elif mode == "append":
+                # Write a set of files with Spark first.
+                create_iceberg_table(df, sql_schema, table_name)
+        except Exception as e:
+            err = "".join(traceback.format_exception(None, e, e.__traceback__))
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), err
+
+    data_files_before_write = set([])
+    if bodo.get_rank() == 0 and mode in ("append", "replace"):
+        data_files_before_write = set(
+            glob.glob(
+                os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+            )
+        )
+    # Construct the expected schema object:
+    passed = 1
+    err = "Constructing expected schema failed. See error on rank 0"
+    expected_schema = None
+    if bodo.get_rank() == 0:
+        try:
+            expected_schema = bodo.io.iceberg.add_iceberg_field_id_md_to_pa_schema(
+                pa_schema
+            )
+            iceberg_schema_str = bodo_iceberg_connector.pyarrow_to_iceberg_schema_str(
+                expected_schema
+            )
+            expected_schema = expected_schema.with_metadata(
+                {"iceberg.schema": iceberg_schema_str}
+            )
+        except Exception as e:
+            err = "".join(traceback.format_exception(None, e, e.__traceback__))
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), err
+
+    return data_files_before_write, expected_schema
+
+
+ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[str, pa.Schema] = [
+    pytest.param(
+        "NUMERIC_TABLE",
+        pa.schema(
+            [
+                pa.field("A", pa.int32(), False),
+                pa.field("B", pa.int64(), False),
+                pa.field("C", pa.float32(), False),
+                pa.field("D", pa.float64(), False),
+                pa.field("E", pa.int32(), True),
+                pa.field("F", pa.int64(), True),
+            ]
+        ),
+        id="simple_numeric",
+    ),
+    pytest.param(
+        "STRUCT_TABLE",
+        pa.schema(
+            [
+                pa.field(
+                    "A",
+                    pa.struct([pa.field("a", pa.int64()), pa.field("b", pa.int64())]),
+                ),
+                pa.field(
+                    "B",
+                    pa.struct(
+                        [
+                            pa.field("a", pa.float64()),
+                            pa.field("b", pa.int64()),
+                            pa.field("c", pa.float64()),
+                        ]
+                    ),
+                ),
+            ]
+        ),
+        id="struct",
+    ),
+    pytest.param(
+        "LIST_TABLE",
+        pa.schema(
+            [
+                pa.field("A", pa.list_(pa.int64())),
+                pa.field("B", pa.list_(pa.string())),
+                pa.field("C", pa.list_(pa.int64())),
+                pa.field("D", pa.list_(pa.float64())),
+                pa.field("E", pa.list_(pa.float64())),
+            ]
+        ),
+        id="list",
+    ),
+]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "base_name,pa_schema", ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS
+)
+@pytest.mark.parametrize("mode", ["create", "replace", "append"])
+def test_iceberg_field_ids_in_pq_schema(
+    base_name,
+    pa_schema,
+    mode,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    """
+    Test that the parquet files written by Bodo have the expected
+    metadata. In particular, the fields' metadata should contain
+    the Iceberg Field ID and the schema metadata should have an
+    encoded JSON describing the Iceberg schema.
+    """
+
+    table_name = f"SIMPLE_{base_name}_pq_schema_test_{mode}"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    df, sql_schema = SIMPLE_TABLES_MAP[base_name]
+
+    if_exists = "fail" if mode == "create" else mode
+
+    if base_name == "LIST_TABLE" and mode == "append":
+        pytest.skip(
+            reason="During unboxing of Series with lists, we always assume int64 (vs int32) and float64 (vs float32), which doesn't match original schema written by Spark."
+        )
+
+    (
+        data_files_before_write,
+        expected_schema,
+    ) = _setup_test_iceberg_field_ids_in_pq_schema(
+        warehouse_loc, db_schema, table_name, mode, pa_schema, df, sql_schema
+    )
+
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists=if_exists)
+
+    # Write using Bodo
+    bodo.jit(distributed=["df"])(impl)(_get_dist_arg(df), table_name, conn, db_schema)
+    bodo.barrier()
+
+    _verify_pq_schema_in_files(
+        warehouse_loc, db_schema, table_name, data_files_before_write, expected_schema
+    )
+
+
+@pytest.mark.slow
+def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test that when appending to a table that has gone through
+    several complicated schema evolutions, we still write
+    the correct metadata in the parquet file. In particular,
+    the fields' metadata should contain the Iceberg Field ID
+    and the schema metadata should have an encoded JSON describing
+    the Iceberg schema (with the correct schema id).
+    """
+    table_name = "schema_evolution_eg_table"
+
+    # We want to use completely new table for each test
+    table_name += "_append"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append")
+
+    # Write using Spark on rank 0
+    passed = 1
+    err = "Setup step failed. See error on rank 0"
+    if bodo.get_rank() == 0:
+        try:
+            schema_evolution_eg_table.create_table(table_name=table_name)
+        except Exception as e:
+            err = "".join(traceback.format_exception(None, e, e.__traceback__))
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), err
+
+    df = pd.DataFrame(
+        {
+            "A": ["salad", "pizza", "pasta"] * 10,
+            "D": [4352, 598237, 23480950, 21329, 423503] * 6,
+            "TY": ["AB", "e3", "tyler"] * 10,
+            "E": np.array([1.56, 2.72, 23.90, 100.84, 234.67, 19.00] * 5, np.float32),
+            "F": np.array([56, 23, 43, 64234, 902, 943] * 5, np.int32),
+        }
+    )
+
+    # Construct the expected schema object.
+    # XXX TODO Investigate why it's large_string here.
+    passed = 1
+    err = "Constructing expected schema failed. See error on rank 0"
+    expected_schema = None
+    if bodo.get_rank() == 0:
+        try:
+            expected_schema = pa.schema(
+                [
+                    pa.field(
+                        "A", pa.large_string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "1"}
+                    ),
+                    pa.field("D", pa.int64(), metadata={ICEBERG_FIELD_ID_MD_KEY: "4"}),
+                    pa.field(
+                        "TY", pa.large_string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "3"}
+                    ),
+                    pa.field(
+                        "E", pa.float32(), metadata={ICEBERG_FIELD_ID_MD_KEY: "5"}
+                    ),
+                    pa.field("F", pa.int32(), metadata={ICEBERG_FIELD_ID_MD_KEY: "6"}),
+                ]
+            )
+            iceberg_schema_str = bodo_iceberg_connector.pyarrow_to_iceberg_schema_str(
+                expected_schema
+            )
+            # This will return a string with schema-id as 0. However, the latest
+            # schema-id is 5, which is what Bodo is expected to write.
+            start_idx = iceberg_schema_str.find('"schema-id":0')
+            assert start_idx != -1, "schema id not in the schema string"
+            iceberg_schema_str = iceberg_schema_str.replace(
+                '"schema-id":0', '"schema-id":5', 1
+            )
+            expected_schema = expected_schema.with_metadata(
+                {"iceberg.schema": iceberg_schema_str}
+            )
+        except Exception as e:
+            err = "".join(traceback.format_exception(None, e, e.__traceback__))
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), err
+
+    data_files_before_write = set([])
+    if bodo.get_rank() == 0:
+        data_files_before_write = set(
+            glob.glob(
+                os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+            )
+        )
+
+    # Append using Bodo
+    impl(_get_dist_arg(df), table_name, conn, db_schema)
+
+    _verify_pq_schema_in_files(
+        warehouse_loc, db_schema, table_name, data_files_before_write, expected_schema
+    )
+
+
 @pytest.mark.slow
 def test_basic_write_runtime_cols_fail(
     iceberg_database,
@@ -2146,15 +2454,17 @@ SCALAR_TRANSFORM_FUNC = {
         lambda x, _: int(x) - 1970 if int(x) > 1000 else int(x)
     ),
     "months": month_scalar_impl,
-    "days": lambda x, _: datetime.strptime(x, "%Y-%m-%d").date() - date(1970, 1, 1)
-    if "-" in x
-    else int(x),
+    "days": lambda x, _: (
+        datetime.strptime(x, "%Y-%m-%d").date() - date(1970, 1, 1)
+        if "-" in x
+        else int(x)
+    ),
     "hours": lambda x, _: (
-        datetime.strptime(x, "%Y-%m-%d-%H") - datetime(1970, 1, 1)
-    ).total_seconds()
-    // 3600
-    if "-" in x
-    else int(x),
+        (datetime.strptime(x, "%Y-%m-%d-%H") - datetime(1970, 1, 1)).total_seconds()
+        // 3600
+        if "-" in x
+        else int(x)
+    ),
     "identity": null_scalar_wrapper(identity_scalar_impl),
     "truncate": truncate_scalar_impl,
     "bucket": lambda x, _: int(x),  # The scalar is already correct
@@ -2166,17 +2476,19 @@ ARRAY_TRANSFORM_FUNC = {
         lambda x: None if pd.isna(x) else (x.year - 1970) * 12 + x.month - 1
     ),
     "days": lambda df, _: df.apply(
-        lambda x: None
-        if pd.isna(x)
-        else (
-            (x.date() if isinstance(x, (datetime, pd.Timestamp)) else x)
-            - date(1970, 1, 1)
-        ).days
+        lambda x: (
+            None
+            if pd.isna(x)
+            else (
+                (x.date() if isinstance(x, (datetime, pd.Timestamp)) else x)
+                - date(1970, 1, 1)
+            ).days
+        )
     ),
     "hours": lambda df, _: df.apply(
-        lambda x: None
-        if pd.isna(x)
-        else (x.date() - date(1970, 1, 1)).days * 24 + x.hour
+        lambda x: (
+            None if pd.isna(x) else (x.date() - date(1970, 1, 1)).days * 24 + x.hour
+        )
     ),
     "identity": lambda df, _: df,
     "truncate": truncate_impl,

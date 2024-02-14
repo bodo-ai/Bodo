@@ -2,6 +2,7 @@ from bodo.tests.iceberg_database_helpers import (
     filter_pushdown_test_table,
     part_sort_table,
     partitions_dt_table,
+    schema_evolution_eg_table,
 )
 from bodo.tests.iceberg_database_helpers.partition_tables import (
     create_all_partition_tables,
@@ -27,6 +28,7 @@ def create_all_tables(spark=None):
         filter_pushdown_test_table,
         partitions_dt_table,
         part_sort_table,
+        schema_evolution_eg_table,
         # These are not used in any of the tests at this time.
         # These should be added back when they are.
         #     file_subset_deleted_rows_table,
@@ -35,7 +37,6 @@ def create_all_tables(spark=None):
         #     large_delete_table,
         #     partitions_dropped_dt_table,
         #     partitions_general_table,
-        #     schema_evolution_eg_table,
     ]:
         table_mod.create_table(spark=spark)
 

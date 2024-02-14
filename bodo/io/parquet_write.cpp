@@ -280,10 +280,17 @@ int64_t pq_write(
         auto arrow_type = bodo_array_to_arrow(
             pool, col, &columns[i], convert_timedelta_to_int64, tz, time_unit,
             downcast_time_ns_to_us);
+        std::shared_ptr<const arrow::KeyValueMetadata> field_metadata = nullptr;
 
+        // XXX TODO Our missing column handling seems to be wrong!
+        // The reason it works out in the 'test_iceberg_missing_optional_column'
+        // right now is because the optional column is at the end. If it
+        // wasn't, it would lead to incorrect results.
         // Cast the Arrow arrays to their expected type and nullability
+        // and copy over any metadata.
         // This is currently only used for enforcing the output of Iceberg
-        // writes
+        // writes and for adding the Iceberg field IDs to the Parquet
+        // fields' metadata.
         if (expected_schema != nullptr) {
             nullable = expected_schema->field(i)->nullable();
             if (!nullable && columns[i]->null_count() != 0) {
@@ -295,9 +302,10 @@ int64_t pq_write(
 
             auto expected_type = expected_schema->field(i)->type();
             if (expected_type->id() != arrow::Type::STRING &&
-                expected_type->id() != arrow::Type::LARGE_STRING)
+                expected_type->id() != arrow::Type::LARGE_STRING) {
                 arrow_type = expected_type;
-            auto array_type = columns[i]->type();
+            }
+            std::shared_ptr<::arrow::DataType> array_type = columns[i]->type();
 
             // Skip expected string types since they can be dictionary encoded
             if (!array_type->Equals(arrow_type)) {
@@ -316,10 +324,12 @@ int64_t pq_write(
 
                 columns[i] = res.ValueOrDie();
             }
+
+            field_metadata = expected_schema->field(i)->metadata();
         }
 
         schema_vector.push_back(
-            arrow::field(col_names[i], arrow_type, nullable));
+            arrow::field(col_names[i], arrow_type, nullable, field_metadata));
     }
 
     // dictionary-encoded column handling
@@ -344,7 +354,8 @@ int64_t pq_write(
             // will indicate that this is a string column, so Arrow doesn't
             // identify it as dictionary when reading the written parquet file
             schema_for_metadata_vector.push_back(
-                arrow::field(col_names[i], arrow::utf8()));
+                arrow::field(col_names[i], arrow::utf8(), /*nullable=*/true,
+                             field->metadata()));
             has_dictionary_columns = true;
             dict_str_field = field;
         } else {
@@ -421,6 +432,8 @@ int64_t pq_write(
         // type BYTE_ARRAY / String, because in the Arrow schema that is
         // inserted in the parquet metadata we are saying that it's a string
         // column
+        // XXX This only checks it for the last dict column, is that
+        // sufficient??
         std::shared_ptr<parquet::schema::Node> node;
         arrow::Status arrowOpStatus =
             parquet::arrow::FieldToNode(dict_str_field, *writer_properties,

@@ -88,8 +88,14 @@ iceberg_writer_payload_members = (
     ("iceberg_schema_id", types.int64),
     # JSON Encoding of Iceberg Schema to include in Parquet metadata
     ("iceberg_schema_str", types.unicode_type),
-    # Expected schema of output PyArrow table written to Parquet files in the Iceberg table
+    # Expected schema of output PyArrow table written to Parquet files in the Iceberg table.
+    # This also contains the Iceberg Field IDs in the fields' metadata
+    # which gets transferred to the parquet metadata at write time.
     ("expected_schema", pyarrow_schema_type),
+    # PyArrow schema of the dataframe. This also contains the Iceberg
+    # field IDs in the fields' metadata which is important during the
+    # commit step.
+    ("df_pyarrow_schema", pyarrow_schema_type),
     # Array of Tuples containing Partition Spec for Iceberg Table (passed to C++)
     ("partition_spec", python_list_of_heterogeneous_tuples_type),
     # Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
@@ -264,6 +270,7 @@ def overload_get_table_details_before_write_wrapper(
             sort_order="python_list_of_heterogeneous_tuples_type",
             iceberg_schema_str="unicode_type",
             expected_schema="pyarrow_schema_type",
+            new_df_pyarrow_schema="pyarrow_schema_type",
         ):
             (
                 already_exists,
@@ -273,6 +280,9 @@ def overload_get_table_details_before_write_wrapper(
                 sort_order,
                 iceberg_schema_str,
                 expected_schema,
+                # This has the Iceberg Field IDs
+                # in the fields' metadata.
+                new_df_pyarrow_schema,
             ) = get_table_details_before_write(
                 table_name,
                 conn,
@@ -289,6 +299,7 @@ def overload_get_table_details_before_write_wrapper(
             sort_order,
             iceberg_schema_str,
             expected_schema,
+            new_df_pyarrow_schema,
         )
 
     return impl
@@ -381,6 +392,9 @@ def gen_iceberg_writer_init_impl(
             sort_order,
             iceberg_schema_str,
             expected_schema,
+            # This has the Iceberg Field IDs
+            # in the fields' metadata.
+            new_df_pyarrow_schema,
         ) = get_table_details_before_write_wrapper(
             table_name,
             con_str,
@@ -409,6 +423,7 @@ def gen_iceberg_writer_init_impl(
         writer["iceberg_schema_id"] = iceberg_schema_id
         writer["iceberg_schema_str"] = iceberg_schema_str
         writer["expected_schema"] = expected_schema
+        writer["df_pyarrow_schema"] = new_df_pyarrow_schema
         writer["partition_spec"] = partition_spec
         writer["sort_order"] = sort_order
         writer["iceberg_files_info"] = get_empty_pylist()
@@ -524,12 +539,6 @@ def gen_iceberg_writer_append_table_impl_inner(
 
     py_table_typ = table
     col_names_arr = pd.array(col_names_meta.meta)
-    input_df_type = DataFrameType(
-        writer.input_table_type.arr_types, None, col_names_meta.meta
-    )
-    df_pyarrow_schema = bodo.io.helpers.numba_to_pyarrow_schema(
-        input_df_type, is_iceberg=True
-    )
 
     def impl_iceberg_writer_append_table(
         writer, table, col_names_meta, is_last, iter
@@ -592,6 +601,7 @@ def gen_iceberg_writer_append_table_impl_inner(
             sort_order = writer["sort_order"]
             if_exists = writer["if_exists"]
             all_iceberg_files_infos = writer["iceberg_files_info"]
+            df_pyarrow_schema = writer["df_pyarrow_schema"]
             with numba.objmode(success="bool_"):
                 fnames, record_counts, file_sizes = collect_file_info(
                     all_iceberg_files_infos
