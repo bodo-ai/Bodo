@@ -4,10 +4,13 @@ File that contains the main functionality for the Iceberg
 integration within the Bodo repo. This does not contain the
 main IR transformation.
 """
+from __future__ import annotations
+
 import os
 import re
 import sys
-from typing import Any, Dict, List, Tuple
+from copy import deepcopy
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import numba
@@ -31,8 +34,26 @@ from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError
 
+# ------------------------------ Constants ------------------------------ #
 
-# ----------------------------- Helper Funcs -----------------------------#
+
+# ===================================================================
+# Must match the values in bodo_iceberg_connector/schema_helper.py
+# ===================================================================
+# This is the key used for storing the Iceberg Field ID in the
+# metadata of the Arrow fields.
+# Taken from: https://github.com/apache/arrow/blob/c23a097965b5c626cbc91b229c76a6c13d36b4e8/cpp/src/parquet/arrow/schema.cc#L245.
+ICEBERG_FIELD_ID_MD_KEY = "PARQUET:field_id"
+
+# PyArrow stores the metadata keys and values as bytes, so we need
+# to use this encoded version when trying to access existing
+# metadata in fields.
+b_ICEBERG_FIELD_ID_MD_KEY = str.encode(ICEBERG_FIELD_ID_MD_KEY)
+# ===================================================================
+
+# ----------------------------- Helper Funcs ---------------------------- #
+
+
 def format_iceberg_conn(conn_str: str) -> str:
     """
     Determine if connection string points to an Iceberg database and reconstruct
@@ -519,6 +540,213 @@ def are_schemas_compatible(
     return df_schema.equals(pa_schema)
 
 
+def with_iceberg_field_id_md(
+    field: pa.Field, next_field_id: int
+) -> tuple[pa.Field, int]:
+    """
+    Adds/Updates Iceberg Field IDs in the PyArrow field's metadata.
+    This field will be assigned the field ID 'next_field_id'.
+    'next_field_id' will then be updated and returned so that the next field
+    ID assignment uses a unique ID.
+    In the case of nested types, we recurse and assign unique field IDs to
+    the child fields as well.
+
+    Args:
+        field (pa.Field): Original field
+        next_field_id (list[int]): Next available field ID.
+
+    Returns:
+        tuple[pa.Field, int]:
+            - New field with the field ID added to the field
+            metadata (including all the child fields).
+            - Next available field ID after assigning field
+            ID to this field and all its child fields.
+    """
+    # Construct new metadata for this field:
+    new_md = {} if field.metadata is None else deepcopy(field.metadata)
+    new_md.update({b_ICEBERG_FIELD_ID_MD_KEY: str(next_field_id)})
+    next_field_id += 1
+
+    new_field: pa.Field = None
+    # Recurse in the nested data type case:
+    if pa.types.is_list(field.type):
+        new_element_field, next_field_id = with_iceberg_field_id_md(
+            field.type.field(0), next_field_id
+        )
+        new_field = field.with_type(pa.list_(new_element_field)).with_metadata(new_md)
+    elif pa.types.is_fixed_size_list(field.type):
+        new_element_field, next_field_id = with_iceberg_field_id_md(
+            field.type.field(0), next_field_id
+        )
+        new_field = field.with_type(
+            pa.list_(new_element_field, list_size=field.type.list_size)
+        ).with_metadata(new_md)
+    elif pa.types.is_large_list(field.type):
+        new_element_field, next_field_id = with_iceberg_field_id_md(
+            field.type.field(0), next_field_id
+        )
+        new_field = field.with_type(pa.large_list(new_element_field)).with_metadata(
+            new_md
+        )
+    elif pa.types.is_struct(field.type):
+        new_children_fields = []
+        for _, child_field in enumerate(field.type):
+            new_child_field, next_field_id = with_iceberg_field_id_md(
+                child_field, next_field_id
+            )
+            new_children_fields.append(new_child_field)
+        new_field = field.with_type(pa.struct(new_children_fields)).with_metadata(
+            new_md
+        )
+    elif pa.types.is_map(field.type):
+        new_key_field, next_field_id = with_iceberg_field_id_md(
+            field.type.key_field, next_field_id
+        )
+        new_item_field, next_field_id = with_iceberg_field_id_md(
+            field.type.item_field, next_field_id
+        )
+        new_field = field.with_type(
+            pa.map_(new_key_field, new_item_field)
+        ).with_metadata(new_md)
+    else:
+        new_field = field.with_metadata(new_md)
+    return new_field, next_field_id
+
+
+def with_iceberg_field_id_md_from_ref_field(
+    field: pa.Field, ref_field: pa.Field
+) -> pa.Field:
+    """
+    Adds/Updates Iceberg Field IDs in the PyArrow field's metadata
+    based on the reference field. The reference field must have
+    the field ID in its metadata.
+    In the case of nested types, we recurse and assign unique field IDs to
+    the child fields as well.
+
+    Args:
+        field (pa.Field): Original field
+        ref_field (pa.Field): Reference field to get the Iceberg field ID from.
+
+    Returns:
+        pa.Field:  New field with the field ID added to the field
+            metadata (including all the child fields).
+    """
+    assert ref_field.metadata is not None, ref_field
+    assert b_ICEBERG_FIELD_ID_MD_KEY in ref_field.metadata, (
+        ref_field,
+        ref_field.metadata,
+    )
+    # Construct new metadata for this field:
+    new_md = {} if field.metadata is None else deepcopy(field.metadata)
+    new_md.update(
+        {b_ICEBERG_FIELD_ID_MD_KEY: ref_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY]}
+    )
+
+    new_field: pa.Field = None
+    # Recurse in the nested data type case:
+    if pa.types.is_list(field.type):
+        assert pa.types.is_list(ref_field.type), ref_field
+        new_value_field = with_iceberg_field_id_md_from_ref_field(
+            field.type.value_field, ref_field.type.value_field
+        )
+        new_field = field.with_type(pa.list_(new_value_field)).with_metadata(new_md)
+    elif pa.types.is_fixed_size_list(field.type):
+        assert pa.types.is_fixed_size_list(ref_field.type), ref_field
+        new_value_field = with_iceberg_field_id_md_from_ref_field(
+            field.type.value_field, ref_field.type.value_field
+        )
+        new_field = field.with_type(
+            pa.list_(new_value_field, list_size=field.type.list_size)
+        ).with_metadata(new_md)
+    elif pa.types.is_large_list(field.type):
+        assert pa.types.is_large_list(ref_field.type), ref_field
+        new_value_field = with_iceberg_field_id_md_from_ref_field(
+            field.type.value_field, ref_field.type.value_field
+        )
+        new_field = field.with_type(pa.large_list(new_value_field)).with_metadata(
+            new_md
+        )
+    elif pa.types.is_struct(field.type):
+        assert pa.types.is_struct(ref_field.type), ref_field
+        new_children_fields = []
+        for i in range(field.type.num_fields):
+            new_children_fields.append(
+                with_iceberg_field_id_md_from_ref_field(
+                    field.type.field(i), ref_field.type.field(i)
+                )
+            )
+        new_field = field.with_type(pa.struct(new_children_fields)).with_metadata(
+            new_md
+        )
+    elif pa.types.is_map(field.type):
+        assert pa.types.is_map(ref_field.type), ref_field
+        new_key_field = with_iceberg_field_id_md_from_ref_field(
+            field.type.key_field, ref_field.type.key_field
+        )
+        new_item_field = with_iceberg_field_id_md_from_ref_field(
+            field.type.item_field, ref_field.type.item_field
+        )
+        new_field = field.with_type(
+            pa.map_(new_key_field, new_item_field)
+        ).with_metadata(new_md)
+    else:
+        new_field = field.with_metadata(new_md)
+    return new_field
+
+
+def add_iceberg_field_id_md_to_pa_schema(
+    schema: pa.Schema, ref_schema: Optional[pa.Schema] = None
+) -> pa.Schema:
+    """
+    Create a new Schema where all the fields (including nested fields)
+    have their Iceberg Field ID in the field metadata.
+    If a reference schema is provided (append case), copy over
+    the field IDs from that schema, else (create/replace case) assign new IDs.
+    In the latter (create/replace; no ref schema) case, we call the Iceberg
+    Java library to assign the field IDs to ensure consistency
+    with the field IDs that will be assigned when creating the
+    table metadata. See the docstring of BodoIcebergHandler.getInitSchema
+    (in BodoIcebergHandler.java) for a more detailed explanation of why
+    this is required.
+
+    Args:
+        schema (pa.Schema): Original schema (possibly without the Iceberg
+            field IDs in the fields' metadata).
+        ref_schema (Optional[pa.Schema], optional): Reference schema
+            to use in the append case. If provided, all fields
+            must have their Iceberg Field ID in the field metadata,
+            including all the nested fields. Defaults to None.
+
+    Returns:
+        pa.Schema: Schema with Iceberg Field IDs correctly assigned
+            in the metadata of all its fields.
+    """
+    import bodo_iceberg_connector as connector
+
+    if ref_schema is None:
+        new_fields = []
+        next_field_id = 1
+        # Add dummy IDs. Note that we need the IDs to be semantically
+        # correct, i.e. we can't set all field IDs to the same number
+        # since there's a validation step during conversion to a
+        # Iceberg Schema object in get_schema_with_init_field_ids.
+        for idx in range(len(schema)):
+            new_field, next_field_id = with_iceberg_field_id_md(
+                schema.field(idx), next_field_id
+            )
+            new_fields.append(new_field)
+        intermediate_schema = pa.schema(new_fields)
+        return connector.get_schema_with_init_field_ids(intermediate_schema)
+    else:
+        new_fields = []
+        for field in schema:
+            ref_field = ref_schema.field(field.name)
+            assert ref_field is not None, field
+            new_field = with_iceberg_field_id_md_from_ref_field(field, ref_field)
+            new_fields.append(new_field)
+        return pa.schema(new_fields)
+
+
 def get_table_details_before_write(
     table_name: str,
     conn: str,
@@ -566,30 +794,39 @@ def get_table_details_before_write(
                 sort_order,
             ) = connector.get_typing_info(conn, database_schema, table_name)
 
-            # Ensure that all column names in the partition spec and sort order are
-            # in the dataframe being written
-            for col_name, *_ in partition_spec:
-                assert (
-                    col_name in col_name_to_idx_map
-                ), f"Iceberg Partition column {col_name} not found in dataframe"
-            for col_name, *_ in sort_order:
-                assert (
-                    col_name in col_name_to_idx_map
-                ), f"Iceberg Sort column {col_name} not found in dataframe"
+            if if_exists != "append":
+                # In the create/replace case, disregard some of the properties
+                pa_schema = None
+                iceberg_schema_str = ""
+                partition_spec = []
+                sort_order = []
+            else:
+                # Ensure that all column names in the partition spec and sort order are
+                # in the dataframe being written
+                for col_name, *_ in partition_spec:
+                    assert (
+                        col_name in col_name_to_idx_map
+                    ), f"Iceberg Partition column {col_name} not found in dataframe"
+                for col_name, *_ in sort_order:
+                    assert (
+                        col_name in col_name_to_idx_map
+                    ), f"Iceberg Sort column {col_name} not found in dataframe"
 
-            # Transform the partition spec and sort order tuples to convert
-            # column name to index in Bodo table
-            partition_spec = [
-                (col_name_to_idx_map[col_name], *rest)
-                for col_name, *rest in partition_spec
-            ]
+                # Transform the partition spec and sort order tuples to convert
+                # column name to index in Bodo table
+                partition_spec = [
+                    (col_name_to_idx_map[col_name], *rest)
+                    for col_name, *rest in partition_spec
+                ]
 
-            sort_order = [
-                (col_name_to_idx_map[col_name], *rest) for col_name, *rest in sort_order
-            ]
+                sort_order = [
+                    (col_name_to_idx_map[col_name], *rest)
+                    for col_name, *rest in sort_order
+                ]
 
-            if if_exists == "append" and (pa_schema is not None):
-                if not are_schemas_compatible(pa_schema, df_schema, allow_downcasting):
+                if (pa_schema is not None) and (
+                    not are_schemas_compatible(pa_schema, df_schema, allow_downcasting)
+                ):
                     # TODO: https://bodo.atlassian.net/browse/BE-4019
                     # for improving docs on Iceberg write support
                     if numba.core.config.DEVELOPER_MODE:
@@ -603,10 +840,17 @@ def get_table_details_before_write(
                             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
                         )
 
-            if iceberg_schema_id is None:
+            # Add Iceberg Field ID to the fields' metadata.
+            # If we received an existing schema (pa_schema) in the append case,
+            # then port over the existing field IDs, else generate new ones.
+            df_schema = add_iceberg_field_id_md_to_pa_schema(
+                df_schema, ref_schema=pa_schema
+            )
+
+            if (if_exists != "append") or (iceberg_schema_id is None):
                 # When the table doesn't exist, i.e. we're creating a new one,
-                # `iceberg_schema_str` will be empty, so we need to create it
-                # from the PyArrow schema of the dataframe.
+                # we need to create iceberg_schema_str from the PyArrow schema
+                # of the dataframe.
                 iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(df_schema)
 
         except connector.IcebergError as e:
@@ -624,6 +868,7 @@ def get_table_details_before_write(
     sort_order = comm.bcast(sort_order)
     iceberg_schema_str = comm.bcast(iceberg_schema_str)
     pa_schema = comm.bcast(pa_schema)
+    df_schema = comm.bcast(df_schema)
 
     if iceberg_schema_id is None:
         already_exists = False
@@ -643,6 +888,8 @@ def get_table_details_before_write(
         # We use the expected schema at the parquet write step (in C++)
         # so we can reuse the df_schema for create and replace cases
         pa_schema if if_exists == "append" and pa_schema is not None else df_schema,
+        # This has the Iceberg field IDs in the fields' metadata.
+        df_schema,
     )
 
 
@@ -925,6 +1172,7 @@ def iceberg_write(
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
         expected_schema="pyarrow_schema_type",
+        df_pyarrow_schema="pyarrow_schema_type",
     ):
         (
             already_exists,
@@ -934,6 +1182,9 @@ def iceberg_write(
             sort_order,
             iceberg_schema_str,
             expected_schema,
+            # This has the Iceberg field IDs in the metadata of every field
+            # which is required for correctness.
+            df_pyarrow_schema,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -1120,6 +1371,7 @@ def iceberg_merge_cow(
             sort_order,
             iceberg_schema_str,
             expected_schema,
+            _,
         ) = get_table_details_before_write(
             table_name,
             conn,

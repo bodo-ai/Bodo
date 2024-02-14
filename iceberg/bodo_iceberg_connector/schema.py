@@ -2,9 +2,11 @@
 API used to translate a Java Schema object into various Pythonic
 representations (Arrow and Bodo)
 """
+
 from collections import namedtuple
 from typing import Dict, List, Optional, Tuple
 
+import pyarrow as pa
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
@@ -17,7 +19,10 @@ from bodo_iceberg_connector.py4j_support import (
     get_java_table_handler,
     launch_jvm,
 )
-from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
+from bodo_iceberg_connector.schema_helper import (
+    arrow_schema_j2py,
+    b_ICEBERG_FIELD_ID_MD_KEY,
+)
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -119,14 +124,30 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
         else:
             schema_id: Optional[int] = java_table_info.getSchemaID()
             iceberg_schema_str = str(java_table_info.getIcebergSchemaEncoding())
+            # XXX Do we need this anymore if the Arrow schema has all the
+            # details including the Iceberg Field IDs?
             java_schema = java_table_info.getIcebergSchema()
             py_schema = iceberg_schema_java_to_py(java_schema)
-            pyarrow_schema = arrow_schema_j2py(java_table_info.getArrowSchema())
+
+            pyarrow_schema: pa.Schema = arrow_schema_j2py(
+                java_table_info.getArrowSchema()
+            )
+            assert (
+                py_schema.colnames == pyarrow_schema.names
+            ), "Iceberg Schema Field Names Should be Equal in PyArrow Schema"
+            assert py_schema.field_ids == [
+                int(f.metadata[b_ICEBERG_FIELD_ID_MD_KEY]) for f in pyarrow_schema
+            ], "Iceberg Field IDs should match the IDs in the metadata of the PyArrow Schema's fields"
+            assert py_schema.is_required == [
+                (not f.nullable) for f in pyarrow_schema
+            ], "Iceberg fields' 'required' property should match the nullability of the PyArrow Schema's fields"
+
             pyarrow_types = [
                 pyarrow_schema.field(name) for name in pyarrow_schema.names
             ]
+
             iceberg_schema = BodoIcebergSchema(
-                py_schema.colnames,
+                pyarrow_schema.names,
                 pyarrow_types,
                 py_schema.field_ids,
                 py_schema.is_required,
@@ -149,10 +170,6 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
                 java_table_info.getSortFields(), field_id_to_col_name_map
             )
 
-            assert (
-                py_schema.colnames == pyarrow_schema.names
-            ), "Iceberg Schema Field Names Should be Equal in PyArrow Schema"
-
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
@@ -165,6 +182,8 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
         schema_id,
         normalize_loc(table_loc),
         iceberg_schema,
+        # This has the Iceberg Field IDs embedded in the
+        # fields' metadata:
         pyarrow_schema,
         iceberg_schema_str,
         partition_spec,

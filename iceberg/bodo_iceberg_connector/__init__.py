@@ -16,7 +16,11 @@ from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
 from bodo_iceberg_connector.table_info import (
     bodo_connector_get_current_snapshot_id,
 )
-from bodo_iceberg_connector.write import commit_merge_cow, commit_write
+from bodo_iceberg_connector.write import (
+    commit_merge_cow,
+    commit_write,
+    get_schema_with_init_field_ids,
+)
 
 # ----------------------- Version Import from Metadata -----------------------
 try:
