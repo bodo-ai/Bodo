@@ -8,7 +8,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttle
 import org.apache.calcite.tools.Program
 
-class ShuttleProgram(private val shuttle: RelShuttle) : Program {
+open class ShuttleProgram(private val shuttle: RelShuttle) : Program {
     override fun run(
         planner: RelOptPlanner,
         rel: RelNode,

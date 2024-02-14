@@ -1,8 +1,11 @@
 package com.bodosql.calcite.prepare;
 
+import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
+import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter;
 import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
 import com.bodosql.calcite.adapter.pandas.PandasRowSample;
 import com.bodosql.calcite.adapter.pandas.PandasSample;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.rel.core.Flatten;
 import com.google.common.collect.ImmutableList;
@@ -122,6 +125,73 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
+  }
+
+  public TrimResult trimFields(
+      SnowflakeTableScan node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+    final Set<RelDataTypeField> combinedInputExtraFields = new LinkedHashSet<>(extraFields);
+    RelOptUtil.InputFinder inputFinder =
+        new RelOptUtil.InputFinder(combinedInputExtraFields, fieldsUsed);
+    ImmutableBitSet totalFieldsUsed = inputFinder.build();
+    int oldFieldCount = node.getRowType().getFieldCount();
+    int newFieldCount = totalFieldsUsed.cardinality();
+    if (oldFieldCount != 0 && newFieldCount == 0) {
+      // We cannot prune all columns without breaking other assumptions.
+      totalFieldsUsed = ImmutableBitSet.of(0);
+      newFieldCount = 1;
+    }
+    if (oldFieldCount == newFieldCount) {
+      // No change. Just return the original node.
+      return result(node, Mappings.createIdentity(oldFieldCount));
+    }
+    SnowflakeTableScan newNode = node.cloneWithProject(totalFieldsUsed);
+    // Update the mapping
+    Mapping inputMapping =
+        Mappings.create(MappingType.INVERSE_SURJECTION, oldFieldCount, newFieldCount);
+
+    Iterator<Integer> setBitIterator = totalFieldsUsed.iterator();
+    for (int i = 0; i < newFieldCount; i++) {
+      int idx = setBitIterator.next();
+      inputMapping.set(idx, i);
+    }
+    return result(newNode, inputMapping);
+  }
+
+  public TrimResult trimFields(
+      IcebergToPandasConverter node,
+      ImmutableBitSet fieldsUsed,
+      Set<RelDataTypeField> extraFields) {
+    return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
+  }
+
+  public TrimResult trimFields(
+      IcebergTableScan node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+    final Set<RelDataTypeField> combinedInputExtraFields = new LinkedHashSet<>(extraFields);
+    RelOptUtil.InputFinder inputFinder =
+        new RelOptUtil.InputFinder(combinedInputExtraFields, fieldsUsed);
+    ImmutableBitSet totalFieldsUsed = inputFinder.build();
+    int oldFieldCount = node.getRowType().getFieldCount();
+    int newFieldCount = totalFieldsUsed.cardinality();
+    if (oldFieldCount != 0 && newFieldCount == 0) {
+      // We cannot prune all columns without breaking other assumptions.
+      totalFieldsUsed = ImmutableBitSet.of(0);
+      newFieldCount = 1;
+    }
+    if (oldFieldCount == newFieldCount) {
+      // No change. Just return the original node.
+      return result(node, Mappings.createIdentity(oldFieldCount));
+    }
+    IcebergTableScan newNode = node.cloneWithProject(totalFieldsUsed);
+    // Update the mapping
+    Mapping inputMapping =
+        Mappings.create(MappingType.INVERSE_SURJECTION, oldFieldCount, newFieldCount);
+
+    Iterator<Integer> setBitIterator = totalFieldsUsed.iterator();
+    for (int i = 0; i < newFieldCount; i++) {
+      int idx = setBitIterator.next();
+      inputMapping.set(idx, i);
+    }
+    return result(newNode, inputMapping);
   }
 
   public TrimResult trimFields(

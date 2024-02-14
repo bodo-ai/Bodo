@@ -23,7 +23,7 @@ import org.apache.calcite.rex.RexInputRef
 import java.lang.RuntimeException
 
 class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
-    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits, input), PandasRel {
+    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return IcebergToPandasConverter(cluster, traitSet, sole(inputs))

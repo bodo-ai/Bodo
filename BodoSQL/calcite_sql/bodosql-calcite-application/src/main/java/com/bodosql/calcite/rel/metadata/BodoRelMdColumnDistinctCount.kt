@@ -1,5 +1,7 @@
 package com.bodosql.calcite.rel.metadata
 
+import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
+import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
@@ -386,7 +388,16 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
     }
 
+    fun getColumnDistinctCount(rel: IcebergToPandasConverter, mq: RelMetadataQuery, column: Int): Double? {
+        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
+    }
+
     fun getColumnDistinctCount(rel: SnowflakeTableScan, mq: RelMetadataQuery, column: Int): Double? {
+        val trueCol = rel.keptColumns.nth(column)
+        return rel.getCatalogTable().getColumnDistinctCount(trueCol)
+    }
+
+    fun getColumnDistinctCount(rel: IcebergTableScan, mq: RelMetadataQuery, column: Int): Double? {
         val trueCol = rel.keptColumns.nth(column)
         return rel.getCatalogTable().getColumnDistinctCount(trueCol)
     }
