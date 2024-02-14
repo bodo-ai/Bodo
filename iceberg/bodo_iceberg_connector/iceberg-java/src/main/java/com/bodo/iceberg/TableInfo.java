@@ -3,7 +3,6 @@ package com.bodo.iceberg;
 import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.*;
-import org.apache.iceberg.arrow.ArrowSchemaUtil;
 
 public class TableInfo {
   /** Class that holds the minimal Table info needed by Bodo */
@@ -37,7 +36,7 @@ public class TableInfo {
   }
 
   public org.apache.arrow.vector.types.pojo.Schema getArrowSchema() {
-    return ArrowSchemaUtil.convert(icebergSchema);
+    return BodoArrowSchemaUtil.convert(icebergSchema);
   }
 
   public List<SortField> getSortFields() {

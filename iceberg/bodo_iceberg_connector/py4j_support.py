@@ -1,6 +1,7 @@
 """
 Contains information used to access the Java package via py4j.
 """
+
 import os
 import sys
 import warnings
@@ -189,6 +190,10 @@ get_op_enum_class = get_class_wrapper(
 get_data_file_class = get_class_wrapper(
     "DataFileClass",
     lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,  # type: ignore
+)
+get_bodo_arrow_schema_utils_class = get_class_wrapper(
+    "BodoArrowSchemaUtil",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,
 )
 
 
