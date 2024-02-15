@@ -35,3 +35,23 @@ Bodo 2024.2 Release (Date: 02/07/2024) {#February_2024}
 ### Dependency Upgrades:
 - Upgrade Iceberg to 1.43.
 
+
+## 2024.2.1 New Features and Improvements
+
+
+### New Features:
+- Support calling `#!sql TO_DOUBLE` on variants.
+- Support for `$` inside of compound identifiers.
+
+
+### Performance Improvements:
+- Improved BodoSQL query plans by increasing ability to infer predicates.
+
+
+### Bug Fixes:
+- Fixed bug sometimes preventing compiling queries on BodoSQL when they contain a join where the condition contains an `IN` subquery clause.
+- Fixed bug sometimes preventing compiling queries on BodoSQL when they contain a `FLATTEN` or `SPLIT_TO_TABLE` call inside an `IN` subquery clause.
+- Fixed bug preventing compiling some queries with no-groupby aggregations followed by an `ORDER BY` that referenced columns that wouldn’t be present after the aggregation.
+- Fixed an issue where certain strings would not be properly escaped in case statements.
+- Fixed a false validation error issue that sometimes occurred with `IS DISTINCT FROM X`.
+- Fixed an issue with variant and null type handling in UDFs.
