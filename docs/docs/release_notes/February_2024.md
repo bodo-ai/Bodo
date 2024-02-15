@@ -1,0 +1,37 @@
+
+Bodo 2024.2 Release (Date: 02/07/2024) {#February_2024}
+========================================
+
+## New Features and Improvements
+
+
+### New Features:
+- Added support for overloaded UDF/UDTF definitions.
+- Added support for the Snowflake table function `#!sql EXTERNAL_TABLE_FILES`, which requires connecting to a Snowflake Catalog.
+- Increased support for variant arguments in functions relating to semi-structured arrays.
+- Added recognition of `#!sql TIMESTAMPNTZ` as an alias for `#!sql TIMESTAMP_NTZ` and `#!sql TIMESTAMPLTZ` as an alias for `#!sql TIMESTAMP_LTZ`.
+- Added support for queries where the source clause is in the form `#!sql FROM (tablename)`.
+- Added support for the `#!sql COUNT` aggregation function on all semi-structured column types.
+- Added support for casting decimal values to integers and vice versa.
+- Added support for `DATE - DOUBLE`.
+- Increased support for type coercion between semi-structured types.
+- Enabled implicit lateral joins when using table functions like `#!sql FLATTEN`.
+- Added support for writing decimal scalars into integer/float arrays.
+
+
+### Performance Improvements:
+- Reduced peak memory usage from queries containing filters on the condition `#!sql ROW_NUMBER() OVER (...) = 1`.
+- Removed extra runtime casts when the source type and target type are represented the same in Bodo.
+
+
+### Bug Fixes:
+- Fixed bug sometimes preventing codegen from completing when a join has a condition comparing a column to a constant string.
+- Fixed bug causing incorrect behavior of a filter on the condition `#!sql ROW_NUMBER() OVER (...) = 1` when the columns to order by are of certain types.
+- Fixed a bug that could lead to an error when some columns in an Aggregate operation are semi-structured.
+- Added a logging message when a view can’t be inlined due to access issues.
+- Fixed a bug preventing correct recognition of table names when using `#!sql FLATTEN` in some situations.
+
+
+### Dependency Upgrades:
+- Upgrade Iceberg to 1.43.
+
