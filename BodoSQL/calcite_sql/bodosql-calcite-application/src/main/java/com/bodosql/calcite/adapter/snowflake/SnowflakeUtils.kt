@@ -45,7 +45,11 @@ class SnowflakeUtils {
         @JvmStatic
         fun parseSnowflakeShowFunctionsArguments(arguments: String): Pair<String, Int> {
             // Remove the return
-            val callParts = arguments.split("RETURN")
+            val callParts = arguments.split(" RETURN ")
+            assert(callParts.size == 2) {
+                "Internal error in parseSnowflakeShowFunctionsArguments: " +
+                    "expected to split into function definition and return type"
+            }
             val call = callParts[0]
             // Remove any optional arguments
             val argParts = call.split("[")
