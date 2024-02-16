@@ -131,9 +131,9 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
           OperandTypes.or(
               OperandTypes.DATETIME,
               OperandTypes.sequence(
-                  "LAST_DAY(DATE/TIMESTAMP, STRING)",
+                  "LAST_DAY(DATE/TIMESTAMP, STRING/DATETIME_INTERVAL)",
                   OperandTypes.DATETIME,
-                  OperandTypes.CHARACTER)),
+                  BodoOperandTypes.DATETIME_INTERVAL_SYMBOL)),
           SqlFunctionCategory.TIMEDATE);
 
   /**

@@ -3147,7 +3147,7 @@ def test_date_trunc_day_part_handling(
     output = pd.DataFrame({"OUTPUT": []})
     with pytest.raises(
         Exception,
-        match=f'Unsupported unit for DATE_TRUNC with TIME input: "{day_part_strings}"',
+        match=f"Unsupported unit for DATE_TRUNC with TIME input: ",
     ):
         check_query(
             query,
@@ -4674,10 +4674,10 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
             ]
         }
     )
-    if unit == "day":
+    if unit == "day" or unit == "dd":
         with pytest.raises(
             Exception,
-            match=f'Unsupported date/time unit "{day_part_strings}" for function LAST_DAY',
+            match=f'Unsupported date/time unit "DAY" for function LAST_DAY',
         ):
             check_query(
                 query,
@@ -4701,7 +4701,7 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
     query = f"SELECT LAST_DAY(B, '{time_part_strings}') as output from table1"
     with pytest.raises(
         Exception,
-        match=f'Unsupported date/time unit "{time_part_strings}" for function LAST_DAY',
+        match=f"Unsupported date/time unit .* for function LAST_DAY",
     ):
         check_query(
             query,

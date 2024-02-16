@@ -1,7 +1,7 @@
 package org.apache.calcite.sql.type;
 
-import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
@@ -10,15 +10,11 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.runtime.CalciteContextException;
-import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlCollation;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
-import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.tools.ValidationException;
-import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
@@ -28,7 +24,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem.getMinIntegerSize;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
@@ -756,16 +751,11 @@ public class BodoReturnTypes {
     private static RelDataType snowflakeDateaddReturnType(SqlOperatorBinding binding, String fnName) {
         List<RelDataType> operandTypes = binding.collectOperandTypes();
         RelDataType datetimeType = operandTypes.get(2);
-        String unit;
         RelDataType typeArg0 = operandTypes.get(0);
-        if (typeArg0.getSqlTypeName().equals(SqlTypeName.SYMBOL)
-                || SqlTypeFamily.INTERVAL_YEAR_MONTH.contains(typeArg0)
-                || SqlTypeFamily.INTERVAL_DAY_TIME.contains(typeArg0)) {
-            unit = ((SqlCallBinding) binding).operand(0).toString();
-        } else {
-            unit = binding.getOperandLiteralValue(0, String.class);
-        }
-        unit = standardizeTimeUnit(fnName, unit, DatetimeFnCodeGen.DateTimeType.TIMESTAMP);
+        assert typeArg0.getSqlTypeName().equals(SqlTypeName.SYMBOL): "Internal error in snowflakeDateaddReturnType: arg0 is not symbol";
+        DatetimeFnUtils.DateTimePart datePartEnum = binding.getOperandLiteralValue(0, DatetimeFnUtils.DateTimePart.class);
+        assert (datePartEnum != null): "Internal error in snowflakeDateaddReturnType: Cannot interpret arg0 as the correct enum";
+
         // TODO: refactor standardizeTimeUnit function to change the third argument to
         // SqlTypeName
         final RelDataType returnType;
@@ -773,9 +763,14 @@ public class BodoReturnTypes {
         final int precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
         final RelDataTypeFactory typeFactory = binding.getTypeFactory();
         if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
-            Set<String> DATE_UNITS =
-                    new HashSet<>(Arrays.asList("year", "quarter", "month", "week", "day"));
-            if (DATE_UNITS.contains(unit)) {
+            Set<DatetimeFnUtils.DateTimePart> DATE_UNITS =
+                    new HashSet<>(Arrays.asList(
+                            DatetimeFnUtils.DateTimePart.YEAR,
+                            DatetimeFnUtils.DateTimePart.QUARTER,
+                            DatetimeFnUtils.DateTimePart.MONTH,
+                            DatetimeFnUtils.DateTimePart.WEEK,
+                            DatetimeFnUtils.DateTimePart.DAY));
+            if (DATE_UNITS.contains(datePartEnum)) {
                 returnType = typeFactory.createSqlType(SqlTypeName.DATE);
             } else {
                 // Date always gets upcast to precision 9, even if we only add 1 hour.

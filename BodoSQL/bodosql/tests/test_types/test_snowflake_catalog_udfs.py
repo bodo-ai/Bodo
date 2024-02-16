@@ -183,7 +183,18 @@ def addone_py(i):
   return i+1
 $$
 
+RET_INPUT_FUNCTION:
+
+CREATE OR REPLACE FUNCTION RET_INPUT_FUNCTION(input_value DATE)
+RETURNS DATE
+LANGUAGE SQL
+as
+$$
+SELECT input_value
+$$;
+
 """
+import datetime
 import io
 
 import numpy as np
@@ -1385,6 +1396,33 @@ def test_multiple_definitions_udfs(test_db_snowflake_catalog, memory_leak_check)
         impl,
         (bc, query2),
         py_output=pd.DataFrame({"OUTPUT": ["abcabcabcabc"]}),
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_dateadd_inline_bug(test_db_snowflake_catalog, memory_leak_check):
+    """Test for a specific issue where inlining a UDF whose arguments included a dateadd
+    function would cause a bug (BSE-2622).
+
+    RET_INPUT_FUNCTION is manually defined inside of TEST_DB.PUBLIC.
+    It takes one argument and returns it unchanged.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        {"LOCAL_TABLE": pd.DataFrame({"A": [1] * 10})},
+        catalog=test_db_snowflake_catalog,
+    )
+
+    query = "select RET_INPUT_FUNCTION(dateadd(DAY, A, '2024-02-08'::DATE)) as OUTPUT from LOCAL_TABLE\n"
+    check_func(
+        impl,
+        (bc, query),
+        py_output=pd.DataFrame({"OUTPUT": [datetime.date(2024, 2, 9)] * 10}),
         check_dtype=False,
         sort_output=True,
         reset_index=True,
