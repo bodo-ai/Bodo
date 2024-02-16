@@ -76,7 +76,7 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
         }
     )
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     calling_func_name: str = request.node.name
     table_name = (
         calling_func_name.replace("[", "_").replace("-", "_").replace("]", "").lower()
@@ -317,7 +317,7 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
     expected = target_table.copy()
 
     # open connection and create initial table
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     table_name = "MERGE_INTO_DICT_ENCODING2"
     sql_schema = [("A", "string", False), ("B", "string", False)]
     if bodo.get_rank() == 0:

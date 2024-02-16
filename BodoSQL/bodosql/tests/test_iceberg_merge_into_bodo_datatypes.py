@@ -93,8 +93,8 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
 
     # create BodoSQL context
     spark = get_spark()
-    db_schema, warehouse_loc = iceberg_database
     table_name = "TARGET_TABLE_MERGE_INTO_BODO_DATATYPES_AS_VALUES"
+    db_schema, warehouse_loc = iceberg_database()
     sql_schema = [("ID", "int", False)] + [
         (col, bodo_datatype_expected_sql_types[col], False)
         for col in bodo_datatype_cols.keys()
@@ -176,7 +176,7 @@ def test_merge_into_bodo_datatypes_as_expr(
 
     # create BodoSQL context
     spark = get_spark()
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     table_name = "TARGET_TABLE_MERGE_INTO_BODO_DATATYPES_AS_EXPRS_" + col_name
     sql_schema = [("EXPR", sql_type, False)]
     if bodo.get_rank() == 0:

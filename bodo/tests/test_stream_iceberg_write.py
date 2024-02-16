@@ -83,7 +83,7 @@ def test_iceberg_write_basic(
 ):
     """Test basic streaming Iceberg write"""
     base_name, table_name, df = simple_dataframe
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
@@ -123,7 +123,7 @@ def test_write_part_sort(
     that each file is correctly sorted and partitioned.
     """
     table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}_streaming"
-    df, sql_schema = SIMPLE_TABLES_MAP[PART_SORT_TABLE_BASE_NAME]
+    df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
     spark = get_spark()
@@ -137,7 +137,7 @@ def test_write_part_sort(
             PART_SORT_TABLE_SORT_ORDER,
         )
     bodo.barrier()
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
@@ -214,9 +214,9 @@ def test_iceberg_field_ids_in_pq_schema(
     """
 
     table_name = f"SIMPLE_{base_name}_pq_schema_test_{mode}_streaming"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    df, sql_schema = SIMPLE_TABLES_MAP[base_name]
+    df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"]
 
     if_exists = "fail" if mode == "create" else mode
 

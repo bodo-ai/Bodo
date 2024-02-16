@@ -243,7 +243,11 @@ class ArrowReader {
         tracing::Event ev("reader::read_all", parallel);
         auto [out_table, is_last_, total_rows_out_] = read_inner();
         assert(is_last_ == true);
-        assert(total_rows_out_ == this->get_local_rows());
+        if (selected_fields.size()) {
+            // If we are not reading any columns, we don't need to check
+            // the number of rows read
+            assert(total_rows_out_ == this->get_local_rows());
+        }
         if (rows_left_to_emit != 0) {
             throw std::runtime_error(
                 "ArrowReader::read_all(): did not read all rows. " +

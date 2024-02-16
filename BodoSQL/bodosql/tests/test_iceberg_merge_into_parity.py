@@ -146,6 +146,7 @@ def test_merge_into_non_existing_table(
         }
     )
 
+    @bodo.jit
     def impl(bc):
         bc.sql(
             f"MERGE INTO I_DO_NOT_EXIST AS t USING source AS s "
@@ -166,7 +167,6 @@ def test_merge_with_only_update_clause(
     """
     Parity for iceberg's testMergeWithOnlyUpdateClause.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],
@@ -208,7 +208,6 @@ def test_merge_with_only_delete_clause(
     """
     Parity for Iceberg's testMergeWithOnlyDeleteClause.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],
@@ -251,7 +250,6 @@ def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name
     """
     Parity for Iceberg's testMergeWithAllClauses.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],
@@ -297,7 +295,6 @@ def test_merge_with_all_causes_with_explicit_column_specification(
     """
     Parity for Iceberg's testMergeWithAllClausesWithExplicitColumnSpecification.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],
@@ -341,7 +338,6 @@ def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name)
     """
     Parity for Iceberg's testMergeWithSourceCTE.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],
@@ -390,7 +386,6 @@ def test_merge_with_source_from_set_ops(
     """
     Parity for Iceberg's testMergeWithSourceFromSetOps.
     """
-
     bc = _create_and_init_table(
         table_name,
         [("ID", "int", False), ("DEP", "string", False)],

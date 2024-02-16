@@ -65,7 +65,7 @@ def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
 
     # Create initial table
     table_name = "MERGE_INTO_E2E"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
 
     if bodo.get_rank() == 0:
         sql_schema = [("ID", "long", True), ("DATA", "string", True)]
