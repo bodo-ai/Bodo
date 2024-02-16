@@ -344,18 +344,18 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
     [
         pytest.param(
             "DATEADD('yrs', 1, T)",
-            'Unsupported unit for DATEADD with TIME input: "yrs"',
+            "Unsupported unit for DATEADD with TIME input:",
             id="dateadd-year",
         ),
         pytest.param(
             "TIMEADD('mon', 6, T)",
-            'Unsupported unit for DATEADD with TIME input: "mon"',
+            "Unsupported unit for DATEADD with TIME input:",
             id="timeadd-month",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "TIMESTAMPADD(WEEK, -1, T)",
-            "Unsupported TIMESTAMPADD unit for TIME input: WEEK",
+            "Invalid time unit input for TIMESTAMPADD: When arg2 is a time, the specified time unit must be smaller than day.",
             id="timestampadd-week",
             marks=pytest.mark.slow,
         ),
@@ -372,18 +372,18 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "DATEDIFF(QUARTER, T, T)",
-            'Unsupported unit for DATEDIFF with TIME input: "QUARTER"',
+            "Unsupported unit for DATEDIFF with TIME input: ",
             id="datediff-quarter",
         ),
         pytest.param(
             "TIMEDIFF('wy', T, T)",
-            'Unsupported unit for DATEDIFF with TIME input: "wy"',
+            "Unsupported unit for DATEDIFF with TIME input: ",
             id="timediff-week",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "TIMESTAMPDIFF(DAY, T, T)",
-            'Unsupported unit for DATEDIFF with TIME input: "DAY"',
+            "Unsupported unit for DATEDIFF with TIME input: ",
             id="timestampdiff-day",
         ),
     ],
@@ -491,21 +491,22 @@ def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF throws an error when a date part is passed in as the unit
     """
-    fn_name = {
-        "quarter": "DATEDIFF",
-        "yyy": "TIMEDIFF",
-        "MONTH": "TIMESTAMPDIFF",
-        "mon": "DATEDIFF",
-        "WEEK": "TIMEDIFF",
-        "wk": "TIMESTAMPDIFF",
-        "DAY": "DATEDIFF",
-        "dd": "TIMEDIFF",
+    symbol_name, fn_name = {
+        "quarter": ("QUARTER", "DATEDIFF"),
+        "yyy": ("YEAR", "TIMEDIFF"),
+        "MONTH": ("MONTH", "TIMESTAMPDIFF"),
+        "mon": ("MONTH", "DATEDIFF"),
+        "WEEK": ("WEEK", "TIMEDIFF"),
+        "wk": ("WEEK", "TIMESTAMPDIFF"),
+        "DAY": ("DAY", "DATEDIFF"),
+        "dd": ("DAY", "TIMEDIFF"),
     }[day_part_strings]
+
     query = f"SELECT {fn_name}('{day_part_strings}', A, B) as output from table1"
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
-        match=f'Unsupported unit for DATEDIFF with TIME input: "{day_part_strings}"',
+        match=f"Unsupported unit for DATEDIFF with TIME input: {symbol_name}",
     ):
         check_query(
             query,

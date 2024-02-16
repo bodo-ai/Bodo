@@ -1,5 +1,6 @@
 package com.bodosql.calcite.sql.parser
 
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils.DateTimePart
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
@@ -16,6 +17,7 @@ import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.parser.SqlParserUtil
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import org.apache.calcite.util.Static.RESOURCE
 import java.util.*
@@ -101,53 +103,57 @@ class SqlBodoParserUtil {
          * Dispatch a DATE_PART or Extract call to the appropriate individual function.
          */
         @JvmStatic
-        fun createDatePartFunction(funcName: String, pos: SqlParserPos, intervalName: String, args: List<SqlNode>): SqlNode {
-            // Normalize to uppercase
-            // Convert the name to the correct function call.
-            when (intervalName.uppercase(Locale.ROOT)) {
-                "YEAR", "YEARS", "Y", "YY", "YYY", "YYYY", "YR", "YRS" -> return SqlStdOperatorTable.YEAR.createCall(pos, args)
-                "MONTH", "MONTHS", "MM", "MON", "MONS" -> return SqlStdOperatorTable.MONTH.createCall(pos, args)
-                "DAY", "DAYS", "D", "DD", "DAYOFMONTH" -> return SqlStdOperatorTable.DAYOFMONTH.createCall(pos, args)
-                "DAYOFWEEK", "WEEKDAY", "DOW", "DW" -> return SqlStdOperatorTable.DAYOFWEEK.createCall(pos, args)
-                "DAYOFWEEKISO", "WEEKDAY_ISO", "DOW_ISO", "DW_ISO" -> return DatetimeOperatorTable.DAYOFWEEKISO.createCall(pos, args)
-                "DAYOFYEAR", "YEARDAY", "DOY", "DY" -> return SqlStdOperatorTable.DAYOFYEAR.createCall(pos, args)
-                "WEEK", "WEEKS", "W", "WK", "WEEKOFYEAR", "WOY", "WY" -> return SqlStdOperatorTable.WEEK.createCall(pos, args)
-                "WEEKISO", "WEEK_ISO", "WEEKOFYEARISO", "WEEKOFYEAR_ISO" -> return DatetimeOperatorTable.WEEKISO.createCall(pos, args)
-                "QUARTER", "Q", "QTR", "QTRS", "QUARTERS" -> return SqlStdOperatorTable.QUARTER.createCall(pos, args)
-                "YEAROFWEEK" -> return DatetimeOperatorTable.YEAROFWEEK.createCall(pos, args)
-                "YEAROFWEEKISO" -> return DatetimeOperatorTable.YEAROFWEEKISO.createCall(pos, args)
-                "HOUR", "H", "HH", "HR", "HOURS", "HRS" -> return SqlStdOperatorTable.HOUR.createCall(pos, args)
-                "MINUTE", "M", "MI", "MIN", "MINUTES", "MINS" -> return SqlStdOperatorTable.MINUTE.createCall(pos, args)
-                "SECOND", "S", "SEC", "SECONDS", "SECS" -> return SqlStdOperatorTable.SECOND.createCall(pos, args)
-                "NANOSECOND", "NS", "NSEC", "NANOSEC", "NSECOND", "NANOSECONDS", "NANOSECS", "NSECONDS" -> return DatetimeOperatorTable.NANOSECOND.createCall(pos, args)
-                "EPOCH_SECOND", "EPOCH", "EPOCH_SECONDS" -> return DatetimeOperatorTable.EPOCH_SECOND.createCall(pos, args)
-                "EPOCH_MILLISECOND", "EPOCH_MILLISECONDS" -> return DatetimeOperatorTable.EPOCH_MILLISECOND.createCall(pos, args)
-                "EPOCH_MICROSECOND", "EPOCH_MICROSECONDS" -> return DatetimeOperatorTable.EPOCH_MICROSECOND.createCall(pos, args)
-                "EPOCH_NANOSECOND", "EPOCH_NANOSECONDS" -> return DatetimeOperatorTable.EPOCH_NANOSECOND.createCall(pos, args)
-                "TIMEZONE_HOUR", "TZH" -> return DatetimeOperatorTable.TIMEZONE_HOUR.createCall(pos, args)
-                "TIMEZONE_MINUTE", "TZM" -> return DatetimeOperatorTable.TIMEZONE_MINUTE.createCall(pos, args)
+        fun createDatePartFunction(funcName: String, pos: SqlParserPos, intervalName: SqlLiteral, args: List<SqlNode>): SqlNode {
+            // Convert the enum to the correct function call.
+            assert(intervalName.typeName == SqlTypeName.SYMBOL) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
+            assert(intervalName.value is DateTimePart) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
+            val intervalEnum: DateTimePart = intervalName.value as DateTimePart
+            when (intervalEnum) {
+                DateTimePart.YEAR -> return SqlStdOperatorTable.YEAR.createCall(pos, args)
+                DateTimePart.MONTH -> return SqlStdOperatorTable.MONTH.createCall(pos, args)
+                DateTimePart.DAY -> return SqlStdOperatorTable.DAYOFMONTH.createCall(pos, args)
+                DateTimePart.DAYOFWEEK -> return SqlStdOperatorTable.DAYOFWEEK.createCall(pos, args)
+                DateTimePart.DAYOFWEEKISO -> return DatetimeOperatorTable.DAYOFWEEKISO.createCall(pos, args)
+                DateTimePart.DAYOFYEAR -> return SqlStdOperatorTable.DAYOFYEAR.createCall(pos, args)
+                DateTimePart.WEEK -> return SqlStdOperatorTable.WEEK.createCall(pos, args)
+                DateTimePart.WEEKISO -> return DatetimeOperatorTable.WEEKISO.createCall(pos, args)
+                DateTimePart.QUARTER -> return SqlStdOperatorTable.QUARTER.createCall(pos, args)
+                DateTimePart.YEAROFWEEK -> return DatetimeOperatorTable.YEAROFWEEK.createCall(pos, args)
+                DateTimePart.YEAROFWEEKISO -> return DatetimeOperatorTable.YEAROFWEEKISO.createCall(pos, args)
+                DateTimePart.HOUR -> return SqlStdOperatorTable.HOUR.createCall(pos, args)
+                DateTimePart.MINUTE -> return SqlStdOperatorTable.MINUTE.createCall(pos, args)
+                DateTimePart.SECOND -> return SqlStdOperatorTable.SECOND.createCall(pos, args)
+                DateTimePart.NANOSECOND -> return DatetimeOperatorTable.NANOSECOND.createCall(pos, args)
+                DateTimePart.EPOCH_SECOND -> return DatetimeOperatorTable.EPOCH_SECOND.createCall(pos, args)
+                DateTimePart.EPOCH_MILLISECOND -> return DatetimeOperatorTable.EPOCH_MILLISECOND.createCall(pos, args)
+                DateTimePart.EPOCH_MICROSECOND -> return DatetimeOperatorTable.EPOCH_MICROSECOND.createCall(pos, args)
+                DateTimePart.EPOCH_NANOSECOND -> return DatetimeOperatorTable.EPOCH_NANOSECOND.createCall(pos, args)
+                DateTimePart.TIMEZONE_HOUR -> return DatetimeOperatorTable.TIMEZONE_HOUR.createCall(pos, args)
+                DateTimePart.TIMEZONE_MINUTE -> return DatetimeOperatorTable.TIMEZONE_MINUTE.createCall(pos, args)
                 else -> throw SqlUtil.newContextException(
                     pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
+                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalEnum.name),
                 )
             }
         }
 
         @JvmStatic
-        fun createLastDayFunction(pos: SqlParserPos, intervalName: String, args: List<SqlNode>): SqlNode {
-            when (intervalName.uppercase(Locale.ROOT)) {
-                "YEAR", "YEARS", "Y", "YY", "YYY", "YYYY", "YR", "YRS",
-                "MONTH", "MONTHS", "MM", "MON", "MONS",
-                "WEEK", "WEEKS", "W", "WK", "WEEKOFYEAR", "WOY", "WY",
-                "QUARTER", "Q", "QTR", "QTRS", "QUARTERS",
+        fun createLastDayFunction(pos: SqlParserPos, intervalName: SqlLiteral, args: List<SqlNode>): SqlNode {
+            assert(intervalName.typeName == SqlTypeName.SYMBOL) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
+            assert(intervalName.value is DateTimePart) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
+            val intervalEnum: DateTimePart = intervalName.value as DateTimePart
+            when (intervalEnum) {
+                DateTimePart.YEAR,
+                DateTimePart.MONTH,
+                DateTimePart.WEEK,
+                DateTimePart.QUARTER,
                 -> {
-                    val timeArg = SqlLiteral.createCharString(intervalName, pos)
-                    val new_args = args.plus(timeArg)
+                    val new_args = args.plus(intervalName)
                     return SqlBodoOperatorTable.LAST_DAY.createCall(pos, new_args)
                 }
                 else -> throw SqlUtil.newContextException(
                     pos,
-                    BODO_SQL_RESOURCE.illegalLastDayTimeUnit(intervalName),
+                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit("LAST_DAY", intervalEnum.name),
                 )
             }
         }

@@ -2,10 +2,15 @@ package org.apache.calcite.sql.type;
 
 
 
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import com.bodosql.calcite.application.operatorTables.VariantOperandChecker;
 
 import com.bodosql.calcite.application.operatorTables.OperatorTableUtils;
 import com.google.common.collect.ImmutableList;
+import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.util.Pair;
 
 import java.util.List;
@@ -15,6 +20,47 @@ public class BodoOperandTypes {
 
   public static final SqlSingleOperandTypeChecker VARIANT = VariantOperandChecker.INSTANCE;
 
+  static class DateTimePartOperandTypeChecker implements SqlSingleOperandTypeChecker {
+
+    /**
+     * Implementation of checkSingleOperandType that always throws an error if there's a failure.
+     * @param callBinding The call whose operandTypes are being validated.
+     * @param operand The operand being validated
+     * @param iFormalOperand The index of the operand in the call's list of operand values.
+     */
+    private boolean checkSingleOperandTypeWrapper(SqlCallBinding callBinding, SqlNode operand, int iFormalOperand) {
+      if (callBinding.getOperandCount() <= iFormalOperand) {
+        throw new IllegalArgumentException("Error: expected at least " + iFormalOperand + " arguments. Found " + callBinding.getOperandCount() + " .");
+      }
+      if (!(operand instanceof SqlLiteral)){
+       throw new IllegalArgumentException("Error: operand is not a literal.");
+      }
+      if (!(((SqlLiteral) operand).getValue() instanceof DatetimeFnUtils.DateTimePart)){
+        throw new IllegalArgumentException("Error: operand is not a valid DateTimePart Symbol.");
+      }
+
+     return true;
+    }
+
+    @Override
+    public boolean checkSingleOperandType(SqlCallBinding callBinding, SqlNode operand, int iFormalOperand, boolean throwOnFailure) {
+      try {
+        return this.checkSingleOperandTypeWrapper(callBinding, operand, iFormalOperand);
+      } catch (IllegalArgumentException e) {
+        if (throwOnFailure){
+          throw e;
+        } else {
+          return false;
+        }
+      }
+    }
+
+    @Override
+    public String getAllowedSignatures(SqlOperator op, String opName) {
+      return "<DATETIME_INTERVAL_SYMBOL>";
+    }
+  }
+  public static final SqlSingleOperandTypeChecker DATETIME_INTERVAL_SYMBOL = new DateTimePartOperandTypeChecker();
   public static final SqlSingleOperandTypeChecker DATE_NUMERIC =
       OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.NUMERIC);
   public static final SqlSingleOperandTypeChecker INTEGER_DATE =

@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import java.util.Locale;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
@@ -56,42 +57,9 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
       opBinding -> {
         final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
         RelDataType arg0Type = opBinding.getOperandType(0);
-        TimeUnit arg0timeUnit;
-        switch (arg0Type.getSqlTypeName()) {
-            // This must be a constant string or time unit input,
-            // due to the way that we handle the parsing
-          case CHAR:
-          case VARCHAR:
-            // This will fail if the value is a non-literal
-            try {
-              String inputTimeStr =
-                  requireNonNull(opBinding.getOperandLiteralValue(0, String.class));
-              arg0timeUnit =
-                  standardizeTimeUnit(
-                      "TIMESTAMPADD",
-                      inputTimeStr,
-                      opBinding.getOperandType(2).getSqlTypeName() == SqlTypeName.TIME);
-            } catch (RuntimeException e) {
-              String errMsg = requireNonNull(e.getMessage());
-              // This can be called in the convertlet. If so we won't have a SqlCallBinding,
-              // but also validation shouldn't fail.
-              if (opBinding instanceof SqlCallBinding) {
-                SqlCallBinding opBindingWithCast = (SqlCallBinding) opBinding;
-                throw opBindingWithCast
-                    .getValidator()
-                    .newValidationError(
-                        opBindingWithCast.getCall(),
-                        BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
-              } else {
-                throw e;
-              }
-            }
-            break;
 
-          default:
-            arg0timeUnit = getOperandLiteralValueOrThrow(opBinding, 0, TimeUnit.class);
-        }
-
+        DatetimeFnUtils.DateTimePart arg0timeUnit =
+            getOperandLiteralValueOrThrow(opBinding, 0, DatetimeFnUtils.DateTimePart.class);
         RelDataType ret;
         try {
           ret =
@@ -325,7 +293,7 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
 
   public static RelDataType deduceType(
       RelDataTypeFactory typeFactory,
-      TimeUnit timeUnit,
+      DatetimeFnUtils.DateTimePart timeUnit,
       RelDataType operandType1,
       RelDataType operandType2) {
 

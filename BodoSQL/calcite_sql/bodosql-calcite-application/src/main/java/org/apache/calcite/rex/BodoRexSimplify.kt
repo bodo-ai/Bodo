@@ -1,15 +1,14 @@
 package org.apache.calcite.rex
 
-import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.rex.JsonPecUtil
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.ByteString
-import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlAggFunction
@@ -20,7 +19,6 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.BasicSqlType
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.SqlTypeUtil.isTimestamp
 import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
@@ -1541,13 +1539,13 @@ class BodoRexSimplify(
      * @return The field enum and multiplier corresponding to the unit, or null if
      * the string does not match one of the units.
      */
-    private fun getDateUnitAsCalendarAndMultiplier(unit: String): Pair<Int, Int>? {
+    private fun getDateUnitAsCalendarAndMultiplier(unit: DatetimeFnUtils.DateTimePart): Pair<Int, Int>? {
         return when (unit) {
-            "year" -> Pair(Calendar.YEAR, 1)
-            "quarter" -> Pair(Calendar.MONTH, 3)
-            "month" -> Pair(Calendar.MONTH, 1)
-            "week" -> Pair(Calendar.WEEK_OF_YEAR, 1)
-            "day" -> Pair(Calendar.DAY_OF_YEAR, 1)
+            DatetimeFnUtils.DateTimePart.YEAR -> Pair(Calendar.YEAR, 1)
+            DatetimeFnUtils.DateTimePart.QUARTER -> Pair(Calendar.MONTH, 3)
+            DatetimeFnUtils.DateTimePart.MONTH -> Pair(Calendar.MONTH, 1)
+            DatetimeFnUtils.DateTimePart.WEEK -> Pair(Calendar.WEEK_OF_YEAR, 1)
+            DatetimeFnUtils.DateTimePart.DAY -> Pair(Calendar.DAY_OF_YEAR, 1)
             else -> return null
         }
     }
@@ -1559,14 +1557,14 @@ class BodoRexSimplify(
      * @return The multiplier corresponding to the number of milliseconds,
      * or null if the string does not match one of the units.
      */
-    private fun getTimeUnitAsMultiplier(unit: String): Long? {
+    private fun getTimeUnitAsMultiplier(unit: DatetimeFnUtils.DateTimePart): Long? {
         return when (unit) {
-            "hour" -> NANOSEC_PER_HOUR
-            "minute" -> NANOSEC_PER_MINUTE
-            "second" -> NANOSEC_PER_SECOND
-            "millisecond" -> NANOSEC_PER_MILLISECOND
-            "microsecond" -> NANOSEC_PER_MICROSECOND
-            "nanosecond" -> 1
+            DatetimeFnUtils.DateTimePart.HOUR -> NANOSEC_PER_HOUR
+            DatetimeFnUtils.DateTimePart.MINUTE -> NANOSEC_PER_MINUTE
+            DatetimeFnUtils.DateTimePart.SECOND -> NANOSEC_PER_SECOND
+            DatetimeFnUtils.DateTimePart.MILLISECOND -> NANOSEC_PER_MILLISECOND
+            DatetimeFnUtils.DateTimePart.MICROSECOND -> NANOSEC_PER_MICROSECOND
+            DatetimeFnUtils.DateTimePart.NANOSECOND -> 1
             else -> return null
         }
     }
@@ -1598,7 +1596,7 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new DateLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToDate(original: RexNode, date: Calendar, unit: String, offset: Long): RexNode {
+    private fun simplifyAddToDate(original: RexNode, date: Calendar, unit: DatetimeFnUtils.DateTimePart, offset: Long): RexNode {
         val unitAndMultiplier = getDateUnitAsCalendarAndMultiplier(unit) ?: return original
         val (field, multiplier) = unitAndMultiplier
         date.add(field, offset.toInt() * multiplier)
@@ -1615,7 +1613,7 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new TimeLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToTime(original: RexNode, time: TimeString, unit: String, offset: Long): RexNode {
+    private fun simplifyAddToTime(original: RexNode, time: TimeString, unit: DatetimeFnUtils.DateTimePart, offset: Long): RexNode {
         val multiplier: Long = getTimeUnitAsMultiplier(unit) ?: return original
         // Convert the time to nanoseconds since midnight
         val milli = time.millisOfDay
@@ -1644,11 +1642,11 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new TimestampLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToTimestamp(original: RexNode, timestamp: TimestampString, unit: String, offset: Long): RexNode {
+    private fun simplifyAddToTimestamp(original: RexNode, timestamp: TimestampString, unit: DatetimeFnUtils.DateTimePart, offset: Long): RexNode {
         // Extract the sub-second components of the original timestamp
         val millisEpoch = timestamp.millisSinceEpoch
         val subMilli = getSubMilliAsNs(timestamp.toString())
-        if (unit in listOf("year", "quarter", "month", "week", "day")) {
+        if (unit in setOf(DatetimeFnUtils.DateTimePart.YEAR, DatetimeFnUtils.DateTimePart.QUARTER, DatetimeFnUtils.DateTimePart.MONTH, DatetimeFnUtils.DateTimePart.WEEK, DatetimeFnUtils.DateTimePart.DAY)) {
             val unitAndMultiplier = getDateUnitAsCalendarAndMultiplier(unit) ?: return original
             // Calculate the entire sub-second component in nanoseconds.
             val ns = ((millisEpoch % 1000) * NANOSEC_PER_MILLISECOND + subMilli).toInt()
@@ -1690,12 +1688,21 @@ class BodoRexSimplify(
         val offset = (e.operands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.setScale(0, RoundingMode.HALF_UP).toLong()
         val base = e.operands[2] as RexLiteral
 
-        // Extract the time unit, either as a unit literal or a string literal.
-        val isSymbol = unitLiteral.typeName == SqlTypeName.SYMBOL
-        val unitStr = if (isSymbol) { unitLiteral.getValueAs(TimeUnitRange::class.java)!!.toString() } else { unitLiteral.getValueAs(String::class.java)!! }
-        val dateTimeType = DatetimeFnCodeGen.getDateTimeDataType(base)
-        val unit = DatetimeFnCodeGen.standardizeTimeUnit(e.operator.name, unitStr, dateTimeType)
-        val isTime = unit in listOf("hour", "minute", "second", "millisecond", "microsecond", "nanosecond")
+        // Extract the time unit should always be an symbol literal
+        assert(unitLiteral.typeName == SqlTypeName.SYMBOL) { "Internal error in simplifySnowflakeDateaddOp: arg0 is not a symbol" }
+
+        val unit: DatetimeFnUtils.DateTimePart =
+            unitLiteral.getValueAs(DatetimeFnUtils.DateTimePart::class.java)
+                ?: throw RuntimeException("Internal error in simplifySnowflakeDateaddOp: arg0 is not the expected enum")
+
+        val isTime = setOf(
+            DatetimeFnUtils.DateTimePart.HOUR,
+            DatetimeFnUtils.DateTimePart.MINUTE,
+            DatetimeFnUtils.DateTimePart.SECOND,
+            DatetimeFnUtils.DateTimePart.MILLISECOND,
+            DatetimeFnUtils.DateTimePart.MICROSECOND,
+            DatetimeFnUtils.DateTimePart.NANOSECOND,
+        ).contains(unit)
 
         // Ensure that we only allow tz-naive timestamps
         if (base.type is BasicSqlType) {
