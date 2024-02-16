@@ -133,12 +133,20 @@ def sort_table_name(base_name, sort_order):
     return f"sort_{base_name}_{col}_{trans}{val_str}_{asc_str}_{nulls_str}"
 
 
+SORT_TABLE_NAME_MAP = {
+    sort_table_name(base_name, sort_order): (base_name, sort_order)
+    for base_name, sort_order in SORT_MAP
+}
+
+
 def create_table(base_name, sort_order, spark=None):
     if spark is None:
         spark = get_spark()
 
-    assert base_name in TABLE_MAP, f"Didn't find table definition for {base_name}."
-    df, sql_schema = TABLE_MAP[base_name]
+    assert (
+        f"SIMPLE_{base_name}" in TABLE_MAP
+    ), f"Didn't find table definition for {base_name}."
+    df, sql_schema = TABLE_MAP[f"SIMPLE_{base_name}"]
 
     create_iceberg_table(
         df,
@@ -150,19 +158,20 @@ def create_table(base_name, sort_order, spark=None):
     )
 
 
-def create_all_sort_tables(spark=None):
+def create_sort_tables(tables: List[str], spark=None):
     if spark is None:
         spark = get_spark()
-
-    for base_name, sort_order in SORT_MAP:
-        create_table(base_name, sort_order, spark)
+    for table in tables:
+        if table in SORT_TABLE_NAME_MAP:
+            base_name, sort_order = SORT_TABLE_NAME_MAP[table]
+            create_table(base_name, sort_order, spark)
 
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) == 1:
-        create_all_sort_tables()
+        create_sort_tables(list(SORT_TABLE_NAME_MAP.keys()))
     else:
         print("Invalid Number of Arguments")
         exit(1)

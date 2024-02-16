@@ -296,7 +296,7 @@ def build_map(base_map):
 
     for key, (a, b) in base_map.items():
         df = pd.DataFrame(a)
-        table_map[key] = (df, b)
+        table_map[f"SIMPLE_{key}"] = (df, b)
 
     return table_map
 
@@ -310,22 +310,23 @@ def create_table(base_name: str, spark=None):
 
     assert base_name in TABLE_MAP, f"Didn't find table definition for {base_name}."
     df, sql_schema = TABLE_MAP[base_name]
-    create_iceberg_table(df, sql_schema, f"SIMPLE_{base_name}", spark)
+    create_iceberg_table(df, sql_schema, base_name, spark)
 
 
-def create_all_simple_tables(spark=None):
+def create_simple_tables(tables: List[str], spark=None):
     if spark is None:
         spark = get_spark()
 
-    for base_table_name in TABLE_MAP:
-        create_table(base_table_name, spark)
+    for table in tables:
+        if table in TABLE_MAP:
+            create_table(table, spark)
 
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) == 1:
-        create_all_simple_tables()
+        create_simple_tables(list(TABLE_MAP.keys()))
 
     elif len(sys.argv) == 2:
         create_table(sys.argv[1])

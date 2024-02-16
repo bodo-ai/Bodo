@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from bodo.tests.iceberg_database_helpers.simple_tables import TABLE_MAP
 from bodo.tests.iceberg_database_helpers.utils import (
@@ -110,12 +110,20 @@ def part_table_name(base_name, part_fields):
     return ans
 
 
+PARTITION_TABLE_NAME_MAP: Dict[str, Tuple[str, List[PartitionField]]] = {
+    part_table_name(starter_table_name, part_fields): (starter_table_name, part_fields)
+    for starter_table_name, part_fields in PARTITION_MAP
+}
+
+
 def create_table(base_name, part_fields, spark=None):
     if spark is None:
         spark = get_spark()
 
-    assert base_name in TABLE_MAP, f"Didn't find table definition for {base_name}."
-    df, sql_schema = TABLE_MAP[base_name]
+    assert (
+        f"SIMPLE_{base_name}" in TABLE_MAP
+    ), f"Didn't find table definition for {base_name}."
+    df, sql_schema = TABLE_MAP[f"SIMPLE_{base_name}"]
 
     create_iceberg_table(
         df,
@@ -126,19 +134,21 @@ def create_table(base_name, part_fields, spark=None):
     )
 
 
-def create_all_partition_tables(spark=None):
+def create_partition_tables(tables: List[str], spark=None):
     if spark is None:
         spark = get_spark()
 
-    for starter_table_name, part_fields in PARTITION_MAP:
-        create_table(starter_table_name, part_fields, spark)
+    for table in tables:
+        if table in PARTITION_TABLE_NAME_MAP:
+            starter_table_name, part_fields = PARTITION_TABLE_NAME_MAP[table]
+            create_table(starter_table_name, part_fields, spark)
 
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) == 1:
-        create_all_partition_tables()
+        create_partition_tables(list(PARTITION_TABLE_NAME_MAP.keys()))
     else:
         print("Invalid Number of Arguments")
         exit(1)

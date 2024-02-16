@@ -9,8 +9,10 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
+TABLE_NAME = "FILTER_PUSHDOWN_TEST_TABLE"
 
-def create_table(table_name="FILTER_PUSHDOWN_TEST_TABLE", spark=None):
+
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
@@ -36,7 +38,8 @@ def create_table(table_name="FILTER_PUSHDOWN_TEST_TABLE", spark=None):
         ("B", "long", True),
         ("C", "string", False),
     ]
-    create_iceberg_table(df, sql_schema, table_name, spark)
+    if create_iceberg_table(df, sql_schema, table_name, spark) is None:
+        return
 
     # Change to partition on year
     print("Adding partition field (year)...")

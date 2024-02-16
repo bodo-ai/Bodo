@@ -115,7 +115,7 @@ def simple_dataframe(request):
     return (
         request.param,
         f"SIMPLE_{request.param}",
-        SIMPLE_TABLES_MAP[request.param][0],
+        SIMPLE_TABLES_MAP[f"SIMPLE_{request.param}"][0],
     )
 
 
@@ -145,7 +145,7 @@ def test_simple_table_read(
     Test simple read operation on test tables
     """
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -181,7 +181,7 @@ def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
     """
     Test that computing just a length in Iceberg loads 0 columns.
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -225,7 +225,7 @@ def test_simple_tz_aware_table_read(
     """
 
     table_name = "SIMPLE_TZ_AWARE_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -256,7 +256,7 @@ def test_simple_numeric_table_read(
     """
 
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -292,7 +292,7 @@ def test_simple_list_table_read(
     Test reading SIMPLE_LIST_TABLE which consists of columns of lists.
     Need to compare Bodo and PySpark results without sorting them.
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -323,7 +323,7 @@ def test_simple_bool_binary_table_read(
     with PySpark.
     """
     table_name = "SIMPLE_BOOL_BINARY_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -361,7 +361,7 @@ def test_simple_struct_table_read(
     Needs special handling since PySpark returns nested structs as tuples.
     """
     table_name = "SIMPLE_STRUCT_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -390,7 +390,7 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
     """
 
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -426,7 +426,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
     table_name = "SIMPLE_DICT_ENCODED_STRING"
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     spark = get_spark()
 
     # Write a simple dataset with strings (repetitive/non-repetitive) and non-strings
@@ -613,7 +613,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
 
     table_name = "TEST_DICT_ENCODING_SYNC_DETERMINATION"
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     spark = get_spark()
 
     # For convenience name them the columns differently so
@@ -669,7 +669,7 @@ def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
 
     table_name = "DONT_DICT_ENCODE_TABLE"
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     spark = get_spark()
 
     # Write a simple dataset with strings (repetitive/non-repetitive) and non-strings
@@ -727,7 +727,7 @@ def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
     """
 
     table_name = "FILTER_PUSHDOWN_TEST_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -757,7 +757,7 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     comm = MPI.COMM_WORLD
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     # Format the connection string since we don't go through pd.read_sql_table
     conn = bodo.io.iceberg.format_iceberg_conn(conn)
@@ -791,7 +791,7 @@ def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
 
     comm = MPI.COMM_WORLD
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     # Get Relevant Info from Spark
@@ -836,7 +836,7 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     """
 
     table_name = "PARTITIONS_DT_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -869,7 +869,7 @@ def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
     """
 
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -910,7 +910,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
 
     comm = MPI.COMM_WORLD
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def f(df, file_list):
@@ -1038,7 +1038,7 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
 def test_limit_pushdown(iceberg_database, iceberg_table_conn):
     """Test that Limit Pushdown is successfully enabled"""
     table_name = "SIMPLE_STRING_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl():
@@ -1071,7 +1071,7 @@ def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
     """
 
     table_name = "FILTER_PUSHDOWN_TEST_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -1092,7 +1092,7 @@ def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
 
     table_name = "NO_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(table_name, conn, db_schema):
@@ -1108,7 +1108,7 @@ def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
     """Tests error raised when invalid path is provided."""
 
     table_name = "FILTER_PUSHDOWN_TEST_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     db_schema += "not"
 
@@ -1128,7 +1128,7 @@ def test_write_existing_fail(
 ):
     """Test that writing to an existing table when if_exists='fail' errors"""
     base_name, table_name, df = simple_dataframe
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(df, table_name, conn, db_schema):
@@ -1174,7 +1174,7 @@ def test_basic_write_replace(
 
     comm = MPI.COMM_WORLD
     base_name, table_name, df = simple_dataframe
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(df, table_name, conn, db_schema):
@@ -1290,8 +1290,8 @@ def test_basic_write_new_append(
         )
 
     # We want to use completely new table for each test
+    db_schema, warehouse_loc = iceberg_database(table_name)
     table_name += f"_{behavior}_{initial_write}"
-    db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def create_impl(df, table_name, conn, db_schema):
@@ -1311,7 +1311,7 @@ def test_basic_write_new_append(
             spark = get_spark()
             # Write using Spark on rank 0
             if bodo.get_rank() == 0:
-                _, sql_schema = SIMPLE_TABLES_MAP[base_name]
+                _, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"]
                 create_iceberg_table(df, sql_schema, table_name, spark)
             bodo.barrier()
         elif initial_write == "spark" and behavior == "create":
@@ -1475,7 +1475,7 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
                 # Create a dummy table with a completely different schema using Spark.
                 # This will verify that Bodo doesn't use the existing schema when
                 # writing new files.
-                df_, sql_schema_ = SIMPLE_TABLES_MAP["BOOL_BINARY_TABLE"]
+                df_, sql_schema_ = SIMPLE_TABLES_MAP["SIMPLE_BOOL_BINARY_TABLE"]
                 create_iceberg_table(df_, sql_schema_, table_name)
             elif mode == "append":
                 # Write a set of files with Spark first.
@@ -1591,9 +1591,9 @@ def test_iceberg_field_ids_in_pq_schema(
     """
 
     table_name = f"SIMPLE_{base_name}_pq_schema_test_{mode}"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    df, sql_schema = SIMPLE_TABLES_MAP[base_name]
+    df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"]
 
     if_exists = "fail" if mode == "create" else mode
 
@@ -1637,7 +1637,7 @@ def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
 
     # We want to use completely new table for each test
     table_name += "_append"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     @bodo.jit(distributed=["df"])
@@ -1736,7 +1736,7 @@ def test_basic_write_runtime_cols_fail(
     """
 
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     @bodo.jit
@@ -1795,7 +1795,7 @@ def test_basic_write_append_not_null_arrays(
     sql_schema = [("A", "float", True), ("B", "double", True), ("C", "timestamp", True)]
 
     table_name = "NULLABLE_TABLE_APPEND_SPARK"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Write using Spark on rank 0
@@ -1865,7 +1865,7 @@ def test_basic_write_upcasting(
     n_pes = comm.Get_size()
 
     table_name = name + "_UPCASTING_TEST"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Write using Spark on rank 0
@@ -2001,7 +2001,7 @@ def test_basic_write_downcasting_fail(
 
     id, sql_schema, df, df_write, _, _ = downcasting_table_info
     table_name = id + "_DOWNCASTING_FAIL_TEST"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Write using Spark on rank 0
@@ -2041,7 +2041,7 @@ def test_basic_write_downcasting(
 
     id, sql_schema, df, df_write, df_fail, err_msgs = downcasting_table_info
     table_name = id + "_DOWNCASTING_TEST"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Write using Spark on rank 0
@@ -2118,7 +2118,7 @@ def test_basic_write_downcasting_copy(
 
     _, sql_schema, df, df_write, _, _ = DOWNCAST_INFO[1]
     table_name = "DOWNCASTING_COPY_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Write using Spark on rank 0
@@ -2151,9 +2151,9 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
     Tests for known errors thrown when writing an Iceberg table.
     """
     table_name = "SIMPLE_BOOL_BINARY_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    df = SIMPLE_TABLES_MAP["BOOL_BINARY_TABLE"][0]
+    df = SIMPLE_TABLES_MAP[table_name][0]
 
     # Check that error is raised when schema is not provided
     def impl1(df, table_name, conn):
@@ -2196,12 +2196,12 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
     """
 
     # The exact table to use doesn't matter, so picking one at random.
-    df = SIMPLE_TABLES_MAP["NUMERIC_TABLE"][0]
+    df = SIMPLE_TABLES_MAP["SIMPLE_NUMERIC_TABLE"][0]
     fname = "test_read_pq_write_iceberg_ds.pq"
 
     # Give it a unique name so there's no conflicts.
     table_name = "TEST_READ_PQ_WRITE_ICEBERG_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(pq_fname, table_name, conn, db_schema):
@@ -2232,8 +2232,15 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     The entire column should be filled with nulls instead of failing.
     """
     table_name = "SIMPLE_OPTIONAL_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    write_table_name = f"{table_name}_WRITE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    if bodo.get_rank() == 0:
+        spark = get_spark()
+        spark.sql(
+            f"CREATE TABLE hadoop_prod.{db_schema}.{write_table_name} AS SELECT * FROM hadoop_prod.{db_schema}.{table_name}"
+        )
+    bodo.barrier()
 
     # Test that a dataframe with a missing optional column can be appended
     def impl(df, table_name, conn, db_schema):
@@ -2244,26 +2251,34 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
             "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
         }
     )
-    bodo.jit(distributed=["df"])(impl)(_get_dist_arg(df), table_name, conn, db_schema)
+    try:
+        bodo.jit(distributed=["df"])(impl)(
+            _get_dist_arg(df), write_table_name, conn, db_schema
+        )
 
-    # Read the columns with Spark and check that the missing column is filled
-    # with nulls.
-    spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        # Read the columns with Spark and check that the missing column is filled
+        # with nulls.
+        spark_out, _, _ = spark_reader.read_iceberg_table(write_table_name, db_schema)
 
-    assert (
-        list(spark_out["B"]).count(None) == 100
-    ), "Missing column not filled with nulls"
+        assert (
+            list(spark_out["B"]).count(None) == 100
+        ), "Missing column not filled with nulls on spark read"
 
-    # Read the columns with Bodo and check that the missing column is filled
-    # with NAs.
-    @bodo.jit
-    def read_bodo(table_name, conn, db_schema):
-        return pd.read_sql_table(table_name, conn, db_schema)
+        # Read the columns with Bodo and check that the missing column is filled
+        # with NAs.
+        @bodo.jit
+        def read_bodo(table_name, conn, db_schema):
+            return pd.read_sql_table(table_name, conn, db_schema)
 
-    bodo_out = read_bodo(table_name, conn, db_schema)
-    assert (
-        reduce_sum(bodo_out["B"].isna().sum()) == 100
-    ), "Missing column not filled with nulls"
+        bodo_out = read_bodo(write_table_name, conn, db_schema)
+        assert (
+            reduce_sum(bodo_out["B"].isna().sum()) == 100
+        ), "Missing column not filled with nulls on Bodo read"
+    finally:
+        if bodo.get_rank() == 0:
+            spark.sql(
+                f"DROP TABLE IF EXISTS hadoop_prod.{db_schema}.{write_table_name}"
+            )
 
 
 @pytest.mark.slow
@@ -2275,7 +2290,7 @@ def test_iceberg_missing_optional_column_missing_error(
     column.
     """
     table_name = "SIMPLE_OPTIONAL_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Test that a dataframe with a missing optional column can be appended
@@ -2304,7 +2319,7 @@ def test_iceberg_missing_optional_column_extra_error(
     has an additional column that is not in the Iceberg table schema.
     """
     table_name = "SIMPLE_OPTIONAL_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Test that a dataframe with a missing optional column can be appended
@@ -2335,7 +2350,7 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
     Test that the correct error is thrown when a dataframe columns in incorrect order.
     """
     table_name = "SIMPLE_OPTIONAL_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     # Test that a dataframe with a missing optional column can be appended
@@ -2516,8 +2531,8 @@ def test_write_partitioned(
     We then also read the table back using Spark and Bodo and validate
     that the contents are as expected.
     """
-    db_schema, warehouse_loc = iceberg_database
     table_name = part_table_name(base_name, part_spec)
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
     comm = MPI.COMM_WORLD
 
@@ -2531,7 +2546,7 @@ def test_write_partitioned(
 
     # TODO Add repl test when supported
 
-    df = SIMPLE_TABLES_MAP[base_name][0]
+    df = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"][0]
     try:
         impl(_get_dist_arg(df), table_name, conn, db_schema)
     finally:
@@ -2645,7 +2660,7 @@ def test_write_sorted(
     that the contents are as expected.
     """
     base_name, sort_order, table_name = sort_cases
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
     comm = MPI.COMM_WORLD
 
@@ -2657,7 +2672,7 @@ def test_write_sorted(
     if base_name == "DICT_ENCODED_STRING_TABLE":
         bodo.hiframes.boxing._use_dict_str_type = True
 
-    df = SIMPLE_TABLES_MAP[base_name][0]
+    df = SIMPLE_TABLES_MAP[f"SIMPLE_{base_name}"][0]
     try:
         impl(_get_dist_arg(df), table_name, conn, db_schema)
     finally:
@@ -2768,7 +2783,7 @@ def test_write_part_sort(
     output is as expected.
     """
     table_name = f"PARTSORT_{PART_SORT_TABLE_BASE_NAME}"
-    df, sql_schema = SIMPLE_TABLES_MAP[PART_SORT_TABLE_BASE_NAME]
+    df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
         spark = get_spark()
@@ -2782,7 +2797,7 @@ def test_write_part_sort(
                 PART_SORT_TABLE_SORT_ORDER,
             )
         bodo.barrier()
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
 
     @bodo.jit(distributed=["df"])
@@ -2939,7 +2954,7 @@ def test_write_part_sort_return_orig(
 
     comm = MPI.COMM_WORLD
     table_name = f"TEST_WRITE_SORTED_RETURN_ORIG_TABLE"
-    df, sql_schema = SIMPLE_TABLES_MAP[PART_SORT_TABLE_BASE_NAME]
+    df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
 
@@ -2954,7 +2969,7 @@ def test_write_part_sort_return_orig(
             PART_SORT_TABLE_SORT_ORDER,
         )
     bodo.barrier()
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
 
     @bodo.jit(distributed=["df"])
@@ -3001,6 +3016,7 @@ def test_merge_into_cow_write_api(
     comm = MPI.COMM_WORLD
     bodo.barrier()
 
+    db_schema, warehouse_loc = iceberg_database()
     # Should always only run this test on rank O
     if bodo.get_rank() != 0:
         passed = comm.bcast(False)
@@ -3016,7 +3032,6 @@ def test_merge_into_cow_write_api(
             df = pd.DataFrame({"A": [1, 2, 3, 4]})
             create_iceberg_table(df, [("A", "long", True)], table_name)
 
-        db_schema, warehouse_loc = iceberg_database
         conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
         conn = bodo.io.iceberg.format_iceberg_conn(conn)
 
@@ -3083,6 +3098,8 @@ def test_merge_into_cow_write_api_partitioned(
     comm = MPI.COMM_WORLD
     bodo.barrier()
 
+    db_schema, warehouse_loc = iceberg_database()
+
     # Should always only run this test on rank O
     if bodo.get_rank() != 0:
         passed = comm.bcast(False)
@@ -3094,7 +3111,7 @@ def test_merge_into_cow_write_api_partitioned(
     try:
         # Create a table to work off of
         table_name = "MERGE_INTO_COW_WRITE_API_PARTITIONED"
-        df, sql_schema = SIMPLE_TABLES_MAP["PRIMITIVES_TABLE"]
+        df, sql_schema = SIMPLE_TABLES_MAP["SIMPLE_PRIMITIVES_TABLE"]
         create_iceberg_table(
             df,
             sql_schema,
@@ -3102,7 +3119,6 @@ def test_merge_into_cow_write_api_partitioned(
             par_spec=[PartitionField("C", "identity", -1)],
         )
 
-        db_schema, warehouse_loc = iceberg_database
         conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
         conn = bodo.io.iceberg.format_iceberg_conn(conn)
 
@@ -3176,6 +3192,9 @@ def test_merge_into_cow_write_api_snapshot_check(
     comm = MPI.COMM_WORLD
     bodo.barrier()
 
+    # Note that for the connector, conn_str and warehouse_loc are the same
+    db_schema, warehouse_loc = iceberg_database()
+
     # Should always only run this test on rank O
     if bodo.get_rank() != 0:
         passed = comm.bcast(False)
@@ -3190,8 +3209,6 @@ def test_merge_into_cow_write_api_snapshot_check(
         df = pd.DataFrame({"A": [1, 2, 3, 4]})
         create_iceberg_table(df, [("A", "long", True)], table_name)
 
-        # Note that for the connector, conn_str and warehouse_loc are the same
-        db_schema, warehouse_loc = iceberg_database
         conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
         # Format the connection string since we don't go through pd.read_sql_table
         conn = bodo.io.iceberg.format_iceberg_conn(conn)
@@ -3257,7 +3274,7 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
         create_iceberg_table(df, [("A", "long", True)], table_name)
     bodo.barrier()
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl1(table_name, conn, db_schema):
@@ -3359,7 +3376,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
         )
     bodo.barrier()
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl1(table_name, conn, db_schema):
@@ -3481,7 +3498,7 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     if bodo.get_rank() == 0:
         spark = get_spark()
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
 
     @bodo.jit(distributed=["S", "A"])
     def impl(S, A, table_name, conn, db_schema, if_exists="replace"):
@@ -3638,7 +3655,7 @@ def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_chec
         return total_max
 
     table_name = "SIMPLE_PRIMITIVES_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     stream = io.StringIO()
@@ -3691,7 +3708,7 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
         return total_len
 
     table_name = "SIMPLE_PRIMITIVES_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     stream = io.StringIO()
