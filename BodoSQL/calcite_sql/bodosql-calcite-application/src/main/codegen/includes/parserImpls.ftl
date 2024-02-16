@@ -862,7 +862,7 @@ SqlNode DatePartFunctionCall() :
 {
     final Span s;
     final SqlNode e;
-    final String interval;
+    final SqlLiteral interval;
     final List<SqlNode> args = new ArrayList<SqlNode>();
 }
 {
@@ -876,12 +876,13 @@ SqlNode DatePartFunctionCall() :
     }
 }
 
-String SnowflakeDateInterval() : {
-    final String e;
+SqlLiteral SnowflakeDateInterval() : {
+    final SqlLiteral e;
+    final String s;
 }
 {
     (
-        e = SimpleStringLiteral()
+        s = SimpleStringLiteral() {e = SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.FromString(s), getPos()); }
     |
         e = SnowflakeDateUnquotedInterval()
     )
@@ -890,12 +891,13 @@ String SnowflakeDateInterval() : {
     }
 }
 
-String SnowflakeTimeInterval() : {
-    final String e;
+SqlLiteral SnowflakeTimeInterval() : {
+    final SqlLiteral e;
+    final String s;
 }
 {
     (
-        e = SimpleStringLiteral()
+        s = SimpleStringLiteral() {e = SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.FromString(s), getPos()); }
     |
         e = SnowflakeTimeUnquotedInterval()
     )
@@ -904,13 +906,14 @@ String SnowflakeTimeInterval() : {
     }
 }
 
-String SnowflakeDateTimeInterval() :
+SqlLiteral SnowflakeDateTimeInterval() :
 {
-    final String e;
+    final SqlLiteral e;
+    final String s;
 }
 {
     (
-        e = SimpleStringLiteral()
+        s = SimpleStringLiteral() {e = SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.FromString(s), getPos()); }
     |
         e = SnowflakeDateTimeUnquotedInterval()
     )
@@ -926,9 +929,9 @@ String SnowflakeDateTimeInterval() :
  *
  * See: https://docs.snowflake.com/sql-reference/functions-date-time#label-supported-date-time-parts
  */
-String SnowflakeDateTimeUnquotedInterval() :
+SqlLiteral SnowflakeDateTimeUnquotedInterval() :
 {
-    final String e;
+    final SqlLiteral e;
 }
 {
     (
@@ -941,112 +944,112 @@ String SnowflakeDateTimeUnquotedInterval() :
     }
 }
 
-String SnowflakeDateUnquotedInterval() : {
+SqlLiteral SnowflakeDateUnquotedInterval() : {
 }{
-    <YEAR> { return "YEAR"; }
-    | <Y> { return "YEAR"; }
-    | <YY> { return "YEAR"; }
-    | <YYY> { return "YEAR"; }
-    | <YYYY> { return "YEAR"; }
-    | <YR> { return "YEAR"; }
-    | <YEARS> { return "YEAR"; }
-    | <YRS> { return "YEAR"; }
-    | <MONTH> { return "MONTH"; }
-    | <MM> { return "MONTH"; }
-    | <MON> { return "MONTH"; }
-    | <MONS> { return "MONTH"; }
-    | <MONTHS> { return "MONTH"; }
-    | <DAY> { return "DAY"; }
-    | <D> { return "DAY"; }
-    | <DD> { return "DAY"; }
-    | <DAYS> { return "DAY"; }
-    | <DAYOFMONTH> { return "DAY"; }
-    | <DAYOFWEEK> { return "DAYOFWEEK"; }
-    | <WEEKDAY> { return "DAYOFWEEK"; }
-    | <DOW> { return "DAYOFWEEK"; }
-    | <DW> { return "DAYOFWEEK"; }
-    | <DAYOFWEEKISO> { return "DAYOFWEEKISO"; }
-    | <WEEKDAY_ISO> { return "DAYOFWEEKISO"; }
-    | <DOW_ISO> { return "DAYOFWEEKISO"; }
-    | <DW_ISO> { return "DAYOFWEEKISO"; }
-    | <DAYOFYEAR> { return "DAYOFYEAR"; }
-    | <YEARDAY> { return "DAYOFYEAR"; }
-    | <DOY> { return "DAYOFYEAR"; }
-    | <DY> { return "DAYOFYEAR"; }
-    | <WEEK> { return "WEEK"; }
-    | <W> { return "WEEK"; }
-    | <WK> { return "WEEK"; }
-    | <WEEKOFYEAR> { return "WEEK"; }
-    | <WOY> { return "WEEK"; }
-    | <WY> { return "WEEK"; }
-    | <WEEKISO> { return "WEEKISO"; }
-    | <WEEK_ISO> { return "WEEKISO"; }
-    | <WEEKOFYEARISO> { return "WEEKISO"; }
-    | <WEEKOFYEAR_ISO> { return "WEEKISO"; }
-    | <QUARTER> { return "QUARTER"; }
-    | <Q> { return "QUARTER"; }
-    | <QTR> { return "QUARTER"; }
-    | <QTRS> { return "QUARTER"; }
-    | <QUARTERS> { return "QUARTER"; }
-    | <YEAROFWEEK> { return "YEAROFWEEK"; }
-    | <YEAROFWEEKISO> { return "YEAROFWEEKISO"; }
+    <YEAR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <Y> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YYY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YYYY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YEARS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <YRS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAR, getPos()); }
+    | <MONTH> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MONTH, getPos()); }
+    | <MM> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MONTH, getPos()); }
+    | <MON> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MONTH, getPos()); }
+    | <MONS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MONTH, getPos()); }
+    | <MONTHS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MONTH, getPos()); }
+    | <DAY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAY, getPos()); }
+    | <D> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAY, getPos()); }
+    | <DD> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAY, getPos()); }
+    | <DAYS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAY, getPos()); }
+    | <DAYOFMONTH> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAY, getPos()); }
+    | <DAYOFWEEK> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEK, getPos()); }
+    | <WEEKDAY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEK, getPos()); }
+    | <DOW> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEK, getPos()); }
+    | <DW> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEK, getPos()); }
+    | <DAYOFWEEKISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEKISO, getPos()); }
+    | <WEEKDAY_ISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEKISO, getPos()); }
+    | <DOW_ISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEKISO, getPos()); }
+    | <DW_ISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFWEEKISO, getPos()); }
+    | <DAYOFYEAR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFYEAR, getPos()); }
+    | <YEARDAY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFYEAR, getPos()); }
+    | <DOY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFYEAR, getPos()); }
+    | <DY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.DAYOFYEAR, getPos()); }
+    | <WEEK> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <W> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <WK> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <WEEKOFYEAR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <WOY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <WY> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEK, getPos()); }
+    | <WEEKISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEKISO, getPos()); }
+    | <WEEK_ISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEKISO, getPos()); }
+    | <WEEKOFYEARISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEKISO, getPos()); }
+    | <WEEKOFYEAR_ISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.WEEKISO, getPos()); }
+    | <QUARTER> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.QUARTER, getPos()); }
+    | <Q> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.QUARTER, getPos()); }
+    | <QTR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.QUARTER, getPos()); }
+    | <QTRS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.QUARTER, getPos()); }
+    | <QUARTERS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.QUARTER, getPos()); }
+    | <YEAROFWEEK> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAROFWEEK, getPos()); }
+    | <YEAROFWEEKISO> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.YEAROFWEEKISO, getPos()); }
 }
 
-String SnowflakeTimeUnquotedInterval() : {
+SqlLiteral SnowflakeTimeUnquotedInterval() : {
 }{
-    <HOUR> { return "HOUR"; }
-    | <H> { return "HOUR"; }
-    | <HH> { return "HOUR"; }
-    | <HR> { return "HOUR"; }
-    | <HOURS> { return "HOUR"; }
-    | <HRS> { return "HOUR"; }
-    | <MINUTE> { return "MINUTE"; }
-    | <M> { return "MINUTE"; }
-    | <MI> { return "MINUTE"; }
-    | <MIN> { return "MINUTE"; }
-    | <MINUTES> { return "MINUTE"; }
-    | <MINS> { return "MINUTE"; }
-    | <SECOND> { return "SECOND"; }
-    | <S> { return "SECOND"; }
-    | <SEC> { return "SECOND"; }
-    | <SECONDS> { return "SECOND"; }
-    | <SECS> { return "SECOND"; }
-    | <MS> { return "MILLISECOND"; }
-    | <MSEC> { return "MILLISECOND"; }
-    | <US> { return "MICROSECOND"; }
-    | <USEC> { return "MICROSECOND"; }
-    | <MICROSECOND> { return "MICROSECOND"; }
-    | <MICROSECONDS> { return "MICROSECOND"; }
-    | <MILLISECOND> { return "MILLISECOND"; }
-    | <MILLISECONDS> { return "MILLISECOND"; }
-    | <NANOSECOND> { return "NANOSECOND"; }
-    | <NS> { return "NANOSECOND"; }
-    | <NSEC> { return "NANOSECOND"; }
-    | <NANOSEC> { return "NANOSECOND"; }
-    | <NSECOND> { return "NANOSECOND"; }
-    | <NANOSECONDS> { return "NANOSECOND"; }
-    | <NANOSECS> { return "NANOSECOND"; }
-    | <NSECONDS> { return "NANOSECOND"; }
-    | <EPOCH_SECOND> { return "EPOCH_SECOND"; }
-    | <EPOCH> { return "EPOCH_SECOND"; }
-    | <EPOCH_SECONDS> { return "EPOCH_SECOND"; }
-    | <EPOCH_MILLISECOND> { return "EPOCH_MILLISECOND"; }
-    | <EPOCH_MILLISECONDS> { return "EPOCH_MILLISECOND"; }
-    | <EPOCH_MICROSECOND> { return "EPOCH_MICROSECOND"; }
-    | <EPOCH_MICROSECONDS> { return "EPOCH_MICROSECOND"; }
-    | <EPOCH_NANOSECOND> { return "EPOCH_NANOSECOND"; }
-    | <EPOCH_NANOSECONDS> { return "EPOCH_NANOSECOND"; }
-    | <TIMEZONE_HOUR> { return "TIMEZONE_HOUR"; }
-    | <TZH> { return "TIMEZONE_HOUR"; }
-    | <TIMEZONE_MINUTE> { return "TIMEZONE_MINUTE"; }
-    | <TZM> { return "TIMEZONE_MINUTE"; }
+    <HOUR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <H> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <HH> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <HR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <HOURS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <HRS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.HOUR, getPos()); }
+    | <MINUTE> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <M> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <MI> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <MIN> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <MINUTES> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <MINS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MINUTE, getPos()); }
+    | <SECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.SECOND, getPos()); }
+    | <S> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.SECOND, getPos()); }
+    | <SEC> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.SECOND, getPos()); }
+    | <SECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.SECOND, getPos()); }
+    | <SECS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.SECOND, getPos()); }
+    | <MS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MILLISECOND, getPos()); }
+    | <MSEC> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MILLISECOND, getPos()); }
+    | <US> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MICROSECOND, getPos()); }
+    | <USEC> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MICROSECOND, getPos()); }
+    | <MICROSECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MICROSECOND, getPos()); }
+    | <MICROSECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MICROSECOND, getPos()); }
+    | <MILLISECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MILLISECOND, getPos()); }
+    | <MILLISECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.MILLISECOND, getPos()); }
+    | <NANOSECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NSEC> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NANOSEC> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NSECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NANOSECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NANOSECS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <NSECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.NANOSECOND, getPos()); }
+    | <EPOCH_SECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_SECOND, getPos()); }
+    | <EPOCH> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_SECOND, getPos()); }
+    | <EPOCH_SECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_SECOND, getPos()); }
+    | <EPOCH_MILLISECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_MILLISECOND, getPos()); }
+    | <EPOCH_MILLISECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_MILLISECOND, getPos()); }
+    | <EPOCH_MICROSECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_MICROSECOND, getPos()); }
+    | <EPOCH_MICROSECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_MICROSECOND, getPos()); }
+    | <EPOCH_NANOSECOND> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_NANOSECOND, getPos()); }
+    | <EPOCH_NANOSECONDS> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.EPOCH_NANOSECOND, getPos()); }
+    | <TIMEZONE_HOUR> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.TIMEZONE_HOUR, getPos()); }
+    | <TZH> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.TIMEZONE_HOUR, getPos()); }
+    | <TIMEZONE_MINUTE> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.TIMEZONE_MINUTE, getPos()); }
+    | <TZM> { return SqlLiteral.createSymbol(DatetimeFnUtils.DateTimePart.TIMEZONE_MINUTE, getPos()); }
 }
 
 SqlNode LastDayFunctionCall() :
 {
     final Span s;
     final SqlNode e;
-    final String interval;
+    final SqlLiteral interval;
     final List<SqlNode> args = new ArrayList<SqlNode>();
 }
 {
@@ -1073,13 +1076,13 @@ SqlCall TimestampAddFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
-    final String interval;
+    final SqlLiteral interval;
 }
 {
     <DATEADD> { s = span(); }
     <LPAREN>
     (
-        interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+        interval = SnowflakeDateTimeInterval() { args.add(interval); }
         <COMMA>
         AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     |
@@ -1094,7 +1097,7 @@ SqlCall TimestampAddFunctionCall() :
 |
     <TIMEADD> { s = span(); }
     <LPAREN>
-    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    interval = SnowflakeDateTimeInterval() { args.add(interval); }
     <COMMA>
     AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     <COMMA>
@@ -1106,7 +1109,7 @@ SqlCall TimestampAddFunctionCall() :
 |
     <TIMESTAMPADD> { s = span(); }
     <LPAREN>
-    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    interval = SnowflakeDateTimeInterval() { args.add(interval); }
     <COMMA>
     AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     <COMMA>
@@ -1125,13 +1128,13 @@ SqlCall TimestampDiffFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
-    final String interval;
+    final SqlLiteral interval;
 }
 {
     <DATEDIFF> { s = span(); }
     <LPAREN>
     (
-      interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+      interval = SnowflakeDateTimeInterval() { args.add(interval); }
       <COMMA>
       AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     |
@@ -1146,7 +1149,7 @@ SqlCall TimestampDiffFunctionCall() :
 |
     <TIMEDIFF> { s = span(); }
     <LPAREN>
-    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    interval = SnowflakeDateTimeInterval() { args.add(interval); }
     <COMMA>
     AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     <COMMA>
@@ -1158,7 +1161,7 @@ SqlCall TimestampDiffFunctionCall() :
 |
     <TIMESTAMPDIFF> { s = span(); }
     <LPAREN>
-    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    interval = SnowflakeDateTimeInterval() { args.add(interval); }
     <COMMA>
     AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
     <COMMA>
@@ -1177,13 +1180,13 @@ SqlCall DateTruncFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
-    final String interval;
+    final SqlLiteral interval;
     final SqlNode e;
 }
 {
     <DATE_TRUNC> { s = span(); }
     <LPAREN>
-    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    interval = SnowflakeDateTimeInterval() {  args.add(interval); }
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <RPAREN> {
