@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Generator, List, Protocol, Tuple, Union
 
 import pandas as pd
 import psutil
@@ -527,41 +527,57 @@ def is_cached(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-@pytest.mark.iceberg
-def iceberg_database():
+def iceberg_database() -> (
+    Generator[Callable[Union[List[str], str], Tuple[str, str]], None, None]
+):
     """
     Create and populate Iceberg test tables.
     """
-    from bodo.tests.iceberg_database_helpers.create_all_tables import (
-        create_all_tables,
+    from bodo.tests.iceberg_database_helpers.create_tables import (
+        create_tables,
     )
+    from bodo.tests.iceberg_database_helpers.utils import get_spark
 
     comm = MPI.COMM_WORLD
+    if bodo.get_rank() == 0:
+        spark = get_spark()
+    bodo.barrier()
 
     warehouse_loc = os.path.abspath(os.getcwd())
 
-    database_schema_or_e = None
-    if bodo.get_rank() == 0:
-        try:
-            database_schema_or_e = create_all_tables()
-        except Exception as e:
-            database_schema_or_e = e
-    database_schema_or_e = comm.bcast(database_schema_or_e)
-    if isinstance(database_schema_or_e, Exception):
-        raise database_schema_or_e
-    database_schema = database_schema_or_e
+    # Use a list to store the database schema, so that it can be accessed by the fixture
+    database_schema = []
 
-    yield database_schema, warehouse_loc
+    def create_tables_on_rank_one(
+        tables: Union[List[str], str] = []
+    ) -> Tuple[str, str]:
+        if not isinstance(tables, list):
+            tables = [tables]
+        database_schema_or_e = None
+        if bodo.get_rank() == 0:
+            try:
+                database_schema_or_e = create_tables(tables, spark)
+            except Exception as e:
+                database_schema_or_e = e
+                print(e)
+        database_schema_or_e = comm.bcast(database_schema_or_e)
+        if isinstance(database_schema_or_e, Exception):
+            raise database_schema_or_e
+        if database_schema_or_e not in database_schema:
+            database_schema.append(database_schema_or_e)
+        return database_schema_or_e, warehouse_loc
+
+    yield create_tables_on_rank_one
 
     if bodo.get_rank() == 0:
         import shutil
 
-        dir_to_rm = os.path.join(warehouse_loc, database_schema)
-        shutil.rmtree(dir_to_rm, ignore_errors=True)
+        for schema in database_schema:
+            dir_to_rm = os.path.join(warehouse_loc, schema)
+            shutil.rmtree(dir_to_rm, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
-@pytest.mark.iceberg
 def iceberg_table_conn():
     """Get the connection string and database-schema for Iceberg table.
 

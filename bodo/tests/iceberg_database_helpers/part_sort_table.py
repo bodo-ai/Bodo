@@ -18,13 +18,17 @@ SORT_ORDER = [
     SortField("A", "identity", -1, False, False),
 ]
 
+TABLE_NAME = f"PARTSORT_{BASE_NAME}"
 
-def create_table(table_name=f"PARTSORT_{BASE_NAME}", spark=None):
+
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
-    assert BASE_NAME in TABLE_MAP, f"Didn't find table definition for {BASE_NAME}."
-    df, sql_schema = TABLE_MAP[BASE_NAME]
+    assert (
+        f"SIMPLE_{BASE_NAME}" in TABLE_MAP
+    ), f"Didn't find table definition for {BASE_NAME}."
+    df, sql_schema = TABLE_MAP[f"SIMPLE_{BASE_NAME}"]
     create_iceberg_table(df, sql_schema, table_name, spark, PARTITION_SPEC, SORT_ORDER)
 
 

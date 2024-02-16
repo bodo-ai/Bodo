@@ -24,7 +24,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
     """
     Test that TablePath raises an error when passing the wrong arguments
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(["SIMPLE_STRING_TABLE"])
     conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
@@ -68,7 +68,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
     """
     Test that TablePath raises an error when passing the wrong arguments in JIT code
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(["SIMPLE_STRING_TABLE"])
     conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     with pytest.raises(
@@ -121,7 +121,7 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     Tests that TablePath raises a reasonable error when the table
     does not exist.
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(["SIMPLE_STRING_TABLE"])
     conn = iceberg_table_conn("SIMPLE_STRING_TABLE", db_schema, warehouse_loc)
 
     # test outside of JIT

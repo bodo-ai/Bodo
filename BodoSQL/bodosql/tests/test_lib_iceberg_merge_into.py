@@ -348,7 +348,7 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
     """
 
     table_name = "SIMPLE_NUMERIC_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):

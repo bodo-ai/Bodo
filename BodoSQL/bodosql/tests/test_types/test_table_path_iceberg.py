@@ -62,7 +62,7 @@ def test_simple_table_read(
     """
     Test simple read operation on test tables
     """
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -113,7 +113,7 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
     """
 
     table_name = "SIMPLE_STRING_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema, bodo_read_as_dict):
@@ -159,7 +159,7 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     """
 
     table_name = "SIMPLE_STRING_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
@@ -197,7 +197,7 @@ def test_tablepath_dict_encoding(
     """
 
     table_name = "SIMPLE_STRING_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema, bodo_read_as_dict):
@@ -235,7 +235,7 @@ def test_tablepath_dict_encoding(
 @pytest.mark.slow
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     sql_schema = [
         ("ID", "int", True),
         ("DEP", "string", True),
@@ -291,7 +291,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
 @pytest.mark.slow
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
     table_name = "TEST_MERGE_INTO_SIMPLE_TBL2"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     sql_schema = [
         ("ID", "int", True),
         ("DEP", "string", True),
@@ -354,7 +354,7 @@ def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_
     """
 
     table_name = "SIMPLE_STRING_TABLE"
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):

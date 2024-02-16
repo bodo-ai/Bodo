@@ -25,7 +25,7 @@ def get_spark():
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.1",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.4.3",
         )
         .config(
             "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
@@ -74,6 +74,12 @@ def create_iceberg_table(
     ]
     sql_col_defs = ",\n".join(sql_strs)
     spark_schema_str = ", ".join(sql_strs)
+    # if the table already exists do nothing
+    try:
+        spark.sql(f"SELECT * FROM hadoop_prod.{DATABASE_NAME}.{table_name} LIMIT 1")
+        return None
+    except Exception:
+        pass
 
     if not par_spec:
         partition_str = ""
@@ -122,3 +128,4 @@ def create_iceberg_table(
 
     df = spark.createDataFrame(df, schema=spark_schema_str)  # type: ignore
     df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
+    return table_name

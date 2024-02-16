@@ -68,7 +68,7 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
         )
     bodo.barrier()
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     # Generate the expected output
@@ -157,7 +157,7 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
         )
     bodo.barrier()
 
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     target_table_path = TablePath(table_name, "sql", conn_str=conn, db_schema=db_schema)
 
@@ -261,7 +261,7 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
         return bc.sql("select * from target_table")
 
     # open connection and create source table
-    db_schema, warehouse_loc = iceberg_database
+    db_schema, warehouse_loc = iceberg_database()
     table_name = "MERGE_INTO_UNIQUE_TARGET"
     sql_schema = [("A", "bigint", False), ("B", "bigint", False)]
     source_df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10)})
