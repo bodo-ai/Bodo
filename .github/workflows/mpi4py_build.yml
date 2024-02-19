@@ -1,0 +1,119 @@
+name: Create MPI4Py-MPICH Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      mpich_version:
+        description: Version of MPICH to Bundle
+        required: false
+        type: string
+        default: '4.1.2'
+      mpi4py_version:
+        description: Version of MPI4Py to Build
+        required: false
+        type: string
+        default: '3.1.5'
+
+jobs:
+  build:
+    name: Build Wheels on ${{ matrix.os.name }}
+    runs-on: ${{ matrix.os.name }}
+    strategy:
+      matrix:
+        os: [
+          {name: ubuntu-20.04, dep_target: 0},
+          {name: macos-11, dep_target: 10.15},
+          {name: macos-14, dep_target: 11}
+        ]
+    steps:
+      - name: Set Input Vars
+        id: set-vars
+        run: |
+          echo "MPICH_VERSION=${{ inputs.mpich_version || '4.1.2' }}" >> $GITHUB_OUTPUT
+          echo "MPI4PY_VERSION=${{ inputs.mpi4py_version || '3.1.5' }}" >> $GITHUB_OUTPUT
+      # Checkout and Patch MPI4Py before Building
+      - name: Checkout bodo/buildscripts
+        uses: actions/checkout@v4
+        with:
+          path: bodo
+          sparse-checkout: buildscripts
+      - name: Checkout MPI4Py
+        uses: actions/checkout@v4
+        with:
+          repository: mpi4py/mpi4py
+          ref: ${{ steps.set-vars.outputs.MPI4PY_VERSION }}
+          fetch-depth: 1
+          path: mpi4py
+      - name: Monkey-Patch MPI4Py
+        run: |
+          cd $GITHUB_WORKSPACE/mpi4py
+          cp -r $GITHUB_WORKSPACE/bodo/buildscripts/mpi4py-pip/mpiexec .
+          git apply $GITHUB_WORKSPACE/bodo/buildscripts/mpi4py-pip/patch.diff
+          # Header for MPICH License
+          echo "
+          =====
+          MPICH
+          =====" >> LICENSE.rst
+
+      - name: Build Wheels
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          MPICH_VER: ${{ steps.set-vars.outputs.MPICH_VERSION }}
+          CIBW_BUILD: cp3*-manylinux_x86_64 cp3*-macosx_*
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BUILD_VERBOSITY: 3
+          # Linux Build is Inside Container, Need to Set the Base Path Created
+          # CIBW_ENVIRONMENT: MPICH_VER="${{ steps.set-vars.outputs.MPICH_VERSION }}"
+          CIBW_ENVIRONMENT_LINUX: GITHUB_WORKSPACE="/project" MPICC='/project/mpich/build/bin/mpicc'
+          CIBW_ENVIRONMENT_PASS_LINUX: MPICH_VER
+          CIBW_ENVIRONMENT_MACOS: >-
+            GITHUB_WORKSPACE="${{ github.workspace }}"
+            MPICC='${{ github.workspace }}/mpich/build/bin/mpicc'
+            MACOSX_DEPLOYMENT_TARGET="${{ matrix.os.dep_target }}"
+            LDFLAGS="-Wl,-headerpad_max_install_names"
+
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
+            auditwheel repair -w {dest_dir} {wheel}
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: |
+            delocate-wheel -k --sanitize-rpaths --require-archs {delocate_archs} -w {dest_dir} -v {wheel}
+          CIBW_BEFORE_BUILD: |     
+            export PATH=$GITHUB_WORKSPACE/mpich/build/bin:$PATH
+            export MPICC=$GITHUB_WORKSPACE/mpich/build/bin/mpicc
+          CIBW_BEFORE_ALL: |
+            set -ex pipefail
+
+            # Build MPICH
+            mkdir $GITHUB_WORKSPACE/mpich
+            cd $GITHUB_WORKSPACE/mpich
+            curl https://www.mpich.org/static/downloads/$MPICH_VER/mpich-$MPICH_VER.tar.gz --output mpich-$MPICH_VER.tar.gz
+            tar xf mpich-$MPICH_VER.tar.gz
+            mkdir build
+            cd mpich-$MPICH_VER
+            ./configure --prefix=$GITHUB_WORKSPACE/mpich/build --enable-fast --enable-shared --disable-fortran --disable-cxx --with-device=ch3
+            make -j 4
+            make install
+
+            # Monkey-Patch MPI4Py
+            cd $GITHUB_WORKSPACE/mpi4py
+            cp $GITHUB_WORKSPACE/mpich/build/bin/mpiexec mpiexec
+            cp $GITHUB_WORKSPACE/mpich/build/bin/hydra_pmi_proxy mpiexec
+            cat $GITHUB_WORKSPACE/mpich/mpich-$MPICH_VER/COPYRIGHT >> LICENSE.rst
+          CIBW_TEST_COMMAND: |
+            python --version
+            python -m mpi4py --prefix
+            python -m mpi4py --version
+            python -m mpi4py --mpi-std-version
+            python -m mpi4py --mpi-lib-version
+            which mpiexec
+            mpiexec -n 2 echo "Hello World"
+            mpiexec -n 2 python -m mpi4py.bench helloworld
+            mpiexec -n 3 python -c "from mpi4py import MPI; print(MPI.COMM_WORLD.Get_rank())"
+        with:
+          package-dir: ./mpi4py
+          output-dir: ./wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
