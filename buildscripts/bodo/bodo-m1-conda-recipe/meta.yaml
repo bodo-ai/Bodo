@@ -11,6 +11,9 @@ build:
   - CHECK_LICENSE_EXPIRED
   - CHECK_LICENSE_CORE_COUNT
   - CHECK_LICENSE_PLATFORM
+  # Necessary for sccache to find AWS
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
   rpaths:
     - lib
     - {{ PREFIX }}/lib
@@ -33,6 +36,7 @@ requirements:
     - libarrow =14.0.2                      # [build_platform != target_platform]
     - pyarrow =14.0.2                       # [build_platform != target_platform]
     - numba 0.59.0
+    - sccache
 
   host:
     - python
