@@ -1798,10 +1798,10 @@ def test_batched_write_agg(
                         dtype=pd.ArrowDtype(
                             pa.struct(
                                 [
-                                    pa.field("X", pa.string()),
-                                    pa.field("Y", pa.float64()),
                                     pa.field("W", pa.int64()),
+                                    pa.field("X", pa.string()),
                                     pa.field("Z", pa.int64()),
+                                    pa.field("Y", pa.float64()),
                                 ]
                             )
                         ),
