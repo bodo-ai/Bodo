@@ -20,7 +20,7 @@ class SortField(NamedTuple):
     nulls_first: bool  # First when True, Last when False
 
 
-def get_spark():
+def get_spark() -> SparkSession:
     spark = (
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
@@ -57,9 +57,51 @@ def transform_str(col_name: str, transform: str, val: int) -> str:
         return f"{transform}({col_name})"
 
 
+def parse_sql_schema_into_col_defs(sql_schema: list[tuple[str, str, bool]]) -> str:
+    """Convert a SQL schema into a string of column definitions
+    e.g. [("col1", "int", True), ("col2", "string", False)] -> "col1 int,\n col2 string not null"
+    """
+    sql_strs = [
+        f"{name} {type} {'' if nullable else 'not null'}"
+        for (name, type, nullable) in sql_schema
+    ]
+    sql_col_defs = ",\n".join(sql_strs)
+    return sql_col_defs
+
+
+def parse_sql_schema_into_spark_schema(sql_schema: list[tuple[str, str, bool]]) -> str:
+    """Convert a SQL schema into a string of column definitions
+    e.g. [("col1", "int", True), ("col2", "string", False)] -> "col1 int, col2 string not null"
+    """
+    sql_strs = [
+        f"{name} {type} {'' if nullable else 'not null'}"
+        for (name, type, nullable) in sql_schema
+    ]
+    spark_schema_str = ", ".join(sql_strs)
+    return spark_schema_str
+
+
+def append_to_iceberg_table(
+    df: pd.DataFrame, sql_schema, table_name: str, spark: Optional[SparkSession]
+):
+    """Append a pandas DataFrame to an existing Iceberg table"""
+    spark_schema_str = parse_sql_schema_into_spark_schema(sql_schema)
+    if spark is None:
+        spark = get_spark()
+    df = df.astype("object").where(pd.notnull(df), None)
+    for col_info in sql_schema:
+        col_name = col_info[0]
+        col_type = col_info[1]
+        if col_type == "timestamp":
+            df[col_name] = pd.to_datetime(df[col_name])
+
+    df = spark.createDataFrame(df, schema=spark_schema_str)  # type: ignore
+    df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
+
+
 def create_iceberg_table(
     df: pd.DataFrame,
-    sql_schema,
+    sql_schema: list[tuple[str, str, bool]],
     table_name: str,
     spark: Optional[SparkSession] = None,
     par_spec: Optional[List[PartitionField]] = None,
@@ -67,13 +109,8 @@ def create_iceberg_table(
 ):
     if spark is None:
         spark = get_spark()
+    sql_col_defs = parse_sql_schema_into_col_defs(sql_schema)
 
-    sql_strs = [
-        f"{name} {type} {'' if nullable else 'not null'}"
-        for (name, type, nullable) in sql_schema
-    ]
-    sql_col_defs = ",\n".join(sql_strs)
-    spark_schema_str = ", ".join(sql_strs)
     # if the table already exists do nothing
     try:
         spark.sql(f"SELECT * FROM hadoop_prod.{DATABASE_NAME}.{table_name} LIMIT 1")
@@ -118,14 +155,6 @@ def create_iceberg_table(
             WRITE ORDERED BY {', '.join(sort_defs)}
         """
         )
+    append_to_iceberg_table(df, sql_schema, table_name, spark)
 
-    df = df.astype("object").where(pd.notnull(df), None)
-    for col_info in sql_schema:
-        col_name = col_info[0]
-        col_type = col_info[1]
-        if col_type == "timestamp":
-            df[col_name] = pd.to_datetime(df[col_name])
-
-    df = spark.createDataFrame(df, schema=spark_schema_str)  # type: ignore
-    df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
     return table_name

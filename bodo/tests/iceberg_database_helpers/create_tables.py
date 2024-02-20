@@ -8,6 +8,10 @@ from bodo.tests.iceberg_database_helpers.partition_tables import (
     PARTITION_TABLE_NAME_MAP,
     create_partition_tables,
 )
+from bodo.tests.iceberg_database_helpers.schema_evolution_tables import (
+    SCHEMA_EVOLUTION_TABLE_NAME_MAP,
+    create_schema_evolution_tables,
+)
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLE_NAME_MAP,
 )
@@ -43,6 +47,7 @@ def create_tables(tables, spark=None):
     create_simple_tables(tables, spark)
     create_partition_tables(tables, spark)
     create_sort_tables(tables, spark)
+    create_schema_evolution_tables(tables, spark)
 
     for table_mod in table_mods:
         if table_mod.TABLE_NAME in tables:
@@ -56,5 +61,6 @@ if __name__ == "__main__":
         list(SIMPLE_TABLE_NAME_MAP.keys())
         + list(PARTITION_TABLE_NAME_MAP.keys())
         + list(SORT_TABLE_NAME_MAP.keys())
+        + list(SCHEMA_EVOLUTION_TABLE_NAME_MAP.keys())
         + [table_mod.TABLE_NAME for table_mod in table_mods]
     )
