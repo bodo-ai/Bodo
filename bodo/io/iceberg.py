@@ -1252,13 +1252,8 @@ def iceberg_merge_cow_py(
     bodo_df,
     snapshot_id,
     old_fnames,
-    is_parallel=False,
+    is_parallel=True,
 ):
-    if not is_parallel:
-        raise BodoError(
-            "Merge Into with Iceberg Tables are only supported on distributed DataFrames"
-        )
-
     df_pyarrow_schema = bodo.io.helpers.numba_to_pyarrow_schema(
         bodo_df, is_iceberg=True
     )
@@ -1274,7 +1269,7 @@ def iceberg_merge_cow_py(
             bodo_df,
             snapshot_id,
             old_fnames,
-            is_parallel=False,
+            is_parallel=True,
         ):  # pragma: no cover
             iceberg_merge_cow(
                 table_name,
@@ -1306,7 +1301,7 @@ def iceberg_merge_cow_py(
         func_text += "    bodo_df,\n"
         func_text += "    snapshot_id,\n"
         func_text += "    old_fnames,\n"
-        func_text += "    is_parallel=False,\n"
+        func_text += "    is_parallel=True,\n"
         func_text += "):\n"
         func_text += "    info_list = [{}]\n".format(data_args)
         func_text += "    table = arr_info_list_to_table(info_list)\n"

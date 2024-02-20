@@ -365,7 +365,9 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
             return None
     elif isinstance(val, str):
         if val.isnumeric() or (len(val) > 1 and val[0] == "-" and val[1:].isnumeric()):
-            return number_to_datetime(np.int64(val)).floor(freq="D")
+            return numba.njit(
+                lambda val: number_to_datetime(np.int64(val)).floor(freq="D")
+            )(val)
         else:
             if "-" in val:
                 parts = val.split("-")

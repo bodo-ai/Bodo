@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     gen_random_string_binary_array,
     is_bool_object_series,
+    no_default,
     pytest_pandas,
 )
 from bodo.utils.typing import BodoError, BodoWarning
@@ -2086,7 +2087,7 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
                 outputs.append(series_val)
             py_output = pd.Series(outputs, index=df_value.columns)
         else:
-            py_output = None
+            py_output = no_default
         check_func(
             test_impl, (df_value,), is_out_distributed=False, py_output=py_output
         )
@@ -2178,7 +2179,7 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
                 outputs.append(series_val)
             py_output = pd.Series(outputs, index=df_value.columns)
         else:
-            py_output = None
+            py_output = no_default
         check_func(
             test_impl, (df_value,), is_out_distributed=False, py_output=py_output
         )

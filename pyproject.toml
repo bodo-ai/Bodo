@@ -159,6 +159,7 @@ exclude = [
     "bodo/__init__.py",
     "BodoSQL/bodosql/__init__.py",
     "iceberg/bodo_iceberg_connector/__init__.py",
+    "BodoSQL/buildscripts/python_library_build/generate_libraries.py",
 ]
 
 [tool.ruff.isort]

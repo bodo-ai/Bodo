@@ -90,7 +90,7 @@ def make_flag_bitvector(flags):
     return result
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_count(arr, pattern, position, flags, dict_encoding_state=None, func_id=-1):
     """Handles cases where REGEXP_COUNT receives optional arguments and forwards
     to args appropriate version of the real implementation"""
@@ -126,7 +126,7 @@ def regexp_count(arr, pattern, position, flags, dict_encoding_state=None, func_i
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_instr(
     arr,
     pattern,
@@ -186,7 +186,7 @@ def regexp_instr(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_like(arr, pattern, flags, dict_encoding_state=None, func_id=-1):
     """Handles cases where REGEXP_LIKE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
@@ -220,7 +220,7 @@ def regexp_like(arr, pattern, flags, dict_encoding_state=None, func_id=-1):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_replace(
     arr,
     pattern,
@@ -276,7 +276,7 @@ def regexp_replace(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_substr(
     arr,
     pattern,
@@ -332,7 +332,7 @@ def regexp_substr(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REGEXP_COUNT which takes in a string
        (or column), a pattern, a position, and regexp control flags and returns
@@ -413,7 +413,7 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_instr_util(
     arr,
     pattern,
@@ -554,7 +554,7 @@ def regexp_instr_util(
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REGEXP_LIKE which takes in a string
        (or column), a pattern, and regexp control flags and returns
@@ -645,7 +645,7 @@ def _gen_regex_replace_body():
     return scalar_text
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_replace_util(
     arr, pattern, replacement, position, occurrence, flags, dict_encoding_state, func_id
 ):
@@ -817,7 +817,7 @@ def regexp_replace_util(
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def regexp_substr_util(
     arr, pattern, position, occurrence, flags, group, dict_encoding_state, func_id
 ):

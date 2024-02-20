@@ -966,7 +966,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
     return loc_vars["set_table_data"]
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def set_table_data(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except arr is inserted at ind. There are two main cases,
@@ -994,7 +994,7 @@ def set_table_data(table, ind, arr, used_cols=None):
     return generate_set_table_data_code(table, ind_lit, arr, used_columns)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def set_table_data_null(table, ind, arr, used_cols=None):
     """Returns a new table with the contents as table
     except a new null array is inserted at ind. There are two main cases,

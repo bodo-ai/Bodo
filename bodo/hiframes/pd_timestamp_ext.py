@@ -1302,7 +1302,7 @@ def is_leap_year(year):  # pragma: no cover
     return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def compute_val_for_timestamp(
     year,
     month,
@@ -1398,7 +1398,7 @@ def compute_val_for_timestamp(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def convert_val_to_timestamp(ts_input, tz=None, is_convert=True):
     """
     Converts value given in nanoseconds to timestamp with appropriate timezone.

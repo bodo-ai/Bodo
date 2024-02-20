@@ -1997,6 +1997,130 @@ def overload_series_sort_values(
     return impl
 
 
+# --------------------- Numba 0.58.1 searchsorted ------------------------------
+# Numba 0.59.0 introduces a regression in its np.searchsorted implementation for
+# datetime64 input: https://github.com/numba/numba/issues/9427
+# We copy and use Numba 0.58.1 implementation until the issue is resolved.
+# https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/np/arraymath.py#L3677
+
+
+def _searchsorted(func):
+    def searchsorted_inner(a, v, v_last, lo, hi, n):
+        """Perform inner loop of searchsorted (i.e. a binary search).
+
+        This is loosely based on the NumPy implementation in [1]_.
+
+        Parameters
+        ----------
+        a: 1-D array_like
+            The input array.
+        v: array_like
+            The current value to insert into `a`.
+        v_last: array_like
+            The previous value inserted into `a`.
+        lo: int
+            The initial/previous "low" value of the binary search.
+        hi: int
+            The initial/previous "high" value of the binary search.
+        n: int
+            The length of `a`.
+
+
+        .. [1] https://github.com/numpy/numpy/blob/809e8d26b03f549fd0b812a17b8a166bcd966889/numpy/core/src/npysort/binsearch.cpp#L173
+        """  # noqa: E501
+        if np.isnan(v):
+            # Find the first nan (i.e. the last from the end of a,
+            # since there shouldn't be many of them in practice)
+            for i in range(n, 0, -1):
+                if not np.isnan(a[i - 1]):
+                    return i
+            return 0
+
+        if v_last < v:
+            hi = n
+        else:
+            lo = 0
+            hi = hi + 1 if hi < n else n
+
+        while hi > lo:
+            mid = (lo + hi) >> 1
+            if func(a[mid], (v)):
+                # mid is too low => go up
+                lo = mid + 1
+            else:
+                # mid is too high, or is a NaN => go down
+                hi = mid
+        return lo
+
+    return searchsorted_inner
+
+
+@register_jitable
+def less_than(a, b):
+    return a < b
+
+
+_lt = less_than
+_le = register_jitable(lambda x, y: x <= y)
+_searchsorted_left = register_jitable(_searchsorted(_lt))
+_searchsorted_right = register_jitable(_searchsorted(_le))
+
+
+def searchsorted(a, v, side="left"):
+    pass
+
+
+@overload(searchsorted)
+def overload_searchsorted(a, v, side="left"):
+    side_val = getattr(side, "literal_value", side)
+    if side_val == "left":
+        loop_impl = _searchsorted_left
+    elif side_val == "right":
+        loop_impl = _searchsorted_right
+    else:
+        raise NumbaValueError(f"Invalid value given for 'side': {side_val}")
+
+    if isinstance(v, types.Array):
+        # N-d array and output
+        def searchsorted_impl(a, v, side="left"):
+            n = len(a)
+            lo = 0
+            hi = n
+            out = np.empty(v.shape, np.intp)
+            v_last = v.flat[0]
+            for view, outview in np.nditer((v, out)):
+                lo = loop_impl(a, view.item(), v_last, lo, hi, n)
+                v_last = view.item()
+                outview.itemset(lo)
+            return out
+
+    elif isinstance(v, types.Sequence):
+        # 1-d sequence and output
+        def searchsorted_impl(a, v, side="left"):
+            n = len(a)
+            lo = 0
+            hi = n
+            out = np.empty(len(v), np.intp)
+            v_last = v[0]
+            for i in range(len(v)):
+                lo = loop_impl(a, v[i], v_last, lo, hi, n)
+                out[i] = lo
+                v_last = v[i]
+            return out
+
+    else:
+        # Scalar value and output
+        # Note: NaNs come last in Numpy-sorted arrays
+        def searchsorted_impl(a, v, side="left"):
+            n = len(a)
+            return loop_impl(a, v, v, 0, n, n)
+
+    return searchsorted_impl
+
+
+# --------------------- end Numba 0.58.1 searchsorted ------------------------------
+
+
 def get_bin_inds(bins, arr):  # pragma: no cover
     return arr
 
@@ -2031,7 +2155,7 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     func_text += "    if include_lowest and val == bins[0]:\n"
     func_text += "      ind = 1\n"
     func_text += "    else:\n"
-    func_text += "      ind = np.searchsorted(bins, val)\n"
+    func_text += "      ind = searchsorted(bins, val)\n"
     # searchsorted() returns 0 or len(bins) if val is not in any bins
     func_text += "    if ind == 0 or ind == len(bins):\n"
     if gen_nullable:
@@ -2043,7 +2167,11 @@ def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     func_text += "  return out_arr\n"
 
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+    exec(
+        func_text,
+        {"bodo": bodo, "np": np, "numba": numba, "searchsorted": searchsorted},
+        loc_vars,
+    )
     impl = loc_vars["impl"]
     return impl
 

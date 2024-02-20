@@ -25,6 +25,7 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    no_default,
     pytest_pandas,
     reduce_sum,
 )
@@ -1235,7 +1236,7 @@ def test_df_first_last(memory_leak_check, offset):
         else:
             py_output = df.loc[:end]
     else:
-        py_output = None
+        py_output = no_default
 
     check_func(impl_first, (df,), py_output=py_output, check_dtype=False)
     check_func(impl_last, (df,))

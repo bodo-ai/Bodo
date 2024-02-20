@@ -1888,7 +1888,7 @@ def cpp_table_to_py_table(
     )
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def cpp_table_to_py_data(
     cpp_table,
     out_col_inds_t,
@@ -2187,7 +2187,7 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     return table_type(py_table_type, py_table_type_t), codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):
     """Convert Python data (table and arrays) to a C++ table.
     Args:

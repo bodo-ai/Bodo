@@ -29,7 +29,7 @@ requirements:
     - cmake
     - ninja
 
-    - numba 0.58.1
+    - numba 0.59.0
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24,<1.27
@@ -55,7 +55,7 @@ requirements:
     - pandas >=2,<2.1
     - fsspec >=2021.09
     - pyarrow =14.0.2
-    - numba 0.58.1
+    - numba 0.59.0
     - mpich *=h* # [not win]
     - msmpi # [win]
     - mpi4py

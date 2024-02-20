@@ -909,7 +909,7 @@ def _init_join_state(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_join_state(
     operator_id,
     build_key_inds,

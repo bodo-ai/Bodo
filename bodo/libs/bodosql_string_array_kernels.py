@@ -2611,7 +2611,7 @@ def hex_encode_util(msg, case, dict_encoding_state, func_id):
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def hex_decode_string(msg, _try=False, dict_encoding_state=None, func_id=-1):
     """Handles cases where HEX_DECODE_STRING receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -2634,7 +2634,7 @@ def hex_decode_string(msg, _try=False, dict_encoding_state=None, func_id=-1):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def hex_decode_binary(msg, _try=False, dict_encoding_state=None, func_id=-1):
     """Handles cases where HEX_DECODE_BINARY receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -2657,7 +2657,7 @@ def hex_decode_binary(msg, _try=False, dict_encoding_state=None, func_id=-1):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function HEX_DECODE family of functions
        which takes in a string, produced by calling HEX_ENCODE on a string/binary value,
@@ -2715,7 +2715,7 @@ def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def base64_encode(msg, max_line_length, alphabet, dict_encoding_state=None, func_id=-1):
     """Handles cases where BASE64_ENCODE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -2745,7 +2745,7 @@ def base64_encode(msg, max_line_length, alphabet, dict_encoding_state=None, func
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def base64_encode_util(msg, max_line_length, alphabet, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function BASE64_ENCODE which takes in a string,
                binary, (or string/binary column) and returns the string encoded using
@@ -2829,7 +2829,7 @@ def base64_encode_util(msg, max_line_length, alphabet, dict_encoding_state, func
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def base64_decode_string(
     msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
 ):
@@ -2861,7 +2861,7 @@ def base64_decode_string(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def base64_decode_binary(
     msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
 ):
@@ -2893,7 +2893,7 @@ def base64_decode_binary(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function BASE64_DECODE family of functions
        which takes in a string, produced by calling BASE64_ENCODE on a string/binary value,
@@ -3000,8 +3000,13 @@ def uuid4(A):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def uuid5(namespace, name, dict_encoding_state=None, func_id=-1):
+    return uuid5_util(namespace, name, dict_encoding_state, func_id)
+
+
+@numba.generated_jit(nopython=True)
+def uuid5_util(namespace, name, dict_encoding_state, func_id):
     verify_string_arg(namespace, "UUID_STRING", "namespace")
     verify_string_arg(name, "UUID_STRING", "name")
 

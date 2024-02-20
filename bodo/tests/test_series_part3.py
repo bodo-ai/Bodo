@@ -8,7 +8,7 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import ParforTestPipeline, check_func, pytest_pandas
+from bodo.tests.utils import ParforTestPipeline, check_func, no_default, pytest_pandas
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
@@ -775,7 +775,7 @@ def test_series_first_last(offset):
         else:
             py_output = ts.loc[:end]
     else:
-        py_output = None
+        py_output = no_default
 
     check_func(impl_first, (ts,), py_output=py_output)
     check_func(impl_last, (ts,))

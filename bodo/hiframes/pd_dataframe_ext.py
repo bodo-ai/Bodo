@@ -3251,7 +3251,7 @@ def lower_val_isin_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def pivot_impl(
     index_tup,
     columns_tup,

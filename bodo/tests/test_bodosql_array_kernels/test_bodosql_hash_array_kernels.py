@@ -207,7 +207,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
 
     n_args = len(args)
     args_str = ", ".join([f"A{i}" for i in range(n_args)])
-    params_str = args_str
+    params_str = args_str + ", n"
     if n_args == 1:
         args_str += ","
 
@@ -223,12 +223,12 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
     test_impl += f"  distinct_hashes = pd.Series(H.unique())\n"
     test_impl += f"  masks = []\n"
     test_impl += f"  L = []\n"
-    test_impl += f"  for i in range(64):\n"
+    test_impl += f"  for i in range(n):\n"
     test_impl += f"    mask = pd.Series((distinct_hashes.values & (1 << i)) >> i)\n"
     test_impl += f"    masks.append(mask)\n"
     test_impl += f"    L.append(abs(mask.mean()))\n"
-    test_impl += f"  for i in range(64):\n"
-    test_impl += f"    for j in range(i+1, 64):\n"
+    test_impl += f"  for i in range(n):\n"
+    test_impl += f"    for j in range(i+1, n):\n"
     test_impl += f"      mask_both = pd.Series(masks[i] & masks[j])\n"
     test_impl += f"      L.append(abs(mask_both.mean()))\n"
     test_impl += f"  return len(distinct_hashes), pd.Series(L)\n"
@@ -239,13 +239,16 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         impl_vars,
     )
     impl = impl_vars["impl"]
+    # Pass loop lengths as argument to avoid slow compilation time due to extensive
+    # loop unrolling
+    n = 64
 
     # 2016 = number of combinations of i & j
-    expected_bits = pd.Series([0.5] * 64 + [0.25] * 2016)
+    expected_bits = pd.Series([0.5] * n + [0.25] * 2016)
 
     check_func(
         impl,
-        args,
+        args + (n,),
         py_output=(distinct, expected_bits),
         check_dtype=False,
         is_out_distributed=False,

@@ -47,6 +47,15 @@ sql_user_pass_and_hostname = (
 oracle_user_pass_and_hostname = "user:pass@localhost"
 
 
+class NoDefault:
+    """Sentinel specifying no default for argument to allow all values including None
+    to be provided for the argument.
+    """
+
+
+no_default = NoDefault()
+
+
 class InputDist(Enum):
     """
     Enum used to represent the various
@@ -148,7 +157,7 @@ def check_func(
     check_dtype=True,
     reset_index=False,
     convert_columns_to_pandas=False,
-    py_output=None,
+    py_output=no_default,
     dist_test=True,
     check_typing_issues=True,
     additional_compiler_arguments=None,
@@ -266,7 +275,7 @@ def check_func(
 
     # gives the option of passing desired output to check_func
     # in situations where pandas is buggy/lacks support
-    if py_output is None:
+    if py_output is no_default:
         if convert_columns_to_pandas:
             call_args_mapped = tuple(convert_non_pandas_columns(a) for a in call_args)
             py_output = func(*call_args_mapped)
@@ -2250,7 +2259,7 @@ def check_caching(
     check_categorical=False,
     set_columns_name_to_none=False,
     reorder_columns=False,
-    py_output=None,
+    py_output=no_default,
     is_out_dist=True,
     args_already_distributed=False,
 ):
@@ -2265,7 +2274,7 @@ def check_caching(
     input_dist: The InputDist for the dataframe arguments. This is used
         in the flags for compiling the function.
     """
-    if py_output is None:
+    if py_output is no_default:
         py_output = impl(*args)
 
     # compile impl in the correct dist
