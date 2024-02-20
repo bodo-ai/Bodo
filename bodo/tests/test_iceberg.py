@@ -1439,7 +1439,6 @@ def _verify_pq_schema_in_files(
             )
             data_files = list(set(data_files) - data_files_before_write)
             assert all(os.path.isfile(file) for file in data_files)
-
             # Verify that all the parquet files have the correct metadata:
             for data_file in data_files:
                 pq_file = pq.ParquetFile(data_file)
@@ -1538,7 +1537,7 @@ ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[str, pa.Schema] = [
             [
                 pa.field(
                     "A",
-                    pa.struct([pa.field("a", pa.int64()), pa.field("b", pa.int64())]),
+                    pa.struct([pa.field("a", pa.int32()), pa.field("b", pa.int64())]),
                 ),
                 pa.field(
                     "B",

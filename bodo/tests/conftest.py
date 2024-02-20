@@ -569,6 +569,7 @@ def iceberg_database() -> (
 
     yield create_tables_on_rank_one
 
+    bodo.barrier()
     if bodo.get_rank() == 0:
         import shutil
 
