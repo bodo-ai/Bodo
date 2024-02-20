@@ -609,9 +609,9 @@ def test_nested_in_map_metadata_handling(cursor):
                 pa.large_string(),
                 pa.struct(
                     [
+                        pa.field("cnt", pa.int64()),
                         pa.field("stat", pa.bool_()),
                         pa.field("name", pa.large_string()),
-                        pa.field("cnt", pa.int64()),
                     ]
                 ),
             ),
@@ -1550,8 +1550,8 @@ def test_read_nested_in_map_col(memory_leak_check):
                         pa.string(),
                         pa.struct(
                             [
-                                pa.field("stat", pa.bool_()),
                                 pa.field("name", pa.string()),
+                                pa.field("stat", pa.bool_()),
                                 pa.field("cnt", pa.int64()),
                             ]
                         ),

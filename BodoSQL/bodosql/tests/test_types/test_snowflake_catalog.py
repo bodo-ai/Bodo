@@ -2364,9 +2364,9 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
                     pa.large_list(
                         pa.struct(
                             [
+                                pa.field("cnt", pa.int64()),
                                 pa.field("stat", pa.bool_()),
                                 pa.field("name", pa.string()),
-                                pa.field("cnt", pa.int64()),
                             ]
                         )
                     )
