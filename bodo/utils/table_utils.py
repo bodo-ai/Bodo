@@ -28,7 +28,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import set_wrapper
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def generate_mappable_table_func(
     table, func_name, out_arr_typ, is_method, used_cols=None
 ):
@@ -385,7 +385,7 @@ def concat_tables(in_tables, used_cols=None):
     return loc_vars["table_concat_func"]
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     """Table kernel to perform an astype operations, which
     converts (possibly) the input table to a new output table.

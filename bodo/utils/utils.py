@@ -1273,18 +1273,6 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-# Copied from Numba PR to make inliner faster and improve compilation time:
-# https://github.com/numba/numba/pull/9245
-# TODO: remove after upgrading to Numba 0.59
-def VAR__deepcopy__(self, memo):
-    out = ir.Var(copy.deepcopy(self.scope, memo), self.name, self.loc)
-    memo[id(self)] = out
-    return out
-
-
-ir.Var.__deepcopy__ = VAR__deepcopy__
-
-
 def is_call_assign(stmt):
     return (
         isinstance(stmt, ir.Assign)

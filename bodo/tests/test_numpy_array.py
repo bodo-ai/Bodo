@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, no_default
 from bodo.utils.typing import BodoError
 
 
@@ -918,7 +918,7 @@ def test_getitem(mutable_bodo_arr, memory_leak_check):
         idx[-1] = False
         py_output = mutable_bodo_arr[idx]
     else:
-        py_output = None
+        py_output = no_default
     idx = pd.array(idx)
     idx[1] = None
     idx[-1] = None
@@ -966,7 +966,7 @@ def test_isna_check(mutable_bodo_arr, memory_leak_check):
         # fails.
         py_output = mutable_bodo_arr
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (pd.Series(mutable_bodo_arr),), py_output=py_output)
 
 
@@ -1116,7 +1116,7 @@ def test_np_select(arr_tuple_val, memory_leak_check):
             arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
         )
     else:
-        py_out = None
+        py_out = no_default
 
     for impl in [impl_1, impl_2, impl_3, impl_4]:
         check_func(
@@ -1175,7 +1175,7 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
             arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
         )
     else:
-        py_out = None
+        py_out = no_default
 
     A1 = pd.array(arr_tuple_val[0][:minsize])
     A2 = pd.array(arr_tuple_val[1][:minsize])

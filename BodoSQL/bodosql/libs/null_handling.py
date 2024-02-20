@@ -2,14 +2,20 @@
 """
     Library of BodoSQL functions used for performing operations on potentially null Values
 """
+import numba
 from numba import generated_jit
 from numba.extending import register_jitable
 
 import bodo
 
 
-@generated_jit(nopython=True)
+@numba.njit
 def scalar_nullable_logical_not(val):
+    return scalar_nullable_logical_not_impl(val)
+
+
+@generated_jit(nopython=True)
+def scalar_nullable_logical_not_impl(val):
     """Helper function that performs a logical not on a nullable boolean scalar value"""
     if val == bodo.none:
         return lambda val: None
@@ -32,8 +38,13 @@ def scalar_nullable_logical_not(val):
         return lambda val: not val
 
 
-@generated_jit(nopython=True)
+@numba.njit
 def scalar_nullable_add(a, b):
+    return scalar_nullable_add_impl(a, b)
+
+
+@generated_jit(nopython=True)
+def scalar_nullable_add_impl(a, b):
     """
     Add operator on scalars with SQL Null handling. This function can take None,
     which should return None (different from Python), an Optional type, which

@@ -16,7 +16,7 @@ from bodo.utils.typing import (
 )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def to_time(arr, format_str, _try, dict_encoding_state=None, func_id=-1):
     """Handles TIME/TO_TIME/TRY_TO_TIME and forwards
     to the appropriate version of the real implementation"""
@@ -43,7 +43,7 @@ def to_time(arr, format_str, _try, dict_encoding_state=None, func_id=-1):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def to_time_util(
     arr, format_str, _try, dict_encoding_state, func_id
 ):  # pragma: no cover

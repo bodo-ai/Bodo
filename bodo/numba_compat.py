@@ -89,53 +89,42 @@ _check_numba_change = False
 numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
 
 
-# Avoid warning in Numba 0.57 until we remove generated_jit from our code base
-# TODO[BSE-1341]: replace all generated_jit use with overload
-def generated_jit(function=None, cache=False, pipeline_class=None, **options):
+# Numba 0.59 removed generated_jit so adding a limited version for our internal usage
+# from here: https://github.com/numba/numba/issues/8466#issuecomment-1274593340
+# NOTE: this version is just an overload and cannot be called from regular Python
+# (doesn't generate a CPython wrapper)
+def generated_jit(
+    function=None, cache=False, pipeline_class=None, no_unliteral=True, **options
+):
     """
     This decorator allows flexible type-based compilation
     of a jitted function.  It works as `@jit`, except that the decorated
     function is called at compile-time with the *types* of the arguments
     and should return an implementation function for those types.
     """
-    from numba.core.decorators import _jit
+    from numba.extending import overload
 
-    url_s = "https://numba.readthedocs.io/en/stable/reference/deprecation.html"
-    url_anchor = "#deprecation-of-generated-jit"
-    url = f"{url_s}{url_anchor}"
-    msg = (
-        "numba.generated_jit is deprecated. Please see the documentation "
-        f"at: {url} for more information and advice on a suitable "
-        "replacement."
-    )
-    # Bodo change: avoid warning
-    # warnings.warn(msg, NumbaDeprecationWarning)
-    dispatcher_args = {}
+    jit_options = dict()
     if pipeline_class is not None:
-        dispatcher_args["pipeline_class"] = pipeline_class
-    wrapper = _jit(
-        sigs=None,
-        locals={},
-        target="cpu",
-        cache=cache,
-        targetoptions=options,
-        impl_kind="generated",
-        **dispatcher_args,
-    )
+        jit_options["pipeline_class"] = pipeline_class
+    jit_options["cache"] = cache
+    jit_options |= options
+
     if function is not None:
-        return wrapper(function)
+        overload(
+            function, jit_options=jit_options, no_unliteral=no_unliteral, strict=False
+        )(function)
+        return function
     else:
+
+        def wrapper(func):
+            overload(
+                func, jit_options=jit_options, no_unliteral=no_unliteral, strict=False
+            )(func)
+            return func
+
         return wrapper
 
-
-if _check_numba_change:  # pragma: no cover
-    # make sure generated_jit hasn't changed before replacing it
-    lines = inspect.getsource(numba.core.decorators.generated_jit)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "d69b869146b984e1fe92cb6737fae9e4b0dd0de938207d5eddd73a0179b92c8c"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.decorators.generated_jit has changed")
 
 numba.core.decorators.generated_jit = generated_jit
 numba.generated_jit = generated_jit
@@ -648,6 +637,8 @@ def _resolve(self, typ, attr):
 
     if isinstance(typ, types.TypeRef):
         assert typ == self.key
+    elif isinstance(typ, types.Callable):
+        assert typ == self.key
     else:
         assert isinstance(typ, self.key)
 
@@ -670,6 +661,22 @@ def _resolve(self, typ, attr):
             if sig is not None:
                 return sig.as_method()
 
+        def get_template_info(self):
+            basepath = os.path.dirname(os.path.dirname(numba.__file__))
+            impl = self._overload_func
+            code, firstlineno, path = self.get_source_code_info(impl)
+            sig = str(numba.core.utils.pysignature(impl))
+            info = {
+                "kind": "overload_method",
+                "name": getattr(impl, "__qualname__", impl.__name__),
+                "sig": sig,
+                "filename": numba.core.utils.safe_relpath(path, start=basepath),
+                "lines": (firstlineno, firstlineno + len(code) - 1),
+                "docstring": impl.__doc__,
+            }
+
+            return info
+
     return types.BoundFunction(MethodTemplate, typ)
 
 
@@ -680,7 +687,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "ce8e0935dc939d0867ef969e1ed2975adb3533a58a4133fcc90ae13c4418e4d6"
+        != "1bf0af889c88f257c89fd6d4eaa4d59507fb9b9eb84da22907fc59a2ebdd5de6"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
@@ -2144,7 +2151,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "a48af3def2fc24be499cc0a95d82dbe2134f918aa2aae70c62fa7b606373152c"
+        != "3b232adb1be7f9e55038b319ef591e1dfcf0ee64bb2e617762c8c845ab723984"
     ):  # pragma: no cover
         warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
 
@@ -2162,21 +2169,29 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
     reduce_nodes = None
     defs = {}
 
-    def lookup(var, already_seen, varonly=True):
-        val = defs.get(var.name, None)
-        if isinstance(val, ir.Var):
-            # Bodo Change: Track variables that are already
-            # seen to avoid infinite recursion.
-            # For example:
-            #       $x = $y
-            #       $y = $x
-            # can lead to infinite recursion
-            if val.name in already_seen:
-                return var
-            already_seen.add(val.name)
-            return lookup(val, already_seen, varonly)
+    def cyclic_lookup(var, varonly=True, start=None):
+        """Lookup definition of ``var``.
+        Returns ``None`` if variable definition forms a cycle.
+        """
+        lookedup_var = defs.get(var.name, None)
+        if isinstance(lookedup_var, ir.Var):
+            if start is None:
+                start = lookedup_var
+            elif start == lookedup_var:
+                # cycle detected
+                return None
+            return cyclic_lookup(lookedup_var, start=start)
         else:
-            return var if (varonly or val is None) else val
+            return var if (varonly or lookedup_var is None) else lookedup_var
+
+    def noncyclic_lookup(*args, **kwargs):
+        """Similar to cyclic_lookup but raise AssertionError if a cycle is
+        detected.
+        """
+        res = cyclic_lookup(*args, **kwargs)
+        if res is None:
+            raise AssertionError("unexpected cycle in lookup()")
+        return res
 
     name = reduction_node.name
     unversioned_name = reduction_node.unversioned_name
@@ -2185,9 +2200,9 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
         rhs = stmt.value
         defs[lhs.name] = rhs
         if isinstance(rhs, ir.Var) and rhs.name in defs:
-            rhs = lookup(rhs, set())
+            rhs = cyclic_lookup(rhs)
         if isinstance(rhs, ir.Expr):
-            in_vars = set(lookup(v, set(), True).name for v in rhs.list_vars())
+            in_vars = set(noncyclic_lookup(v, True).name for v in rhs.list_vars())
             if name in in_vars:
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
@@ -2197,6 +2212,46 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 # e.g. $2 = a + $1; a = $2
                 # reductions that are functions calls like max() don't have an
                 # extra assignment afterwards
+
+                # This code was created when Numba had an IR generation strategy
+                # where a binop for a reduction would be followed by an
+                # assignment as follows:
+                # $c.4.15 = inplace_binop(fn=<iadd>, ...>, lhs=c.3, rhs=$const20)
+                # c.4 = $c.4.15
+
+                # With Python 3.12 changes, Numba may separate that assignment
+                # to a new basic block.  The code below looks and sees if an
+                # assignment to the reduction var follows the reduction operator
+                # and if not it searches the rest of the reduction nodes to find
+                # the assignment that should follow the reduction operator
+                # and then reorders the reduction nodes so that assignment
+                # follows the reduction operator.
+                if i + 1 < len(nodes) and (
+                    (not isinstance(nodes[i + 1], ir.Assign))
+                    or nodes[i + 1].target.unversioned_name != unversioned_name
+                ):
+                    foundj = None
+                    # Iterate through the rest of the reduction nodes.
+                    for j, jstmt in enumerate(nodes[i + 1 :]):
+                        # If this stmt is an assignment where the right-hand
+                        # side of the assignment is the output of the reduction
+                        # operator.
+                        if isinstance(jstmt, ir.Assign) and jstmt.value == lhs:
+                            # Remember the index of this node.  Because of
+                            # nodes[i+1] above, we have to add i + 1 to j below
+                            # to get the index in the original nodes list.
+                            foundj = i + j + 1
+                            break
+                    if foundj is not None:
+                        # If we found the correct assignment then move it to
+                        # after the reduction operator.
+                        nodes = (
+                            nodes[: i + 1]
+                            + nodes[foundj : foundj + 1]  # nodes up to operator
+                            + nodes[i + 1 : foundj]  # assignment node
+                            + nodes[foundj + 1 :]  # between op and assign
+                        )  # after assignment node
+
                 # if (not (i+1 < len(nodes) and isinstance(nodes[i+1], ir.Assign)
                 #         and nodes[i+1].target.unversioned_name == unversioned_name)
                 #         and lhs.unversioned_name != unversioned_name):
@@ -2209,7 +2264,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 # if not supported_reduction(rhs, func_ir):
                 #     raise ValueError(("Use of reduction variable " + unversioned_name +
                 #                       " in an unsupported reduction function."))
-                args = [(x.name, lookup(x, set(), True)) for x in get_expr_args(rhs)]
+                args = [(x.name, noncyclic_lookup(x, True)) for x in get_expr_args(rhs)]
                 non_red_args = [x for (x, y) in args if y.name != name]
                 # Bodo change: avoid raising error for concat reduction case
                 # assert len(non_red_args) == 1
@@ -2230,7 +2285,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "a05b52aff9cb02e595a510cd34e973857303a71097fc5530567cb70ca183ef3b"
+        != "102b5ee3d41f43c5c2a9aa84e0a00420dce8ffd684fedb08a87dee1e9c7ec92d"
     ):  # pragma: no cover
         warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
 
@@ -2983,7 +3038,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.errors.ForceLiteralArg.bind_fold_arguments)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1e93cca558f7c604a47214a8f2ec33ee994104cb3e5051166f16d7cc9315141d"
+        != "62ce537a62cfada95eb3f960eff60ce207c023f93956dc9d881618f8c758db8f"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.errors.ForceLiteralArg.bind_fold_arguments has changed"
@@ -4251,15 +4306,15 @@ def _lifted_compile(self, sig):
 
 
 if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.dispatcher.LiftedCode.compile)
+    lines = inspect.getsource(numba.core.dispatcher.LiftedWith.compile)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1351ebc5d8812dc8da167b30dad30eafb2ca9bf191b49aaed6241c21e03afff1"
+        != "918e7e84c5965c517157811f084595340a8763099b3fd99f8533e3049e2edcd5"
     ):  # pragma: no cover
-        warnings.warn("numba.core.dispatcher.LiftedCode.compile has changed")
+        warnings.warn("numba.core.dispatcher.LiftedWith.compile has changed")
 
 
-numba.core.dispatcher.LiftedCode.compile = _lifted_compile
+numba.core.dispatcher.LiftedWith.compile = _lifted_compile
 
 
 def compile_ir(
@@ -6252,165 +6307,6 @@ if _check_numba_change:  # pragma: no cover
 numba.core.ir_utils.find_topo_order = find_topo_order
 
 #### END PATCH TO ADD AN ITERATIVE IMPLEMENTATION OF find_topo_order ####
-
-
-# Bodo change: apply Numba patch to avoid extra IR copy in inliner:
-# https://github.com/numba/numba/pull/8990
-# TODO(ehsan): Remove after upgrade to Numba 0.59
-def inline_ir(self, caller_ir, block, i, callee_ir, callee_freevars, arg_typs=None):
-    """Inlines the callee_ir in the caller_ir at statement index i of block
-    `block`, callee_freevars are the free variables for the callee_ir. If
-    the callee_ir is derived from a function `func` then this is
-    `func.__code__.co_freevars`. If `arg_typs` is given and the InlineWorker
-    instance was initialized with a typemap and calltypes then they will be
-    appropriately updated based on the arg_typs.
-    """
-    from numba.core.inline_closurecall import (
-        _add_definitions,
-        _debug_dump,
-        _get_all_scopes,
-        _get_callee_args,
-        _replace_args_with,
-        _replace_returns,
-        add_offset_to_labels,
-        next_label,
-        replace_vars,
-    )
-
-    # Always copy the callee IR, it gets mutated
-    def copy_ir(the_ir):
-        kernel_copy = the_ir.copy()
-        kernel_copy.blocks = {}
-        for block_label, block in the_ir.blocks.items():
-            new_block = copy.deepcopy(the_ir.blocks[block_label])
-            # Bodo change: remove extra copy:
-            # https://github.com/numba/numba/pull/8990
-            # new_block.body = []
-            # for stmt in the_ir.blocks[block_label].body:
-            #     scopy = copy.deepcopy(stmt)
-            #     new_block.body.append(scopy)
-            kernel_copy.blocks[block_label] = new_block
-        return kernel_copy
-
-    callee_ir = copy_ir(callee_ir)
-
-    # check that the contents of the callee IR is something that can be
-    # inlined if a validator is present
-    if self.validator is not None:
-        self.validator(callee_ir)
-
-    # save an unmutated copy of the callee_ir to return
-    callee_ir_original = copy_ir(callee_ir)
-    scope = block.scope
-    instr = block.body[i]
-    call_expr = instr.value
-    callee_blocks = callee_ir.blocks
-
-    # 1. relabel callee_ir by adding an offset
-    max_label = max(
-        ir_utils._the_max_label.next(),
-        max(caller_ir.blocks.keys()),
-    )
-    callee_blocks = add_offset_to_labels(callee_blocks, max_label + 1)
-    callee_blocks = simplify_CFG(callee_blocks)
-    callee_ir.blocks = callee_blocks
-    min_label = min(callee_blocks.keys())
-    max_label = max(callee_blocks.keys())
-    #    reset globals in ir_utils before we use it
-    ir_utils._the_max_label.update(max_label)
-    self.debug_print("After relabel")
-    _debug_dump(callee_ir)
-
-    # 2. rename all local variables in callee_ir with new locals created in
-    # caller_ir
-    callee_scopes = _get_all_scopes(callee_blocks)
-    self.debug_print("callee_scopes = ", callee_scopes)
-    #    one function should only have one local scope
-    assert len(callee_scopes) == 1
-    callee_scope = callee_scopes[0]
-    var_dict = {}
-    for var in tuple(callee_scope.localvars._con.values()):
-        if not (var.name in callee_freevars):
-            inlined_name = _created_inlined_var_name(
-                callee_ir.func_id.unique_name, var.name
-            )
-            # Update the caller scope with the new names
-            new_var = scope.redefine(inlined_name, loc=var.loc)
-            # Also update the callee scope with the new names. Should the
-            # type and call maps need updating (which requires SSA form) the
-            # transformation to SSA is valid as the IR object is internally
-            # consistent.
-            callee_scope.redefine(inlined_name, loc=var.loc)
-            var_dict[var.name] = new_var
-    self.debug_print("var_dict = ", var_dict)
-    replace_vars(callee_blocks, var_dict)
-    self.debug_print("After local var rename")
-    _debug_dump(callee_ir)
-
-    # 3. replace formal parameters with actual arguments
-    callee_func = callee_ir.func_id.func
-    args = _get_callee_args(call_expr, callee_func, block.body[i].loc, caller_ir)
-
-    # 4. Update typemap
-    if self._permit_update_type_and_call_maps:
-        if arg_typs is None:
-            raise TypeError("arg_typs should have a value not None")
-        self.update_type_and_call_maps(callee_ir, arg_typs)
-        # update_type_and_call_maps replaces blocks
-        callee_blocks = callee_ir.blocks
-
-    self.debug_print("After arguments rename: ")
-    _debug_dump(callee_ir)
-
-    _replace_args_with(callee_blocks, args)
-    # 5. split caller blocks into two
-    new_blocks = []
-    new_block = ir.Block(scope, block.loc)
-    new_block.body = block.body[i + 1 :]
-    new_label = next_label()
-    caller_ir.blocks[new_label] = new_block
-    new_blocks.append((new_label, new_block))
-    block.body = block.body[:i]
-    block.body.append(ir.Jump(min_label, instr.loc))
-
-    # 6. replace Return with assignment to LHS
-    topo_order = find_topo_order(callee_blocks)
-    _replace_returns(callee_blocks, instr.target, new_label)
-
-    # remove the old definition of instr.target too
-    if (
-        instr.target.name in caller_ir._definitions
-        and call_expr in caller_ir._definitions[instr.target.name]
-    ):
-        # NOTE: target can have multiple definitions due to control flow
-        caller_ir._definitions[instr.target.name].remove(call_expr)
-
-    # 7. insert all new blocks, and add back definitions
-    for label in topo_order:
-        # block scope must point to parent's
-        block = callee_blocks[label]
-        block.scope = scope
-        _add_definitions(caller_ir, block)
-        caller_ir.blocks[label] = block
-        new_blocks.append((label, block))
-    self.debug_print("After merge in")
-    _debug_dump(caller_ir)
-
-    return callee_ir_original, callee_blocks, var_dict, new_blocks
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.inline_closurecall.InlineWorker.inline_ir)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "2e121cdc0227aba01adc49675e14e1edec867dbaa8bb5e11107fc1aee184c228"
-    ):
-        warnings.warn(
-            "numba.core.inline_closurecall.InlineWorker.inline_ir has changed"
-        )
-
-
-numba.core.inline_closurecall.InlineWorker.inline_ir = inline_ir
 
 
 def _sanitize_cell_contents(c):

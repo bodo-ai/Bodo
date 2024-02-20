@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     _test_equal,
     check_func,
     is_bool_object_series,
+    no_default,
     pytest_pandas,
 )
 from bodo.utils.typing import BodoError
@@ -618,7 +619,7 @@ def test_dataframe_concat(series_val):
             py_output = py_output.astype(series_val.dtype.categories.dtype)
         py_output = py_output.astype(series_val.dtype)
     else:
-        py_output = None
+        py_output = no_default
     if isinstance(series_val.values[0], list):
         check_func(
             f,

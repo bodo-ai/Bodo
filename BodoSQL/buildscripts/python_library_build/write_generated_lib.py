@@ -97,7 +97,7 @@ def generate_and_write_library():
 
     library_fn_strings = []
 
-    for (fn_name, fn_expr, num_args) in library_fns_info:
+    for fn_name, fn_expr, num_args in library_fns_info:
         library_fn_strings.append(
             buildscripts.python_library_build.generate_libraries.generate_library_fn_string(
                 fn_name, fn_expr, num_args
@@ -117,6 +117,7 @@ import operator
 import numpy as np
 import pandas as pd
 import re
+import numba
 from numba import generated_jit
 """
     library_string = "\n".join([header_string] + library_fn_strings)

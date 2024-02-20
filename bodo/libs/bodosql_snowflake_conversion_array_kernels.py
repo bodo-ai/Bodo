@@ -39,6 +39,7 @@ def make_to_boolean(_try):
                 f"bodo.libs.bodosql_array_kernels.{func_name}",
                 ["arr", "dict_encoding_state", "func_id"],
                 0,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
         def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
@@ -55,7 +56,7 @@ try_to_boolean = make_to_boolean(True)
 to_boolean = make_to_boolean(False)
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def to_boolean_util(arr, _try, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function TO_BOOLEAN which takes in a
     number (or column) and returns True if it is not zero and not null,
@@ -890,7 +891,7 @@ def is_string_numeric(expr):  # pragma: no cover
     return i == len(expr)
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function TO_DOUBLE which takes in a
     number (or column) and converts it to float64.
@@ -1764,7 +1765,7 @@ def convert_timezone(source_tz, target_tz, data, return_tz):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def convert_timezone_util(source_tz, target_tz, data, return_tz):
     """
     Converts <data> to <target_tz> timezone.

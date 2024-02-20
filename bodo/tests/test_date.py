@@ -11,7 +11,7 @@ import pytest
 import pytz
 
 import bodo
-from bodo.tests.utils import check_func, generate_comparison_ops_func
+from bodo.tests.utils import check_func, generate_comparison_ops_func, no_default
 from bodo.utils.typing import BodoError
 
 
@@ -1110,7 +1110,7 @@ def test_dt64_astype(datetime_convertable_series, memory_leak_check):
             index=datetime_convertable_series.index,
         )
     else:
-        py_output = None
+        py_output = no_default
 
     check_func(impl1, (datetime_convertable_series,), py_output=py_output)
     check_func(impl2, (datetime_convertable_series,), py_output=py_output)
@@ -1169,7 +1169,7 @@ def test_td64_astype(datetime_convertable_series, memory_leak_check):
             index=datetime_convertable_series.index,
         )
     else:
-        py_output = None
+        py_output = no_default
 
     check_func(impl1, (datetime_convertable_series,), py_output=py_output)
     check_func(impl2, (datetime_convertable_series,), py_output=py_output)

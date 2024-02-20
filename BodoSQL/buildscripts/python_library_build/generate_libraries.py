@@ -3,9 +3,9 @@
 and otherwise return the result of the original function. This file automatically generates these library functions."""
 import operator
 
-from numba import generated_jit
-
 import bodo
+import numba
+from bodo.numba_compat import generated_jit
 
 
 def generate_library_fn_string(fn_name, fn_expr_lambda, num_args):
@@ -74,7 +74,7 @@ def generate_library_fn_string(fn_name, fn_expr_lambda, num_args):
 
     function_code = f"""
 @generated_jit(nopython=True)
-def {lib_fn_name}({args_list}):
+def {lib_fn_name}_impl({args_list}):
     \"automatically generated library function for {fn_name}\"
 
     #if either input is None, return None
@@ -98,6 +98,10 @@ def {lib_fn_name}({args_list}):
 
     else:
         return lambda {args_list}: {fn_expr}
+
+@numba.njit
+def {lib_fn_name}({args_list}):
+    return {lib_fn_name}_impl({args_list})
         """
     return function_code
 
@@ -109,7 +113,12 @@ def generate_fn_impl(fn_name, fn_expr_lambda, num_args):
     locs = {}
     exec(
         func_text,
-        {"bodo": bodo, "operator": operator, "generated_jit": generated_jit},
+        {
+            "bodo": bodo,
+            "operator": operator,
+            "generated_jit": generated_jit,
+            "numba": numba,
+        },
         locs,
     )
     func = locs[lib_fn_name]

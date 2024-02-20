@@ -639,7 +639,7 @@ def nvl2_util(arr, not_null_branch, null_branch):
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function EQUAL_NULL which takes in two values
     (or columns) and returns True if they are equal (where NULL is treated as

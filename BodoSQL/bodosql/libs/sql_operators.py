@@ -3,6 +3,7 @@
     Library of BodoSQL operators that don't have a Python equivalent
 """
 
+import numba
 import pandas as pd
 from numba import generated_jit
 from numba.extending import overload, register_jitable
@@ -53,8 +54,13 @@ def overload_sql_null_equal_column(arg0, arg1):
         return lambda arg0, arg1: sql_null_equal_column(arg1, arg0)
 
 
-@generated_jit(nopython=True)
+@numba.njit
 def sql_null_equal_scalar(arg0, arg1):
+    return sql_null_equal_scalar_impl(arg0, arg1)
+
+
+@generated_jit(nopython=True)
+def sql_null_equal_scalar_impl(arg0, arg1):
     """
     Function that replicates the behavior of MYSQL's <=> operator on scalars,
     properly handling the null/optional cases. Equivalent to =, but returns

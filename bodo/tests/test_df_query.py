@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, pytest_pandas
+from bodo.tests.utils import check_func, no_default, pytest_pandas
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
@@ -60,7 +60,7 @@ def test_df_query_unicode_expr(expr):
         filter_val = df.C.str.isalpha()
         py_output = df[filter_val]
     else:
-        py_output = None
+        py_output = no_default
     check_func(impl, (df, expr, 1), py_output=py_output)
 
 

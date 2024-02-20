@@ -471,8 +471,13 @@ def alltoall(send_arr, recv_arr, count):  # pragma: no cover
     _alltoall(send_arr.ctypes, recv_arr.ctypes, np.int32(count), type_enum)
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def gather_scalar(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
+    return gather_scalar_impl_jit(data, allgather, warn_if_rep, root)
+
+
+@numba.generated_jit(nopython=True)
+def gather_scalar_impl_jit(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     data = types.unliteral(data)
     typ_val = numba_to_c_type(data)
     dtype = data
@@ -572,8 +577,13 @@ _dist_arr_reduce = types.ExternalFunction(
 )
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_reduce(value, reduce_op):
+    return dist_reduce_impl(value, reduce_op)
+
+
+@numba.generated_jit(nopython=True)
+def dist_reduce_impl(value, reduce_op):
     if isinstance(value, types.Array):
         typ_enum = np.int32(numba_to_c_type(value.dtype))
 
@@ -627,8 +637,13 @@ _dist_exscan = types.ExternalFunction(
 )
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_exscan(value, reduce_op):
+    return dist_exscan_impl(value, reduce_op)
+
+
+@numba.generated_jit(nopython=True)
+def dist_exscan_impl(value, reduce_op):
     target_typ = types.unliteral(value)
     typ_enum = np.int32(numba_to_c_type(target_typ))
     zero = target_typ(0)
@@ -667,8 +682,13 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
+    return gatherv_impl_jit(data, allgather, warn_if_rep, root)
+
+
+@numba.generated_jit(nopython=True)
+def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     """gathers distributed data into rank 0 or all ranks if 'allgather' is set.
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
     gatherv has no effect (applicable only inside jit functions).
@@ -1518,8 +1538,13 @@ def overload_distributed_transpose(arr):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
+    return rebalance_impl(data, dests, random, random_seed, parallel)
+
+
+@numba.generated_jit(nopython=True, no_unliteral=True)
+def rebalance_impl(data, dests=None, random=False, random_seed=None, parallel=False):
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.rebalance()"
     )
@@ -1631,8 +1656,13 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
+    return random_shuffle_impl(data, seed, dests, n_samples, parallel)
+
+
+@numba.generated_jit(nopython=True)
+def random_shuffle_impl(data, seed=None, dests=None, n_samples=None, parallel=False):
     func_text = (
         "def impl(data, seed=None, dests=None, n_samples=None, parallel=False):\n"
     )
@@ -1691,8 +1721,13 @@ def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def allgatherv(data, warn_if_rep=True, root=MPI_ROOT):
+    return allgatherv_impl(data, warn_if_rep, root)
+
+
+@numba.generated_jit(nopython=True)
+def allgatherv_impl(data, warn_if_rep=True, root=MPI_ROOT):
     return lambda data, warn_if_rep=True, root=MPI_ROOT: gatherv(
         data, True, warn_if_rep, root
     )  # pragma: no cover
@@ -1963,13 +1998,18 @@ def scatterv_overload(data, send_counts=None, warn_if_dist=True):
         data, "bodo.scatterv()"
     )
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.scatterv()")
-    return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl(
+    return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl_jit(
         data, send_counts
     )  # pragma: no cover
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def scatterv_impl(data, send_counts=None, warn_if_dist=True):
+    return scatterv_impl_jit(data, send_counts, warn_if_dist)
+
+
+@numba.generated_jit(nopython=True)
+def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
     """nopython implementation of scatterv()"""
     if isinstance(data, types.Array):
         return lambda data, send_counts=None, warn_if_dist=True: _scatterv_np(
@@ -2701,8 +2741,13 @@ c_bcast = types.ExternalFunction(
 )
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def bcast_scalar(val, root=MPI_ROOT):
+    return bcast_scalar_impl_jit(val, root)
+
+
+@numba.generated_jit(nopython=True)
+def bcast_scalar_impl_jit(val, root=MPI_ROOT):
     """broadcast for a scalar value.
     Assumes all ranks `val` has same type.
     """
@@ -2821,8 +2866,13 @@ def bcast_scalar(val, root=MPI_ROOT):
     return bcast_scalar_impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def bcast_tuple(val, root=MPI_ROOT):
+    return bcast_tuple_impl_jit(val, root)
+
+
+@numba.generated_jit(nopython=True)
+def bcast_tuple_impl_jit(val, root=MPI_ROOT):
     """broadcast a tuple value
     calls bcast_scalar() on individual elements
     """
@@ -3476,8 +3526,13 @@ def get_node_portion(total_size, pes, rank):  # pragma: no cover
         return blk_size
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_cumsum(in_arr, out_arr):
+    return dist_cumsum_impl(in_arr, out_arr)
+
+
+@numba.generated_jit(nopython=True)
+def dist_cumsum_impl(in_arr, out_arr):
     zero = in_arr.dtype(0)
     op = np.int32(Reduce_Type.Sum.value)
 
@@ -3494,8 +3549,13 @@ def dist_cumsum(in_arr, out_arr):
     return cumsum_impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_cumprod(in_arr, out_arr):
+    return dist_cumprod_impl(in_arr, out_arr)
+
+
+@numba.generated_jit(nopython=True)
+def dist_cumprod_impl(in_arr, out_arr):
     neutral_val = in_arr.dtype(1)
     op = np.int32(Reduce_Type.Prod.value)
 
@@ -3519,8 +3579,13 @@ def dist_cumprod(in_arr, out_arr):
     return cumprod_impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_cummin(in_arr, out_arr):
+    return dist_cummin_impl(in_arr, out_arr)
+
+
+@numba.generated_jit(nopython=True)
+def dist_cummin_impl(in_arr, out_arr):
     if isinstance(in_arr.dtype, types.Float):
         neutral_val = np.finfo(in_arr.dtype(1).dtype).max
     else:
@@ -3543,8 +3608,13 @@ def dist_cummin(in_arr, out_arr):
     return cummin_impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.njit
 def dist_cummax(in_arr, out_arr):
+    return dist_cummax_impl(in_arr, out_arr)
+
+
+@numba.generated_jit(nopython=True)
+def dist_cummax_impl(in_arr, out_arr):
     if isinstance(in_arr.dtype, types.Float):
         neutral_val = np.finfo(in_arr.dtype(1).dtype).min
     else:

@@ -253,7 +253,7 @@ def _init_chunked_table_builder_state(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_table_builder_state(
     operator_id,
     expected_state_type=None,

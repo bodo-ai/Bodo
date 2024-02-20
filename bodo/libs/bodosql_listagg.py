@@ -33,7 +33,7 @@ ll.add_symbol(
 )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def bodosql_listagg(
     df,
     agg_col,
@@ -137,7 +137,7 @@ def bodosql_listagg(
     return bodosql_listagg_impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def bodosql_listagg_seq(df, ascending, na_position, separator=""):
     """
     Sequential implementation of listagg.

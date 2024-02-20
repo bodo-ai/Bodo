@@ -2,14 +2,19 @@
 """
     Library of BodoSQL functions used for performing "AND" and "OR" operations involving potentially null values
 """
-
+import numba
 from numba import generated_jit
 
 import bodo
 
 
-@generated_jit(nopython=True)
+@numba.njit
 def mysql_nullchecking_scalar_or(arg0, arg1):
+    return mysql_nullchecking_scalar_or_impl(arg0, arg1)
+
+
+@generated_jit(nopython=True)
+def mysql_nullchecking_scalar_or_impl(arg0, arg1):
     """
     Function that replicates the behavior of MYSQL's or function on scalar values, properly
     handling the null/optional cases.
@@ -52,8 +57,13 @@ def mysql_nullchecking_scalar_or(arg0, arg1):
         return lambda arg0, arg1: arg0 or arg1
 
 
-@generated_jit(nopython=True)
+@numba.njit
 def mysql_nullchecking_scalar_and(arg0, arg1):
+    return mysql_nullchecking_scalar_and_impl(arg0, arg1)
+
+
+@generated_jit(nopython=True)
+def mysql_nullchecking_scalar_and_impl(arg0, arg1):
     """
     Function that replicates the behavior of MYSQL's and function on scalar
     values, properly handling the null/optional cases.
