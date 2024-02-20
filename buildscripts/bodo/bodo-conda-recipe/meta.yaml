@@ -11,11 +11,15 @@ build:
   - CHECK_LICENSE_EXPIRED
   - CHECK_LICENSE_CORE_COUNT
   - CHECK_LICENSE_PLATFORM
+  # Necessary for sccache to find AWS
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
 
 requirements:
   build:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
+    - sccache
 
   host:
     - python
