@@ -284,7 +284,6 @@ def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
         func_text = """def f(n):
             A = np.arange(0, n, 1, np.{})
             return A.{}()
@@ -311,7 +310,6 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
         func_text = """def f(A):
             return A.{}()
         """.format(
@@ -354,7 +352,6 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-
         func_text = """def f(A):
             A = A[A>5]
             return A.{}()
@@ -380,7 +377,7 @@ def test_array_reduce(memory_leak_check):
         "np.int32",
         "np.int64",
     ]
-    for (op, typ) in zip(binops, dtypes):
+    for op, typ in zip(binops, dtypes):
         func_text = """def f(n):
                 A = np.arange(0, 10, 1, {})
                 B = np.arange(0 +  3, 10 + 3, 1, {})
@@ -936,6 +933,9 @@ def test_pure_func(datapath):
 
     import h5py
 
+    # import Bodo's h5py extension since not using Bodo jit decorator that inits it in
+    # this test
+    import bodo.io.h5_api  # noqa
     from bodo.utils.transform import _func_is_pure
 
     fname_pq = datapath("example.parquet")

@@ -1746,7 +1746,7 @@ def test_like_kernel_optional(memory_leak_check):
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                answer = (False, True) if flag0 and flag1 and flag2 else None
+                answer = (False, True) if flag0 and flag1 and flag2 else (None, None)
                 check_func(
                     impl,
                     (arg, pattern, escape, flag0, flag1, flag2),

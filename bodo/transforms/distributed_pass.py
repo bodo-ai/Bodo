@@ -2324,9 +2324,10 @@ class DistributedPass:
         if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
             # Dataframe is the 3rd argument (counting from 0)
             df_arg = rhs.args[3].name
-            if self._is_1D_or_1D_Var_arr(df_arg):
-                set_last_arg_to_true(self, assign.value)
-                return [assign]
+            if not self._is_1D_or_1D_Var_arr(df_arg):
+                raise BodoError(
+                    "Merge Into with Iceberg Tables are only supported on distributed DataFrames"
+                )
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64

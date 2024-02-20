@@ -510,7 +510,7 @@ def overload_setna_slice(arr, s):
     return impl
 
 
-@numba.generated_jit
+@numba.generated_jit(no_unliteral=True)
 def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
     """
     Taking a data array (arr) and index array (index_arr) as input, this function determines the index
@@ -673,7 +673,7 @@ def series_monotonicity(arr, inc_dec, parallel=False):  # pragma: no cover
 ################################ DateTime ####################################
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def get_valid_entries_from_date_offset(
     index_arr, offset, initial_date, is_last, is_parallel=False
 ):

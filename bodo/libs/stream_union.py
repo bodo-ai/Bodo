@@ -161,7 +161,7 @@ class UnionStateType(types.Type):
 register_model(UnionStateType)(models.OpaqueModel)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_union_state(
     operator_id,
     all=False,

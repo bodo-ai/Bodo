@@ -8,9 +8,9 @@ test the desired helper function.
 """
 import os
 
+import numba
 import pytest
 from numba.core import types
-from numba.core.compiler import Flags, compile_isolated
 
 
 # Used for testing topological sort ordering. Copied from
@@ -41,8 +41,7 @@ def test_for_break(iterative):
     try:
         os.environ["BODO_TOPO_ORDER_ITERATIVE"] = "1" if iterative else "0"
         pyfunc = for_break
-        cr = compile_isolated(pyfunc, (types.intp, types.intp), flags=Flags())
-        cfunc = cr.entry_point
+        cfunc = numba.jit((types.intp, types.intp))(pyfunc)
         for n, x in [(4, 2), (4, 6)]:
             assert pyfunc(n, x) == cfunc(n, x)
     finally:

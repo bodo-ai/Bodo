@@ -2643,7 +2643,7 @@ def test_strcmp_instr_option(memory_leak_check):
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
-            answer = (1, 0) if flag0 and flag1 else None
+            answer = (1, 0) if flag0 and flag1 else (None, None)
             check_func(
                 impl, ("a", "Z", flag0, flag1), py_output=answer, dist_test=False
             )
@@ -2663,7 +2663,7 @@ def test_option_strtok_split_part(memory_leak_check):
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                answer = ("b", "c") if flag0 and flag1 and flag2 else None
+                answer = ("b", "c") if flag0 and flag1 and flag2 else (None, None)
                 check_func(
                     impl,
                     ("a  b  c", " ", 3, flag0, flag1, flag2),

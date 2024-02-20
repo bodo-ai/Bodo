@@ -20,6 +20,7 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     is_bool_object_series,
+    no_default,
     pytest_pandas,
 )
 from bodo.utils.typing import BodoError
@@ -767,7 +768,7 @@ def test_series_idxmin(series_val, memory_leak_check):
     elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (series_val,), py_output=py_output)
 
 
@@ -817,7 +818,7 @@ def test_series_idxmax(series_val, memory_leak_check):
     elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
-        py_output = None
+        py_output = no_default
     check_func(test_impl, (series_val,), py_output=py_output)
 
 
@@ -1053,7 +1054,7 @@ def test_series_isin_true(series_val):
             [True, True] + [False] * (len(series_val) - 2), index=series_val.index
         )
     else:
-        py_output = None
+        py_output = no_default
     # TODO: Check distributed
     # setting check_dtype to False because as bodo returns a series with non-nullable boolean type
     # as opposed to nullable pandas type. See [BE-1162]
@@ -1256,7 +1257,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
             .quantile(0.30)
         )
     else:
-        py_out = None
+        py_out = no_default
 
     def test_impl(A):
         return A.quantile(0.30)
@@ -3202,7 +3203,7 @@ def test_series_np_select(series_val):
                 pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
             )
     else:
-        py_out = None
+        py_out = no_default
 
     for impl in [impl1, impl2, impl3, impl4]:
         check_func(
@@ -3275,7 +3276,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             else:
                 py_out = pd.array(pd.Series(py_out).astype(series_val.dtype))
     else:
-        py_out = None
+        py_out = no_default
 
     check_func(
         impl,
@@ -3326,7 +3327,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
         py_out[pd.isna(py_out)] = np.NAN
         py_out = py_out.astype(float)
     else:
-        py_out = None
+        py_out = no_default
 
     check_func(
         impl,

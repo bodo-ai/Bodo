@@ -1805,7 +1805,7 @@ def overload_date_trunc_util(
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def construct_timestamp_util(
     year, month, day, hour, minute, second, nanosecond, time_zone
 ):
@@ -3139,7 +3139,7 @@ def dayofweek(arr, week_start):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def dayofweek_util(arr, week_start):
     """
     Python kernel for DAYOFWEEK.
@@ -3553,7 +3553,7 @@ def week(arr, week_start, week_of_year_policy):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def weekofyear(arr, week_start, week_of_year_policy):
     args = [arr, week_start, week_of_year_policy]
     for i in range(len(args)):
@@ -3570,7 +3570,7 @@ def weekofyear(arr, week_start, week_of_year_policy):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def weekofyear_util(arr, week_start, week_of_year_policy):
     """
     Python kernel for WEEKOFYEAR.
@@ -3655,7 +3655,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def yearofweek(arr, week_start, week_of_year_policy):
     args = [arr, week_start, week_of_year_policy]
     for i in range(len(args)):
@@ -3672,7 +3672,7 @@ def yearofweek(arr, week_start, week_of_year_policy):
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def yearofweek_util(arr, week_start, week_of_year_policy):
     """
     Python kernel for YEAROFWEEK.
@@ -3843,7 +3843,7 @@ def add_months_util(dt0, num_months):
     )
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def time_slice(
     arr, slice_length, date_time_part, start_or_end, start_day
 ):  # pragma: no cover
@@ -3866,7 +3866,7 @@ def time_slice(
     return impl
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, no_unliteral=True)
 def time_slice_util(arr, slice_length, date_time_part, start_or_end, start_day):
     """
     Python kernel for TIME_SLICE function.
