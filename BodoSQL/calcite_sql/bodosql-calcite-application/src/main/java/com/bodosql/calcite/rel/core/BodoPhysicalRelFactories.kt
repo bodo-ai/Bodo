@@ -91,37 +91,35 @@ object BodoPhysicalRelFactories {
             throw UnsupportedOperationException("Correlation variables are not supported")
         }
 
-        val strippedInput = if (input is HepRelVertex) {
-            input.stripped()
-        } else {
-            input
+        if (input is HepRelVertex) {
+            return createProject(input.stripped(), hints, childExprs, fieldNames, variablesSet)
         }
 
-        val retVal = if (strippedInput.convention == PandasRel.CONVENTION) {
-            PandasProject.create(strippedInput, childExprs, fieldNames)
-        } else if (strippedInput.convention == SnowflakeRel.CONVENTION) {
+        val retVal = if (input.convention == PandasRel.CONVENTION) {
+            PandasProject.create(input, childExprs, fieldNames)
+        } else if (input.convention == SnowflakeRel.CONVENTION) {
             SnowflakeProject.create(
-                strippedInput.cluster,
-                strippedInput.traitSet,
-                strippedInput,
+                input.cluster,
+                input.traitSet,
+                input,
                 childExprs,
                 fieldNames,
-                (strippedInput as SnowflakeRel).getCatalogTable(),
+                (input as SnowflakeRel).getCatalogTable(),
             )
-        } else if (strippedInput.convention == IcebergRel.CONVENTION) {
+        } else if (input.convention == IcebergRel.CONVENTION) {
             IcebergProject.create(
-                strippedInput.cluster,
-                strippedInput.traitSet,
-                strippedInput,
+                input.cluster,
+                input.traitSet,
+                input,
                 childExprs,
                 fieldNames,
-                (strippedInput as IcebergRel).getCatalogTable(),
+                (input as IcebergRel).getCatalogTable(),
             )
         } else {
-            throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + strippedInput.convention?.name)
+            throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
         }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == strippedInput.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
+        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
         return retVal
     }
 
@@ -131,23 +129,21 @@ object BodoPhysicalRelFactories {
             throw UnsupportedOperationException("Correlation variables are not supported")
         }
 
-        val strippedInput = if (input is HepRelVertex) {
-            input.stripped()
-        } else {
-            input
+        if (input is HepRelVertex) {
+            return createFilter(input.stripped(), condition, variablesSet)
         }
 
-        val retVal = if (strippedInput.convention == PandasRel.CONVENTION) {
-            PandasFilter.create(strippedInput.cluster, strippedInput, condition)
-        } else if (strippedInput.convention == SnowflakeRel.CONVENTION) {
-            SnowflakeFilter.create(strippedInput.cluster, strippedInput.traitSet, strippedInput, condition, (strippedInput as SnowflakeRel).getCatalogTable())
+        val retVal = if (input.convention == PandasRel.CONVENTION) {
+            PandasFilter.create(input.cluster, input, condition)
+        } else if (input.convention == SnowflakeRel.CONVENTION) {
+            SnowflakeFilter.create(input.cluster, input.traitSet, input, condition, (input as SnowflakeRel).getCatalogTable())
         } else if (input.convention == IcebergRel.CONVENTION) {
-            IcebergFilter.create(strippedInput.cluster, strippedInput.traitSet, strippedInput, condition, (strippedInput as IcebergRel).getCatalogTable())
+            IcebergFilter.create(input.cluster, input.traitSet, input, condition, (input as IcebergRel).getCatalogTable())
         } else {
             throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
         }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == strippedInput.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
+        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
         return retVal
     }
 
@@ -224,23 +220,21 @@ object BodoPhysicalRelFactories {
         val inputConvention = input.convention
         assert(inputConvention != null) { "Internal Error in Bodo Physical Builder: Input does not have any convention" }
 
-        val strippedInput = if (input is HepRelVertex) {
-            input.stripped()
-        } else {
-            input
+        if (input is HepRelVertex) {
+            return createAggregate(input.stripped(), hints, groupSet, groupSets, aggCalls)
         }
 
         val retVal = if (inputConvention == PandasRel.CONVENTION) {
-            PandasAggregate.create(strippedInput.cluster, strippedInput, groupSet, groupSets, aggCalls)
+            PandasAggregate.create(input.cluster, input, groupSet, groupSets, aggCalls)
         } else if (inputConvention == SnowflakeRel.CONVENTION) {
-            SnowflakeAggregate.create(strippedInput.cluster, strippedInput.traitSet, strippedInput, groupSet, groupSets, aggCalls, (strippedInput as SnowflakeRel).getCatalogTable())
+            SnowflakeAggregate.create(input.cluster, input.traitSet, input, groupSet, groupSets, aggCalls, (input as SnowflakeRel).getCatalogTable())
         } else if (inputConvention == IcebergRel.CONVENTION) {
             throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder's createAggregate: unhandled Iceberg operation")
         } else {
             throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
         }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == strippedInput.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
+        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) { "TODO createProject: fix Batching property" }
         return retVal
     }
 
@@ -248,18 +242,16 @@ object BodoPhysicalRelFactories {
         val inputConvention = input.convention
         assert(inputConvention != null) { "Internal Error in Bodo Physical Builder: Input does not have any convention" }
 
-        val strippedInput = if (input is HepRelVertex) {
-            input.stripped()
-        } else {
-            input
+        if (input is HepRelVertex) {
+            return createSort(input.stripped(), collation, offset, fetch)
         }
 
         val retVal = if (inputConvention == PandasRel.CONVENTION) {
-            PandasSort.create(strippedInput, collation, offset, fetch)
+            PandasSort.create(input, collation, offset, fetch)
         } else if (inputConvention == SnowflakeRel.CONVENTION) {
-            SnowflakeSort.create(strippedInput.cluster, strippedInput.traitSet, strippedInput, collation, offset, fetch, (strippedInput as SnowflakeRel).getCatalogTable())
+            SnowflakeSort.create(input.cluster, input.traitSet, input, collation, offset, fetch, (input as SnowflakeRel).getCatalogTable())
         } else if (inputConvention == IcebergRel.CONVENTION) {
-            IcebergSort.create(strippedInput.cluster, strippedInput.traitSet, strippedInput, collation, offset, fetch, (strippedInput as IcebergRel).getCatalogTable())
+            IcebergSort.create(input.cluster, input.traitSet, input, collation, offset, fetch, (input as IcebergRel).getCatalogTable())
         } else {
             throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
         }

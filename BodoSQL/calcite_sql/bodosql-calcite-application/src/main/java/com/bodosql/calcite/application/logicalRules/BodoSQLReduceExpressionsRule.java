@@ -497,23 +497,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
   }
 
   /**
-   * Creates a map containing each (e, constant) pair that occurs within a predicate list.
-   *
-   * @param clazz Class of expression that is considered constant
-   * @param rexBuilder Rex builder
-   * @param predicates Predicate list
-   * @param <C> what to consider a constant: {@link RexLiteral} to use a narrow definition of
-   *     constant, or {@link RexNode} to use {@link RexUtil#isConstant(RexNode)}
-   * @return Map from values to constants
-   * @deprecated Use {@link RelOptPredicateList#constantMap}
-   */
-  @Deprecated // to be removed before 2.0
-  public static <C extends RexNode> ImmutableMap<RexNode, C> predicateConstants(
-      Class<C> clazz, RexBuilder rexBuilder, RelOptPredicateList predicates) {
-    return RexUtil.predicateConstants(clazz, rexBuilder, predicates.pulledUpPredicates);
-  }
-
-  /**
    * Pushes predicates into a CASE.
    *
    * <p>We have a loose definition of 'predicate': any boolean expression will do, except CASE. For

@@ -28,7 +28,6 @@ import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.PushProjector;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
 
 /**
@@ -51,16 +50,6 @@ public class BodoProjectSetOpTransposeRule extends RelRule<BodoProjectSetOpTrans
   /** Creates a ProjectSetOpTransposeRule. */
   protected BodoProjectSetOpTransposeRule(Config config) {
     super(config);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoProjectSetOpTransposeRule(
-      PushProjector.ExprCondition preserveExprCondition, RelBuilderFactory relBuilderFactory) {
-    this(
-        Config.DEFAULT
-            .withRelBuilderFactory(relBuilderFactory)
-            .as(Config.class)
-            .withPreserveExprCondition(preserveExprCondition));
   }
 
   // ~ Methods ----------------------------------------------------------------
