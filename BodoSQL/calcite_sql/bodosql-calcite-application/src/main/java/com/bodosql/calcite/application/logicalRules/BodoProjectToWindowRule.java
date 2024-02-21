@@ -49,7 +49,6 @@ import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.rex.RexWindow;
 import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
@@ -136,14 +135,6 @@ public abstract class BodoProjectToWindowRule extends RelRule<BodoProjectToWindo
     protected BodoProjectToLogicalProjectAndWindowRule(
         BodoProjectToLogicalProjectAndWindowRuleConfig config) {
       super(config);
-    }
-
-    @Deprecated // to be removed before 2.0
-    public BodoProjectToLogicalProjectAndWindowRule(RelBuilderFactory relBuilderFactory) {
-      this(
-          BodoProjectToLogicalProjectAndWindowRuleConfig.DEFAULT
-              .withRelBuilderFactory(relBuilderFactory)
-              .as(BodoProjectToLogicalProjectAndWindowRuleConfig.class));
     }
 
     // BODO CHANGE: moved out of onMatch and into a helper function

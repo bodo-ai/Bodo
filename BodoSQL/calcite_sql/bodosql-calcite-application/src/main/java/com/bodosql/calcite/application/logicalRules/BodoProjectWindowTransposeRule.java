@@ -40,7 +40,6 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.sql.SqlAggFunction;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.BitSets;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.immutables.value.Value;
@@ -57,11 +56,6 @@ public class BodoProjectWindowTransposeRule extends RelRule<BodoProjectWindowTra
   /** Creates a BodoProjectWindowTransposeRule. */
   protected BodoProjectWindowTransposeRule(Config config) {
     super(config);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoProjectWindowTransposeRule(RelBuilderFactory relBuilderFactory) {
-    this(Config.DEFAULT.withRelBuilderFactory(relBuilderFactory).as(Config.class));
   }
 
   @Override

@@ -17,17 +17,14 @@
 package com.bodosql.calcite.application.logicalRules;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
-import org.apache.calcite.plan.Contexts;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
 
 /**
@@ -42,26 +39,6 @@ public class BodoJoinPushTransitivePredicatesRule
   /** Creates a JoinPushTransitivePredicatesRule. */
   protected BodoJoinPushTransitivePredicatesRule(Config config) {
     super(config);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoJoinPushTransitivePredicatesRule(
-      Class<? extends Join> joinClass, RelBuilderFactory relBuilderFactory) {
-    this(
-        Config.DEFAULT
-            .withRelBuilderFactory(relBuilderFactory)
-            .as(Config.class)
-            .withOperandFor(joinClass));
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoJoinPushTransitivePredicatesRule(
-      Class<? extends Join> joinClass, RelFactories.FilterFactory filterFactory) {
-    this(
-        Config.DEFAULT
-            .withRelBuilderFactory(RelBuilder.proto(Contexts.of(filterFactory)))
-            .as(Config.class)
-            .withOperandFor(joinClass));
   }
 
   @Override
