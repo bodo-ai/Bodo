@@ -298,6 +298,13 @@
                                         <exclude>org/apache/calcite/plan/RelOptTable$ToRelContext.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable$ViewExpander.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$1.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$DeferringRuleCall.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$DirectProvenance.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$Provenance.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$RuleProvenance.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$UnknownProvenance.class</exclude>
+                                        <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner.class</exclude>
                                         <exclude>org/apache/calcite/prepare/CalciteCatalogReader.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$2.class</exclude>
