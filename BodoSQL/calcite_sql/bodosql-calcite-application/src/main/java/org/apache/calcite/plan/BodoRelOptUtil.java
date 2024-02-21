@@ -1,5 +1,6 @@
 package org.apache.calcite.plan;
 
+import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelShuttleImpl;
 import org.apache.calcite.rel.RelVisitor;
@@ -132,6 +133,60 @@ public class BodoRelOptUtil {
         join.getCondition().accept(rexFinder);
       }
       return super.visit(join);
+    }
+  }
+
+  /**
+   * Determine if there is a cycle in a RelNode.
+   * This is intended for use with the volcano planner,
+   * so it supports RelSubset.
+   */
+  public static class CycleFinder extends RelVisitor {
+
+    private final Set<RelNode> startedRelNodes;
+    private final Set<RelNode> finishedRelNodes;
+    private boolean containsCycle;
+
+    public CycleFinder() {
+      startedRelNodes = new HashSet();
+      finishedRelNodes = new HashSet();
+      containsCycle = false;
+    }
+    public void visit(
+            RelNode node,
+            int ordinal,
+            @Nullable RelNode parent) {
+      if (startedRelNodes.contains(node)) {
+        containsCycle = true;
+        return;
+      } else if (finishedRelNodes.contains(node)) {
+        // We have already traversed this section.
+        return;
+      }
+      startedRelNodes.add(node);
+      if (node instanceof RelSubset) {
+        RelSubset s = (RelSubset) node;
+        RelNode best = s.getBest();
+        if (best != null) {
+          visit(best, 0, node);
+        }
+      } else {
+        super.visit(node, ordinal, parent);
+      }
+      startedRelNodes.remove(node);
+      finishedRelNodes.add(node);
+    }
+
+    public boolean foundCycle() {
+      return containsCycle;
+    }
+
+    public @Nullable RelNode go(RelNode p) {
+      containsCycle = false;
+      @Nullable RelNode result = super.go(p);
+      startedRelNodes.clear();
+      finishedRelNodes.clear();
+      return result;
     }
   }
 }
