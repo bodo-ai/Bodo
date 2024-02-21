@@ -36,7 +36,6 @@ import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -51,7 +50,6 @@ import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlSplittableAggFunction;
 import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.Bug;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Util;
@@ -76,68 +74,6 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
   /** Creates an AggregateJoinTransposeRule. */
   protected BodoAggregateJoinTransposeRule(Config config) {
     super(config);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoAggregateJoinTransposeRule(
-      Class<? extends Aggregate> aggregateClass,
-      Class<? extends Join> joinClass,
-      RelBuilderFactory relBuilderFactory,
-      boolean allowFunctions) {
-    this(
-        Config.DEFAULT
-            .withRelBuilderFactory(relBuilderFactory)
-            .as(Config.class)
-            .withOperandFor(aggregateClass, joinClass, allowFunctions));
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoAggregateJoinTransposeRule(
-      Class<? extends Aggregate> aggregateClass,
-      RelFactories.AggregateFactory aggregateFactory,
-      Class<? extends Join> joinClass,
-      RelFactories.JoinFactory joinFactory) {
-    this(aggregateClass, joinClass, RelBuilder.proto(aggregateFactory, joinFactory), false);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoAggregateJoinTransposeRule(
-      Class<? extends Aggregate> aggregateClass,
-      RelFactories.AggregateFactory aggregateFactory,
-      Class<? extends Join> joinClass,
-      RelFactories.JoinFactory joinFactory,
-      boolean allowFunctions) {
-    this(
-        aggregateClass, joinClass, RelBuilder.proto(aggregateFactory, joinFactory), allowFunctions);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoAggregateJoinTransposeRule(
-      Class<? extends Aggregate> aggregateClass,
-      RelFactories.AggregateFactory aggregateFactory,
-      Class<? extends Join> joinClass,
-      RelFactories.JoinFactory joinFactory,
-      RelFactories.ProjectFactory projectFactory) {
-    this(
-        aggregateClass,
-        joinClass,
-        RelBuilder.proto(aggregateFactory, joinFactory, projectFactory),
-        false);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public BodoAggregateJoinTransposeRule(
-      Class<? extends Aggregate> aggregateClass,
-      RelFactories.AggregateFactory aggregateFactory,
-      Class<? extends Join> joinClass,
-      RelFactories.JoinFactory joinFactory,
-      RelFactories.ProjectFactory projectFactory,
-      boolean allowFunctions) {
-    this(
-        aggregateClass,
-        joinClass,
-        RelBuilder.proto(aggregateFactory, joinFactory, projectFactory),
-        allowFunctions);
   }
 
   private static boolean isAggregateSupported(Aggregate aggregate, boolean allowFunctions) {
