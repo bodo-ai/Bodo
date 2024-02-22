@@ -16,12 +16,15 @@ PARTITION_MAP: List[Tuple[str, List[PartitionField]]] = [
     ("NUMERIC_TABLE", [PartitionField("B", "identity", -1)]),  # int64 no nulls
     ("NUMERIC_TABLE", [PartitionField("E", "identity", -1)]),  # int32
     ("NUMERIC_TABLE", [PartitionField("F", "identity", -1)]),  # int64
+    ("NUMERIC_TABLE", [PartitionField("C", "identity", -1)]),  # float32 no nulls
+    ("DECIMALS_TABLE", [PartitionField("A", "identity", -1)]),  # decimal(10,5)
     ("STRING_TABLE", [PartitionField("B", "identity", -1)]),  # string no nulls
     ("DT_TSZ_TABLE", [PartitionField("A", "identity", -1)]),  # date with nulls
     ("DT_TSZ_TABLE", [PartitionField("B", "identity", -1)]),  # datetime with NaTs
     ("TZ_AWARE_TABLE", [PartitionField("A", "identity", -1)]),  # datetime no nulls
     ("DICT_ENCODED_STRING_TABLE", [PartitionField("A", "identity", -1)]),  # w/o nulls
     ("DICT_ENCODED_STRING_TABLE", [PartitionField("B", "identity", -1)]),  # w/ nulls
+    ("STRUCT_TABLE", [PartitionField("A.a", "identity", -1)]),  # Struct int field
     # Date / Time Transformations
     ("DT_TSZ_TABLE", [PartitionField("A", "years", -1)]),
     ("DT_TSZ_TABLE", [PartitionField("A", "months", -1)]),
@@ -105,7 +108,7 @@ def part_table_name(base_name, part_fields):
             val,
         ) = field
         val_str = f"_{val}" if trans in ["bucket", "truncate"] else ""
-        ans += f"_{col}_{trans}{val_str}"
+        ans += f"_{col.replace('.', '_')}_{trans}{val_str}"
 
     return ans
 
@@ -116,7 +119,7 @@ PARTITION_TABLE_NAME_MAP: Dict[str, Tuple[str, List[PartitionField]]] = {
 }
 
 
-def create_table(base_name, part_fields, spark=None):
+def create_table(base_name, part_fields, spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
 
@@ -125,23 +128,25 @@ def create_table(base_name, part_fields, spark=None):
     ), f"Didn't find table definition for {base_name}."
     df, sql_schema = TABLE_MAP[f"SIMPLE_{base_name}"]
 
-    create_iceberg_table(
+    return create_iceberg_table(
         df,
         sql_schema,
-        part_table_name(base_name, part_fields),
+        f"{part_table_name(base_name, part_fields)}{postfix}",
         spark,
         part_fields,
     )
 
 
-def create_partition_tables(tables: List[str], spark=None):
+def create_partition_tables(tables: List[str], spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
-
+    created = []
     for table in tables:
         if table in PARTITION_TABLE_NAME_MAP:
             starter_table_name, part_fields = PARTITION_TABLE_NAME_MAP[table]
-            create_table(starter_table_name, part_fields, spark)
+            if create_table(starter_table_name, part_fields, spark, postfix):
+                created.append(table)
+    return created
 
 
 if __name__ == "__main__":
