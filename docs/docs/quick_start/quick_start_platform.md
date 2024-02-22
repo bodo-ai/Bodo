@@ -1,7 +1,6 @@
 ---
 hide:
   - tags
-  - navigation
 
 tags:
   - getting started
@@ -51,10 +50,10 @@ If you sign up for Bodo through the AWS marketplace, you get a 14-day free trial
 
 1. Once your cloud config has been created navigate to the *Workspaces* tab and click the *Create Workspace* button in the
  top right corner. Once your workspace has finished creating, you will be able to enter it.
- ![Dashboard view](quick_start_screenshots/dashboard.png#center)
+ ![Dashboard view](../quick_start_screenshots/dashboard.png#center)
 
   Once inside the Workspace, navigate to the *Notebooks* tab.
-   ![Notebook view](quick_start_screenshots/notebook.png#center)
+   ![Notebook view](../quick_start_screenshots/notebook.png#center)
 
 
 That’s it, you’re all set to experience Bodo. Follow along one of our tutorials or go through the curated list of bodo-examples.

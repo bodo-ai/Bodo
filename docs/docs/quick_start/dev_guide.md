@@ -5,7 +5,6 @@ hide:
 tags:
   - getting started
 
-
 ---
 
 # Developer's Quick Start Guide {#devguide}
@@ -391,7 +390,7 @@ parallelism challenges like communication.
 
 <br>
 
-![parallel processes](img/python_parallel_process.svg#center)
+![parallel processes](../img/python_parallel_process.svg#center)
 
 Bodo JIT Requirements
 ---------------------
@@ -582,7 +581,7 @@ if __name__ == "__main__":
     create_list()
 ```
 
-Please refer to the [Unsupported Python Programs](bodo_parallelism/not_supported.md#notsupported)
+Please refer to the [Unsupported Python Programs](../bodo_parallelism/not_supported.md#notsupported)
 documentation for more details.
 
 Using Bodo in Jupyter Notebooks {#jupyter}
