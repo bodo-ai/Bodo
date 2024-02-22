@@ -88,6 +88,16 @@ STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
     "STRUCT_FIELD_ADD": "STRUCT_TABLE",
 }
 
+MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
+    "MAP_VALUE_PROMOTE": "MAP_TABLE",
+    "MAP_KEY_NULLABLE": "MAP_TABLE",
+}
+
+LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
+    "LIST_VALUES_PROMOTE": "LIST_TABLE",
+    "LIST_VALUES_NULLABLE": "LIST_TABLE",
+}
+
 
 def gen_combo_tables(input_table: str) -> dict[str, str]:
     funcs = ["PROMOTE", "RENAME", "NULLABLE", "REORDER", "ADD", "DROP"]
@@ -354,7 +364,7 @@ def create_struct_unsupported_operation_table(
             spark.sql(
                 f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} DROP COLUMN A.a"
             )
-            df["A"] = df["A"].apply(lambda x: x.b)
+            df["A"] = df["A"].apply(lambda x: {"b": x["b"]})
             sql_schema[0] = ("A", "STRUCT<b: long>", True)
             append_to_iceberg_table(df, sql_schema, table, spark)
 
@@ -364,12 +374,12 @@ def create_struct_unsupported_operation_table(
             )
 
             def rename_field(x):
-                x.b_renamed = x.b
-                del x.b
+                x["b_renamed"] = x["b"]
+                del x["b"]
                 return x
 
             df["A"] = df["A"].apply(rename_field)
-            sql_schema[0] = (("A", "STRUCT<a: int, b_renamed: long>", True),)
+            sql_schema[0] = ("A", "STRUCT<a: int, b_renamed: long>", True)
             append_to_iceberg_table(df, sql_schema, table, spark)
 
         elif table == "STRUCT_FIELD_ADD":
@@ -392,7 +402,7 @@ def create_struct_unsupported_operation_table(
             )
             df["A"] = df["A"].apply(
                 lambda x: {
-                    **{"b": x.b},
+                    **{"b": x["b"]},
                     **{key: value for key, value in x.items() if key != "b"},
                 }
             )
