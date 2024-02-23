@@ -2280,6 +2280,13 @@ def test_struct_read(test_db_snowflake_catalog, memory_leak_check):
         impl,
         (bc,),
         py_output=py_output,
+        # Necessary because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
     )
 
 
@@ -2364,9 +2371,9 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
                     pa.large_list(
                         pa.struct(
                             [
-                                pa.field("cnt", pa.int64()),
-                                pa.field("stat", pa.bool_()),
                                 pa.field("name", pa.string()),
+                                pa.field("stat", pa.bool_()),
+                                pa.field("cnt", pa.int64()),
                             ]
                         )
                     )
@@ -2379,8 +2386,15 @@ def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_
         impl,
         (bc, query),
         py_output=py_output,
+        # Both check_dtype=False and convert_columns_to_pandas=False are necessary
+        # because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
         check_dtype=False,
-        convert_columns_to_pandas=True,
+        convert_columns_to_pandas=False,
     )
 
 
@@ -2488,7 +2502,18 @@ def test_read_nested_struct_in_map_col(test_db_snowflake_catalog):
     )
 
     query = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
-    check_func(impl, (bc, query), py_output=py_output, check_dtype=False)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        # Necessary because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
+    )
 
 
 def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check):
@@ -2546,7 +2571,18 @@ def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check)
 
     # TODO: Add 'updated' for Sentinal NaNs and Struct Unboxing
     query = "SELECT INFO FROM BODOSQL_NESTED_STRUCT_TEST ORDER BY idx"
-    check_func(impl, (bc, query), py_output=py_output)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        # Necessary because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
+    )
 
 
 @pytest_mark_one_rank

@@ -371,7 +371,7 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
                 from table(generator(ROWCOUNT=>1000))
             )
 
-            select OBJECT_CONSTRUCT_KEEP_NULL('a', 10, 'd', 'bad') as A
+            select OBJECT_CONSTRUCT_KEEP_NULL('b', '10', 'd', 'bad') as A
             union all
             select A from thousand
             """,
@@ -496,20 +496,18 @@ def test_nested_in_array_metadata_handling(cursor):
     assert pa_fields[1].equals(
         pa.field("B", pa.large_list(pa.map_(pa.large_string(), pa.date32())))
     )
-    assert pa_fields[2].equals(
-        pa.field(
-            "C",
-            pa.large_list(
-                pa.struct(
-                    [
-                        pa.field("stat", pa.bool_()),
-                        pa.field("name", pa.large_string()),
-                        pa.field("cnt", pa.int64()),
-                    ]
-                )
-            ),
-        )
-    )
+    # Order of Object Fields is Non-Deterministic
+    assert pa_fields[2].name == "C"
+    assert pa.types.is_large_list(pa_fields[2].type)
+    inner_struct = pa_fields[2].type.value_type
+    assert pa.types.is_struct(inner_struct)
+    assert inner_struct.num_fields == 3
+    for f in (
+        pa.field("stat", pa.bool_()),
+        pa.field("name", pa.large_string()),
+        pa.field("cnt", pa.int64()),
+    ):
+        assert inner_struct.field(inner_struct.get_field_index(f.name)).equals(f)
 
 
 @pytest_mark_one_rank
@@ -602,21 +600,19 @@ def test_nested_in_map_metadata_handling(cursor):
             "B", pa.map_(pa.large_string(), pa.map_(pa.large_string(), pa.date32()))
         )
     )
-    assert pa_fields[2].equals(
-        pa.field(
-            "C",
-            pa.map_(
-                pa.large_string(),
-                pa.struct(
-                    [
-                        pa.field("cnt", pa.int64()),
-                        pa.field("stat", pa.bool_()),
-                        pa.field("name", pa.large_string()),
-                    ]
-                ),
-            ),
-        )
-    )
+    # Order of Object Fields is Non-Deterministic
+    assert pa_fields[2].name == "C"
+    assert pa.types.is_map(pa_fields[2].type)
+    assert pa.types.is_large_string(pa_fields[2].type.key_type)
+    inner_struct = pa_fields[2].type.item_type
+    assert pa.types.is_struct(inner_struct)
+    assert inner_struct.num_fields == 3
+    for f in (
+        pa.field("stat", pa.bool_()),
+        pa.field("name", pa.large_string()),
+        pa.field("cnt", pa.int64()),
+    ):
+        assert inner_struct.field(inner_struct.get_field_index(f.name)).equals(f)
 
 
 @pytest_mark_one_rank
@@ -1475,7 +1471,18 @@ def test_read_nested_struct_in_array_col(memory_leak_check):
     queryC = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
     conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
     check_func(
-        impl, (queryC, conn), py_output=py_output, convert_columns_to_pandas=True
+        impl,
+        (queryC, conn),
+        py_output=py_output,
+        convert_columns_to_pandas=False,
+        # Both check_dtype=False and convert_columns_to_pandas=False are necessary
+        # because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
     )
 
 
@@ -1562,7 +1569,17 @@ def test_read_nested_in_map_col(memory_leak_check):
     )
     queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
     check_func(
-        impl, (queryC, conn), py_output=py_output, convert_columns_to_pandas=True
+        impl,
+        (queryC, conn),
+        py_output=py_output,
+        convert_columns_to_pandas=True,
+        # Necessary because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
     )
 
 
@@ -1622,7 +1639,18 @@ def test_read_nested_in_struct_col(memory_leak_check):
 
     # TODO: Add 'updated' for Sentinal NaNs and Struct Unboxing
     query = "SELECT OBJECT_PICK(INFO, 'group', 'values', 'created') as I FROM NESTED_STRUCT_TEST ORDER BY I"
-    check_func(impl, (query, conn), py_output=py_output)
+    check_func(
+        impl,
+        (query, conn),
+        py_output=py_output,
+        # Necessary because Snowflake can output fields in struct in any
+        # order, and structs with different fields in different order are different
+        # TODO: Make this more robust by either:
+        # 1. Sorting the fields in the struct
+        # 2. Using a different comparison method
+        # 3. Casting the struct to the expected format
+        check_dtype=False,
+    )
 
 
 def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
