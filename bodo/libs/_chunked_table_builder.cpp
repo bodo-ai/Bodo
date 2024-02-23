@@ -3,6 +3,7 @@
 #include <numeric>
 
 #include "_table_builder.h"
+#include "arrow/util/bit_util.h"
 
 /* --------------------------- Helper Functions --------------------------- */
 
@@ -605,6 +606,33 @@ void ChunkedTableBuilder::AppendBatch(
     // entries by in_table_start_offset.
     for (size_t i_row = 0; i_row < append_rows.size(); i_row++) {
         if (append_rows[i_row]) {
+            idxs.emplace_back(in_table_start_offset + i_row);
+        }
+    }
+
+    this->AppendBatch(in_table, idxs);
+}
+
+void ChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::unique_ptr<uint8_t[]> append_rows,
+    const int64_t in_table_start_offset) {
+    // Count the number of rows to append.
+    // This won't be exact for the last word, but that's fine, it will be within
+    // 63 and will always overestimate.
+    size_t num_append_rows = 0;
+    for (int64_t i = 0;
+         i < (arrow::bit_util::BytesForBits(in_table->nrows()) / 8); i++) {
+        num_append_rows +=
+            arrow::bit_util::PopCount(((uint64_t*)append_rows.get())[i]);
+    }
+    std::vector<int64_t> idxs;
+    idxs.reserve(num_append_rows);
+
+    // Convert the bit-vector to a vector of indices. Offset the
+    // entries by in_table_start_offset.
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (arrow::bit_util::GetBit(append_rows.get(), i_row)) {
             idxs.emplace_back(in_table_start_offset + i_row);
         }
     }

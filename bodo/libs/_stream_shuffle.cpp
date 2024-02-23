@@ -372,7 +372,7 @@ void IncrementalShuffleState::ResetAfterShuffle() {
 std::tuple<
     std::shared_ptr<table_info>,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-    std::shared_ptr<uint32_t[]>>
+    std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
 IncrementalShuffleState::GetShuffleTableAndHashes() {
     std::shared_ptr<table_info> shuffle_table = this->table_buffer->data_table;
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
@@ -385,7 +385,8 @@ IncrementalShuffleState::GetShuffleTableAndHashes() {
         shuffle_table, this->n_keys, SEED_HASH_PARTITION, /*is_parallel*/ true,
         /*global_dict_needed*/ false, dict_hashes);
 
-    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes);
+    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
+                           std::unique_ptr<uint8_t[]>(nullptr));
 }
 
 std::optional<std::shared_ptr<table_info>>
@@ -422,7 +423,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
             << ", is_last: " << is_last << std::endl;
     }
 
-    auto [shuffle_table, dict_hashes, shuffle_hashes] =
+    auto [shuffle_table, dict_hashes, shuffle_hashes, keep_row_bitmask] =
         this->GetShuffleTableAndHashes();
     dict_hashes.reset();
 
@@ -436,7 +437,9 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 
     // Shuffle the data
     mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
-                                  /*is_parallel*/ true);
+                                  /*is_parallel*/ true, /*filter*/ nullptr,
+                                  keep_row_bitmask.get());
+
     std::shared_ptr<table_info> new_data =
         shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                              comm_info_table, /*is_parallel*/ true);

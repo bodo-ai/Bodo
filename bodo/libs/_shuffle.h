@@ -97,10 +97,14 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
  * will compute the hashes
  * @param filter : filter to discard rows from shuffle. If no filter is
  * provided then no filtering will happen.
- * @param null_bitmask : In case of a SQL join where nulls are not considered
- equal, a null bitmask can be provided that indicates whether any of the keys
- columns in the table are null (and hence cannot match with any other row).
- * @param keep_nulls_and_filter_misses : In case a Bloom filter is provided and
+ * @param keep_row_bitmask : If provided row at index idx are dropped if
+ * keep_row_bitmask[idx] is not set and keep_filter_misses is false.
+ * This is useful in the case of a SQL join where nulls are not considered
+ * equal, a bitmask can be provided that indicates whether any of the keys
+ * columns in the table are null (and hence cannot match with any other row).
+ * also useful in certain aggregation functions where we know it always safe to
+ * drop a row such as mrnf or nunique.
+ * @param keep_filter_misses : In case a Bloom filter is provided and
  * a key is not present in the bloom filter, should we keep the value on this
  * rank (i.e. not discard it altogether). Similarly, in cases where a
  * null-bitmask is provided, this parameter determines what should be done with
@@ -115,8 +119,8 @@ std::shared_ptr<table_info> coherent_shuffle_table(
     int64_t n_keys,
     std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr),
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
-    const uint8_t* null_bitmask = nullptr,
-    const bool keep_nulls_and_filter_misses = true);
+    const uint8_t* keep_row_bitmask = nullptr,
+    const bool keep_filter_misses = true);
 
 /** Shuffling a table from all nodes to all the other nodes.
  *

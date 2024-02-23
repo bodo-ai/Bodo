@@ -71,10 +71,14 @@ def test_groupby_basic(func_name, use_np_data, memory_leak_check):
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
 
-    groups = [1, 2, 1, 1, 2, 0, 1, 2]
+    groups = [1, 2, 1, 1, 2, 0, 1, 2] * 100
     # First is nondeterministic on multiple ranks so set the data equal to the groups
     # so each group only has one unique value
-    data = [1, 3, 5, 11, 1, 3, 5, 3] if func_name != "first" else groups
+    data = (
+        [1, 3, 5, 11, 1, 3, 5, 3] * 100
+        if func_name != "first" and func_name != "nunique"
+        else groups
+    )
     df = pd.DataFrame(
         {
             "A": groups,
