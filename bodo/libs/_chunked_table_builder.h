@@ -1235,6 +1235,10 @@ struct ChunkedTableBuilder {
                      const std::vector<bool>& append_rows,
                      const int64_t in_table_start_offset = 0);
 
+    void AppendBatch(const std::shared_ptr<table_info>& in_table,
+                     const std::unique_ptr<uint8_t[]> append_rows,
+                     const int64_t in_table_start_offset = 0);
+
     void AppendBatch(const std::shared_ptr<table_info>& in_table);
 
     void AppendBatch(const std::shared_ptr<table_info>& in_table,

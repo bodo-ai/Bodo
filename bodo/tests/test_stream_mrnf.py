@@ -12,7 +12,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank
+from bodo.tests.utils import check_func, pytest_mark_one_rank, temp_env_override
 from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 
@@ -935,6 +935,74 @@ def test_mrnf_all_ties(
         df,
         expected_df,
         MetaType(tuple(key_inds_list)),
+        MetaType(("min_row_number_filter",)),
+        MetaType(tuple(f_in_offsets_list)),
+        MetaType(tuple(f_in_cols_list)),
+        MetaType(tuple(sort_inds_list)),
+        MetaType(tuple(sort_asc_list)),
+        MetaType(tuple(sort_na_list)),
+        MetaType(tuple(keep_inds_list)),
+        MetaType(tuple(range(n_cols))),
+        20,
+        ColNamesMetaType(tuple(np.take(col_names, keep_inds_list))),
+    )
+
+
+@temp_env_override({"BODO_STREAM_LOOP_SYNC_ITERS": "1"})
+@pytest.mark.parametrize(
+    "n_unique_keys",
+    [
+        pytest.param(2, id="few_unique_local_reduction"),
+        pytest.param(100, id="many_unique_no_local_reduction"),
+    ],
+)
+@pytest.mark.skipif(
+    bodo.get_size() == 1,
+    reason="Test for shuffle behavior only that only happens when size > 1",
+)
+def test_mrnf_shuffle_reduction(n_unique_keys, memory_leak_check):
+    """
+    Test that the MRNF works correctly when there are many unique keys
+    and the local reduction is disabled as well as when there are few
+    unique keys and the local reduction is enabled.
+    """
+    nrows = 1000
+    np.random.seed(234)
+    keys = np.random.choice(list(range(n_unique_keys)), nrows)
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(keys, dtype="Int64"),
+            "B": pd.Series(list(range(nrows)), dtype="Int64"),
+        }
+    )
+    n_cols = len(df.columns)
+    col_names = list(df.columns)
+    n_sort_cols = 1
+    sort_cols_list = ["B"]
+    key_inds_list = [0]
+    sort_inds_list = [i + 1 for i in range(n_sort_cols)]
+    sort_asc_list = [True] * n_sort_cols
+    sort_na_list = [True] * n_sort_cols
+    keep_inds_list = list(range(n_cols))
+    f_in_cols_list = list(range(1, n_cols))
+    f_in_offsets_list = [0, n_cols - 1]
+    expected_keys = []
+    seen_keys = set()
+    expected_vals = []
+
+    def py_mrnf(x: pd.DataFrame):
+        return x.sort_values(
+            by=sort_cols_list,
+            ascending=sort_asc_list,
+            na_position=("last"),
+        ).iloc[0]
+
+    expected_df = df.groupby(["A"], as_index=False, dropna=False).apply(py_mrnf)
+    expected_df = expected_df[list(np.take(list(df.columns), keep_inds_list))]
+    _test_mrnf_helper(
+        df,
+        expected_df,
+        MetaType((0,)),
         MetaType(("min_row_number_filter",)),
         MetaType(tuple(f_in_offsets_list)),
         MetaType(tuple(f_in_cols_list)),

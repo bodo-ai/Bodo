@@ -419,7 +419,7 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     df = pd.DataFrame(
         {
             "A": pd.array([1] * 32000, dtype="Int64"),
-            "B": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "B": pd.array(list(range(1000)) * 32, dtype="Int64"),
             "C": pd.Series(
                 np.random.choice(
                     [
@@ -484,21 +484,17 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
 
     # This will cause partition split during the "AppendBuildBatch[2]"
     op_pool_size_bytes = 2 * 1024 * 1024
-    expected_partition_state = (
-        [(0, 0)] if (bodo.get_rank() == 0) else [(2, 0), (2, 1), (1, 1)]
-    )
+    expected_partition_state = [(0, 0)] if (bodo.get_rank() == 0) else [(1, 0), (1, 1)]
     # Verify that we split a partition during AppendBuildBatch.
     expected_log_messages = (
         [
             "[DEBUG] GroupbyState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0.",
-            "[DEBUG] GroupbyState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0.",
             "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 0.",
             "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 1.",
-            "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 2.",
-            "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 3.",
+            "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
         ]
         if bodo.get_rank() == 1
-        else ([None] * 6)
+        else ([None] * 4)
     )
 
     _test_helper(

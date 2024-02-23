@@ -191,6 +191,11 @@ std::shared_ptr<table_info> drop_duplicates_table(
     std::shared_ptr<table_info> in_table, bool is_parallel, int64_t num_keys,
     int64_t keep, bool dropna = false, bool drop_local_first = true);
 
+bodo::vector<int64_t> drop_duplicates_table_helper(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
+    int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
+    std::shared_ptr<uint32_t[]> hashes);
+
 std::shared_ptr<table_info> drop_duplicates_table_inner(
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
     int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,

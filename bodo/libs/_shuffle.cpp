@@ -90,13 +90,13 @@ bodo::vector<int> get_inner_array_row_dest(
     return row_dest_inner;
 }
 
-template <bool keep_nulls_and_filter_misses>
+template <bool keep_filter_misses>
 void mpi_comm_info::set_send_count(
     const std::shared_ptr<uint32_t[]>& hashes,
     const SimdBlockFilterFixed<::hashing::SimpleMixSplit>*& filter,
-    const uint8_t*& null_bitmask, const uint64_t& n_rows) {
+    const uint8_t* keep_row_bitmask, const uint64_t& n_rows) {
     if (filter == nullptr) {
-        if (null_bitmask == nullptr) {
+        if (keep_row_bitmask == nullptr) {
             for (size_t i = 0; i < n_rows; i++) {
                 int node = hash_to_rank(hashes[i], n_pes);
                 row_dest[i] = node;
@@ -104,11 +104,11 @@ void mpi_comm_info::set_send_count(
             }
         } else {
             for (size_t i = 0; i < n_rows; i++) {
-                if (!GetBit(null_bitmask, i)) {
+                if (!GetBit(keep_row_bitmask, i)) {
                     // if null: keep the row on this rank if
-                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // keep_filter_misses=true, or drop entirely
                     // otherwise (i.e. leave row_dest[i] as -1).
-                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                    handle_unmatchable_rows<keep_filter_misses>(
                         row_dest, send_count, i, this->myrank);
                 } else {
                     int node = hash_to_rank(hashes[i], n_pes);
@@ -118,14 +118,14 @@ void mpi_comm_info::set_send_count(
             }
         }
     } else {
-        if (null_bitmask == nullptr) {
+        if (keep_row_bitmask == nullptr) {
             for (size_t i = 0; i < n_rows; i++) {
                 const uint32_t& hash = hashes[i];
                 if (!filter->Find(static_cast<uint64_t>(hash))) {
                     // if not in filter: keep the row on this rank if
-                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // keep_filter_misses=true, or drop entirely
                     // otherwise (i.e. leave row_dest[i] as -1).
-                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                    handle_unmatchable_rows<keep_filter_misses>(
                         row_dest, send_count, i, this->myrank);
                 } else {
                     int node = hash_to_rank(hash, n_pes);
@@ -135,20 +135,20 @@ void mpi_comm_info::set_send_count(
             }
         } else {
             for (size_t i = 0; i < n_rows; i++) {
-                if (!GetBit(null_bitmask, i)) {
+                if (!GetBit(keep_row_bitmask, i)) {
                     // if null: keep the row on this rank if
-                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // keep_filter_misses=true, or drop entirely
                     // otherwise (i.e. leave row_dest[i] as -1).
-                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                    handle_unmatchable_rows<keep_filter_misses>(
                         row_dest, send_count, i, this->myrank);
                 } else {
                     const uint32_t& hash = hashes[i];
                     if (!filter->Find(static_cast<uint64_t>(hash))) {
                         // if not in filter: keep the row on this rank if
-                        // keep_nulls_and_filter_misses=true, or drop
+                        // keep_filter_misses=true, or drop
                         // entirely otherwise (i.e. leave row_dest[i] as
                         // -1).
-                        handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                        handle_unmatchable_rows<keep_filter_misses>(
                             row_dest, send_count, i, this->myrank);
                     } else {
                         int node = hash_to_rank(hash, n_pes);
@@ -165,18 +165,18 @@ mpi_comm_info::mpi_comm_info(
     const std::vector<std::shared_ptr<array_info>>& arrays,
     const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
     const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const uint8_t* null_bitmask, bool keep_nulls_and_filter_misses)
+    const uint8_t* keep_row_bitmask, bool keep_filter_misses)
     : has_nulls(false), n_null_bytes(0), row_dest(arrays[0]->length, -1) {
     tracing::Event ev("mpi_comm_info", is_parallel);
     const uint64_t& n_rows = arrays[0]->length;
     ev.add_attribute("n_rows", n_rows);
     ev.add_attribute("g_using_filter", filter != nullptr);
-    ev.add_attribute("g_keep_filter_misses", keep_nulls_and_filter_misses);
-    ev.add_attribute("g_using_hash_null_bitmask", null_bitmask != nullptr);
-    ev.add_attribute("g_keep_nulls_local", ((null_bitmask != nullptr) &&
-                                            keep_nulls_and_filter_misses));
-    ev.add_attribute("g_drop_nulls", ((null_bitmask != nullptr) &&
-                                      !keep_nulls_and_filter_misses));
+    ev.add_attribute("g_keep_filter_misses", keep_filter_misses);
+    ev.add_attribute("g_using_keep_row_bitmask", keep_row_bitmask != nullptr);
+    ev.add_attribute("g_keep_nulls_local",
+                     ((keep_row_bitmask != nullptr) && keep_filter_misses));
+    ev.add_attribute("g_drop_nulls",
+                     ((keep_row_bitmask != nullptr) && !keep_filter_misses));
 
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -194,15 +194,15 @@ mpi_comm_info::mpi_comm_info(
     send_disp.resize(n_pes);
     recv_disp.resize(n_pes);
 
-    if (keep_nulls_and_filter_misses) {
-        this->set_send_count<true>(hashes, filter, null_bitmask, n_rows);
+    if (keep_filter_misses) {
+        this->set_send_count<true>(hashes, filter, keep_row_bitmask, n_rows);
     } else {
-        this->set_send_count<false>(hashes, filter, null_bitmask, n_rows);
+        this->set_send_count<false>(hashes, filter, keep_row_bitmask, n_rows);
     }
 
     // Rows can get filtered if either a bloom-filter or a null filter is
     // provided
-    this->filtered = (null_bitmask != nullptr) || (filter != nullptr);
+    this->filtered = (keep_row_bitmask != nullptr) || (filter != nullptr);
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
@@ -1827,7 +1827,7 @@ std::shared_ptr<table_info> coherent_shuffle_table(
     std::shared_ptr<table_info> in_table, std::shared_ptr<table_info> ref_table,
     int64_t n_keys, std::shared_ptr<uint32_t[]> hashes,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const uint8_t* null_bitmask, const bool keep_nulls_and_filter_misses) {
+    const uint8_t* keep_row_bitmask, const bool keep_filter_misses) {
     tracing::Event ev("coherent_shuffle_table", true);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
@@ -1860,7 +1860,7 @@ std::shared_ptr<table_info> coherent_shuffle_table(
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
     mpi_comm_info comm_info(in_table->columns, hashes, true, filter,
-                            null_bitmask, keep_nulls_and_filter_misses);
+                            keep_row_bitmask, keep_filter_misses);
     std::shared_ptr<table_info> table =
         shuffle_table_kernel(std::move(in_table), hashes, comm_info, true);
     if (delete_hashes) {

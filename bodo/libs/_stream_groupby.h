@@ -406,6 +406,9 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      *
      * @param shuffle_table_schema_ Schema of the shuffle table.
      * @param dict_builders_ Dictionary builders for the top level columns.
+     * @param col_sets_ Column sets for performing reductions.
+     * @param mrnf_n_sort_cols Number of columns to sort based off of in the
+     * MRNF case
      * @param n_keys_ Number of key columns (to shuffle based off of).
      * @param curr_iter_ Reference to the iteration counter from parent
      * operator. e.g. In Groupby, this is 'build_iter'. For HashJoin, this could
@@ -416,12 +419,15 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * enabled).
      * @param nunique_only_ Whether this is the nunique-only accumulate input
      * case.
+     * @param mrnf_only_ Whether this is the MRNF-only case.
      */
     GroupbyIncrementalShuffleState(
         const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
-        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-        int64_t op_id_, const bool nunique_only_);
+        const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
+        const uint64_t mrnf_n_sort_cols_, const uint64_t n_keys_,
+        const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t op_id_,
+        const bool nunique_only_, const bool mrnf_only_);
 
     virtual ~GroupbyIncrementalShuffleState() = default;
 
@@ -439,18 +445,21 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
    protected:
     /**
      * @brief Helper for ShuffleIfRequired. This is the same implementation as
-     * the base class, except for the nunique-only case. In the nunique-only
-     * case, we may drop-duplicates from the shuffle-table before the shuffle.
+     * the base class, except for the nunique-only and mrnf only cases. In the
+     * nunique-only case, we may drop-duplicates from the shuffle-table before
+     * the shuffle. In the MRNF-only case we may perform a local reduction
+     * before the shuffle.
      *
      * @return std::tuple<
      * std::shared_ptr<table_info>,
      * std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-     * std::shared_ptr<uint32_t[]>>
+     * std::shared_ptr<uint32_t[]>,
+     * std::unique_ptr<uint8_t[]>>
      */
     std::tuple<
         std::shared_ptr<table_info>,
         std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-        std::shared_ptr<uint32_t[]>>
+        std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
     GetShuffleTableAndHashes() override;
 
     /**
@@ -467,8 +476,17 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     void ResetAfterShuffle() override;
 
    private:
+    /// Column sets from the parent GroupbyState, used in some local reductions
+    /// before shuffling
+    const std::vector<std::shared_ptr<BasicColSet>> col_sets;
+    /// Number of columns to sort based off of in the MRNF case
+    const uint64_t mrnf_n_sort_cols;
+
+    // If we keep adding more of these we should convert to an enum
     /// @brief Whether this is the nunique-only case.
     const bool nunique_only = false;
+    /// Whether this is the mrnf-only case.
+    const bool mrnf_only = false;
 };
 
 class GroupbyState {

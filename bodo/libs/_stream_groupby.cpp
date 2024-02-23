@@ -5,10 +5,12 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_groupby_col_set.h"
 #include "_groupby_common.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
 #include "_window_compute.h"
+#include "arrow/util/bit_util.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
 #define MAX_SHUFFLE_HASHTABLE_SIZE 50 * 1024 * 1024
@@ -523,6 +525,59 @@ std::vector<bool> get_mrnf_cols_to_keep_bitmask(
         cols_to_keep[i] = true;
     }
     return cols_to_keep;
+}
+
+/**
+ * @ brief Helper function to compute the output bitmask for the Min Row-Number
+ * Filter (MRNF) case.
+ * @param in_table The input table to compute the MRNF bitmask for.
+ * @param colset The colset to use for computing the output bitmask.
+ * @param n_sort_cols The number of columns that will be used for the sort.
+ * @param n_keys The number of keys in the input table.
+ * @param pool The buffer ppol to use for allocations.
+ * @param mm The memory manager to use for
+ * allocations.
+ */
+std::unique_ptr<uint8_t[]> compute_local_mrnf(
+    std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<BasicColSet>& colset, size_t n_sort_cols,
+    size_t n_keys,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    // MRNF always uses the ACC path.
+    std::vector<grouping_info> grp_infos =
+        get_grouping_infos_for_update_table</*is_acc_case*/ true>(
+            in_table, n_keys,
+            /*req_extended_group_info=*/false, pool);
+    grouping_info& grp_info = grp_infos[0];
+    // Construct a vector with the order-by columns.
+    std::vector<std::shared_ptr<array_info>> orderby_arrs(
+        in_table->columns.begin() + n_keys,
+        in_table->columns.begin() + n_keys + n_sort_cols);
+
+    std::vector<std::shared_ptr<array_info>> list_arr;
+    // Compute the output index column using this colset:
+    colset->setInCol(orderby_arrs);
+    colset->alloc_update_columns(grp_info.num_groups, list_arr,
+                                 /*alloc_out_if_no_combine*/ false, pool, mm);
+    colset->update(grp_infos, pool, mm);
+    const std::vector<std::shared_ptr<array_info>> out_cols =
+        colset->getOutputColumns();
+    const std::shared_ptr<array_info>& idx_col = out_cols[0];
+    colset->clear();
+
+    // Create an insertion bitmask for the output.
+    // XXX Use bodo::vector instead?
+    std::unique_ptr<uint8_t[]> out_bitmask = std::make_unique<uint8_t[]>(
+        arrow::bit_util::BytesForBits(in_table->columns[0]->length));
+    memset(out_bitmask.get(), 0,
+           arrow::bit_util::BytesForBits(in_table->columns[0]->length));
+    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+        int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
+        arrow::bit_util::SetBit(out_bitmask.get(), row_one_idx);
+    }
+    return out_bitmask;
 }
 
 #pragma endregion  // Min Row-Number Filter Helpers
@@ -1124,42 +1179,13 @@ void GroupbyPartition::FinalizeMrnf(
     // and hence a NOP if the partition is already active.
     this->ActivatePartition();
 
-    // MRNF always uses the ACC path.
-    std::vector<grouping_info> grp_infos =
-        get_grouping_infos_for_update_table</*is_acc_case*/ true>(
-            this->build_table_buffer->data_table, n_keys,
-            this->req_extended_group_info, this->op_scratch_pool);
-    grouping_info& grp_info = grp_infos[0];
-
-    // Construct a vector with the order-by columns.
-    std::vector<std::shared_ptr<array_info>> orderby_arrs(
-        this->build_table_buffer->data_table->columns.begin() + this->n_keys,
-        this->build_table_buffer->data_table->columns.begin() + this->n_keys +
-            mrnf_sort_cols_to_keep.size());
-
-    // In the MRNF case, there's a single colset.
+    // MRNF only supports a single colset.
     assert(this->col_sets.size() == 1);
-    const std::shared_ptr<BasicColSet>& col_set = this->col_sets[0];
-    std::vector<std::shared_ptr<array_info>> list_arr;
-    // Compute the output index column using this colset:
-    col_set->setInCol(orderby_arrs);
-    col_set->alloc_update_columns(grp_info.num_groups, list_arr,
-                                  /*alloc_out_if_no_combine*/ false,
-                                  this->op_scratch_pool, this->op_scratch_mm);
-    col_set->update(grp_infos, this->op_scratch_pool, this->op_scratch_mm);
-    const std::vector<std::shared_ptr<array_info>> out_cols =
-        col_set->getOutputColumns();
-    const std::shared_ptr<array_info>& idx_col = out_cols[0];
-    col_set->clear();
 
-    // Create an insertion bitmask for the output.
-    // XXX Use bodo::vector instead?
-    std::vector<bool> out_bitmask(this->build_table_buffer->data_table->nrows(),
-                                  false);
-    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
-        int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
-        out_bitmask[row_one_idx] = true;
-    }
+    std::unique_ptr<uint8_t[]> out_bitmask = compute_local_mrnf(
+        this->build_table_buffer->data_table, this->col_sets[0],
+        mrnf_sort_cols_to_keep.size(), this->n_keys, this->op_scratch_pool,
+        this->op_scratch_mm);
 
     // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
@@ -1178,7 +1204,8 @@ void GroupbyPartition::FinalizeMrnf(
         std::make_shared<table_info>(cols_to_keep);
 
     // Append this "pruned" table to the output buffer using the bitmask.
-    output_buffer->AppendBatch(data_table_w_cols_to_keep, out_bitmask);
+    output_buffer->AppendBatch(data_table_w_cols_to_keep,
+                               std::move(out_bitmask));
 
     // Since we have added the output to the output buffer, we don't need the
     // build state anymore and can release that memory.
@@ -1253,14 +1280,19 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
     const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
-    const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-    int64_t op_id_, const bool nunique_only_)
+    const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
+    const uint64_t mrnf_n_sort_cols_, const uint64_t n_keys_,
+    const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t op_id_,
+    const bool nunique_only_, const bool mrnf_only_)
     : IncrementalShuffleState(shuffle_table_schema_, dict_builders_, n_keys_,
                               curr_iter_, sync_freq_, op_id_),
       hash_table(std::make_unique<shuffle_hash_table_t>(
           0, HashGroupbyTable<false>(nullptr, this),
           KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
-      nunique_only(nunique_only_) {}
+      col_sets(col_sets_),
+      mrnf_n_sort_cols(mrnf_n_sort_cols_),
+      nunique_only(nunique_only_),
+      mrnf_only(mrnf_only_) {}
 
 void GroupbyIncrementalShuffleState::Finalize() {
     this->hash_table.reset();
@@ -1272,43 +1304,67 @@ void GroupbyIncrementalShuffleState::Finalize() {
 std::tuple<
     std::shared_ptr<table_info>,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-    std::shared_ptr<uint32_t[]>>
+    std::shared_ptr<uint32_t[]>, std::unique_ptr<uint8_t[]>>
 GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
-    auto [shuffle_table, dict_hashes, shuffle_hashes] =
+    auto [shuffle_table, dict_hashes, shuffle_hashes, always_null] =
         IncrementalShuffleState::GetShuffleTableAndHashes();
+    assert(always_null == nullptr);
     // drop shuffle table duplicate rows if there are a lot of duplicates
     // only possible for nunique-only cases
-    if (this->nunique_only) {
+    if (this->nunique_only || this->mrnf_only) {
         int64_t shuffle_nrows = shuffle_table->nrows();
 
-        // estimate number of uniques using key/value hashes
-        std::shared_ptr<uint32_t[]> key_value_hashes =
-            std::make_unique<uint32_t[]>(shuffle_nrows);
-        // reusing shuffle_hashes for keys to make the initial check cheaper
-        // for code path without drop duplicates
-        std::memcpy(key_value_hashes.get(), shuffle_hashes.get(),
-                    sizeof(uint32_t) * shuffle_nrows);
-        for (size_t col = this->n_keys; col < shuffle_table->ncols(); col++) {
-            hash_array_combine(key_value_hashes, shuffle_table->columns[col],
-                               shuffle_nrows, SEED_HASH_PARTITION,
-                               /*global_dict_needed=*/false,
-                               /*is_parallel*/ true);
+        std::shared_ptr<uint32_t[]> hashes;
+        if (this->nunique_only) {
+            // estimate number of uniques using key/value hashes
+            std::shared_ptr<uint32_t[]> key_value_hashes =
+                std::make_unique<uint32_t[]>(shuffle_nrows);
+            // reusing shuffle_hashes for keys to make the initial check cheaper
+            // for code path without drop duplicates
+            std::memcpy(key_value_hashes.get(), shuffle_hashes.get(),
+                        sizeof(uint32_t) * shuffle_nrows);
+            for (size_t col = this->n_keys; col < shuffle_table->ncols();
+                 col++) {
+                hash_array_combine(key_value_hashes,
+                                   shuffle_table->columns[col], shuffle_nrows,
+                                   SEED_HASH_PARTITION,
+                                   /*global_dict_needed=*/false,
+                                   /*is_parallel*/ true);
+            }
+            hashes = key_value_hashes;
+        } else {
+            hashes = shuffle_hashes;
         }
-        size_t nunique_keyval_hashes = get_nunique_hashes(
-            key_value_hashes, shuffle_nrows, /*is_parallel*/ true);
+        size_t nunique_keyval_hashes =
+            get_nunique_hashes(hashes, shuffle_nrows, /*is_parallel*/ true);
 
-        // drop duplicates if output will be less than half the size of
+        // local reduction if output will be less than half the size of
         // input (rough heuristic, TODO: tune)
         if ((2 * nunique_keyval_hashes) < static_cast<size_t>(shuffle_nrows)) {
-            shuffle_table = drop_duplicates_table_inner(
-                shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
-                /*drop_duplicates_dict=*/false, key_value_hashes);
-            shuffle_hashes = hash_keys_table(
-                shuffle_table, this->n_keys, SEED_HASH_PARTITION,
-                /*is_parallel*/ true, false, dict_hashes);
+            std::unique_ptr<uint8_t[]> row_inclusion_bitmask;
+            if (this->nunique_only) {
+                // drop duplicates
+                auto ListIdx = drop_duplicates_table_helper(
+                    shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
+                    /*drop_duplicates_dict=*/false, hashes);
+                row_inclusion_bitmask = std::make_unique<uint8_t[]>(
+                    arrow::bit_util::BytesForBits(shuffle_table->nrows()));
+                memset(row_inclusion_bitmask.get(), 0,
+                       arrow::bit_util::BytesForBits(shuffle_table->nrows()));
+                for (auto idx : ListIdx) {
+                    arrow::bit_util::SetBit(row_inclusion_bitmask.get(), idx);
+                }
+            } else {
+                // MRNF
+                row_inclusion_bitmask =
+                    compute_local_mrnf(shuffle_table, this->col_sets[0],
+                                       this->mrnf_n_sort_cols, this->n_keys);
+            }
+            return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
+                                   std::move(row_inclusion_bitmask));
         }
     }
-    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes);
+    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes, nullptr);
 }
 
 void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
@@ -1651,8 +1707,9 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
         build_table_non_key_dict_builders.end());
 
     this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
-        build_table_schema, this->build_table_dict_builders, this->n_keys,
-        this->build_iter, this->sync_iter, op_id_, this->nunique_only);
+        build_table_schema, this->build_table_dict_builders, this->col_sets,
+        this->mrnf_sort_cols_to_keep.size(), this->n_keys, this->build_iter,
+        this->sync_iter, op_id_, this->nunique_only, this->mrnf_only);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
         0, 0, build_table_schema, std::move(separate_out_cols_schema),
