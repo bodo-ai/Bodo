@@ -1096,7 +1096,6 @@ def test_unsupported_both_tables_join_condition_udf_calls(
         True,
     ],
 )
-@pytest_mark_one_rank
 def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
@@ -1106,7 +1105,6 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
     one argument.
     """
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
@@ -1136,11 +1134,14 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
     else:
         py_output = pd.DataFrame({"OUTPUT": [14, 14, 14, 14, 14, 14, 14, 14]})
 
-    with pytest.raises(
-        BodoError,
-        match="All correlation variables should resolve to the same namespace",
-    ):
-        impl(bc, query)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 def test_window_partition_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
