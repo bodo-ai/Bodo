@@ -5,5 +5,5 @@ BODOSQL_VERSION: "{{ bodosql_version }}"
 BODOSQL_CHANNEL: "{{ bodosql_channel }}"
 ICEBERG_CONNECTOR_VERSION: "{{ iceberg_connector_version }}"
 ICEBERG_CONNECTOR_CHANNEL: "{{ iceberg_connector_channel }}"
-BODO_PLATFORM_UTILS_VERSION: 0.0.12
+BODO_PLATFORM_UTILS_VERSION: 0.1.0
 BODO_PLATFORM_EXTENSIONS_VERSION: 1.2.0
