@@ -29,7 +29,7 @@ class SnowflakeUtils {
          * https://docs.snowflake.com/en/sql-reference/sql/show-functions
          *
          * The signature has the form
-         * FUNC_NAME(TYPE_1, ..., TYPE_N, [OPTIONAL_TYPE_1, ..., OPTIONAL_TYPE_N]) RETURN RETURN_TYPE
+         * FUNC_NAME(TYPE_1, ..., TYPE_N, DEFAULT TYPE_N+1, DEFAULT TYPE_N+M) RETURN RETURN_TYPE
          *
          * While we cannot support the default values in Snowflake, we can handle optional arguments if
          * they are provided (and produce a higher quality error message about which arguments are missing).
@@ -46,26 +46,48 @@ class SnowflakeUtils {
         fun parseSnowflakeShowFunctionsArguments(arguments: String): Pair<String, Int> {
             // Remove the return
             val callParts = arguments.split(" RETURN ")
-            assert(callParts.size == 2) {
-                "Internal error in parseSnowflakeShowFunctionsArguments: " +
-                    "expected to split into function definition and return type"
+            if (callParts.size != 2) {
+                throw java.lang.RuntimeException(
+                    "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
+                        "expected to split into function definition and return type",
+                )
             }
             val call = callParts[0]
-            // Remove any optional arguments
-            val argParts = call.split("[")
-            val validArgs = argParts[0].trim()
-            // If there is no "[" found we didn't have optional args.
-            return if (argParts.size == 1) {
-                Pair(validArgs, 0)
-            } else {
-                // Remove the remaining ] and count the number of optional arguments.
-                val optionalPart = argParts[1].split("]")[0].trim()
-                // Number of optional elements is number of commas + 1.
-                val numOptional: Int = optionalPart.count { it == ',' } + 1
-                // Recombine the signatures. The ) and space have been removed.
-                val newSignature = "$validArgs $optionalPart)"
-                Pair(newSignature, numOptional)
+
+            val argParts = call.split("(", ")")
+
+            if (argParts.size != 3) {
+                throw java.lang.RuntimeException(
+                    "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
+                        "unexpected special characters",
+                )
             }
+            val prefix = argParts[0]
+            val argString = argParts[1].trim()
+            val (argList, numOptional) = if (argString.isEmpty()) {
+                Pair(listOf(), 0)
+            } else {
+                var numOptional = 0
+                val args = argString.split(",").map {
+                    val trimmedArg = it.trim()
+                    val spacedArg = trimmedArg.split(" ")
+                    if (spacedArg.size == 1) {
+                        trimmedArg
+                    } else {
+                        if (spacedArg.size != 2 || spacedArg[0].trim() != "DEFAULT") {
+                            throw java.lang.RuntimeException(
+                                "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
+                                    "unexpected special characters",
+                            )
+                        }
+                        numOptional += 1
+                        spacedArg[1]
+                    }
+                }
+                Pair(args, numOptional)
+            }
+            val newSignature = "$prefix(${argList.joinToString()})"
+            return Pair(newSignature, numOptional)
         }
     }
 }
