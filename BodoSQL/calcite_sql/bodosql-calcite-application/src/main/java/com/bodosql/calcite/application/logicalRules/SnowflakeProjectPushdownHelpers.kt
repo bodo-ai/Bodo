@@ -17,12 +17,16 @@ import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexPatternFieldRef
+import org.apache.calcite.rex.RexPermuteInputsShuttle
 import org.apache.calcite.rex.RexRangeRef
 import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.rex.RexSubQuery
 import org.apache.calcite.rex.RexTableInputRef
 import org.apache.calcite.rex.RexWindow
 import org.apache.calcite.tools.RelBuilder
+import org.apache.calcite.util.mapping.Mappings
+import org.apache.calcite.util.mapping.Mappings.TargetMapping
+import org.locationtech.proj4j.parser.Proj4Keyword.k
 
 /**
  * File that contains a selection of helper functions for rules that enable pushing down projections to Snowflake.
@@ -83,14 +87,14 @@ class SnowflakeProjectPushdownHelpers {
             val conditionValue: List<RexNode> = listOf(toReplace.condition)
 
             // First what values we need to push, so we can determine how many expressions we're pushing to the left/right
-            val newNodeAndRexExprs = extractValues(builder.rexBuilder, -1, conditionValue)
+            val newNodeAndRexExprs = extractValues(builder.rexBuilder, 0, conditionValue)
             val expressionsToTryAndPush = newNodeAndRexExprs.second
 
             if (expressionsToTryAndPush.isEmpty()) {
                 return null
             }
             // Split the needed projects into two expressions, a project on top of each of the inputs
-            val leftBound = toReplace.left.rowType.fieldCount
+            val leftBound = toReplace.left.getRowType().fieldCount
 
             // NOTE: we don't need to care about left/right/outer joins here,
             // since we're only pushing the join condition.
@@ -120,17 +124,42 @@ class SnowflakeProjectPushdownHelpers {
             builder.projectPlus(rightProjects)
 
             // Now create a map of project expression => index
-            val leftExpressionsIndexed: Iterable<Pair<RexNode, Int>> = leftProjects.mapIndexed { idx, node -> Pair(node, idx + oldLeft.rowType.fieldCount) }
-            val rightExpressionsIndexed: Iterable<Pair<RexNode, Int>> = rightProjects.mapIndexed { idx, node -> Pair(node, idx + oldLeft.rowType.fieldCount) }
+            val leftExpressionsIndexed: Iterable<Pair<RexNode, Int>> = leftProjects.mapIndexed { idx, node -> Pair(node, idx + oldLeft.getRowType().fieldCount) }
+            val rightExpressionsIndexed: Iterable<Pair<RexNode, Int>> = rightProjects.mapIndexed { idx, node -> Pair(node, idx + oldRight.getRowType().fieldCount) }
             val expressionMap: Map<RexNode, RexNode> = leftExpressionsIndexed.plus(rightExpressionsIndexed).map { rexNodeAndNewIndex: Pair<RexNode, Int> ->
                 Pair(rexNodeAndNewIndex.first, builder.rexBuilder.makeInputRef(rexNodeAndNewIndex.first.type, rexNodeAndNewIndex.second))
             }.toMap()
+            // Update the input refs in the join condition
+            val oldLeftFieldCount = oldLeft.getRowType().fieldCount
+            val oldRightFieldCount = oldRight.getRowType().fieldCount
+            val leftMapping: TargetMapping = Mappings.createIdentity(oldLeftFieldCount)
+            val rightMapping = Mappings.createShiftMapping(
+                oldLeftFieldCount + oldRightFieldCount + leftProjects.size + rightProjects.size,
+                oldLeftFieldCount + leftProjects.size,
+                oldLeftFieldCount,
+                oldRightFieldCount,
+            )
+            val conditionMapping = Mappings.merge(leftMapping, rightMapping)
+            val conditionShuttle = RexPermuteInputsShuttle(conditionMapping, oldLeft, oldRight)
+            val replacedCondition = toReplace.condition.accept(conditionShuttle)
+            val updatedExpressionMap = expressionMap.mapKeys { k -> k.key.accept(conditionShuttle) }
 
-            val newJoinCondition: RexNode = toReplace.condition.accept(MapReplacer(expressionMap, builder.rexBuilder))
+            // Build new project expressions.
+            val newJoinCondition: RexNode = replacedCondition.accept(MapReplacer(updatedExpressionMap, builder.rexBuilder))
             builder.join(
                 toReplace.joinType,
                 newJoinCondition,
             )
+            // Generate a projection to get the original type.
+            val finalFields: MutableList<RexNode> = ArrayList()
+            for (i in 0 until oldLeft.getRowType().fieldCount) {
+                finalFields.add(builder.field(i))
+            }
+            val totalLeft = oldLeft.getRowType().fieldCount + leftProjects.size
+            for (i in totalLeft until totalLeft + oldRight.getRowType().fieldCount) {
+                finalFields.add(builder.field(i))
+            }
+            builder.project(finalFields, toReplace.getRowType().fieldNames)
             return builder.build()
         }
 
@@ -144,7 +173,7 @@ class SnowflakeProjectPushdownHelpers {
         fun replaceValuesProjectFilter(project: Project, filter: Filter, builder: RelBuilder): RelNode? {
             val filterInput = filter.input
             // Returns a list of values that need to be extracted/pushed below the provided project and filter
-            val replacer = Replacer(filterInput.rowType.fieldCount, builder.rexBuilder)
+            val replacer = Replacer(filterInput.getRowType().fieldCount, builder.rexBuilder)
             val newProjects = replacer.apply(project.projects)
             val newFilterCond = replacer.apply(filter.condition)
 
@@ -169,7 +198,7 @@ class SnowflakeProjectPushdownHelpers {
      * The index of the new input refs is dependent on the value passed for initial field count. Replaced expressions
      * are located in the replacedExprs argument.
      *
-     * After running, for all values of n, all instances of replacedExpres[n]
+     * After running, for all values of n, all instances of replacedExprs[n]
      * will have been replaced with a RexInputRef $(i+n).
      *
      * Note that this shouldn't be called directly on a RelNode, as this can lead to RelBuilders throwing
