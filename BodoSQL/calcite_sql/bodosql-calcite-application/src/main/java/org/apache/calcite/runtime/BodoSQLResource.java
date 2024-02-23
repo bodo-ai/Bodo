@@ -9,9 +9,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public interface BodoSQLResource {
 
-   @Resources.BaseMessage("All correlation variables should resolve to the same namespace. Previous namespace={0}. New namespace={1}")
-   Resources.ExInst<CalciteException> conflictCorrelationVariable(String prevNs, String newNs);
-
    @Resources.BaseMessage("Invalid Trim Syntax. We support TRIM([BOTH/TRAILING/LEADING] trimchars from Y ) and TRIM(X [, trimchars])")
    Resources.ExInst<CalciteException> genericTrimError();
 

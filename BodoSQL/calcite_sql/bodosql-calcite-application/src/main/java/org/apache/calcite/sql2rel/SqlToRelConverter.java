@@ -3247,12 +3247,6 @@ public class SqlToRelConverter {
     final ImmutableBitSet.Builder requiredColumns = ImmutableBitSet.builder();
     final List<CorrelationId> correlNames = new ArrayList<>();
 
-    // All correlations must refer the same namespace since correlation
-    // produces exactly one correlation source.
-    // The same source might be referenced by different variables since
-    // DeferredLookups are not de-duplicated at create time.
-    SqlValidatorNamespace prevNs = null;
-
     for (CorrelationId correlName : correlatedVariables) {
       // Bodo Change: This structure of getCorrelationUse() only supports
       // the correlation variable being directly defined by the calling
@@ -3275,7 +3269,6 @@ public class SqlToRelConverter {
           nameMatcher, false, resolved);
       assert resolved.count() == 1;
       final SqlValidatorScope.Resolve resolve = resolved.only();
-      final SqlValidatorNamespace foundNs = resolve.namespace;
       final RelDataType rowType = resolve.rowType();
       final int childNamespaceIndex = resolve.path.steps().get(0).i;
       final SqlValidatorScope ancestorScope = resolve.scope;
@@ -3283,27 +3276,6 @@ public class SqlToRelConverter {
 
       if (!correlInCurrentScope) {
         continue;
-      }
-
-      if (prevNs == null) {
-        prevNs = foundNs;
-      } else {
-        // Bodo Change: Replace an assert with an actual exception.
-        if (prevNs != foundNs) {
-          final String prevNsString;
-          if (prevNs instanceof IdentifierNamespace) {
-            prevNsString = ((IdentifierNamespace) prevNs).getId().toString();
-          } else {
-            prevNsString = prevNs.toString();
-          }
-          final String foundNsString;
-          if (foundNs instanceof IdentifierNamespace) {
-            foundNsString = ((IdentifierNamespace) foundNs).getId().toString();
-          } else {
-            foundNsString = foundNs.toString();
-          }
-          throw BODO_SQL_RESOURCE.conflictCorrelationVariable(prevNsString, foundNsString).ex();
-        }
       }
 
       int namespaceOffset = 0;

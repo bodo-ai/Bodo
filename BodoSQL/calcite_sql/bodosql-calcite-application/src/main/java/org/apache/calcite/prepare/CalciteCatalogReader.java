@@ -327,7 +327,7 @@ public class CalciteCatalogReader implements Prepare.CatalogReader {
     // SqlOperandMetadata.paramTypes will use the real type factory, during
     // validation.
     // BODO CHANGE: Use the BodoTypeFactory here so we can properly handle variant types.
-    final RelDataTypeFactory dummyTypeFactory = new BodoTypeFactoryImpl(BodoSQLRelDataTypeSystem.DEFAULT);
+    final RelDataTypeFactory dummyTypeFactory = new BodoTypeFactoryImpl(new BodoSQLRelDataTypeSystem());
     final List<RelDataType> argTypes = argTypesFactory.apply(dummyTypeFactory);
     final List<SqlTypeFamily> typeFamilies =
         typeFamiliesFactory.apply(dummyTypeFactory);
