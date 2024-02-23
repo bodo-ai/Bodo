@@ -1347,22 +1347,11 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
     hashes.reset();
     return ret_table;
 }
-
-/** This function is the inner function for the dropping of duplicated rows.
- * This C++ code is used for the drop_duplicates.
- * Two support cases:
- * ---The local computation where we store two values (first and last) in order
- *    to deal with all eventualities
- * ---The final case where depending on the case we store the first, last or
- *    none if more than 2 are considered.
- *
- * As for the join, this relies on using hash keys for the partitioning.
- * The computation is done locally.
- *
- * External function used are "RetrieveTable" and "TestEqual"
- *
- * @param in_table : the input table
- * @param sum_value: the uint64_t containing all the values together.
+/**
+ * @brief Helper function for drop_duplicates_table_inner. Returns a vector of
+ * indices of rows to keep.
+ * @param in_table Table to drop duplicates from.
+ * @param num_keys Number of keys to consider for the drop duplicates operation.
  * @param keep: integer specifying the expected behavior.
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
@@ -1375,23 +1364,12 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
  * @param hashes: the precomputed hashes to use for the hash table. If set to
  *                `nullptr` then the hashes are computed inside this function
  *                and deleted at the end. If passed they are not deleted.
- *
- * collate the rows on the computational node 1 corresponds to the second step
- * of the operation after the rows have been merged on the computation
- * @return the table to be used.
+ * @return A vector of indices of rows to keep.
  */
-std::shared_ptr<table_info> drop_duplicates_table_inner(
+bodo::vector<int64_t> drop_duplicates_table_helper(
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
     int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
     std::shared_ptr<uint32_t[]> hashes) {
-    tracing::Event ev("drop_duplicates_table_inner", is_parallel);
-    ev.add_attribute("table_nrows_before",
-                     static_cast<size_t>(in_table->nrows()));
-    if (ev.is_tracing()) {
-        size_t global_table_nbytes = table_global_memory_size(in_table);
-        ev.add_attribute("g_table_nbytes", global_table_nbytes);
-    }
-    const bool delete_hashes = bool(hashes);
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<std::shared_ptr<array_info>> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
@@ -1496,13 +1474,59 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
     } else {
         ListIdx = RetrieveListIdx2();
     }
+    return ListIdx;
+};
+
+/** This function is the inner function for the dropping of duplicated rows.
+ * This C++ code is used for the drop_duplicates.
+ * Two support cases:
+ * ---The local computation where we store two values (first and last) in order
+ *    to deal with all eventualities
+ * ---The final case where depending on the case we store the first, last or
+ *    none if more than 2 are considered.
+ *
+ * As for the join, this relies on using hash keys for the partitioning.
+ * The computation is done locally.
+ *
+ * External function used are "RetrieveTable" and "TestEqual"
+ *
+ * @param in_table : the input table
+ * @param sum_value: the uint64_t containing all the values together.
+ * @param keep: integer specifying the expected behavior.
+ *        keep = 0 corresponds to the case of keep="first" keep first entry
+ *        keep = 1 corresponds to the case of keep="last" keep last entry
+ *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @param step: integer specifying the work done
+ *              2 corresponds to the first step of the operation where we
+ * @param is_parallel: whether we run in parallel or not.
+ * @param drop_duplicates_dict: Do we need to ensure a dictionary has no
+ * duplicates?
+ * @param hashes: the precomputed hashes to use for the hash table. If set to
+ *                `nullptr` then the hashes are computed inside this function
+ *                and deleted at the end. If passed they are not deleted.
+ *
+ * collate the rows on the computational node 1 corresponds to the second step
+ * of the operation after the rows have been merged on the computation
+ * @return the table to be used.
+ */
+std::shared_ptr<table_info> drop_duplicates_table_inner(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
+    int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
+    std::shared_ptr<uint32_t[]> hashes) {
+    tracing::Event ev("drop_duplicates_table_inner", is_parallel);
+    ev.add_attribute("table_nrows_before",
+                     static_cast<size_t>(in_table->nrows()));
+    if (ev.is_tracing()) {
+        size_t global_table_nbytes = table_global_memory_size(in_table);
+        ev.add_attribute("g_table_nbytes", global_table_nbytes);
+    }
+    bodo::vector<int64_t> ListIdx = drop_duplicates_table_helper(
+        in_table, num_keys, keep, step, is_parallel, dropna,
+        drop_duplicates_dict, hashes);
     // Now building the out_arrs array.
     std::shared_ptr<table_info> ret_table =
         RetrieveTable(std::move(in_table), ListIdx, -1);
     //
-    if (delete_hashes) {
-        hashes.reset();
-    }
     ev.add_attribute("table_nrows_after",
                      static_cast<size_t>(ret_table->nrows()));
     return ret_table;

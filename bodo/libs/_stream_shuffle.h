@@ -154,13 +154,16 @@ class IncrementalShuffleState {
      * @return std::tuple<
      * std::shared_ptr<table_info>,
      * std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-     * std::shared_ptr<uint32_t[]>> shuffle_table, dict_hashes, shuffle_hashes.
+     * std::shared_ptr<uint32_t[]>,
+     * std::unique_ptr<uint8_t[]> shuffle_table, dict_hashes, shuffle_hashes
+     * keep_row_bitmap. Only keep_row_bitmap is optional may be nullptr.
      */
     virtual std::tuple<
         /*shuffle_table*/ std::shared_ptr<table_info>,
         /*dict_hashes*/
         std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
-        /*shuffle_hashes*/ std::shared_ptr<uint32_t[]>>
+        /*shuffle_hashes*/ std::shared_ptr<uint32_t[]>,
+        /*keep_row_bitmap*/ std::unique_ptr<uint8_t[]>>
     GetShuffleTableAndHashes();
 
     /**
