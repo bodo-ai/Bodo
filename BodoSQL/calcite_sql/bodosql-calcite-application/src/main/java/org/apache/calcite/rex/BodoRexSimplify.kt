@@ -7,6 +7,7 @@ import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.rex.JsonPecUtil
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.ByteString
 import org.apache.calcite.plan.RelOptPredicateList
@@ -1804,6 +1805,63 @@ class BodoRexSimplify(
     }
 
     /**
+     * Determine if a rex node is a comparison between two literals
+     */
+    private fun isLiteralComparison(e: RexNode): Boolean {
+        return (e is RexCall) && listOf(
+            SqlStdOperatorTable.LESS_THAN.name,
+            SqlStdOperatorTable.LESS_THAN_OR_EQUAL.name,
+            SqlStdOperatorTable.GREATER_THAN.name,
+            SqlStdOperatorTable.GREATER_THAN_OR_EQUAL.name,
+            SqlBodoOperatorTable.NULL_EQUALS.name,
+            SqlStdOperatorTable.EQUALS.name,
+            SqlStdOperatorTable.NOT_EQUALS.name,
+            SqlStdOperatorTable.IS_DISTINCT_FROM.name,
+            SqlStdOperatorTable.IS_NOT_DISTINCT_FROM.name,
+            CondOperatorTable.EQUAL_NULL.name,
+        ).contains(e.operator.name) && (e.operands.size == 2) && e.operands.all { it is RexLiteral }
+    }
+
+    // Attempts to coerce a literal to a BigDecimal, returning null if this is not possible
+    private fun getAsDecimal(e: RexLiteral): BigDecimal? {
+        return when (e.type.sqlTypeName) {
+            SqlTypeName.TINYINT,
+            SqlTypeName.SMALLINT,
+            SqlTypeName.INTEGER,
+            SqlTypeName.BIGINT,
+            SqlTypeName.FLOAT,
+            SqlTypeName.DOUBLE,
+            SqlTypeName.REAL,
+            SqlTypeName.DECIMAL -> e.getValueAs(BigDecimal::class.java)
+            else -> null
+        }
+    }
+
+    // Attempts to simplify comparisons between two literals in forms that are not
+    // supported by the regular simplifier, e.g. decimal_literal >= double_literal
+    private fun simplifyLiteralComparison(e: RexCall): RexNode {
+        val asDecimal0 = getAsDecimal(e.operands[0] as RexLiteral)
+        val asDecimal1 = getAsDecimal(e.operands[1] as RexLiteral)
+        return if (asDecimal0 != null && asDecimal1 != null) {
+            val comparisonInt = asDecimal0.compareTo(asDecimal1)
+            val asBool = when (e.operator.name) {
+                SqlStdOperatorTable.LESS_THAN.name -> comparisonInt < 0
+                SqlStdOperatorTable.LESS_THAN_OR_EQUAL.name -> comparisonInt <= 0
+                SqlStdOperatorTable.GREATER_THAN.name -> comparisonInt > 0
+                SqlStdOperatorTable.GREATER_THAN_OR_EQUAL.name -> comparisonInt >= 0
+                SqlStdOperatorTable.EQUALS.name,
+                CondOperatorTable.EQUAL_NULL.name,
+                SqlBodoOperatorTable.NULL_EQUALS.name,
+                SqlStdOperatorTable.IS_NOT_DISTINCT_FROM.name -> comparisonInt == 0
+                SqlStdOperatorTable.NOT_EQUALS.name,
+                SqlStdOperatorTable.IS_DISTINCT_FROM.name -> comparisonInt != 0
+                else -> return e
+            }
+            return rexBuilder.makeLiteral(asBool)
+        } else { e }
+    }
+
+    /**
      * Implementation of simplifyUnknownAs where we simplify custom Bodo functions
      * and then dispatch to the regular RexSimplifier.
      */
@@ -1829,6 +1887,7 @@ class BodoRexSimplify(
                 isLength(e) -> simplifyLength(e as RexCall)
                 isIFF(e) -> simplifyIFF(e as RexCall)
                 e is RexOver -> simplifyRexOver(e)
+                isLiteralComparison(e) -> simplifyLiteralComparison(e as RexCall)
                 else -> e
             }
         }
