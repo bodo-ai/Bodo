@@ -1019,6 +1019,11 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             n, tz_literal
         )  # pragma: no cover
 
+    if isinstance(typ, bodo.hiframes.timestamptz_ext.TimestampTZArrayType):
+        return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(
+            n
+        )  # pragma: no cover
+
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array

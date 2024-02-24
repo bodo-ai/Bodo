@@ -1556,6 +1556,9 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.TimeType):
         return bodo.hiframes.time_ext.TimeArrayType(dtype.precision)
 
+    if dtype == bodo.timestamptz_type:
+        return bodo.hiframes.timestamptz_ext.timestamp_tz_array_type
+
     if isinstance(dtype, bodo.Decimal128Type):
         return bodo.DecimalArrayType(dtype.precision, dtype.scale)
 
@@ -1817,6 +1820,7 @@ def is_scalar_type(t: types.Type) -> bool:
         bodo.date_offset_type,
         types.none,
         bodo.null_dtype,
+        bodo.timestamptz_type,
     )
 
 

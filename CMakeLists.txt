@@ -332,6 +332,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_nested_array.cpp"
     "bodo/tests/test_stream_shuffle.cpp"
+    "bodo/tests/test_timestamptz_array.cpp"
   )
 endif()
 

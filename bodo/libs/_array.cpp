@@ -115,6 +115,23 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                            std::shared_ptr<array_info>(indices_arr)});
 }
 
+array_info* timestamp_tz_array_to_info(array_info* timestamp_arr,
+                                       array_info* offset_arr,
+                                       NRT_MemInfo* null_bitmap) {
+    // Assert that timestamp_arr is a timestamp array/offest array is an int64
+    // and that offset_arr is int16
+    int64_t n_items = timestamp_arr->length;
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+    auto arr_type = bodo_array_type::arr_type_enum::TIMESTAMPTZ;
+    auto dtype = Bodo_CTypes::CTypeEnum::DATETIME;
+    return new array_info(
+        arr_type, dtype, n_items,
+        {timestamp_arr->buffers[0], offset_arr->buffers[0], null_bitmap_buff},
+        {});
+}
+
 // Raw pointer since called from Python
 int32_t get_has_global_dictionary(array_info* dict_arr) {
     return int32_t(dict_arr->child_arrays[0]->is_globally_replicated);
@@ -1076,6 +1093,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, string_array_to_info);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
+    SetAttrStringFromVoidPtr(m, timestamp_tz_array_to_info);
     SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
     SetAttrStringFromVoidPtr(m, get_has_unique_local_dictionary);
     SetAttrStringFromVoidPtr(m, get_dict_id);
