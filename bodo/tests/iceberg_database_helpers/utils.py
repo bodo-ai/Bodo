@@ -37,6 +37,8 @@ def get_spark() -> SparkSession:
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
         .config("spark.sql.session.timeZone", "UTC")
+        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+        .config("spark.sql.execution.arrow.enabled", "true")
         .getOrCreate()
     )
 

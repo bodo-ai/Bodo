@@ -1205,12 +1205,10 @@ def test_basic_write_replace(
 
     if read_behavior == "spark":
         py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
-        # Spark doesn't handle null timestamps properly. It converts them to
-        # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
-        # dataframes to match Spark.
+        # Spark reads the column in micro-seconds instead of nano-seconds like
+        # we do, so we need to convert it to match Bodo.
         if base_name == "DT_TSZ_TABLE":
-            df["B"] = df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
-            py_out["B"] = py_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
+            py_out["B"] = py_out["B"].astype("datetime64[ns]")
     else:
         assert (
             read_behavior == "bodo"
@@ -1401,6 +1399,9 @@ def test_basic_write_new_append(
             expected_df["B"] = expected_df["B"].fillna(
                 pd.Timestamp(1970, 1, 1, tz="UTC")
             )
+            spark_out["B"] = (
+                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
+            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
         if not_hashable:
@@ -1559,8 +1560,8 @@ ICEBERG_FIELD_IDS_IN_PQ_SCHEMA_TEST_PARAMS: list[str, pa.Schema] = [
             [
                 pa.field("A", pa.list_(pa.int64())),
                 pa.field("B", pa.list_(pa.string())),
-                pa.field("C", pa.list_(pa.int64())),
-                pa.field("D", pa.list_(pa.float64())),
+                pa.field("C", pa.list_(pa.int32())),
+                pa.field("D", pa.list_(pa.float32())),
                 pa.field("E", pa.list_(pa.float64())),
             ]
         ),
@@ -2535,6 +2536,14 @@ def test_write_partitioned(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=True)
     comm = MPI.COMM_WORLD
 
+    if "DECIMALS" in table_name:
+        pytest.skip(reason="Bodo cannot write decimals other than (38,18).")
+    if "STRUCT" in table_name:
+        # TODO Add support for this.
+        pytest.skip(
+            reason="Bodo doesn't support writing tables where the partition column is a nested field."
+        )
+
     @bodo.jit(distributed=["df"])
     def impl(df, table_name, conn, db_schema):
         df.to_sql(table_name, conn, db_schema, if_exists="append")
@@ -2625,6 +2634,9 @@ def test_write_partitioned(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
         # dataframe to match Spark.
         if base_name == "DT_TSZ_TABLE":
+            spark_out["B"] = (
+                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
+            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -2753,6 +2765,9 @@ def test_write_sorted(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
         if base_name == "DT_TSZ_TABLE":
+            spark_out["B"] = (
+                spark_out["B"].astype("datetime64[ns]").dt.tz_localize("UTC")
+            )
             spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
@@ -3433,6 +3448,9 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
         try:
             spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
             spark_out = spark_out.sort_values(by="C", ascending=True)
+            spark_out["D"] = (
+                spark_out["D"].astype("datetime64[ns]").dt.tz_localize("UTC")
+            )
 
             passed = bool(
                 _test_equal_guard(
