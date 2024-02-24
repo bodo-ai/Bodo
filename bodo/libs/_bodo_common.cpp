@@ -715,6 +715,31 @@ std::unique_ptr<array_info> alloc_dict_string_array(
             {dict_data_arr, indices_data_arr}));
 }
 
+std::unique_ptr<array_info> alloc_timestamptz_array(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    auto timestamp_buffer =
+        AllocateBodoBuffer(length, Bodo_CTypes::CTypeEnum::DATETIME, pool, mm);
+    // tz offset in ns
+    auto offset_buffer =
+        AllocateBodoBuffer(length, Bodo_CTypes::CTypeEnum::INT16, pool, mm);
+
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    auto null_bitmap_buffer =
+        AllocateBodoBuffer(n_bytes * sizeof(uint8_t), pool, mm);
+    // setting all to non-null to avoid unexpected issues
+    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
+
+    auto arr_type = bodo_array_type::arr_type_enum::TIMESTAMPTZ;
+    auto dtype = Bodo_CTypes::CTypeEnum::DATETIME;
+    return std::make_unique<array_info>(
+        arr_type, dtype, length,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(timestamp_buffer), std::move(offset_buffer),
+             std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}));
+}
+
 std::unique_ptr<array_info> create_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<std::string> const& list_string, int64_t array_id,
@@ -898,6 +923,9 @@ std::unique_ptr<array_info> alloc_array_top_level(
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
                                            extra_null_bytes, pool,
+                                           std::move(mm));
+        case bodo_array_type::TIMESTAMPTZ:
+            return alloc_timestamptz_array(length, extra_null_bytes, pool,
                                            std::move(mm));
         case bodo_array_type::ARRAY_ITEM:
             return alloc_array_item(length, nullptr, extra_null_bytes, pool,

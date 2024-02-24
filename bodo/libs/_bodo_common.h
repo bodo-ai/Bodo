@@ -452,6 +452,7 @@ struct bodo_array_type {
         DICT = 7,  // dictionary-encoded string array
         // string_array_split_view_type, etc.
         MAP = 8,
+        TIMESTAMPTZ = 9,
 
         // Used to fallback to runtime type checks
         // for templated functions
@@ -944,6 +945,7 @@ struct array_info {
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::STRING:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[2]->mutable_data();
             case bodo_array_type::DICT:
                 return (char*)this->child_arrays[1]
@@ -1098,6 +1100,7 @@ struct array_info {
         switch (arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
+            case bodo_array_type::TIMESTAMPTZ:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
@@ -1123,6 +1126,7 @@ struct array_info {
         switch (arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
+            case bodo_array_type::TIMESTAMPTZ:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
@@ -1261,6 +1265,12 @@ std::unique_ptr<array_info> alloc_string_array(
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+std::unique_ptr<array_info> alloc_timestamptz_array(
+    int64_t length, int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());

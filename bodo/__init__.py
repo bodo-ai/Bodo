@@ -253,6 +253,11 @@ from bodo.hiframes.time_ext import (
     Time,
     parse_time_string,
 )
+from bodo.hiframes.timestamptz_ext import (
+    TimestampTZ,
+    timestamptz_type,
+    timestamptz_array_type,
+)
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     datetime_timedelta_array_type,

@@ -30,6 +30,7 @@ from bodo.hiframes.pd_categorical_ext import (
     get_categories_int_type,
 )
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
+from bodo.hiframes.timestamptz_ext import TimestampTZArrayType
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -428,6 +429,35 @@ def array_to_info_codegen(context, builder, sig, args):
                 arr.dict_id,
             ],
         )
+
+    if isinstance(arr_type, TimestampTZArrayType):
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+        data_ts_arr = arr.data_ts
+        data_offset_arr = arr.data_offset
+
+        sig = array_info_type(arr_type.data_ts)
+        timestamp_info = array_to_info_codegen(context, builder, sig, (data_ts_arr,))
+
+        sig = array_info_type(arr_type.data_offset)
+        offset_info = array_to_info_codegen(context, builder, sig, (data_offset_arr,))
+
+        null_bitmap = context.make_helper(
+            builder, null_bitmap_arr_type, arr.null_bitmap
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # data_ts_info
+                lir.IntType(8).as_pointer(),  # data_offset_info
+                lir.IntType(8).as_pointer(),  # null_bitmap_info
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="timestamp_tz_array_to_info"
+        )
+
+        return builder.call(fn_tp, [timestamp_info, offset_info, null_bitmap.meminfo])
 
     # get codes array from CategoricalArrayType to be handled similar to other Numpy
     # arrays.
