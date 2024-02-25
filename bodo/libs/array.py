@@ -30,7 +30,7 @@ from bodo.hiframes.pd_categorical_ext import (
     get_categories_int_type,
 )
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
-from bodo.hiframes.timestamptz_ext import TimestampTZArrayType
+from bodo.hiframes.timestamptz_ext import timestamptz_array_type
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -90,6 +90,7 @@ ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
+ll.add_symbol("timestamp_tz_array_to_info", array_ext.timestamp_tz_array_to_info)
 ll.add_symbol("info_to_array_item_array", array_ext.info_to_array_item_array)
 ll.add_symbol("info_to_struct_array", array_ext.info_to_struct_array)
 ll.add_symbol("get_child_info", array_ext.get_child_info)
@@ -98,6 +99,7 @@ ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_null_array", array_ext.info_to_null_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
+ll.add_symbol("info_to_timestamptz_array", array_ext.info_to_timestamptz_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
@@ -430,17 +432,15 @@ def array_to_info_codegen(context, builder, sig, args):
             ],
         )
 
-    if isinstance(arr_type, TimestampTZArrayType):
+    if arr_type == timestamptz_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
-        data_ts_arr = arr.data_ts
-        data_offset_arr = arr.data_offset
-
-        sig = array_info_type(arr_type.data_ts)
-        timestamp_info = array_to_info_codegen(context, builder, sig, (data_ts_arr,))
-
-        sig = array_info_type(arr_type.data_offset)
-        offset_info = array_to_info_codegen(context, builder, sig, (data_offset_arr,))
-
+        data_ts_arr = context.make_array(timestamptz_array_type.ts_arr_type())(
+            context, builder, arr.data_ts
+        )
+        data_offset_arr = context.make_array(
+            timestamptz_array_type.offset_array_type()
+        )(context, builder, arr.data_offset)
+        length = builder.extract_value(data_ts_arr.shape, 0)
         null_bitmap = context.make_helper(
             builder, null_bitmap_arr_type, arr.null_bitmap
         )
@@ -448,16 +448,31 @@ def array_to_info_codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
+                lir.IntType(64),  # n_items
                 lir.IntType(8).as_pointer(),  # data_ts_info
                 lir.IntType(8).as_pointer(),  # data_offset_info
                 lir.IntType(8).as_pointer(),  # null_bitmap_info
+                lir.IntType(8).as_pointer(),  # data_ts_meminfo
+                lir.IntType(8).as_pointer(),  # data_offset_meminfo
+                lir.IntType(8).as_pointer(),  # null_bitmap_meminfo
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="timestamp_tz_array_to_info"
         )
 
-        return builder.call(fn_tp, [timestamp_info, offset_info, null_bitmap.meminfo])
+        return builder.call(
+            fn_tp,
+            [
+                length,
+                builder.bitcast(data_ts_arr.data, lir.IntType(8).as_pointer()),
+                builder.bitcast(data_offset_arr.data, lir.IntType(8).as_pointer()),
+                builder.bitcast(null_bitmap.data, lir.IntType(8).as_pointer()),
+                data_ts_arr.meminfo,
+                data_offset_arr.meminfo,
+                null_bitmap.meminfo,
+            ],
+        )
 
     # get codes array from CategoricalArrayType to be handled similar to other Numpy
     # arrays.
@@ -1183,6 +1198,107 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         if raise_py_err:
             bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         arr.length = builder.load(length_ptr)
+        return arr._getvalue()
+
+    # Timestamp TZ array
+    if arr_type == timestamptz_array_type:
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+        data_ts_arr_type = arr_type.ts_arr_type()
+        data_ts_arr = context.make_array(data_ts_arr_type)(context, builder)
+        data_offset_arr_type = arr_type.offset_array_type()
+        data_offset_arr = context.make_array(data_offset_arr_type)(context, builder)
+        nulls_arr_type = null_bitmap_arr_type
+        nulls_arr = context.make_array(nulls_arr_type)(context, builder)
+
+        length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        n_bytes_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        data_ts_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        data_offset_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        nulls_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        meminfo_data_ts_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        meminfo_data_offsets_ptr = cgutils.alloca_once(
+            builder, lir.IntType(8).as_pointer()
+        )
+        meminfo_nulls_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),  # info
+                lir.IntType(64).as_pointer(),  # num_items
+                lir.IntType(64).as_pointer(),  # num_bytes
+                lir.IntType(8).as_pointer().as_pointer(),  # data ts
+                lir.IntType(8).as_pointer().as_pointer(),  # data offset
+                lir.IntType(8).as_pointer().as_pointer(),  # nulls
+                lir.IntType(8).as_pointer().as_pointer(),  # meminfo ts
+                lir.IntType(8).as_pointer().as_pointer(),  # meminfo offset
+                lir.IntType(8).as_pointer().as_pointer(),  # meminfo nulls
+            ],
+        )  # meminfo_nulls
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_to_timestamptz_array"
+        )
+        builder.call(
+            fn_tp,
+            [
+                in_info,
+                length_ptr,
+                n_bytes_ptr,
+                data_ts_ptr,
+                data_offset_ptr,
+                nulls_ptr,
+                meminfo_data_ts_ptr,
+                meminfo_data_offsets_ptr,
+                meminfo_nulls_ptr,
+            ],
+        )
+        if raise_py_err:
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+        intp_t = context.get_value_type(types.intp)
+
+        # Load the array components
+        arrs = []
+        for size_ptr, data_ptr, dest_arr, scalar_type, meminfo_ptr in [
+            (length_ptr, data_ts_ptr, data_ts_arr, types.int64, meminfo_data_ts_ptr),
+            (
+                length_ptr,
+                data_offset_ptr,
+                data_offset_arr,
+                types.int16,
+                meminfo_data_offsets_ptr,
+            ),
+            (n_bytes_ptr, nulls_ptr, nulls_arr, types.uint8, meminfo_nulls_ptr),
+        ]:
+            shape_array = cgutils.pack_array(
+                builder, [builder.load(size_ptr)], ty=intp_t
+            )
+            itemsize = context.get_constant(
+                types.intp,
+                context.get_abi_sizeof(context.get_data_type(scalar_type)),
+            )
+            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+            data = builder.bitcast(
+                builder.load(data_ptr),
+                context.get_data_type(scalar_type).as_pointer(),
+            )
+
+            numba.np.arrayobj.populate_array(
+                dest_arr,
+                data=data,
+                shape=shape_array,
+                strides=strides_array,
+                itemsize=itemsize,
+                meminfo=builder.load(meminfo_ptr),
+            )
+            arrs.append(dest_arr._getvalue())
+
+        # Update the timestamp tz array
+        arr.data_ts = arrs[0]
+        arr.data_offset = arrs[1]
+        arr.null_bitmap = arrs[2]
+
         return arr._getvalue()
 
     # nullable integer/bool array

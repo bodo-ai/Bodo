@@ -1796,6 +1796,31 @@ def concat_overload(arr_list):
 
         return time_array_concat_impl
 
+    # TimestampTZ array
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == timestamptz_array_type
+    ):
+
+        def timestamp_tz_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            out_arr = bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(tot_len)
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    out_arr.data_ts[i + curr_pos] = A.data_ts[i]
+                    out_arr.data_offset[i + curr_pos] = A.data_offset[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        out_arr._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+            return out_arr
+
+        return timestamp_tz_array_concat_impl
+
     # datetime.timedelta array
     if (
         isinstance(arr_list, (types.UniTuple, types.List))

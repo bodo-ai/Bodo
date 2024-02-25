@@ -131,76 +131,83 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
 // --------------------- bodo::DataType and bodo::Schema ---------------------
 
 static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {
-    if (arr_type == bodo_array_type::NUMPY)
+    if (arr_type == bodo_array_type::NUMPY) {
         return "NUMPY";
-    if (arr_type == bodo_array_type::STRING)
+    } else if (arr_type == bodo_array_type::STRING) {
         return "STRING";
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+    } else if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         return "NULLABLE";
-    if (arr_type == bodo_array_type::ARRAY_ITEM)
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         return "ARRAY_ITEM";
-    if (arr_type == bodo_array_type::STRUCT)
+    } else if (arr_type == bodo_array_type::STRUCT) {
         return "STRUCT";
-    if (arr_type == bodo_array_type::MAP)
+    } else if (arr_type == bodo_array_type::MAP) {
         return "MAP";
-    if (arr_type == bodo_array_type::CATEGORICAL)
+    } else if (arr_type == bodo_array_type::CATEGORICAL) {
         return "CATEGORICAL";
-    if (arr_type == bodo_array_type::DICT)
+    } else if (arr_type == bodo_array_type::DICT) {
         return "DICT";
-    return "UNKNOWN";
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        return "TIMESTAMPTZ";
+    } else {
+        return "UNKNOWN";
+    }
 }
 
 static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
-    if (dtype == Bodo_CTypes::INT8)
+    if (dtype == Bodo_CTypes::INT8) {
         return "INT8";
-    if (dtype == Bodo_CTypes::UINT8)
+    } else if (dtype == Bodo_CTypes::UINT8) {
         return "UINT8";
-    if (dtype == Bodo_CTypes::INT16)
+    } else if (dtype == Bodo_CTypes::INT16) {
         return "INT16";
-    if (dtype == Bodo_CTypes::UINT16)
+    } else if (dtype == Bodo_CTypes::UINT16) {
         return "UINT16";
-    if (dtype == Bodo_CTypes::INT32)
+    } else if (dtype == Bodo_CTypes::INT32) {
         return "INT32";
-    if (dtype == Bodo_CTypes::UINT32)
+    } else if (dtype == Bodo_CTypes::UINT32) {
         return "UINT32";
-    if (dtype == Bodo_CTypes::INT64)
+    } else if (dtype == Bodo_CTypes::INT64) {
         return "INT64";
-    if (dtype == Bodo_CTypes::UINT64)
+    } else if (dtype == Bodo_CTypes::UINT64) {
         return "UINT64";
-    if (dtype == Bodo_CTypes::FLOAT32)
+    } else if (dtype == Bodo_CTypes::FLOAT32) {
         return "FLOAT32";
-    if (dtype == Bodo_CTypes::FLOAT64)
+    } else if (dtype == Bodo_CTypes::FLOAT64) {
         return "FLOAT64";
-    if (dtype == Bodo_CTypes::STRING)
+    } else if (dtype == Bodo_CTypes::STRING) {
         return "STRING";
-    if (dtype == Bodo_CTypes::BINARY)
+    } else if (dtype == Bodo_CTypes::BINARY) {
         return "BINARY";
-    if (dtype == Bodo_CTypes::_BOOL)
+    } else if (dtype == Bodo_CTypes::_BOOL) {
         return "_BOOL";
-    if (dtype == Bodo_CTypes::DECIMAL)
+    } else if (dtype == Bodo_CTypes::DECIMAL) {
         return "DECIMAL";
-    if (dtype == Bodo_CTypes::INT128)
+    } else if (dtype == Bodo_CTypes::INT128) {
         return "INT128";
-    if (dtype == Bodo_CTypes::DATE)
+    } else if (dtype == Bodo_CTypes::DATE) {
         return "DATE";
-    if (dtype == Bodo_CTypes::DATETIME)
+    } else if (dtype == Bodo_CTypes::DATETIME) {
         return "DATETIME";
-    if (dtype == Bodo_CTypes::TIMEDELTA)
+    } else if (dtype == Bodo_CTypes::TIMEDELTA) {
         return "TIMEDELTA";
-    if (dtype == Bodo_CTypes::TIME)
+    } else if (dtype == Bodo_CTypes::TIME) {
         return "TIME";
-    if (dtype == Bodo_CTypes::LIST)
+    } else if (dtype == Bodo_CTypes::LIST) {
         return "LIST";
-    if (dtype == Bodo_CTypes::STRUCT)
+    } else if (dtype == Bodo_CTypes::STRUCT) {
         return "STRUCT";
-    if (dtype == Bodo_CTypes::MAP)
+    } else if (dtype == Bodo_CTypes::MAP) {
         return "MAP";
-    if (dtype == Bodo_CTypes::COMPLEX64)
+    } else if (dtype == Bodo_CTypes::COMPLEX64) {
         return "COMPLEX64";
-    if (dtype == Bodo_CTypes::COMPLEX128)
+    } else if (dtype == Bodo_CTypes::COMPLEX128) {
         return "COMPLEX128";
-
-    return "UNKNOWN";
+    } else if (dtype == Bodo_CTypes::TIMESTAMPTZ) {
+        return "TIMESTAMPTZ";
+    } else {
+        return "UNKNOWN";
+    }
 }
 
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
@@ -731,7 +738,7 @@ std::unique_ptr<array_info> alloc_timestamptz_array(
     memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
 
     auto arr_type = bodo_array_type::arr_type_enum::TIMESTAMPTZ;
-    auto dtype = Bodo_CTypes::CTypeEnum::DATETIME;
+    auto dtype = Bodo_CTypes::CTypeEnum::TIMESTAMPTZ;
     return std::make_unique<array_info>(
         arr_type, dtype, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
@@ -1074,6 +1081,13 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
             uint64_t siztype = numpy_item_size[earr->dtype];
             return n_bytes + siztype * earr->length;
         }
+    } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        int64_t timestamp_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT64];
+        int64_t offset_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT16];
+        int64_t null_bytes = arrow::bit_util::BytesForBits(earr->length);
+        return timestamp_bytes + offset_bytes + null_bytes;
     } else if (earr->arr_type == bodo_array_type::STRING) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return earr->n_sub_elems() + sizeof(offset_t) * (earr->length + 1) +

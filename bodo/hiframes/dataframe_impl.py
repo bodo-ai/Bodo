@@ -61,6 +61,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.timestamptz_ext import timestamptz_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
@@ -3529,6 +3530,7 @@ def common_validate_merge_merge_asof_spec(
         datetime_date_array_type,
         datetime_timedelta_array_type,
         boolean_array_type,
+        timestamptz_array_type,
     }
     merge_on_names = {
         get_overload_const_str(on_const)
