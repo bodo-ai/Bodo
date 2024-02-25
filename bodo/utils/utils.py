@@ -701,6 +701,13 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_decimal_arr
 
+    if arr == bodo.timestamptz_array_type:
+
+        def empty_like_timestamp_tz_arr(n, arr):  # pragma: no cover
+            return bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)
+
+        return empty_like_timestamp_tz_arr
+
     # string array buffer for join
     assert arr == string_array_type
 
