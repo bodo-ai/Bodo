@@ -1,61 +1,59 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 
 
 def test_timestamptz_array_creation(memory_leak_check):
     """Test creation of TimestampTZ array"""
 
-    # TODO(aneesh) test setting nulls after implementing setna/is_na
-    @bodo.jit
     def f():
         arr = bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(5)
         arr[0] = bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100)
         arr[1] = bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
         arr[2] = bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 300)
+        arr[3] = None
+        arr[4] = bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200)
         return arr
 
-    arr = f()
-    assert arr[0].utc_timestamp == pd.Timestamp("2021-01-02 03:04:05")
-    assert arr[0].offset_minutes == 100
-    assert arr[1].utc_timestamp == pd.Timestamp("2022-12-31 12:59:59")
-    assert arr[1].offset_minutes == 200
-    assert arr[2].utc_timestamp == pd.Timestamp("2024-01-01 00:00:00")
-    assert arr[2].offset_minutes == 300
+    expected = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 300),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200),
+        ]
+    )
+    check_func(f, (), py_output=expected)
 
 
 def test_timestamptz_boxing_unboxing(memory_leak_check):
     """Test boxing and unboxing of TimestampTZ scalar"""
 
-    @bodo.jit
     def f(v):
         return v
 
-    x = f(bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100))
-    assert x.utc_timestamp == pd.Timestamp("2021-01-02 03:04:05")
-    assert x.offset_minutes == 100
+    v = bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100)
+    check_func(f, (v,))
 
 
 def test_timestamptz_array_boxing_unboxing(memory_leak_check):
     """Test boxing and unboxing of TimestampTZ array"""
+
+    def f(arr):
+        return arr
+
     arr = pd.Series(
         [
             bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
             bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
         ]
+        * 5
     )
-
-    @bodo.jit
-    def f(arr):
-        return arr
-
-    x = f(arr)
-    assert x[0].utc_timestamp == pd.Timestamp("2021-01-02 03:04:05")
-    assert x[0].offset_minutes == 100
-    assert x[1].utc_timestamp == pd.Timestamp("2022-02-03 04:05:06")
-    assert x[1].offset_minutes == 200
+    check_func(f, (arr,))
 
 
 # Tests for core distributed api operations
@@ -149,3 +147,158 @@ def test_distributed_scalar_optional_getitem(memory_leak_check):
     for i in range(len(arr)):
         py_output = arr[i]
         check_func(impl, (arr, i), py_output=py_output)
+
+
+# Test for lowering to C++ and back via the table builder API
+def test_table_builder(memory_leak_check):
+    global_1 = bodo.utils.typing.MetaType((0,))
+
+    def impl(arr):
+        T1 = bodo.hiframes.table.logical_table_to_table((arr,), (), global_1, 1)
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.table_builder.table_builder_append(table_builder, T1)
+        T2 = bodo.libs.table_builder.table_builder_finalize(table_builder)
+        return T2
+
+    arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+        ]
+    )
+    check_func(impl, (arr,), py_output=bodo.hiframes.table.Table([arr]))
+
+
+# Test for join data to test the shuffle infrastructure
+def test_join_data(memory_leak_check):
+    def impl(df1, df2):
+        return df1.merge(df2, left_on="A", right_on="C")[["A", "B", "C"]]
+
+    key1_arr = np.arange(6)
+    key2_arr = np.arange(4, 8)
+    data_arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+        ]
+    )
+    df1 = pd.DataFrame({"A": key1_arr, "B": data_arr})
+    df2 = pd.DataFrame({"C": key2_arr})
+    py_output = pd.DataFrame({"A": key1_arr[4:], "B": data_arr[4:], "C": key2_arr[:2]})
+    check_func(
+        impl, (df1, df2), py_output=py_output, reset_index=True, sort_output=True
+    )
+
+
+@pytest_mark_one_rank
+def test_concat(memory_leak_check):
+    """
+    Test that the bodo concat function works correctly. We test on 1 rank
+    because order is not strictly defined in the output.
+    """
+
+    def impl(arr1, arr2):
+        return bodo.libs.array_kernels.concat([arr1, arr2])
+
+    arr1 = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+        ]
+    )
+    arr2 = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            None,
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 14:45:06"), 350),
+        ]
+    )
+    py_output = np.concatenate([arr1, arr2])
+    check_func(impl, (arr1, arr2), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param(
+            np.array([True, False, True, False, True, True]), id="Boolean array index"
+        ),
+        pytest.param(np.array([1, 3, 0, 4]), id="Integer array index"),
+        pytest.param(slice(1, 5, 1), id="Slice index"),
+    ],
+)
+def test_getitem_complex(idx, memory_leak_check):
+    """Test that getitem works with various idx inputs."""
+
+    def impl(arr, idx):
+        return arr[idx]
+
+    arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+        ]
+    )
+    # Integer array indexing isn't supported on distributed data.
+    only_seq = isinstance(idx, np.ndarray) and np.issubdtype(idx.dtype, np.integer)
+    check_func(impl, (arr, idx), only_seq=only_seq)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param(
+            np.array([True, False, True, False, True, True]), id="Boolean array index"
+        ),
+        pytest.param(np.array([1, 3, 0, 4]), id="Integer array index"),
+        pytest.param(slice(1, 5, 1), id="Slice index"),
+    ],
+)
+def test_setitem_complex(idx, memory_leak_check):
+    """Test that setitem works with various idx inputs."""
+
+    def impl(arr, idx, val):
+        arr[idx] = val
+        return arr
+
+    arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+        ]
+    )
+    scalar_val = bodo.TimestampTZ(pd.Timestamp("2021-01-02 14:21:17"), 700)
+    # Integer array indexing isn't supported on distributed data.
+    only_seq = isinstance(idx, np.ndarray) and np.issubdtype(idx.dtype, np.integer)
+    check_func(impl, (arr, idx, scalar_val), copy_input=True, only_seq=only_seq)
+    arr_val = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 14:21:17"), 700),
+            None,
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2024-12-17 14:45:06"), 350),
+        ]
+    )
+    # arr_val cannot be distributed differently, so this only works with 1 rank.
+    check_func(impl, (arr, idx, arr_val), copy_input=True, only_seq=True)

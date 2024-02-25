@@ -580,6 +580,22 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                 fill_send_array(send_arr->child_arrays[0],
                                 in_arr->child_arrays[0], comm_info,
                                 str_comm_info, is_parallel);
+            } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+                // Send Timestamp section
+                fill_send_array_inner<int64_t>(
+                    (int64_t*)send_arr->data1(), (int64_t*)in_arr->data1(),
+                    comm_info.send_disp, n_rows, comm_info.row_dest,
+                    comm_info.filtered, is_parallel);
+                // Send offsets
+                fill_send_array_inner<int16_t>(
+                    (int16_t*)send_arr->data2(), (int16_t*)in_arr->data2(),
+                    comm_info.send_disp, n_rows, comm_info.row_dest,
+                    comm_info.filtered, is_parallel);
+                // Send nulls
+                fill_send_array_null_inner(
+                    (uint8_t*)send_arr->null_bitmask(),
+                    (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
+                    comm_info.n_pes, n_rows, comm_info.row_dest);
             } else if (in_arr->arr_type != bodo_array_type::DICT) {
                 throw std::runtime_error(
                     "Invalid data type for fill_send_array: " +
@@ -1029,6 +1045,30 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
             out_arr->child_arrays[0] =
                 shuffle_array(in_arr->child_arrays[0], comm_info,
                               tmp_null_bytes, is_parallel);
+            break;
+        }
+        case bodo_array_type::TIMESTAMPTZ: {
+            // timestamp_data
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT64);
+            bodo_alltoallv(send_arr->data1(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, out_arr->data1(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
+                           MPI_COMM_WORLD);
+            // offset data
+            mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+            bodo_alltoallv(send_arr->data2(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, out_arr->data2(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
+                           MPI_COMM_WORLD);
+            // nulls
+            mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
+                           comm_info.send_disp_null, mpi_typ,
+                           tmp_null_bytes.data(), comm_info.recv_count_null,
+                           comm_info.recv_disp_null, mpi_typ, MPI_COMM_WORLD);
+            copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
+                                     tmp_null_bytes, comm_info.recv_count_null,
+                                     comm_info.recv_count);
             break;
         }
         default:

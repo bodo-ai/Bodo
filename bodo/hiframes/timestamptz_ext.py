@@ -19,10 +19,24 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo.libs.pd_datetime_arr_ext
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs import hdatetime_ext
+from bodo.utils.indexing import (
+    get_new_null_mask_bool_index,
+    get_new_null_mask_int_index,
+    get_new_null_mask_slice_index,
+    setitem_slice_index_null_bits,
+)
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_iterable_type,
+    is_list_like_index_type,
+    is_overload_constant_str,
+)
 
 
 class TimestampTZ:
@@ -42,6 +56,9 @@ class TimestampTZ:
     def __int__(self):
         # Dummy method for pandas' is_scalar, throw error if called
         raise Exception("Conversion to int not implemented")
+
+    def __hash__(self) -> int:
+        return hash(self.utc_timestamp)
 
     def __repr__(self):
         offset_sign = "+" if self.offset_minutes >= 0 else "-"
@@ -65,9 +82,40 @@ class TimestampTZ:
         return self.__repr__()
 
     def __eq__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp == other.utc_timestamp
+
+    def __ne__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp != other.utc_timestamp
+
+    def __lt__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp < other.utc_timestamp
+
+    def __le__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp <= other.utc_timestamp
+
+    def __gt__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp > other.utc_timestamp
+
+    def __ge__(self, other):
+        self._check_can_compare(other)
+        return self.utc_timestamp >= other.utc_timestamp
+
+    def _check_can_compare(self, other):
+        """Determine if other is a valid object to compare with this TimestampTZ.
+
+        Args:
+            other (Any): The other type to check.
+
+        Raises:
+            TypeError: The type is not a valid type to compare with TimestampTZ.
+        """
         if not isinstance(other, TimestampTZ):
             raise TypeError("Cannot compare TimestampTZ with non-TimestampTZ")
-        return self.utc_timestamp == other.utc_timestamp
 
 
 class TimestampTZType(types.Type):
@@ -195,13 +243,21 @@ class TimestampTZArrayType(types.IterableType, types.ArrayCompatible):
     def offset_dtype():
         return types.int16
 
+    @staticmethod
+    def ts_arr_type():
+        return types.Array(TimestampTZArrayType.ts_dtype(), 1, "C")
+
+    @staticmethod
+    def offset_array_type():
+        return types.Array(TimestampTZArrayType.offset_dtype(), 1, "C")
+
 
 timestamptz_array_type = TimestampTZArrayType()
 
 
 # TODO(aneesh) refactor array definitions into 1 standard file
-data_ts_type = types.Array(TimestampTZArrayType.ts_dtype(), 1, "C")
-data_offset_type = types.Array(TimestampTZArrayType.offset_dtype(), 1, "C")
+data_ts_type = TimestampTZArrayType.ts_arr_type()
+data_offset_type = TimestampTZArrayType.offset_array_type()
 nulls_type = types.Array(types.uint8, 1, "C")
 
 
@@ -259,10 +315,24 @@ def alloc_timestamptz_array(n):  # pragma: no cover
     return init_timestamptz_array(data_ts, data_offset, nulls)
 
 
+def alloc_timestamptz_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for alloc_timestamptz_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert len(args) == 1 and not kws, "alloc_timestamptz_array() takes one argument"
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_timestamptz_ext_alloc_timestamptz_array = (
+    alloc_timestamptz_array_equiv
+)
+
+
 @overload_method(TimestampTZArrayType, "copy", no_unliteral=True)
 def overload_timestamptz_arr_copy(A):
     """Copy a TimestampTZArrayType by copying the underlying data and null bitmap"""
-    return lambda A: bodo.hiframes.timestamptz_ext.init_timestamp_array(
+    return lambda A: bodo.hiframes.timestamptz_ext.init_timestamptz_array(
         A.data_ts, A.data_offset, A._null_bitmap
     )  # pragma: no cover
 
@@ -362,6 +432,13 @@ def box_timestamptz_array(typ, val, c):
 def timestamptz_array_setitem(A, idx, val):
     if A != timestamptz_array_type:
         return
+
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for TimestampTZ Array with indexing type {idx} received an incorrect 'value' type {val}."
+
     if isinstance(idx, types.Integer):
         if val == timestamptz_type:
 
@@ -371,18 +448,185 @@ def timestamptz_array_setitem(A, idx, val):
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
             return impl
-    raise Exception("TODO")
+
+        else:  # pragma: no cover
+            raise BodoError(typ_err_msg)
+
+    if not (
+        (is_iterable_type(val) and val.dtype == timestamptz_type)
+        or types.unliteral(val) == timestamptz_type
+    ):  # pragma: no cover
+        raise BodoError(typ_err_msg)
+
+    # array of integers
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+        if types.unliteral(val) == timestamptz_type:
+            # A[int_array] = ts_tz_scalar
+
+            def impl_arr_ind_scalar(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    A.data_ts[idx[i]] = val.utc_timestamp.value
+                    A.data_offset[idx[i]] = val.offset_minutes
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+
+            return impl_arr_ind_scalar
+
+        else:
+            # A[int_array] = ts_tz_array
+
+            def impl_arr_ind(A, idx, val):  # pragma: no cover
+                val = bodo.utils.conversion.coerce_to_array(
+                    val, use_nullable_array=True
+                )
+                n = len(val)
+                for i in range(n):
+                    A.data_ts[idx[i]] = val.data_ts[i]
+                    A.data_offset[idx[i]] = val.data_offset[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+
+            return impl_arr_ind
+
+    # bool array
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        if types.unliteral(val) == timestamptz_type:
+            # A[bool_array] = ts_tz_scalar
+
+            def impl_bool_ind_mask_scalar(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        A.data_ts[i] = val.utc_timestamp.value
+                        A.data_offset[i] = val.offset_minutes
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_bool_ind_mask_scalar
+
+        else:
+            # A[bool_array] = ts_tz_array
+
+            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+                val = bodo.utils.conversion.coerce_to_array(
+                    val, use_nullable_array=True
+                )
+                n = len(idx)
+                val_ind = 0
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        A.data_ts[i] = val.data_ts[val_ind]
+                        A.data_offset[i] = val.data_offset[val_ind]
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                            val._null_bitmap, val_ind
+                        )
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                        val_ind += 1
+
+            return impl_bool_ind_mask
+
+    # slice case
+    if isinstance(idx, types.SliceType):
+        if types.unliteral(val) == timestamptz_type:
+            # A[slice] = ts_tz_scalar
+
+            def impl_slice_scalar(A, idx, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A.data_ts[i] = val.utc_timestamp.value
+                    A.data_offset[i] = val.offset_minutes
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
+
+        else:
+            # A[slice] = ts_tz_array
+
+            def impl_slice_mask(A, idx, val):  # pragma: no cover
+                val = bodo.utils.conversion.coerce_to_array(
+                    val,
+                    use_nullable_array=True,
+                )
+                n = len(A)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A.data_ts[idx] = val.data_ts
+                A.data_offset[idx] = val.data_offset
+                # XXX: conservative copy of bitmap in case there is overlap
+                src_bitmap = val._null_bitmap.copy()
+                setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
+
+            return impl_slice_mask
+
+    # This should be the only TimestampTZ Array implementation.
+    # We only expect to reach this case if more ind options are added.
+    raise BodoError(
+        f"setitem for TimestampTZ Array with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.getitem, no_unliteral=True)
 def timestamptz_array_getitem(A, idx):
     if A != timestamptz_array_type:
         return
+
+    # Integer index
     if isinstance(idx, types.Integer):
         return lambda A, idx: init_timestamptz(
             pd.Timestamp(A.data_ts[idx]), A.data_offset[idx]
         )  # pragma: no cover
-    raise Exception("TODO")
+
+    # bool arr indexing.
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+
+        def impl_bool(A, idx):  # pragma: no cover
+            # Heavily influenced by array_getitem_bool_index.
+            # Just replaces calls for new data with all 3 arrays
+            idx_t = bodo.utils.conversion.coerce_to_array(idx)
+            old_mask = A._null_bitmap
+            new_ts_data = A.data_ts[idx_t]
+            new_offset_data = A.data_offset[idx_t]
+            n = len(new_ts_data)
+            new_mask = get_new_null_mask_bool_index(old_mask, idx_t, n)
+            return init_timestamptz_array(new_ts_data, new_offset_data, new_mask)
+
+        return impl_bool
+
+    # int arr indexing
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+
+        def impl(A, idx):  # pragma: no cover
+            # Heavily influenced by array_getitem_int_index.
+            # Just replaces calls for new data with all 3 arrays
+            idx_t = bodo.utils.conversion.coerce_to_array(idx)
+            old_mask = A._null_bitmap
+            new_ts_data = A.data_ts[idx_t]
+            new_offset_data = A.data_offset[idx_t]
+            n = len(new_ts_data)
+            new_mask = get_new_null_mask_int_index(old_mask, idx_t, n)
+            return init_timestamptz_array(new_ts_data, new_offset_data, new_mask)
+
+        return impl
+
+    # slice case
+    if isinstance(idx, types.SliceType):
+
+        def impl_slice(A, idx):  # pragma: no cover
+            # Heavily influenced by array_getitem_slice_index.
+            # Just replaces calls for new data with all 3 arrays
+            n = len(A)
+            old_mask = A._null_bitmap
+            new_ts_data = np.ascontiguousarray(A.data_ts[idx])
+            new_offset_data = np.ascontiguousarray(A.data_offset[idx])
+            new_mask = get_new_null_mask_slice_index(old_mask, idx, n)
+            return init_timestamptz_array(new_ts_data, new_offset_data, new_mask)
+
+        return impl_slice
+
+    # This should be the only Timestamp TZ array implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for TimestampTZ Array with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)
