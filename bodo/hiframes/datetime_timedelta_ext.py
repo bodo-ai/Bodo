@@ -1402,7 +1402,7 @@ def dt_timedelta_arr_getitem(A, ind):
             new_seconds_data = A._seconds_data[ind_t]
             new_microseconds_data = A._microseconds_data[ind_t]
             n = len(new_days_data)
-            new_mask = get_new_null_mask_bool_index(old_mask, ind, n)
+            new_mask = get_new_null_mask_bool_index(old_mask, ind_t, n)
             return init_datetime_timedelta_array(
                 new_days_data, new_seconds_data, new_microseconds_data, new_mask
             )
@@ -1596,7 +1596,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             return impl_slice_mask
 
-    # This should be the only IntegerArray implementation.
+    # This should be the only DatetimeTimedeltaArray implementation.
     # We only expect to reach this case if more ind options are added.
     raise BodoError(
         f"setitem for DatetimeTimedeltaArray with indexing type {ind} not supported."

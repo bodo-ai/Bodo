@@ -287,6 +287,7 @@ struct Bodo_CTypes {
         COMPLEX64 = 21,
         COMPLEX128 = 22,
         MAP = 23,
+        TIMESTAMPTZ = 24,  // Used to raise errors in other code locations
         _numtypes
     };
 };
@@ -817,6 +818,7 @@ struct array_info {
             case bodo_array_type::CATEGORICAL:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
@@ -841,6 +843,7 @@ struct array_info {
             case bodo_array_type::CATEGORICAL:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
@@ -862,6 +865,7 @@ struct array_info {
         switch (this->arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
@@ -887,6 +891,7 @@ struct array_info {
         switch (arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
@@ -914,6 +919,7 @@ struct array_info {
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::STRING:
+            case bodo_array_type::TIMESTAMPTZ:
                 return (char*)this->buffers[2]->mutable_data();
             case bodo_array_type::DICT:
                 return (char*)this->child_arrays[1]

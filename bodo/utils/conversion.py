@@ -308,6 +308,22 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
+        if data == bodo.timestamptz_type:
+
+            def impl_timestamptz(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = bodo.hiframes.pd_timestamp_ext.alloc_timestamptz_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = data
+                return A
+
+            return impl_timestamptz
+
         # Timestamp values are stored as dt64 arrays
         if data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
             dt64_dtype = np.dtype("datetime64[ns]")

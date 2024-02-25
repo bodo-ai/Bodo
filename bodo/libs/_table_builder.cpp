@@ -139,6 +139,7 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                             Bodo_CTypes::INT128);
                 break;
             default:
+                assert(false);
                 break;
         }
     } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
@@ -195,30 +196,31 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                 APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
                 break;
             default:
+                assert(false);
                 break;
         }
     } else if (in_arr->arr_type == bodo_array_type::STRING) {
         if (in_arr->dtype == Bodo_CTypes::STRING) {
             APPEND_ROWS(bodo_array_type::STRING, Bodo_CTypes::STRING);
-        } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+        } else {
+            assert(in_arr->dtype == Bodo_CTypes::BINARY);
             APPEND_ROWS(bodo_array_type::STRING, Bodo_CTypes::BINARY);
         }
     } else if (in_arr->arr_type == bodo_array_type::DICT) {
-        if (in_arr->dtype == Bodo_CTypes::STRING) {
-            APPEND_ROWS(bodo_array_type::DICT, Bodo_CTypes::STRING);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::STRING);
+        APPEND_ROWS(bodo_array_type::DICT, Bodo_CTypes::STRING);
     } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-        if (in_arr->dtype == Bodo_CTypes::LIST) {
-            APPEND_ROWS(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::LIST);
+        APPEND_ROWS(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
     } else if (in_arr->arr_type == bodo_array_type::MAP) {
-        if (in_arr->dtype == Bodo_CTypes::MAP) {
-            APPEND_ROWS(bodo_array_type::MAP, Bodo_CTypes::MAP);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::MAP);
+        APPEND_ROWS(bodo_array_type::MAP, Bodo_CTypes::MAP);
     } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
-        if (in_arr->dtype == Bodo_CTypes::STRUCT) {
-            APPEND_ROWS(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+        APPEND_ROWS(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+    } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+        APPEND_ROWS(bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ);
     } else {
         throw std::runtime_error(
             "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
@@ -305,6 +307,7 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                                    Bodo_CTypes::INT128);
                 break;
             default:
+                assert(false);
                 break;
         }
     } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
@@ -366,30 +369,32 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                 APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
                 break;
             default:
+                assert(false);
                 break;
         }
     } else if (in_arr->arr_type == bodo_array_type::STRING) {
         if (in_arr->dtype == Bodo_CTypes::STRING) {
             APPEND_BATCH_ARRAY(bodo_array_type::STRING, Bodo_CTypes::STRING);
-        } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+        } else {
+            assert(in_arr->dtype == Bodo_CTypes::BINARY);
             APPEND_BATCH_ARRAY(bodo_array_type::STRING, Bodo_CTypes::BINARY);
         }
     } else if (in_arr->arr_type == bodo_array_type::DICT) {
-        if (in_arr->dtype == Bodo_CTypes::STRING) {
-            APPEND_BATCH_ARRAY(bodo_array_type::DICT, Bodo_CTypes::STRING);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::STRING);
+        APPEND_BATCH_ARRAY(bodo_array_type::DICT, Bodo_CTypes::STRING);
     } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-        if (in_arr->dtype == Bodo_CTypes::LIST) {
-            APPEND_BATCH_ARRAY(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::LIST);
+        APPEND_BATCH_ARRAY(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
     } else if (in_arr->arr_type == bodo_array_type::MAP) {
-        if (in_arr->dtype == Bodo_CTypes::MAP) {
-            APPEND_BATCH_ARRAY(bodo_array_type::MAP, Bodo_CTypes::MAP);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::MAP);
+        APPEND_BATCH_ARRAY(bodo_array_type::MAP, Bodo_CTypes::MAP);
     } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
-        if (in_arr->dtype == Bodo_CTypes::STRUCT) {
-            APPEND_BATCH_ARRAY(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
-        }
+        assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+        APPEND_BATCH_ARRAY(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+    } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+        APPEND_BATCH_ARRAY(bodo_array_type::TIMESTAMPTZ,
+                           Bodo_CTypes::TIMESTAMPTZ);
     } else {
         throw std::runtime_error(
             "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
@@ -650,6 +655,26 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
                 capacity = new_capacity;
             }
         } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            uint64_t ts_size_type = numpy_item_size[Bodo_CTypes::INT64];
+            uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
+            if (min_capacity > capacity) {
+                int64_t new_capacity = std::max(min_capacity, capacity * 2);
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[0]->Reserve(new_capacity *
+                                                          ts_size_type),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[1]->Reserve(new_capacity *
+                                                          offset_size_type),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[2]->Reserve(
+                        arrow::bit_util::BytesForBits(new_capacity)),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
+                capacity = new_capacity;
+            }
+        } break;
         default:
             throw std::runtime_error(
                 "ArrayBuildBuffer::ReserveSize: Invalid array type " +
@@ -701,6 +726,14 @@ void ArrayBuildBuffer::Reset() {
                 child_array_builder.Reset();
             }
             CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+        } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         default: {
@@ -841,6 +874,7 @@ void TableBuildBuffer::UnsafeAppendBatch(
                                  Bodo_CTypes::INT128);
                     break;
                 default:
+                    assert(false);
                     break;
             }
         } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
@@ -898,30 +932,36 @@ void TableBuildBuffer::UnsafeAppendBatch(
                     APPEND_BATCH(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
                     break;
                 default:
+                    assert(false);
                     break;
             }
         } else if (in_arr->arr_type == bodo_array_type::STRING) {
             if (in_arr->dtype == Bodo_CTypes::STRING) {
                 APPEND_BATCH(bodo_array_type::STRING, Bodo_CTypes::STRING);
-            } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+            } else {
+                assert(in_arr->dtype == Bodo_CTypes::BINARY);
                 APPEND_BATCH(bodo_array_type::STRING, Bodo_CTypes::BINARY);
             }
         } else if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (in_arr->dtype == Bodo_CTypes::STRING) {
-                APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::STRING);
+            APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
         } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-            if (in_arr->dtype == Bodo_CTypes::LIST) {
-                APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::LIST);
+            APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
         } else if (in_arr->arr_type == bodo_array_type::MAP) {
-            if (in_arr->dtype == Bodo_CTypes::MAP) {
-                APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::MAP);
+            APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
         } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
-            if (in_arr->dtype == Bodo_CTypes::STRUCT) {
-                APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+            APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+        } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+            assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+            APPEND_BATCH(bodo_array_type::TIMESTAMPTZ,
+                         Bodo_CTypes::TIMESTAMPTZ);
+        } else {
+            throw std::runtime_error(
+                "TableBuildBuffer::UnsafeAppendBatch: Invalid array type " +
+                GetArrType_as_string(in_arr->arr_type));
         }
     }
 #undef APPEND_BATCH
@@ -1014,6 +1054,7 @@ void TableBuildBuffer::UnsafeAppendBatch(
                                  Bodo_CTypes::INT128);
                     break;
                 default:
+                    assert(false);
                     break;
             }
         } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
@@ -1071,30 +1112,36 @@ void TableBuildBuffer::UnsafeAppendBatch(
                     APPEND_BATCH(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
                     break;
                 default:
+                    assert(false);
                     break;
             }
         } else if (in_arr->arr_type == bodo_array_type::STRING) {
             if (in_arr->dtype == Bodo_CTypes::STRING) {
                 APPEND_BATCH(bodo_array_type::STRING, Bodo_CTypes::STRING);
-            } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+            } else {
+                assert(in_arr->dtype == Bodo_CTypes::BINARY);
                 APPEND_BATCH(bodo_array_type::STRING, Bodo_CTypes::BINARY);
             }
         } else if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (in_arr->dtype == Bodo_CTypes::STRING) {
-                APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::STRING);
+            APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
         } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-            if (in_arr->dtype == Bodo_CTypes::LIST) {
-                APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::LIST);
+            APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
         } else if (in_arr->arr_type == bodo_array_type::MAP) {
-            if (in_arr->dtype == Bodo_CTypes::MAP) {
-                APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::MAP);
+            APPEND_BATCH(bodo_array_type::MAP, Bodo_CTypes::MAP);
         } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
-            if (in_arr->dtype == Bodo_CTypes::STRUCT) {
-                APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
-            }
+            assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+            APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+        } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+            assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+            APPEND_BATCH(bodo_array_type::TIMESTAMPTZ,
+                         Bodo_CTypes::TIMESTAMPTZ);
+        } else {
+            throw std::runtime_error(
+                "TableBuildBuffer::UnsafeAppendBatch: Invalid array type " +
+                GetArrType_as_string(in_arr->arr_type));
         }
     }
 #undef APPEND_BATCH
@@ -1269,25 +1316,30 @@ TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
 
 void table_builder_append_py_entry(TableBuilderState* state,
                                    table_info* in_table) {
-    std::shared_ptr<table_info> tmp_table(in_table);
+    try {
+        std::shared_ptr<table_info> tmp_table(in_table);
 
-    if (state->input_dics_unified) {
-        // No need for unification if input is already unified by an upstream
-        // operator. The dictionary arrays need to be set from the latest batch
-        // since the upstream operator may have appended elements to them (which
-        // changes data pointers).
-        for (size_t i = 0; i < tmp_table->ncols(); i++) {
-            const std::shared_ptr<array_info>& arr = tmp_table->columns[i];
-            if (arr->arr_type == bodo_array_type::DICT) {
-                state->builder.data_table->columns[i]->child_arrays[0] =
-                    arr->child_arrays[0];
+        if (state->input_dics_unified) {
+            // No need for unification if input is already unified by an
+            // upstream operator. The dictionary arrays need to be set from the
+            // latest batch since the upstream operator may have appended
+            // elements to them (which changes data pointers).
+            for (size_t i = 0; i < tmp_table->ncols(); i++) {
+                const std::shared_ptr<array_info>& arr = tmp_table->columns[i];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    state->builder.data_table->columns[i]->child_arrays[0] =
+                        arr->child_arrays[0];
+                }
             }
-        }
 
-        state->builder.ReserveTable(tmp_table);
-        state->builder.UnsafeAppendBatch(tmp_table);
-    } else {
-        state->builder.UnifyTablesAndAppend(tmp_table, state->dict_builders);
+            state->builder.ReserveTable(tmp_table);
+            state->builder.UnsafeAppendBatch(tmp_table);
+        } else {
+            state->builder.UnifyTablesAndAppend(tmp_table,
+                                                state->dict_builders);
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
 }
 

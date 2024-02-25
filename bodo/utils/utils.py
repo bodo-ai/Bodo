@@ -35,6 +35,7 @@ from numba.np.numpy_support import as_dtype
 import bodo
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
 from bodo.ir.filter import supported_funcs_map
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
@@ -94,6 +95,7 @@ class CTypeEnum(Enum):
     COMPLEX64 = 21
     COMPLEX128 = 22
     Map = 23
+    TIMESTAMPTZ = 24  # Used to catch gaps based on dtype in C++
 
 
 _numba_to_c_type_map = {
@@ -122,6 +124,7 @@ _numba_to_c_type_map = {
     null_dtype: CTypeEnum.Bool.value,
     types.complex64: CTypeEnum.COMPLEX64.value,
     types.complex128: CTypeEnum.COMPLEX128.value,
+    timestamptz_type: CTypeEnum.TIMESTAMPTZ.value,
 }
 
 
@@ -137,6 +140,7 @@ class CArrayTypeEnum(Enum):
     INTERVAL = 6
     DICT = 7  # dictionary-encoded string array
     MAP = 8
+    TIMESTAMPTZ = 9
 
 
 # silence Numba error messages for now
@@ -264,6 +268,8 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         return CArrayTypeEnum.CATEGORICAL.value
     elif isinstance(arr_type, bodo.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value
+    elif arr_type == timestamptz_array_type:
+        return CArrayTypeEnum.TIMESTAMPTZ.value
     elif arr_type == bodo.dict_str_arr_type:
         return CArrayTypeEnum.DICT.value
     else:
@@ -369,6 +375,10 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.pd_datetime_arr_ext"
         )
         or (func_name == "alloc_time_array" and mod_name == "bodo.hiframes.time_ext")
+        or (
+            func_name == "alloc_timestamptz_array"
+            and mod_name == "bodo.hiframes.timestamptz_ext"
+        )
         or (func_name == "init_null_array" and mod_name == "bodo.libs.null_arr_ext")
         or (func_name == "full_type" and mod_name == "bodo.utils.utils")
     )
@@ -701,7 +711,7 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_decimal_arr
 
-    if arr == bodo.timestamptz_array_type:
+    if arr == timestamptz_array_type:
 
         def empty_like_timestamp_tz_arr(n, arr):  # pragma: no cover
             return bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)

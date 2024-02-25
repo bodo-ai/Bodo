@@ -115,21 +115,28 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                            std::shared_ptr<array_info>(indices_arr)});
 }
 
-array_info* timestamp_tz_array_to_info(array_info* timestamp_arr,
-                                       array_info* offset_arr,
-                                       NRT_MemInfo* null_bitmap) {
-    // Assert that timestamp_arr is a timestamp array/offest array is an int64
-    // and that offset_arr is int16
-    int64_t n_items = timestamp_arr->length;
+array_info* timestamp_tz_array_to_info(uint64_t n_items, char* timestamp_arr,
+                                       char* offset_arr, char* null_bitmap,
+                                       NRT_MemInfo* meminfo_ts,
+                                       NRT_MemInfo* meminfo_offset,
+                                       NRT_MemInfo* meminfo_bitmask) {
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> ts_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_ts->data,
+        n_items * numpy_item_size[Bodo_CTypes::INT64], meminfo_ts);
+    std::shared_ptr<BodoBuffer> offset_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_offset->data,
+        n_items * numpy_item_size[Bodo_CTypes::INT16], meminfo_offset);
     int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
     std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
-        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
-    auto arr_type = bodo_array_type::arr_type_enum::TIMESTAMPTZ;
-    auto dtype = Bodo_CTypes::CTypeEnum::DATETIME;
-    return new array_info(
-        arr_type, dtype, n_items,
-        {timestamp_arr->buffers[0], offset_arr->buffers[0], null_bitmap_buff},
-        {});
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
+    return new array_info(bodo_array_type::arr_type_enum::TIMESTAMPTZ,
+                          Bodo_CTypes::CTypeEnum::TIMESTAMPTZ, n_items,
+                          {ts_buff, offset_buff, null_bitmap_buff}, {}, 0, 0, 0,
+                          -1, false, false, false,
+                          /*offset*/ timestamp_arr - (char*)meminfo_ts->data);
 }
 
 // Raw pointer since called from Python
@@ -446,6 +453,46 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
     NRT_MemInfo* r_meminfo = info->buffers[1]->getMeminfo();
     incref_meminfo(r_meminfo);
     *right_meminfo = r_meminfo;
+}
+
+void info_to_timestamptz_array(array_info* info, uint64_t* n_items,
+                               uint64_t* n_bytes, char** data_ts,
+                               char** data_offset, char** null_bitmap,
+                               NRT_MemInfo** meminfo_ts,
+                               NRT_MemInfo** meminfo_offset,
+                               NRT_MemInfo** meminfo_bitmask) {
+    if (info->arr_type != bodo_array_type::TIMESTAMPTZ) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_timestamptz_array: "
+                        "info_to_nullable_array requires Timestamp TZ input");
+        return;
+    }
+    if (info->dtype == Bodo_CTypes::TIMESTAMPTZ) {
+        // Temporary fix to set invalid entries to NaT
+        std::uint8_t* bitmap =
+            reinterpret_cast<std::uint8_t*>(info->null_bitmask());
+        std::int64_t* data = reinterpret_cast<std::int64_t*>(info->data1());
+        for (std::uint64_t i = 0; i < info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                data[i] = std::numeric_limits<std::int64_t>::min();
+            }
+        }
+    }
+    *n_items = info->length;
+    *n_bytes = (info->length + 7) >> 3;
+    *data_ts = info->data1();
+    *data_offset = info->data2();
+    *null_bitmap = info->null_bitmask();
+    // give Python a reference
+    NRT_MemInfo* data_ts_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_ts_meminfo);
+    *meminfo_ts = data_ts_meminfo;
+    NRT_MemInfo* data_offset_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(data_offset_meminfo);
+    *meminfo_offset = data_offset_meminfo;
+    NRT_MemInfo* nulls_meminfo = info->buffers[2]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *meminfo_bitmask = nulls_meminfo;
 }
 
 // returns raw pointer since called from Python
@@ -1117,6 +1164,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, info_to_null_array);
     SetAttrStringFromVoidPtr(m, info_to_nullable_array);
     SetAttrStringFromVoidPtr(m, info_to_interval_array);
+    SetAttrStringFromVoidPtr(m, info_to_timestamptz_array);
     SetAttrStringFromVoidPtr(m, alloc_numpy);
     SetAttrStringFromVoidPtr(m, alloc_string_array);
     SetAttrStringFromVoidPtr(m, arr_info_list_to_table);

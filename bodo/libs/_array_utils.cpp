@@ -489,6 +489,49 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     return out_arr;
 }
 
+/**
+ * @brief Create a TimestampTZ array by selecting elements from input array as
+ * provided by index array in_arr_idxs.
+ *
+ * @param in_arr TimestampTZ array with input data
+ * @param in_arr_idxs array of indices into input array to create the output
+ * array
+ * @param nRowOut number of rows in output array
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
+ * @return std::shared_ptr<array_info> output data array as specified by input
+ */
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_timestamptz(
+    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    size_t nRowOut,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    std::shared_ptr<array_info> out_arr =
+        alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
+                              false, false, pool, std::move(mm));
+    using T1 = typename dtype_to_type<Bodo_CTypes::INT64>::type;
+    using T2 = typename dtype_to_type<Bodo_CTypes::INT16>::type;
+    T1* in_ts_data = (T1*)in_arr->data1();
+    T1* out_ts_data = (T1*)out_arr->data1();
+    T2* in_offset_data = (T2*)in_arr->data2();
+    T2* out_offset_data = (T2*)out_arr->data2();
+    for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+        int64_t idx = in_arr_idxs[iRow];
+        bool bit = false;
+        if (idx >= 0) {
+            out_ts_data[iRow] = in_ts_data[idx];
+            out_offset_data[iRow] = in_offset_data[idx];
+            bit = in_arr->get_null_bit(idx);
+        }
+        out_arr->set_null_bit(iRow, bit);
+    }
+    return out_arr;
+}
+
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
     std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
     size_t nRowOut, bool use_nullable_arr,
@@ -556,6 +599,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             out_arr = RetrieveArray_SingleColumn_F_nullable(
+                in_arr, in_arr_idxs, nRowOut, pool, std::move(mm));
+            break;
+        }
+        case bodo_array_type::TIMESTAMPTZ: {
+            out_arr = RetrieveArray_SingleColumn_F_timestamptz(
                 in_arr, in_arr_idxs, nRowOut, pool, std::move(mm));
             break;
         }
