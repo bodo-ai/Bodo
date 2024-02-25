@@ -64,6 +64,11 @@ class TimestampTZ:
     def __str__(self):
         return self.__repr__()
 
+    def __eq__(self, other):
+        if not isinstance(other, TimestampTZ):
+            raise TypeError("Cannot compare TimestampTZ with non-TimestampTZ")
+        return self.utc_timestamp == other.utc_timestamp
+
 
 class TimestampTZType(types.Type):
     def __init__(self):
@@ -157,7 +162,7 @@ def init_timestamptz(typingctx, utc_timestamp, offset_minutes):
 
 @overload(TimestampTZ, no_unliteral=True)
 def overload_timestamptz(utc_timestamp, offset_minutes):
-    def impl(utc_timestamp, offset_minutes):
+    def impl(utc_timestamp, offset_minutes):  # pragma: no cover
         return init_timestamptz(utc_timestamp, offset_minutes)
 
     return impl
@@ -182,13 +187,21 @@ class TimestampTZArrayType(types.IterableType, types.ArrayCompatible):
     def copy(self):
         return TimestampTZArrayType()
 
+    @staticmethod
+    def ts_dtype():
+        return types.int64
+
+    @staticmethod
+    def offset_dtype():
+        return types.int16
+
 
 timestamptz_array_type = TimestampTZArrayType()
 
 
 # TODO(aneesh) refactor array definitions into 1 standard file
-data_ts_type = types.Array(types.int64, 1, "C")
-data_offset_type = types.Array(types.int16, 1, "C")
+data_ts_type = types.Array(TimestampTZArrayType.ts_dtype(), 1, "C")
+data_offset_type = types.Array(TimestampTZArrayType.offset_dtype(), 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
 
@@ -205,7 +218,7 @@ class TimestampTZArrayModel(models.StructModel):
 
 make_attribute_wrapper(TimestampTZArrayType, "data_ts", "data_ts")
 make_attribute_wrapper(TimestampTZArrayType, "data_offset", "data_offset")
-make_attribute_wrapper(TimestampTZArrayType, "null_bitmap", "null_bitmap")
+make_attribute_wrapper(TimestampTZArrayType, "null_bitmap", "_null_bitmap")
 
 
 @intrinsic(prefer_literal=True)
@@ -250,7 +263,7 @@ def alloc_timestamptz_array(n):  # pragma: no cover
 def overload_timestamptz_arr_copy(A):
     """Copy a TimestampTZArrayType by copying the underlying data and null bitmap"""
     return lambda A: bodo.hiframes.timestamptz_ext.init_timestamp_array(
-        A.data_ts, A.data_offset, A.null_bitmap
+        A.data_ts, A.data_offset, A._null_bitmap
     )  # pragma: no cover
 
 
@@ -347,15 +360,15 @@ def box_timestamptz_array(typ, val, c):
 
 @overload(operator.setitem, no_unliteral=True)
 def timestamptz_array_setitem(A, idx, val):
-    if not isinstance(A, TimestampTZArrayType):
+    if A != timestamptz_array_type:
         return
     if isinstance(idx, types.Integer):
-        if isinstance(val, TimestampTZType):
+        if val == timestamptz_type:
 
-            def impl(A, idx, val):
+            def impl(A, idx, val):  # pragma: no cover
                 A.data_ts[idx] = val.utc_timestamp.value
                 A.data_offset[idx] = val.offset_minutes
-                bodo.libs.int_arr_ext.set_bit_to_arr(A.null_bitmap, idx, 1)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
             return impl
     raise Exception("TODO")
@@ -363,10 +376,25 @@ def timestamptz_array_setitem(A, idx, val):
 
 @overload(operator.getitem, no_unliteral=True)
 def timestamptz_array_getitem(A, idx):
-    if not isinstance(A, TimestampTZArrayType):
+    if A != timestamptz_array_type:
         return
     if isinstance(idx, types.Integer):
         return lambda A, idx: init_timestamptz(
             pd.Timestamp(A.data_ts[idx]), A.data_offset[idx]
         )  # pragma: no cover
     raise Exception("TODO")
+
+
+@overload(len, no_unliteral=True)
+def overload_len_timestamptz_arr(A):
+    """Overload len for TimestampTZ Array by returning the length of a component array."""
+    if A == timestamptz_array_type:
+        return lambda A: len(A.data_ts)  # pragma: no cover
+
+
+@overload_attribute(TimestampTZArrayType, "shape")
+def overload_timestamptz_arr_shape(A):
+    """Overload shape for TimestampTZArrayType by returning the shape of the underlying
+    ts array
+    """
+    return lambda A: (len(A.data_ts),)  # pragma: no cover

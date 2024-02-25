@@ -35,6 +35,7 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.timestamptz_ext import TimestampTZArrayType, timestamptz_array_type
 from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
@@ -130,6 +131,7 @@ BODO_ARRAY_TYPE_CLASSES = (
     bodo.libs.csr_matrix_ext.CSRMatrixType,
     bodo.DatetimeArrayType,
     TimeArrayType,
+    TimestampTZArrayType,
 )
 
 
@@ -161,6 +163,7 @@ def overload_isna(arr, i):
         datetime_date_array_type,
         datetime_timedelta_array_type,
         string_array_split_view_type,
+        timestamptz_array_type,
     ):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             arr._null_bitmap, i
@@ -299,7 +302,16 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl
 
-    if isinstance(arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)):
+    if isinstance(
+        arr,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            TimestampTZArrayType,
+        ),
+    ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
@@ -403,14 +415,6 @@ def setna_overload(arr, ind, int_nan_const=0):
             bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return setna_datetime_date
-
-    # Add support for bodo.Time array.
-    if isinstance(arr, bodo.TimeArrayType):
-
-        def setna_time(arr, ind, int_nan_const=0):
-            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
-
-        return setna_time
 
     # Add support for datetime.timedelta array
     if arr == datetime_timedelta_array_type:

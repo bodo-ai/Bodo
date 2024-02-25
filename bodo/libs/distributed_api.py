@@ -1022,6 +1022,73 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return impl_interval_arr
 
+    # TimestampTZ Array
+    if data == bodo.timestamptz_array_type:
+        ts_typ_enum = np.int32(numba_to_c_type(data.ts_dtype()))
+        offset_typ_enum = np.int32(numba_to_c_type(data.offset_dtype()))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def gatherv_impl_timestamp_tz_arr(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            displs = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if rank == root or allgather:
+                displs = bodo.ir.join.calc_disp(recv_counts)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+            c_gatherv(
+                data.data_ts.ctypes,
+                np.int32(n_loc),
+                all_data.data_ts.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                ts_typ_enum,
+                allgather,
+                np.int32(root),
+            )
+            c_gatherv(
+                data.data_offset.ctypes,
+                np.int32(n_loc),
+                all_data.data_offset.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                offset_typ_enum,
+                allgather,
+                np.int32(root),
+            )
+            c_gatherv(
+                data._null_bitmap.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+                np.int32(root),
+            )
+            copy_gathered_null_bytes(
+                all_data._null_bitmap.ctypes,
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
+            )
+            return all_data
+
+        return gatherv_impl_timestamp_tz_arr
+
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
         def impl(
@@ -1965,6 +2032,9 @@ def get_value_for_type(dtype):  # pragma: no cover
         arr_type = get_value_for_type(dtype.arr_type)
         return pd.arrays.IntervalArray([pd.Interval(arr_type[0], arr_type[0])])
 
+    if dtype == bodo.timestamptz_array_type:
+        return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+
     # TODO: Add missing data types
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
 
@@ -2384,6 +2454,55 @@ def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
 
         return impl_interval_arr
 
+    # TimestampTZ array
+    if data == bodo.timestamptz_array_type:
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_timestamp_tz_arr(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
+            n_pes = bodo.libs.distributed_api.get_size()
+
+            data_ts_in = data.data_ts
+            data_offset_in = data.data_offset
+            null_bitmap = data._null_bitmap
+            n_in = len(data_ts_in)
+
+            data_ts_recv = _scatterv_np(data_ts_in, send_counts)
+            data_offset_recv = _scatterv_np(data_offset_in, send_counts)
+
+            n_all = bcast_scalar(n_in)
+            n_recv_bytes = (len(data_ts_recv) + 7) >> 3
+            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
+
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
+
+            # compute send counts for nulls
+            send_counts_nulls = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
+
+            # displacements for nulls
+            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
+
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                null_bitmap.ctypes, send_counts, send_counts_nulls
+            )
+
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                send_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                bitmap_recv.ctypes,
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+            return bodo.hiframes.timestamptz_ext.init_timestamptz_array(
+                data_ts_recv, data_offset_recv, bitmap_recv
+            )
+
+        return impl_timestamp_tz_arr
+
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: support send_counts
         def impl_range_index(
@@ -2756,7 +2875,14 @@ def bcast_scalar_impl_jit(val, root=MPI_ROOT):
     # Optional type
 
     if not (
-        isinstance(val, (types.Integer, types.Float, bodo.PandasTimestampType))
+        isinstance(
+            val,
+            (
+                types.Integer,
+                types.Float,
+                bodo.PandasTimestampType,
+            ),
+        )
         or val
         in [
             bodo.datetime64ns,
@@ -2765,14 +2891,28 @@ def bcast_scalar_impl_jit(val, root=MPI_ROOT):
             types.none,
             types.bool_,
             bodo.datetime_date_type,
+            bodo.timestamptz_type,
         ]
     ):
         raise BodoError(
-            f"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timedelta64ns, string, None, or Bool. Found type {val}"
+            f"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timestamptz, timedelta64ns, string, None, or Bool. Found type {val}"
         )
 
     if val == types.none:
         return lambda val, root=MPI_ROOT: None
+
+    if val == bodo.timestamptz_type:
+
+        def impl(val, root=MPI_ROOT):  # pragma: no cover
+            updated_timestamp = bodo.libs.distributed_api.bcast_scalar(
+                val.utc_timestamp, root
+            )
+            updated_offset = bodo.libs.distributed_api.bcast_scalar(
+                val.offset_minutes, root
+            )
+            return bodo.TimestampTZ(updated_timestamp, updated_offset)
+
+        return impl
 
     if val == bodo.datetime_date_type:
         c_type = numba_to_c_type(types.int32)
@@ -3215,6 +3355,51 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             return bodo.hiframes.datetime_date_ext.cast_int_to_datetime_date(val)
 
         return date_getitem_impl
+
+    if arr == bodo.timestamptz_array_type:
+
+        def timestamp_tz_getitem_impl(
+            arr, ind, arr_start, total_len, is_1D
+        ):  # pragma: no cover
+            if ind >= total_len:
+                raise IndexError("index out of bounds")
+
+            # normalize negative slice
+            ind = ind % total_len
+            # TODO: avoid sending to root in case of 1D since position can be
+            # calculated
+
+            # send data to rank 0 and broadcast
+            root = np.int32(0)
+            tag1 = np.int32(11)
+            tag2 = np.int32(12)
+            send_arr1 = np.zeros(1, np.int64)
+            send_arr2 = np.zeros(1, np.int16)
+            if arr_start <= ind < (arr_start + len(arr)):
+                idx = ind - arr_start
+                ts = arr.data_ts[idx]
+                offset = arr.data_offset[idx]
+                send_arr1 = np.full(1, ts)
+                send_arr2 = np.full(1, offset)
+                isend(send_arr1, np.int32(1), root, tag1, True)
+                isend(send_arr2, np.int32(1), root, tag2, True)
+
+            rank = bodo.libs.distributed_api.get_rank()
+            new_ts = np.int64(0)  # TODO: better way to get zero of type
+            new_offset = np.int16(0)  # TODO: better way to get zero of type
+            if rank == root:
+                new_ts = recv(np.int64, ANY_SOURCE, tag1)
+                new_offset = recv(np.int16, ANY_SOURCE, tag2)
+
+            dummy_use(send_arr1)
+            dummy_use(send_arr2)
+            return bcast_scalar(
+                bodo.hiframes.timestamptz_ext.TimestampTZ(
+                    pd.Timestamp(new_ts), new_offset
+                )
+            )
+
+        return timestamp_tz_getitem_impl
 
     np_dtype = arr.dtype
 
