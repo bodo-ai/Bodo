@@ -5,9 +5,10 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
+import typing as pt
 import warnings
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -95,8 +96,10 @@ from bodo.utils.utils import (
     is_expr,
 )
 
-if TYPE_CHECKING:
+if pt.TYPE_CHECKING:
     from numba.core.utils import UniqueDict
+
+    from bodo.ir.connector import Connector
 
 
 # global flag indicating that we are in partial type inference, so that error checking
@@ -785,7 +788,7 @@ class TypingTransforms:
 
     def _follow_patterns_to_table_def(
         self, in_table_var: ir.Var, func_ir: ir.FunctionIR
-    ) -> Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]:
+    ) -> pt.Tuple[ir.Inst, pt.Dict[str, ir.Inst], pt.Set[str]]:
         """
         Takes an ir.Assign that creates a DataFrame/Table used in filter pushdown and
         converts it to the "Expression" that defined the DataFrame/Table.
@@ -915,7 +918,9 @@ class TypingTransforms:
 
         return value_def, used_dfs, skipped_vars
 
-    def _get_filter_read_and_def_nodes(self, value_def):
+    def _get_filter_read_and_def_nodes(
+        self, value_def
+    ) -> pt.Tuple[ir.Expr, "Connector"]:
         """Find table definition node and read node for filter pushdown. value_def is
         the definition of the DataFrame/Table being filtered and could be
         init_dataframe, reader, or static_getitem node.
@@ -974,9 +979,9 @@ class TypingTransforms:
         working_body,
         func_ir,
         table_def_node,
-        read_node,
-        used_dfs: Dict[str, ir.Inst],
-        skipped_vars: Set[str],
+        read_node: "Connector",
+        used_dfs: pt.Dict[str, ir.Inst],
+        skipped_vars: pt.Set[str],
         index_def,
         label: int,
     ):
@@ -1337,11 +1342,11 @@ class TypingTransforms:
 
     @staticmethod
     def _move_filter_nodes(
-        block_body: List[ir.Stmt],
+        block_body: pt.List[ir.Stmt],
         reader_ind: int,
-        filter_nodes: Set[ir.Expr],
-        filter_vars: Set[ir.Var],
-    ) -> Tuple[List[ir.Stmt], List[ir.Stmt]]:
+        filter_nodes: pt.Set[ir.Expr],
+        filter_vars: pt.Set[ir.Var],
+    ) -> pt.Tuple[pt.List[ir.Stmt], pt.List[ir.Stmt]]:
         """
         Given a block that should be reordered based on filter nodes, splits the block into
         two lists, one containing all the nodes before the reader and any reordered filters,
@@ -1569,11 +1574,11 @@ class TypingTransforms:
 
     def _negate_column_filter(
         self,
-        old_filter: Tuple[str, str, ir.Var],
-        new_ir_assigns: List[ir.Stmt],
+        old_filter: pt.Tuple[str, str, ir.Var],
+        new_ir_assigns: pt.List[ir.Stmt],
         loc: ir.Loc,
         func_ir: ir.FunctionIR,
-    ) -> Tuple[str, str, ir.Var]:
+    ) -> pt.Tuple[str, str, ir.Var]:
         """Negate an individual filter by wrapping it in the NOT operator.
         If we
 
@@ -1607,11 +1612,11 @@ class TypingTransforms:
 
     def _get_negate_filters(
         self,
-        filters: List[List[Tuple[Union[str, Tuple], str, ir.Var]]],
-        new_ir_assigns: List[ir.Stmt],
+        filters: pt.List[pt.List[pt.Tuple[pt.Union[str, pt.Tuple], str, ir.Var]]],
+        new_ir_assigns: pt.List[ir.Stmt],
         loc: ir.Loc,
         func_ir: ir.FunctionIR,
-    ) -> List[List[Tuple[Union[str, Tuple], str, ir.Var]]]:
+    ) -> pt.List[pt.List[pt.Tuple[pt.Union[str, pt.Tuple], str, ir.Var]]]:
         """Negate the a series of filters in ARROW format.
         We convert the expression by leveraging DE MORGAN'S LAWS:
 
@@ -1663,8 +1668,8 @@ class TypingTransforms:
         df_col_names,
         is_sql_op: bool,
         read_node,
-        new_ir_assigns: List[ir.Stmt],
-    ) -> Tuple[str, str, ir.Var]:
+        new_ir_assigns: pt.List[ir.Stmt],
+    ) -> pt.Tuple[str, str, ir.Var]:
         """Function used by _get_partition_filters to extract filters
         related to columns with boolean data. Returns a single filter
         comparing the boolean column to True.
@@ -1944,7 +1949,7 @@ class TypingTransforms:
         is_sql_op: bool,
         read_node,
         new_ir_assigns: List[ir.Var],
-    ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
+    ) -> pt.Tuple[str, str, ir.Var]:  # pragma: no cover
         args = call_def.args
         # Get the column names
         col_name = self._get_col_name(
@@ -1995,8 +2000,8 @@ class TypingTransforms:
         df_col_names,
         is_sql_op: bool,
         read_node,
-        new_ir_assigns: List[ir.Var],
-    ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
+        new_ir_assigns: pt.List[ir.Var],
+    ) -> pt.Tuple[str, str, ir.Var]:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
         then this generates the correct operations
 
@@ -2134,7 +2139,14 @@ class TypingTransforms:
         return (colname, op, new_var)
 
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, new_ir_assigns
+        self,
+        index_def,
+        df_var,
+        lhs_def,
+        rhs_def,
+        func_ir,
+        read_node: "Connector",
+        new_ir_assigns,
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -2144,11 +2156,11 @@ class TypingTransforms:
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
         # Iceberg uses arrow operators instead of SQL operators.
         is_sql_op = is_sql and read_node.db_type != "iceberg"
-        # NOTE: I/O nodes update df_colnames in DCE but typing pass is before
+        # NOTE: I/O nodes update out_table_col_names in DCE but typing pass is before
         # optimizations
         # SqlReader doesn't have original_df_colnames so needs special casing
         df_col_names = (
-            read_node.df_colnames if is_sql else read_node.original_df_colnames
+            read_node.out_table_col_names if is_sql else read_node.original_df_colnames
         )
 
         # similar to DNF normalization in Sympy:
@@ -2386,9 +2398,7 @@ class TypingTransforms:
         if not is_sql and not is_call(index_def):
             lhs_arr_typ = self._get_filter_col_type(
                 cond[0],
-                read_node.original_out_types[0].col_types
-                if read_node.chunksize
-                else read_node.original_out_types,
+                read_node.original_table_col_types,
                 read_node.original_df_colnames,
             )
             lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
@@ -2423,13 +2433,13 @@ class TypingTransforms:
         return self._get_filter_col_type(col_val[0], out_types, col_names)
 
     def _get_col_name(
-        self, var, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        self, var, df_var, df_col_names, func_ir, read_node: "Connector", new_ir_assigns
     ):
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
 
-        def are_supported_kws(kws: List[Tuple[str, ir.Var]]) -> bool:
+        def are_supported_kws(kws: pt.List[pt.Tuple[str, ir.Var]]) -> bool:
             """Verify that keyword args passed into a function are supported,
             which are only the special arguments for filter pushdown.
 
@@ -4209,10 +4219,8 @@ class TypingTransforms:
                 con,
                 lhs.name,
                 list(df_type.columns),
+                list(df_type.data),
                 data_arrs,
-                list(df_type.data)
-                if chunksize is None
-                else [ArrowReaderType(col_names, df_type.data)],
                 set(),
                 "iceberg",
                 lhs.loc,
@@ -4559,8 +4567,8 @@ class TypingTransforms:
         self,
         func_text: str,
         func_name: str,
-        extra_globals: Dict[str, Any],
-        args: Tuple[Any, ...],
+        extra_globals: pt.Dict[str, Any],
+        args: pt.Tuple[pt.Any, ...],
         retvar,
         def_to_replace,
         label_of_replacer: int,

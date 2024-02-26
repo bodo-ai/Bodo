@@ -12,24 +12,24 @@ from bodo.tests.utils import reduce_sum
 
 @contextmanager
 def set_logging_stream(logger, verbose_level):
-    error_msg = ""
+    err = None
     try:
         passed = 1
         bodo.set_verbose_level(verbose_level)
         bodo.set_bodo_verbose_logger(logger)
         yield
     except Exception as e:
-        # Print the error message
-        print(e, flush=True)
-        error_msg = e
+        err = e
         passed = 0
     finally:
         bodo.user_logging.restore_default_bodo_verbose_level()
         bodo.user_logging.restore_default_bodo_verbose_logger()
         n_passed = reduce_sum(passed)
-        assert (
-            n_passed == bodo.get_size()
-        ), f"Error while testing logging stream ({error_msg})"
+        if n_passed != bodo.get_size():
+            if err is not None:
+                raise AssertionError(f"Error while testing logging stream") from err
+            else:
+                raise AssertionError(f"Error while testing logging stream")
 
 
 def create_string_io_logger(stream):

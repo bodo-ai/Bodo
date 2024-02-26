@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-
+import typing as pt
 from collections import defaultdict
 
 import numba
@@ -13,6 +13,7 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
+import bodo.user_logging
 from bodo import objmode  # noqa
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
@@ -24,6 +25,7 @@ from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
+from bodo.ir.connector import Connector
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
@@ -42,16 +44,21 @@ from bodo.utils.utils import (
     sanitize_varname,
 )
 
+if pt.TYPE_CHECKING:  # pragma: no cover
+    from bodo.io.csv_iterator_ext import CSVIteratorType
 
-class CsvReader(ir.Stmt):
+
+class CsvReader(Connector):
+    connector_typ = "csv"
+
     def __init__(
         self,
         file_name,
-        df_out,
+        df_out_varname: str,
         sep,
-        df_colnames,
-        out_vars,
-        out_types,
+        out_table_col_names: list[str],
+        out_vars: list[ir.Var],
+        out_table_col_types: list[types.ArrayCompatible],
         usecols,
         loc,
         header,
@@ -59,6 +66,7 @@ class CsvReader(ir.Stmt):
         nrows,
         skiprows,
         chunksize,
+        chunk_iterator: pt.Optional["CSVIteratorType"],
         is_skiprows_list,
         low_memory,
         escapechar,
@@ -66,13 +74,12 @@ class CsvReader(ir.Stmt):
         index_column_index=None,
         index_column_typ=types.none,
     ):
-        self.connector_typ = "csv"
         self.file_name = file_name
-        self.df_out = df_out  # used only for printing
+        self.df_out_varname = df_out_varname  # used only for printing
         self.sep = sep
-        self.df_colnames = df_colnames
+        self.out_table_col_names = out_table_col_names
         self.out_vars = out_vars
-        self.out_types = out_types
+        self.out_table_col_types = out_table_col_types
         self.usecols = usecols
         self.loc = loc
         self.skiprows = skiprows
@@ -82,6 +89,7 @@ class CsvReader(ir.Stmt):
         # If this value is not None, we return an iterator instead of a DataFrame.
         # When this happens the out_vars are a list with a single CSVReaderType.
         self.chunksize = chunksize
+        self.chunk_iterator = chunk_iterator
         # skiprows list
         self.is_skiprows_list = is_skiprows_list
         self.pd_low_memory = low_memory
@@ -96,11 +104,11 @@ class CsvReader(ir.Stmt):
         self.out_used_cols = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, out_used_colss={})".format(
-            self.df_out,
+        return "{} = ReadCsv(file={}, col_names={}, col_types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, out_used_colss={})".format(
+            self.df_out_varname,
             self.file_name,
-            self.df_colnames,
-            self.out_types,
+            self.out_table_col_names,
+            self.out_table_col_types,
             self.out_vars,
             self.nrows,
             self.skiprows,
@@ -112,6 +120,16 @@ class CsvReader(ir.Stmt):
             self.index_column_index,
             self.index_column_typ,
             self.out_used_cols,
+        )
+
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        return (
+            [(self.out_vars[0].name, self.chunk_iterator)]
+            if self.is_streaming
+            else [
+                (self.out_vars[0].name, TableType(tuple(self.out_table_col_types))),
+                (self.out_vars[1].name, self.index_column_typ),
+            ]
         )
 
 
@@ -260,7 +278,13 @@ def csv_file_chunk_reader(
 
 
 def remove_dead_csv(
-    csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    csv_node: CsvReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     """
     Function to determine to remove the returned variables
@@ -291,14 +315,14 @@ def remove_dead_csv(
         # so that it doesn't get loaded from CSV
         elif table_var.name not in lives:
             csv_node.usecols = []
-            csv_node.out_types = []
+            csv_node.out_table_col_types = []
             csv_node.out_used_cols = []
 
     return csv_node
 
 
 def csv_distributed_run(
-    csv_node, array_dists, typemap, calltypes, typingctx, targetctx
+    csv_node: CsvReader, array_dists, typemap, calltypes, typingctx, targetctx
 ):
     """
     Generate that actual code for this ReadCSV Node during distributed pass.
@@ -319,14 +343,14 @@ def csv_distributed_run(
         if bodo.user_logging.get_verbose_level() >= 1:
             msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
             csv_source = csv_node.loc.strformat()
-            csv_cols = csv_node.df_colnames
+            csv_cols = csv_node.out_table_col_names
             bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
 
             # Log if any columns use dictionary encoded arrays.
-            col_types = csv_node.out_types[0].yield_type.data
+            col_types = csv_node.out_table_col_types
             dict_encoded_cols = [
                 c
-                for i, c in enumerate(csv_node.df_colnames)
+                for i, c in enumerate(csv_node.out_table_col_names)
                 if isinstance(col_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType)
             ]
             if dict_encoded_cols:
@@ -450,10 +474,11 @@ def csv_distributed_run(
             # We use csv_node.out_used_cols because this is the actual
             # offset into the type.
             for i in csv_node.out_used_cols:
-                colname = csv_node.df_colnames[i]
+                colname = csv_node.out_table_col_names[i]
                 csv_cols.append(colname)
                 if isinstance(
-                    csv_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+                    csv_node.out_table_col_types[i],
+                    bodo.libs.dict_arr_ext.DictionaryArrayType,
                 ):
                     dict_encoded_cols.append(colname)
         bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
@@ -468,8 +493,8 @@ def csv_distributed_run(
             )
 
     csv_reader_py = _gen_csv_reader_py(
-        csv_node.df_colnames,
-        csv_node.out_types,
+        csv_node.out_table_col_names,
+        csv_node.out_table_col_types,
         final_usecols,
         csv_node.out_used_cols,
         csv_node.sep,
@@ -590,7 +615,7 @@ def _get_dtype_str(t):
     if t == string_array_type:
         # HACK: add string_array_type to numba.core.types
         # FIXME: fix after Numba #3372 is resolved
-        types.string_array_type = string_array_type
+        types.string_array_type = string_array_type  # type: ignore
         return "string_array_type"
 
     if isinstance(t, IntegerArrayType):
@@ -606,7 +631,7 @@ def _get_dtype_str(t):
         return t_name
 
     if t == boolean_array_type:
-        types.boolean_array_type = boolean_array_type
+        types.boolean_array_type = boolean_array_type  # type: ignore
         return "boolean_array_type"
 
     if dtype == types.bool_:

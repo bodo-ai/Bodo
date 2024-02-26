@@ -1036,7 +1036,7 @@ class UntypedPass:
         # Generate the type info.
         (
             db_type,
-            columns,
+            col_names,
             data_arrs,
             out_types,
             converted_colnames,
@@ -1071,14 +1071,14 @@ class UntypedPass:
             # convert column number to column name
             if isinstance(index_col, int):
                 index_ind = index_col
-                index_col = columns[index_col]
+                index_col = col_names[index_col]
             else:
-                index_ind = columns.index(index_col)
+                index_ind = col_names.index(index_col)
             # Set the information for the index type
             index_col_name = index_col
             index_arr_typ = out_types[index_ind]
             # Remove the index column from the table.
-            columns.remove(index_col_name)
+            col_names.remove(index_col_name)
             out_types.remove(index_arr_typ)
 
         data_args = ["table_val", "idx_arr_val"]
@@ -1098,13 +1098,12 @@ class UntypedPass:
         df_type = DataFrameType(
             tuple(out_types),
             index_type,
-            tuple(columns),
+            tuple(col_names),
             is_table_format=True,
         )
         col_meta = ColNamesMetaType(df_type.columns)
 
         if chunksize is not None:  # pragma: no cover
-            out_types = [bodo.io.arrow_reader.ArrowReaderType(columns, out_types)]
             # Create a new temp var so this is always exactly one variable
             data_arrs = [ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc)]
 
@@ -1113,9 +1112,9 @@ class UntypedPass:
                 sql_const,
                 con_const,
                 lhs.name,
-                columns,
-                data_arrs,
+                col_names,
                 out_types,
+                data_arrs,
                 converted_colnames,
                 db_type,
                 lhs.loc,
@@ -1998,23 +1997,23 @@ class UntypedPass:
         # If we have a chunksize we need to create an iterator, so we determine
         # the yield DataFrame type directly.
         if chunksize is not None:
-            out_types = [
-                bodo.io.csv_iterator_ext.CSVIteratorType(
-                    df_type,
-                    orig_columns,
-                    out_types,
-                    usecols,
-                    sep,
-                    index_ind,
-                    index_arr_typ,
-                    index_name,
-                    escapechar,
-                    csv_storage_options,
-                )
-            ]
+            chunk_iterator = bodo.io.csv_iterator_ext.CSVIteratorType(
+                df_type,
+                orig_columns,
+                out_types,
+                usecols,
+                sep,
+                index_ind,
+                index_arr_typ,
+                index_name,
+                escapechar,
+                csv_storage_options,
+            )
+
             # Create a new temp var so this is always exactly one variable.
             data_arrs = [ir.Var(lhs.scope, mk_unique_var("csv_iterator"), lhs.loc)]
         else:
+            chunk_iterator = None
             data_arrs = [
                 ir.Var(lhs.scope, mk_unique_var("csv_table"), lhs.loc),
                 ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
@@ -2034,6 +2033,7 @@ class UntypedPass:
                 _nrows,
                 _skiprows,
                 chunksize,
+                chunk_iterator,
                 is_skiprows_list,
                 pd_low_memory,
                 escapechar,

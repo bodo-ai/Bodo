@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the parquet data access"""
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import llvmlite.binding as ll
 import numba
@@ -27,6 +27,7 @@ from numba.extending import (
 
 import bodo
 import bodo.ir.connector
+import bodo.user_logging
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import arrow_cpp
@@ -42,6 +43,7 @@ from bodo.io.parquet_pio import (
     parquet_file_schema,
     parquet_predicate_type,
 )
+from bodo.ir.connector import Connector
 from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
@@ -189,13 +191,13 @@ class ParquetHandler:
                     use_hive,
                 )
         else:
-            all_col_names: List[str] = list(table_types.keys())
+            all_col_names: list[str] = list(table_types.keys())
             # Create a map for efficient index lookup
             all_col_names_map = {c: i for i, c in enumerate(all_col_names)}
             col_types_total = [t for t in table_types.values()]
 
             # TODO: allow specifying types of only selected columns
-            col_names: List[str] = all_col_names if columns is None else columns
+            col_names: list[str] = all_col_names if columns is None else columns
             col_indices = [all_col_names_map[c] for c in col_names]
             col_types = [col_types_total[all_col_names_map[c]] for c in col_names]
 
@@ -251,7 +253,7 @@ class ParquetHandler:
                 lhs.name,
                 col_names,
                 col_indices,
-                out_types,
+                col_types,
                 data_arrs,
                 loc,
                 partition_names,
@@ -270,15 +272,17 @@ class ParquetHandler:
         return col_names, data_arrs, index_col, nodes, col_types, index_column_type
 
 
-class ParquetReader(ir.Stmt):
+class ParquetReader(Connector):
+    connector_typ = "parquet"
+
     def __init__(
         self,
         file_name,
-        df_out,
-        col_names: List[str],
+        df_out_varname: str,
+        col_names: list[str],
         col_indices,
-        out_types,
-        out_vars: List[ir.Var],
+        out_table_col_types: list[types.ArrayCompatible],
+        out_vars: list[ir.Var],
         loc: ir.Loc,
         partition_names,
         # These are the same storage_options that would be passed to pandas
@@ -295,12 +299,13 @@ class ParquetReader(ir.Stmt):
         # But not enforced that all chunks are this size
         chunksize: Optional[int] = None,
     ):
-        self.connector_typ = "parquet"
+        # From Base Connector Class
+        self.out_table_col_names = col_names
+        self.out_table_col_types = out_table_col_types
+
         self.file_name = file_name
-        self.df_out = df_out  # used only for printing
-        self.df_colnames = col_names
+        self.df_out_varname = df_out_varname  # used only for printing
         self.col_indices = col_indices
-        self.out_types = out_types
         # Original out types + columns are maintained even if columns are pruned.
         # This is maintained in case we need type info for filter pushdown and
         # the column has been eliminated.
@@ -309,10 +314,10 @@ class ParquetReader(ir.Stmt):
         #     df = pd.read_parquet(filename)
         #     df = df[df.A > 1]
         #     return df[["B", "C"]]
-        # Then DCE should remove all columns from df_colnames/out_types except B and C,
+        # Then DCE should remove all columns from out_table_col_names/out_types except B and C,
         # but we still need to the type of column A to determine if we need to generate
         # a cast inside the arrow filters.
-        self.original_out_types = out_types
+        self.original_table_col_types = out_table_col_types
         self.original_df_colnames = col_names
         self.out_vars = out_vars
         self.loc = loc
@@ -343,12 +348,12 @@ class ParquetReader(ir.Stmt):
     def __repr__(self):  # pragma: no cover
         # TODO
         return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, chunksize={})".format(
-            self.df_out,
+            self.df_out_varname,
             self.file_name.name,
-            self.df_colnames,
+            self.out_table_col_names,
             self.col_indices,
-            self.out_types,
-            self.original_out_types,
+            self.out_table_col_types,
+            self.original_table_col_types,
             self.original_df_colnames,
             self.out_vars,
             self.partition_names,
@@ -362,6 +367,21 @@ class ParquetReader(ir.Stmt):
             self.unsupported_arrow_types,
             self.arrow_schema,
             self.chunksize,
+        )
+
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        return (
+            [
+                (
+                    self.out_vars[0].name,
+                    ArrowReaderType(self.out_table_col_names, self.out_table_col_types),
+                )
+            ]
+            if self.is_streaming
+            else [
+                (self.out_vars[0].name, TableType(tuple(self.out_table_col_types))),
+                (self.out_vars[1].name, self.index_column_type),
+            ]
         )
 
 
@@ -378,7 +398,7 @@ def remove_dead_pq(
     Function that eliminates parquet reader variables when they
     are no longer live.
     """
-    if pq_node.chunksize is not None:
+    if pq_node.is_streaming:
         return pq_node
 
     table_var = pq_node.out_vars[0].name
@@ -390,8 +410,7 @@ def remove_dead_pq(
         # If table isn't live we only want to load the index.
         # To do this we should mark the col_indices as empty
         pq_node.col_indices = []
-        pq_node.out_types = []
-        pq_node.df_colnames = []
+        pq_node.out_table_col_names = []
         pq_node.out_used_cols = []
         pq_node.is_live_table = False
 
@@ -405,7 +424,7 @@ def remove_dead_pq(
     return pq_node
 
 
-def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
+def pq_remove_dead_column(pq_node: ParquetReader, column_live_map, equiv_vars, typemap):
     """
     Function that tracks which columns to prune from the Parquet node.
     This updates out_used_cols which stores which arrays in the
@@ -452,9 +471,7 @@ def pq_distributed_run(
         filter_vars,
         pq_node.original_df_colnames,
         pq_node.partition_names,
-        pq_node.original_out_types
-        if pq_node.chunksize is None
-        else pq_node.original_out_types[0].col_types,
+        pq_node.original_table_col_types,
         typemap,
         "parquet",
         output_dnf=False,
@@ -475,17 +492,13 @@ def pq_distributed_run(
 
     # Add debug info about column pruning and dictionary encoded arrays.
     if bodo.user_logging.get_verbose_level() >= 1:
-        out_types = (
-            pq_node.out_types
-            if pq_node.chunksize is None
-            else pq_node.out_types[0].col_types
-        )
+        out_types = pq_node.out_table_col_types
         # State which columns are pruned
         pq_source = pq_node.loc.strformat()
         pq_cols = []
         dict_encoded_cols = []
         for i in pq_node.out_used_cols:
-            colname = pq_node.df_colnames[i]
+            colname = pq_node.out_table_col_names[i]
             pq_cols.append(colname)
             if isinstance(out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType):
                 dict_encoded_cols.append(colname)
@@ -509,7 +522,7 @@ def pq_distributed_run(
             )
 
     # Parallel read flag
-    if pq_node.chunksize is not None:
+    if pq_node.is_streaming:
         parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
             pq_node, array_dists, "ParquetReader"
         )
@@ -537,19 +550,17 @@ def pq_distributed_run(
                 while pq_node.unsupported_columns[idx] != col_num:
                     idx += 1
                 msg_list.append(
-                    f"Column '{pq_node.df_colnames[col_num]}' with unsupported arrow type {pq_node.unsupported_arrow_types[idx]}"
+                    f"Column '{pq_node.out_table_col_names[col_num]}' with unsupported arrow type {pq_node.unsupported_arrow_types[idx]}"
                 )
                 idx += 1
             total_msg = "\n".join(msg_list)
             raise BodoError(total_msg, loc=pq_node.loc)
 
     genargs = (
-        pq_node.df_colnames,
+        pq_node.out_table_col_names,
         pq_node.col_indices,
         pq_node.out_used_cols,
-        pq_node.out_types
-        if pq_node.chunksize is None
-        else pq_node.out_types[0].col_types,
+        pq_node.out_table_col_types,
         pq_node.storage_options,
         pq_node.partition_names,
         dnf_filter_str,
@@ -568,9 +579,7 @@ def pq_distributed_run(
     if pq_node.chunksize is None:
         pq_reader_py = _gen_pq_reader_py(*genargs)
     else:
-        pq_reader_py = _gen_pq_reader_chunked_py(
-            *genargs, pq_node.chunksize, pq_node.out_types[0]
-        )
+        pq_reader_py = _gen_pq_reader_chunked_py(*genargs, pq_node.chunksize)
 
     # First arg is the path to the parquet dataset, and can be a string or a list
     # of strings
@@ -595,7 +604,7 @@ def pq_distributed_run(
     # In the streaming case, ParquetReader only return an ArrowReader object
     # Thus, we only need to pair 1 out_var to the last target node
     # We don't need to pair any other elements
-    if pq_node.chunksize is not None:
+    if pq_node.is_streaming:
         nodes[-1].target = pq_node.out_vars[0]
         return nodes
 
@@ -620,15 +629,15 @@ def pq_distributed_run(
 
 
 def pq_reader_params(
-    meta_head_only_info: Optional[Tuple],
-    col_names: List[str],
+    meta_head_only_info: Optional[tuple],
+    col_names: list[str],
     col_indices,
     partition_names,
     input_file_name_col,
     out_used_cols,
     index_column_index,
     index_column_type,
-    out_types,
+    out_types: list[types.ArrayCompatible],
 ):
     # head-only optimization: we may need to read only the first few rows
     tot_rows_to_read = -1  # read all rows by default
@@ -758,10 +767,10 @@ def pq_reader_params(
 
 
 def _gen_pq_reader_py(
-    col_names: List[str],
+    col_names: list[str],
     col_indices,
     out_used_cols,
-    out_types,
+    out_types: list[types.ArrayCompatible],
     storage_options,
     partition_names,
     dnf_filter_str: str,
@@ -959,10 +968,10 @@ def _gen_pq_reader_py(
 
 
 def _gen_pq_reader_chunked_py(
-    col_names: List[str],
+    col_names: list[str],
     col_indices,
     out_used_cols,
-    out_types,
+    out_table_col_types: list[types.ArrayCompatible],
     storage_options,
     partition_names,
     dnf_filter_str: str,
@@ -977,7 +986,6 @@ def _gen_pq_reader_chunked_py(
     pyarrow_schema: pa.Schema,
     use_hive: bool,
     chunksize: int,
-    arrow_reader_t: ArrowReaderType,
 ):
     """
     Generate Python code for streaming Parquet initialization impl.
@@ -1027,7 +1035,7 @@ def _gen_pq_reader_chunked_py(
         out_used_cols,
         index_column_index,
         index_column_type,
-        out_types,
+        out_table_col_types,
     )
 
     # Call pq_reader_init_py_entry() in C++
@@ -1081,7 +1089,7 @@ def _gen_pq_reader_chunked_py(
         "get_filters_pyobject": get_filters_pyobject,
         "get_storage_options_pyobject": get_storage_options_pyobject,
         "get_fname_pyobject": get_fname_pyobject,
-        "arrow_reader_t": arrow_reader_t,
+        "arrow_reader_t": ArrowReaderType(col_names, out_table_col_types),
         "np": np,
         "bodo": bodo,
     }
