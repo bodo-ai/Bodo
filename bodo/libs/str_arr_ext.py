@@ -108,7 +108,7 @@ def typeof_string_array(val, c):
 def typeof_pyarrow_string_array(val, c):
     # use dict-encoded type if input is dict-encoded (boxed from Bodo dict-encoded
     # array since pandas doesn't use dict-encoded yet)
-    if pa.types.is_dictionary(val._data.combine_chunks().type):
+    if pa.types.is_dictionary(val._pa_array.combine_chunks().type):
         return bodo.dict_str_arr_type
     return string_array_type
 

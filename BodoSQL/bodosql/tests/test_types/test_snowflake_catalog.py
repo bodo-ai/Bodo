@@ -677,6 +677,17 @@ def test_current_timestamp_case(
             "IS_VALID_LOCALTIME": V,
         },
     )
+    py_output["NOW_TRUNC"] = py_output["NOW_TRUNC"].astype(pd.DatetimeTZDtype(tz="UTC"))
+    py_output["LOCAL_TRUNC"] = py_output["LOCAL_TRUNC"].astype(
+        pd.DatetimeTZDtype(tz="UTC")
+    )
+    py_output["GETDATE_TRUNC"] = py_output["GETDATE_TRUNC"].astype(
+        pd.DatetimeTZDtype(tz="UTC")
+    )
+    py_output["SYS_TRUNC"] = py_output["SYS_TRUNC"].astype(pd.DatetimeTZDtype(tz="UTC"))
+    py_output["CASE_CURRENT_TRUNC"] = py_output["CASE_CURRENT_TRUNC"].astype(
+        pd.DatetimeTZDtype(tz="UTC")
+    )
     check_func(
         impl,
         (bc,),

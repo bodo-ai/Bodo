@@ -119,7 +119,7 @@ jobs:
   - script: |
       set -exo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
-      mamba create -y -n bodo_build conda-build anaconda-client conda-verify 'python=3.11' 'python-libarchive-c=4.0' -c conda-forge
+      mamba create -y -n bodo_build conda-build anaconda-client conda-verify python-libarchive-c -c conda-forge
     displayName: 'Create Mamba Env'
 
   # It was taken from code in the Numba feedstock that handles cross compiling,
@@ -193,8 +193,8 @@ jobs:
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       fi
 
-      # release and weekly conda variant file builds Python 3.9/3.10/3.11,
-      # but the nightly one and the platform release only builds only Python 3.11 (nightly tests and platform build only use 3.11)
+      # release and weekly conda variant file builds Python 3.10/3.11/3.12,
+      # but the nightly one and the platform release only builds only Python 3.12 (nightly tests and platform build only use 3.12)
       if ([[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.weeklyTest }}" == "True" ]]) && [[ "${{ parameters.platformBuild }}" != "True" ]]; then
         export CONDA_VARIANT_ARG="-e release_conda_build_config.yaml"
       else

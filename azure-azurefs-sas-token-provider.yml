@@ -11,4 +11,4 @@ stages:
   - template: buildscripts/azurefs-sas-token-provider/azure-build-binary.yml
     parameters:
       name: Noarch
-      pythonVersion: '3.11'
+      pythonVersion: '3.12'

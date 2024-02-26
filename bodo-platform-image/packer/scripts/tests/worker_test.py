@@ -193,7 +193,7 @@ def test_connectors(connector, pip_packages, conda_packages):
 @pytest.mark.parametrize(
     "package, expected_version",
     [
-        ("scikit-learn", "1.1"),
+        ("scikit-learn", "1.4"),
         ("bodo", os.environ["BODO_VERSION"]),
         ("bodo-iceberg-connector", os.environ["ICEBERG_VERSION"]),
         ("bodosql", os.environ["BODOSQL_VERSION"]),
@@ -201,7 +201,7 @@ def test_connectors(connector, pip_packages, conda_packages):
         ("ipyparallel", "8.6.1"),
         ("ipywidgets", "8.1.1"),
         ("bodo-azurefs-sas-token-provider", "1.0"),
-        ("pandas", "2.0.3"),
+        ("pandas", "2.1.4"),
     ],
 )
 def test_versions(package, expected_version, conda_packages):

@@ -30,7 +30,6 @@ from pyspark.sql.types import (
 )
 
 import bodo
-import bodo.pyspark_compat
 import bodosql
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
@@ -1139,6 +1138,8 @@ def _check_query_equal(
             # arr.to_numpy() fails in Arrow if all values are NA
             # see test_cond.py::test_decode\[all_scalar_no_case_no_default\]
             if arr.isna().all():
+                # Workaround Pandas 2 Arrow setitem error by setting to an int first
+                bodosql_output.iloc[:, i] = 3
                 bodosql_output.iloc[:, i] = None
             else:
                 # Workaround Pandas 2 Arrow setitem error by setting to an int first

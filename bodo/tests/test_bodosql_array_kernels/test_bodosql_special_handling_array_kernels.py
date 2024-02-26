@@ -160,7 +160,7 @@ def test_is_in_string_int(memory_leak_check, args):
             pd.Series,
             np.ndarray,
             pd.core.arrays.base.ExtensionArray,
-            pd.core.arrays.PandasArray,
+            pd.core.arrays.NumpyExtensionArray,
         ),
     ):
 

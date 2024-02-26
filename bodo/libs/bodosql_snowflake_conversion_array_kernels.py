@@ -31,7 +31,7 @@ def make_to_boolean(_try):
         func_name = "try_to_boolean"
 
     @numba.generated_jit(nopython=True)
-    def func(arr, dict_encoding_state=None, func_id=-1):
+    def func_impl(arr, dict_encoding_state, func_id):
         """Handles cases where TO_BOOLEAN receives optional arguments and forwards
         to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):  # pragma: no cover
@@ -42,12 +42,16 @@ def make_to_boolean(_try):
                 default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-        def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        def impl(arr, dict_encoding_state, func_id):  # pragma: no cover
             return to_boolean_util(
                 arr, numba.literally(_try), dict_encoding_state, func_id
             )
 
         return impl
+
+    @numba.njit
+    def func(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return func_impl(arr, dict_encoding_state, func_id)
 
     return func
 

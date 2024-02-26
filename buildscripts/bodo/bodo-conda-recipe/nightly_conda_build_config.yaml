@@ -1,9 +1,9 @@
 CONDA_BUILD_SYSROOT:
   - /opt/MacOSX10.15.sdk        # [osx]
 
-# we only test python 3.11 in nightly, no need to build all versions
+# we only test python 3.12 in nightly, no need to build all versions
 python:
-  - 3.11
+  - 3.12
 
 numpy:
   - 1.23

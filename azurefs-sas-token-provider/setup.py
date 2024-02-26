@@ -79,9 +79,9 @@ setup(
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Topic :: Software Development :: Compilers",
         "Topic :: System :: Distributed Computing",
     ],
@@ -100,6 +100,6 @@ setup(
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI
     install_requires=[],
-    python_requires=">=3.9,<3.12",
+    python_requires=">=3.10,<3.13",
     cmdclass={"develop": CustomDevelopCommand, "build_py": CustomBuildCommand},
 )

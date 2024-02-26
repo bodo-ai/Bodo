@@ -611,6 +611,10 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
             "IS_VALID_MINUTE": True,
         }
     )
+    # Make sure DATE_TRUNC_RES dtype is ns (not us)
+    py_output["DATE_TRUNC_RES"] = py_output["DATE_TRUNC_RES"].astype(
+        pd.DatetimeTZDtype(tz="UTC")
+    )
     # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
     check_query(
         query,
@@ -652,6 +656,10 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
             "IS_VALID_HOUR": S,
             "IS_VALID_MINUTE": S,
         }
+    )
+    # Make sure DATE_TRUNC_RES dtype is ns (not us)
+    py_output["DATE_TRUNC_RES"] = py_output["DATE_TRUNC_RES"].astype(
+        pd.DatetimeTZDtype(tz="UTC")
     )
     # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
     check_query(
@@ -824,6 +832,9 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
             "IS_VALID_MINUTE": S,
         }
     )
+
+    # Make sure DATE_TRUNC_RES dtype is ns (not us)
+    py_output["DATE_TRUNC_RES"] = py_output["DATE_TRUNC_RES"].astype("datetime64[ns]")
 
     check_query(
         query,

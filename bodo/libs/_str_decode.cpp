@@ -5,12 +5,26 @@
 #define Py_UNREACHABLE() abort()
 #endif
 
+// Python 3.12 removed PyUnicode_WCHAR_KIND so replacing PyUnicode_Kind to
+// keep existing code working
+// https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Include/cpython/unicodeobject.h#L304
+enum _PyUnicode_Kind {
+    /* String contains only wstr byte characters.  This is only possible
+       when the string was created with a legacy API and _PyUnicode_Ready()
+       has not been called yet.  */
+    _PyUnicode_WCHAR_KIND = 0,
+    /* Return values of the PyUnicode_KIND() function: */
+    _PyUnicode_1BYTE_KIND = 1,
+    _PyUnicode_2BYTE_KIND = 2,
+    _PyUnicode_4BYTE_KIND = 4
+};
+
 // ******** ported from CPython 31e8d69bfe7cf5d4ffe0967cb225d2a8a229cc97
 
 typedef struct {
     NRT_MemInfo *buffer;
     void *data;
-    enum PyUnicode_Kind kind;
+    enum _PyUnicode_Kind kind;
     int is_ascii;
     Py_UCS4 maxchar;
     Py_ssize_t size;
@@ -36,11 +50,11 @@ void _C_UnicodeWriter_Init(_C_UnicodeWriter *writer) {
     /* ASCII is the bare minimum */
     writer->min_char = 127;
 
-    /* use a value smaller than PyUnicode_1BYTE_KIND() so
+    /* use a value smaller than _PyUnicode_1BYTE_KIND() so
        _C_UnicodeWriter_PrepareKind() will copy the buffer. */
-    writer->kind = PyUnicode_WCHAR_KIND;
+    writer->kind = _PyUnicode_WCHAR_KIND;
     writer->is_ascii = 0;
-    assert(writer->kind <= PyUnicode_1BYTE_KIND);
+    assert(writer->kind <= _PyUnicode_1BYTE_KIND);
 }
 
 #ifdef MS_WINDOWS
@@ -54,10 +68,10 @@ void _C_UnicodeWriter_Init(_C_UnicodeWriter *writer) {
 /* Maximum code point of Unicode 6.0: 0x10ffff (1,114,111) */
 #define MAX_UNICODE 0x10ffff
 
-#define KIND_MAX_CHAR_VALUE(kind) \
-    (kind == PyUnicode_1BYTE_KIND \
-         ? (0xffU)                \
-         : (kind == PyUnicode_2BYTE_KIND ? (0xffffU) : (0x10ffffU)))
+#define KIND_MAX_CHAR_VALUE(kind)  \
+    (kind == _PyUnicode_1BYTE_KIND \
+         ? (0xffU)                 \
+         : (kind == _PyUnicode_2BYTE_KIND ? (0xffffU) : (0x10ffffU)))
 
 // clang-format off
 #include "stringlib/bytesobject.cpp"
@@ -84,11 +98,11 @@ int64_t unicode_to_utf8(char *out_data, char *data, int64_t size, int kind) {
     switch (kind) {
         default:
             Py_UNREACHABLE();
-        case PyUnicode_1BYTE_KIND:
+        case _PyUnicode_1BYTE_KIND:
             return ucs1lib_utf8_encoder(out_data, (Py_UCS1 *)data, size);
-        case PyUnicode_2BYTE_KIND:
+        case _PyUnicode_2BYTE_KIND:
             return ucs2lib_utf8_encoder(out_data, (Py_UCS2 *)data, size);
-        case PyUnicode_4BYTE_KIND:
+        case _PyUnicode_4BYTE_KIND:
             return ucs4lib_utf8_encoder(out_data, (Py_UCS4 *)data, size);
     }
 }

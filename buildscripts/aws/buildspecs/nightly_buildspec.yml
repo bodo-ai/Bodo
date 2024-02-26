@@ -10,7 +10,7 @@ env:
   variables:
     CONDA_ENV: "BodoCodeBuild"
     RUNTIME: "yes"
-    PYTHON_VERSION: 3.11
+    PYTHON_VERSION: 3.12
     CI_SOURCE: AWS
 
 phases:

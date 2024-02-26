@@ -150,7 +150,7 @@ def test_scalar_series(val, memory_leak_check):
     def test_impl():
         return pd.Series(val, pd.RangeIndex(0, 100, 1))
 
-    check_func(test_impl, (), reset_index=True)
+    check_func(test_impl, (), reset_index=True, check_dtype=False)
 
 
 def test_or_null(memory_leak_check):

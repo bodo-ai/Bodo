@@ -12,7 +12,7 @@ ADD buildscripts/aws/setup_minio.sh .
 ADD buildscripts/envs/conda-lock.yml ./buildscripts/envs/conda-lock.yml
 
 ENV CONDA_ENV BodoCodeBuild
-ENV PYTHON_VERSION 3.11
+ENV PYTHON_VERSION 3.12
 
 RUN ./setup_conda.sh
 RUN ./setup_minio.sh

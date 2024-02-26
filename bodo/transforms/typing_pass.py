@@ -1489,13 +1489,19 @@ class TypingTransforms:
             new_target_block = []
             new_target_label = -1
             for pred, _ in cfg.predecessors(label):
-                if pred == label:
+                body = func_ir.blocks[pred].body
+                # NOTE: Numba as of 0.59 may generate an indirect self-loop with an
+                # extra empty block
+                if (pred == label) or (
+                    len(body) == 1
+                    and isinstance(body[0], ir.Jump)
+                    and body[0].target == label
+                ):
                     # Ignore self-loops.
                     continue
                 # Simplify the filter pushdown requirements. There can
                 # only be one path we select.
                 require(new_target_label == -1)
-                body = func_ir.blocks[pred].body
                 pq_ind = self._find_target_node_location_for_filtering(
                     body,
                     read_node,
