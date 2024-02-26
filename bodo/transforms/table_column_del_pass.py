@@ -5,8 +5,8 @@ when they are no longer used. This enables garbage collecting
 single columns when tables are represented by a single variable.
 """
 import copy
+import typing as pt
 from collections import defaultdict
-from typing import Dict, Optional, Set, Tuple
 
 import numba
 from numba.core import ir, types
@@ -331,7 +331,7 @@ class TableColumnDelPass:
                 var_names = []
                 func_lines = []
                 # Track globals to pass for deleting columns
-                col_globals: Dict[str, bodo.utils.typing.MetaType] = {}
+                col_globals: pt.Dict[str, bodo.utils.typing.MetaType] = {}
                 for table_key, columns in escaping_cols.items():
                     used_var_key = get_livevar_key(
                         table_key, alias_sets[table_key], block_livemap
@@ -408,7 +408,9 @@ class TableColumnDelPass:
                                 # Track globals to pass for deleting columns. This
                                 # is one element but we pass a dict for consistency with
                                 # the block start case.
-                                col_globals: Dict[str, bodo.utils.typing.MetaType] = {
+                                col_globals: pt.Dict[
+                                    str, bodo.utils.typing.MetaType
+                                ] = {
                                     "cols_to_delete": bodo.utils.typing.MetaType(
                                         tuple(sorted(deleted_cols))
                                     )
@@ -1688,11 +1690,11 @@ def _generate_rhs_use_map(
 
 
 def _compute_table_column_uses(
-    table_key: Tuple[str, Optional[int]],
-    table_col_use_map: Dict[
-        int, Dict[Tuple[str, Optional[int]], Tuple[Set[int], bool, bool]]
+    table_key: pt.Tuple[str, pt.Optional[int]],
+    table_col_use_map: pt.Dict[
+        int, pt.Dict[pt.Tuple[str, pt.Optional[int]], pt.Tuple[pt.Set[int], bool, bool]]
     ],
-    equiv_vars: Dict[str, Set[str]],
+    equiv_vars: pt.Mapping[str, pt.Set[str]],
 ):
     """Computes the used columns for a table name
     and all of its aliases. Returns a triple of
@@ -1702,7 +1704,7 @@ def _compute_table_column_uses(
     columns.
     Args:
         table_name (Tuple[str, Optional[int]]): The to find the table and to determine uses.
-        table_col_use_map (Dict[int, Dict[str, Tuple[Set[int], bool, bool]]]):
+        table_col_use_map (dict[int, dict[str, tuple[set[int], bool, bool]]]):
             Dictionary mapping block numbers to a dictionary of table keys
             and "column uses". A column use is represented by the triple
                 - used_cols: Set of used column numbers
@@ -1711,11 +1713,11 @@ def _compute_table_column_uses(
                 - cannot_del_columns: Flag indicate this table is used in
                     an unsupported operation (e.g. passed to a DataFrame)
                     and therefore no columns can be deleted.
-        equiv_vars (Dict[str, Set[str]]): Dictionary
+        equiv_vars (Mapping[str, set[str]]): Dictionary
             mapping table variable names to a set of
             other table name aliases.
     Returns:
-        Tuple[Set[int], bool, bool]: Returns a triple of column uses
+        tuple[set[int], bool, bool]: Returns a triple of column uses
             for the table in the current A column use is represented
             by the triple
                 - used_cols: Set of used column numbers

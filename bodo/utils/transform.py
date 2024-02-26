@@ -1131,10 +1131,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
     (e.g. no I/O) and has no side-effects"""
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.ir.csv_ext import CsvReader
-    from bodo.ir.json_ext import JsonReader
-    from bodo.ir.parquet_ext import ParquetReader
-    from bodo.ir.sql_ext import SqlReader
+    from bodo.ir.connector import Connector
 
     f_ir, typemap, _, _ = bodo.compiler.get_func_type_info(py_func, arg_types, kw_types)
     for block in f_ir.blocks.values():
@@ -1143,7 +1140,7 @@ def _func_is_pure(py_func, arg_types, kw_types):
             if isinstance(stmt, ir.Print):
                 return False
             # I/O nodes
-            if isinstance(stmt, (CsvReader, JsonReader, ParquetReader, SqlReader)):
+            if isinstance(stmt, Connector):
                 return False
             # setitem of input arguments like lists causes reflection
             if is_setitem(stmt) and isinstance(

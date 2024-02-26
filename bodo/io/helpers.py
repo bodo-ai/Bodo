@@ -588,8 +588,8 @@ def pyarrow_type_to_numba(arrow_type):
 
 # ---------------------------- Compilation Time Helpers ----------------------------- #
 def map_cpp_to_py_table_column_idxs(
-    col_names: List[str], out_used_cols: List[int]
-) -> "npt.NDArray[np.int64]":  # pragma: no cover
+    col_names: list[str], out_used_cols: list[int]
+) -> "npt.NDArray[np.int64]":
     """
     Compilation-time helper that maps the index / location of each
     column in the table type to its 'physical index' in the C++ table

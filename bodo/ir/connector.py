@@ -3,17 +3,9 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 import sys
+import typing as pt
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from typing import (
-    TYPE_CHECKING,
-    Dict,
-    List,
-    Literal,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
 
 import numba
 import pandas as pd
@@ -34,20 +26,65 @@ from bodo.utils.utils import (
     is_array_typ,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if pt.TYPE_CHECKING:  # pragma: no cover
     from numba.core.typeinfer import TypeInferer
 
 
-def connector_array_analysis(node, equiv_set, typemap, array_analysis):
+class Connector(ir.Stmt, metaclass=ABCMeta):
+    connector_typ: str
+
+    # Numba IR Properties
+    loc: ir.Loc
+    out_vars: list[ir.Var]
+    # Original out var, for debugging only
+    df_out_varname: str
+
+    # Output Dataframe / Table Typing
+    out_table_col_names: list[str]
+    out_table_col_types: list[types.ArrayCompatible]
+
+    # Is Streaming Enabled, and Whats the Output Table Size
+    chunksize: pt.Optional[int] = None
+
+    @property
+    def is_streaming(self) -> bool:
+        """Will the Connector Output a Single Table Batch or a Stream"""
+        return self.chunksize is not None
+
+    @abstractmethod
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        """
+        Returns the output variables and their types. Used in the
+        default implementation of Connector.typeinfer_out_vars
+        """
+        ...
+
+    def typeinfer_out_vars(self, typeinferer: "TypeInferer") -> None:
+        """
+        Set the typing constraints for the current connector node.
+        This is used for showing type dependencies. As a result,
+        connectors only require that the output columns exactly
+        match the types expected.
+
+        While the inputs fields of these nodes have type requirements,
+        these should only be checked after the typemap is finalized
+        because they should not allow the inputs to unify at all.
+        """
+        for var, typ in self.out_vars_and_types():
+            typeinferer.lock_type(var, typ, loc=self.loc)
+
+    def out_table_distribution(self) -> Distribution:
+        return Distribution.OneD
+
+
+def connector_array_analysis(node: Connector, equiv_set, typemap, array_analysis):
     post = []
     # empty csv/parquet/sql/json nodes should be deleted in remove dead
-    assert len(node.out_vars) > 0, "empty {} in array analysis".format(
-        node.connector_typ
-    )
+    assert len(node.out_vars) > 0, f"Empty {node.connector_typ} in Array Analysis"
 
     # If we have a csv chunksize the variables don't refer to the data,
     # so we skip this step.
-    if node.connector_typ in ("csv", "parquet", "sql") and node.chunksize is not None:
+    if node.connector_typ in ("csv", "parquet", "sql") and node.is_streaming:
         return [], []
 
     # create correlations for output arrays
@@ -84,23 +121,12 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
     return [], post
 
 
-def connector_distributed_analysis(node, array_dists):
+def connector_distributed_analysis(node: Connector, array_dists):
     """
     Common distributed analysis function shared by
     various connectors.
     """
-    # Import inside function to avoid circular import
-    from bodo.ir.sql_ext import SqlReader
-
-    # If we have a SQL node with an inferred limit, we may have a
-    # 1D-Var distribution
-    if isinstance(node, SqlReader) and not node.is_select_query:
-        out_dist = Distribution.REP
-    elif isinstance(node, SqlReader) and node.limit is not None:
-        # TODO: Don't use 1D_Var for Snowflake
-        out_dist = Distribution.OneD_Var
-    else:
-        out_dist = Distribution.OneD
+    out_dist = node.out_table_distribution()
 
     # For non Table returns, all output arrays should have the same distribution
     # For Table returns, both the table and the index should have the same distribution
@@ -112,60 +138,13 @@ def connector_distributed_analysis(node, array_dists):
         array_dists[v.name] = out_dist
 
 
-# TODO: Should have common connector interface
-def connector_typeinfer(node, typeinferer: "TypeInferer"):
+def connector_typeinfer(node: Connector, typeinferer: "TypeInferer") -> None:
     """
     Set the typing constraints for various connector nodes.
-    This is used for showing type dependencies. As a result,
-    connectors only require that the output columns exactly
-    match the types expected from read_csv.
-
-    While the inputs fields of these nodes have type requirements,
-    these should only be checked after the typemap is finalized
-    because they should not allow the inputs to unify at all.
+    See Connector.typeinfer_out_vars for more information.
     """
 
-    # new table format case
-    if node.connector_typ == "csv":
-        if node.chunksize is not None:
-            # Iterator is stored in out types
-            typeinferer.lock_type(
-                node.out_vars[0].name, node.out_types[0], loc=node.loc
-            )
-        else:
-            typeinferer.lock_type(
-                node.out_vars[0].name, TableType(tuple(node.out_types)), loc=node.loc
-            )
-            typeinferer.lock_type(
-                node.out_vars[1].name, node.index_column_typ, loc=node.loc
-            )
-        return
-
-    if node.connector_typ in ("parquet", "sql") and node.chunksize is not None:
-        typeinferer.lock_type(node.out_vars[0].name, node.out_types[0], loc=node.loc)
-        return
-
-    if node.connector_typ in ("parquet", "sql"):
-        typeinferer.lock_type(
-            node.out_vars[0].name, TableType(tuple(node.out_types)), loc=node.loc
-        )
-        typeinferer.lock_type(
-            node.out_vars[1].name, node.index_column_type, loc=node.loc
-        )
-        if node.connector_typ == "sql":
-            if len(node.out_vars) > 2:
-                typeinferer.lock_type(
-                    node.out_vars[2].name, node.file_list_type, loc=node.loc
-                )
-            if len(node.out_vars) > 3:
-                typeinferer.lock_type(
-                    node.out_vars[3].name, node.snapshot_id_type, loc=node.loc
-                )
-
-        return
-
-    for col_var, typ in zip(node.out_vars, node.out_types):
-        typeinferer.lock_type(col_var.name, typ, loc=node.loc)
+    node.typeinfer_out_vars(typeinferer)
 
 
 def _visit_predicate_tuple_vars(tup, callback, cbdata):
@@ -195,7 +174,7 @@ def _visit_predicate_tuple_vars(tup, callback, cbdata):
     return tuple(out_data)
 
 
-def visit_vars_connector(node, callback, cbdata):
+def visit_vars_connector(node: Connector, callback, cbdata):
     if debug_prints():  # pragma: no cover
         print("visiting {} vars for:".format(node.connector_typ), node)
         print("cbdata: ", sorted(cbdata.items()))
@@ -272,7 +251,7 @@ def get_filter_vars(filters):
     return filter_vars
 
 
-def connector_usedefs(node, use_set=None, def_set=None):
+def connector_usedefs(node: Connector, use_set=None, def_set=None):
     if use_set is None:
         use_set = set()
     if def_set is None:
@@ -297,7 +276,7 @@ def connector_usedefs(node, use_set=None, def_set=None):
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
-def get_copies_connector(node, typemap):
+def get_copies_connector(node: Connector, typemap):
     # csv/parquet/sql/json doesn't generate copies,
     # it just kills the output columns
     kill_set = set(v.name for v in node.out_vars)
@@ -331,7 +310,7 @@ def _replace_predicate_tuple_vars(tup, var_dict):
 
 
 def apply_copies_connector(
-    node, var_dict, name_var_table, typemap, calltypes, save_copies
+    node: Connector, var_dict, name_var_table, typemap, calltypes, save_copies
 ):
     """apply copy propagate in csv/parquet/sql/json"""
 
@@ -361,7 +340,7 @@ def apply_copies_connector(
         node.skiprows = replace_vars_inner(node.skiprows, var_dict)
 
 
-def build_connector_definitions(node, definitions=None):
+def build_connector_definitions(node: Connector, definitions=None):
     if definitions is None:
         definitions = defaultdict(list)
 
@@ -411,7 +390,7 @@ StreamReaderType = install_py_obj_class(
 )
 
 
-def trim_extra_used_columns(used_columns: Set, num_columns: int):
+def trim_extra_used_columns(used_columns: set[int], num_columns: int) -> set[int]:
     """
     Trim a computed set of used columns to eliminate any columns
     beyond the num_columns available at the source. This is necessary
@@ -420,7 +399,7 @@ def trim_extra_used_columns(used_columns: Set, num_columns: int):
 
 
     Args:
-        used_columns (Set): Set of used columns
+        used_columns (set): Set of used columns
         num_columns (int): Total number of possible columns.
             All columns >= num_columns should be removed.
 
@@ -456,7 +435,7 @@ def cast_float_to_nullable(df, df_type):
 
 
 def connector_table_column_use(
-    node, block_use_map, equiv_vars, typemap, table_col_use_map
+    node: Connector, block_use_map, equiv_vars, typemap, table_col_use_map
 ):
     """
     Function to handle any necessary processing for column uses
@@ -472,7 +451,7 @@ def connector_table_column_use(
 
 
 def base_connector_remove_dead_columns(
-    node,
+    node: Connector,
     column_live_map,
     equiv_vars,
     typemap,
@@ -542,7 +521,9 @@ def base_connector_remove_dead_columns(
     return False
 
 
-def is_connector_table_parallel(node, array_dists, typemap, node_name):
+def is_connector_table_parallel(
+    node: Connector, array_dists, typemap, node_name
+) -> bool:
     """
     Returns if the parallel implementation should be used for
     a connector that returns two variables, a table and an
@@ -576,8 +557,8 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     a connector that returns an iterator
     """
     assert (
-        node.chunksize is not None
-    ), f"is_chunked_connector_table_parallel: {node_name} must be a connector with a chunksize"
+        node.is_streaming
+    ), f"is_chunked_connector_table_parallel: {node_name} must be a connector in streaming mode"
 
     parallel = False
     if array_dists is not None:
@@ -628,9 +609,9 @@ def generate_arrow_filters(
     partition_names,
     original_out_types,
     typemap,
-    source: Literal["parquet", "iceberg"],
+    source: pt.Literal["parquet", "iceberg"],
     output_dnf=True,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Generate Arrow DNF filters and expression filters with the
     given filter_map and filter_vars.
@@ -801,9 +782,9 @@ def generate_arrow_filters(
 
 
 def _get_filter_column_type(
-    col_val: Union[str, Filter],
-    col_types: Sequence[types.Type],
-    orig_colname_map: Dict[str, int],
+    col_val: pt.Union[str, Filter],
+    col_types: pt.Sequence[types.Type],
+    orig_colname_map: dict[str, int],
 ):
     """get column type for column representation in filter predicate
 
@@ -826,13 +807,13 @@ def _get_filter_column_type(
 
 
 def determine_filter_cast(
-    col_types: Sequence[types.Type],
+    col_types: pt.Sequence[types.Type],
     typemap,
-    filter_val: List[Union[str, Filter]],
-    orig_colname_map: Dict[str, int],
+    filter_val: list[pt.Union[str, Filter]],
+    orig_colname_map: dict[str, int],
     partition_names,
     source: str,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Function that generates text for casts that need to be included
     in the filter when not automatically handled by Arrow. For example
@@ -945,24 +926,24 @@ def determine_filter_cast(
 
 def _generate_column_expr_filter(
     filter: Filter,
-    filter_map: Dict[str, str],
-    original_out_types: Tuple,
-    typemap: Dict[str, types.Type],
-    orig_colname_map: Dict[str, int],
-    partition_names: List[str],
-    source: Literal["parquet", "iceberg"],
+    filter_map: dict[str, str],
+    original_out_types: tuple,
+    typemap: dict[str, types.Type],
+    orig_colname_map: dict[str, int],
+    partition_names: list[str],
+    source: pt.Literal["parquet", "iceberg"],
 ) -> str:
     """Generates an Arrow format expression filter representing the comparison for a single column.
 
     Args:
-        filter (Tuple[Union[str, Tuple], str, Union[ir.Var, str]]): The column filter to parse.
-        filter_map (Dict[str, str]): Mapping of the IR variable name to the runtime variable name.
-        original_out_types (Tuple): A tuple of column data types for the input DataFrame, including dead
+        filter (tuple[Union[str, tuple], str, Union[ir.Var, str]]): The column filter to parse.
+        filter_map (dict[str, str]): Mapping of the IR variable name to the runtime variable name.
+        original_out_types (tuple): A tuple of column data types for the input DataFrame, including dead
             columns.
-        typemap (Dict[str, types.Type]): Mapping of ir Variable names to their type.
-        orig_colname_map (Dict[int, str]): Mapping of column index to its column name.
-        partition_names (List[str]): List of column names that represent parquet partitions.
-        source (Literal[&quot;parquet&quot;, &quot;iceberg&quot;]): The input source that needs the filters.
+        typemap (dict[str, types.Type]): Mapping of ir Variable names to their type.
+        orig_colname_map (dict[int, str]): Mapping of column index to its column name.
+        partition_names (list[str]): List of column names that represent parquet partitions.
+        source (Literal["parquet", "iceberg"]): The input source that needs the filters.
             Either parquet or iceberg.
 
     Returns:
