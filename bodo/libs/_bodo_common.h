@@ -261,6 +261,7 @@ size_t get_stats_mi_alloc();
 size_t get_stats_mi_free();
 
 // NOTE: should match CTypeEnum in utils/utils.py
+// NOTE: should match numpy_item_size in _bodo_common.cpp
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -435,7 +436,7 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
 }
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
-extern std::vector<size_t> numpy_item_size;
+extern const std::vector<size_t> numpy_item_size;
 
 /**
  * @brief enum for array types supported by Bodo
