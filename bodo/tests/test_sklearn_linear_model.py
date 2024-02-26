@@ -107,7 +107,7 @@ def test_sgdc_lr(memory_leak_check):
         # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
         clf = SGDClassifier(
             n_jobs=8,
-            loss="log",
+            loss="log_loss",
             max_iter=100,
             early_stopping=False,
             random_state=42,
@@ -190,7 +190,7 @@ def test_sgdc_predict_proba_log_proba(memory_leak_check):
     # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
     clf = SGDClassifier(
         n_jobs=8,
-        loss="log",
+        loss="log_loss",
         max_iter=10,
         early_stopping=False,
         random_state=500,

@@ -37,9 +37,9 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24,<1.27
-    - pandas >=2,<2.1
+    - pandas >=2.1,<2.2
     - fsspec >=2021.09
-    - pyarrow =14.0.2
+    - pyarrow =15.0.0
     - boost-cpp =1.84
     - fmt =10.1
     - libcurl <=8.5
@@ -56,9 +56,9 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas >=2,<2.1
+    - pandas >=2.1,<2.2
     - fsspec >=2021.09
-    - pyarrow =14.0.2
+    - pyarrow =15.0.0
     - numba 0.59.0
     - mpich *=h* # [not win]
     - msmpi # [win]
@@ -72,11 +72,11 @@ requirements:
   # run constrained will not install these packages when building,
   # but will restrict them if they are present in the conda env.
   # currently matplotlib is an optional dependency, and we only
-  # support up to 3.6.1
+  # support up to 3.8.2
   run_constrained:
-    - matplotlib <= 3.6.1
+    - matplotlib <= 3.8.2
     - numpy >=1.24,<1.27
-    - scikit-learn =1.1.*
+    - scikit-learn =1.4.*
     - s3fs >=2022.1.0
 
 test:

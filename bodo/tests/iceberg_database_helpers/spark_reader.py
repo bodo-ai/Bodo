@@ -2,7 +2,6 @@ import sys
 
 import numpy as np
 
-import bodo.pyspark_compat
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 
 

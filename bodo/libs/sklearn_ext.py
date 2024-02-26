@@ -70,9 +70,9 @@ from bodo.utils.typing import (
 this_module = sys.modules[__name__]
 
 _is_sklearn_supported_version = False
-_min_sklearn_version = (1, 1, 0)
+_min_sklearn_version = (1, 4, 0)
 _min_sklearn_ver_str = ".".join(str(x) for x in _min_sklearn_version)
-_max_sklearn_version_exclusive = (1, 2, 0)
+_max_sklearn_version_exclusive = (1, 5, 0)
 _max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version_exclusive)
 try:
     # Create capturing group for major, minor, and bugfix version numbers.
@@ -217,7 +217,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     min_samples_split=2,
     min_samples_leaf=1,
     min_weight_fraction_leaf=0.0,
-    max_features="auto",
+    max_features="sqrt",
     max_leaf_nodes=None,
     min_impurity_decrease=0.0,
     bootstrap=True,
@@ -229,6 +229,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     class_weight=None,
     ccp_alpha=0.0,
     max_samples=None,
+    monotonic_cst=None,
 ):
     check_sklearn_version()
 
@@ -241,7 +242,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         min_samples_split=2,
         min_samples_leaf=1,
         min_weight_fraction_leaf=0.0,
-        max_features="auto",
+        max_features="sqrt",
         max_leaf_nodes=None,
         min_impurity_decrease=0.0,
         bootstrap=True,
@@ -253,6 +254,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         class_weight=None,
         ccp_alpha=0.0,
         max_samples=None,
+        monotonic_cst=None,
     ):  # pragma: no cover
         with numba.objmode(m="random_forest_classifier_type"):
             if random_state is not None and get_num_nodes() > 1:
@@ -277,6 +279,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
                 class_weight=class_weight,
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
+                monotonic_cst=monotonic_cst,
             )
         return m
 
@@ -292,7 +295,6 @@ def parallel_predict_regression(m, X):
     check_sklearn_version()
 
     def _model_predict_impl(m, X):  # pragma: no cover
-
         with numba.objmode(result="float64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
@@ -300,7 +302,6 @@ def parallel_predict_regression(m, X):
                 # TODO If X is replicated this should be an error (same as sklearn)
                 result = np.empty(0, dtype=np.float64)
             else:
-
                 result = m.predict(X).astype(np.float64).flatten()
         return result
 
@@ -398,7 +399,6 @@ def parallel_score(
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-
         with numba.objmode(result="float64[:]"):
             result = m.score(X, y, sample_weight=sample_weight)
             if _is_data_distributed:
@@ -553,7 +553,6 @@ def overload_precision_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-
     check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
@@ -665,7 +664,6 @@ def overload_recall_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-
     check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
@@ -777,7 +775,6 @@ def overload_f1_score(
     zero_division="warn",
     _is_data_distributed=False,
 ):
-
     check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
@@ -1547,7 +1544,6 @@ def overload_accuracy_score(
 
     check_sklearn_version()
     if is_overload_false(_is_data_distributed):
-
         if is_overload_none(sample_weight):
 
             def _accuracy_score_impl(
@@ -1592,7 +1588,6 @@ def overload_accuracy_score(
             return _accuracy_score_impl
 
     else:
-
         if is_overload_none(sample_weight):
 
             def _accuracy_score_impl(
@@ -2222,7 +2217,6 @@ def overload_sgdr_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-
             # TODO: Rebalance the data X and y to be the same size on every rank
             with numba.objmode(m="sgd_regressor_type"):
                 m = fit_sgd(m, X, y, _is_data_distributed)
@@ -2271,7 +2265,7 @@ def overload_sgdr_model_score(
 # -------------------------------------SGDClassifier----------------------------------------
 # Support sklearn.linear_model.SGDClassifier using object mode of Numba
 # The model it fits can be controlled with the loss parameter; by default, it fits a linear support vector machine (SVM).
-# Logistic regression (loss='log')
+# Logistic regression (loss='log_loss')
 # -----------------------------------------------------------------------------
 
 # Typing and overloads to use SGDClassifier inside Bodo functions
@@ -2381,7 +2375,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     # TODO: Add other loss cases
     if m.loss == "hinge":
         loss_func = hinge_loss
-    elif m.loss == "log":
+    elif m.loss == "log_loss":
         loss_func = log_loss
     elif m.loss == "squared_error":
         loss_func = mean_squared_error
@@ -2462,7 +2456,6 @@ def overload_sgdc_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-
             # TODO: Rebalance the data X and y to be the same size on every rank
             # y has to be an array
             y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
@@ -2555,28 +2548,27 @@ BodoKMeansClusteringType = install_py_obj_class(
 def sklearn_cluster_kmeans_overload(
     n_clusters=8,
     init="k-means++",
-    n_init=10,
+    n_init="auto",
     max_iter=300,
     tol=1e-4,
     verbose=0,
     random_state=None,
     copy_x=True,
-    algorithm="auto",
+    algorithm="lloyd",
 ):
     check_sklearn_version()
 
     def _sklearn_cluster_kmeans_impl(
         n_clusters=8,
         init="k-means++",
-        n_init=10,
+        n_init="auto",
         max_iter=300,
         tol=1e-4,
         verbose=0,
         random_state=None,
         copy_x=True,
-        algorithm="auto",
+        algorithm="lloyd",
     ):  # pragma: no cover
-
         with numba.objmode(m="kmeans_clustering_type"):
             m = sklearn.cluster.KMeans(
                 n_clusters=n_clusters,
@@ -2667,7 +2659,6 @@ def overload_kmeans_clustering_fit(
     def _cluster_kmeans_fit_impl(
         m, X, y=None, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-
         # If data is distributed, gather it on rank0
         # since that's where we call fit
         if _is_data_distributed:
@@ -2719,7 +2710,6 @@ def overload_kmeans_clustering_predict(
     sample_weight=None,
 ):
     def _cluster_kmeans_predict(m, X, sample_weight=None):  # pragma: no cover
-
         with numba.objmode(preds="int64[:]"):
             # TODO: Set _n_threads to 1, even though it shouldn't be necessary
             preds = kmeans_predict_helper(m, X, sample_weight)
@@ -2780,7 +2770,6 @@ def overload_kmeans_clustering_transform(m, X):
     """
 
     def _cluster_kmeans_transform(m, X):  # pragma: no cover
-
         with numba.objmode(X_new="float64[:,:]"):
             # Doesn't parallelize automatically afaik. Set n_threads to 1 anyway.
             orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
@@ -2920,7 +2909,8 @@ def fit_multinomial_nb(
     m, X_train, y_train, sample_weight=None, total_cols=0, _is_data_distributed=False
 ):
     """Fit naive bayes Multinomial(parallel version)
-    Since this model depends on having lots of columns, we do parallelization by columns"""
+    Since this model depends on having lots of columns, we do parallelization by columns
+    """
     # 1. Compute class log probabilities
     # Taken as it's from sklearn https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/sklearn/naive_bayes.py#L596
     m._check_X_y(X_train, y_train)
@@ -3126,7 +3116,8 @@ def overload_logistic_regression_fit(
             raise BodoError(
                 "sklearn.linear_model.LogisticRegression.fit() : 'sample_weight' is not supported for distributed data."
             )
-        # Create and run SGDClassifier(loss='log')
+
+        # Create and run SGDClassifier(loss='log_loss')
         def _sgdc_logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
@@ -3139,7 +3130,7 @@ def overload_logistic_regression_fit(
                 else:
                     l1_ratio = m.l1_ratio
                 clf = sklearn.linear_model.SGDClassifier(
-                    loss="log",
+                    loss="log_loss",
                     penalty=m.penalty,
                     tol=m.tol,
                     fit_intercept=m.fit_intercept,
@@ -3274,6 +3265,7 @@ def overload_linear_regression_fit(
             raise BodoError(
                 "sklearn.linear_model.LinearRegression.fit() : 'sample_weight' is not supported for distributed data."
             )
+
         # Create and run SGDRegressor(loss="squared_error", penalty=None)
         def _sgdc_linear_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
@@ -3417,6 +3409,7 @@ def overload_lasso_fit(
             raise BodoError(
                 "sklearn.linear_model.Lasso.fit() : 'check_input' is not supported for distributed data."
             )
+
         # Create and run SGDRegressor(loss="squared_error", penalty='l1')
         def _sgdc_lasso_fit_impl(
             m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
@@ -3543,6 +3536,7 @@ def overload_ridge_fit(
             raise BodoError(
                 "sklearn.linear_model.Ridge.fit() : 'sample_weight' is not supported for distributed data."
             )
+
         # Create and run SGDRegressor(loss="squared_error", penalty='l2')
         def _ridge_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
@@ -3679,7 +3673,6 @@ def overload_linear_svc_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-
     """Linear SVC fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
@@ -3697,7 +3690,8 @@ def overload_linear_svc_fit(
             raise BodoError(
                 "sklearn.svm.LinearSVC.fit() : 'sample_weight' is not supported for distributed data."
             )
-        # Create and run SGDClassifier(loss='log')
+
+        # Create and run SGDClassifier
         def _svm_linear_svc_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
@@ -3852,11 +3846,12 @@ def get_one_hot_encoder_n_features_in_(m):
 def sklearn_preprocessing_one_hot_encoder_overload(
     categories="auto",
     drop=None,
-    sparse=True,
+    sparse_output=True,
     dtype=np.float64,
     handle_unknown="error",
     min_frequency=None,
     max_categories=None,
+    feature_name_combiner="concat",
 ):
     """Provide implementation for __init__ function of OneHotEncoder.
     We simply call sklearn in objmode.
@@ -3885,7 +3880,7 @@ def sklearn_preprocessing_one_hot_encoder_overload(
             intact.
           - array: drop[i] is the category in feature X[:, i] that should be
             dropped.
-        sparse (bool): Only sparse=False is supported. Will return sparse
+        sparse_output (bool): Only sparse_output=False is supported. Will return sparse
           if set True else will return an array.
         dtype (number type): Only dtype=np.float64 is supported. Desired
           datatype of output.
@@ -3902,21 +3897,21 @@ def sklearn_preprocessing_one_hot_encoder_overload(
     check_sklearn_version()
 
     # Because we only support dense float64 matrix output for now, check that
-    # `sparse=False` and that `dtype=np.float64`. For compatibility with
+    # `sparse_output=False` and that `dtype=np.float64`. For compatibility with
     # check_unsupported_args, we convert `dtype` to string representation
     # since type classes aren't directly comparable.
     #
     # Adding support for additional output types would require more typing work
     # to determine the proper output type of transform().
     args_dict = {
-        "sparse": sparse,
+        "sparse_output": sparse_output,
         "dtype": "float64" if "float64" in repr(dtype) else repr(dtype),
         "min_frequency": min_frequency,
         "max_categories": max_categories,
     }
 
     args_default_dict = {
-        "sparse": False,
+        "sparse_output": False,
         "dtype": "float64",
         "min_frequency": None,
         "max_categories": None,
@@ -3926,21 +3921,23 @@ def sklearn_preprocessing_one_hot_encoder_overload(
     def _sklearn_preprocessing_one_hot_encoder_impl(
         categories="auto",
         drop=None,
-        sparse=True,
+        sparse_output=True,
         dtype=np.float64,
         handle_unknown="error",
         min_frequency=None,
         max_categories=None,
+        feature_name_combiner="concat",
     ):  # pragma: no cover
         with numba.objmode(m="preprocessing_one_hot_encoder_type"):
             m = sklearn.preprocessing.OneHotEncoder(
                 categories=categories,
                 drop=drop,
-                sparse=sparse,
+                sparse_output=sparse_output,
                 dtype=dtype,
                 handle_unknown=handle_unknown,
                 min_frequency=min_frequency,
                 max_categories=max_categories,
+                feature_name_combiner=feature_name_combiner,
             )
         return m
 
@@ -3969,17 +3966,11 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
     # Compute local categories by using default sklearn implementation.
     # This updates m.categories_ on each local rank
     try:
-        # NOTE: _validate_keywords() sets `_infrequent_enabled` flag which is necessary
-        # see https://bodo.atlassian.net/browse/BE-3337
-        # return counts is set to _infrequent_enabled to match sklearn 1.1.*'s behavior
-        # It does this because _infrequent_enabled allows infrequent categories to be
-        # returned
-        m._validate_keywords()
+        m._validate_params()
         fit_result_or_err = m._fit(
             X,
             handle_unknown=m.handle_unknown,
             force_all_finite="allow-nan",
-            return_counts=m._infrequent_enabled,
         )
     except ValueError as e:  # pragma: no cover
         # Catch if any rank raises a ValueError for unknown categories,
@@ -4032,17 +4023,9 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
 
         m.categories_ = global_values_per_feat
 
-    # _infrequent_enabled is set here to match sklearn 1.1.*'s behavior,
-    # in which it is set after _fit() is called:
-    # https://github.com/scikit-learn/scikit-learn/blob/d2c713bce62974f7a17aab3e556d0bf14eebab3c/sklearn/preprocessing/_encoders.py#L832
-    if m._infrequent_enabled:  # pragma: no cover
-        m._fit_infrequent_category_mapping(
-            fit_result_or_err["n_samples"], fit_result_or_err["category_counts"]
-        )
-
     # Compute dropped indices. Since category info is now replicated,
     # we can just call sklearn
-    m.drop_idx_ = m._compute_drop_idx()
+    m._set_drop_idx()
     m._n_features_outs = m._compute_n_features_outs()
 
     return m
@@ -4078,8 +4061,8 @@ def overload_preprocessing_one_hot_encoder_fit(
     # sklearn.fit() expects a 2D array as input, but Bodo does not support
     # 2D string arrays - these are instead typed as 1D arrays of object
     # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
-    func_text += "        if X.ndim == 1 and isinstance(X[0], (np.ndarray, pd.arrays.ArrowStringArray)):\n"
-    func_text += "            X = np.vstack(X)\n"
+    func_text += "        if X.ndim == 1 and isinstance(X[0], (np.ndarray, pd.arrays.ArrowStringArray, pd.arrays.ArrowExtensionArray, list)):\n"
+    func_text += "            X = np.vstack(X).astype(object)\n"
 
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
@@ -4127,9 +4110,15 @@ def overload_preprocessing_one_hot_encoder_transform(
             # 2D string arrays - these are instead typed as 1D arrays of object
             # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
             if X.ndim == 1 and isinstance(
-                X[0], (np.ndarray, pd.arrays.ArrowStringArray)
+                X[0],
+                (
+                    np.ndarray,
+                    pd.arrays.ArrowStringArray,
+                    pd.arrays.ArrowExtensionArray,
+                    list,
+                ),
             ):
-                X = np.vstack(X)
+                X = np.vstack(X).astype(object)
 
             transformed_X = m.transform(X)
 
@@ -4212,7 +4201,6 @@ def sklearn_preprocessing_standard_scaler_overload(
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
     ):  # pragma: no cover
-
         with numba.objmode(m="preprocessing_standard_scaler_type"):
             m = sklearn.preprocessing.StandardScaler(
                 copy=copy,
@@ -4740,7 +4728,6 @@ def sklearn_model_selection_leave_p_out_overload(
     def _sklearn_model_selection_leave_p_out_impl(
         p,
     ):  # pragma: no cover
-
         with numba.objmode(m="model_selection_leave_p_out_type"):
             m = sklearn.model_selection.LeavePOut(
                 p=p,
@@ -4813,7 +4800,6 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = sklearn_model_selection_leave_p_out_generator_dist_helper(m, X)
             return gen
@@ -4823,7 +4809,6 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = m.split(X, y=y, groups=groups)
             return gen
@@ -4848,7 +4833,6 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             with numba.objmode(out="int64"):
                 global_data_size = bodo.libs.distributed_api.dist_reduce(
                     len(X), np.int32(Reduce_Type.Sum.value)
@@ -4861,7 +4845,6 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             with numba.objmode(out="int64"):
                 out = m.get_n_splits(X)
 
@@ -4914,7 +4897,6 @@ def sklearn_model_selection_kfold_overload(
         shuffle=False,
         random_state=None,
     ):  # pragma: no cover
-
         with numba.objmode(m="model_selection_kfold_type"):
             m = sklearn.model_selection.KFold(
                 n_splits=n_splits,
@@ -5035,7 +5017,6 @@ def overload_model_selection_kfold_generator(
         def _model_selection_kfold_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
             with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
@@ -5053,7 +5034,6 @@ def overload_model_selection_kfold_generator(
         def _model_selection_kfold_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
             with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
@@ -5080,7 +5060,6 @@ def overload_model_selection_kfold_get_n_splits(
     def _model_selection_kfold_get_n_splits_impl(
         m, X=None, y=None, groups=None, _is_data_distributed=False
     ):  # pragma: no cover
-
         with numba.objmode(out="int64"):
             out = m.n_splits
         return out
@@ -5467,7 +5446,6 @@ def sklearn_preprocessing_minmax_scaler_overload(
         copy=True,
         clip=False,
     ):  # pragma: no cover
-
         with numba.objmode(m="preprocessing_minmax_scaler_type"):
             m = sklearn.preprocessing.MinMaxScaler(
                 feature_range=feature_range,
@@ -5542,7 +5520,6 @@ def overload_preprocessing_minmax_scaler_fit(
     def _preprocessing_minmax_scaler_fit_impl(
         m, X, y=None, _is_data_distributed=False
     ):  # pragma: no cover
-
         with numba.objmode(m="preprocessing_minmax_scaler_type"):
             if _is_data_distributed:
                 # If distributed, then use native implementation
@@ -5729,7 +5706,6 @@ def sklearn_preprocessing_robust_scaler_overload(
         copy=True,
         unit_variance=False,
     ):  # pragma: no cover
-
         with numba.objmode(m="preprocessing_robust_scaler_type"):
             m = sklearn.preprocessing.RobustScaler(
                 with_centering=with_centering,
@@ -5844,13 +5820,11 @@ def overload_preprocessing_robust_scaler_fit(
         ]
         return _preprocessing_robust_scaler_fit_impl
     else:
-
         # If replicated, then just use sklearn implementation
 
         def _preprocessing_robust_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-
             with numba.objmode(m="preprocessing_robust_scaler_type"):
                 m = m.fit(X, y)
             return m
@@ -5915,6 +5889,15 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
+def _pa_str_to_obj(a):
+    """Convert string[pyarrow] arrays to object arrays to workaround Scikit-learn issues
+    as of 1.4.0. See test_label_encoder.
+    """
+    if isinstance(a, pd.arrays.ArrowStringArray):
+        return a.astype(object)
+    return a
+
+
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
 BodoPreprocessingLabelEncoderType = install_py_obj_class(
@@ -5936,7 +5919,6 @@ def sklearn_preprocessing_label_encoder_overload():
     check_sklearn_version()
 
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
-
         with numba.objmode(m="preprocessing_label_encoder_type"):
             m = sklearn.preprocessing.LabelEncoder()
         return m
@@ -5967,7 +5949,8 @@ def overload_preprocessing_label_encoder_fit(
                 y_classes, ascending=True, inplace=False
             )
             with numba.objmode:
-                m.classes_ = y_classes
+                y_classes_obj = _pa_str_to_obj(y_classes)
+                m.classes_ = y_classes_obj
 
             return m
 
@@ -6109,7 +6092,6 @@ def sklearn_hashing_vectorizer_overload(
         alternate_sign=True,
         dtype=np.float64,
     ):  # pragma: no cover
-
         with numba.objmode(m="f_extract_hashing_vectorizer_type"):
             m = sklearn.feature_extraction.text.HashingVectorizer(
                 input=input,
@@ -6186,7 +6168,7 @@ def overload_sklearn_rf_regressor(
     min_samples_split=2,
     min_samples_leaf=1,
     min_weight_fraction_leaf=0.0,
-    max_features="auto",
+    max_features=1.0,
     max_leaf_nodes=None,
     min_impurity_decrease=0.0,
     bootstrap=True,
@@ -6197,6 +6179,7 @@ def overload_sklearn_rf_regressor(
     warm_start=False,
     ccp_alpha=0.0,
     max_samples=None,
+    monotonic_cst=None,
 ):
     """
     Provide implementation for __init__ functions of RandomForestRegressor.
@@ -6214,7 +6197,7 @@ def overload_sklearn_rf_regressor(
         min_samples_split=2,
         min_samples_leaf=1,
         min_weight_fraction_leaf=0.0,
-        max_features="auto",
+        max_features=1.0,
         max_leaf_nodes=None,
         min_impurity_decrease=0.0,
         bootstrap=True,
@@ -6225,6 +6208,7 @@ def overload_sklearn_rf_regressor(
         warm_start=False,
         ccp_alpha=0.0,
         max_samples=None,
+        monotonic_cst=None,
     ):  # pragma: no cover
         with numba.objmode(m="random_forest_regressor_type"):
             if random_state is not None and get_num_nodes() > 1:
@@ -6248,6 +6232,7 @@ def overload_sklearn_rf_regressor(
                 warm_start=warm_start,
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
+                monotonic_cst=monotonic_cst,
             )
         return m
 
@@ -6293,7 +6278,6 @@ def overload_rf_classifier_model_fit(
     def _model_fit_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-
         # Get lowest rank in each node
         with numba.objmode(first_rank_node="int32[:]"):
             first_rank_node = get_nodes_first_ranks()
@@ -6398,7 +6382,6 @@ def sklearn_count_vectorizer_overload(
         binary=False,
         dtype=np.int64,
     ):  # pragma: no cover
-
         with numba.objmode(m="f_extract_count_vectorizer_type"):
             m = sklearn.feature_extraction.text.CountVectorizer(
                 input=input,
@@ -6473,7 +6456,6 @@ def overload_count_vectorizer_fit_transform(
             y=None,
             _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
         ):  # pragma: no cover
-
             with numba.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
                 changeVoc, local_vocabulary = _cv_fit_transform_helper(m, X)
             # Gather vocabulary from each rank and generate its integer indices (alphabetical order)

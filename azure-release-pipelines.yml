@@ -85,6 +85,16 @@ stages:
   jobs:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
+      name: macOS_312
+      buildMac: true
+      pool:
+        vmImage: macOS-latest
+      platformBuild: false
+      weeklyTest: false
+      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
+      pythonVersion: 3.12
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
+    parameters:
       name: macOS_311
       buildMac: true
       pool:
@@ -103,20 +113,21 @@ stages:
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
+#  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
+#    parameters:
+#      name: Windows
+#      vmImage: windows-2019
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
-      name: macOS_39
+      name: macOS_ARM_312
       buildMac: true
       pool:
         vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
+      buildARM: true
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
-      pythonVersion: 3.9
-#  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
-#    parameters:
-#      name: Windows
-#      vmImage: windows-2019
+      pythonVersion: 3.12
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_311
@@ -139,17 +150,6 @@ stages:
       buildARM: true
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
-  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
-    parameters:
-      name: macOS_ARM_39
-      buildMac: true
-      pool:
-        vmImage: macOS-latest
-      platformBuild: false
-      weeklyTest: false
-      buildARM: true
-      uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
-      pythonVersion: 3.9
 
 # Pip Packages. Usually disabled for Nightly Runs
 # But useful to have when testing all Pip Builds
@@ -188,7 +188,7 @@ stages:
     parameters:
       name: BodoSQL_Conda_Build
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.11
+      PYTHON_VERSION: 3.12
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
   - template: buildscripts/bodosql/azure/azure-build-pip.yml
     parameters:

@@ -4,7 +4,7 @@
 # A initial version
 # TODO: hava Python compiled from source to work with conda
 FROM --platform=linux/amd64 buildpack-deps:stable
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 
 ENV PYTHONMALLOC malloc
 ENV MKL_DISABLE_FAST_MM 1

@@ -38,10 +38,10 @@ dependencies:
   - fmt =10.1
 
   # BodoSQL or Iceberg
-  # PySpark 3.4 is necessary for Python 3.11
+  # PySpark 3.5 is necessary for Python 3.12
   - maven
-  - pyspark=3.4
-  - mmh3=3.0
+  - pyspark=3.5
+  - mmh3
 
   # Excel
   - xlrd

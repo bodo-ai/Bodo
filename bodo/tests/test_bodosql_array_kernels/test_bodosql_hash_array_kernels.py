@@ -300,7 +300,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         ),
         pytest.param(
             (Decimal("20.31"),),
-            2905488202071118327,
+            -7665313548287772755,
             id="decimal",
         ),
     ],

@@ -4961,9 +4961,10 @@ def to_json_overload(
     # Change it to match Bodo default for `read_json`
     lines=True,
     compression="infer",
-    index=True,
+    index=None,
     indent=None,
     storage_options=None,
+    mode="w",
     _bodo_file_prefix="part-",
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_json()")
@@ -4994,9 +4995,10 @@ def to_json_overload(
             default_handler=None,
             lines=True,
             compression="infer",
-            index=True,
+            index=None,
             indent=None,
             storage_options=None,
+            mode="w",
             _bodo_file_prefix="part-",
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
@@ -5013,6 +5015,7 @@ def to_json_overload(
                     index,
                     indent,
                     storage_options,
+                    mode,
                 )
             return D
 
@@ -5029,9 +5032,10 @@ def to_json_overload(
         default_handler=None,
         lines=True,
         compression="infer",
-        index=True,
+        index=None,
         indent=None,
         storage_options=None,
+        mode="w",
         _bodo_file_prefix="part-",
     ):  # pragma: no cover
         # passing None for the first argument returns a string
@@ -5050,6 +5054,7 @@ def to_json_overload(
                 index,
                 indent,
                 storage_options,
+                mode,
             )
 
         # Assuming that path_or_buf is a string

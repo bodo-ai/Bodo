@@ -655,8 +655,18 @@ def test_mse(data, squared, multioutput, memory_leak_check):
             multioutput=multioutput,
         )
 
-    check_func(test_mse_0, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_mse_1, tuple(data), is_out_distributed=False)
+    check_func(
+        test_mse_0,
+        tuple(data[0:2]),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        test_mse_1,
+        tuple(data),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -689,8 +699,18 @@ def test_mae(data, multioutput, memory_leak_check):
             multioutput=multioutput,
         )
 
-    check_func(test_mae_0, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_mae_1, tuple(data), is_out_distributed=False)
+    check_func(
+        test_mae_0,
+        tuple(data[0:2]),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        test_mae_1,
+        tuple(data),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
 
     bodo.barrier()
     import gc
@@ -751,16 +771,31 @@ def test_r2_score(data, multioutput, memory_leak_check):
 
     # To check that Bodo fails in compilation when an unsupported value is passed
     # in for multioutput
-    if multioutput == "some_unsupported_val":
+    if isinstance(multioutput, str) and multioutput == "some_unsupported_val":
         with pytest.raises(BodoError, match="Unsupported argument"):
             bodo.jit(distributed=["y_true", "y_pred"])(test_r2_0)(
                 _get_dist_arg(data[0]), _get_dist_arg(data[1])
             )
         return
 
-    check_func(test_r2_0, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_r2_1, tuple(data), is_out_distributed=False)
-    check_func(test_metrics_r2_1, tuple(data), is_out_distributed=False)
+    check_func(
+        test_r2_0,
+        tuple(data[0:2]),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        test_r2_1,
+        tuple(data),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        test_metrics_r2_1,
+        tuple(data),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
 
     bodo.barrier()
     import gc

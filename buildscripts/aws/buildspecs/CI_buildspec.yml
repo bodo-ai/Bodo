@@ -11,7 +11,7 @@ env:
     CI_SOURCE: AWS
     CONDA_ENV: BodoCodeBuild
     RUNTIME: "yes"
-    PYTHON_VERSION: 3.11
+    PYTHON_VERSION: 3.12
 
 phases:
   # Note: we need to do all the installation and build steps if BodoSQL has been changed

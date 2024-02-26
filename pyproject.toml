@@ -5,7 +5,7 @@ requires = [
     "scikit-build-core[pyproject]",
     "cython",
     "numpy>=1.24,<1.27",
-    "pyarrow==14.0.2",
+    "pyarrow==15.0.0",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -14,7 +14,7 @@ name = "bodo"
 dynamic = ["version"]
 description = "The Python Supercomputing Analytics Platform"
 readme = "README_pypi.md"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.10,<3.13"
 keywords = ["data", "analytics", "cluster"]
 authors = [{name = "Bodo.ai"}]
 
@@ -25,17 +25,17 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Compilers",
     "Topic :: System :: Distributed Computing",
 ]
 
 dependencies = [
-    "numba==0.58.1",
-    "pyarrow==14.0.2",
-    "pandas>=2,<2.1",
+    "numba==0.59.0",
+    "pyarrow==15.0.0",
+    "pandas>=2.1,<2.2",
     "numpy>=1.24,<1.27",
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",

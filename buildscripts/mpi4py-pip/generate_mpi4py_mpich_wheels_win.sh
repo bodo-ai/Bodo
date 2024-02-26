@@ -40,7 +40,7 @@ git apply $PATH_TO_BODO_SRC/buildscripts/mpi4py-pip/patch-3.1.2.diff
 # append MS-MPI license to mpi4py license
 cat $PATH_TO_BODO_SRC/buildscripts/mpi4py-pip/MS-MPI_license.txt >> LICENSE.rst
 
-for PYTHON_VER in "3.9" "3.10" "3.11"
+for PYTHON_VER in "3.10" "3.11" "3.12"
 do
     conda create -n BUILDPIP python=$PYTHON_VER msmpi -c conda-forge -y
     conda activate BUILDPIP
