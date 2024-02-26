@@ -32,7 +32,7 @@ def test_bcast_scalar_type_error():
     def test_impl():
         return bodo.libs.distributed_api.bcast_scalar(b"I'm a bytes val")
 
-    message = r"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timedelta64ns, string, None, or Bool. Found type.*"
+    message = r"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timestamptz, timedelta64ns, string, None, or Bool. Found type.*"
     with pytest.raises(BodoError, match=message):
         bodo.jit(test_impl)()
 

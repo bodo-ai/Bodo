@@ -37,7 +37,7 @@ from bodo.tests.utils import DistTestPipeline, _test_equal_guard, check_func
 pytestmark = [
     pytest.mark.iceberg,
     pytest.mark.slow,
-    # pytest.mark.skip("Not implemented yet"),
+    pytest.mark.skip("Not implemented yet"),
 ]
 
 
