@@ -9,39 +9,52 @@
 #include "_datetime_utils.h"
 #include "_distributed.h"
 
-std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
-
+// for numpy arrays, this maps dtype to sizeof(dtype)
+// Order should match Bodo_CTypes::CTypeEnum
+const std::vector<size_t> numpy_item_size({
+    sizeof(int8_t),    // INT8
+    sizeof(uint8_t),   // UINT8
+    sizeof(int32_t),   // INT32
+    sizeof(uint32_t),  // UINT32
+    sizeof(int64_t),   // INT64
+    sizeof(float),     // FLOAT32
+    sizeof(double),    // FLOAT64
+    sizeof(uint64_t),  // UINT64
+    sizeof(int16_t),   // INT16
+    sizeof(uint16_t),  // UINT16
+    0,                 // STRING
+    // Note: This is only true for Numpy Boolean arrays
+    // and should be removed when we purge Numpy Boolean arrays
+    // from C++.
+    sizeof(bool),       // _BOOL
+    BYTES_PER_DECIMAL,  // DECIMAL
+    sizeof(int32_t),    // DATE
+    // TODO: [BE-4106] TIME size should depend on precision.
+    sizeof(int64_t),    // TIME
+    sizeof(int64_t),    // DATETIME
+    sizeof(int64_t),    // TIMEDELTA
+    BYTES_PER_DECIMAL,  // INT128
+    0,                  // LIST
+    0,                  // STRUCT
+    0,                  // BINARY
+    // std::complex is bit compatible with fftw_complex and C99 fftw_complex
+    // https://www.fftw.org/fftw3_doc/Complex-numbers.html
+    sizeof(std::complex<float>),   // COMPLEX64
+    sizeof(std::complex<double>),  // COMPLEX128
+    0,                             // MAP
+});
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
         return;
     }
     initialized = true;
-    // Note: This is only true for Numpy Boolean arrays
-    // and should be removed when we purge Numpy Boolean arrays
-    // from C++.
-    numpy_item_size[Bodo_CTypes::_BOOL] = sizeof(bool);
-    numpy_item_size[Bodo_CTypes::INT8] = sizeof(int8_t);
-    numpy_item_size[Bodo_CTypes::UINT8] = sizeof(uint8_t);
-    numpy_item_size[Bodo_CTypes::INT16] = sizeof(int16_t);
-    numpy_item_size[Bodo_CTypes::UINT16] = sizeof(uint16_t);
-    numpy_item_size[Bodo_CTypes::INT32] = sizeof(int32_t);
-    numpy_item_size[Bodo_CTypes::UINT32] = sizeof(uint32_t);
-    numpy_item_size[Bodo_CTypes::INT64] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::UINT64] = sizeof(uint64_t);
-    numpy_item_size[Bodo_CTypes::FLOAT32] = sizeof(float);
-    numpy_item_size[Bodo_CTypes::FLOAT64] = sizeof(double);
-    numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
-    numpy_item_size[Bodo_CTypes::DATETIME] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::DATE] = sizeof(int32_t);
-    // TODO: [BE-4106] TIME size should depend on precision.
-    numpy_item_size[Bodo_CTypes::TIME] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::TIMEDELTA] = sizeof(int64_t);
-    numpy_item_size[Bodo_CTypes::INT128] = BYTES_PER_DECIMAL;
-    // std::complex is bit compatible with fftw_complex and C99 fftw_complex
-    // https://www.fftw.org/fftw3_doc/Complex-numbers.html
-    numpy_item_size[Bodo_CTypes::COMPLEX64] = sizeof(std::complex<float>);
-    numpy_item_size[Bodo_CTypes::COMPLEX128] = sizeof(std::complex<double>);
+
+    if (numpy_item_size.size() != Bodo_CTypes::_numtypes) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Incorrect number of bodo item sizes!");
+        return;
+    }
 
     PyObject* np_mod = PyImport_ImportModule("numpy");
     PyObject* dtype_obj = PyObject_CallMethod(np_mod, "dtype", "s", "bool");
