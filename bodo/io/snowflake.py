@@ -962,8 +962,9 @@ def get_list_type_from_metadata(
 
         # However, we should only use this method of sampling if the row count is non-trivial
         # (e.g. above a thousand)
-        if enough_rows_for_system_sample(cursor, sql_query):
-            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size({cur_colname}) > 0"
+        sample_rate = get_sample_rate_for_system_sample(cursor, sql_query)
+        if sample_rate is not None:
+            sample_clauses = f"SAMPLE SYSTEM ({sample_rate}) WHERE {cur_colname} is not null and array_size({cur_colname}) > 0"
 
     if sample_clauses is None:
         # If the source is a view, do the same but using a large limit to quickly narrow down
@@ -1027,10 +1028,11 @@ def get_list_type_from_metadata(
     return pa.large_list(pa_type)
 
 
-def enough_rows_for_system_sample(cursor: "SnowflakeCursor", sql_query: str):
+def get_sample_rate_for_system_sample(cursor: "SnowflakeCursor", sql_query: str):
     """
-    Returns True if the table produced by a sql query which is valid for system sampling is
-    large enough that system sample should be done at all (current cutoff: at least 1k rows).
+    If the table produced by a sql query which is valid for system sampling is
+    large enough that system sample should be done at all, returns the sample rate.
+    Otherwise, returns None.
     """
     rowcount_res = execute_query(
         cursor,
@@ -1039,9 +1041,20 @@ def enough_rows_for_system_sample(cursor: "SnowflakeCursor", sql_query: str):
     )
     if rowcount_res is not None:
         rowcount_df = rowcount_res.fetch_pandas_all()
-        if rowcount_df["COUNT(*)"].iloc[0] >= 1000:
-            return True
-    return False
+        row_count = rowcount_df["COUNT(*)"].iloc[0]
+        if row_count < 10**3:
+            return None
+        elif row_count < 10**6:
+            return 5
+        elif row_count < 10**9:
+            return 1
+        elif row_count < 10**10:
+            return 0.5
+        elif row_count < 10**11:
+            return 0.1
+        else:
+            return 0.05
+    return None
 
 
 def get_variant_type_from_metadata(
@@ -1065,8 +1078,11 @@ def get_variant_type_from_metadata(
 
         # However, we should only use this method of sampling if the row count is non-trivial
         # (e.g. above a thousand)
-        if enough_rows_for_system_sample(cursor, sql_query):
-            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null"
+        sample_rate = get_sample_rate_for_system_sample(cursor, sql_query)
+        if sample_rate is not None:
+            sample_clauses = (
+                f"SAMPLE SYSTEM ({sample_rate}) WHERE {cur_colname} is not null"
+            )
 
     if sample_clauses is None:
         # If the source is a view, do the same but using a large limit to quickly narrow down
@@ -1261,8 +1277,9 @@ def get_map_type_from_metadata(
 
         # However, we should only use this method of sampling if the row count is non-trivial
         # (e.g. above a thousand)
-        if enough_rows_for_system_sample(cursor, sql_query):
-            sample_clauses = f"SAMPLE SYSTEM (0.5) WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0"
+        sample_rate = get_sample_rate_for_system_sample(cursor, sql_query)
+        if sample_rate is not None:
+            sample_clauses = f"SAMPLE SYSTEM ({sample_rate}) WHERE {cur_colname} is not null and array_size(object_keys({cur_colname})) > 0"
 
     if sample_clauses is None:
         # If the source is a view, do the same but using a large limit to quickly narrow down
@@ -1344,9 +1361,12 @@ def can_table_be_system_sampled(cursor: "SnowflakeCursor", table_name: Optional[
         return False
     try:
         fake_sample_query = f"SELECT * FROM {table_name} SAMPLE SYSTEM(0)"
-        execute_query(
+        result = execute_query(
             cursor, fake_sample_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
-        ).fetch_pandas_all()
+        )
+        if result is None:
+            return False
+        result.fetch_pandas_all()
         return True
     except snowflake.connector.errors.ProgrammingError as e:
         return False
