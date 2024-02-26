@@ -830,22 +830,22 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
 
 
 def _is_wrapper_pd_arr(arr):
-    """return True if 'arr' is a Pandas wrapper array around regular Numpy like PandasArray"""
+    """return True if 'arr' is a Pandas wrapper array around regular Numpy like NumpyExtensionArray"""
 
-    # Pandas bug (as of 1.5): StringArray is a subclass of PandasArray for some reason
+    # Pandas bug (as of 1.5): StringArray is a subclass of NumpyExtensionArray for some reason
     if isinstance(arr, pd.arrays.StringArray):
         return False
 
-    return isinstance(arr, (pd.arrays.PandasArray, pd.arrays.TimedeltaArray)) or (
-        isinstance(arr, pd.arrays.DatetimeArray) and arr.tz is None
-    )
+    return isinstance(
+        arr, (pd.arrays.NumpyExtensionArray, pd.arrays.TimedeltaArray)
+    ) or (isinstance(arr, pd.arrays.DatetimeArray) and arr.tz is None)
 
 
 def unwrap_pd_arr(arr):
-    """Unwrap Numpy array from the PandasArray wrapper for unboxing purposes
+    """Unwrap Numpy array from the NumpyExtensionArray wrapper for unboxing purposes
 
     Args:
-        arr (pd.Array): input array which could be PandasArray
+        arr (pd.Array): input array which could be NumpyExtensionArray
 
     Returns:
         pd.array or np.ndarray: numpy array or Pandas extension array
@@ -860,7 +860,7 @@ def unwrap_pd_arr(arr):
 
 
 def _fix_series_arr_type(pd_arr):
-    """remove Pandas array wrappers like PandasArray to make Series typing easier"""
+    """remove Pandas array wrappers like NumpyExtensionArray to make Series typing easier"""
     if _is_wrapper_pd_arr(pd_arr):
         return pd_arr._ndarray
 
@@ -1264,8 +1264,8 @@ def unbox_col_if_needed(df, i):  # pragma: no cover
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
     # use "array" attribute instead of "values" to handle ExtensionArrays like
-    # DatetimeArray properly. Non-ExtensionArrays just use the PandasArray wrapper
-    # around Numpy
+    # DatetimeArray properly. Non-ExtensionArrays just use the NumpyExtensionArray
+    # wrapper around Numpy
     # https://pandas.pydata.org/docs/reference/api/pandas.Series.array.html#pandas.Series.array
     arr_obj_orig = c.pyapi.object_getattr_string(val, "array")
 
@@ -1680,7 +1680,7 @@ def _infer_ndarray_obj_dtype(val):
         (
             list,
             np.ndarray,
-            pd.core.arrays.numpy_.PandasArray,
+            pd.core.arrays.numpy_.NumpyExtensionArray,
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
             pd.arrays.FloatingArray,

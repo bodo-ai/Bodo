@@ -18,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       pythonVersion:
-        description: Python Version (e.g. 3.11)
+        description: Python Version (e.g. 3.12)
         required: false
-        default: "3.11"
+        default: "3.12"
 
       bodoVersion:
         description: Bodo Version (e.g. 2022.8)
@@ -182,7 +182,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.11' 
+          python-version: '3.12' 
 
       # We can't use conda-lock directly because it can't install to the base environment
       # Thus, we need to generate Conda-style .lock file first
@@ -254,7 +254,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: Combine manifests and create AMI Add and Share JSON
         env:
@@ -283,7 +283,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: "Install dependencies"
         run: |
@@ -325,7 +325,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: "Install dependencies"
         run: |
@@ -367,7 +367,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: "Install dependencies"
         run: |
@@ -409,7 +409,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: "Install dependencies"
         run: |

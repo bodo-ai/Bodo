@@ -234,7 +234,7 @@ def test_nullarray_invalid_cast():
             B = bodo.libs.null_arr_ext.init_null_array(3)
         return B
 
-    with pytest.raises(numba.TypingError, match="Cannot unify"):
+    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to unify"):
         bodo.jit(impl)(3, True)
 
 

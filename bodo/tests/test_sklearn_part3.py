@@ -226,7 +226,7 @@ def test_one_hot_encoder(X):
     """
 
     def test_fit(X):
-        m = OneHotEncoder(sparse=False)
+        m = OneHotEncoder(sparse_output=False)
         m.fit(X)
         result = m.categories_
         return result
@@ -234,7 +234,7 @@ def test_one_hot_encoder(X):
     check_func(test_fit, (X,), is_out_distributed=False)
 
     def test_transform(X):
-        m = OneHotEncoder(sparse=False)
+        m = OneHotEncoder(sparse_output=False)
         m.fit(X)
         result = m.transform(X)
         return result
@@ -249,7 +249,7 @@ def test_one_hot_encoder_fit_attributes():
     """
 
     def get_model_fit(X):
-        m = OneHotEncoder(sparse=False)
+        m = OneHotEncoder(sparse_output=False)
         m.fit(X)
         return m
 
@@ -295,7 +295,9 @@ def test_one_hot_encoder_categories(X, categories):
     """Test OneHotEncoder's categories and handle_unknown parameters."""
 
     def test_transform_error(X):
-        m = OneHotEncoder(sparse=False, categories=categories, handle_unknown="error")
+        m = OneHotEncoder(
+            sparse_output=False, categories=categories, handle_unknown="error"
+        )
         m.fit(X)
         result = m.transform(X)
         return result
@@ -310,7 +312,9 @@ def test_one_hot_encoder_categories(X, categories):
         rep_impl_error(X)
 
     def test_transform_ignore(X):
-        m = OneHotEncoder(sparse=False, categories=categories, handle_unknown="ignore")
+        m = OneHotEncoder(
+            sparse_output=False, categories=categories, handle_unknown="ignore"
+        )
         m.fit(X)
         result = m.transform(X)
         return result
@@ -341,25 +345,25 @@ def test_one_hot_encoder_attributes(X, drop):
     """Test OneHotEncoder's drop_idx_ and n_features_in_ attributes."""
 
     def test_drop_idx_1(X):
-        m = OneHotEncoder(sparse=False, dtype=np.float64)
+        m = OneHotEncoder(sparse_output=False, dtype=np.float64)
         m.fit(X)
         result = m.drop_idx_
         return result
 
     def test_drop_idx_2(X):
-        m = OneHotEncoder(sparse=False, drop="first")
+        m = OneHotEncoder(sparse_output=False, drop="first")
         m.fit(X)
         result = m.drop_idx_
         return result
 
     def test_drop_idx_3(X):
-        m = OneHotEncoder(sparse=False, drop="if_binary")
+        m = OneHotEncoder(sparse_output=False, drop="if_binary")
         m.fit(X)
         result = m.drop_idx_
         return result
 
     def test_drop_idx_4(X):
-        m = OneHotEncoder(sparse=False, drop=drop)
+        m = OneHotEncoder(sparse_output=False, drop=drop)
         m.fit(X)
         result = m.drop_idx_
         return result
@@ -370,7 +374,7 @@ def test_one_hot_encoder_attributes(X, drop):
     check_func(test_drop_idx_4, (X,), is_out_distributed=False)
 
     def test_n_features_in_(X):
-        m = OneHotEncoder(sparse=False)
+        m = OneHotEncoder(sparse_output=False)
         m.fit(X)
         result = m.n_features_in_
         return result
@@ -388,7 +392,7 @@ def test_one_hot_encoder_unsupported():
         return m
 
     def impl2():
-        m = OneHotEncoder(sparse=True)
+        m = OneHotEncoder(sparse_output=True)
         return m
 
     def impl3():
@@ -396,12 +400,12 @@ def test_one_hot_encoder_unsupported():
         return m
 
     def impl4():
-        m = OneHotEncoder(sparse=False, dtype=np.int64)
+        m = OneHotEncoder(sparse_output=False, dtype=np.int64)
         return m
 
-    err_msg_1 = "sparse parameter only supports default value False"
-    err_msg_2 = "sparse parameter only supports default value False"
-    err_msg_3 = "sparse parameter only supports default value False"
+    err_msg_1 = "sparse_output parameter only supports default value False"
+    err_msg_2 = "sparse_output parameter only supports default value False"
+    err_msg_3 = "sparse_output parameter only supports default value False"
     err_msg_4 = "dtype parameter only supports default value float64"
 
     with pytest.raises(BodoError, match=err_msg_1):

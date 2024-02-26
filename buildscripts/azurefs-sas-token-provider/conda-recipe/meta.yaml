@@ -11,14 +11,14 @@ build:
 
 requirements:
   host:
-    - python >=3.8,<3.12
+    - python >=3.10,<3.13
     - setuptools
     - openjdk >=9.0,<12
     - maven
     - ninja
 
   run:
-    - python >=3.8,<3.12
+    - python >=3.10,<3.13
     - openjdk >=9.0,<12
 
 about:

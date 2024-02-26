@@ -1590,7 +1590,7 @@ def info_to_array(typingctx, info_type, array_type):
 
 @typeof_impl.register(pd.arrays.ArrowExtensionArray)
 def _typeof_pd_arrow_arr(val, c):
-    return bodo.io.helpers.pyarrow_type_to_numba(val._data.type)
+    return bodo.io.helpers.pyarrow_type_to_numba(val._pa_array.type)
 
 
 def convert_arrow_arr_to_dict(arr, arrow_type):
@@ -1651,7 +1651,12 @@ def to_pa_arr(A, arrow_type, arrow_type_no_dict):
         return A
 
     if isinstance(A, pd.arrays.ArrowExtensionArray):
-        return A._data.combine_chunks()
+        return A._pa_array.combine_chunks()
+
+    # Handle 2D string arrays unboxed as array(array(str))
+    # See test_one_hot_encoder
+    if isinstance(A, np.ndarray) and A.ndim == 2:
+        A = [A[i] for i in range(len(A))]
 
     arr = pa.array(A, arrow_type_no_dict)
 
@@ -1802,7 +1807,7 @@ def fix_boxed_nested_array(arr, arrow_type):
     Returns:
         ArrowExtensionArray: equivalent array with proper type
     """
-    arr = arr._data.combine_chunks()
+    arr = arr._pa_array.combine_chunks()
     new_arr = _convert_to_pa_map_arr(arr, arrow_type)
 
     # Bodo C++ doesn't have details like timezone which need fixed

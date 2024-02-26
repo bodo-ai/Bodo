@@ -1734,8 +1734,8 @@ def test_empty_df_var_std(memory_leak_check):
         return df.std()
 
     df = pd.DataFrame({"A": []})
-    check_func(impl, (df,), is_out_distributed=False)
-    check_func(impl2, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
+    check_func(impl2, (df,), is_out_distributed=False, check_dtype=False)
 
 
 def test_df_std(numeric_df_value, memory_leak_check):

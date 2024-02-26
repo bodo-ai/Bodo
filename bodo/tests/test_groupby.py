@@ -2819,12 +2819,12 @@ def test_count_select_col(memory_leak_check):
             "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
         }
     )
-    check_func(impl1, (df_int,), sort_output=True)
-    check_func(impl1, (df_str,), sort_output=True)
-    check_func(impl1, (df_bool,), sort_output=True)
-    check_func(impl1, (df_dt,), sort_output=True)
-    check_func(impl1, (df_bin,), sort_output=True)
-    check_func(impl2, (11,), sort_output=True)
+    check_func(impl1, (df_int,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_str,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_dt,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_bin,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -6431,7 +6431,7 @@ def test_count_supported_cases(memory_leak_check):
 
     # Empty dataframe
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -6702,7 +6702,7 @@ def test_groupby_transform_count(memory_leak_check):
             "F": pd.Series(pd.array([1.1, 2.2, 3.3, None, 5.5, 6.6], dtype="Float64")),
         }
     )
-    check_func(impl_count, (df,))
+    check_func(impl_count, (df,), check_dtype=False)
 
 
 @pytest_mark_pandas

@@ -66,20 +66,20 @@ def ArrowStringArray__init__(self, values):
     from pandas.core.arrays.string_arrow import ArrowStringArray
 
     super(ArrowStringArray, self).__init__(values)
-    self._dtype = StringDtype(storage="pyarrow")
+    self._dtype = StringDtype(storage=self._storage)
 
     # Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
     # also allow dict-encoded string arrays from Bodo
     if not (
-        pa.types.is_string(self._data.type)
-        or pa.types.is_large_string(self._data.type)
+        pa.types.is_string(self._pa_array.type)
+        or pa.types.is_large_string(self._pa_array.type)
         or (
-            pa.types.is_dictionary(self._data.type)
+            pa.types.is_dictionary(self._pa_array.type)
             and (
-                pa.types.is_string(self._data.type.value_type)
-                or pa.types.is_large_string(self._data.type.value_type)
+                pa.types.is_string(self._pa_array.type.value_type)
+                or pa.types.is_large_string(self._pa_array.type.value_type)
             )
-            and pa.types.is_int32(self._data.type.index_type)
+            and pa.types.is_int32(self._pa_array.type.index_type)
         )
     ):
         raise ValueError(
@@ -91,7 +91,7 @@ if _check_pandas_change:
     lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "2b9106983d8d35cd024233abc1201cde4de1941584b902b0e2350bcbdfaa291c"
+        != "5127b219e8856a16ef858b0f120881e32623d75422e50597f8a2fbb5281900c0"
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
@@ -113,11 +113,11 @@ def _concat_same_type(cls, to_concat):
     -------
     ArrowExtensionArray
     """
-    chunks = [array for ea in to_concat for array in ea._data.iterchunks()]
+    chunks = [array for ea in to_concat for array in ea._pa_array.iterchunks()]
     if to_concat[0].dtype == "string":
         # Bodo change: use Arrow type of underlying data since it could be different
         # (dict-encoded or large_string)
-        pa_dtype = to_concat[0]._data.type
+        pa_dtype = to_concat[0]._pa_array.type
     else:
         pa_dtype = to_concat[0].dtype.pyarrow_dtype
     arr = pa.chunked_array(chunks, type=pa_dtype)
@@ -130,7 +130,7 @@ if _check_pandas_change:
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "6a7397b59a7264de2167cc79344f01c411aeeecccd47d9ee4e37da4b700316ff"
+        != "8f29eb56a84ce4000be3ba611f5a23cbf81b981fd8cfe5c7776e79f7800ba94e"
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_typehas changed"
@@ -162,3 +162,9 @@ if _check_pandas_change:  # pragma: no cover
 
 
 pd.core.computation.ops.FuncNode.__init__ = FuncNode__init__
+
+
+# Pandas as of 2.1.4 doesn't have notna() for DatetimeArray for some reason
+# See test_series_value_counts
+if not hasattr(pd.arrays.DatetimeArray, "notna"):
+    pd.arrays.DatetimeArray.notna = lambda self: ~self.isna()

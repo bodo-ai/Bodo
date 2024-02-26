@@ -2854,7 +2854,28 @@ def gen_bodosql_case_func(
     return f, glbls
 
 
-gen_objmode_func_overload(warnings.warn, "none")
+# NOTE: not using gen_objmode_func_overload since inspect cannot find the function
+# signature for warnings.warn as of Python 3.12
+@overload(warnings.warn)
+def overload_warn(
+    message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
+):
+    def impl(
+        message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
+    ):  # pragma: no cover
+        if bodo.get_rank() == 0:
+            with bodo.objmode:
+                if skip_file_prefixes is None:
+                    skip_file_prefixes = ()
+                warnings.warn(
+                    message,
+                    category,
+                    stacklevel,
+                    source,
+                    skip_file_prefixes=skip_file_prefixes,
+                )
+
+    return impl
 
 
 def get_array_getitem_scalar_type(t):

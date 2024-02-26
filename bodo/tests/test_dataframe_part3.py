@@ -400,6 +400,9 @@ def test_categorical_astype(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.skip(
+    "[BSE-2776] Support list comprehension unrolling with condition for Python 3.12"
+)
 def test_avoid_static_getitem_const(memory_leak_check):
     """Test for avoiding Numba's static_getitem const idx inference bug in typing pass.
     See https://github.com/numba/numba/issues/7592

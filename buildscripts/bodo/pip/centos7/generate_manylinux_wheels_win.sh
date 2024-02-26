@@ -47,7 +47,7 @@ fi
 
 # build Bodo wheels
 export BUILD_PIP=1
-for PYTHON_VER in "3.9" "3.10" "3.11"
+for PYTHON_VER in "3.10" "3.11" "3.12"
 do
     conda create -n BUILDPIP python=$PYTHON_VER msmpi boost-cpp -c conda-forge -y
     conda activate BUILDPIP
@@ -55,10 +55,10 @@ do
     # packages prior to 1.21 do not build.
     if python -c 'import sys; sys.exit(sys.version_info[:2] >= (3, 10))'; then
         # exit code 0 when version < 3.10
-        python -m pip install Cython numpy==1.18.* wheel pyarrow==14.0.2 mpi4py_mpich==3.1.2
+        python -m pip install Cython numpy==1.18.* wheel pyarrow==15.0.0 mpi4py_mpich==3.1.2
     else
         # exit code 1 when version >= 3.10
-        python -m pip install Cython numpy==1.21.* wheel pyarrow==14.0.2 mpi4py_mpich==3.1.2
+        python -m pip install Cython numpy==1.21.* wheel pyarrow==15.0.0 mpi4py_mpich==3.1.2
     fi
     # copy SSL DLLs to bodo source directory to bundle them in package
     cp `cygpath -u $CONDA_PREFIX`/Library/bin/libssl-*-x64.dll bodo/libs

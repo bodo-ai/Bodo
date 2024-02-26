@@ -4181,6 +4181,42 @@ def bcast_comm_impl(data, comm_ranks, nranks, root=MPI_ROOT):  # pragma: no cove
         return lambda data, comm_ranks, nranks, root=MPI_ROOT: _bcast_np(
             data, comm_ranks, nranks, root
         )  # pragma: no cover
+
+    if (
+        isinstance(
+            data,
+            (IntegerArrayType, FloatingArrayType, DecimalArrayType, DatetimeArrayType),
+        )
+        or data == datetime_date_array_type
+    ):
+        # these array need a data array and a null bitmap array to be initialized by
+        # their init functions
+        if isinstance(data, IntegerArrayType):
+            init_func = bodo.libs.int_arr_ext.init_integer_array
+        if isinstance(data, FloatingArrayType):
+            init_func = bodo.libs.float_arr_ext.init_float_array
+        if isinstance(data, DecimalArrayType):
+            precision = data.precision
+            scale = data.scale
+            init_func = numba.njit(no_cpython_wrapper=True)(
+                lambda d, b: bodo.libs.decimal_arr_ext.init_decimal_array(
+                    d, b, precision, scale
+                )  # pragma: no cover
+            )
+        if data == datetime_date_array_type:
+            init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
+
+        def impl_range_nullable(
+            data, comm_ranks, nranks, root=MPI_ROOT
+        ):  # pragma: no cover
+            data_in = data._data
+            null_bitmap = data._null_bitmap
+            data_recv = _bcast_np(data_in, comm_ranks, nranks, root)
+            bitmap_recv = _bcast_np(null_bitmap, comm_ranks, nranks, root)
+            return init_func(data_recv, bitmap_recv)
+
+        return impl_range_nullable
+
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
