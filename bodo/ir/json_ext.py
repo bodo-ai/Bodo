@@ -1,4 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -9,11 +10,14 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
+import bodo.user_logging
 from bodo import objmode
+from bodo.io import json_cpp
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
+from bodo.ir.connector import Connector
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.utils import (
@@ -22,16 +26,20 @@ from bodo.utils.utils import (
     sanitize_varname,
 )
 
+ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 
-class JsonReader(ir.Stmt):
+
+class JsonReader(Connector):
+    connector_typ = "json"
+
     def __init__(
         self,
-        df_out,
-        loc,
-        out_vars,
-        out_types,
+        df_out_varname: str,
+        loc: ir.Loc,
+        out_vars: list[ir.Var],
+        out_table_col_types,
         file_name,
-        df_colnames,
+        out_table_col_names: list[str],
         orient,
         convert_dates,
         precise_float,
@@ -39,13 +47,14 @@ class JsonReader(ir.Stmt):
         compression,
         storage_options,
     ):
-        self.connector_typ = "json"
-        self.df_out = df_out  # used only for printing
+        self.df_out_varname = df_out_varname  # used only for printing
         self.loc = loc
+        # Each column is returned to a separate variable
+        # unlike the C++ readers that return a single TableType
         self.out_vars = out_vars
-        self.out_types = out_types
+        self.out_table_col_types = out_table_col_types
         self.file_name = file_name
-        self.df_colnames = df_colnames
+        self.out_table_col_names = out_table_col_names
         self.orient = orient
         self.convert_dates = convert_dates
         self.precise_float = precise_float
@@ -55,15 +64,15 @@ class JsonReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadJson(file={}, col_names={}, types={}, vars={})".format(
-            self.df_out, self.file_name, self.df_colnames, self.out_types, self.out_vars
+            self.df_out_varname,
+            self.file_name,
+            self.out_table_col_names,
+            self.out_table_col_types,
+            self.out_vars,
         )
 
-
-import llvmlite.binding as ll
-
-from bodo.io import json_cpp
-
-ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        return list(zip((x.name for x in self.out_vars), self.out_table_col_types))
 
 
 @intrinsic(prefer_literal=True)
@@ -136,22 +145,28 @@ def json_file_chunk_reader(
 
 
 def remove_dead_json(
-    json_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    json_node: JsonReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     # TODO
-    new_df_colnames = []
+    new_col_names = []
     new_out_vars = []
     new_out_types = []
 
     for i, col_var in enumerate(json_node.out_vars):
         if col_var.name in lives:
-            new_df_colnames.append(json_node.df_colnames[i])
+            new_col_names.append(json_node.out_table_col_names[i])
             new_out_vars.append(json_node.out_vars[i])
-            new_out_types.append(json_node.out_types[i])
+            new_out_types.append(json_node.out_table_col_types[i])
 
-    json_node.df_colnames = new_df_colnames
+    json_node.out_table_col_names = new_col_names
     json_node.out_vars = new_out_vars
-    json_node.out_types = new_out_types
+    json_node.out_table_col_types = new_out_types
 
     if len(json_node.out_vars) == 0:
         return None
@@ -160,13 +175,13 @@ def remove_dead_json(
 
 
 def json_distributed_run(
-    json_node, array_dists, typemap, calltypes, typingctx, targetctx
+    json_node: JsonReader, array_dists, typemap, calltypes, typingctx, targetctx
 ):
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Finish column pruning on read_json node:\n%s\nColumns loaded %s\n"
         json_source = json_node.loc.strformat()
-        json_cols = json_node.df_colnames
+        json_cols = json_node.out_table_col_names
         bodo.user_logging.log_message(
             "Column Pruning",
             msg,
@@ -176,9 +191,10 @@ def json_distributed_run(
         # Log if any columns use dictionary encoded arrays.
         dict_encoded_cols = [
             c
-            for i, c in enumerate(json_node.df_colnames)
+            for i, c in enumerate(json_node.out_table_col_names)
             if isinstance(
-                json_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+                json_node.out_table_col_types[i],
+                bodo.libs.dict_arr_ext.DictionaryArrayType,
             )
         ]
         # TODO: Test. Dictionary encoding isn't supported yet.
@@ -212,8 +228,8 @@ def json_distributed_run(
     exec(func_text, {}, loc_vars)
     json_impl = loc_vars["json_impl"]
     json_reader_py = _gen_json_reader_py(
-        json_node.df_colnames,
-        json_node.out_types,
+        json_node.out_table_col_names,
+        json_node.out_table_col_types,
         typingctx,
         targetctx,
         parallel,

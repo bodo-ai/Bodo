@@ -8,12 +8,9 @@ version for this task.
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
     Iterable,
-    List,
     NamedTuple,
     Optional,
-    Tuple,
     Union,
 )
 from urllib.parse import urlparse
@@ -35,12 +32,14 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
+import bodo.user_logging
 from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io import arrow_cpp
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import map_cpp_to_py_table_column_idxs, pyarrow_schema_type
 from bodo.io.parquet_pio import ParquetPredicateType
+from bodo.ir.connector import Connector
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
     array_from_cpp_table,
@@ -52,6 +51,7 @@ from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import bcast, bcast_scalar
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
@@ -125,20 +125,22 @@ class SnowflakeReadParams(NamedTuple):
         )
 
 
-class SqlReader(ir.Stmt):
+class SqlReader(Connector):
+    connector_typ: str = "sql"
+
     def __init__(
         self,
         sql_request: str,
         connection: str,
-        df_out: str,
-        df_colnames: List[str],
-        out_vars: List[ir.Var],
-        out_types,
-        converted_colnames: List[str],
+        df_out_varname: str,
+        out_table_col_names: list[str],
+        out_table_col_types: list[types.ArrayCompatible],
+        out_vars: list[ir.Var],
+        converted_colnames: list[str],
         db_type: str,
         loc: ir.Loc,
-        unsupported_columns: List[str],
-        unsupported_arrow_types: List[pa.DataType],
+        unsupported_columns: list[str],
+        unsupported_arrow_types: list[pa.DataType],
         is_select_query: bool,
         has_side_effects: bool,
         index_column_name: Optional[str],
@@ -148,8 +150,8 @@ class SqlReader(ir.Stmt):
         pyarrow_schema: Optional[pa.Schema],
         # Only relevant for Iceberg MERGE INTO COW
         is_merge_into: bool,
-        file_list_type,
-        snapshot_id_type,
+        file_list_type: types.Type,
+        snapshot_id_type: types.Type,
         # Runtime should downcast decimal columns to double
         # Only relevant for Snowflake ATM
         downcast_decimal_to_double: bool,
@@ -159,13 +161,25 @@ class SqlReader(ir.Stmt):
         # But not enforced that all chunks are this size
         chunksize: Optional[int] = None,
     ):
-        self.connector_typ = "sql"
+        # Column Names and Types. Common for all Connectors
+        # - Output Columns
+        # - Original Columns
+        # - Index Column
+        # - Unsupported Columns
+        self.out_table_col_names = out_table_col_names
+        self.out_table_col_types = out_table_col_types
+        # Both are None if index=False
+        self.index_column_name = index_column_name
+        self.index_column_type = index_column_type
+        # These fields are used to enable compilation if unsupported columns
+        # get eliminated. Currently only used with snowflake.
+        self.unsupported_columns = unsupported_columns
+        self.unsupported_arrow_types = unsupported_arrow_types
+
         self.sql_request = sql_request
         self.connection = connection
-        self.df_out = df_out  # used only for printing
-        self.df_colnames = df_colnames
+        self.df_out_varname = df_out_varname  # used only for printing
         self.out_vars = out_vars
-        self.out_types = out_types
         # Any columns that had their output name converted by the actual
         # DB result. This is used by Snowflake because we update the SQL query
         # to perform dce and we must specify the exact column name (because we quote
@@ -178,22 +192,16 @@ class SqlReader(ir.Stmt):
         # Support for filter pushdown. Currently only used with snowflake
         # and iceberg.
         self.filters = None
-        # These fields are used to enable compilation if unsupported columns
-        # get eliminated. Currently only used with snowflake.
-        self.unsupported_columns = unsupported_columns
-        self.unsupported_arrow_types = unsupported_arrow_types
+
         self.is_select_query = is_select_query
         # Does this query have side effects (e.g. DELETE). If so
         # we cannot perform DCE on the whole node.
         self.has_side_effects = has_side_effects
-        # Name of the index column. None if index=False.
-        self.index_column_name = index_column_name
-        # Type of the index array. types.none if index=False.
-        self.index_column_type = index_column_type
+
         # List of indices within the table name that are used.
-        # df_colnames is unchanged unless the table is deleted,
+        # out_table_col_names is unchanged unless the table is deleted,
         # so this is used to track dead columns.
-        self.out_used_cols = list(range(len(df_colnames)))
+        self.out_used_cols = list(range(len(out_table_col_names)))
         # The database schema used to load data. This is currently only
         # supported/required for snowflake and must be provided
         # at compile time.
@@ -221,12 +229,38 @@ class SqlReader(ir.Stmt):
         self.downcast_decimal_to_double = downcast_decimal_to_double
         self.chunksize = chunksize
 
-    def __repr__(self):  # pragma: no cover
+    def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, downcast_decimal_to_double={self.downcast_decimal_to_double})"
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, df_out_varname={self.df_out_varname}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, downcast_decimal_to_double={self.downcast_decimal_to_double})"
+
+    def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
+        if self.is_streaming:
+            return [
+                (
+                    self.out_vars[0].name,
+                    ArrowReaderType(self.out_table_col_names, self.out_table_col_types),
+                )
+            ]
+        vars = [
+            (self.out_vars[0].name, TableType(tuple(self.out_table_col_types))),
+            (self.out_vars[1].name, self.index_column_type),
+        ]
+        if len(self.out_vars) > 2:
+            vars.append((self.out_vars[2].name, self.file_list_type))
+        if len(self.out_vars) > 3:
+            vars.append((self.out_vars[3].name, self.snapshot_id_type))
+        return vars
+
+    def out_table_distribution(self) -> Distribution:
+        if not self.is_select_query:
+            return Distribution.REP
+        elif self.limit is not None:
+            return Distribution.OneD_Var
+        else:
+            return Distribution.OneD
 
 
-def parse_dbtype(con_str) -> Tuple[str, str]:
+def parse_dbtype(con_str) -> tuple[str, str]:
     """
     Converts a constant string used for db_type to a standard representation
     for each database.
@@ -300,7 +334,7 @@ def remove_dead_sql(
 
     This does not include column elimination on the table.
     """
-    if sql_node.chunksize is not None:  # pragma: no cover
+    if sql_node.is_streaming:  # pragma: no cover
         return sql_node
 
     table_var = sql_node.out_vars[0].name
@@ -319,10 +353,10 @@ def remove_dead_sql(
         return None
 
     if table_var not in lives:
-        # If table isn't live we mark the df_colnames as empty
+        # If table isn't live we mark the out_table_col_names as empty
         # and avoid loading the table
-        sql_node.out_types = []
-        sql_node.df_colnames = []
+        sql_node.out_table_col_names = []
+        sql_node.out_table_col_types = []
         sql_node.out_used_cols = []
         sql_node.is_live_table = False
 
@@ -330,7 +364,7 @@ def remove_dead_sql(
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_name as None
         sql_node.index_column_name = None
-        sql_node.index_arr_typ = types.none
+        sql_node.index_column_type = types.none
 
     if file_list_var not in lives:
         sql_node.file_list_live = False
@@ -346,7 +380,7 @@ def _get_sql_column_str(
     p0: Union[str, Filter],
     scalars_to_unpack,
     converted_colnames: Iterable[str],
-    filter_map: Dict[str, str],
+    filter_map: dict[str, str],
     typemap,
 ) -> str:  # pragma: no cover
     """get SQL code for representing a column in filter pushdown.
@@ -422,13 +456,9 @@ def sql_distributed_run(
         sql_cols = []
         sql_types = []
         dict_encoded_cols = []
-        out_types = (
-            sql_node.out_types
-            if sql_node.chunksize is None
-            else sql_node.out_types[0].col_types
-        )
+        out_types = sql_node.out_table_col_types
         for i in sql_node.out_used_cols:
-            colname = sql_node.df_colnames[i]
+            colname = sql_node.out_table_col_names[i]
             sql_cols.append(colname)
             sql_types.append(out_types[i])
             if isinstance(out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType):
@@ -467,7 +497,7 @@ def sql_distributed_run(
                 sql_node.sql_request,
             )
 
-    if sql_node.chunksize is not None:  # pragma: no cover
+    if sql_node.is_streaming:  # pragma: no cover
         parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
             sql_node, array_dists, "SQLReader"
         )
@@ -498,7 +528,7 @@ def sql_distributed_run(
                 while sql_node.unsupported_columns[idx] != col_num:
                     idx += 1
                 msg_list.append(
-                    f"Column '{sql_node.original_df_colnames[col_num]}' with unsupported arrow type {sql_node.unsupported_arrow_types[idx]}"
+                    f"Column '{sql_node.unsupported_columns[col_num]}' with unsupported arrow type {sql_node.unsupported_arrow_types[idx]}"
                 )
                 idx += 1
             total_msg = "\n".join(msg_list)
@@ -593,7 +623,7 @@ def sql_distributed_run(
         filter_args = extra_args
 
     # total_rows is used for setting total size variable below
-    if sql_node.chunksize is not None:  # pragma: no cover
+    if sql_node.is_streaming:  # pragma: no cover
         func_text += f"    snowflake_reader = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
     else:
         func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
@@ -603,16 +633,12 @@ def sql_distributed_run(
     sql_impl = loc_vars["sql_impl"]
 
     genargs = {
-        "col_names": sql_node.df_colnames,
-        "col_typs": sql_node.out_types
-        if sql_node.chunksize is None
-        else sql_node.out_types[0].col_types,
+        "col_names": sql_node.out_table_col_names,
+        "col_typs": sql_node.out_table_col_types,
         "index_column_name": sql_node.index_column_name,
         "index_column_type": sql_node.index_column_type,
         "out_used_cols": sql_node.out_used_cols,
         "converted_colnames": sql_node.converted_colnames,
-        "typingctx": typingctx,
-        "targetctx": targetctx,
         "db_type": sql_node.db_type,
         "limit": limit,
         "parallel": parallel,
@@ -625,14 +651,16 @@ def sql_distributed_run(
         "is_independent": is_independent,
         "downcast_decimal_to_double": sql_node.downcast_decimal_to_double,
     }
-    if sql_node.chunksize is not None:
+    if sql_node.is_streaming:
+        assert sql_node.chunksize is not None
         if sql_node.db_type == "snowflake":  # pragma: no cover
             sql_reader_py = _gen_snowflake_reader_chunked_py(
-                **genargs, chunksize=sql_node.chunksize, out_type=sql_node.out_types[0]
+                **genargs, chunksize=sql_node.chunksize
             )
         else:
             sql_reader_py = _gen_iceberg_reader_chunked_py(
-                **genargs, chunksize=sql_node.chunksize, out_type=sql_node.out_types[0]
+                **genargs,
+                chunksize=sql_node.chunksize,
             )
     else:
         sql_reader_py = _gen_sql_reader_py(**genargs)
@@ -657,7 +685,9 @@ def sql_distributed_run(
     if sql_node.is_select_query and sql_node.db_type != "iceberg":
         # Prune the columns to only those that are used.
         # Note: Iceberg skips this step as pruning is done in parquet.
-        used_col_names = [sql_node.df_colnames[i] for i in sql_node.out_used_cols]
+        used_col_names = [
+            sql_node.out_table_col_names[i] for i in sql_node.out_used_cols
+        ]
         if sql_node.index_column_name:
             used_col_names.append(sql_node.index_column_name)
         if len(used_col_names) == 0:
@@ -699,7 +729,7 @@ def sql_distributed_run(
     if meta_head_only_info:
         nodes[-5].target = meta_head_only_info[1]
 
-    if sql_node.chunksize is not None:  # pragma: no cover
+    if sql_node.is_streaming:  # pragma: no cover
         nodes[-1].target = sql_node.out_vars[0]
         return nodes
 
@@ -795,18 +825,18 @@ def escape_column_names(col_names, db_type, converted_colnames):
 def _generate_column_filter(
     filter: Filter,
     scalars_to_unpack,
-    converted_colnames: List[str],
-    filter_map: Dict[str, str],
-    typemap: Dict[str, types.Type],
-) -> List[str]:  # pragma: no cover
+    converted_colnames: list[str],
+    filter_map: dict[str, str],
+    typemap: dict[str, types.Type],
+) -> list[str]:  # pragma: no cover
     """Generate a filter string
 
     Args:
-        filter (Tuple[Union[str, Tuple], str, Union[ir.Var, str]]): filter in Bodo format to convert
-        scalars_to_unpack (List[str]): A list that will be appended to with any scalars that should be
+        filter (tuple[Union[str, tuple], str, Union[ir.Var, str]]): filter in Bodo format to convert
+        scalars_to_unpack (list[str]): A list that will be appended to with any scalars that should be
             unpacked before converting to a Snowflake literal. This is to ensure we have a tuple of literals
             as opposed to a Tuple literal.
-        converted_colnames: List of column names that must have their case converted.
+        converted_colnames: list of column names that must have their case converted.
         filter_map: Mapping of IR variable name to runtime variable name.
         typemap: Dictionary used to determine scalar types for each variable name.
 
@@ -1034,7 +1064,7 @@ def _get_snowflake_sql_literal(filter_value):
     # TODO: Support more types (i.e. Interval, datetime64, datetime.datetime)
 
 
-def sql_remove_dead_column(sql_node, column_live_map, equiv_vars, typemap):
+def sql_remove_dead_column(sql_node: SqlReader, column_live_map, equiv_vars, typemap):
     """
     Function that tracks which columns to prune from the SQL node.
     This updates out_used_cols which stores which arrays in the
@@ -1048,9 +1078,9 @@ def sql_remove_dead_column(sql_node, column_live_map, equiv_vars, typemap):
         equiv_vars,
         typemap,
         "SQLReader",
-        # df_colnames is set to an empty list if the table is dead
+        # out_table_col_names is set to an empty list if the table is dead
         # see 'remove_dead_sql'
-        sql_node.df_colnames,
+        sql_node.out_table_col_names,
         # Iceberg and Snowflake don't require reading any columns
         require_one_column=sql_node.db_type not in ("iceberg", "snowflake"),
     )
@@ -1191,9 +1221,9 @@ def req_limit(sql_request):
 
 
 def prune_columns(
-    col_names: List[str],
-    col_typs: List[types.ArrayCompatible],
-    out_used_cols: List[int],
+    col_names: list[str],
+    col_typs: list[types.ArrayCompatible],
+    out_used_cols: list[int],
     index_column_name: Optional[str],
     index_column_type: Union[types.ArrayCompatible, types.NoneType],
 ):
@@ -1202,6 +1232,7 @@ def prune_columns(
     used_col_types = [col_typs[i] for i in out_used_cols]
     if index_column_name:
         used_col_names.append(index_column_name)
+        assert isinstance(index_column_type, types.ArrayCompatible)
         used_col_types.append(index_column_type)
 
     return used_col_names, used_col_types
@@ -1228,14 +1259,12 @@ def prune_snowflake_select(
 
 
 def _gen_snowflake_reader_chunked_py(
-    col_names: List[str],
-    col_typs: List[Any],
+    col_names: list[str],
+    col_typs: list[Any],
     index_column_name: Optional[str],
     index_column_type,
-    out_used_cols: List[int],
-    converted_colnames: List[str],
-    typingctx,
-    targetctx,
+    out_used_cols: list[int],
+    converted_colnames: list[str],
     db_type: str,
     limit: Optional[int],
     parallel: bool,
@@ -1248,7 +1277,6 @@ def _gen_snowflake_reader_chunked_py(
     is_independent: bool,
     downcast_decimal_to_double: bool,
     chunksize: int,
-    out_type,
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
 
@@ -1323,7 +1351,7 @@ def _gen_snowflake_reader_chunked_py(
         np=np,
         unicode_to_utf8=unicode_to_utf8,
         snowflake_reader_init_py_entry=snowflake_reader_init_py_entry,
-        out_type=out_type,
+        out_type=ArrowReaderType(col_names, col_typs),
     )
     glbls.update(params._asdict())
     glbls.update({f"pyarrow_schema_{call_id}": pyarrow_schema})
@@ -1339,14 +1367,12 @@ def _gen_snowflake_reader_chunked_py(
 
 
 def _gen_iceberg_reader_chunked_py(
-    col_names: List[str],
-    col_typs: List[Any],
+    col_names: list[str],
+    col_typs: list[Any],
     index_column_name: Optional[str],
     index_column_type,
-    out_used_cols: List[int],
-    converted_colnames: List[str],
-    typingctx,
-    targetctx,
+    out_used_cols: list[int],
+    converted_colnames: list[str],
     db_type: str,
     limit: Optional[int],
     parallel: bool,
@@ -1359,7 +1385,6 @@ def _gen_iceberg_reader_chunked_py(
     is_independent: bool,
     downcast_decimal_to_double: bool,
     chunksize: int,
-    out_type,
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
 
@@ -1402,7 +1427,7 @@ def _gen_iceberg_reader_chunked_py(
     # table / schema, assuming that Iceberg and Parquet field ordering is the same
     # Note that this does not include any locally generated columns (row id, file list, ...)
     # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
-    selected_cols: List[int] = [
+    selected_cols: list[int] = [
         pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
     nullable_cols = [
@@ -1451,7 +1476,7 @@ def _gen_iceberg_reader_chunked_py(
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
-            "out_type": out_type,
+            "out_type": ArrowReaderType(col_names, col_typs),
             f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
             f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
             f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),
@@ -1470,14 +1495,12 @@ def _gen_iceberg_reader_chunked_py(
 
 
 def _gen_sql_reader_py(
-    col_names: List[str],
-    col_typs: List[Any],
+    col_names: list[str],
+    col_typs: list[Any],
     index_column_name: Optional[str],
     index_column_type,
-    out_used_cols: List[int],
-    converted_colnames: List[str],
-    typingctx,
-    targetctx,
+    out_used_cols: list[int],
+    converted_colnames: list[str],
     db_type: str,
     limit: Optional[int],
     parallel: bool,
@@ -1605,7 +1628,7 @@ def _gen_sql_reader_py(
         # table / schema, assuming that Iceberg and Parquet field ordering is the same
         # Note that this does not include any locally generated columns (row id, file list, ...)
         # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
-        selected_cols: List[int] = [
+        selected_cols: list[int] = [
             pyarrow_schema.get_field_index(col_names[i])
             for i in out_used_cols
             if i != merge_into_row_id_col_idx

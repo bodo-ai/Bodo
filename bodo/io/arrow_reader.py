@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import llvmlite.binding as ll
 import numba
@@ -32,7 +32,7 @@ ll.add_symbol("arrow_reader_del_py_entry", arrow_cpp.arrow_reader_del_py_entry)
 
 class ArrowReaderType(types.Type):
     def __init__(
-        self, col_names: List[str], col_types: List[types.ArrayCompatible]
+        self, col_names: list[str], col_types: list[types.ArrayCompatible]
     ):  # pragma: no cover
         self.col_names = col_names
         self.col_types = col_types
