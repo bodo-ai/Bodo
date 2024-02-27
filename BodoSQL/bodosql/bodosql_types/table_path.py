@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import List, Optional
 
 from numba.core import cgutils, types
@@ -16,6 +17,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.io.parquet_pio import get_parquet_dataset
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
@@ -186,6 +188,13 @@ class TablePath:
 
     def __str__(self):
         return f"TablePath({self._file_path}, {self._file_type}, conn_str={self._conn_str}, reorder_io={self._reorder_io}), db_schema={self._db_schema}, bodo_read_as_dict={self._bodo_read_as_dict}"
+
+    @cached_property
+    def estimated_row_count(self) -> int | None:
+        if self._file_type == "pq":
+            return get_parquet_dataset(self._file_path)._bodo_total_rows
+        else:
+            return None
 
 
 class TablePathType(types.Type):

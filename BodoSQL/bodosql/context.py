@@ -509,6 +509,19 @@ def add_table_type(
     schema.addTable(table)
 
 
+def _get_estimated_row_count(table: pd.DataFrame | TablePath) -> int | None:
+    if isinstance(table, pd.DataFrame):
+        # TODO: Handle distributed inputs.
+        # Generate lengths if known.
+        return len(table)
+    elif isinstance(table, TablePath):
+        return table.estimated_row_count
+    else:
+        # Pass None for unknown lengths.
+        # TODO: Support other inputs types
+        return None
+
+
 def _generate_table_read(
     table_name: str,
     bodo_type: types.Type,
@@ -652,14 +665,7 @@ class BodoSQLContext:
             for k, v in tables.items():
                 names.append(k)
                 dfs.append(v)
-                if isinstance(v, pd.DataFrame):
-                    # TODO: Handle distributed inputs.
-                    # Generate lengths if known.
-                    estimated_row_counts.append(len(v))
-                else:
-                    # Pass None for unknown lengths.
-                    # TODO: Support other inputs types (e.g. TablePath)
-                    estimated_row_counts.append(None)
+                estimated_row_counts.append(_get_estimated_row_count(v))
             orig_bodo_types, df_types = compute_df_types(dfs, False)
             schema = initialize_schema(None)
             self.schema = schema
