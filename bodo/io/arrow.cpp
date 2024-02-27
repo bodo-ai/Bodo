@@ -38,9 +38,9 @@ ArrowReader* pq_reader_init_py_entry(
 table_info* iceberg_pq_read_py_entry(
     const char* conn, const char* database_schema, const char* table_name,
     bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
-    PyObject* expr_filters, int32_t* _selected_fields,
-    int32_t num_selected_fields, int32_t* _is_nullable,
-    PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
+    const char* expr_filter_f_str_, PyObject* filter_scalars,
+    int32_t* _selected_fields, int32_t num_selected_fields,
+    int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
     int32_t num_str_as_dict_cols, bool is_merge_into_cow,
     int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr);
@@ -48,9 +48,9 @@ table_info* iceberg_pq_read_py_entry(
 ArrowReader* iceberg_pq_reader_init_py_entry(
     const char* conn, const char* database_schema, const char* table_name,
     bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
-    PyObject* expr_filters, int32_t* _selected_fields,
-    int32_t num_selected_fields, int32_t* _is_nullable,
-    PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
+    const char* expr_filter_f_str, PyObject* filter_scalars,
+    int32_t* _selected_fields, int32_t num_selected_fields,
+    int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
     int32_t num_str_as_dict_cols, int64_t batch_size);
 
 // --------- function defined in snowflake_reader.cpp ---------

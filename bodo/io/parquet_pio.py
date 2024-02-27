@@ -91,6 +91,41 @@ def box_parquet_predicate_type(typ, val, c):
     return val
 
 
+class ParquetFilterScalarsListType(types.Type):
+    """
+    Type for filter scalars for Parquet filtering
+    (e.g. [("f0", 2), ("f1", [1, 2, 3]), ("f2", "BODO")]).
+    It is a list of tuples. Each tuple has
+    a string for the variable name and the second element
+    can be any Python type (e.g. string, int, list, date, etc.)
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super(ParquetFilterScalarsListType, self).__init__(
+            name="ParquetFilterScalarsListType()"
+        )
+
+
+parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
+types.parquet_filter_scalars_list_type = parquet_filter_scalars_list_type  # type: ignore
+register_model(ParquetFilterScalarsListType)(models.OpaqueModel)
+
+
+@unbox(ParquetFilterScalarsListType)
+def unbox_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ParquetFilterScalarsListType)
+def box_parquet_filter_scalars_list_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
+
+
 class ParquetFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a parquet dataset"""
@@ -143,6 +178,29 @@ def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
     func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
     func_text += "  return (dnf_filters_py, expr_filters_py)\n"
+    loc_vars = {}
+    glbs = globals()
+    glbs["numba"] = numba
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
+
+
+def get_filter_scalars_pyobject(vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filter_scalars_pyobject, no_unliteral=True)
+def overload_get_filter_scalars_pyobject(var_tup):
+    """
+    Generate a PyObject for a list of the scalars in
+    a filter to pass to C++.
+    """
+    func_text = "def impl(var_tup):\n"
+    func_text += (
+        "  with numba.objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
+    )
+    func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
+    func_text += "  return filter_scalars_py\n"
     loc_vars = {}
     glbs = globals()
     glbs["numba"] = numba
@@ -756,8 +814,8 @@ def populate_row_counts_in_pq_dataset_pieces(
     total_row_groups_size_chunk = 0
 
     if expr_filters is not None:
-        random.seed(37)
-        pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
+        my_random = random.Random(37)
+        pieces = my_random.sample(dataset.pieces, k=len(dataset.pieces))
     else:
         pieces = dataset.pieces
 
@@ -1051,6 +1109,141 @@ def get_parquet_dataset(
     return dataset
 
 
+def filter_row_groups_from_start_of_dataset_heuristic(
+    len_fpaths: int, start_offset: int, expr_filter: pc.Expression | None
+) -> bool:
+    """
+    Heuristic to determine whether or not to prune individual
+    row groups from the start of a file.
+
+    Args:
+        len_fpaths (int): Total number of files being read.
+        start_offset (int): Starting row offset into the first fiel.
+        expr_filter (pc.Expression | None): Filter to apply.
+
+    Returns:
+        bool: Whether or not to prune row groups.
+    """
+    # ------- row group filtering -------
+    # Ranks typically will not read all the row groups from their list of
+    # files (they will skip some rows at the beginning of the first file and
+    # some rows at the end of the last one).
+    # To make sure this rank only reads from the minimum necessary row groups,
+    # we can create a new dataset object composed of row group fragments
+    # instead of file fragments. We need to do it like this because Arrow's
+    # scanner doesn't support skipping rows.
+    # For this approach, we need to get row group metadata which can be very
+    # expensive when reading from remote filesystems. Also, row group filtering
+    # typically only benefits when the rank reads from a small set of files
+    # (since the filtering only applies to the first and last file).
+    # So we only filter based on this heuristic:
+    # Filter row groups if the list of files is very small, or if it is <= 10
+    # and this rank needs to skip rows of the first file.
+    # TODO see if getting row counts with filter pushdown could be worthwhile
+    # in some specific cases, and integrate that into this heuristic.
+    return (expr_filter is None) and (
+        len_fpaths <= 3 or (start_offset > 0 and len_fpaths <= 10)
+    )
+
+
+def filter_row_groups_from_start_of_dataset(
+    dataset: ds.FileSystemDataset,
+    start_offset: int,
+    max_rows_to_read: int,
+    pq_format: ds.ParquetFileFormat,
+) -> tuple[ds.FileSystemDataset, int]:
+    """
+    Filter row groups from the start of the dataset.
+    See rationale in the description of
+    filter_row_groups_from_start_of_dataset_heuristic.
+
+    Args:
+        dataset (ds.FileSystemDataset): Original dataset.
+        start_offset (int): Starting row offset into the
+            first file.
+        max_rows_to_read (int): Maximum number of rows
+            this process will read from the files.
+        pq_format (ds.ParquetFileFormat): FileFormat
+            used for constructing the new dataset.
+
+    Returns:
+        tuple[ds.FileSystemDataset, int]:
+            - New dataset.
+            - New offest into the first piece/row-group.
+    """
+    new_frags = []
+    # Total number of rows of all the row groups we iterate through
+    count_rows = 0
+    # Track total rows that this rank will read from row groups we iterate
+    # through
+    rows_added = 0
+    start_row_first_rg = -1
+    for frag in dataset.get_fragments():
+        # Each fragment is a parquet file.
+        # For reference, this is basically the same logic as in
+        # ArrowReader::init_arrow_reader() and just adapted from there.
+        # Get the file's row groups that this rank will read from
+        row_group_ids = []
+        for rg in frag.row_groups:
+            num_rows_rg = rg.num_rows
+            if start_offset < count_rows + num_rows_rg:
+                # Rank needs to read from this row group
+                if rows_added == 0:
+                    # This is the first row group the rank will read from
+                    start_row_first_rg = start_offset - count_rows
+                    rows_added_from_rg = min(
+                        num_rows_rg - start_row_first_rg, max_rows_to_read
+                    )
+                else:
+                    rows_added_from_rg = min(num_rows_rg, max_rows_to_read - rows_added)
+                rows_added += rows_added_from_rg
+                row_group_ids.append(rg.id)
+            count_rows += num_rows_rg
+            if rows_added >= max_rows_to_read:
+                break
+        # XXX frag.subset(row_group_ids) is expensive on remote filesystems
+        # with datasets composed of many files and row groups
+        new_frags.append(frag.subset(row_group_ids=row_group_ids))
+        if rows_added >= max_rows_to_read:
+            break
+
+    # New dataset:
+    new_dataset = ds.FileSystemDataset(
+        new_frags, dataset.schema, pq_format, filesystem=dataset.filesystem
+    )
+
+    assert start_row_first_rg >= 0
+
+    return new_dataset, start_row_first_rg
+
+
+def schema_with_dict_cols(schema: pa.Schema, str_as_dict_cols: list[str]) -> pa.Schema:
+    """
+    Helper function to get a PyArrow schema object
+    from an existing Schema by replacing certain
+    columns to be dictionary-encoded.
+
+    Args:
+        schema (pa.Schema): Original schema.
+        str_as_dict_cols (list[str]): Column to dict-encode.
+
+    Returns:
+        pa.Schema: New schema.
+    """
+    if len(str_as_dict_cols) == 0:
+        return schema
+    new_fields: list[pa.Field] = []
+    dict_col_set = set(str_as_dict_cols)
+    for i, name in enumerate(schema.names):
+        if name in dict_col_set:
+            old_field = schema.field(i)
+            new_field = old_field.with_type(pa.dictionary(pa.int32(), old_field.type))
+            new_fields.append(new_field)
+        else:
+            new_fields.append(schema.field(i))
+    return pa.schema(new_fields)
+
+
 def get_scanner_batches(
     fpaths,
     expr_filters,
@@ -1075,6 +1268,7 @@ def get_scanner_batches(
         cpu_count = 2
     default_threads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), cpu_count)
     max_threads = min(int(os.environ.get("BODO_MAX_IO_THREADS", 16)), cpu_count)
+    # TODO Unset this after the read??
     if (
         is_parallel
         and len(fpaths) > max_threads
@@ -1087,16 +1281,12 @@ def get_scanner_batches(
     else:
         pa.set_io_thread_count(default_threads)
         pa.set_cpu_count(default_threads)
+
     pq_format = ds.ParquetFileFormat(dictionary_columns=str_as_dict_cols)
-    # set columns to be read as dictionary encoded in schema
-    dict_col_set = set(str_as_dict_cols)
-    for i, name in enumerate(schema.names):
-        if name in dict_col_set:
-            old_field = schema.field(i)
-            new_field = pa.field(
-                name, pa.dictionary(pa.int32(), old_field.type), old_field.nullable
-            )
-            schema = schema.remove(i).insert(i, new_field)
+
+    # Set columns to be read as dictionary encoded in schema
+    schema = schema_with_dict_cols(schema, str_as_dict_cols)
+
     dataset = ds.dataset(
         fpaths,
         filesystem=filesystem,
@@ -1107,70 +1297,27 @@ def get_scanner_batches(
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
 
-    # ------- row group filtering -------
-    # Ranks typically will not read all the row groups from their list of
-    # files (they will skip some rows at the beginning of the first file and
-    # some rows at the end of the last one).
-    # To make sure this rank only reads from the minimum necessary row groups,
-    # we can create a new dataset object composed of row group fragments
-    # instead of file fragments. We need to do it like this because Arrow's
-    # scanner doesn't support skipping rows.
-    # For this approach, we need to get row group metadata which can be very
-    # expensive when reading from remote filesystems. Also, row group filtering
-    # typically only benefits when the rank reads from a small set of files
-    # (since the filtering only applies to the first and last file).
-    # So we only filter based on this heuristic:
-    # Filter row groups if the list of files is very small, or if it is <= 10
-    # and this rank needs to skip rows of the first file
-    filter_row_groups = len(fpaths) <= 3 or (start_offset > 0 and len(fpaths) <= 10)
-    if filter_row_groups and (expr_filters is None):
-        # TODO see if getting row counts with filter pushdown could be worthwhile
-        # in some specific cases, and integrate that into the above heuristic
-        new_frags = []
-        # total number of rows of all the row groups we iterate through
-        count_rows = 0
-        # track total rows that this rank will read from row groups we iterate
-        # through
-        rows_added = 0
-        for frag in dataset.get_fragments():  # each fragment is a parquet file
-            # For reference, this is basically the same logic as in
-            # ArrowReader::init_arrow_reader() and just adapted from there.
-            # Get the file's row groups that this rank will read from
-            row_group_ids = []
-            for rg in frag.row_groups:
-                num_rows_rg = rg.num_rows
-                if start_offset < count_rows + num_rows_rg:
-                    # rank needs to read from this row group
-                    if rows_added == 0:
-                        # this is the first row group the rank will read from
-                        start_row_first_rg = start_offset - count_rows
-                        rows_added_from_rg = min(
-                            num_rows_rg - start_row_first_rg, rows_to_read
-                        )
-                    else:
-                        rows_added_from_rg = min(num_rows_rg, rows_to_read - rows_added)
-                    rows_added += rows_added_from_rg
-                    row_group_ids.append(rg.id)
-                count_rows += num_rows_rg
-                if rows_added == rows_to_read:
-                    break
-            # XXX frag.subset(row_group_ids) is expensive on remote filesystems
-            # with datasets composed of many files and row groups
-            new_frags.append(frag.subset(row_group_ids=row_group_ids))
-            if rows_added == rows_to_read:
-                break
-        dataset = ds.FileSystemDataset(
-            new_frags, dataset.schema, pq_format, filesystem=dataset.filesystem
-        )
+    if filter_row_groups_from_start_of_dataset_heuristic(
+        len(fpaths), start_offset, expr_filters
+    ):
         # The starting offset the Parquet reader knows about is from the first
         # file, not the first row group, so we need to communicate this back to C++
-        start_offset = start_row_first_rg
+        dataset, start_offset = filter_row_groups_from_start_of_dataset(
+            dataset, start_offset, rows_to_read, pq_format
+        )
 
     rb_reader = dataset.scanner(
+        # XXX Specifying "__filename" as one of the columns
+        # will create a column with the filename. We might
+        # want to replace our custom filename handling with
+        # this at some point.
         columns=selected_names,
         filter=expr_filters,
         batch_size=batch_size or 128 * 1024,
         use_threads=True,
+        # XXX Specify batch_readahead (default: 16)?
+        # XXX Specify fragment_readahead (default: 4)?
+        # XXX Specify memory pool?
     ).to_reader()
     return rb_reader, start_offset
 
@@ -1290,21 +1437,12 @@ def _pa_schemas_match(pa_schema1: pa.Schema, pa_schema2: pa.Schema) -> bool:
 
 def _get_sample_pq_pieces(
     pq_dataset: Optional[ParquetDataset],
-    pa_schema: pa.Schema,
-    is_iceberg: bool,
 ):
     """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
     every file in compile time.
 
-    Also filters the pieces that don't match the table schema, needed for Iceberg to
-    avoid errors. We don't know the filters early in the compilation pipeline, so we
-    want to avoid schema evolution issues for codes that would otherwise work when
-    filters are applied.
-
     Args:
         pq_dataset: input Parquet dataset
-        pa_schema: Arrow schema to check
-        is_iceberg: Whether the dataset it part of an Iceberg table
 
     Returns:
         list(ParquetPiece): A sample of filtered pieces
@@ -1317,32 +1455,15 @@ def _get_sample_pq_pieces(
     if len(pieces) > bodo.get_size():
         import random
 
-        random.seed(37)
-        pieces = random.sample(pieces, bodo.get_size())
+        my_random = random.Random(37)
+        pieces = my_random.sample(pieces, bodo.get_size())
     else:
         pieces = pieces
-
-    # Only use pieces that match the target schema. May reduce the sample size in cases
-    # with schema evolution, but not very likely to change the outcome due to Iceberg's
-    # random file name generation.
-    # NOTE: p.metadata opens the Parquet file and can be slow so not filtering before
-    # random sampling above.
-    # Schema matching isn't straightforward for Parquet datasets, since piece schemas
-    # don't include the Hive partitioned columns.
-    # See https://bodo.atlassian.net/browse/BE-3679
-    if is_iceberg:
-        pieces = [
-            p
-            for p in pieces
-            if _pa_schemas_match(p.metadata.schema.to_arrow_schema(), pa_schema)
-        ]
 
     return pieces
 
 
-def determine_str_as_dict_columns(
-    pq_dataset, pa_schema, str_columns: list, is_iceberg: bool = False
-) -> set:
+def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> set:
     """
     Determine which string columns (str_columns) should be read by Arrow as
     dictionary encoded arrays, based on this heuristic:
@@ -1357,8 +1478,8 @@ def determine_str_as_dict_columns(
     if len(str_columns) == 0:
         return set()  # no string as dict columns
 
-    # get a sample of Parquet pieces to avoid opening every file in compile time
-    pieces = _get_sample_pq_pieces(pq_dataset, pa_schema, is_iceberg)
+    # Get a sample of Parquet pieces to avoid opening every file in compile time
+    pieces = _get_sample_pq_pieces(pq_dataset)
 
     # Sort the list to ensure same order on all ranks. This is
     # important for correctness.

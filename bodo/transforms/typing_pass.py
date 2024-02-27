@@ -2,6 +2,7 @@
 Bodo type inference pass that performs transformations that enable typing of the IR
 according to Bodo requirements (using partial typing).
 """
+
 import copy
 import itertools
 import operator
@@ -4136,18 +4137,9 @@ class TypingTransforms:
 
         all_dict_str_cols = set(_bodo_read_as_dict)
         if detect_dict_cols:
-            # estimate which string columns should be dict-encoded using existing Parquet
+            # Estimate which string columns should be dict-encoded using existing Parquet
             # infrastructure.
-            # setting get_row_counts=False since row counts of all files are only needed
-            # during runtime.
-            iceberg_pq_dset = bodo.io.iceberg.get_iceberg_pq_dataset(
-                con,
-                database_schema,
-                table_name,
-                pyarrow_table_schema,
-                get_row_counts=False,
-            )
-            str_columns = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+            str_columns: List[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
                 pyarrow_table_schema
             )
             # remove user provided dict-encoded columns
@@ -4155,11 +4147,12 @@ class TypingTransforms:
             # Sort the columns to ensure same order on all ranks
             str_columns = sorted(str_columns)
 
-            dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
-                iceberg_pq_dset.pq_dataset,
-                pyarrow_table_schema,
+            dict_str_cols = bodo.io.iceberg.determine_str_as_dict_columns(
+                con,
+                database_schema,
+                table_name,
                 str_columns,
-                is_iceberg=True,
+                pyarrow_table_schema,
             )
             all_dict_str_cols.update(dict_str_cols)
 

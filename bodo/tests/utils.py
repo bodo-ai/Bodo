@@ -940,9 +940,11 @@ def sort_dataframe_values_index(df):
     # Sort only works on hashable datatypes
     # Thus we convert (non-hashable) list-like types to (hashable) tuples
     df = df.applymap(
-        lambda x: tuple(x)
-        if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
-        else x
+        lambda x: (
+            tuple(x)
+            if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
+            else x
+        )
     )
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
@@ -1032,9 +1034,11 @@ def _test_equal(
         if isinstance(bodo_out, pd.MultiIndex):
             bodo_out = pd.MultiIndex(
                 levels=[
-                    v.values.to_numpy()
-                    if isinstance(v.values, pd.arrays.ArrowStringArray)
-                    else v
+                    (
+                        v.values.to_numpy()
+                        if isinstance(v.values, pd.arrays.ArrowStringArray)
+                        else v
+                    )
                     for v in bodo_out.levels
                 ],
                 codes=bodo_out.codes,
@@ -1634,7 +1638,10 @@ def convert_non_pandas_columns(df):
     # Manually invalidate the cached typing information.
     df_copy._bodo_meta = None
     list_col = df.columns.to_list()
-    n_rows = df_copy[list_col[0]].size
+    if len(list_col) > 0:
+        n_rows = df_copy[list_col[0]].size
+    else:
+        n_rows = df_copy.shape[0]
     # Determine which columns have list of strings in them
     # Determine which columns have Decimals in them.
     col_names_list_string = []

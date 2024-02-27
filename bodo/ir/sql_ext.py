@@ -38,7 +38,7 @@ from bodo.hiframes.table import Table, TableType
 from bodo.io import arrow_cpp
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import map_cpp_to_py_table_column_idxs, pyarrow_schema_type
-from bodo.io.parquet_pio import ParquetPredicateType
+from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
@@ -1412,7 +1412,13 @@ def _gen_iceberg_reader_chunked_py(
 
     # Generate the partition filters and predicate filters. Note we pass
     # all col names as possible partitions via partition names.
-    dnf_filter_str, expr_filter_str = bodo.ir.connector.generate_arrow_filters(
+    # The expression filters are returned as f-strings so that we can
+    # pass them to the runtime to generate the filters dynamically
+    # for the various schemas (to account for schema evolution).
+    (
+        dnf_filter_str,
+        iceberg_expr_filter_f_str,
+    ) = bodo.ir.connector.generate_arrow_filters(
         filters,
         filter_map,
         filter_vars,
@@ -1421,6 +1427,7 @@ def _gen_iceberg_reader_chunked_py(
         col_typs,
         typemap,
         "iceberg",
+        output_expr_filters_as_f_string=True,
     )
 
     # Determine selected C++ columns (and thus nullable) from original Iceberg
@@ -1445,11 +1452,14 @@ def _gen_iceberg_reader_chunked_py(
         else "0, 0"
     )
 
+    # Create a dummy one for the get_filters_pyobject call.
+    expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in col_names})
     comma = "," if filter_args else ""
     func_text = (
         f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
-        f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+        f'  dnf_filters, _ = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+        f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
         # Iceberg C++ Parquet Reader
         f"  iceberg_reader = iceberg_pq_reader_init_py_entry(\n"
         f"    unicode_to_utf8(conn),\n"
@@ -1458,7 +1468,8 @@ def _gen_iceberg_reader_chunked_py(
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
         f"    dnf_filters,\n"
-        f"    expr_filters,\n"
+        f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
+        f"    filter_scalars_pyobject,\n"
         f"    selected_cols_arr_{call_id}.ctypes,\n"
         f"    {len(selected_cols)},\n"
         f"    nullable_cols_arr_{call_id}.ctypes,\n"
@@ -1476,6 +1487,8 @@ def _gen_iceberg_reader_chunked_py(
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
+            "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
+            f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "out_type": ArrowReaderType(col_names, col_typs),
             f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
             f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
@@ -1599,6 +1612,8 @@ def _gen_sql_reader_py(
         filter_map, filter_vars = bodo.ir.connector.generate_filter_map(filters)
         filter_args = ", ".join(filter_map.values())
 
+    iceberg_expr_filter_f_str = ""
+
     func_text = (
         f"def sql_reader_py(sql_request, conn, database_schema, {filter_args}):\n"
     )
@@ -1609,7 +1624,13 @@ def _gen_sql_reader_py(
 
         # Generate the partition filters and predicate filters. Note we pass
         # all col names as possible partitions via partition names.
-        dnf_filter_str, expr_filter_str = bodo.ir.connector.generate_arrow_filters(
+        # The expression filters are returned as f-strings so that we can
+        # pass them to the runtime to generate the filters dynamically
+        # for the various schemas (to account for schema evolution).
+        (
+            dnf_filter_str,
+            iceberg_expr_filter_f_str,
+        ) = bodo.ir.connector.generate_arrow_filters(
             filters,
             filter_map,
             filter_vars,
@@ -1618,6 +1639,7 @@ def _gen_sql_reader_py(
             col_typs,
             typemap,
             "iceberg",
+            output_expr_filters_as_f_string=True,
         )
 
         merge_into_row_id_col_idx = -1
@@ -1649,10 +1671,13 @@ def _gen_sql_reader_py(
             else "0, 0"
         )
 
+        # Generate a temporary one for codegen:
+        expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in col_names})
         comma = "," if filter_args else ""
         func_text += (
             f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
-            f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+            f'  dnf_filters, _ = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+            f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
             # Iceberg C++ Parquet Reader
             f"  out_table, total_rows, file_list, snapshot_id = iceberg_pq_read_py_entry(\n"
             f"    unicode_to_utf8(conn),\n"
@@ -1661,7 +1686,8 @@ def _gen_sql_reader_py(
             f"    {parallel},\n"
             f"    {-1 if limit is None else limit},\n"
             f"    dnf_filters,\n"
-            f"    expr_filters,\n"
+            f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
+            f"    filter_scalars_pyobject,\n"
             #     TODO Confirm that we're computing selected_cols correctly
             f"    selected_cols_arr_{call_id}.ctypes,\n"
             f"    {len(selected_cols)},\n"
@@ -1916,6 +1942,8 @@ def _gen_sql_reader_py(
                 f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
                 f"py_table_type_{call_id}": py_table_type,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
+                f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
+                "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
                 "iceberg_pq_read_py_entry": iceberg_pq_read_py_entry,
             }
         )
@@ -1959,6 +1987,7 @@ def _gen_sql_reader_py(
 
 
 parquet_predicate_type = ParquetPredicateType()
+parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 
 
 @intrinsic(prefer_literal=True)
@@ -1970,7 +1999,8 @@ def iceberg_pq_read_py_entry(
     parallel,
     limit,
     dnf_filters,
-    expr_filters,
+    expr_filter_f_str,
+    filter_scalars,
     selected_cols,
     num_selected_cols,
     nullable_cols,
@@ -2001,7 +2031,11 @@ def iceberg_pq_read_py_entry(
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
         dnf_filters (parquet_predicate_type): PyObject for DNF filters.
-        expr_filters (parquet_predicate_type): PyObject for Expr filters
+        expr_filter_f_str (types.voidptr): f-string representation of the
+            expression filter. This is used to generate the filter expression
+            at runtime.
+        filter_scalars (parquet_filter_scalars_list_type): Scalars to use
+            to generate the filter expression at runtime.
         selected_cols (types.voidptr): C pointers of integers for selected columns
         num_selected_cols (types.int64): Length of selected_cols
         nullable_cols (types.voidptr): C pointers of 0 or 1 for if each selected column is nullable
@@ -2020,6 +2054,7 @@ def iceberg_pq_read_py_entry(
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(1),  # bool
                 lir.IntType(64),  # int64
+                lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(8).as_pointer(),  # void*
@@ -2080,7 +2115,8 @@ def iceberg_pq_read_py_entry(
         types.boolean,
         types.int64,
         parquet_predicate_type,  # dnf filters
-        parquet_predicate_type,  # expr filters
+        types.voidptr,  # expr_filter_f_str
+        parquet_filter_scalars_list_type,  # filter_scalars
         types.voidptr,
         types.int32,
         types.voidptr,
@@ -2101,7 +2137,8 @@ def iceberg_pq_reader_init_py_entry(
     parallel,
     limit,
     dnf_filters,
-    expr_filters,
+    expr_filter_f_str,
+    filter_scalars,
     selected_cols,
     num_selected_cols,
     nullable_cols,
@@ -2122,7 +2159,11 @@ def iceberg_pq_reader_init_py_entry(
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
         dnf_filters (parquet_predicate_type): PyObject for DNF filters.
-        expr_filters (parquet_predicate_type): PyObject for Expr filters
+        expr_filter_f_str (types.voidptr): f-string representation of the
+            expression filter. This is used to generate the filter expression
+            at runtime.
+        filter_scalars (parquet_filter_scalars_list_type): Scalars to use
+            to generate the filter expression at runtime.
         selected_cols (types.voidptr): C pointers of integers for selected columns
         num_selected_cols (types.int64): Length of selected_cols
         nullable_cols (types.voidptr): C pointers of 0 or 1 for if each selected column is nullable
@@ -2146,7 +2187,8 @@ def iceberg_pq_reader_init_py_entry(
                 lir.IntType(1),  # parallel bool
                 lir.IntType(64),  # tot_rows_to_read int64
                 lir.IntType(8).as_pointer(),  # dnf_filters void*
-                lir.IntType(8).as_pointer(),  # expr_filters void*
+                lir.IntType(8).as_pointer(),  # expr_filter_f_str void*
+                lir.IntType(8).as_pointer(),  # filter_scalars void*
                 lir.IntType(8).as_pointer(),  # _selected_fields void*
                 lir.IntType(32),  # num_selected_fields int32
                 lir.IntType(8).as_pointer(),  # _is_nullable void*
@@ -2172,7 +2214,8 @@ def iceberg_pq_reader_init_py_entry(
         types.boolean,
         types.int64,
         parquet_predicate_type,  # dnf filters
-        parquet_predicate_type,  # expr filters
+        types.voidptr,  # expr_filter_f_str
+        parquet_filter_scalars_list_type,  # filter_scalars
         types.voidptr,
         types.int32,
         types.voidptr,
