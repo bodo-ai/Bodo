@@ -32,12 +32,13 @@ class Doc private constructor(private val code: StringBuilder, private val inden
         // This just checks for the newline, splits it,
         // maps the prefix onto each line, then joins
         // them back together.
-        val block = if (line.contains("\n")) {
-            line.split("\n")
-                .joinToString { "${prefix}${it.trim()}" }
-        } else {
-            "${prefix}$line"
-        }
+        val block =
+            if (line.contains("\n")) {
+                line.split("\n")
+                    .joinToString { "${prefix}${it.trim()}" }
+            } else {
+                "${prefix}$line"
+            }
         code.append(block)
         code.append("\n")
     }
@@ -47,8 +48,7 @@ class Doc private constructor(private val code: StringBuilder, private val inden
      * @return New document with the same parameters at
      *         an extra level of indentation.
      */
-    fun indent(): Doc =
-        Doc(code = this.code, indent = this.indent, level = level + 1)
+    fun indent(): Doc = Doc(code = this.code, indent = this.indent, level = level + 1)
 
     /**
      * Returns the code that was written to this document.

@@ -10,7 +10,6 @@ import org.apache.calcite.rel.core.AggregateCall
  * for if a filter is present.
  */
 class AggCostEstimator {
-
     companion object {
         fun estimateInputCost(input: RelNode): Cost {
             // Give a fixed cost to drop duplicates.

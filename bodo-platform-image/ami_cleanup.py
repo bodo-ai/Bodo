@@ -15,7 +15,9 @@ def is_release_image(img_details):
     if "Tags" not in img_details:
         return False
     for tag_dict in img_details["Tags"]:
-        if tag_dict["Key"] == "AMISha" and tag_dict["Value"].startswith("20"): # changing it for the bodo ami repo merge
+        if tag_dict["Key"] == "AMISha" and tag_dict["Value"].startswith(
+            "20"
+        ):  # changing it for the bodo ami repo merge
             return True
     return False
 
@@ -51,7 +53,6 @@ def find_amis_to_remove(region):
 
 
 def deregister_images(region, images_to_remove):
-
     ec2 = boto3.client("ec2", region_name=region)
     ami_ids = list(map(lambda x: x["ImageId"], images_to_remove))
     print(f"Number of AMIs to deregister: {len(ami_ids)}")

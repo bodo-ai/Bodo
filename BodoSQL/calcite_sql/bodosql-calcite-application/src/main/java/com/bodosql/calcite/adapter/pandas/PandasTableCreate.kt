@@ -22,10 +22,18 @@ class PandasTableCreate(
     createTableType: SqlCreateTable.CreateTableType,
     path: List<String>,
     meta: SnowflakeCreateTableMetadata,
-
-) : TableCreateBase(cluster, traitSet.replace(PandasRel.CONVENTION), input, schema, tableName, isReplace, createTableType, path, meta), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableCreate {
+) : TableCreateBase(
+        cluster,
+        traitSet.replace(
+            PandasRel.CONVENTION,
+        ),
+        input, schema, tableName, isReplace, createTableType, path, meta,
+    ),
+    PandasRel {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): PandasTableCreate {
         return PandasTableCreate(
             cluster,
             traitSet,
@@ -46,7 +54,9 @@ class PandasTableCreate(
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "writing table"
+
     override fun loggingTitle() = "IO TIMING"
+
     override fun nodeDetails() = tableName
 
     override fun isStreaming() = (input as PandasRel).batchingProperty() == BatchingProperty.STREAMING
@@ -60,7 +70,10 @@ class PandasTableCreate(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 }

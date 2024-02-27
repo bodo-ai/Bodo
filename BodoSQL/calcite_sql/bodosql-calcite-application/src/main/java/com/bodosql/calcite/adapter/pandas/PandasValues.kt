@@ -16,12 +16,14 @@ class PandasValues(
     tuples: ImmutableList<ImmutableList<RexLiteral>>,
     traitSet: RelTraitSet,
 ) : Values(cluster, rowType, tuples, traitSet), PandasRel {
-
     init {
         assert(convention == PandasRel.CONVENTION)
     }
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasValues {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): PandasValues {
         return PandasValues(cluster, getRowType(), tuples, traitSet.replace(PandasRel.CONVENTION))
     }
 
@@ -33,12 +35,20 @@ class PandasValues(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
     companion object {
-        fun create(cluster: RelOptCluster, traitSet: RelTraitSet, rowType: RelDataType, tuples: ImmutableList<ImmutableList<RexLiteral>>): PandasValues {
+        fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            rowType: RelDataType,
+            tuples: ImmutableList<ImmutableList<RexLiteral>>,
+        ): PandasValues {
             val newTraitSet = traitSet.replace(PandasRel.CONVENTION)
             return PandasValues(cluster, rowType, tuples, newTraitSet)
         }

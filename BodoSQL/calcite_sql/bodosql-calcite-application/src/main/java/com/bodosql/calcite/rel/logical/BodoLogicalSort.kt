@@ -16,7 +16,6 @@ class BodoLogicalSort(
     offset: RexNode?,
     fetch: RexNode?,
 ) : SortBase(cluster, traitSet, input, collation, offset, fetch) {
-
     override fun copy(
         traitSet: RelTraitSet,
         newInput: RelNode,

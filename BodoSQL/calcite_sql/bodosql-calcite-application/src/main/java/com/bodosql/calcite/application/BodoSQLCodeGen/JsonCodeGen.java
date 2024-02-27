@@ -59,7 +59,7 @@ public class JsonCodeGen {
     }
     Expr keyGlobal = visitor.lowerAsColNamesMetaType(new Expr.Tuple(keyExprs));
     Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
-    return ExprKt.BodoSQLKernel(
+    return ExprKt.bodoSQLKernel(
         fnName.toLowerCase(Locale.ROOT),
         List.of(new Expr.Tuple(valExprs), keyGlobal, scalarGlobal),
         List.of());
@@ -86,7 +86,7 @@ public class JsonCodeGen {
       kwargs = new ArrayList<>();
       kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(arg_scalars.get(0))));
     }
-    return ExprKt.BodoSQLKernel(jsonFnMap.get(fnName), operands, kwargs);
+    return ExprKt.bodoSQLKernel(jsonFnMap.get(fnName), operands, kwargs);
   }
 
   /**
@@ -107,7 +107,7 @@ public class JsonCodeGen {
     kotlin.Pair isScalarIndArg =
         new kotlin.Pair("is_scalar_idx", new Expr.BooleanLiteral(indexScalar));
     List<Pair<String, Expr>> namedArgs = List.of(isScalarArrArg, isScalarIndArg);
-    return ExprKt.BodoSQLKernel("arr_get", operands, namedArgs);
+    return ExprKt.bodoSQLKernel("arr_get", operands, namedArgs);
   }
 
   public static Expr visitGetIgnoreCaseOp(List<Expr> operands, List<Boolean> arg_scalars) {
@@ -122,6 +122,6 @@ public class JsonCodeGen {
 
     List<Pair<String, Expr>> namedArgs = List.of(isScalarArrArg, isScalarIndArg);
 
-    return ExprKt.BodoSQLKernel("get_ignore_case", operands, namedArgs);
+    return ExprKt.bodoSQLKernel("get_ignore_case", operands, namedArgs);
   }
 }

@@ -17,8 +17,10 @@ class PandasTargetTableScan(
     traitSet: RelTraitSet,
     table: RelOptTable,
 ) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: MutableList<RelNode>?): RelNode {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: MutableList<RelNode>?,
+    ): RelNode {
         return PandasTargetTableScan(cluster, traitSet, table)
     }
 
@@ -29,6 +31,7 @@ class PandasTargetTableScan(
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "reading table"
+
     override fun loggingTitle() = "IO TIMING"
 
     override fun nodeDetails(): String {
@@ -41,7 +44,10 @@ class PandasTargetTableScan(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 

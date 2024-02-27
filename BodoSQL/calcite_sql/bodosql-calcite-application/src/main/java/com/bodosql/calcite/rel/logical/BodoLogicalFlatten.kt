@@ -9,7 +9,23 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.util.ImmutableBitSet
 
-class BodoLogicalFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode, call: RexCall, callType: RelDataType, usedColOutputs: ImmutableBitSet, repeatColumns: ImmutableBitSet) : FlattenBase(cluster, traits, input, call, callType, usedColOutputs, repeatColumns) {
+class BodoLogicalFlatten(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    input: RelNode,
+    call: RexCall,
+    callType: RelDataType,
+    usedColOutputs: ImmutableBitSet,
+    repeatColumns: ImmutableBitSet,
+) : FlattenBase(
+        cluster,
+        traits,
+        input,
+        call,
+        callType,
+        usedColOutputs,
+        repeatColumns,
+    ) {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,

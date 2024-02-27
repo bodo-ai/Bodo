@@ -26,12 +26,14 @@ class PandasTableModify(
     sourceExpressionList: List<RexNode>?,
     flattened: Boolean,
 ) : TableModify(
-    cluster, traitSet.replace(PandasRel.CONVENTION), table, catalogReader,
-    input, operation, updateColumnList, sourceExpressionList, flattened,
-),
+        cluster, traitSet.replace(PandasRel.CONVENTION), table, catalogReader,
+        input, operation, updateColumnList, sourceExpressionList, flattened,
+    ),
     PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableModify {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): PandasTableModify {
         return PandasTableModify(
             cluster, traitSet, table, catalogReader,
             sole(inputs), operation, updateColumnList, sourceExpressionList, isFlattened,
@@ -45,6 +47,7 @@ class PandasTableModify(
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "writing table"
+
     override fun loggingTitle() = "IO TIMING"
 
     override fun nodeDetails(): String {
@@ -65,7 +68,10 @@ class PandasTableModify(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 }

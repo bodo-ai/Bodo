@@ -62,7 +62,6 @@ MIN_MERGE = 32
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def sort(key_arrs, lo, hi, data):  # pragma: no cover
-
     nRemaining = hi - lo
     if nRemaining < 2:
         return  # Arrays of size 0 and 1 are always sorted
@@ -306,7 +305,6 @@ INITIAL_TMP_STORAGE_LENGTH = 256
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def init_sort_start(key_arrs, data):  # pragma: no cover
-
     # This controls when we get *into* galloping mode.  It is initialized
     # to MIN_GALLOP.  The mergeLo and mergeHi methods nudge it higher for
     # random data, and lower for highly structured data.
@@ -354,6 +352,7 @@ def init_sort_start(key_arrs, data):  # pragma: no cover
 
 # Pushes the specified run onto the pending-run stack.
 
+
 # @param runBase index of the first element in the run
 # @param runLen  the number of elements in the run
 @numba.njit(no_cpython_wrapper=True, cache=True)
@@ -369,6 +368,7 @@ def pushRun(stackSize, runBase, runLen, runBase_val, runLen_val):  # pragma: no 
 
 #    1. runLen[i - 3] > runLen[i - 2] + runLen[i - 1]
 #    2. runLen[i - 2] > runLen[i - 1]
+
 
 # This method is called each time a new run is pushed onto the stack,
 # so the invariants are guaranteed to hold for i < stackSize upon
@@ -432,6 +432,7 @@ def mergeForceCollapse(
 # Merges the two runs at stack indices i and i+1.  Run i must be
 # the penultimate or antepenultimate run on the stack.  In other words,
 # i must be equal to stackSize-2 or stackSize-3.
+
 
 # @param i stack index of the first of the two runs to merge
 @numba.njit(no_cpython_wrapper=True, cache=True)
@@ -502,6 +503,7 @@ def mergeAt(
 # Locates the position at which to insert the specified key into the
 # specified sorted range, if the range contains an element equal to key,
 # returns the index of the leftmost equal element.
+
 
 # @param key the key whose insertion point to search for
 # @param a the array in which to search
@@ -574,6 +576,7 @@ def gallopLeft(key, arr, base, _len, hint):  # pragma: no cover
 
 # Like gallopLeft, except that if the range contains an element equal to
 # key, gallopRight returns the index after the rightmost equal element.
+
 
 # @param key the key whose insertion point to search for
 # @param a the array in which to search
@@ -649,6 +652,7 @@ def gallopRight(key, arr, base, _len, hint):  # pragma: no cover
 # For performance, this method should be called only when len1 <= len2
 # its twin, mergeHi should be called if len1 >= len2.  (Either method
 # may be called if len1 == len2.)
+
 
 # @param base1 index of first element in first run to be merged
 # @param len1  length of first run to be merged (must be > 0)
@@ -726,7 +730,6 @@ def mergeLo(
 def mergeLo_inner(
     arr, arr_data, tmp_data, len1, len2, tmp, cursor1, cursor2, dest, minGallop
 ):  # pragma: no cover
-
     while True:
         count1 = 0  # Number of times in a row that first run won
         count2 = 0  # Number of times in a row that second run won
@@ -818,6 +821,7 @@ def mergeLo_inner(
 # len1 >= len2 mergeLo should be called if len1 <= len2.  (Either method
 # may be called if len1 == len2.)
 
+
 # @param base1 index of first element in first run to be merged
 # @param len1  length of first run to be merged (must be > 0)
 # @param base2 index of first element in second run to be merged
@@ -903,7 +907,6 @@ def mergeHi(
 def mergeHi_inner(
     arr, arr_data, tmp_data, base1, len1, len2, tmp, cursor1, cursor2, dest, minGallop
 ):  # pragma: no cover
-
     while True:
         count1 = 0  # Number of times in a row that first run won
         count2 = 0  # Number of times in a row that second run won

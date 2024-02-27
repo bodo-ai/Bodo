@@ -23,14 +23,23 @@ open class ProjectBase(
     projects: List<RexNode>,
     rowType: RelDataType,
 ) : Project(cluster, traitSet, hints, input, RexNormalizer(cluster.rexBuilder).visitList(projects), rowType, setOf()) {
-    override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        projects: List<RexNode>,
+        rowType: RelDataType,
+    ): Project {
         return ProjectBase(cluster, traitSet, hints, input, projects, rowType)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
-        val cost = projects.map { project -> project.accept(RexCostEstimator) }
-            .reduce { l, r -> l.plus(r) as Cost }
+        val cost =
+            projects.map { project -> project.accept(RexCostEstimator) }
+                .reduce { l, r -> l.plus(r) as Cost }
         return planner.makeCost(from = cost).multiplyBy(rows)
     }
 }

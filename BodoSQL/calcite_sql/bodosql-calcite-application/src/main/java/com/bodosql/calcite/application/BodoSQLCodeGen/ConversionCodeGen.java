@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.SQLToPython.FormatHelpers.SQLFormatToPandasToDatetimeFormat;
-import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
+import static com.bodosql.calcite.ir.ExprKt.bodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
@@ -51,7 +51,7 @@ public class ConversionCodeGen {
       args.add(None.INSTANCE);
     }
     assert args.size() == 2;
-    return BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), args, streamingNamedArgs);
+    return bodoSQLKernel(fnName.toLowerCase(Locale.ROOT), args, streamingNamedArgs);
   }
 
   /**
@@ -90,7 +90,7 @@ public class ConversionCodeGen {
     } else {
       args = List.of(operands.get(0), Expr.None.INSTANCE, tzExpr, new Expr.IntegerLiteral(0));
     }
-    return BodoSQLKernel(kernelName, args, streamingNamedArgs);
+    return bodoSQLKernel(kernelName, args, streamingNamedArgs);
   }
 
   /**
@@ -113,7 +113,7 @@ public class ConversionCodeGen {
     // Append none for the format string.
     // TODO(njriasan): Support format strings.
     args.add(None.INSTANCE);
-    return BodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
+    return bodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
   }
 
   /**
@@ -123,7 +123,7 @@ public class ConversionCodeGen {
    * @return Expr for the TO_CHAR function
    */
   public static Expr generateToCharFnCode(List<Expr> operandsInfo, List<Boolean> argScalars) {
-    return BodoSQLKernel(
+    return bodoSQLKernel(
         "to_char",
         operandsInfo,
         List.of(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0)))));
@@ -141,7 +141,7 @@ public class ConversionCodeGen {
   public static Expr generateToBooleanFnCode(
       List<Expr> operands, String fnName, List<Pair<String, Expr>> streamingNamedArgs) {
     assert operands.size() == 1 : "Error, " + fnName + " function takes 1 argument";
-    return BodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
+    return bodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
   }
 
   /**
@@ -159,7 +159,7 @@ public class ConversionCodeGen {
       throw new BodoSQLCodegenException(
           fnName.toLowerCase() + ": format argument not yet supported");
     }
-    return BodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
+    return bodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
   }
 
   /**
@@ -172,7 +172,7 @@ public class ConversionCodeGen {
   public static Expr generateToArrayCode(List<Expr> operands, List<Boolean> argScalars) {
     ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
     kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0))));
-    return BodoSQLKernel("to_array", operands, kwargs);
+    return bodoSQLKernel("to_array", operands, kwargs);
   }
 
   /**
@@ -185,6 +185,6 @@ public class ConversionCodeGen {
    */
   public static Expr generateTimestampFnCode(
       List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
-    return BodoSQLKernel("create_timestamp", args, streamingNamedArgs);
+    return bodoSQLKernel("create_timestamp", args, streamingNamedArgs);
   }
 }

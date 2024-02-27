@@ -19,7 +19,6 @@ open class SortBase(
     offset: RexNode?,
     fetch: RexNode?,
 ) : Sort(cluster, traitSet, input, collation, offset, fetch) {
-
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
@@ -30,14 +29,18 @@ open class SortBase(
         return SortBase(cluster, traitSet, input, collation, offset, fetch)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
         // Add a sorting cost:
-        val cpu = if (collation.fieldCollations.isEmpty()) {
-            0.0
-        } else {
-            1.0
-        }
+        val cpu =
+            if (collation.fieldCollations.isEmpty()) {
+                0.0
+            } else {
+                1.0
+            }
         val averageRowSize = mq.getAverageRowSize(this)
         val rowSize = averageRowSize?.times(rows) ?: 0.0
         return planner.makeCost(cpu = cpu, rows = rows, mem = rowSize)

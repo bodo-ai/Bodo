@@ -51,7 +51,7 @@ public class CondOpCodeGen {
       // If we made it here, something has gone very wrong
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-    return ExprKt.BodoSQLKernel(kernelName, codeExprs, List.of());
+    return ExprKt.bodoSQLKernel(kernelName, codeExprs, List.of());
   }
 
   /**
@@ -83,7 +83,7 @@ public class CondOpCodeGen {
     kwargs.add(new Pair<String, Expr>("is_scalar_a", new Expr.BooleanLiteral(argScalars.get(0))));
     kwargs.add(new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(1))));
     kwargs.addAll(streamingNamedArgs);
-    return ExprKt.BodoSQLKernel(kernelName, codeExprs, kwargs);
+    return ExprKt.bodoSQLKernel(kernelName, codeExprs, kwargs);
   }
 
   /**
@@ -101,7 +101,7 @@ public class CondOpCodeGen {
       scalarExprs.add(new Expr.BooleanLiteral(isScalar));
     }
     Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
-    return ExprKt.BodoSQLKernel(
+    return ExprKt.bodoSQLKernel(
         "sql_hash", List.of(new Expr.Tuple(codeExprs), scalarGlobal), List.of());
   }
 
@@ -127,6 +127,6 @@ public class CondOpCodeGen {
     if (fnName == "ZEROIFNULL") {
       codeExprs.add(new Expr.Raw("0"));
     }
-    return ExprKt.BodoSQLKernel(kernelName, List.of(new Expr.Tuple(codeExprs)), streamingNamedArgs);
+    return ExprKt.bodoSQLKernel(kernelName, List.of(new Expr.Tuple(codeExprs)), streamingNamedArgs);
   }
 }

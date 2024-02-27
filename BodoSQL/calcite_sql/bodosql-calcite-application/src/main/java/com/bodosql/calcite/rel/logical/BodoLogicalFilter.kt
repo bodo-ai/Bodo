@@ -17,22 +17,29 @@ class BodoLogicalFilter(
     child: RelNode,
     condition: RexNode,
 ) : FilterBase(cluster, traitSet, child, condition) {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): BodoLogicalFilter {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        condition: RexNode,
+    ): BodoLogicalFilter {
         return BodoLogicalFilter(cluster, traitSet, input, condition)
     }
 
     companion object {
-        fun create(input: RelNode, condition: RexNode): BodoLogicalFilter {
+        fun create(
+            input: RelNode,
+            condition: RexNode,
+        ): BodoLogicalFilter {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(Convention.NONE)
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    RelMdCollation.filter(mq, input)
-                }
-                .replaceIf(RelDistributionTraitDef.INSTANCE) {
-                    RelMdDistribution.filter(mq, input)
-                }
+            val traitSet =
+                cluster.traitSetOf(Convention.NONE)
+                    .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                        RelMdCollation.filter(mq, input)
+                    }
+                    .replaceIf(RelDistributionTraitDef.INSTANCE) {
+                        RelMdDistribution.filter(mq, input)
+                    }
             return BodoLogicalFilter(cluster, traitSet, input, condition)
         }
     }

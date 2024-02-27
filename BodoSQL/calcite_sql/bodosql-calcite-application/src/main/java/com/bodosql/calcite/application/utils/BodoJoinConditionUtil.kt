@@ -18,17 +18,17 @@ import org.apache.calcite.sql.type.SqlTypeName
  */
 class BodoJoinConditionUtil {
     companion object {
-
         /**
          * SqlTypeNames for literals that can definitely be used in a join condition's
          * generated code.
          */
         @JvmStatic
-        private val validLiteralTypes = setOf(
-            SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT,
-            SqlTypeName.FLOAT, SqlTypeName.REAL, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL, SqlTypeName.CHAR,
-            SqlTypeName.VARCHAR, SqlTypeName.BOOLEAN,
-        )
+        private val validLiteralTypes =
+            setOf(
+                SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT,
+                SqlTypeName.FLOAT, SqlTypeName.REAL, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL, SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR, SqlTypeName.BOOLEAN,
+            )
 
         /**
          * Determine if the literal is valid to use in a join condition's
@@ -44,12 +44,13 @@ class BodoJoinConditionUtil {
          * generated code.
          */
         @JvmStatic
-        private val validBuiltinFunctionKinds = setOf(
-            SqlKind.EQUALS, SqlKind.NOT_EQUALS, SqlKind.GREATER_THAN,
-            SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN,
-            SqlKind.LESS_THAN_OR_EQUAL, SqlKind.AND, SqlKind.OR, SqlKind.PLUS, SqlKind.MINUS,
-            SqlKind.TIMES, SqlKind.DIVIDE, SqlKind.NOT, SqlKind.IS_NOT_TRUE,
-        )
+        private val validBuiltinFunctionKinds =
+            setOf(
+                SqlKind.EQUALS, SqlKind.NOT_EQUALS, SqlKind.GREATER_THAN,
+                SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN,
+                SqlKind.LESS_THAN_OR_EQUAL, SqlKind.AND, SqlKind.OR, SqlKind.PLUS, SqlKind.MINUS,
+                SqlKind.TIMES, SqlKind.DIVIDE, SqlKind.NOT, SqlKind.IS_NOT_TRUE,
+            )
 
         /**
          * Determine if a function with a kind that is not in otherFunctionKinds
@@ -86,13 +87,14 @@ class BodoJoinConditionUtil {
             return when (node) {
                 is RexLiteral -> isValidLiteral(node)
                 is RexInputRef -> true
-                is RexCall -> if (isValidBuiltinFunction(node) || isValidOtherFunction(node)) {
-                    node.operands.all {
-                        isValidNode(it)
+                is RexCall ->
+                    if (isValidBuiltinFunction(node) || isValidOtherFunction(node)) {
+                        node.operands.all {
+                            isValidNode(it)
+                        }
+                    } else {
+                        false
                     }
-                } else {
-                    false
-                }
                 else -> false
             }
         }
@@ -101,7 +103,11 @@ class BodoJoinConditionUtil {
          * Returns a pair to describe if the left and right table are used.
          */
         @JvmStatic
-        private fun determineUsedTables(node: RexNode, numLeftColumns: Int, totalColumns: Int): Pair<Boolean, Boolean> {
+        private fun determineUsedTables(
+            node: RexNode,
+            numLeftColumns: Int,
+            totalColumns: Int,
+        ): Pair<Boolean, Boolean> {
             val usedColumns = RelOptUtil.InputFinder.bits(node)
             val usesLeft = !(usedColumns.get(0, numLeftColumns).isEmpty)
             val usesRight = !(usedColumns.get(numLeftColumns, totalColumns).isEmpty)
@@ -114,7 +120,11 @@ class BodoJoinConditionUtil {
          * side of the join or a valid node whose inputs are all valid nodes.
          */
         @JvmStatic
-        fun isPushableFunction(node: RexNode, numLeftColumns: Int, totalColumns: Int): Boolean {
+        fun isPushableFunction(
+            node: RexNode,
+            numLeftColumns: Int,
+            totalColumns: Int,
+        ): Boolean {
             return when (node) {
                 // Even unsupported literals can always be pushed down as columns.
                 is RexLiteral, is RexInputRef -> true
@@ -150,7 +160,16 @@ class BodoJoinConditionUtil {
          * @param nodeCache OUTPUT: A mapping of expression to index number table side + index number. This is
          * used for both caching the update and later transformation stages.
          */
-        private fun extractPushableFunctionsInternal(node: RexNode, numLeftColumns: Int, totalColumns: Int, leftShuttle: RexPermuteInputsShuttle, rightShuttle: RexPermuteInputsShuttle, leftNodes: MutableList<RexNode>, rightNodes: MutableList<RexNode>, nodeCache: MutableMap<RexNode, Pair<Boolean, Int>>) {
+        private fun extractPushableFunctionsInternal(
+            node: RexNode,
+            numLeftColumns: Int,
+            totalColumns: Int,
+            leftShuttle: RexPermuteInputsShuttle,
+            rightShuttle: RexPermuteInputsShuttle,
+            leftNodes: MutableList<RexNode>,
+            rightNodes: MutableList<RexNode>,
+            nodeCache: MutableMap<RexNode, Pair<Boolean, Int>>,
+        ) {
             when {
                 // Any that already matches we can skip.
                 nodeCache.contains(node) -> return
@@ -169,7 +188,16 @@ class BodoJoinConditionUtil {
                         // down but the function doesn't. For example =(my_func1(...), my_func2(...))
                         // would push my_func1(...) and my_func2(...) but not the equals function.
                         node.operands.map {
-                            extractPushableFunctionsInternal(it, numLeftColumns, totalColumns, leftShuttle, rightShuttle, leftNodes, rightNodes, nodeCache)
+                            extractPushableFunctionsInternal(
+                                it,
+                                numLeftColumns,
+                                totalColumns,
+                                leftShuttle,
+                                rightShuttle,
+                                leftNodes,
+                                rightNodes,
+                                nodeCache,
+                            )
                         }
                     } else {
                         val (usesLeft, usesRight) = determineUsedTables(node, numLeftColumns, totalColumns)
@@ -207,11 +235,26 @@ class BodoJoinConditionUtil {
          *        the table.
          */
         @JvmStatic
-        fun extractPushableFunctions(condition: RexNode, numLeftColumns: Int, totalColumns: Int, leftShuttle: RexPermuteInputsShuttle, rightShuttle: RexPermuteInputsShuttle): Triple<List<RexNode>, List<RexNode>, Map<RexNode, Pair<Boolean, Int>>> {
+        fun extractPushableFunctions(
+            condition: RexNode,
+            numLeftColumns: Int,
+            totalColumns: Int,
+            leftShuttle: RexPermuteInputsShuttle,
+            rightShuttle: RexPermuteInputsShuttle,
+        ): Triple<List<RexNode>, List<RexNode>, Map<RexNode, Pair<Boolean, Int>>> {
             val leftNodes = ArrayList<RexNode>()
             val rightNodes = ArrayList<RexNode>()
             val nodeMap = HashMap<RexNode, Pair<Boolean, Int>>()
-            extractPushableFunctionsInternal(condition, numLeftColumns, totalColumns, leftShuttle, rightShuttle, leftNodes, rightNodes, nodeMap)
+            extractPushableFunctionsInternal(
+                condition,
+                numLeftColumns,
+                totalColumns,
+                leftShuttle,
+                rightShuttle,
+                leftNodes,
+                rightNodes,
+                nodeMap,
+            )
             return Triple(leftNodes, rightNodes, nodeMap)
         }
 

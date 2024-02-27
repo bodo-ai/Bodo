@@ -31,8 +31,12 @@ class PandasProject(
     projects: List<RexNode>,
     rowType: RelDataType,
 ) : ProjectBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, projects, rowType), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        projects: List<RexNode>,
+        rowType: RelDataType,
+    ): PandasProject {
         return PandasProject(cluster, traitSet, input, projects, rowType)
     }
 
@@ -49,7 +53,10 @@ class PandasProject(
         }
     }
 
-    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
+    private fun emitStreaming(
+        implementor: PandasRel.Implementor,
+        inputVar: BodoEngineTable,
+    ): BodoEngineTable {
         return implementor.buildStreaming(
             { ctx -> initStateVariable(ctx) },
             {
@@ -62,7 +69,10 @@ class PandasProject(
         )
     }
 
-    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
+    private fun emitSingleBatch(
+        implementor: PandasRel.Implementor,
+        inputVar: BodoEngineTable,
+    ): BodoEngineTable {
         return implementor::build {
                 ctx ->
             // Extract window aggregates and update the nodes.
@@ -76,7 +86,10 @@ class PandasProject(
      * Generate the additional inputs to generateDataFrame after handling the Window
      * Functions.
      */
-    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable): Pair<List<RexNode>, MutableList<Variable>> {
+    private fun genDataFrameWindowInputs(
+        ctx: PandasRel.BuildContext,
+        inputVar: BodoEngineTable,
+    ): Pair<List<RexNode>, MutableList<Variable>> {
         val (windowAggregate, projectExprs) = extractWindows(cluster, inputVar, projects)
         // Emit the windows and turn this into a mutable list.
         // This is a bit strange, but we're going to add to this list
@@ -86,7 +99,13 @@ class PandasProject(
         return Pair(projectExprs, localRefs)
     }
 
-    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): BodoEngineTable {
+    private fun generateDataFrame(
+        ctx: PandasRel.BuildContext,
+        inputVar: BodoEngineTable,
+        translator: RexToPandasTranslator,
+        projectExprs: List<RexNode>,
+        localRefs: MutableList<Variable>,
+    ): BodoEngineTable {
         try {
             if (canUseLoc()) {
                 return generateLocCode(ctx, inputVar)
@@ -105,7 +124,10 @@ class PandasProject(
         return readerVar
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
@@ -142,7 +164,10 @@ class PandasProject(
      * and those values do not have duplicates. The method [canUseLoc]
      * should be invoked before calling this function.
      */
-    private fun generateLocCode(ctx: PandasRel.BuildContext, input: BodoEngineTable): BodoEngineTable {
+    private fun generateLocCode(
+        ctx: PandasRel.BuildContext,
+        input: BodoEngineTable,
+    ): BodoEngineTable {
         val colIndices = getProjects().map { r -> Expr.IntegerLiteral((r as RexInputRef).index) }
         val typeCall = Expr.Call("MetaType", Expr.Tuple(colIndices))
         val colNamesMeta = ctx.lowerAsGlobal(typeCall)
@@ -158,11 +183,15 @@ class PandasProject(
      *
      * If a rename is not necessary, this method returns its input.
      */
-    private fun generateRenameIfNeeded(input: Expr, rowType: RelDataType): Expr {
-        val renameMap = namedProjects.asSequence()
-            .map { (r, alias) -> rowType.fieldNames[(r as RexInputRef).index] to alias }
-            .filter { (name, alias) -> name != alias }
-            .toList()
+    private fun generateRenameIfNeeded(
+        input: Expr,
+        rowType: RelDataType,
+    ): Expr {
+        val renameMap =
+            namedProjects.asSequence()
+                .map { (r, alias) -> rowType.fieldNames[(r as RexInputRef).index] to alias }
+                .filter { (name, alias) -> name != alias }
+                .toList()
         if (renameMap.isEmpty()) {
             return input
         }
@@ -170,14 +199,16 @@ class PandasProject(
         return Expr.Method(
             input,
             "rename",
-            namedArgs = listOf(
-                "columns" to Expr.Dict(
-                    renameMap.map { (name, alias) ->
-                        Expr.StringLiteral(name) to Expr.StringLiteral(alias)
-                    },
+            namedArgs =
+                listOf(
+                    "columns" to
+                        Expr.Dict(
+                            renameMap.map { (name, alias) ->
+                                Expr.StringLiteral(name) to Expr.StringLiteral(alias)
+                            },
+                        ),
+                    "copy" to Expr.BooleanLiteral(false),
                 ),
-                "copy" to Expr.BooleanLiteral(false),
-            ),
         )
     }
 
@@ -187,7 +218,13 @@ class PandasProject(
      *
      * This is the general catch-all for most projections.
      */
-    private fun generateProject(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): BodoEngineTable {
+    private fun generateProject(
+        ctx: PandasRel.BuildContext,
+        inputVar: BodoEngineTable,
+        translator: RexToPandasTranslator,
+        projectExprs: List<RexNode>,
+        localRefs: MutableList<Variable>,
+    ): BodoEngineTable {
         // Evaluate projections into new series.
         // In order to optimize this, we only generate new series
         // for projections that are non-trivial (aka not a RexInputRef)
@@ -197,32 +234,35 @@ class PandasProject(
         val builder = ctx.builder()
 
         // newProjectRefs will be a list of RexSlot values (either RexInputRef or RexLocalRef).
-        val newProjectRefs = projectExprs.map { proj ->
-            if (proj is RexSlot) {
-                return@map proj
-            }
-
-            val expr = proj.accept(translator).let {
-                if (isScalar(proj)) {
-                    coerceScalarToArray(ctx, proj.type, it, inputVar)
-                } else {
-                    it
+        val newProjectRefs =
+            projectExprs.map { proj ->
+                if (proj is RexSlot) {
+                    return@map proj
                 }
+
+                val expr =
+                    proj.accept(translator).let {
+                        if (isScalar(proj)) {
+                            coerceScalarToArray(ctx, proj.type, it, inputVar)
+                        } else {
+                            it
+                        }
+                    }
+                val arr = builder.symbolTable.genArrayVar()
+                builder.add(Op.Assign(arr, expr))
+                localRefs.add(arr)
+                RexLocalRef(localRefs.lastIndex, proj.type)
             }
-            val arr = builder.symbolTable.genArrayVar()
-            builder.add(Op.Assign(arr, expr))
-            localRefs.add(arr)
-            RexLocalRef(localRefs.lastIndex, proj.type)
-        }
 
         // Generate the indices we will reference when creating the table.
-        val indices = newProjectRefs.map { proj ->
-            when (proj) {
-                is RexInputRef -> proj.index
-                is RexLocalRef -> proj.index + input.getRowType().fieldCount
-                else -> throw AssertionError("Internal Error: Projection must be InputRef or LocalRef")
+        val indices =
+            newProjectRefs.map { proj ->
+                when (proj) {
+                    is RexInputRef -> proj.index
+                    is RexLocalRef -> proj.index + input.getRowType().fieldCount
+                    else -> throw AssertionError("Internal Error: Projection must be InputRef or LocalRef")
+                }
             }
-        }
         val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs, input.getRowType().fieldCount)
         return ctx.returns(logicalTableVar)
     }
@@ -242,7 +282,12 @@ class PandasProject(
      * @param scalar the expression that refers to the scalar value.
      * @param input the input dataframe.
      */
-    private fun coerceScalarToArray(ctx: PandasRel.BuildContext, dataType: RelDataType, scalar: Expr, input: BodoEngineTable): Expr {
+    private fun coerceScalarToArray(
+        ctx: PandasRel.BuildContext,
+        dataType: RelDataType,
+        scalar: Expr,
+        input: BodoEngineTable,
+    ): Expr {
         val global = ctx.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
         return Expr.Call(
             "bodo.utils.conversion.coerce_scalar_to_array",
@@ -272,21 +317,23 @@ class PandasProject(
         colsBeforeProject: Int,
     ): Variable {
         // Use the list of indices to generate a meta type with the column numbers.
-        val metaType = ctx.lowerAsGlobal(
-            Expr.Call(
-                "MetaType",
-                Expr.Tuple(indices.map { Expr.IntegerLiteral(it) }),
-            ),
-        )
+        val metaType =
+            ctx.lowerAsGlobal(
+                Expr.Call(
+                    "MetaType",
+                    Expr.Tuple(indices.map { Expr.IntegerLiteral(it) }),
+                ),
+            )
 
         // Generate the output table with logical_table_to_table.
-        val logicalTableExpr = Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            input,
-            Expr.Tuple(seriesList),
-            metaType,
-            Expr.IntegerLiteral(colsBeforeProject),
-        )
+        val logicalTableExpr =
+            Expr.Call(
+                "bodo.hiframes.table.logical_table_to_table",
+                input,
+                Expr.Tuple(seriesList),
+                metaType,
+                Expr.IntegerLiteral(colsBeforeProject),
+            )
         val builder = ctx.builder()
         val logicalTableVar = builder.symbolTable.genTableVar()
         builder.add(Op.Assign(logicalTableVar, logicalTableExpr))
@@ -298,25 +345,34 @@ class PandasProject(
     }
 
     companion object {
-
-        fun create(input: RelNode, projects: List<RexNode>, fieldNames: List<String?>?): PandasProject {
+        fun create(
+            input: RelNode,
+            projects: List<RexNode>,
+            fieldNames: List<String?>?,
+        ): PandasProject {
             val cluster = input.cluster
-            val rowType = RexUtil.createStructType(
-                cluster.typeFactory,
-                projects,
-                fieldNames,
-                SqlValidatorUtil.F_SUGGESTER,
-            )
+            val rowType =
+                RexUtil.createStructType(
+                    cluster.typeFactory,
+                    projects,
+                    fieldNames,
+                    SqlValidatorUtil.F_SUGGESTER,
+                )
             return create(input, projects, rowType)
         }
 
-        fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
+        fun create(
+            input: RelNode,
+            projects: List<RexNode>,
+            rowType: RelDataType,
+        ): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet()
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    RelMdCollation.project(mq, input, projects)
-                }
+            val traitSet =
+                cluster.traitSet()
+                    .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                        RelMdCollation.project(mq, input, projects)
+                    }
             return PandasProject(cluster, traitSet, input, projects, rowType)
         }
     }

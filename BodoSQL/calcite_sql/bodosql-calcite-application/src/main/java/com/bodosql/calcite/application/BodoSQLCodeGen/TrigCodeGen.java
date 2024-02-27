@@ -32,7 +32,7 @@ public class TrigCodeGen {
    */
   public static Expr getTrigFnCode(String fnName, List<Expr> args) {
     if (equivalentFnMap.containsKey(fnName)) {
-      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
+      return ExprKt.bodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }

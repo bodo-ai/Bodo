@@ -27,18 +27,17 @@ class SqlLikeQuantifyOperator(
     val comparisonKind: SqlKind,
     val caseSensitive: Boolean,
 ) : SqlSpecialOperator(
-    name,
-    kind,
-    32,
-    // LIKE is right-associative, because that makes it easier to capture
-    // dangling ESCAPE clauses: "a like b like c escape d" becomes
-    // "a like (b like c escape d)".
-    false,
-    ReturnTypes.BOOLEAN_NULLABLE,
-    InferTypes.FIRST_KNOWN,
-    null,
-) {
-
+        name,
+        kind,
+        32,
+        // LIKE is right-associative, because that makes it easier to capture
+        // dangling ESCAPE clauses: "a like b like c escape d" becomes
+        // "a like (b like c escape d)".
+        false,
+        ReturnTypes.BOOLEAN_NULLABLE,
+        InferTypes.FIRST_KNOWN,
+        null,
+    ) {
     init {
         assert(kind == SqlKind.LIKE)
     }
@@ -47,7 +46,11 @@ class SqlLikeQuantifyOperator(
         return SqlOperandCountRanges.between(2, 3)
     }
 
-    override fun deriveType(validator: SqlValidator, scope: SqlValidatorScope, call: SqlCall): RelDataType {
+    override fun deriveType(
+        validator: SqlValidator,
+        scope: SqlValidatorScope,
+        call: SqlCall,
+    ): RelDataType {
         val operands = call.operandList
         assert(operands.size in 2..3)
         val left = operands[0]
@@ -55,38 +58,41 @@ class SqlLikeQuantifyOperator(
 
         val typeFactory = validator.typeFactory
         val leftType = validator.deriveType(scope, left)
-        val rightType = if (right is SqlNodeList) {
-            val rightTypeList = right.map { node ->
-                validator.deriveType(scope, node)
-            }
-            var rightType = typeFactory.leastRestrictive(rightTypeList)
+        val rightType =
+            if (right is SqlNodeList) {
+                val rightTypeList =
+                    right.map { node ->
+                        validator.deriveType(scope, node)
+                    }
+                var rightType = typeFactory.leastRestrictive(rightTypeList)
 
-            // First check that the expressions in the IN list are compatible
-            // with each other. Same rules as the VALUES operator (per
-            // SQL:2003 Part 2 Section 8.4, <in predicate>).
-            if (rightType == null && validator.config().typeCoercionEnabled()) {
-                // Do implicit type cast if it is allowed to.
-                rightType = validator.typeCoercion.getWiderTypeFor(rightTypeList, true)
+                // First check that the expressions in the IN list are compatible
+                // with each other. Same rules as the VALUES operator (per
+                // SQL:2003 Part 2 Section 8.4, <in predicate>).
+                if (rightType == null && validator.config().typeCoercionEnabled()) {
+                    // Do implicit type cast if it is allowed to.
+                    rightType = validator.typeCoercion.getWiderTypeFor(rightTypeList, true)
+                }
+                if (rightType == null) {
+                    throw validator.newValidationError(right, RESOURCE.incompatibleTypesInList())
+                }
+                validator.setValidatedNodeType(right, rightType)
+                rightType
+            } else {
+                // Handle the 'LIKE ANY (query)' form.
+                // We don't strictly support this in code generation, but
+                // snowflake seems to allow it for query parsing.
+                validator.deriveType(scope, right)
             }
-            if (rightType == null) {
-                throw validator.newValidationError(right, RESOURCE.incompatibleTypesInList())
-            }
-            validator.setValidatedNodeType(right, rightType)
-            rightType
-        } else {
-            // Handle the 'LIKE ANY (query)' form.
-            // We don't strictly support this in code generation, but
-            // snowflake seems to allow it for query parsing.
-            validator.deriveType(scope, right)
-        }
 
         val callBinding = SqlCallBinding(validator, scope, call)
 
-        val checker = if (operands.size == 3) {
-            OperandTypes.STRING_SAME_SAME_SAME
-        } else {
-            OperandTypes.STRING_SAME_SAME
-        }
+        val checker =
+            if (operands.size == 3) {
+                OperandTypes.STRING_SAME_SAME_SAME
+            } else {
+                OperandTypes.STRING_SAME_SAME
+            }
         if (!checker.checkOperandTypes(callBinding, false)) {
             throw validator.newValidationError(call, RESOURCE.incompatibleValueType(call.operator.name))
         }
@@ -99,7 +105,12 @@ class SqlLikeQuantifyOperator(
         )
     }
 
-    override fun unparse(writer: SqlWriter, call: SqlCall, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         val frame = writer.startList("", "")
         call.operand<SqlNode>(0).unparse(writer, getLeftPrec(), getRightPrec())
         writer.sep(name)
@@ -116,7 +127,10 @@ class SqlLikeQuantifyOperator(
      * This method is copied from the SqlLikeOperator.
      * See that method in Calcite for details.
      */
-    override fun reduceExpr(opOrdinal: Int, list: TokenSequence): ReduceResult {
+    override fun reduceExpr(
+        opOrdinal: Int,
+        list: TokenSequence,
+    ): ReduceResult {
         // Example:
         //   a LIKE b || c ESCAPE d || e AND f
         // |  |    |      |      |      |
@@ -124,23 +138,25 @@ class SqlLikeQuantifyOperator(
         val exp0 = list.node(opOrdinal - 1)
         val op = list.op(opOrdinal)
         assert(op is SqlLikeQuantifyOperator)
-        val exp1 = SqlParserUtil.toTreeEx(
-            list,
-            opOrdinal + 1,
-            rightPrec,
-            SqlKind.ESCAPE,
-        )
+        val exp1 =
+            SqlParserUtil.toTreeEx(
+                list,
+                opOrdinal + 1,
+                rightPrec,
+                SqlKind.ESCAPE,
+            )
         var exp2: SqlNode? = null
         if (opOrdinal + 2 < list.size()) {
             if (list.isOp(opOrdinal + 2)) {
                 val op2 = list.op(opOrdinal + 2)
                 if (op2.getKind() == SqlKind.ESCAPE) {
-                    exp2 = SqlParserUtil.toTreeEx(
-                        list,
-                        opOrdinal + 3,
-                        rightPrec,
-                        SqlKind.ESCAPE,
-                    )
+                    exp2 =
+                        SqlParserUtil.toTreeEx(
+                            list,
+                            opOrdinal + 3,
+                            rightPrec,
+                            SqlKind.ESCAPE,
+                        )
                 }
             }
         }

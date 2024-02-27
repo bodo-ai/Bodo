@@ -31,6 +31,6 @@ public class PrefixOpCodeGen {
             "Internal Error: Calcite Plan Produced an Unsupported Prefix Operator");
     }
 
-    return ExprKt.BodoSQLKernel(fnName, List.of(arg), List.of());
+    return ExprKt.bodoSQLKernel(fnName, List.of(arg), List.of());
   }
 }

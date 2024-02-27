@@ -13,9 +13,10 @@ data class ProgramCollection(val programFactory: ProgramFactory) {
      *
      * The list order is preprocessor, optimized, and then unoptimized.
      */
-    fun toList(): List<Program> = listOf(
-        BodoPrograms.preprocessor(),
-        programFactory.invoke(true),
-        programFactory.invoke(false),
-    )
+    fun toList(): List<Program> =
+        listOf(
+            BodoPrograms.preprocessor(),
+            programFactory.invoke(true),
+            programFactory.invoke(false),
+        )
 }

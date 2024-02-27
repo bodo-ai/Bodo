@@ -13,7 +13,7 @@ repos:
       - id: black
         language_version: python3
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.8.0
+    rev: v2.12.0
     hooks:
       - id: pretty-format-java
         args: ["--autofix", "--google-java-formatter-version", "1.9"]

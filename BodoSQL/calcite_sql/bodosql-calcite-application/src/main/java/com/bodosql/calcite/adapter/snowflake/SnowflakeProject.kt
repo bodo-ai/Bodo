@@ -27,7 +27,6 @@ class SnowflakeProject(
     rowType: RelDataType,
     private val catalogTable: SnowflakeCatalogTable,
 ) : ProjectBase(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), input, projects, rowType), SnowflakeRel {
-
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
@@ -37,7 +36,10 @@ class SnowflakeProject(
         return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
         return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }
@@ -64,12 +66,13 @@ class SnowflakeProject(
             fieldNames: List<String?>?,
             catalogTable: SnowflakeCatalogTable,
         ): SnowflakeProject {
-            val rowType = RexUtil.createStructType(
-                cluster.typeFactory,
-                projects,
-                fieldNames,
-                SqlValidatorUtil.F_SUGGESTER,
-            )
+            val rowType =
+                RexUtil.createStructType(
+                    cluster.typeFactory,
+                    projects,
+                    fieldNames,
+                    SqlValidatorUtil.F_SUGGESTER,
+                )
             return create(cluster, traitSet, input, projects, rowType, catalogTable)
         }
     }

@@ -8,14 +8,15 @@ import org.apache.calcite.rel.logical.LogicalTableScan
 class PandasTableScanRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                LogicalTableScan::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasTableScanRule",
-            )
-            .withRuleFactory { config -> PandasTableScanRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    LogicalTableScan::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasTableScanRule",
+                )
+                .withRuleFactory { config -> PandasTableScanRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

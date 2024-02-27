@@ -8,14 +8,15 @@ import org.apache.calcite.rel.convert.ConverterRule
 class PandasTableCreateRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG = Config.INSTANCE
-            .withConversion(
-                BodoLogicalTableCreate::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasTableCreateRule",
-            )
-            .withRuleFactory { config -> PandasTableCreateRule(config) }
+        val DEFAULT_CONFIG =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalTableCreate::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasTableCreateRule",
+                )
+                .withRuleFactory { config -> PandasTableCreateRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

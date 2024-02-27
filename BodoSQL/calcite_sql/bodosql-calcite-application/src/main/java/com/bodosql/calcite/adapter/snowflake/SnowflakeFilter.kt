@@ -18,12 +18,18 @@ class SnowflakeFilter private constructor(
     condition: RexNode,
     private val catalogTable: SnowflakeCatalogTable,
 ) : Filter(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, condition), SnowflakeRel {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): Filter {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        condition: RexNode,
+    ): Filter {
         return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
         return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }

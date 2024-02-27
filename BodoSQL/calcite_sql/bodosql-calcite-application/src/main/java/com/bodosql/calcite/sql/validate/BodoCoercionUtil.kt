@@ -16,15 +16,17 @@ import java.lang.RuntimeException
  * https://bodo.atlassian.net/wiki/spaces/B/pages/1565098005/Snowflake+UDF+Overload+Investigation#Conclusions.1
  */
 class BodoCoercionUtil {
-
     companion object {
-
         /**
          * Determine if the input type can be used for the target type. If coerce=true
          * then we can use implicit casts to reach this result. This is the equivalent
          * to SqlTypeUtil.canCastFrom except with UDF restrictions.
          */
-        fun canCastFromUDF(input: RelDataType, target: RelDataType, coerce: Boolean): Boolean {
+        fun canCastFromUDF(
+            input: RelDataType,
+            target: RelDataType,
+            coerce: Boolean,
+        ): Boolean {
             return if (coerce) {
                 val (type, _) = coercableInUDF(input, target)
                 return type
@@ -42,7 +44,10 @@ class BodoCoercionUtil {
          * Each score is relative to the source type. The full type ordering can be found here:
          * https://bodo.atlassian.net/wiki/spaces/B/pages/1565098005/Snowflake+UDF+Overload+Investigation#Conclusions.1
          */
-        fun getCastingMatchScore(input: RelDataType, target: RelDataType): Int {
+        fun getCastingMatchScore(
+            input: RelDataType,
+            target: RelDataType,
+        ): Int {
             val (_, score) = coercableInUDF(input, target)
             return score
         }
@@ -52,7 +57,10 @@ class BodoCoercionUtil {
          * UDF. There is no need to cast for nullability or differing precision
          * in a UDF.
          */
-        private fun assignableInUDF(input: RelDataType, target: RelDataType): Boolean {
+        private fun assignableInUDF(
+            input: RelDataType,
+            target: RelDataType,
+        ): Boolean {
             if (input.sqlTypeName == SqlTypeName.NULL || input.sqlTypeName == SqlTypeName.ANY) {
                 // Null and Any should always match
                 return true
@@ -110,7 +118,10 @@ class BodoCoercionUtil {
          * Note: Since we are trying to find the "best match" for the input type, this section is order by input
          * or "source type" and the score is computed by checking the target.
          */
-        private fun coercableInUDF(input: RelDataType, target: RelDataType): Pair<Boolean, Int> {
+        private fun coercableInUDF(
+            input: RelDataType,
+            target: RelDataType,
+        ): Pair<Boolean, Int> {
             if (assignableInUDF(input, target)) {
                 return Pair(true, 0)
             } else if (input is ArraySqlType) {

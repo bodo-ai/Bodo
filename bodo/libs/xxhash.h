@@ -1891,9 +1891,9 @@ static void* XXH_memcpy(void* dest, const void* src, size_t size) {
 /* *************************************
  *  Compiler Specific Options
  ***************************************/
-#ifdef _MSC_VER /* Visual Studio warning fix */
-#pragma warning( \
-    disable : 4127) /* disable: C4127: conditional expression is constant */
+#ifdef _MSC_VER                 /* Visual Studio warning fix */
+#pragma warning(disable : 4127) /* disable: C4127: conditional expression is \
+                                   constant */
 #endif
 
 #if XXH_NO_INLINE_HINTS /* disable inlining hints */
@@ -2471,7 +2471,8 @@ static XXH_PUREF xxh_u32 XXH32_finalize(xxh_u32 hash, const xxh_u8* ptr,
         hash = XXH_rotl32(hash, 17) * XXH_PRIME32_4; \
     } while (0)
 
-    if (ptr == NULL) XXH_ASSERT(len == 0);
+    if (ptr == NULL)
+        XXH_ASSERT(len == 0);
 
     /* Compact rerolled version; generally faster */
     if (!XXH32_ENDJMP) {
@@ -2567,7 +2568,8 @@ XXH_FORCE_INLINE XXH_PUREF xxh_u32 XXH32_endian_align(const xxh_u8* input,
                                                       XXH_alignment align) {
     xxh_u32 h32;
 
-    if (input == NULL) XXH_ASSERT(len == 0);
+    if (input == NULL)
+        XXH_ASSERT(len == 0);
 
     if (len >= 16) {
         const xxh_u8* const bEnd = input + len;
@@ -2752,7 +2754,8 @@ XXH_PUBLIC_API XXH32_hash_t XXH32_digest(const XXH32_state_t* state) {
 XXH_PUBLIC_API void XXH32_canonicalFromHash(XXH32_canonical_t* dst,
                                             XXH32_hash_t hash) {
     XXH_STATIC_ASSERT(sizeof(XXH32_canonical_t) == sizeof(XXH32_hash_t));
-    if (XXH_CPU_LITTLE_ENDIAN) hash = XXH_swap32(hash);
+    if (XXH_CPU_LITTLE_ENDIAN)
+        hash = XXH_swap32(hash);
     XXH_memcpy(dst, &hash, sizeof(*dst));
 }
 /*! @ingroup XXH32_family */
@@ -2967,7 +2970,8 @@ static xxh_u64 XXH64_avalanche(xxh_u64 hash) {
  */
 static XXH_PUREF xxh_u64 XXH64_finalize(xxh_u64 hash, const xxh_u8* ptr,
                                         size_t len, XXH_alignment align) {
-    if (ptr == NULL) XXH_ASSERT(len == 0);
+    if (ptr == NULL)
+        XXH_ASSERT(len == 0);
     len &= 31;
     while (len >= 8) {
         xxh_u64 const k1 = XXH64_round(0, XXH_get64bits(ptr));
@@ -3012,7 +3016,8 @@ XXH_FORCE_INLINE XXH_PUREF xxh_u64 XXH64_endian_align(const xxh_u8* input,
                                                       size_t len, xxh_u64 seed,
                                                       XXH_alignment align) {
     xxh_u64 h64;
-    if (input == NULL) XXH_ASSERT(len == 0);
+    if (input == NULL)
+        XXH_ASSERT(len == 0);
 
     if (len >= 32) {
         const xxh_u8* const bEnd = input + len;
@@ -3192,7 +3197,8 @@ XXH64_digest(XXH_NOESCAPE const XXH64_state_t* state) {
 XXH_PUBLIC_API void XXH64_canonicalFromHash(XXH_NOESCAPE XXH64_canonical_t* dst,
                                             XXH64_hash_t hash) {
     XXH_STATIC_ASSERT(sizeof(XXH64_canonical_t) == sizeof(XXH64_hash_t));
-    if (XXH_CPU_LITTLE_ENDIAN) hash = XXH_swap64(hash);
+    if (XXH_CPU_LITTLE_ENDIAN)
+        hash = XXH_swap64(hash);
     XXH_memcpy(dst, &hash, sizeof(*dst));
 }
 
@@ -4142,7 +4148,8 @@ XXH_FORCE_INLINE XXH_PUREF XXH64_hash_t XXH3_len_0to16_64b(const xxh_u8* input,
             return XXH3_len_9to16_64b(input, len, secret, seed);
         if (XXH_likely(len >= 4))
             return XXH3_len_4to8_64b(input, len, secret, seed);
-        if (len) return XXH3_len_1to3_64b(input, len, secret, seed);
+        if (len)
+            return XXH3_len_1to3_64b(input, len, secret, seed);
         return XXH64_avalanche(
             seed ^ (XXH_readLE64(secret + 56) ^ XXH_readLE64(secret + 64)));
     }
@@ -4362,7 +4369,8 @@ XXH_NO_INLINE XXH_PUREF XXH64_hash_t XXH3_len_129to240_64b(
     }
 
 XXH_FORCE_INLINE void XXH_writeLE64(void* dst, xxh_u64 v64) {
-    if (!XXH_CPU_LITTLE_ENDIAN) v64 = XXH_swap64(v64);
+    if (!XXH_CPU_LITTLE_ENDIAN)
+        v64 = XXH_swap64(v64);
     XXH_memcpy(dst, &v64, sizeof(v64));
 }
 
@@ -5673,7 +5681,8 @@ static void XXH_alignedFree(void* p) {
 XXH_PUBLIC_API XXH3_state_t* XXH3_createState(void) {
     XXH3_state_t* const state =
         (XXH3_state_t*)XXH_alignedMalloc(sizeof(XXH3_state_t), 64);
-    if (state == NULL) return NULL;
+    if (state == NULL)
+        return NULL;
     XXH3_INITSTATE(state);
     return state;
 }
@@ -5719,7 +5728,8 @@ static void XXH3_reset_internal(XXH3_state_t* statePtr, XXH64_hash_t seed,
 /*! @ingroup XXH3_family */
 XXH_PUBLIC_API XXH_errorcode
 XXH3_64bits_reset(XXH_NOESCAPE XXH3_state_t* statePtr) {
-    if (statePtr == NULL) return XXH_ERROR;
+    if (statePtr == NULL)
+        return XXH_ERROR;
     XXH3_reset_internal(statePtr, 0, XXH3_kSecret, XXH_SECRET_DEFAULT_SIZE);
     return XXH_OK;
 }
@@ -5728,18 +5738,23 @@ XXH3_64bits_reset(XXH_NOESCAPE XXH3_state_t* statePtr) {
 XXH_PUBLIC_API XXH_errorcode XXH3_64bits_reset_withSecret(
     XXH_NOESCAPE XXH3_state_t* statePtr, XXH_NOESCAPE const void* secret,
     size_t secretSize) {
-    if (statePtr == NULL) return XXH_ERROR;
+    if (statePtr == NULL)
+        return XXH_ERROR;
     XXH3_reset_internal(statePtr, 0, secret, secretSize);
-    if (secret == NULL) return XXH_ERROR;
-    if (secretSize < XXH3_SECRET_SIZE_MIN) return XXH_ERROR;
+    if (secret == NULL)
+        return XXH_ERROR;
+    if (secretSize < XXH3_SECRET_SIZE_MIN)
+        return XXH_ERROR;
     return XXH_OK;
 }
 
 /*! @ingroup XXH3_family */
 XXH_PUBLIC_API XXH_errorcode XXH3_64bits_reset_withSeed(
     XXH_NOESCAPE XXH3_state_t* statePtr, XXH64_hash_t seed) {
-    if (statePtr == NULL) return XXH_ERROR;
-    if (seed == 0) return XXH3_64bits_reset(statePtr);
+    if (statePtr == NULL)
+        return XXH_ERROR;
+    if (seed == 0)
+        return XXH3_64bits_reset(statePtr);
     if ((seed != statePtr->seed) || (statePtr->extSecret != NULL))
         XXH3_initCustomSecret(statePtr->customSecret, seed);
     XXH3_reset_internal(statePtr, seed, NULL, XXH_SECRET_DEFAULT_SIZE);
@@ -5750,9 +5765,12 @@ XXH_PUBLIC_API XXH_errorcode XXH3_64bits_reset_withSeed(
 XXH_PUBLIC_API XXH_errorcode XXH3_64bits_reset_withSecretandSeed(
     XXH_NOESCAPE XXH3_state_t* statePtr, XXH_NOESCAPE const void* secret,
     size_t secretSize, XXH64_hash_t seed64) {
-    if (statePtr == NULL) return XXH_ERROR;
-    if (secret == NULL) return XXH_ERROR;
-    if (secretSize < XXH3_SECRET_SIZE_MIN) return XXH_ERROR;
+    if (statePtr == NULL)
+        return XXH_ERROR;
+    if (secret == NULL)
+        return XXH_ERROR;
+    if (secretSize < XXH3_SECRET_SIZE_MIN)
+        return XXH_ERROR;
     XXH3_reset_internal(statePtr, seed64, secret, secretSize);
     statePtr->useSeed = 1; /* always, even if seed64==0 */
     return XXH_OK;
@@ -6128,9 +6146,12 @@ XXH_FORCE_INLINE XXH_PUREF XXH128_hash_t XXH3_len_0to16_128b(
     const xxh_u8* input, size_t len, const xxh_u8* secret, XXH64_hash_t seed) {
     XXH_ASSERT(len <= 16);
     {
-        if (len > 8) return XXH3_len_9to16_128b(input, len, secret, seed);
-        if (len >= 4) return XXH3_len_4to8_128b(input, len, secret, seed);
-        if (len) return XXH3_len_1to3_128b(input, len, secret, seed);
+        if (len > 8)
+            return XXH3_len_9to16_128b(input, len, secret, seed);
+        if (len >= 4)
+            return XXH3_len_4to8_128b(input, len, secret, seed);
+        if (len)
+            return XXH3_len_1to3_128b(input, len, secret, seed);
         {
             XXH128_hash_t h128;
             xxh_u64 const bitflipl =
@@ -6506,7 +6527,8 @@ XXH_PUBLIC_API int XXH128_cmp(XXH_NOESCAPE const void* h128_1,
     XXH128_hash_t const h2 = *(const XXH128_hash_t*)h128_2;
     int const hcmp = (h1.high64 > h2.high64) - (h2.high64 > h1.high64);
     /* note : bets that, in most cases, hash values are different */
-    if (hcmp) return hcmp;
+    if (hcmp)
+        return hcmp;
     return (h1.low64 > h2.low64) - (h2.low64 > h1.low64);
 }
 
@@ -6553,8 +6575,10 @@ XXH_PUBLIC_API XXH_errorcode XXH3_generateSecret(
     XXH_ASSERT(secretSize >= XXH3_SECRET_SIZE_MIN);
 #else
     /* production mode, assert() are disabled */
-    if (secretBuffer == NULL) return XXH_ERROR;
-    if (secretSize < XXH3_SECRET_SIZE_MIN) return XXH_ERROR;
+    if (secretBuffer == NULL)
+        return XXH_ERROR;
+    if (secretSize < XXH3_SECRET_SIZE_MIN)
+        return XXH_ERROR;
 #endif
 
     if (customSeedSize == 0) {
@@ -6564,7 +6588,8 @@ XXH_PUBLIC_API XXH_errorcode XXH3_generateSecret(
 #if (XXH_DEBUGLEVEL >= 1)
     XXH_ASSERT(customSeed != NULL);
 #else
-    if (customSeed == NULL) return XXH_ERROR;
+    if (customSeed == NULL)
+        return XXH_ERROR;
 #endif
 
     /* Fill secretBuffer with a copy of customSeed - repeat as needed */

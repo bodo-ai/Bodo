@@ -22,37 +22,39 @@ class SnowflakeAggregate private constructor(
     private val catalogTable: SnowflakeCatalogTable,
 ) :
     Aggregate(cluster, traitSet.replace(SnowflakeRel.CONVENTION), listOf(), input, groupSet, groupSets, aggCalls),
-    SnowflakeRel {
-
-    override fun copy(
-        traitSet: RelTraitSet,
-        input: RelNode,
-        groupSet: ImmutableBitSet,
-        groupSets: List<ImmutableBitSet>?,
-        aggCalls: List<AggregateCall>,
-    ): Aggregate {
-        return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
-    }
-
-    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
-
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
-        val rows = mq.getRowCount(this)
-        return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
-    }
-
-    companion object {
-        @JvmStatic
-        fun create(
-            cluster: RelOptCluster,
+        SnowflakeRel {
+        override fun copy(
             traitSet: RelTraitSet,
             input: RelNode,
             groupSet: ImmutableBitSet,
             groupSets: List<ImmutableBitSet>?,
             aggCalls: List<AggregateCall>,
-            catalogTable: SnowflakeCatalogTable,
-        ): SnowflakeAggregate {
+        ): Aggregate {
             return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
         }
+
+        override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
+
+        override fun computeSelfCost(
+            planner: RelOptPlanner,
+            mq: RelMetadataQuery,
+        ): RelOptCost {
+            val rows = mq.getRowCount(this)
+            return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
+        }
+
+        companion object {
+            @JvmStatic
+            fun create(
+                cluster: RelOptCluster,
+                traitSet: RelTraitSet,
+                input: RelNode,
+                groupSet: ImmutableBitSet,
+                groupSets: List<ImmutableBitSet>?,
+                aggCalls: List<AggregateCall>,
+                catalogTable: SnowflakeCatalogTable,
+            ): SnowflakeAggregate {
+                return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
+            }
+        }
     }
-}

@@ -13,7 +13,7 @@ import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
-import java.util.*
+import java.util.Arrays
 
 interface PandasRel : RelNode {
     companion object {
@@ -46,13 +46,15 @@ interface PandasRel : RelNode {
     fun getTimerType(): SingleBatchRelNodeTimer.OperationType = SingleBatchRelNodeTimer.OperationType.BATCH
 
     fun operationDescriptor() = "RelNode"
+
     fun loggingTitle() = "RELNODE_TIMING"
 
-    fun nodeDetails() = Arrays.stream(
-        RelOptUtil.toString(this)
-            .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
-            .toTypedArray(),
-    ).findFirst().get()
+    fun nodeDetails() =
+        Arrays.stream(
+            RelOptUtil.toString(this)
+                .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
+                .toTypedArray(),
+        ).findFirst().get()
 
     /**
      * Determine if an operator is streaming.
@@ -74,31 +76,42 @@ interface PandasRel : RelNode {
      * Function to delete the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable)
+    fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    )
 
     /**
      * What is the expected batching property for the output data given the property
      * of the inputs. Most implementation will ignore the argument but some nodes may allow
      * matching it under some circumstances.
      */
-    fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+    fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.alwaysSingleBatchProperty()
 
     /**
      * The expected batching property for the given input node's property.
      * Most implementation will ignore the argument but some nodes may allow
      * matching it under some circumstances.
      */
-    fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = expectedOutputBatchingProperty(inputBatchingProperty)
+    fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        expectedOutputBatchingProperty(inputBatchingProperty)
 
     interface Implementor {
-        fun visitChild(input: RelNode, ordinal: Int): BodoEngineTable
+        fun visitChild(
+            input: RelNode,
+            ordinal: Int,
+        ): BodoEngineTable
 
-        fun visitChildren(inputs: List<RelNode>): List<BodoEngineTable> =
-            inputs.mapIndexed { index, input -> visitChild(input, index) }
+        fun visitChildren(inputs: List<RelNode>): List<BodoEngineTable> = inputs.mapIndexed { index, input -> visitChild(input, index) }
 
         fun build(fn: (BuildContext) -> BodoEngineTable): BodoEngineTable
 
-        fun buildStreaming(initFn: (BuildContext) -> StateVariable, bodyFn: (BuildContext, StateVariable) -> BodoEngineTable, deleteFn: (BuildContext, StateVariable) -> Unit): BodoEngineTable
+        fun buildStreaming(
+            initFn: (BuildContext) -> StateVariable,
+            bodyFn: (BuildContext, StateVariable) -> BodoEngineTable,
+            deleteFn: (BuildContext, StateVariable) -> Unit,
+        ): BodoEngineTable
 
         fun createStreamingPipeline()
     }
@@ -132,7 +145,10 @@ interface PandasRel : RelNode {
          * Returns a PandasToRexTranslator that works in this build context
          * and is initialized with the given local refs.
          */
-        fun rexTranslator(input: BodoEngineTable, localRefs: List<Expr>): RexToPandasTranslator
+        fun rexTranslator(
+            input: BodoEngineTable,
+            localRefs: List<Expr>,
+        ): RexToPandasTranslator
 
         /**
          * Returns a PandasToRexTranslator that works in this build context and
@@ -143,7 +159,11 @@ interface PandasRel : RelNode {
         /**
          * Returns a PandasToRexTranslator that works in this a streaming context.
          */
-        fun streamingRexTranslator(input: BodoEngineTable, localRefs: List<Expr>, stateVar: StateVariable): StreamingRexToPandasTranslator
+        fun streamingRexTranslator(
+            input: BodoEngineTable,
+            localRefs: List<Expr>,
+            stateVar: StateVariable,
+        ): StreamingRexToPandasTranslator
 
         /**
          * Creates an assignment to the destination dataframe with the
@@ -160,19 +180,28 @@ interface PandasRel : RelNode {
          * the number of columns in the DataFrame.
          * @return The BodoEngineTable that the DataFrame has been converted into.
          */
-        fun convertDfToTable(df: Variable?, node: RelNode): BodoEngineTable
+        fun convertDfToTable(
+            df: Variable?,
+            node: RelNode,
+        ): BodoEngineTable
 
         /**
          * An overload of convertDfToTable that works the same but accepts
          * a row type instead of a node.
          */
-        fun convertDfToTable(df: Variable?, rowType: RelDataType): BodoEngineTable
+        fun convertDfToTable(
+            df: Variable?,
+            rowType: RelDataType,
+        ): BodoEngineTable
 
         /**
          * An overload of convertDfToTable that works the same but accepts
          * the number of fields instead of a node or type.
          */
-        fun convertDfToTable(df: Variable?, numCols: Int): BodoEngineTable
+        fun convertDfToTable(
+            df: Variable?,
+            numCols: Int,
+        ): BodoEngineTable
 
         /**
          * Converts a Table into a DataFrame.

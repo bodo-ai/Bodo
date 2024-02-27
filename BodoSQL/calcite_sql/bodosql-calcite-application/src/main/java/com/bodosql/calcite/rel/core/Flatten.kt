@@ -38,9 +38,20 @@ import org.apache.calcite.util.ImmutableBitSet
  * typing assumptions, so it will break all of the metadata APIs.
  *
  */
-abstract class Flatten(cluster: RelOptCluster, traits: RelTraitSet, var input: RelNode, val call: RexCall, val callType: RelDataType, val usedColOutputs: ImmutableBitSet, val repeatColumns: ImmutableBitSet) : AbstractRelNode(cluster, traits) {
+abstract class Flatten(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    var input: RelNode,
+    val call: RexCall,
+    val callType: RelDataType,
+    val usedColOutputs: ImmutableBitSet,
+    val repeatColumns: ImmutableBitSet,
+) : AbstractRelNode(cluster, traits) {
     // ~ Methods ----------------------------------------------------------------
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): Flatten {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): Flatten {
         return copy(traitSet, sole(inputs), call, callType, usedColOutputs, repeatColumns)
     }
 
@@ -64,7 +75,14 @@ abstract class Flatten(cluster: RelOptCluster, traits: RelTraitSet, var input: R
         return copy(traitSet, newInput, newCall, callType, usedColOutputs, repeatColumns)
     }
 
-    abstract fun copy(traitSet: RelTraitSet, input: RelNode, call: RexCall, callType: RelDataType, usedColOutputs: ImmutableBitSet, repeatColumns: ImmutableBitSet): Flatten
+    abstract fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        call: RexCall,
+        callType: RelDataType,
+        usedColOutputs: ImmutableBitSet,
+        repeatColumns: ImmutableBitSet,
+    ): Flatten
 
     override fun getInputs(): List<RelNode> {
         return listOf(input)

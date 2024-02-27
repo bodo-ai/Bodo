@@ -427,7 +427,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           // that the second argument does consists of
           // exclusively discrete values
           List<Expr> args = visitList(node.operands);
-          return ExprKt.BodoSQLKernel("is_in", args, List.of());
+          return ExprKt.bodoSQLKernel("is_in", args, List.of());
         } else {
           // Fallback to generating individual checks
           // in the case that the second argument does not consist of
@@ -481,10 +481,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
 
     if (patternRegex) {
-      return ExprKt.BodoSQLKernel(
+      return ExprKt.bodoSQLKernel(
           "regexp_like", List.of(arg, pattern, new Expr.StringLiteral("")), streamingNamedArgs);
     } else {
-      return ExprKt.BodoSQLKernel(
+      return ExprKt.bodoSQLKernel(
           "like_kernel",
           List.of(
               arg,
@@ -717,7 +717,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       // Pop the frame
       Frame ifFrame = builder.endFrame();
       // Generate the if statement
-      Expr condCall = ExprKt.BodoSQLKernel("is_true", List.of(cond), List.of());
+      Expr condCall = ExprKt.bodoSQLKernel("is_true", List.of(cond), List.of());
       Op.If ifStatement = new If(condCall, ifFrame, null);
       builder.add(ifStatement);
     }
@@ -976,7 +976,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @return The generated expression.
    */
   protected Expr visitNullIfFunc(List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
-    return ExprKt.BodoSQLKernel("nullif", operands, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("nullif", operands, streamingNamedArgs);
   }
 
   protected Expr visitLeastGreatest(String fnName, List<Expr> operands) {
@@ -1080,7 +1080,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return operands.get(0);
       case "TO_OBJECT":
         assert operands.size() == 1;
-        return ExprKt.BodoSQLKernel("to_object", operands, List.of());
+        return ExprKt.bodoSQLKernel("to_object", operands, List.of());
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected Cast function: %s", fnName));
     }
@@ -1228,7 +1228,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "SHA2":
         return generateSHA2(operands, streamingNamedArgs);
       case "MD5":
-        return ExprKt.BodoSQLKernel("md5", operands, streamingNamedArgs);
+        return ExprKt.bodoSQLKernel("md5", operands, streamingNamedArgs);
       case "HEX_ENCODE":
         return generateHexEncode(operands, streamingNamedArgs);
       case "HEX_DECODE_STRING":
@@ -1354,7 +1354,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             String.format(Locale.ROOT, "Unsupported nested Array function: %s", fnName));
     }
 
-    return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, kwargs);
+    return ExprKt.bodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, kwargs);
   }
 
   /**
@@ -1371,7 +1371,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     for (Boolean isScalar : argScalars) {
       scalarExprs.add(new Expr.BooleanLiteral(isScalar));
     }
-    return ExprKt.BodoSQLKernel(
+    return ExprKt.bodoSQLKernel(
         "array_construct",
         List.of(new Expr.Tuple(codeExprs), new Expr.Tuple(scalarExprs)),
         List.of());
@@ -1393,7 +1393,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       scalarExprs.add(new Expr.BooleanLiteral(isScalar));
     }
     Expr scalarGlobal = this.visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
-    return ExprKt.BodoSQLKernel(
+    return ExprKt.bodoSQLKernel(
         "object_filter_keys",
         List.of(new Expr.Tuple(tupleArgs), new Expr.BooleanLiteral(keep), scalarGlobal),
         List.of());
@@ -1403,7 +1403,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     switch (fnName) {
       case "IS_ARRAY":
       case "IS_OBJECT":
-        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, List.of());
+        return ExprKt.bodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, List.of());
       default:
         throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
@@ -1423,7 +1423,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
     kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(2))));
 
-    return ExprKt.BodoSQLKernel("object_insert", args, kwargs);
+    return ExprKt.bodoSQLKernel("object_insert", args, kwargs);
   }
 
   protected Expr visitNestedArrayFunc(
@@ -1525,17 +1525,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             {
               int numOps = operands.size();
               assert numOps == 4 : "WIDTH_BUCKET takes 4 arguments, but found " + numOps;
-              return ExprKt.BodoSQLKernel("width_bucket", operands, List.of());
+              return ExprKt.bodoSQLKernel("width_bucket", operands, List.of());
             }
           case "HAVERSINE":
             {
               assert operands.size() == 4;
-              return ExprKt.BodoSQLKernel("haversine", operands, List.of());
+              return ExprKt.bodoSQLKernel("haversine", operands, List.of());
             }
           case "DIV0":
             {
               assert operands.size() == 2 && fnOperation.operands.size() == 2;
-              return ExprKt.BodoSQLKernel("div0", operands, List.of());
+              return ExprKt.bodoSQLKernel("div0", operands, List.of());
             }
           case "NULLIF":
             assert operands.size() == 2;
@@ -1593,9 +1593,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               if (is_date_interval
                   && getDateTimeDataType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
                 if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
-                  arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
+                  arg1 = ExprKt.bodoSQLKernel("negate", List.of(arg1), List.of());
                 }
-                return ExprKt.BodoSQLKernel(
+                return ExprKt.bodoSQLKernel(
                     "add_date_interval_to_date", List.of(arg0, arg1), List.of());
               }
               return generateMySQLDateAddCode(arg0, arg1, manual_addition, fnName);
@@ -1719,7 +1719,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateLogFnInfo(operands);
           case "CONV":
             assert operands.size() == 3;
-            return ExprKt.BodoSQLKernel("conv", operands, List.of());
+            return ExprKt.bodoSQLKernel("conv", operands, List.of());
           case "RAND":
             return new Expr.Call("np.random.rand");
           case "PI":
@@ -1768,10 +1768,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return getYearWeekFnInfo(operands.get(0));
           case "MONTHS_BETWEEN":
             assert operands.size() == 2;
-            return ExprKt.BodoSQLKernel("months_between", operands, List.of());
+            return ExprKt.bodoSQLKernel("months_between", operands, List.of());
           case "ADD_MONTHS":
             assert operands.size() == 2;
-            return ExprKt.BodoSQLKernel("add_months", operands, List.of());
+            return ExprKt.bodoSQLKernel("add_months", operands, List.of());
           case "MONTHNAME":
           case "MONTH_NAME":
           case "DAYNAME":
@@ -1786,7 +1786,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             args = new ArrayList<>(operands);
             args.add(new Expr.IntegerLiteral(this.weekStart));
             args.add(new Expr.IntegerLiteral(this.weekOfYearPolicy));
-            return ExprKt.BodoSQLKernel("yearofweek", args, List.of());
+            return ExprKt.bodoSQLKernel("yearofweek", args, List.of());
           case "LAST_DAY":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(0));
             if (dateTimeExprType1 == DateTimeType.TIME)

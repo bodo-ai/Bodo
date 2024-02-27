@@ -17,7 +17,8 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
-import java.util.*
+import java.util.Locale
+import kotlin.collections.HashMap
 
 /**
  * Implementation of CatalogTable for Snowflake Catalogs.
@@ -32,7 +33,6 @@ open class SnowflakeCatalogTable(
     private val catalog: SnowflakeCatalog,
 ) :
     CatalogTable(name, schemaPath, columns, catalog) {
-
     // Hold the statistics for this table.
     private val statistic: Statistic = StatisticImpl()
 
@@ -50,11 +50,12 @@ open class SnowflakeCatalogTable(
         return this.catalog.canReadTable(fullPath)
     }
 
-    private val columnDistinctCount = com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
-        this.estimateColumnDistinctCount(
-            column,
-        )
-    }
+    private val columnDistinctCount =
+        com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
+            this.estimateColumnDistinctCount(
+                column,
+            )
+        }
 
     /**
      * Determine the estimated approximate number of distinct values for the column. This value is
@@ -79,12 +80,13 @@ open class SnowflakeCatalogTable(
         // Do not allow the metadata to be requested if this column of this table was
         // not pre-cleared by the metadata scanning pass.
         if (!canRequestColumnDistinctiveness(fullPath, columnName)) {
-            val message = String.format(
-                Locale.ROOT,
-                "Skipping attempt to fetch column '%s' from table '%s' due to metadata restrictions",
-                columnName,
-                qualifiedName,
-            )
+            val message =
+                String.format(
+                    Locale.ROOT,
+                    "Skipping attempt to fetch column '%s' from table '%s' due to metadata restrictions",
+                    columnName,
+                    qualifiedName,
+                )
             PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.warning(message)
             return null
         }
@@ -94,11 +96,12 @@ open class SnowflakeCatalogTable(
 
         // If the original query failed, try again with sampling
         if (distinctCount == null) {
-            distinctCount = catalog.estimateColumnDistinctCountWithSampling(
-                fullPath,
-                columnName,
-                statistic.rowCount,
-            )
+            distinctCount =
+                catalog.estimateColumnDistinctCountWithSampling(
+                    fullPath,
+                    columnName,
+                    statistic.rowCount,
+                )
         }
 
         // Important: We must use getStatistic() here to allow subclassing, which we use for
@@ -119,20 +122,19 @@ open class SnowflakeCatalogTable(
         return trySubmitLongMetadataQuerySnowflakeMemoizedFn.apply(sql)
     }
 
-    private val trySubmitLongMetadataQuerySnowflakeMemoizedFn = com.bodosql.calcite.application.utils.Memoizer.memoize<SqlString, Long?> { metadataSelectQueryString: SqlString ->
-        this.trySubmitLongMetadataQuerySnowflakeInternal(
-            metadataSelectQueryString,
-        )
-    }
+    private val trySubmitLongMetadataQuerySnowflakeMemoizedFn =
+        com.bodosql.calcite.application.utils.Memoizer.memoize<SqlString, Long?> { metadataSelectQueryString: SqlString ->
+            this.trySubmitLongMetadataQuerySnowflakeInternal(
+                metadataSelectQueryString,
+            )
+        }
 
     /**
      * Submits a Submits the specified query to Snowflake for evaluation, with a timeout. See
      * SnowflakeCatalog#trySubmitIntegerMetadataQuery for the full documentation.
      * @return A long result from the query or NULL.
      */
-    fun trySubmitLongMetadataQuerySnowflakeInternal(
-        metadataSelectQueryString: SqlString,
-    ): Long? {
+    fun trySubmitLongMetadataQuerySnowflakeInternal(metadataSelectQueryString: SqlString): Long? {
         return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString)
     }
 
@@ -168,12 +170,13 @@ open class SnowflakeCatalogTable(
         input: ExpandViewInput,
     ): RelNode? {
         try {
-            val root = toRelContext.expandView(
-                input.outputType,
-                input.viewDefinition,
-                input.defaultPath,
-                input.viewPath,
-            )
+            val root =
+                toRelContext.expandView(
+                    input.outputType,
+                    input.viewDefinition,
+                    input.defaultPath,
+                    input.viewPath,
+                )
             val rel = root.calciteLogicalProject()
             // Verify that we can read before inlining.
             if (canRead(rel)) {
@@ -183,31 +186,33 @@ open class SnowflakeCatalogTable(
             }
         } catch (e: Exception) {
             // Log the failure
-            val message = String.format(
-                Locale.ROOT,
-                """
-              Unable to expand view %s with definition:
-              %s. Error encountered when compiling view:
-              %s
-                """.trimIndent(),
-                qualifiedName,
-                input.viewDefinition,
-                e.message,
-            )
+            val message =
+                String.format(
+                    Locale.ROOT,
+                    """
+                    Unable to expand view %s with definition:
+                    %s. Error encountered when compiling view:
+                    %s
+                    """.trimIndent(),
+                    qualifiedName,
+                    input.viewDefinition,
+                    e.message,
+                )
             PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
         } catch (e: Error) {
             // Log the failure
-            val message = String.format(
-                Locale.ROOT,
-                """
-              Unable to expand view %s with definition:
-              %s. Error encountered when compiling view:
-              %s
-                """.trimIndent(),
-                qualifiedName,
-                input.viewDefinition,
-                e.message,
-            )
+            val message =
+                String.format(
+                    Locale.ROOT,
+                    """
+                    Unable to expand view %s with definition:
+                    %s. Error encountered when compiling view:
+                    %s
+                    """.trimIndent(),
+                    qualifiedName,
+                    input.viewDefinition,
+                    e.message,
+                )
             PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
         }
         return null
@@ -226,12 +231,13 @@ open class SnowflakeCatalogTable(
         viewDefinition: String,
         baseRelNode: RelNode,
     ): RelNode? {
-        val input = ExpandViewInput(
-            baseRelNode.rowType,
-            viewDefinition,
-            parentFullPath,
-            fullPath,
-        )
+        val input =
+            ExpandViewInput(
+                baseRelNode.rowType,
+                viewDefinition,
+                parentFullPath,
+                fullPath,
+            )
         // Check the cache. We can only use the cache if the clusters
         // are the same.
         val result: RelNode?
@@ -244,18 +250,20 @@ open class SnowflakeCatalogTable(
         }
         return if (result != null) {
             // Log that we inlined the view.
-            val levelOneMessage = String.format(
-                Locale.ROOT,
-                "Successfully inlined view %s",
-                qualifiedName,
-            )
+            val levelOneMessage =
+                String.format(
+                    Locale.ROOT,
+                    "Successfully inlined view %s",
+                    qualifiedName,
+                )
             PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(levelOneMessage)
-            val levelTwoMessage = String.format(
-                Locale.ROOT,
-                "Replaced view %s with definition %s",
-                qualifiedName,
-                input.viewDefinition,
-            )
+            val levelTwoMessage =
+                String.format(
+                    Locale.ROOT,
+                    "Replaced view %s with definition %s",
+                    qualifiedName,
+                    input.viewDefinition,
+                )
             PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.info(levelTwoMessage)
             result
         } else {
@@ -263,7 +271,10 @@ open class SnowflakeCatalogTable(
         }
     }
 
-    override fun toRel(toRelContext: RelOptTable.ToRelContext, relOptTable: RelOptTable?): RelNode? {
+    override fun toRel(
+        toRelContext: RelOptTable.ToRelContext,
+        relOptTable: RelOptTable?,
+    ): RelNode? {
         val baseRelNode: RelNode = create(toRelContext.cluster, relOptTable!!, this)
         // Check if this table is a view and if so attempt to inline it.
         if (RelationalAlgebraGenerator.tryInlineViews && canSafelyInlineView()) {
@@ -271,27 +282,30 @@ open class SnowflakeCatalogTable(
             if (viewDefinition != null) {
                 return tryInlineView(toRelContext, viewDefinition, baseRelNode)
             } else {
-                val message = String.format(
-                    Locale.ROOT,
-                    "Unable to inline view %s because we cannot determine its definition.",
-                    qualifiedName,
-                )
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because we cannot determine its definition.",
+                        qualifiedName,
+                    )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             }
         } else if (isAccessibleView()) {
             if (isSecureView()) {
-                val message = String.format(
-                    Locale.ROOT,
-                    "Unable to inline view %s because it is a secure view.",
-                    qualifiedName,
-                )
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because it is a secure view.",
+                        qualifiedName,
+                    )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             } else if (isMaterializedView()) {
-                val message = String.format(
-                    Locale.ROOT,
-                    "Unable to inline view %s because it is a materialized view.",
-                    qualifiedName,
-                )
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because it is a materialized view.",
+                        qualifiedName,
+                    )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             }
         }

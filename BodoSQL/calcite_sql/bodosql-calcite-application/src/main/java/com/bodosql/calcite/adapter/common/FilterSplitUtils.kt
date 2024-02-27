@@ -13,7 +13,6 @@ import java.util.function.Predicate
  * in the new convention and those that cannot be pushed down.
  */
 class FilterSplitUtils {
-
     companion object {
         /**
          * @param condition The conditions to a filter that are being checked to see if it is a
@@ -49,16 +48,20 @@ class FilterSplitUtils {
          * @return Is at least 1 condition in a filter pushable?
          */
         @JvmStatic
-        fun isPartiallyPushableFilter(filter: Filter, pushablePredicate: Predicate<RexNode>): Boolean {
+        fun isPartiallyPushableFilter(
+            filter: Filter,
+            pushablePredicate: Predicate<RexNode>,
+        ): Boolean {
             // You cannot split a filter that contains an over.
             if (filter.containsOver()) {
                 return false
             }
-            val (pushedConditions, _) = extractPushableConditions(
-                filter.condition,
-                filter.cluster.rexBuilder,
-                pushablePredicate,
-            )
+            val (pushedConditions, _) =
+                extractPushableConditions(
+                    filter.condition,
+                    filter.cluster.rexBuilder,
+                    pushablePredicate,
+                )
             return pushedConditions != null
         }
 
@@ -72,16 +75,20 @@ class FilterSplitUtils {
          * @return Is every condition in a filter pushable?
          */
         @JvmStatic
-        fun isFullyPushableFilter(filter: Filter, pushablePredicate: Predicate<RexNode>): Boolean {
+        fun isFullyPushableFilter(
+            filter: Filter,
+            pushablePredicate: Predicate<RexNode>,
+        ): Boolean {
             // You cannot split a filter that contains an over.
             if (filter.containsOver()) {
                 return false
             }
-            val (pushedConditions, keptConditions) = extractPushableConditions(
-                filter.condition,
-                filter.cluster.rexBuilder,
-                pushablePredicate,
-            )
+            val (pushedConditions, keptConditions) =
+                extractPushableConditions(
+                    filter.condition,
+                    filter.cluster.rexBuilder,
+                    pushablePredicate,
+                )
             return pushedConditions != null && keptConditions == null
         }
     }

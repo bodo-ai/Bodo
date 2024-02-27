@@ -43,26 +43,37 @@ object BodoLogicalRelFactories {
     val BODO_LOGICAL_SORT_FACTORY: RelFactories.SortFactory = RelFactories.SortFactory(::createSort)
 
     @JvmField
-    val DEFAULT_CONTEXT: Context = Contexts.of(
-        BODO_LOGICAL_PROJECT_FACTORY,
-        BODO_LOGICAL_FILTER_FACTORY,
-        BODO_LOGICAL_JOIN_FACTORY,
-        BODO_LOGICAL_SET_OP_FACTORY,
-        BODO_LOGICAL_AGGREGATE_FACTORY,
-        BODO_LOGICAL_SORT_FACTORY,
-    )
+    val DEFAULT_CONTEXT: Context =
+        Contexts.of(
+            BODO_LOGICAL_PROJECT_FACTORY,
+            BODO_LOGICAL_FILTER_FACTORY,
+            BODO_LOGICAL_JOIN_FACTORY,
+            BODO_LOGICAL_SET_OP_FACTORY,
+            BODO_LOGICAL_AGGREGATE_FACTORY,
+            BODO_LOGICAL_SORT_FACTORY,
+        )
 
     @JvmField
     val BODO_LOGICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
 
-    private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?, variablesSet: Set<CorrelationId>): RelNode =
+    private fun createProject(
+        input: RelNode,
+        hints: List<RelHint>,
+        childExprs: List<RexNode>,
+        fieldNames: List<String?>?,
+        variablesSet: Set<CorrelationId>,
+    ): RelNode =
         if (variablesSet.isNotEmpty()) {
             throw UnsupportedOperationException("Correlation variables are not supported")
         } else {
             BodoLogicalProject.create(input, hints, childExprs, fieldNames)
         }
 
-    private fun createFilter(input: RelNode, condition: RexNode, variablesSet: Set<CorrelationId>): RelNode =
+    private fun createFilter(
+        input: RelNode,
+        condition: RexNode,
+        variablesSet: Set<CorrelationId>,
+    ): RelNode =
         if (variablesSet.isNotEmpty()) {
             throw UnsupportedOperationException("Correlation variables are not supported")
         } else {
@@ -86,7 +97,11 @@ object BodoLogicalRelFactories {
             BodoLogicalJoin.create(left, right, hints, condition, joinType)
         }
 
-    private fun createSetOp(kind: SqlKind, inputs: List<RelNode>, all: Boolean): RelNode {
+    private fun createSetOp(
+        kind: SqlKind,
+        inputs: List<RelNode>,
+        all: Boolean,
+    ): RelNode {
         return when (kind) {
             SqlKind.UNION -> BodoLogicalUnion.create(inputs, all)
             else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all)
@@ -103,7 +118,12 @@ object BodoLogicalRelFactories {
         return BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
     }
 
-    private fun createSort(input: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?): RelNode {
+    private fun createSort(
+        input: RelNode,
+        collation: RelCollation,
+        offset: RexNode?,
+        fetch: RexNode?,
+    ): RelNode {
         return BodoLogicalSort.create(input, collation, offset, fetch)
     }
 }

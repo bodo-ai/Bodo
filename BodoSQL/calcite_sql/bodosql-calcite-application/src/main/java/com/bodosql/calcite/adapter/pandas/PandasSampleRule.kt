@@ -8,14 +8,15 @@ import org.apache.calcite.rel.core.Sample
 class PandasSampleRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                Sample::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasSampleRule",
-            )
-            .withRuleFactory { config -> PandasSampleRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    Sample::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasSampleRule",
+                )
+                .withRuleFactory { config -> PandasSampleRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

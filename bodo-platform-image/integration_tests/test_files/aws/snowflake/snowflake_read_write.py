@@ -8,9 +8,9 @@ from bodo_platform_utils import catalog
 import sys
 
 conn_secrets = catalog.get_data("integration-test")
-username=conn_secrets['username']
-password=conn_secrets['password']
-account=conn_secrets['host']
+username = conn_secrets["username"]
+password = conn_secrets["password"]
+account = conn_secrets["host"]
 warehouse = "DEMO_WH"
 
 schema_read = "TPCH_SF1"
@@ -68,7 +68,7 @@ def main(sf_read_conn, sf_write_conn, table_name):
     # The summation is for testing correctness only and is
     # not related to dictionary encoding
     agg_counts = gb["a_count"].sum()
-    
+
     t4 = time.time()
     print("Starting Snowflake write...")
     df.to_sql(table_name, sf_write_conn, if_exists="replace", index=False)
@@ -76,6 +76,7 @@ def main(sf_read_conn, sf_write_conn, table_name):
     print("Snowflake Write time: ", time.time() - t4)
 
     return agg_counts
+
 
 if __name__ == "__main__":
     read_conn = f"snowflake://{username}:{password}@{account}/{database_read}/{schema_read}?warehouse={warehouse}"

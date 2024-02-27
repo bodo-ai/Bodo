@@ -142,7 +142,7 @@ public class ExtractCodeGen {
         throw new BodoSQLCodegenException(
             "ERROR, datetime value: " + datetimeVal + " not supported inside of extract");
     }
-    return ExprKt.BodoSQLKernel(kernelName, args, List.of());
+    return ExprKt.bodoSQLKernel(kernelName, args, List.of());
   }
 
   /**

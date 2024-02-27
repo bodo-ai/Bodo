@@ -10,25 +10,24 @@ from pyspark.sql.types import StructType, StringType, DateType, IntegerType, Dou
 def spark_sql_q3(data_folder, spark):
     t0 = time.time()
     lineitem_struct = (
-    StructType()
-    .add("L_ORDERKEY", IntegerType(), True, None)
-    .add("L_PARTKEY", IntegerType(), True, None)
-    .add("L_SUPPKEY", IntegerType(), True, None)
-    .add("L_LINENUMBER", IntegerType(), True, None)
-    .add("L_QUANTITY", DoubleType(), True, None)
-    .add("L_EXTENDEDPRICE", DoubleType(), True, None)
-    .add("L_DISCOUNT", DoubleType(), True, None)
-    .add("L_TAX", DoubleType(), True, None)
-    .add("L_RETURNFLAG", StringType(), True, None)
-    .add("L_LINESTATUS", StringType(), True, None)
-    .add("L_SHIPDATE", DateType(), True, None)
-    .add("L_COMMITDATE", DateType(), True, None)
-    .add("L_RECEIPTDATE", DateType(), True, None)
-    .add("L_SHIPINSTRUCT", StringType(), True, None)
-    .add("L_SHIPMODE", StringType(), True, None)
-    .add("L_COMMENT", StringType(), True, None)
+        StructType()
+        .add("L_ORDERKEY", IntegerType(), True, None)
+        .add("L_PARTKEY", IntegerType(), True, None)
+        .add("L_SUPPKEY", IntegerType(), True, None)
+        .add("L_LINENUMBER", IntegerType(), True, None)
+        .add("L_QUANTITY", DoubleType(), True, None)
+        .add("L_EXTENDEDPRICE", DoubleType(), True, None)
+        .add("L_DISCOUNT", DoubleType(), True, None)
+        .add("L_TAX", DoubleType(), True, None)
+        .add("L_RETURNFLAG", StringType(), True, None)
+        .add("L_LINESTATUS", StringType(), True, None)
+        .add("L_SHIPDATE", DateType(), True, None)
+        .add("L_COMMITDATE", DateType(), True, None)
+        .add("L_RECEIPTDATE", DateType(), True, None)
+        .add("L_SHIPINSTRUCT", StringType(), True, None)
+        .add("L_SHIPMODE", StringType(), True, None)
+        .add("L_COMMENT", StringType(), True, None)
     )
-
 
     orders_struct = (
         StructType()
@@ -42,7 +41,6 @@ def spark_sql_q3(data_folder, spark):
         .add("O_SHIPPRIORITY", IntegerType(), True, None)
         .add("O_COMMENT", StringType(), True, None)
     )
-
 
     customer_struct = (
         StructType()

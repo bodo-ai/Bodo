@@ -28,7 +28,10 @@ interface SnowflakeRel : RelNode {
         val CONVENTION = Convention.Impl("SNOWFLAKE", SnowflakeRel::class.java)
     }
 
-    fun generatePythonConnStr(databaseName: String, schemaName: String): String {
+    fun generatePythonConnStr(
+        databaseName: String,
+        schemaName: String,
+    ): String {
         val catalog = getCatalogTable().catalog
         return catalog.generatePythonConnStr(databaseName, schemaName)
     }
@@ -52,26 +55,28 @@ interface SnowflakeRel : RelNode {
         // Add the count(*)
         val selectList = SqlNodeList.of(SqlStdOperatorTable.COUNT.createCall(SqlParserPos.ZERO, SqlIdentifier.STAR))
 
-        val metadataSelectQuery = SqlSelect(
-            SqlParserPos.ZERO,
-            SqlNodeList.EMPTY,
-            selectList,
-            baseSqlNode,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-        )
+        val metadataSelectQuery =
+            SqlSelect(
+                SqlParserPos.ZERO,
+                SqlNodeList.EMPTY,
+                selectList,
+                baseSqlNode,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+            )
 
-        val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString { c: SqlWriterConfig ->
-            c.withClauseStartsLine(false)
-                .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
-        }
+        val metadataSelectQueryString: SqlString =
+            metadataSelectQuery.toSqlString { c: SqlWriterConfig ->
+                c.withClauseStartsLine(false)
+                    .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
+            }
 
         return this.getCatalogTable().trySubmitIntegerMetadataQuerySnowflake(metadataSelectQueryString)?.toDouble()
     }

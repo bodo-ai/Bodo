@@ -32,7 +32,13 @@ class BodoLogicalJoin(
 
     companion object {
         @JvmStatic
-        fun create(left: RelNode, right: RelNode, hints: List<RelHint>, condition: RexNode, joinType: JoinRelType): BodoLogicalJoin {
+        fun create(
+            left: RelNode,
+            right: RelNode,
+            hints: List<RelHint>,
+            condition: RexNode,
+            joinType: JoinRelType,
+        ): BodoLogicalJoin {
             val cluster = left.cluster
             val traitSet = cluster.traitSetOf(Convention.NONE)
             return BodoLogicalJoin(cluster, traitSet, hints, left, right, condition, joinType)

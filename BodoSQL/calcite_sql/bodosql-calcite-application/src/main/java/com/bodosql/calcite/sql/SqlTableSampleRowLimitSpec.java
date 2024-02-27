@@ -1,8 +1,7 @@
 package com.bodosql.calcite.sql;
 
-import org.apache.calcite.sql.SqlSampleSpec;
-
 import java.math.BigDecimal;
+import org.apache.calcite.sql.SqlSampleSpec;
 
 /** Sample specification for row based sampling. */
 public class SqlTableSampleRowLimitSpec extends SqlSampleSpec {
@@ -18,45 +17,35 @@ public class SqlTableSampleRowLimitSpec extends SqlSampleSpec {
     this.repeatableSeed = 0;
   }
 
-  SqlTableSampleRowLimitSpec(
-      boolean isBernoulli,
-      BigDecimal numberOfRows,
-      int repeatableSeed) {
+  SqlTableSampleRowLimitSpec(boolean isBernoulli, BigDecimal numberOfRows, int repeatableSeed) {
     this.isBernoulli = isBernoulli;
     this.numberOfRows = numberOfRows;
     this.isRepeatable = true;
     this.repeatableSeed = repeatableSeed;
   }
 
-  /**
-   * Indicates Bernoulli vs. System sampling.
-   */
+  /** Indicates Bernoulli vs. System sampling. */
   public boolean isBernoulli() {
     return isBernoulli;
   }
 
-  /**
-   * Returns number of rows to sample. Must be zero or positive.
-   */
+  /** Returns number of rows to sample. Must be zero or positive. */
   public BigDecimal getNumberOfRows() {
     return numberOfRows;
   }
 
-  /**
-   * Indicates whether repeatable seed should be used.
-   */
+  /** Indicates whether repeatable seed should be used. */
   public boolean isRepeatable() {
     return isRepeatable;
   }
 
-  /**
-   * Seed to produce repeatable samples.
-   */
+  /** Seed to produce repeatable samples. */
   public int getRepeatableSeed() {
     return repeatableSeed;
   }
 
-  @Override public String toString() {
+  @Override
+  public String toString() {
     StringBuilder b = new StringBuilder();
     b.append(isBernoulli ? "BERNOULLI" : "SYSTEM");
     b.append('(');
@@ -74,31 +63,24 @@ public class SqlTableSampleRowLimitSpec extends SqlSampleSpec {
   /**
    * Creates a table sample with a row limit without repeatability.
    *
-   * @param isBernoulli      true if Bernoulli style sampling is to be used;
-   *                         false for implementation specific sampling
-   * @param numberOfRows     number of rows to sample from the table
+   * @param isBernoulli true if Bernoulli style sampling is to be used; false for implementation
+   *     specific sampling
+   * @param numberOfRows number of rows to sample from the table
    */
-  public static SqlSampleSpec createTableSample(
-      boolean isBernoulli,
-      BigDecimal numberOfRows) {
+  public static SqlSampleSpec createTableSample(boolean isBernoulli, BigDecimal numberOfRows) {
     return new SqlTableSampleRowLimitSpec(isBernoulli, numberOfRows);
   }
 
   /**
    * Creates a table sample with repeatability.
    *
-   * @param isBernoulli      true if Bernoulli style sampling is to be used;
-   *                         false for implementation specific sampling
-   * @param numberOfRows     number of rows to sample from the table
-   * @param repeatableSeed   seed value used to reproduce the same sample
+   * @param isBernoulli true if Bernoulli style sampling is to be used; false for implementation
+   *     specific sampling
+   * @param numberOfRows number of rows to sample from the table
+   * @param repeatableSeed seed value used to reproduce the same sample
    */
   public static SqlSampleSpec createTableSample(
-      boolean isBernoulli,
-      BigDecimal numberOfRows,
-      int repeatableSeed) {
-    return new SqlTableSampleRowLimitSpec(
-        isBernoulli,
-        numberOfRows,
-        repeatableSeed);
+      boolean isBernoulli, BigDecimal numberOfRows, int repeatableSeed) {
+    return new SqlTableSampleRowLimitSpec(isBernoulli, numberOfRows, repeatableSeed);
   }
 }

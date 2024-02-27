@@ -5,7 +5,6 @@ package com.bodosql.calcite.ir
  * operations found within the same scope.
  */
 interface Frame {
-
     /**
      * Emits the code for this Frame.
      */

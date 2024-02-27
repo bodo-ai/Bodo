@@ -13,9 +13,9 @@ class BodoCatalogReader(
     config: CalciteConnectionConfig?,
 ) :
     CalciteCatalogReader(
-        rootSchema,
-        SqlNameMatchers.withCaseSensitive(config != null && config.caseSensitive()),
-        defaultSchemaPaths,
-        typeFactory,
-        config,
-    )
+            rootSchema,
+            SqlNameMatchers.withCaseSensitive(config != null && config.caseSensitive()),
+            defaultSchemaPaths,
+            typeFactory,
+            config,
+        )

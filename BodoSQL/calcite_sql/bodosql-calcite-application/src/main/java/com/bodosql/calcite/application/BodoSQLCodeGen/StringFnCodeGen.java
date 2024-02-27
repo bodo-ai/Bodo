@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
+import static com.bodosql.calcite.ir.ExprKt.bodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.BodoEngineTable;
@@ -66,7 +66,7 @@ public class StringFnCodeGen {
    */
   public static Expr getStringFnCode(String fnName, List<Expr> args) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      return ExprKt.BodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, List.of());
+      return ExprKt.bodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
@@ -85,7 +85,7 @@ public class StringFnCodeGen {
   public static Expr getOptimizedStringFnCode(
       String fnName, List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      return ExprKt.BodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, streamingNamedArgs);
+      return ExprKt.bodoSQLKernel(equivalentFnMapBroadcast.get(fnName), args, streamingNamedArgs);
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
@@ -128,7 +128,7 @@ public class StringFnCodeGen {
               + args.size()
               + ".\n");
     }
-    return BodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
+    return bodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
   }
 
   /**
@@ -165,7 +165,7 @@ public class StringFnCodeGen {
       return operandsInfo.get(0);
     }
     Expr.Tuple tupleArg = new Tuple(operandsInfo);
-    return ExprKt.BodoSQLKernel("concat_ws", List.of(tupleArg, separator), streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("concat_ws", List.of(tupleArg, separator), streamingNamedArgs);
   }
 
   /**
@@ -186,7 +186,7 @@ public class StringFnCodeGen {
       args.add(new Expr.Raw("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'"));
     }
     assert args.size() == 2;
-    return BodoSQLKernel("initcap", args, streamingNamedArgs);
+    return bodoSQLKernel("initcap", args, streamingNamedArgs);
   }
 
   /**
@@ -207,7 +207,7 @@ public class StringFnCodeGen {
       args.add(new Expr.IntegerLiteral(1));
     }
     assert args.size() == 3;
-    return ExprKt.BodoSQLKernel("strtok", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("strtok", args, streamingNamedArgs);
   }
 
   /**
@@ -225,7 +225,7 @@ public class StringFnCodeGen {
       args.add(new Expr.StringLiteral(" "));
     }
     assert args.size() == 2;
-    return ExprKt.BodoSQLKernel("strtok_to_array", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("strtok_to_array", args, streamingNamedArgs);
   }
 
   /**
@@ -245,7 +245,7 @@ public class StringFnCodeGen {
       assert operands.size() == 3;
       fnName = "editdistance_with_max";
     }
-    return ExprKt.BodoSQLKernel(fnName, operands, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel(fnName, operands, streamingNamedArgs);
   }
 
   /**
@@ -267,7 +267,7 @@ public class StringFnCodeGen {
     if (operands.size() == 2) {
       args.add(new Expr.IntegerLiteral(1));
     }
-    return BodoSQLKernel("position", args, streamingNamedArgs);
+    return bodoSQLKernel("position", args, streamingNamedArgs);
   }
 
   /**
@@ -286,7 +286,7 @@ public class StringFnCodeGen {
       Expr stringToBeTrimmed,
       Expr charactersToBeTrimmed,
       List<Pair<String, Expr>> streamingNamedArgs) {
-    return BodoSQLKernel(
+    return bodoSQLKernel(
         trimName.toLowerCase(Locale.ROOT),
         List.of(stringToBeTrimmed, charactersToBeTrimmed),
         streamingNamedArgs);
@@ -310,7 +310,7 @@ public class StringFnCodeGen {
     } else {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to SUBSTRING");
     }
-    return BodoSQLKernel(fnName, operands, streamingNamedArgs);
+    return bodoSQLKernel(fnName, operands, streamingNamedArgs);
   }
 
   /**
@@ -324,12 +324,12 @@ public class StringFnCodeGen {
   public static Expr generateReplace(
       List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     if (operands.size() == 2) {
-      return ExprKt.BodoSQLKernel(
+      return ExprKt.bodoSQLKernel(
           "replace",
           List.of(operands.get(0), operands.get(1), new Expr.Raw("\"\"")),
           streamingNamedArgs);
     } else if (operands.size() == 3) {
-      return ExprKt.BodoSQLKernel("replace", operands, streamingNamedArgs);
+      return ExprKt.bodoSQLKernel("replace", operands, streamingNamedArgs);
     } else {
       throw new BodoSQLCodegenException("Invalid number of arguments passed to REPLACE.");
     }
@@ -346,10 +346,10 @@ public class StringFnCodeGen {
   public static Expr generateSHA2(
       List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     if (operands.size() == 1) {
-      return ExprKt.BodoSQLKernel(
+      return ExprKt.bodoSQLKernel(
           "sha2", List.of(operands.get(0), new Expr.IntegerLiteral(256)), streamingNamedArgs);
     } else if (operands.size() == 2) {
-      return ExprKt.BodoSQLKernel("sha2", operands, streamingNamedArgs);
+      return ExprKt.bodoSQLKernel("sha2", operands, streamingNamedArgs);
     } else {
       throw new BodoSQLCodegenException("Invalid number of arguments passed to SHA2.");
     }
@@ -379,7 +379,7 @@ public class StringFnCodeGen {
       args.set(1, numericArg);
     }
     assert args.size() == 2;
-    return ExprKt.BodoSQLKernel("hex_encode", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("hex_encode", args, streamingNamedArgs);
   }
 
   /**
@@ -429,7 +429,7 @@ public class StringFnCodeGen {
         }
     }
     args.add(new Expr.BooleanLiteral(tryMode));
-    return ExprKt.BodoSQLKernel(kernel, args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel(kernel, args, streamingNamedArgs);
   }
 
   /**
@@ -459,7 +459,7 @@ public class StringFnCodeGen {
       args.add(new Expr.StringLiteral("+/="));
     }
     assert args.size() == 3;
-    return ExprKt.BodoSQLKernel("base64_encode", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("base64_encode", args, streamingNamedArgs);
   }
 
   /**
@@ -512,7 +512,7 @@ public class StringFnCodeGen {
     }
     args.add(new Expr.BooleanLiteral(tryMode));
     assert args.size() == 3;
-    return ExprKt.BodoSQLKernel(kernel, args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel(kernel, args, streamingNamedArgs);
   }
 
   public static Expr generateUUIDString(
@@ -521,7 +521,7 @@ public class StringFnCodeGen {
       List<Expr> operands,
       List<Pair<String, Expr>> streamingNamedArgs) {
     if (!operands.isEmpty()) {
-      return ExprKt.BodoSQLKernel("uuid5", operands, streamingNamedArgs);
+      return ExprKt.bodoSQLKernel("uuid5", operands, streamingNamedArgs);
     } else {
       Expr arg;
       if (isSingleRow) {
@@ -529,7 +529,7 @@ public class StringFnCodeGen {
       } else {
         arg = input;
       }
-      return ExprKt.BodoSQLKernel("uuid4", List.of(arg), List.of());
+      return ExprKt.bodoSQLKernel("uuid4", List.of(arg), List.of());
     }
   }
 }

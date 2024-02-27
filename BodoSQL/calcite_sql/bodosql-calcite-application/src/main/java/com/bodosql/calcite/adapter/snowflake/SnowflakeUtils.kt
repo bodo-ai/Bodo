@@ -1,7 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import java.util.*
-
 /**
  * Utility functions for parsing information obtained from Snowflake. This is intended
  * to be shared across various modules and testing files that all interact with Snowflake.
@@ -19,7 +17,9 @@ class SnowflakeUtils {
             return when (val loweredStr = s.uppercase()) {
                 "Y" -> true
                 "N" -> false
-                else -> throw RuntimeException("Internal Processing Error: Snowflake column expected to hold Y/N but a different value '$loweredStr' was encountered")
+                else -> throw RuntimeException(
+                    "Internal Processing Error: Snowflake column expected to hold Y/N but a different value '$loweredStr' was encountered",
+                )
             }
         }
 
@@ -64,28 +64,30 @@ class SnowflakeUtils {
             }
             val prefix = argParts[0]
             val argString = argParts[1].trim()
-            val (argList, numOptional) = if (argString.isEmpty()) {
-                Pair(listOf(), 0)
-            } else {
-                var numOptional = 0
-                val args = argString.split(",").map {
-                    val trimmedArg = it.trim()
-                    val spacedArg = trimmedArg.split(" ")
-                    if (spacedArg.size == 1) {
-                        trimmedArg
-                    } else {
-                        if (spacedArg.size != 2 || spacedArg[0].trim() != "DEFAULT") {
-                            throw java.lang.RuntimeException(
-                                "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
-                                    "unexpected special characters",
-                            )
+            val (argList, numOptional) =
+                if (argString.isEmpty()) {
+                    Pair(listOf(), 0)
+                } else {
+                    var numOptional = 0
+                    val args =
+                        argString.split(",").map {
+                            val trimmedArg = it.trim()
+                            val spacedArg = trimmedArg.split(" ")
+                            if (spacedArg.size == 1) {
+                                trimmedArg
+                            } else {
+                                if (spacedArg.size != 2 || spacedArg[0].trim() != "DEFAULT") {
+                                    throw java.lang.RuntimeException(
+                                        "UDF formatting error in parseSnowflakeShowFunctionsArguments: " +
+                                            "unexpected special characters",
+                                    )
+                                }
+                                numOptional += 1
+                                spacedArg[1]
+                            }
                         }
-                        numOptional += 1
-                        spacedArg[1]
-                    }
+                    Pair(args, numOptional)
                 }
-                Pair(args, numOptional)
-            }
             val newSignature = "$prefix(${argList.joinToString()})"
             return Pair(newSignature, numOptional)
         }

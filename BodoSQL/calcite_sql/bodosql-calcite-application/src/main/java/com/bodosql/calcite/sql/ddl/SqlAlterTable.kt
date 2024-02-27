@@ -21,14 +21,18 @@ abstract class SqlAlterTable(
     val ifExists: Boolean,
     val table: SqlIdentifier,
 ) : SqlCall(pos) {
-
     companion object {
         @JvmField
         val OPERATOR = SqlSpecialOperator("ALTER TABLE", SqlKind.ALTER_TABLE)
     }
+
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("ALTER")
         writer.keyword("TABLE")
         if (ifExists) {
@@ -39,5 +43,9 @@ abstract class SqlAlterTable(
         unparseSuffix(writer, leftPrec, rightPrec)
     }
 
-    abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int)
+    abstract fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    )
 }

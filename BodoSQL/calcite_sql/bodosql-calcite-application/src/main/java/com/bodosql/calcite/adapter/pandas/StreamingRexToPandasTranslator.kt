@@ -26,7 +26,6 @@ class StreamingRexToPandasTranslator(
     // dictionary encoding.
     private var stateVar: StateVariable,
 ) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, localRefs) {
-
     /**
      * Generate the additional keyword arguments that are passed to functions that support
      * dictionary encoding caching in a streaming context. This is the state variable for the
@@ -61,7 +60,11 @@ class StreamingRexToPandasTranslator(
         return visitSubstringScan(node, genDictEncodingArgs())
     }
 
-    override fun visitNullIgnoringGenericFunc(fnOperation: RexCall, isSingleRow: Boolean, argScalars: List<Boolean>): Expr {
+    override fun visitNullIgnoringGenericFunc(
+        fnOperation: RexCall,
+        isSingleRow: Boolean,
+        argScalars: List<Boolean>,
+    ): Expr {
         return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs(), argScalars)
     }
 
@@ -74,13 +77,21 @@ class StreamingRexToPandasTranslator(
         return visitDynamicCast(arg, inputType, outputType, isScalar, genDictEncodingArgs())
     }
 
-    override fun visitTrimFunc(fnName: String, stringToBeTrimmed: Expr, charactersToBeTrimmed: Expr): Expr {
+    override fun visitTrimFunc(
+        fnName: String,
+        stringToBeTrimmed: Expr,
+        charactersToBeTrimmed: Expr,
+    ): Expr {
         return visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, genDictEncodingArgs())
     }
 
-    override fun visitLeastGreatest(fnName: String, operands: List<Expr>): Expr {
+    override fun visitLeastGreatest(
+        fnName: String,
+        operands: List<Expr>,
+    ): Expr {
         return visitLeastGreatest(fnName, operands, genDictEncodingArgs())
     }
+
     override fun visitNullIfFunc(operands: List<Expr>): Expr {
         return visitNullIfFunc(operands, genDictEncodingArgs())
     }
@@ -89,11 +100,19 @@ class StreamingRexToPandasTranslator(
         return visitPosition(operands, genDictEncodingArgs())
     }
 
-    override fun visitCastFunc(fnOperation: RexCall, operands: List<Expr>, argScalars: List<Boolean>): Expr {
+    override fun visitCastFunc(
+        fnOperation: RexCall,
+        operands: List<Expr>,
+        argScalars: List<Boolean>,
+    ): Expr {
         return visitCastFunc(fnOperation, operands, argScalars, genDictEncodingArgs())
     }
 
-    override fun visitStringFunc(fnOperation: RexCall, operands: List<Expr>, isSingleRow: Boolean): Expr {
+    override fun visitStringFunc(
+        fnOperation: RexCall,
+        operands: List<Expr>,
+        isSingleRow: Boolean,
+    ): Expr {
         return visitStringFunc(fnOperation, operands, genDictEncodingArgs(), isSingleRow)
     }
 }

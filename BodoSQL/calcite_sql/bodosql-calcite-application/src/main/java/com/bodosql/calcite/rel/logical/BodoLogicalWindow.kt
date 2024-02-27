@@ -9,7 +9,6 @@ import org.apache.calcite.rel.logical.LogicalWindow
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.util.ImmutableBitSet
-import java.util.*
 
 class BodoLogicalWindow(
     cluster: RelOptCluster,
@@ -22,7 +21,6 @@ class BodoLogicalWindow(
     inputsToKeep: ImmutableBitSet,
 ) :
     WindowBase(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep) {
-
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
@@ -55,7 +53,16 @@ class BodoLogicalWindow(
             rowType: RelDataType,
             groups: List<Group>,
         ): BodoLogicalWindow {
-            return BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, ImmutableBitSet.range(input.rowType.fieldCount))
+            return BodoLogicalWindow(
+                cluster,
+                traitSet,
+                hints,
+                input,
+                constants,
+                rowType,
+                groups,
+                ImmutableBitSet.range(input.rowType.fieldCount),
+            )
         }
 
         @JvmStatic
@@ -84,9 +91,7 @@ class BodoLogicalWindow(
         }
 
         @JvmStatic
-        fun fromLogicalWindow(
-            win: LogicalWindow,
-        ): BodoLogicalWindow {
+        fun fromLogicalWindow(win: LogicalWindow): BodoLogicalWindow {
             return create(win.cluster, win.traitSet, win.hints, win.input, win.constants, win.rowType, win.groups)
         }
     }

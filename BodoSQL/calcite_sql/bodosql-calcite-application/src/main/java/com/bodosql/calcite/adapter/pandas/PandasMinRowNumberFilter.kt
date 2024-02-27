@@ -22,21 +22,25 @@ class PandasMinRowNumberFilter(
     condition: RexNode,
     inputsToKeep: ImmutableBitSet,
 ) : MinRowNumberFilterBase(cluster, traitSet.replace(PandasRel.CONVENTION), child, condition, inputsToKeep), PandasRel {
-
     fun asPandasProjectFilter(): PandasRel {
         val asPandasFilter = PandasFilter(cluster, traitSet, input, condition)
         return if (inputsToKeep.cardinality() == input.rowType.fieldCount) {
             asPandasFilter
         } else {
-            val projExprs = inputsToKeep.map {
-                RexInputRef(it, input.rowType.fieldList[it].type)
-            }
+            val projExprs =
+                inputsToKeep.map {
+                    RexInputRef(it, input.rowType.fieldList[it].type)
+                }
             val parentProject = PandasProject(cluster, traitSet, asPandasFilter, projExprs, rowType)
             parentProject
         }
     }
 
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): PandasMinRowNumberFilter {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        condition: RexNode,
+    ): PandasMinRowNumberFilter {
         return PandasMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
     }
 
@@ -56,7 +60,10 @@ class PandasMinRowNumberFilter(
      * Function to delete the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
@@ -74,15 +81,25 @@ class PandasMinRowNumberFilter(
     }
 
     companion object {
-        fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode, inputsToKeep: ImmutableBitSet): PandasMinRowNumberFilter {
+        fun create(
+            cluster: RelOptCluster,
+            input: RelNode,
+            condition: RexNode,
+            inputsToKeep: ImmutableBitSet,
+        ): PandasMinRowNumberFilter {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet().replaceIfs(RelCollationTraitDef.INSTANCE) {
-                RelMdCollation.filter(mq, input)
-            }
+            val traitSet =
+                cluster.traitSet().replaceIfs(RelCollationTraitDef.INSTANCE) {
+                    RelMdCollation.filter(mq, input)
+                }
             return PandasMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
         }
 
-        fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode): PandasMinRowNumberFilter {
+        fun create(
+            cluster: RelOptCluster,
+            input: RelNode,
+            condition: RexNode,
+        ): PandasMinRowNumberFilter {
             val inputsToKeep = ImmutableBitSet.range(input.rowType.fieldCount)
             return create(cluster, input, condition, inputsToKeep)
         }

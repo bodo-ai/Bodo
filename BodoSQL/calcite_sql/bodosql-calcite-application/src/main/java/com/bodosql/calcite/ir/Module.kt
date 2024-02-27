@@ -2,14 +2,13 @@ package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
-import java.util.*
+import java.util.Stack
 
 /**
  * Module is the top level compilation unit for code generation.
  * @param frame The main function frame for this module.
  */
 class Module(private val frame: Frame) {
-
     /**
      * Emits the code for the module.
      * @return Emitted code for the full module.
@@ -141,7 +140,10 @@ class Module(private val frame: Frame) {
             return Module(functionFrame)
         }
 
-        fun buildFunction(name: String, args: List<Variable>): Op.Function {
+        fun buildFunction(
+            name: String,
+            args: List<Variable>,
+        ): Op.Function {
             return Op.Function(name, args, functionFrame)
         }
 
@@ -158,7 +160,10 @@ class Module(private val frame: Frame) {
          * Updates a builder to create a new activeFrame
          * as a StreamingPipelineFrame.
          */
-        fun startStreamingPipelineFrame(exitCond: Variable, iterVar: Variable) {
+        fun startStreamingPipelineFrame(
+            exitCond: Variable,
+            iterVar: Variable,
+        ) {
             parentFrames.add(activeFrame)
             activeFrame = StreamingPipelineFrame(exitCond, iterVar, scope, currentPipeline)
             currentPipeline++
@@ -205,7 +210,10 @@ class Module(private val frame: Frame) {
          * This is currently only used for CombineStreamExchange
          * as it doesn't call currentStreamingPipeline.deleteState
          */
-        fun forceEndOperatorAtCurPipeline(opID: Int, pipeline: StreamingPipelineFrame) {
+        fun forceEndOperatorAtCurPipeline(
+            opID: Int,
+            pipeline: StreamingPipelineFrame,
+        ) {
             scope.endOperator(opID, pipeline.pipelineID)
         }
 

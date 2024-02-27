@@ -25,7 +25,7 @@ class JsonPecUtil {
          * the pattern.
          */
         @JvmStatic
-        public fun isPec(node: RexNode) = isPecCast(node, false)
+        fun isPec(node: RexNode) = isPecCast(node, false)
 
         /**
          * Returns whether a function call is a casting function besides
@@ -57,16 +57,11 @@ class JsonPecUtil {
                 CastingOperatorTable.TO_VARCHAR.name,
                 CastingOperatorTable.TO_BINARY.name,
                 CastingOperatorTable.TRY_TO_BINARY.name,
-                /** Not including the following because they are aliases
-                 * that should be removed by the convertlet table.
+                /**
+                 * Note: Aliases that are resolved in the convertlet table
+                 * (e.g. CastingOperatorTable.DATE.name) should not be
+                 * included here.
                  */
-                // CastingOperatorTable.DATE.name,
-                // CastingOperatorTable.TO_CHAR.name,
-                // CastingOperatorTable.TIME.name,
-                // CastingOperatorTable.TO_NUMERIC.name,
-                // CastingOperatorTable.TO_DECIMAL.name,
-                // CastingOperatorTable.TRY_TO_NUMERIC.name,
-                // CastingOperatorTable.TRY_TO_DECIMAL.name,
                 -> true
                 else -> false
             }
@@ -95,10 +90,16 @@ class JsonPecUtil {
          * @param semiStructured True if the node is expected to be
          * semi-structured, false if it is expected to be non-semi-structured.
          */
-        private fun isPecCast(node: RexNode, semiStructured: Boolean): Boolean {
+        private fun isPecCast(
+            node: RexNode,
+            semiStructured: Boolean,
+        ): Boolean {
             return if (node is RexCall && (node.kind == SqlKind.CAST || node.kind == SqlKind.SAFE_CAST || isCastFunc(node))) {
-                (semiStructured == isSemiStructuredType(node.type)) && (node.operands[0] is RexCall) && isPecExtract(node.operands[0] as RexCall)
-            } else { false }
+                (semiStructured == isSemiStructuredType(node.type)) && (node.operands[0] is RexCall) &&
+                    isPecExtract(node.operands[0] as RexCall)
+            } else {
+                false
+            }
         }
 
         /**
@@ -133,7 +134,10 @@ class JsonPecUtil {
          * @param builder A RexBuilder used to construct function calls.
          */
         @JvmStatic
-        public fun rewritePec(node: RexCall, builder: RexBuilder): RexNode {
+        public fun rewritePec(
+            node: RexCall,
+            builder: RexBuilder,
+        ): RexNode {
             val (stringToParse, pathToExtract) = rewritePecHelper(node, builder, null)
             val parseExtract = builder.makeCall(ObjectOperatorTable.JSON_EXTRACT_PATH_TEXT, stringToParse, pathToExtract)
             val newOperands: MutableList<RexNode> = mutableListOf()
@@ -158,7 +162,11 @@ class JsonPecUtil {
          * Starts out as null before terms are added to it.
          * requires adding a dot before it.
          */
-        private fun rewritePecHelper(node: RexCall, builder: RexBuilder, pathSoFar: RexNode?): Pair<RexNode, RexNode> {
+        private fun rewritePecHelper(
+            node: RexCall,
+            builder: RexBuilder,
+            pathSoFar: RexNode?,
+        ): Pair<RexNode, RexNode> {
             return when (node.operator.name) {
                 // Base case: when we reach the PARSE_JSON call, its input
                 // is the string that is to be parsed.
@@ -196,25 +204,34 @@ class JsonPecUtil {
          * @param extractComponent The integer/string expression (possibly constant)
          * that is the next extract term to add.
          */
-        private fun prependToExtractPath(pathSoFar: RexNode?, builder: RexBuilder, extractComponent: RexNode): RexNode {
+        private fun prependToExtractPath(
+            pathSoFar: RexNode?,
+            builder: RexBuilder,
+            extractComponent: RexNode,
+        ): RexNode {
             val leftBracket = builder.makeLiteral("[")
             val rightBracket = builder.makeLiteral("]")
             val quoteChar = builder.makeLiteral("'")
             val isString = listOf(SqlTypeName.CHAR, SqlTypeName.VARCHAR).contains(extractComponent.type.sqlTypeName)
-            val wrappedComponent = if (isString) {
-                // If the component is a string, ensure it is wrapped in quotes
-                builder.makeCall(StringOperatorTable.CONCAT, quoteChar, extractComponent, quoteChar)
-            } else {
-                // If the component is an integer, cast it to a string so it can be part
-                // of the path string.
-                builder.makeCast(builder.typeFactory.createSqlType(SqlTypeName.VARCHAR), extractComponent)
-            }
+            val wrappedComponent =
+                if (isString) {
+                    // If the component is a string, ensure it is wrapped in quotes
+                    builder.makeCall(StringOperatorTable.CONCAT, quoteChar, extractComponent, quoteChar)
+                } else {
+                    // If the component is an integer, cast it to a string so it can be part
+                    // of the path string.
+                    builder.makeCast(builder.typeFactory.createSqlType(SqlTypeName.VARCHAR), extractComponent)
+                }
             // Wrap the component in brackets
             val componentInBrackets = builder.makeCall(StringOperatorTable.CONCAT, leftBracket, wrappedComponent, rightBracket)
             // If this is the first iteration, no concatenation is required. Otherwise,
             // concat this the possibly wrapped term to the existing path, possibly
             // with a dot in between based on the old value of requiresDot.
-            return if (pathSoFar == null) { componentInBrackets } else { builder.makeCall(StringOperatorTable.CONCAT, componentInBrackets, pathSoFar) }
+            return if (pathSoFar == null) {
+                componentInBrackets
+            } else {
+                builder.makeCall(StringOperatorTable.CONCAT, componentInBrackets, pathSoFar)
+            }
         }
     }
 }

@@ -24,8 +24,11 @@ class SqlSnowflakeColumnDeclaration(
     val comment: SqlNode?,
     strategy: ColumnStrategy?,
 ) : SqlColumnDeclaration(pos, name, dataType, defaultExpr, strategy) {
-
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         name.unparse(writer, 0, 0)
         dataType.unparse(writer, 0, 0)
         dataType.nullable?.let {

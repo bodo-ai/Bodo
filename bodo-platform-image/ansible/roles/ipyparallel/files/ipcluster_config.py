@@ -72,7 +72,9 @@ SLURM_SETUP_TIMEOUT_SECONDS = 30
 # check if we are using a new image that has Slurm installed, otherwise fall back to
 # regular MPI engines
 slurm_installed = os.path.isfile("/etc/slurm/cgroup.conf")
-use_slurm_if_installed = os.environ.get("BODO_CONF_USE_SLURM", "false").lower() == "true"
+use_slurm_if_installed = (
+    os.environ.get("BODO_CONF_USE_SLURM", "false").lower() == "true"
+)
 
 if slurm_installed and use_slurm_if_installed:
     from bodo_platform_ipyparallel_kernel.helpers import execute_shell

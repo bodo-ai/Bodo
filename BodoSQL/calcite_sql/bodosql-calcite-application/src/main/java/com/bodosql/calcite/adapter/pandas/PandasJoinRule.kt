@@ -13,14 +13,15 @@ import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 class PandasJoinRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                BodoLogicalJoin::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasJoinRule",
-            )
-            .withRuleFactory { config -> PandasJoinRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalJoin::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasJoinRule",
+                )
+                .withRuleFactory { config -> PandasJoinRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode? {
@@ -35,9 +36,10 @@ class PandasJoinRule private constructor(config: Config) : ConverterRule(config)
                 return null
             }
         }
-        val inputs = join.inputs.map { input ->
-            convert(input, input.traitSet.replace(PandasRel.CONVENTION))
-        }
+        val inputs =
+            join.inputs.map { input ->
+                convert(input, input.traitSet.replace(PandasRel.CONVENTION))
+            }
         return PandasJoin.create(inputs[0], inputs[1], join.condition, join.joinType)
     }
 }
