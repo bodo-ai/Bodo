@@ -193,6 +193,34 @@ $$
 SELECT input_value
 $$;
 
+
+
+create or replace function JAVASCRIPT_ADD_ONE(n DOUBLE)
+returns DOUBLE
+LANGUAGE JAVASCRIPT
+as
+$$
+  return N+1
+$$
+
+create or replace function JAVASCRIPT_ADD_ONE_WRAPPER(n DOUBLE)
+returns DOUBLE
+LANGUAGE SQL
+as
+$$
+  SELECT JAVASCRIPT_ADD_ONE(n)
+$$
+
+create or replace function JAVASCRIPT_ADD_ONE_WRAPPER_WRAPPER(n DOUBLE)
+returns DOUBLE
+LANGUAGE SQL
+as
+$$
+  SELECT JAVASCRIPT_ADD_ONE_WRAPPER(n)
+$$
+
+
+
 """
 import datetime
 import io
@@ -1428,3 +1456,27 @@ def test_dateadd_inline_bug(test_db_snowflake_catalog, memory_leak_check):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest_mark_one_rank
+def test_nested_javascript_inline_error(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test to insure that nested javascript functions are not inlined, and throw an appropriate error message.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        {"LOCAL_TABLE": pd.DataFrame({"A": [1] * 10})},
+        catalog=test_db_snowflake_catalog,
+    )
+
+    query = "select JAVASCRIPT_ADD_ONE_WRAPPER_WRAPPER(1)\n"
+
+    with pytest.raises(
+        BodoError,
+        match=".*Unsupported source language. Bodo only support SQL UDFs, but found JAVASCRIPT.*",
+    ):
+        impl(bc, query)

@@ -120,6 +120,11 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         val rootSchema = rootSchema(defaultSchemas[0])
         var currentSchema = rootSchema
         val defaultSchemaPaths: ImmutableList.Builder<List<String>> = ImmutableList.builder()
+        // must go form MOST SPECIFIC to LEAST SPECIFIC,
+        // this is enforced by UDF resolution during validation,
+        // see getFunctionsFrom in CalciteCatalogReader
+        // Last element must be an empty list.
+        defaultSchemaPaths.add(listOf())
         for (element in defaultPath) {
             // Load each schema. It must already exist because we were able to resolve the view.
             val newSchema = currentSchema.getSubSchema(element) ?: throw RuntimeException("Internal Error: Unable to locate schema")
@@ -127,11 +132,10 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             // Update the parent.
             currentSchema = newSchema
         }
-        // Last element must be an empty list.
-        defaultSchemaPaths.add(listOf())
+
         return BodoCatalogReader(
             CalciteSchema.from(rootSchema),
-            defaultSchemaPaths.build(),
+            defaultSchemaPaths.build().reversed(),
             typeFactory,
             connectionConfig,
         )
