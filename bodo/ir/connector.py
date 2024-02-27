@@ -570,7 +570,7 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     return parallel
 
 
-def _get_filter_column_arrow_expr(col_val, filter_map):
+def _get_filter_column_arrow_expr(col_val, filter_map, output_f_string: bool = False):
     """returns Arrow expr code for filter column,
     e.g. ("A", "coalesce", v1) - > pa.compute.coalesce(ds.field('A'), ds.scalar(f1))
 
@@ -578,14 +578,20 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
         col_val (tuple|str): column representation in filter
         filter_map (dict(str, int)): map of IR variable names to read function variable
             names. E.g. {'_v14call_method_6_224': 'f0'}
+        output_f_string (bool): Whether we should return an f-string where the
+            column names are templated variables instead of being inlined.
 
     Returns:
         str: Arrow expression for filter column
     """
     if isinstance(col_val, str):
-        return f"ds.field('{col_val}')"
+        return (
+            f"ds.field('{{{col_val}}}')"
+            if output_f_string
+            else f"ds.field('{col_val}')"
+        )
 
-    filter = _get_filter_column_arrow_expr(col_val[0], filter_map)
+    filter = _get_filter_column_arrow_expr(col_val[0], filter_map, output_f_string)
     column_compute_func = get_filter_predicate_compute_func(col_val)
 
     if column_compute_func == "coalesce":
@@ -611,6 +617,7 @@ def generate_arrow_filters(
     typemap,
     source: pt.Literal["parquet", "iceberg"],
     output_dnf=True,
+    output_expr_filters_as_f_string=False,
 ) -> tuple[str, str]:
     """
     Generate Arrow DNF filters and expression filters with the
@@ -628,6 +635,11 @@ def generate_arrow_filters(
     source -- What is generating this filter. Either "parquet" or "iceberg".
     output_dnf -- Should we output the first expression in DNF format or regular
                   arrow compute expression format.
+    output_expr_filters_as_f_string -- Whether to output the expression filter
+        as an f-string, where the column names are templated. This is used in Iceberg
+        for schema evolution purposes to allow substituting the column names
+        used in the filter based on the file/schema-group. See description
+        of bodo.io.iceberg.generate_expr_filter for more details.
     """
     dnf_filter_str = "None"
     expr_filter_str = "None"
@@ -689,6 +701,7 @@ def generate_arrow_filters(
                     orig_colname_map,
                     partition_names,
                     source,
+                    output_expr_filters_as_f_string,
                 )
                 expr_and_conds.append(expr_val)
                 # Now handle the dnf section. We can only append a value if its not a constant
@@ -716,7 +729,13 @@ def generate_arrow_filters(
                         if output_dnf:
                             dnf_str = f"('{p[0]}', '{p[1]}', {filter_map[p[2].name]})"
                         else:
-                            dnf_str = expr_val
+                            dnf_str = (
+                                expr_val
+                                if not output_expr_filters_as_f_string
+                                # If the expr_val is an f-string, add the
+                                # column names to it for the dnf_str.
+                                else expr_val.format(**{x: x for x in col_names})
+                            )
                         dnf_and_conds.append(dnf_str)
                     # handle isna/notna (e.g. [[('C', 'is', 'NULL')]]) cases only for
                     # Iceberg, since supporting nulls in Parquet/Arrow/Hive partitioning is
@@ -730,7 +749,13 @@ def generate_arrow_filters(
                         if output_dnf:
                             dnf_str = f"('{p[0]}', '{p[1]}', '{p[2]}')"
                         else:
-                            dnf_str = expr_val
+                            dnf_str = (
+                                expr_val
+                                if not output_expr_filters_as_f_string
+                                # If the expr_val is an f-string, add the
+                                # column names to it for the dnf_str.
+                                else expr_val.format(**{x: x for x in col_names})
+                            )
                         dnf_and_conds.append(dnf_str)
                     # If we don't append to the list, we are effectively
                     # replacing this expression with TRUE as
@@ -932,6 +957,7 @@ def _generate_column_expr_filter(
     orig_colname_map: dict[str, int],
     partition_names: list[str],
     source: pt.Literal["parquet", "iceberg"],
+    output_f_string: bool = False,
 ) -> str:
     """Generates an Arrow format expression filter representing the comparison for a single column.
 
@@ -945,6 +971,10 @@ def _generate_column_expr_filter(
         partition_names (list[str]): List of column names that represent parquet partitions.
         source (Literal["parquet", "iceberg"]): The input source that needs the filters.
             Either parquet or iceberg.
+        output_f_string (bool): Whether the expression filter should be returned as an f-string
+            where the column names are templated instead of being inlined. This is used for
+            Iceberg to allow us to generate the expression dynamically for different file
+            schemas to account for schema evolution.
 
     Returns:
         str: A string representation of an arrow expression equivalent to the filter.
@@ -968,10 +998,11 @@ def _generate_column_expr_filter(
             orig_colname_map,
             partition_names,
             source,
+            output_f_string,
         )
         expr_val = f"~({inner_filter})"
     else:
-        col_expr = _get_filter_column_arrow_expr(p0, filter_map)
+        col_expr = _get_filter_column_arrow_expr(p0, filter_map, output_f_string)
         if isinstance(p2, ir.Var):
             # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
             # For known cases where we need to cast we generate the cast. For simpler code we return two strings,

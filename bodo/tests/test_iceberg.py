@@ -863,7 +863,9 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
 
 
 @pytest.mark.slow
-def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
+def test_filter_pushdown_file_filters(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
     Test that simple filter pushdown works inside the parquet file.
     """
@@ -978,7 +980,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         "get_iceberg_file_list", "g_dnf_filter", 0
     )
     expr_filters = tracing_info.get_event_attribute(
-        "get_row_counts", "g_expr_filters", 0
+        "get_iceberg_pq_dataset", "g_expr_filter_f_str", 0
     )
     # Verify we have dnf filters.
     assert dnf_filters != "None", "No DNF filters were pushed"
@@ -1063,36 +1065,12 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn):
 
 
 @pytest.mark.slow
-def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
-    """
-    Test that we throw the right error when dataset has schema evolution,
-    which we don't support yet. This test should be removed once
-    we add support for it.
-    """
-
-    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
-    db_schema, warehouse_loc = iceberg_database(table_name)
-    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
-
-    def impl(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema)
-        df = df[(df["TY"].notnull()) & (df["B"] > 10)]
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match="Bodo currently doesn't support reading Iceberg tables with schema evolution.",
-    ):
-        bodo.jit(impl)(table_name, conn, db_schema)
-
-
-@pytest.mark.slow
 @pytest.mark.skip("[BE-3212] Fix Java failures on CI")
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
 
     table_name = "NO_TABLE"
-    db_schema, warehouse_loc = iceberg_database(name)
+    db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def impl(table_name, conn, db_schema):
