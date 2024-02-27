@@ -15,6 +15,7 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
+    pytest_mark_one_rank,
     pytest_slow_unless_codegen,
 )
 
@@ -3238,3 +3239,555 @@ def test_uuidv5_scalar(memory_leak_check):
         py_output="dc0b6f65-fca6-5b4b-9d37-ccc3fde1f3e2",
         only_seq=True,
     )
+
+
+@pytest.mark.parametrize(
+    "url_string, answer",
+    [
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": None,
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_basic",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_path_not_null",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_path_not_null",
+        ),
+        pytest.param(
+            "https://user:pass@www.example.com:8080/dir/page.html?q1=test&q2=a2#anchor1",
+            {
+                "fragment": "anchor1",
+                "host": "user:pass@www.example.com",
+                "parameters": {"q1": "test", "q2": "a2"},
+                "path": "dir/page.html",
+                "port": "8080",
+                "query": "q1=test&q2=a2",
+                "scheme": "https",
+            },
+            id="test_host_port_mutliple_colons",
+        ),
+        pytest.param(
+            "https://user:pass@www.example.com/dir/page.html?q1=test&q2=a2#anchor1",
+            {
+                "fragment": "anchor1",
+                "host": "user:pass@www.example.com",
+                "parameters": {"q1": "test", "q2": "a2"},
+                "path": "dir/page.html",
+                "port": None,
+                "query": "q1=test&q2=a2",
+                "scheme": "https",
+            },
+            id="test_host_port_mutliple_colons_no_port",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_obsolete_path",
+        ),
+        pytest.param(
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this#ThisIsTheFragment",
+            {
+                "fragment": "ThisIsTheFragment",
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_fragment",
+        ),
+        pytest.param(
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this#",
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_fragment_empty_string",
+        ),
+        pytest.param(
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this?#",
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,  # TODO: should be all empty dict to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_query_empty_string",
+        ),
+        pytest.param(
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this?Param0=Value0&Param1=Value1&Param2=Value2#",
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {
+                    "Param0": "Value0",
+                    "Param1": "Value1",
+                    "Param2": "Value2",
+                },
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": "Param0=Value0&Param1=Value1&Param2=Value2",
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_query_basic_string",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1&&&&&ElectricBogalooHello=2ElectricBogalooHello=2",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {
+                    "12345": "1",
+                    "ElectricBogalooHello": "2ElectricBogalooHello=2",
+                },
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "12345=1&&&&&ElectricBogalooHello=2ElectricBogalooHello=2",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_1",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?????12345&&&&&??ElectricBogalooHello",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"????12345": None, "??ElectricBogalooHello": None},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "????12345&&&&&??ElectricBogalooHello",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            marks=pytest.mark.skip(
+                "Boxing issue with map types, returns pd.NA instead of None"
+            ),
+            id="test_edgecase_2",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1=1=1&&&&&??Electric=======BogalooHello",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"12345": "1=1=1", "??Electric": "======BogalooHello"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "12345=1=1=1&&&&&??Electric=======BogalooHello",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_3",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?123///45=1=///1=1&&&///&&?//?Ele///ctric=====////==Bo///////gal//ooHello",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {
+                    "///": None,
+                    "123///45": "1=///1=1",
+                    "?//?Ele///ctric": "====////==Bo///////gal//ooHello",
+                },
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "123///45=1=///1=1&&&///&&?//?Ele///ctric=====////==Bo///////gal//ooHello",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            marks=pytest.mark.skip(
+                "Boxing issue with map types, returns pd.NA instead of None"
+            ),
+            id="test_edgecase_4",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?&=2",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"": "2"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "&=2",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_5",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?hello=1&hello=2",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"hello": "2"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "hello=1&hello=2",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_6",
+        ),
+        pytest.param(
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?&&&1////=1&&&&&",
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"1////": "1"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "&&&1////=1&&&&&",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_7",
+        ),
+        pytest.param(
+            "HTTPS://////USER:PASS@EXAMPLE.INT:4345/////////HELLO.PHP?&&&1////=1&&&&&",
+            {
+                "fragment": None,
+                "host": None,
+                "parameters": {"1////": "1"},
+                "path": "///USER:PASS@EXAMPLE.INT:4345/////////HELLO.PHP",
+                "port": None,
+                "query": "&&&1////=1&&&&&",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            id="test_edgecase_8",
+        ),
+    ],
+)
+def test_parse_url_scalars(url_string, answer, memory_leak_check):
+    def impl(url_string):
+        return bodo.libs.bodosql_array_kernels.parse_url(url_string)
+
+    check_func(
+        impl,
+        (url_string,),
+        py_output=answer,
+        check_dtype=False,
+        only_seq=True,  # This flag is needed due to a bug with gathering map types on ranks where there's no data.
+    )
+
+
+@pytest.mark.skip(
+    "Randomly failing due to an issue which appears to be due to map boxing: https://bodo.atlassian.net/browse/BSE-2742"
+)
+# TODO: determine the issue with this test for multiple ranks: https://bodo.atlassian.net/browse/BSE-2718
+@pytest_mark_one_rank
+def test_parse_url_array(memory_leak_check):
+    test_input = pd.Series(
+        [
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/",
+            None,
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP",
+            "https://user:pass@www.example.com:8080/dir/page.html?q1=test&q2=a2#anchor1",
+            "https://user:pass@www.example.com/dir/page.html?q1=test&q2=a2#anchor1",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this",
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this#ThisIsTheFragment",
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this#",
+            None,
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this?#",
+            "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP;Param=this?Param0=Value0&Param1=Value1&Param2=Value2#",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1&&&&&ElectricBogalooHello=2ElectricBogalooHello=2",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?????12345&&&&&??ElectricBogalooHello",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1=1=1&&&&&??Electric=======BogalooHello",
+            # TODO: pyarrow.lib.ArrowException: Unknown error: Wrapping 1=/����� failed: https://bodo.atlassian.net/browse/BSE-2722
+            # "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?123///45=1=///1=1&&&///&&?//?Ele///ctric=====////==Bo///////gal//ooHello",
+            # TODO: For some reason, these URLs cause a error: ValueError: cannot assign slice from input of different size
+            #  My guess is it's because of having a empty string as a key in the inner map, but I'm not sure.
+            # https://bodo.atlassian.net/browse/BSE-2724
+            # "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?&=2",
+            # "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?hello=1&hello=2",
+            "HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?&&&1////=1&&&&&",
+            "HTTPS://////USER:PASS@EXAMPLE.INT:4345/////////HELLO.PHP?&&&1////=1&&&&&",
+            # TODO: fix segfault with empty string input https://bodo.atlassian.net/browse/BSE-2720
+            # "",
+        ]
+    )
+
+    expected_output = pd.Series(
+        [
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": None,
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            None,
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": "anchor1",
+                "host": "user:pass@www.example.com",
+                "parameters": {"q1": "test", "q2": "a2"},
+                "path": "dir/page.html",
+                "port": "8080",
+                "query": "q1=test&q2=a2",
+                "scheme": "https",
+            },
+            {
+                "fragment": "anchor1",
+                "host": "user:pass@www.example.com",
+                "parameters": {"q1": "test", "q2": "a2"},
+                "path": "dir/page.html",
+                "port": None,
+                "query": "q1=test&q2=a2",
+                "scheme": "https",
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": "ThisIsTheFragment",
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            None,
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,  # TODO: should be all empty dict to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707,
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,  # TODO: should be all empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {
+                    "Param0": "Value0",
+                    "Param1": "Value1",
+                    "Param2": "Value2",
+                },
+                "path": "HELLO.PHP;Param=this",
+                "port": "4345",
+                "query": "Param0=Value0&Param1=Value1&Param2=Value2",
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {
+                    "12345": "1",
+                    "ElectricBogalooHello": "2ElectricBogalooHello=2",
+                },
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "12345=1&&&&&ElectricBogalooHello=2ElectricBogalooHello=2",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"????12345": None, "??ElectricBogalooHello": None},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "????12345&&&&&??ElectricBogalooHello",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"12345": "1=1=1", "??Electric": "======BogalooHello"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "12345=1=1=1&&&&&??Electric=======BogalooHello",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            # {
+            #     "fragment": None,
+            #     "host": "USER:PASS@EXAMPLE.INT",
+            #     "parameters": {
+            #         "///": None,
+            #         "123///45": "1=///1=1",
+            #         "?//?Ele///ctric": "====////==Bo///////gal//ooHello",
+            #     },
+            #     "path": "HELLO.PHP",
+            #     "port": "4345",
+            #     "query": "123///45=1=///1=1&&&///&&?//?Ele///ctric=====////==Bo///////gal//ooHello",
+            #     "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            # },
+            # {
+            #     "fragment": None,
+            #     "host": "USER:PASS@EXAMPLE.INT",
+            #     "parameters": {"": "2"},
+            #     "path": "HELLO.PHP",
+            #     "port": "4345",
+            #     "query": "&=2",
+            #     "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            # },
+            # {
+            #     "fragment": None,
+            #     "host": "USER:PASS@EXAMPLE.INT",
+            #     "parameters": {"hello": "2"},
+            #     "path": "HELLO.PHP",
+            #     "port": "4345",
+            #     "query": "hello=1&hello=2",
+            #     "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            # },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"1////": "1"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "&&&1////=1&&&&&",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": None,
+                "parameters": {"1////": "1"},
+                "path": "///USER:PASS@EXAMPLE.INT:4345/////////HELLO.PHP",
+                "port": None,
+                "query": "&&&1////=1&&&&&",
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            # {
+            #     "fragment": None,
+            #     "host": None,
+            #     "parameters": None,
+            #     "path": None,
+            #     "port": None,
+            #     "query": None,
+            #     "scheme": None
+            # },
+        ],
+        dtype=pd.ArrowDtype(
+            pa.struct(
+                [
+                    pa.field("fragment", pa.large_string()),
+                    pa.field("host", pa.large_string()),
+                    pa.field(
+                        "parameters", pa.map_(pa.large_string(), pa.large_string())
+                    ),
+                    pa.field("path", pa.large_string()),
+                    pa.field("port", pa.large_string()),
+                    pa.field("query", pa.large_string()),
+                    pa.field("scheme", pa.large_string()),
+                ]
+            )
+        ),
+    )
+
+    def impl(url_string_array):
+        return pd.Series(bodo.libs.bodosql_array_kernels.parse_url(url_string_array))
+
+    check_func(
+        impl,
+        (test_input,),
+        py_output=expected_output,
+        check_dtype=False,
+        only_seq=True,
+    )
+
+
+@pytest.mark.skip("https://bodo.atlassian.net/browse/BSE-2729")
+def test_parse_url_optional(memory_leak_check):
+    """Test the optional code path for parse_url."""
+
+    def impl(url_string, flag0):
+        arg0 = url_string if flag0 else None
+        return bodo.libs.bodosql_array_kernels.parse_url(arg0, False)
+
+    A = "HTTPS://USER:PASS@EXAMPLE.INT:4345"
+    for flag0 in [True, False]:
+        py_output = (
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": None,
+                "path": None,
+                "port": "4345",
+                "query": None,
+                "scheme": "https",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            }
+            if flag0
+            else None
+        )
+        check_func(
+            impl,
+            (A, flag0),
+            py_output=py_output,
+        )

@@ -71,7 +71,7 @@ class StructArrayType(types.ArrayCompatible):
         # names is a tuple of field names
         assert isinstance(data, tuple) and all(
             bodo.utils.utils.is_array_typ(a, False) for a in data
-        )
+        ), "Internal error in StructArrayType: Data does not have the correct format"
         if names is not None:
             assert (
                 isinstance(names, tuple)
@@ -666,7 +666,11 @@ def init_struct_with_nulls(values, nulls, names):
         The values packed into a struct with the specified names
         and the specified indices as nulls.
     """
-    names_tup = bodo.utils.typing.unwrap_typeref(names).meta
+    names_unwrapped = unwrap_typeref(names)
+    assert isinstance(
+        names_unwrapped, bodo.utils.typing.ColNamesMetaType
+    ), f"Internal error in init_struct_with_nulls: 'names' must be a ColNamesMetaType. Got: {names}"
+    names_tup = names_unwrapped.meta
     func_text = "def impl(values, nulls, names):\n"
     func_text += f"  s = init_struct(values, {names_tup})\n"
     for i in range(len(names_tup)):
