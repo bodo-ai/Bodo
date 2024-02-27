@@ -1765,3 +1765,79 @@ def test_object_insert_case(df, answer, memory_leak_check):
         only_jit_1DVar=True,
         sort_output=False,
     )
+
+
+def test_parse_url():
+    """"""
+    df = pd.DataFrame(
+        {
+            "URL_COLUMN": [
+                "https://www.snowflake.com/",
+                "HTTP://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?USER=1",
+                "mailto:abc@xyz.com",
+            ]
+            * 3
+        }
+    )
+
+    expected_output_series = pd.Series(
+        [
+            {
+                "fragment": None,
+                "host": "www.snowflake.com",
+                "parameters": None,
+                "path": None,  # TODO: should be empty string to match SF: https://bodo.atlassian.net/browse/BSE-2707
+                "port": None,
+                "query": None,
+                "scheme": "https",
+            },
+            {
+                "fragment": None,
+                "host": "USER:PASS@EXAMPLE.INT",
+                "parameters": {"USER": "1"},
+                "path": "HELLO.PHP",
+                "port": "4345",
+                "query": "USER=1",
+                "scheme": "http",  # TODO: should be all uppercase to match SF: https://bodo.atlassian.net/browse/BSE-2707
+            },
+            {
+                "fragment": None,
+                "host": None,
+                "parameters": None,
+                "path": "abc@xyz.com",
+                "port": None,
+                "query": None,
+                "scheme": "mailto",
+            },
+        ]
+        * 3,
+        dtype=pd.ArrowDtype(
+            pa.struct(
+                [
+                    pa.field("fragment", pa.large_string()),
+                    pa.field("host", pa.large_string()),
+                    pa.field(
+                        "parameters", pa.map_(pa.large_string(), pa.large_string())
+                    ),
+                    pa.field("path", pa.large_string()),
+                    pa.field("port", pa.large_string()),
+                    pa.field("query", pa.large_string()),
+                    pa.field("scheme", pa.large_string()),
+                ]
+            )
+        ),
+    )
+
+    ctx = {"TABLE1": df}
+    expected_output = pd.DataFrame({"OUT_COLUMN": expected_output_series})
+    query = "SELECT PARSE_URL(URL_COLUMN) as OUT_COLUMN FROM table1"
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+    )

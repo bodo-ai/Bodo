@@ -23,6 +23,7 @@ from bodo.libs.bodosql_trig_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
 from bodo.libs.bodosql_variant_array_kernels import *  # noqa
 from bodo.libs.bodosql_window_agg_array_kernels import *  # noqa
+from bodo.libs.bodosql_parse_url_array_kernel import *  # noqa
 
 broadcasted_fixed_arg_functions = {
     "abs",
@@ -281,6 +282,7 @@ broadcasted_fixed_arg_functions = {
     "year_timestamp",
     "yearofweek",
     "yearofweekiso",
+    "parse_url",
 }
 
 
