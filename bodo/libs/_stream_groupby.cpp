@@ -444,8 +444,7 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
                         "combined with other aggregate functions.",
                         caller));
     }
-    if ((mrnf_sort_asc.size() == 0) ||
-        (mrnf_sort_asc.size() != mrnf_sort_na.size()) ||
+    if ((mrnf_sort_asc.size() != mrnf_sort_na.size()) ||
         (mrnf_sort_asc.size() != mrnf_sort_cols_to_keep.size())) {
         throw std::runtime_error(
             fmt::format("{}: Min Row-Number Filter arguments "
@@ -2869,7 +2868,7 @@ GroupbyState* groupby_state_init_py_entry(
     std::vector<bool> mrnf_sort_na_vec(mrnf_n_sort_keys, false);
     std::vector<bool> mrnf_part_cols_to_keep_vec(n_keys, true);
     std::vector<bool> mrnf_sort_cols_to_keep_vec(mrnf_n_sort_keys, true);
-    if (mrnf_n_sort_keys > 0) {
+    if (n_funcs == 1 && ftypes[0] == Bodo_FTypes::min_row_number_filter) {
         for (size_t i = 0; i < n_keys; i++) {
             mrnf_part_cols_to_keep_vec[i] = mrnf_part_cols_to_keep[i];
         }

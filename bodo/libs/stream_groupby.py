@@ -405,7 +405,7 @@ class GroupbyStateType(types.Type):
 
         # TODO[BSE-578]: get proper output type for all functions
         out_arr_types = []
-        if self.n_mrnf_sort_keys == 0:
+        if self.fnames != ("min_row_number_filter",):
             for i, f_name in enumerate(self.fnames):
                 assert (
                     self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
@@ -465,7 +465,7 @@ class GroupbyStateType(types.Type):
             # TODO[BSE-645]: Support pruning output columns.
             num_cols = len(out_table_type.arr_types)
 
-            if self.n_mrnf_sort_keys == 0:
+            if self.fnames != ("min_row_number_filter",):
                 # In the non-MRNF case, the mapping is trivial,
                 # i.e. no re-ordering of columns is required.
                 num_cols = len(out_table_type.arr_types)
@@ -692,8 +692,6 @@ def init_groupby_state(
             key_inds_set = set(list(key_inds))
             common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
             if len(common_inds) > 0:
-                # TODO Handle this case by removing the common indices from
-                # the list of sort columns. (https://bodo.atlassian.net/browse/BSE-2594)
                 raise BodoError(
                     "Groupby (Min Row-Number Filter): A column cannot be both a partition column and a sort column. "
                     f"The following column indices were in both sets: {common_inds}."
@@ -732,10 +730,6 @@ def init_groupby_state(
         if len(output_type.fnames) > 1:
             raise BodoError(
                 "Streaming Groupby: Min Row-Number Filter cannot be combined with other aggregation functions."
-            )
-        if output_type.n_mrnf_sort_keys == 0:
-            raise BodoError(
-                "Groupby (Min Row-Number Filter): At least one sort column must be provided."
             )
         if len(output_type._f_in_cols) != (n_cols - output_type.n_keys):
             raise BodoError(

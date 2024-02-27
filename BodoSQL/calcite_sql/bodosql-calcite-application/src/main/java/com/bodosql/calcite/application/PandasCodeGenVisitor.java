@@ -81,6 +81,7 @@ import java.util.function.Supplier;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import kotlin.jvm.functions.Function2;
+import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -1915,15 +1916,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<Expr> orderKeys = new ArrayList<>();
     List<Expr> ascendingKeys = new ArrayList<>();
     List<Expr> nullPosKeys = new ArrayList<>();
-    for (int i : node.getOrderColSet()) {
-      orderKeys.add(new Expr.IntegerLiteral(i));
+    for (int i = 0; i < node.getOrderColSet().size(); i++) {
+      int orderCol = node.getOrderColSet().get(i);
+      // Skip any order columns that are also partition columns
+      if (node.getPartitionColSet().get(orderCol)) continue;
+      // Otherwise, add the order column to the relevant lists
+      boolean asc = node.getAscendingList().get(i);
+      boolean nullpos = node.getNullPosList().get(i);
+      orderKeys.add(new Expr.IntegerLiteral(orderCol));
+      ascendingKeys.add(new Expr.BooleanLiteral(asc));
+      nullPosKeys.add(new Expr.BooleanLiteral(nullpos));
     }
-    for (boolean b : node.getAscendingList()) {
-      ascendingKeys.add(new Expr.BooleanLiteral(b));
-    }
-    for (boolean b : node.getNullPosList()) {
-      nullPosKeys.add(new Expr.BooleanLiteral(b));
-    }
+
     Variable orderGlobal = this.lowerAsMetaType(new Expr.Tuple(orderKeys));
     Variable ascendingGlobal = this.lowerAsMetaType(new Expr.Tuple(ascendingKeys));
     Variable nullPosGlobal = this.lowerAsMetaType(new Expr.Tuple(nullPosKeys));
