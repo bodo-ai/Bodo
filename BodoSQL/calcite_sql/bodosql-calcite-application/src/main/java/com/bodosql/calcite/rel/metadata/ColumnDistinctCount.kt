@@ -9,7 +9,6 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
 
 // ~ Inner classes and interfaces -------------------------------------------
 interface ColumnDistinctCount : Metadata {
-
     fun getColumnDistinctCount(column: Int): Double?
 
     /** Handler API.  */
@@ -25,7 +24,11 @@ interface ColumnDistinctCount : Metadata {
          * @return This function returns either an estimate based on the relationship between
          * operators or null if a reasonable estimate could not be made.
          */
-        fun getColumnDistinctCount(rel: RelNode, mq: RelMetadataQuery, column: Int): Double?
+        fun getColumnDistinctCount(
+            rel: RelNode,
+            mq: RelMetadataQuery,
+            column: Int,
+        ): Double?
 
         override fun getDef(): MetadataDef<ColumnDistinctCount?> {
             return DEF
@@ -33,11 +36,12 @@ interface ColumnDistinctCount : Metadata {
     }
 
     companion object {
-        val METHOD = Types.lookupMethod(
-            ColumnDistinctCount::class.java,
-            "getColumnDistinctCount",
-            Int::class.java,
-        )
+        val METHOD =
+            Types.lookupMethod(
+                ColumnDistinctCount::class.java,
+                "getColumnDistinctCount",
+                Int::class.java,
+            )
 
         val DEF = MetadataDef.of(ColumnDistinctCount::class.java, Handler::class.java, METHOD)
     }

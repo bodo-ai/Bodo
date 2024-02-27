@@ -12,7 +12,10 @@ import org.apache.calcite.rex.RexBuilder
 class BodoRelOptClusterSetup {
     companion object {
         @JvmStatic
-        fun create(planner: RelOptPlanner, rexBuilder: RexBuilder): RelOptCluster {
+        fun create(
+            planner: RelOptPlanner,
+            rexBuilder: RexBuilder,
+        ): RelOptCluster {
             val cluster = RelOptCluster.create(planner, rexBuilder)
             cluster.metadataQuerySupplier = BodoRelMetadataQuery.getSupplier()
             return cluster

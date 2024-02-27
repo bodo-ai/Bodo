@@ -18,7 +18,6 @@ class ArrayRexToPandasTranslator(
     input: BodoEngineTable,
     localRefs: List<Expr>,
 ) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, localRefs) {
-
     constructor(
         visitor: PandasCodeGenVisitor,
         builder: Module.Builder,
@@ -44,7 +43,10 @@ class ArrayRexToPandasTranslator(
     /**
      * Convert a scalar output to an array.
      */
-    private fun scalarToArray(scalar: Expr, dataType: RelDataType): Expr.Call {
+    private fun scalarToArray(
+        scalar: Expr,
+        dataType: RelDataType,
+    ): Expr.Call {
         val global = visitor.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
         return Expr.Call(
             "bodo.utils.conversion.coerce_scalar_to_array",

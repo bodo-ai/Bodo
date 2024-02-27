@@ -7,7 +7,6 @@ sourcedir = "api_docs"
 targetdir = "docs/"
 i = 0
 for filename in glob.iglob(sourcedir + "**/**", recursive=True):
-
     if filename.endswith(".md"):
         i += 1
         print(i)

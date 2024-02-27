@@ -23,6 +23,7 @@ class SqlSnowflakeCreateTableAs(
     comment: SqlNode?,
 ) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, columnList, selectSource, comment) {
     private val columnComments: List<SqlNode?>?
+
     init {
         // CREATE TABLE AS SELECT only allows COPY GRANTS if OR REPLACE is also provided
         if (copyGrants && !replace) {
@@ -32,9 +33,18 @@ class SqlSnowflakeCreateTableAs(
     }
 
     override fun getColumnCommentStrings(): List<String?>? =
-        getcolumnList()?.map { (it as SqlSnowflakeColumnDeclaration).comment?.let { c -> (c as SqlLiteral).getValueAs(String::class.java) } }
+        getcolumnList()?.map {
+            (it as SqlSnowflakeColumnDeclaration).comment?.let {
+                    c ->
+                (c as SqlLiteral).getValueAs(String::class.java)
+            }
+        }
 
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         clusterExprs?.let {
             writer.keyword("CLUSTER BY")
             val frame = writer.startList("(", ")")

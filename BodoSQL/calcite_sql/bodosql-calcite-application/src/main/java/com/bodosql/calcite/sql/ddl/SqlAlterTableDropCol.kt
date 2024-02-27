@@ -12,8 +12,11 @@ class SqlAlterTableDropCol(
     table: SqlIdentifier,
     val dropCols: SqlNodeList,
 ) : SqlAlterTable(pos, ifExists, table) {
-
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("DROP")
         writer.keyword("COLUMN")
         dropCols.unparse(writer, leftPrec, rightPrec)

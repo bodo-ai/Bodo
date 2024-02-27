@@ -53,7 +53,7 @@ public class DatetimeFnCodeGen {
   public static Expr getSingleArgDatetimeFnInfo(String fnName, Expr arg1) {
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1), List.of());
+      return ExprKt.bodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -71,7 +71,7 @@ public class DatetimeFnCodeGen {
   public static Expr getDoubleArgDatetimeFnInfo(String fnName, Expr arg1, Expr arg2) {
     // If the functions have a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      return ExprKt.BodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1, arg2), List.of());
+      return ExprKt.bodoSQLKernel(equivalentFnMap.get(fnName), List.of(arg1, arg2), List.of());
     }
 
     // If we made it here, something has gone very wrong
@@ -86,7 +86,7 @@ public class DatetimeFnCodeGen {
    * @return The Expr corresponding to the function call
    */
   public static Expr generateMakeDateInfo(Expr arg1Info, Expr arg2Info) {
-    return ExprKt.BodoSQLKernel("makedate", List.of(arg1Info, arg2Info), List.of());
+    return ExprKt.bodoSQLKernel("makedate", List.of(arg1Info, arg2Info), List.of());
   }
 
   /**
@@ -128,7 +128,7 @@ public class DatetimeFnCodeGen {
         List.of(
             new Pair<>("format_str", Expr.None.INSTANCE),
             new Pair<>("_try", Expr.BooleanLiteral.True.INSTANCE));
-    return ExprKt.BodoSQLKernel("to_time", List.of(nowCall), namedArgs);
+    return ExprKt.bodoSQLKernel("to_time", List.of(nowCall), namedArgs);
   }
 
   /**
@@ -173,7 +173,7 @@ public class DatetimeFnCodeGen {
    *     the result.
    */
   public static Expr generateDateTruncCode(String unit, Expr arg2Info) {
-    return ExprKt.BodoSQLKernel(
+    return ExprKt.bodoSQLKernel(
         "date_trunc", List.of(new Expr.StringLiteral(unit), arg2Info), List.of());
   }
 
@@ -189,7 +189,7 @@ public class DatetimeFnCodeGen {
     assert isStringLiteral(arg2Info.emit());
     Expr pythonFormatString = new Expr.Raw(convertMySQLFormatStringToPython(arg2Info.emit()));
 
-    return ExprKt.BodoSQLKernel("date_format", List.of(arg1Info, pythonFormatString), List.of());
+    return ExprKt.bodoSQLKernel("date_format", List.of(arg1Info, pythonFormatString), List.of());
   }
 
   public static Expr generateCombineIntervalsCode(List<Expr> operands) {
@@ -212,7 +212,7 @@ public class DatetimeFnCodeGen {
       args.addAll(operands);
       args.add(new Expr.BooleanLiteral(false));
     }
-    return ExprKt.BodoSQLKernel("convert_timezone", args, List.of());
+    return ExprKt.bodoSQLKernel("convert_timezone", args, List.of());
   }
 
   /**
@@ -249,12 +249,12 @@ public class DatetimeFnCodeGen {
     // performs yearNum * 100 + week num
     // TODO: Add proper null checking on scalars by converting * and +
     // to an array kernel
-    Expr getYear = ExprKt.BodoSQLKernel("get_year", List.of(arg0Info), List.of());
+    Expr getYear = ExprKt.bodoSQLKernel("get_year", List.of(arg0Info), List.of());
     Expr getYearTimes100 =
-        ExprKt.BodoSQLKernel(
+        ExprKt.bodoSQLKernel(
             "multiply_numeric", List.of(getYear, new Expr.IntegerLiteral(100)), List.of());
-    Expr weekNum = ExprKt.BodoSQLKernel("get_weekofyear", List.of(arg0Info), List.of());
-    return ExprKt.BodoSQLKernel("add_numeric", List.of(getYearTimes100, weekNum), List.of());
+    Expr weekNum = ExprKt.bodoSQLKernel("get_weekofyear", List.of(arg0Info), List.of());
+    return ExprKt.bodoSQLKernel("add_numeric", List.of(getYearTimes100, weekNum), List.of());
   }
 
   /**
@@ -275,7 +275,7 @@ public class DatetimeFnCodeGen {
     }
     // Add the try arg.
     args.add(new Expr.BooleanLiteral(opName.contains("TRY")));
-    return ExprKt.BodoSQLKernel("to_time", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("to_time", args, streamingNamedArgs);
   }
 
   /**
@@ -286,7 +286,7 @@ public class DatetimeFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateLastDayCode(Expr arg0, String unit) {
-    return ExprKt.BodoSQLKernel("last_day_" + unit, List.of(arg0), List.of());
+    return ExprKt.bodoSQLKernel("last_day_" + unit, List.of(arg0), List.of());
   }
 
   public static Expr generateTimeSliceFnCode(List<Expr> operandsInfo, Integer weekStart) {
@@ -297,7 +297,7 @@ public class DatetimeFnCodeGen {
       args.add(new Expr.StringLiteral("START"));
     }
     args.add(new Expr.IntegerLiteral(weekStart));
-    return ExprKt.BodoSQLKernel("time_slice", args, List.of());
+    return ExprKt.bodoSQLKernel("time_slice", args, List.of());
   }
 
   /**
@@ -358,7 +358,7 @@ public class DatetimeFnCodeGen {
       args.add(tzExpr);
     }
 
-    return ExprKt.BodoSQLKernel(generateFnName, args, List.of());
+    return ExprKt.bodoSQLKernel(generateFnName, args, List.of());
   }
 
   public static ArrayList<String> TIME_PART_UNITS =

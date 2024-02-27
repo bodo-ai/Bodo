@@ -96,7 +96,6 @@ def q26(ss_file, i_file, category, item_count):
 
 
 if __name__ == "__main__":
-
     ss_file = "s3://bodotest-customer-data/tpcx-bb/q26/store_sales_10.parquet"
     i_file = "s3://bodotest-customer-data/tpcx-bb/q26/item_10.parquet"
     require_cache = False

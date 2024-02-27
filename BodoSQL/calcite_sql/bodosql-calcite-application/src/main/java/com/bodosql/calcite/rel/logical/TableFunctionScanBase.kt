@@ -22,8 +22,15 @@ import java.math.BigDecimal
 /**
  * Base table function scan node for defining the cost model.
  */
-open class TableFunctionScanBase(cluster: RelOptCluster, traits: RelTraitSet, inputs: List<RelNode>, call: RexCall, elementType: Type?, rowType: RelDataType, columnMappings: Set<RelColumnMapping>?) : TableFunctionScan(cluster, traits, inputs, call, elementType, rowType, columnMappings) {
-
+open class TableFunctionScanBase(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    inputs: List<RelNode>,
+    call: RexCall,
+    elementType: Type?,
+    rowType: RelDataType,
+    columnMappings: Set<RelColumnMapping>?,
+) : TableFunctionScan(cluster, traits, inputs, call, elementType, rowType, columnMappings) {
     override fun copy(
         traitSet: RelTraitSet?,
         inputs: MutableList<RelNode>?,
@@ -48,7 +55,10 @@ open class TableFunctionScanBase(cluster: RelOptCluster, traits: RelTraitSet, in
         return super.estimateRowCount(mq)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = estimateRowCount(mq)
         return planner.makeCost(rows = rows)
     }

@@ -13,7 +13,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToDaysCode(Expr arg1Info) {
-    return ExprKt.BodoSQLKernel("to_days", List.of(arg1Info), List.of());
+    return ExprKt.bodoSQLKernel("to_days", List.of(arg1Info), List.of());
   }
 
   /**
@@ -23,7 +23,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToSecondsCode(Expr arg1Info) {
-    return ExprKt.BodoSQLKernel("to_seconds", List.of(arg1Info), List.of());
+    return ExprKt.bodoSQLKernel("to_seconds", List.of(arg1Info), List.of());
   }
 
   /**
@@ -33,7 +33,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateFromDaysCode(Expr arg1Info) {
-    return ExprKt.BodoSQLKernel("from_days", List.of(arg1Info), List.of());
+    return ExprKt.bodoSQLKernel("from_days", List.of(arg1Info), List.of());
   }
 
   /**
@@ -43,7 +43,7 @@ public class SinceEpochFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateFromUnixTimeCode(Expr arg1Info) {
-    return ExprKt.BodoSQLKernel("second_timestamp", List.of(arg1Info), List.of());
+    return ExprKt.bodoSQLKernel("second_timestamp", List.of(arg1Info), List.of());
   }
 
   /**

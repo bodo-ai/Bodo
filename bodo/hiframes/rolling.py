@@ -1338,6 +1338,7 @@ linear_kernels = {
 
 # shift -------------
 
+
 # dummy
 def shift(in_arr, shift, parallel, default_fill_value=None):  # pragma: no cover
     return
@@ -1535,6 +1536,7 @@ def is_supported_shift_array_type(arr_type):
 
 
 # pct_change -------------
+
 
 # dummy
 def pct_change():  # pragma: no cover

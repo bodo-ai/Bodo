@@ -9,7 +9,6 @@ from bodo.tests.iceberg_database_helpers.utils import (
 
 
 def create_table(table_name="file_subset_deleted_rows_table", spark=None):
-
     if spark is None:
         spark = get_spark()
 

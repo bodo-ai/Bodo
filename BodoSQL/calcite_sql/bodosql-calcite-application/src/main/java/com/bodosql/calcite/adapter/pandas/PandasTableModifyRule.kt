@@ -9,14 +9,15 @@ import org.apache.calcite.rel.logical.LogicalTableModify
 class PandasTableModifyRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                LogicalTableModify::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasTableModifyRule",
-            )
-            .withRuleFactory { config -> PandasTableModifyRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    LogicalTableModify::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasTableModifyRule",
+                )
+                .withRuleFactory { config -> PandasTableModifyRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

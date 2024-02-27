@@ -4,7 +4,6 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.type.SqlTypeName
 
 interface PandasCostEstimator {
-
     companion object {
         /**
          * This is copied from RelMdSize in Calcite with some suitable defaults for
@@ -17,24 +16,33 @@ interface PandasCostEstimator {
                 SqlTypeName.TINYINT -> 1.0
                 SqlTypeName.SMALLINT -> 2.0
                 SqlTypeName.INTEGER, SqlTypeName.FLOAT, SqlTypeName.DATE, SqlTypeName.TIME, SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE -> 4.0
-                SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL, SqlTypeName.REAL, SqlTypeName.TIMESTAMP, SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_SECOND, SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_YEAR_MONTH, SqlTypeName.INTERVAL_MONTH -> 8.0
-                SqlTypeName.BINARY -> if (type.precision <= 0) {
-                    DEFAULT_VARBINARY_PRECISION
-                } else {
-                    type.precision.toDouble()
-                }
+                SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL, SqlTypeName.REAL, SqlTypeName.TIMESTAMP,
+                SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_DAY_HOUR,
+                SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR,
+                SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE,
+                SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_SECOND, SqlTypeName.INTERVAL_YEAR,
+                SqlTypeName.INTERVAL_YEAR_MONTH, SqlTypeName.INTERVAL_MONTH,
+                -> 8.0
+                SqlTypeName.BINARY ->
+                    if (type.precision <= 0) {
+                        DEFAULT_VARBINARY_PRECISION
+                    } else {
+                        type.precision.toDouble()
+                    }
 
-                SqlTypeName.VARBINARY -> if (type.precision <= 0) {
-                    DEFAULT_VARBINARY_PRECISION
-                } else {
-                    type.precision.toDouble()
-                }
+                SqlTypeName.VARBINARY ->
+                    if (type.precision <= 0) {
+                        DEFAULT_VARBINARY_PRECISION
+                    } else {
+                        type.precision.toDouble()
+                    }
 
-                SqlTypeName.CHAR -> if (type.precision <= 0) {
-                    DEFAULT_VARCHAR_PRECISION
-                } else {
-                    type.precision.toDouble()
-                }
+                SqlTypeName.CHAR ->
+                    if (type.precision <= 0) {
+                        DEFAULT_VARCHAR_PRECISION
+                    } else {
+                        type.precision.toDouble()
+                    }
 
                 SqlTypeName.VARCHAR -> // Even in large (say VARCHAR(2000)) columns most strings are small.
                     // By default, Snowflake gives a very large string value, so we map this case to 16 bytes
@@ -45,7 +53,7 @@ interface PandasCostEstimator {
                         } else {
                             type.precision.toDouble()
                         }
-                        ).coerceAtMost(100.0)
+                    ).coerceAtMost(100.0)
 
                 // Note: this is the Variant type.
                 // TODO: Refactor this to look at actual types instead of type names.

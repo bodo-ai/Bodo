@@ -9,14 +9,15 @@ import org.apache.calcite.rel.core.Aggregate
 class PandasAggregateRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                BodoLogicalAggregate::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasAggregateRule",
-            )
-            .withRuleFactory { config -> PandasAggregateRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalAggregate::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasAggregateRule",
+                )
+                .withRuleFactory { config -> PandasAggregateRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

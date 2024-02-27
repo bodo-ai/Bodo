@@ -13,8 +13,11 @@ class PandasIntersect(
     inputs: List<RelNode>,
     all: Boolean,
 ) : Intersect(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasIntersect {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+        all: Boolean,
+    ): PandasIntersect {
         return PandasIntersect(cluster, traitSet, inputs, all)
     }
 
@@ -26,7 +29,10 @@ class PandasIntersect(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 }

@@ -32,7 +32,6 @@ import org.apache.calcite.util.ImmutableBitSet
  */
 class ExpectedBatchingProperty {
     companion object {
-
         /**
          * Convert a rowType to a list of types. This is
          * done to normalize row types into nodes with more complex
@@ -54,7 +53,10 @@ class ExpectedBatchingProperty {
          * @param nodeTypes List of types that are the output of the node.
          * All of these must be supported in streaming.
          */
-        private fun getBatchingProperty(streaming: Boolean, nodeTypes: List<RelDataType>): BatchingProperty {
+        private fun getBatchingProperty(
+            streaming: Boolean,
+            nodeTypes: List<RelDataType>,
+        ): BatchingProperty {
             return if (streaming) {
                 BatchingProperty.STREAMING
             } else {
@@ -105,12 +107,16 @@ class ExpectedBatchingProperty {
          * @return The Batch property.
          */
         @JvmStatic
-        fun projectProperty(nodes: List<RexNode>, inputBatchingProperty: BatchingProperty): BatchingProperty {
-            val canStream = if (nodes.all { r -> r is RexInputRef || r is RexLiteral }) {
-                columnPruningIsStreaming(inputBatchingProperty)
-            } else {
-                !RexOver.containsOver(nodes, null)
-            }
+        fun projectProperty(
+            nodes: List<RexNode>,
+            inputBatchingProperty: BatchingProperty,
+        ): BatchingProperty {
+            val canStream =
+                if (nodes.all { r -> r is RexInputRef || r is RexLiteral }) {
+                    columnPruningIsStreaming(inputBatchingProperty)
+                } else {
+                    !RexOver.containsOver(nodes, null)
+                }
             // Note: Types may be lazily computed so use getType() instead of type
             // Unsupported types are also only supported for the output of streaming
             // (e.g. to cross between operators/write to TableBuildBuffers), so we
@@ -128,15 +134,16 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        val unsupportedAggregates = setOf(
-            SqlStdOperatorTable.PERCENTILE_CONT.name,
-            SqlStdOperatorTable.PERCENTILE_DISC.name,
-            SqlStdOperatorTable.MODE.name,
-            SqlAggOperatorTable.LISTAGG.name,
-            AggOperatorTable.ARRAY_UNIQUE_AGG.name,
-            AggOperatorTable.ARRAY_AGG.name,
-            AggOperatorTable.OBJECT_AGG.name,
-        )
+        val unsupportedAggregates =
+            setOf(
+                SqlStdOperatorTable.PERCENTILE_CONT.name,
+                SqlStdOperatorTable.PERCENTILE_DISC.name,
+                SqlStdOperatorTable.MODE.name,
+                SqlAggOperatorTable.LISTAGG.name,
+                AggOperatorTable.ARRAY_UNIQUE_AGG.name,
+                AggOperatorTable.ARRAY_AGG.name,
+                AggOperatorTable.OBJECT_AGG.name,
+            )
 
         @JvmStatic
         private fun streamingSupportedAggFunction(a: SqlAggFunction): Boolean {
@@ -158,20 +165,28 @@ class ExpectedBatchingProperty {
          * @return The Batch property.
          */
         @JvmStatic
-        fun aggregateProperty(groupSets: List<ImmutableBitSet>, aggCallList: List<AggregateCall>, rowType: RelDataType): BatchingProperty {
-            var canStream = groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
-                !AggHelpers.aggContainsFilter(aggCallList) &&
-                aggCallList.all {
-                        a ->
-                    streamingSupportedAggFunction(a.aggregation)
-                }
+        fun aggregateProperty(
+            groupSets: List<ImmutableBitSet>,
+            aggCallList: List<AggregateCall>,
+            rowType: RelDataType,
+        ): BatchingProperty {
+            var canStream =
+                groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
+                    !AggHelpers.aggContainsFilter(aggCallList) &&
+                    aggCallList.all {
+                            a ->
+                        streamingSupportedAggFunction(a.aggregation)
+                    }
 
             val nodeTypes = rowTypeToTypes(rowType)
             return getBatchingProperty(canStream, nodeTypes)
         }
 
         @JvmStatic
-        fun tableReadProperty(table: BodoSqlTable?, rowType: RelDataType): BatchingProperty {
+        fun tableReadProperty(
+            table: BodoSqlTable?,
+            rowType: RelDataType,
+        ): BatchingProperty {
             // TODO(njriasan): Can we make this non-nullable?
             val canStream = (table != null) && (table.dbType.equals("PARQUET") || table.dbType.equals("ICEBERG"))
             val nodeTypes = rowTypeToTypes(rowType)
@@ -179,7 +194,10 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        fun tableModifyProperty(table: BodoSqlTable, inputRowType: RelDataType): BatchingProperty {
+        fun tableModifyProperty(
+            table: BodoSqlTable,
+            inputRowType: RelDataType,
+        ): BatchingProperty {
             // We can stream if it's a Snowflake write via the Snowflake Catalog.
             val canStream = (table is CatalogTable) && (table.dbType.equals("SNOWFLAKE"))
             val nodeTypes = rowTypeToTypes(inputRowType)
@@ -187,7 +205,10 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        fun tableCreateProperty(schema: Schema, inputRowType: RelDataType): BatchingProperty {
+        fun tableCreateProperty(
+            schema: Schema,
+            inputRowType: RelDataType,
+        ): BatchingProperty {
             val canStream = (schema is CatalogSchema) && (schema.dbType.equals("SNOWFLAKE"))
             val nodeTypes = rowTypeToTypes(inputRowType)
             return getBatchingProperty(canStream, nodeTypes)

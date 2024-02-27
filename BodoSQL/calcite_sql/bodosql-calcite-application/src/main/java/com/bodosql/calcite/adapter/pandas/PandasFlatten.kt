@@ -17,8 +17,25 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.util.ImmutableBitSet
 
-class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode, call: RexCall, callType: RelDataType, usedColOutputs: ImmutableBitSet, repeatColumns: ImmutableBitSet) : FlattenBase(cluster, traits.replace(PandasRel.CONVENTION), input, call, callType, usedColOutputs, repeatColumns), PandasRel {
-
+class PandasFlatten(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    input: RelNode,
+    call: RexCall,
+    callType: RelDataType,
+    usedColOutputs: ImmutableBitSet,
+    repeatColumns: ImmutableBitSet,
+) :
+    FlattenBase(
+            cluster,
+            traits.replace(PandasRel.CONVENTION),
+            input,
+            call,
+            callType,
+            usedColOutputs,
+            repeatColumns,
+        ),
+        PandasRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
@@ -55,17 +72,28 @@ class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode,
      * @param flattenCall the function call to FLATTEN
      * @return the variable that represents this relational expression.
      */
-    fun emitFlatten(implementor: PandasRel.Implementor, ctx: PandasRel.BuildContext, flattenCall: RexCall): BodoEngineTable {
+    fun emitFlatten(
+        implementor: PandasRel.Implementor,
+        ctx: PandasRel.BuildContext,
+        flattenCall: RexCall,
+    ): BodoEngineTable {
         val inputVar = implementor.visitChild(input, 0)
         val replicatedColsExpresions = repeatColumns.toList().map { idx -> Expr.IntegerLiteral(idx) }
         val replicatedColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(replicatedColsExpresions)))
         val columnToExplode = flattenCall.operands[0]
-        val explodeColIdx = if (columnToExplode is RexInputRef) { columnToExplode.index } else { throw Exception("Expected input to FLATTEN to be an input column reference") }
+        val explodeColIdx =
+            if (columnToExplode is RexInputRef) {
+                columnToExplode.index
+            } else {
+                throw Exception("Expected input to FLATTEN to be an input column reference")
+            }
         val explodeCol = Expr.IntegerLiteral(explodeColIdx)
         val outputColsExpressions = callType.fieldList.mapIndexed { idx, _ -> Expr.BooleanLiteral(this.usedColOutputs.contains(idx)) }
         val outputColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(outputColsExpressions)))
         val outer = Expr.BooleanLiteral(RexLiteral.booleanValue(flattenCall.operands[2]))
-        return ctx.returns(Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal, outer)))
+        return ctx.returns(
+            Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal, outer)),
+        )
     }
 
     /**
@@ -80,7 +108,10 @@ class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode,
      * Function to delete the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 

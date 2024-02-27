@@ -12,25 +12,57 @@ import org.apache.calcite.sql.type.VariantSqlType
 /**
  * Data info class for BodoSQL columns. These are designed to support nested data.
  */
-data class ColumnDataTypeInfo(val dataType: BodoSQLColumn.BodoSQLColumnDataType, val isNullable: Boolean, val precision: Int, val scale: Int, val tzInfo: BodoTZInfo?, val children: List<ColumnDataTypeInfo>) {
-
+data class ColumnDataTypeInfo(
+    val dataType: BodoSQLColumnDataType,
+    val isNullable: Boolean,
+    val precision: Int,
+    val scale: Int,
+    val tzInfo: BodoTZInfo?,
+    val children: List<ColumnDataTypeInfo>,
+) {
     // Constructor for most data types without precision or scale
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
 
     // Constructor for String/Binary data types
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean, precision: Int) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        precision: Int,
+    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
 
     // Constructor for timestamp
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean, precision: Int, tzInfo: BodoTZInfo?) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, tzInfo, listOf())
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        precision: Int,
+        tzInfo: BodoTZInfo?,
+    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, tzInfo, listOf())
 
     // Constructor for decimal
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean, precision: Int, scale: Int) : this(dataType, isNullable, precision, scale, null, listOf())
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        precision: Int,
+        scale: Int,
+    ) : this(dataType, isNullable, precision, scale, null, listOf())
 
     // Constructor for Array and Categorical
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean, child: ColumnDataTypeInfo) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(child))
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        child: ColumnDataTypeInfo,
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(child))
 
     // Constructor for Map
-    constructor(dataType: BodoSQLColumn.BodoSQLColumnDataType, isNullable: Boolean, keyType: ColumnDataTypeInfo, valueType: ColumnDataTypeInfo) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(keyType, valueType))
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        keyType: ColumnDataTypeInfo,
+        valueType: ColumnDataTypeInfo,
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(keyType, valueType))
 
     fun convertToSqlType(typeFactory: RelDataTypeFactory): RelDataType {
         if (dataType == BodoSQLColumnDataType.CATEGORICAL) {
@@ -82,35 +114,44 @@ data class ColumnDataTypeInfo(val dataType: BodoSQLColumn.BodoSQLColumnDataType,
                     SqlTypeName.BIGINT -> ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, isNullable)
                     SqlTypeName.FLOAT -> ColumnDataTypeInfo(BodoSQLColumnDataType.FLOAT32, isNullable)
                     // TODO: FIX DECIMAL
-                    SqlTypeName.REAL, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL -> ColumnDataTypeInfo(
-                        BodoSQLColumnDataType.FLOAT64,
-                        isNullable,
-                    )
+                    SqlTypeName.REAL, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.FLOAT64,
+                            isNullable,
+                        )
 
                     SqlTypeName.DATE -> ColumnDataTypeInfo(BodoSQLColumnDataType.DATE, isNullable)
-                    SqlTypeName.CHAR, SqlTypeName.VARCHAR -> ColumnDataTypeInfo(
-                        BodoSQLColumnDataType.STRING,
-                        isNullable,
-                        relDataType.precision,
-                    )
+                    SqlTypeName.CHAR, SqlTypeName.VARCHAR ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.STRING,
+                            isNullable,
+                            relDataType.precision,
+                        )
 
-                    SqlTypeName.TIMESTAMP -> ColumnDataTypeInfo(
-                        BodoSQLColumnDataType.DATETIME,
-                        isNullable,
-                        relDataType.precision,
-                    )
+                    SqlTypeName.TIMESTAMP ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.DATETIME,
+                            isNullable,
+                            relDataType.precision,
+                        )
 
-                    SqlTypeName.TIME -> ColumnDataTypeInfo(
-                        BodoSQLColumnDataType.TIME,
-                        isNullable,
-                        relDataType.precision,
-                    )
+                    SqlTypeName.TIME ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.TIME,
+                            isNullable,
+                            relDataType.precision,
+                        )
 
                     SqlTypeName.BOOLEAN -> ColumnDataTypeInfo(BodoSQLColumnDataType.BOOL8, isNullable)
-                    SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_SECOND, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_YEAR_MONTH -> ColumnDataTypeInfo(
-                        BodoSQLColumnDataType.TIMEDELTA,
-                        isNullable,
-                    )
+                    SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND,
+                    SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE_SECOND,
+                    SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_SECOND, SqlTypeName.INTERVAL_DAY,
+                    SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_YEAR_MONTH,
+                    ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.TIMEDELTA,
+                            isNullable,
+                        )
 
                     else -> throw RuntimeException(
                         "Internal Error: Calcite Plan Produced an Unsupported relDataType" +

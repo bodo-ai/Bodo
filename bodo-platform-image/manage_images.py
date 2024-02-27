@@ -44,43 +44,39 @@ def manage_image(header, be_url, img_data, share=False):
 
 
 def create_from_env(bodo_version, image_region, image_id, cloud_provider):
-    return [{
-        "bodoVersion": bodo_version,
-        "supported": "true",
-        "imagePrefix": "null",
-        "imageGitSha": "null",
-        "region": image_region,
-        "workerImageId": image_id,
-        "imageCloudProvider": (cloud_provider.upper())
-    }]
+    return [
+        {
+            "bodoVersion": bodo_version,
+            "supported": "true",
+            "imagePrefix": "null",
+            "imageGitSha": "null",
+            "region": image_region,
+            "workerImageId": image_id,
+            "imageCloudProvider": (cloud_provider.upper()),
+        }
+    ]
 
 
 def create_from_json():
-    with open('img_share_requests.json', 'r') as f:
+    with open("img_share_requests.json", "r") as f:
         img_data = json.load(f)
     return img_data
 
 
 def create_for_deregister(bodo_version, cloud_provider):
     return {
-        'bodoVersion': bodo_version,
-        'imagePrefix': "null",
-        'supported': None,
-        'imageCloudProvider': cloud_provider
+        "bodoVersion": bodo_version,
+        "imagePrefix": "null",
+        "supported": None,
+        "imageCloudProvider": cloud_provider,
     }
 
 
 def update_image_entry(bodo_version, updated_bodo_version, supported):
     if not supported:
-        return {
-            'bodoVersion': bodo_version,
-            'supported': supported
-        }
+        return {"bodoVersion": bodo_version, "supported": supported}
 
-    return {
-        'bodoVersion': bodo_version,
-        'updatedBodoVersion': updated_bodo_version
-    }
+    return {"bodoVersion": bodo_version, "updatedBodoVersion": updated_bodo_version}
 
 
 if __name__ == "__main__":
@@ -95,10 +91,15 @@ if __name__ == "__main__":
     assert "BOT_PLATFORM_PASSWORD" in os.environ
     assert "BACKEND_SERVICE_URL" in os.environ
 
-    logging.info(f"Log into the platform using {os.environ['BOT_PLATFORM_USERNAME']} account and get an access token...")
+    logging.info(
+        f"Log into the platform using {os.environ['BOT_PLATFORM_USERNAME']} account and get an access token..."
+    )
     try:
-        access_token = login(os.environ["AUTH_SERVICE_URL"], os.environ["BOT_PLATFORM_USERNAME"],
-                             os.environ["BOT_PLATFORM_PASSWORD"])
+        access_token = login(
+            os.environ["AUTH_SERVICE_URL"],
+            os.environ["BOT_PLATFORM_USERNAME"],
+            os.environ["BOT_PLATFORM_PASSWORD"],
+        )
     except Exception as e:
         logging.info("Login Failed")
         logging.info("Received Response: " + str(e))
@@ -106,11 +107,13 @@ if __name__ == "__main__":
 
     logging.info("Login successful...")
 
-    logging.info("Triggering bodoImage endpoint on backend with the access token and image entries...")
-    header = {'Authorization': 'Bearer ' + access_token}
+    logging.info(
+        "Triggering bodoImage endpoint on backend with the access token and image entries..."
+    )
+    header = {"Authorization": "Bearer " + access_token}
 
-    bodo_version = os.environ.get('IMAGE_NAME', None)
-    cloud_provider = os.environ.get('CLOUD_PROVIDER', None)
+    bodo_version = os.environ.get("IMAGE_NAME", None)
+    cloud_provider = os.environ.get("CLOUD_PROVIDER", None)
     be_url = os.environ.get("BACKEND_SERVICE_URL", None)
     image_region = os.environ.get("IMAGE_REGION", None)
     image_id = os.environ.get("IMAGE_ID", None)
@@ -126,7 +129,9 @@ if __name__ == "__main__":
         if update:
             is_supported = False if args.deregister else True
             # Based on args.deregister, we only update the image name or make supported as False
-            img_data = update_image_entry(bodo_version, updated_bodo_version, is_supported)
+            img_data = update_image_entry(
+                bodo_version, updated_bodo_version, is_supported
+            )
         else:
             img_data = create_for_deregister(bodo_version, cloud_provider)
 
@@ -135,7 +140,9 @@ if __name__ == "__main__":
     else:
         # Adding new images to DB.
         if args.generate_from_env:
-            img_data = create_from_env(bodo_version, image_region, image_id, cloud_provider)
+            img_data = create_from_env(
+                bodo_version, image_region, image_id, cloud_provider
+            )
         else:
             img_data = create_from_json()
 

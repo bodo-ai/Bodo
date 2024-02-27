@@ -9,21 +9,28 @@ import com.bodosql.calcite.ir.Variable
 
 private val noOpVar = Variable("NOOP")
 
-private const val IOTimingVerboseLevel = 1
-private const val RelNodeTimingVerboseLevel = 2
+private const val IO_TIMING_VERBOSE_LEVEL = 1
+private const val REL_NODE_TIMING_VERBOSE_LEVEL = 2
 
 /**
  * Class that builds the framework for implementing runtime timers around the various components in a non-streaming
  * operator. This holds state shared between timer steps but the code generation is responsible for calling the
  * correct APIs. This class should be removed when streaming is fully supported so there is some duplicate code for now.
  */
-class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val isNoOp: Boolean, private val operationDescriptor: String, private val loggingTitle: String, private val nodeDetails: String) {
-    private var startTimerVar = if (isNoOp) {
-        // Avoid impacting tests when timers are disabled.
-        noOpVar
-    } else {
-        builder.symbolTable.genGenericTempVar()
-    }
+class SingleBatchRelNodeTimer(
+    private val builder: Module.Builder,
+    private val isNoOp: Boolean,
+    private val operationDescriptor: String,
+    private val loggingTitle: String,
+    private val nodeDetails: String,
+) {
+    private var startTimerVar =
+        if (isNoOp) {
+            // Avoid impacting tests when timers are disabled.
+            noOpVar
+        } else {
+            builder.symbolTable.genGenericTempVar()
+        }
 
     /**
      * Insert the starting time.time() call before a
@@ -65,19 +72,22 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
         val nodeDetailsVariable = builder.symbolTable.genGenericTempVar()
         builder.add(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
 
-        val printMessage = String.format(
-            "f'''Execution time for %s {%s}: {%s}'''",
-            operationDescriptor,
-            nodeDetailsVariable.emit(),
-            subVar.emit(),
-        )
-        val logMessageCall: Op = Stmt(
-            Expr.Call(
-                "bodo.user_logging.log_message",
-                Expr.StringLiteral(loggingTitle), // TODO: Add a format string op?
-                Expr.Raw(printMessage),
-            ),
-        )
+        val printMessage =
+            String.format(
+                "f'''Execution time for %s {%s}: {%s}'''",
+                operationDescriptor,
+                nodeDetailsVariable.emit(),
+                subVar.emit(),
+            )
+        val logMessageCall: Op =
+            Stmt(
+                Expr.Call(
+                    "bodo.user_logging.log_message",
+                    // TODO: Add a format string op?
+                    Expr.StringLiteral(loggingTitle),
+                    Expr.Raw(printMessage),
+                ),
+            )
         builder.add(logMessageCall)
     }
 
@@ -91,11 +101,12 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
             nodeDetails: String,
             type: OperationType,
         ): SingleBatchRelNodeTimer {
-            val verboseThreshold = if (type == OperationType.BATCH) {
-                RelNodeTimingVerboseLevel
-            } else {
-                IOTimingVerboseLevel
-            }
+            val verboseThreshold =
+                if (type == OperationType.BATCH) {
+                    REL_NODE_TIMING_VERBOSE_LEVEL
+                } else {
+                    IO_TIMING_VERBOSE_LEVEL
+                }
             return SingleBatchRelNodeTimer(
                 builder,
                 verboseLevel < verboseThreshold,
@@ -105,6 +116,7 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
             )
         }
     }
+
     enum class OperationType {
         BATCH,
         IO_BATCH,

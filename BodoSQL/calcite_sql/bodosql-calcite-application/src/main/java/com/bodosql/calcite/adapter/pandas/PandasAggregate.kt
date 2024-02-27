@@ -24,8 +24,13 @@ class PandasAggregate(
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
 ) : AggregateBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, groupSet, groupSets, aggCalls), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>): PandasAggregate {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        groupSet: ImmutableBitSet,
+        groupSets: List<ImmutableBitSet>?,
+        aggCalls: List<AggregateCall>,
+    ): PandasAggregate {
         return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
     }
 
@@ -37,7 +42,10 @@ class PandasAggregate(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
@@ -56,7 +64,9 @@ class PandasAggregate(
             val name = aggCall.aggregation.name
             // Should match accumulate function check in C++:
             // https://github.com/Bodo-inc/Bodo/blob/3c902f01b0aa0748793b00554304d8a051f511aa/bodo/libs/_stream_groupby.cpp#L1101
-            if (name == "LISTAGG" || kind == SqlKind.MEDIAN || (kind == SqlKind.COUNT && aggCall.argList.isNotEmpty() && aggCall.isDistinct)) {
+            if (name == "LISTAGG" || kind == SqlKind.MEDIAN ||
+                (kind == SqlKind.COUNT && aggCall.argList.isNotEmpty() && aggCall.isDistinct)
+            ) {
                 isStreamAccumulate = true
                 break
             }
@@ -64,7 +74,7 @@ class PandasAggregate(
 
         // Get the set of groupby key indices to skip in type check below
         val keySet = mutableSetOf<Int>()
-        for (i in 0..< groupSet.size()) {
+        for (i in 0..<groupSet.size()) {
             if (groupSet[i]) {
                 keySet.add(i)
             }
@@ -106,7 +116,6 @@ class PandasAggregate(
     }
 
     companion object {
-
         fun create(
             cluster: RelOptCluster,
             input: RelNode,

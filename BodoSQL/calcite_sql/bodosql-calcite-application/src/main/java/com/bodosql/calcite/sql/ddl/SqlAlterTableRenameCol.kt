@@ -12,8 +12,11 @@ class SqlAlterTableRenameCol(
     val renameColOld: SqlIdentifier,
     val renameColNew: SqlIdentifier,
 ) : SqlAlterTable(pos, ifExists, table) {
-
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("RENAME")
         writer.keyword("COLUMN")
         renameColOld.unparse(writer, leftPrec, rightPrec)

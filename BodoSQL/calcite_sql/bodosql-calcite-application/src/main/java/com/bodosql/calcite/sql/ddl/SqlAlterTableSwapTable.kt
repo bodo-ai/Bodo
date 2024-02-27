@@ -11,8 +11,11 @@ class SqlAlterTableSwapTable(
     table: SqlIdentifier,
     val swapTable: SqlIdentifier,
 ) : SqlAlterTable(pos, ifExists, table) {
-
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("SWAP")
         writer.keyword("WITH")
         swapTable.unparse(writer, leftPrec, rightPrec)

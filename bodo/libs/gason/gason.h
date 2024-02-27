@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 enum JsonTag {
     JSON_NUMBER = 0,
@@ -25,18 +25,19 @@ union JsonValue {
     uint64_t ival;
     double fval;
 
-    JsonValue(double x)
-        : fval(x) {
-    }
+    JsonValue(double x) : fval(x) {}
     JsonValue(JsonTag tag = JSON_NULL, void *payload = nullptr) {
         assert((uintptr_t)payload <= JSON_VALUE_PAYLOAD_MASK);
-        ival = JSON_VALUE_NAN_MASK | ((uint64_t)tag << JSON_VALUE_TAG_SHIFT) | (uintptr_t)payload;
+        ival = JSON_VALUE_NAN_MASK | ((uint64_t)tag << JSON_VALUE_TAG_SHIFT) |
+               (uintptr_t)payload;
     }
     bool isDouble() const {
         return (int64_t)ival <= (int64_t)JSON_VALUE_NAN_MASK;
     }
     JsonTag getTag() const {
-        return isDouble() ? JSON_NUMBER : JsonTag((ival >> JSON_VALUE_TAG_SHIFT) & JSON_VALUE_TAG_MASK);
+        return isDouble() ? JSON_NUMBER
+                          : JsonTag((ival >> JSON_VALUE_TAG_SHIFT) &
+                                    JSON_VALUE_TAG_MASK);
     }
     uint64_t getPayload() const {
         assert(!isDouble());
@@ -65,26 +66,14 @@ struct JsonNode {
 struct JsonIterator {
     JsonNode *p;
 
-    void operator++() {
-        p = p->next;
-    }
-    bool operator!=(const JsonIterator &x) const {
-        return p != x.p;
-    }
-    JsonNode *operator*() const {
-        return p;
-    }
-    JsonNode *operator->() const {
-        return p;
-    }
+    void operator++() { p = p->next; }
+    bool operator!=(const JsonIterator &x) const { return p != x.p; }
+    JsonNode *operator*() const { return p; }
+    JsonNode *operator->() const { return p; }
 };
 
-inline JsonIterator begin(JsonValue o) {
-    return JsonIterator{o.toNode()};
-}
-inline JsonIterator end(JsonValue) {
-    return JsonIterator{nullptr};
-}
+inline JsonIterator begin(JsonValue o) { return JsonIterator{o.toNode()}; }
+inline JsonIterator end(JsonValue) { return JsonIterator{nullptr}; }
 
 #define JSON_ERRNO_MAP(XX)                           \
     XX(OK, "ok")                                     \
@@ -113,23 +102,20 @@ class JsonAllocator {
         size_t used;
     } *head;
 
-public:
-    JsonAllocator() : head(nullptr) {};
+   public:
+    JsonAllocator() : head(nullptr){};
     JsonAllocator(const JsonAllocator &) = delete;
     JsonAllocator &operator=(const JsonAllocator &) = delete;
-    JsonAllocator(JsonAllocator &&x) : head(x.head) {
-        x.head = nullptr;
-    }
+    JsonAllocator(JsonAllocator &&x) : head(x.head) { x.head = nullptr; }
     JsonAllocator &operator=(JsonAllocator &&x) {
         head = x.head;
         x.head = nullptr;
         return *this;
     }
-    ~JsonAllocator() {
-        deallocate();
-    }
+    ~JsonAllocator() { deallocate(); }
     void *allocate(size_t size);
     void deallocate();
 };
 
-int jsonParse(char *str, char **endptr, JsonValue *value, JsonAllocator &allocator);
+int jsonParse(char *str, char **endptr, JsonValue *value,
+              JsonAllocator &allocator);

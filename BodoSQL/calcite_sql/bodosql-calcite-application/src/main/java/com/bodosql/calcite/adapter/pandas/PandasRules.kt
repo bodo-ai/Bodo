@@ -70,27 +70,28 @@ class PandasRules private constructor() {
         val PANDAS_JOIN_REBALANCE_OUTPUT_RULE: RelOptRule = PandasJoinRebalanceOutputRule.Config.DEFAULT_CONFIG.toRule()
 
         @JvmField
-        val PANDAS_RULES: List<RelOptRule> = listOf(
-            PANDAS_PROJECT_RULE,
-            PANDAS_FILTER_RULE,
-            PANDAS_AGGREGATE_RULE,
-            PANDAS_JOIN_RULE,
-            PANDAS_SORT_RULE,
-            PANDAS_UNION_RULE,
-            PANDAS_INTERSECT_RULE,
-            PANDAS_MINUS_RULE,
-            PANDAS_VALUES_RULE,
-            PANDAS_SAMPLE_RULE,
-            PANDAS_ROW_SAMPLE_RULE,
-            PANDAS_FLATTEN_RULE,
-            PANDAS_WINDOW_RULE,
-            PANDAS_TABLE_MODIFY_RULE,
-            PANDAS_TABLE_CREATE_RULE,
-            PANDAS_TABLE_SCAN,
-            PANDAS_TARGET_TABLE_SCAN,
-            PANDAS_TABLE_FUNCTION_SCAN_RULE,
-            PANDAS_MIN_ROW_NUMBER_FILTER_RULE,
-        )
+        val PANDAS_RULES: List<RelOptRule> =
+            listOf(
+                PANDAS_PROJECT_RULE,
+                PANDAS_FILTER_RULE,
+                PANDAS_AGGREGATE_RULE,
+                PANDAS_JOIN_RULE,
+                PANDAS_SORT_RULE,
+                PANDAS_UNION_RULE,
+                PANDAS_INTERSECT_RULE,
+                PANDAS_MINUS_RULE,
+                PANDAS_VALUES_RULE,
+                PANDAS_SAMPLE_RULE,
+                PANDAS_ROW_SAMPLE_RULE,
+                PANDAS_FLATTEN_RULE,
+                PANDAS_WINDOW_RULE,
+                PANDAS_TABLE_MODIFY_RULE,
+                PANDAS_TABLE_CREATE_RULE,
+                PANDAS_TABLE_SCAN,
+                PANDAS_TARGET_TABLE_SCAN,
+                PANDAS_TABLE_FUNCTION_SCAN_RULE,
+                PANDAS_MIN_ROW_NUMBER_FILTER_RULE,
+            )
 
         fun rules(): List<RelOptRule> = PANDAS_RULES
     }

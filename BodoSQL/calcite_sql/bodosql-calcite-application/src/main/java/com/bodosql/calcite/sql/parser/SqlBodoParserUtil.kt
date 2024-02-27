@@ -20,7 +20,6 @@ import org.apache.calcite.sql.parser.SqlParserUtil
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import org.apache.calcite.util.Static.RESOURCE
-import java.util.*
 
 class SqlBodoParserUtil {
     companion object {
@@ -57,7 +56,11 @@ class SqlBodoParserUtil {
          * Returns a call to a builtin Table Function.
          */
         @JvmStatic
-        fun createBuiltinTableFunction(name: SqlIdentifier, pos: SqlParserPos, args: List<SqlNode>): SqlNode {
+        fun createBuiltinTableFunction(
+            name: SqlIdentifier,
+            pos: SqlParserPos,
+            args: List<SqlNode>,
+        ): SqlNode {
             if (name.simple == "FLATTEN") {
                 // In Snowflake FLATTEN supports calling functions using a mix of
                 // position and named arguments, which is not generally supported in SQL.
@@ -66,19 +69,24 @@ class SqlBodoParserUtil {
                 // for this mix by inserting the parameter names for any initial arguments
                 // preceding the first named argument.
                 val argNames = listOf("INPUT", "PATH", "OUTER", "RECURSIVE", "MODE")
-                val updatedArgs = if (args.any { x -> x.kind == SqlKind.ARGUMENT_ASSIGNMENT } && args.size <= argNames.size) {
-                    var seenNamed = false
-                    args.mapIndexed { i, arg ->
-                        if (!seenNamed && arg.kind != SqlKind.ARGUMENT_ASSIGNMENT) {
-                            SqlStdOperatorTable.ARGUMENT_ASSIGNMENT.createCall(arg.parserPosition, arg, SqlIdentifier(argNames[i], arg.parserPosition))
-                        } else {
-                            seenNamed = true
-                            arg
+                val updatedArgs =
+                    if (args.any { x -> x.kind == SqlKind.ARGUMENT_ASSIGNMENT } && args.size <= argNames.size) {
+                        var seenNamed = false
+                        args.mapIndexed { i, arg ->
+                            if (!seenNamed && arg.kind != SqlKind.ARGUMENT_ASSIGNMENT) {
+                                SqlStdOperatorTable.ARGUMENT_ASSIGNMENT.createCall(
+                                    arg.parserPosition,
+                                    arg,
+                                    SqlIdentifier(argNames[i], arg.parserPosition),
+                                )
+                            } else {
+                                seenNamed = true
+                                arg
+                            }
                         }
+                    } else {
+                        args
                     }
-                } else {
-                    args
-                }
                 return TableFunctionOperatorTable.FLATTEN.createCall(pos, updatedArgs)
             } else {
                 throw RuntimeException("Internal Error: Unexpected builtin table")
@@ -87,10 +95,14 @@ class SqlBodoParserUtil {
 
         /**
          * Convert a call to SPLIT_TO_TABLE to a call to FLATTEN(SPLIT(...)) with a pruning projection
-         * that only selects the columns of FLATTEN that can be produced by SPLIT_TO_TABLE.
+         * that only selects the columns of FLATTEN that can be newArgs by SPLIT_TO_TABLE.
          */
         @JvmStatic
-        fun createSplitToTable(start: SqlParserPos, end: SqlParserPos, args: List<SqlNode>): SqlNode? {
+        fun createSplitToTable(
+            start: SqlParserPos,
+            end: SqlParserPos,
+            args: List<SqlNode>,
+        ): SqlNode? {
             val splitCall: SqlNode = StringOperatorTable.SPLIT.createCall(end, args)
             val flattenCall = TableFunctionOperatorTable.FLATTEN.createCall(end, listOf(splitCall))
             val tableCall = SqlStdOperatorTable.COLLECTION_TABLE.createCall(end, flattenCall)
@@ -103,12 +115,16 @@ class SqlBodoParserUtil {
          * Dispatch a DATE_PART or Extract call to the appropriate individual function.
          */
         @JvmStatic
-        fun createDatePartFunction(funcName: String, pos: SqlParserPos, intervalName: SqlLiteral, args: List<SqlNode>): SqlNode {
+        fun createDatePartFunction(
+            funcName: String,
+            pos: SqlParserPos,
+            intervalName: SqlLiteral,
+            args: List<SqlNode>,
+        ): SqlNode {
             // Convert the enum to the correct function call.
             assert(intervalName.typeName == SqlTypeName.SYMBOL) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
             assert(intervalName.value is DateTimePart) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
-            val intervalEnum: DateTimePart = intervalName.value as DateTimePart
-            when (intervalEnum) {
+            when (val intervalEnum: DateTimePart = intervalName.value as DateTimePart) {
                 DateTimePart.YEAR -> return SqlStdOperatorTable.YEAR.createCall(pos, args)
                 DateTimePart.MONTH -> return SqlStdOperatorTable.MONTH.createCall(pos, args)
                 DateTimePart.DAY -> return SqlStdOperatorTable.DAYOFMONTH.createCall(pos, args)
@@ -138,18 +154,21 @@ class SqlBodoParserUtil {
         }
 
         @JvmStatic
-        fun createLastDayFunction(pos: SqlParserPos, intervalName: SqlLiteral, args: List<SqlNode>): SqlNode {
+        fun createLastDayFunction(
+            pos: SqlParserPos,
+            intervalName: SqlLiteral,
+            args: List<SqlNode>,
+        ): SqlNode {
             assert(intervalName.typeName == SqlTypeName.SYMBOL) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
             assert(intervalName.value is DateTimePart) { "Internal Error in createDatePartFunction: intervalName is not a symbol" }
-            val intervalEnum: DateTimePart = intervalName.value as DateTimePart
-            when (intervalEnum) {
+            when (val intervalEnum: DateTimePart = intervalName.value as DateTimePart) {
                 DateTimePart.YEAR,
                 DateTimePart.MONTH,
                 DateTimePart.WEEK,
                 DateTimePart.QUARTER,
                 -> {
-                    val new_args = args.plus(intervalName)
-                    return SqlBodoOperatorTable.LAST_DAY.createCall(pos, new_args)
+                    val newArgs = args.plus(intervalName)
+                    return SqlBodoOperatorTable.LAST_DAY.createCall(pos, newArgs)
                 }
                 else -> throw SqlUtil.newContextException(
                     pos,
@@ -181,8 +200,9 @@ class SqlBodoParserUtil {
             val splitStrings = s.split(",".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
             for (intervalInfo in splitStrings) {
                 val trimmedStr = intervalInfo.trim { it <= ' ' }
-                val intervalParts = trimmedStr.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }
-                    .toTypedArray()
+                val intervalParts =
+                    trimmedStr.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }
+                        .toTypedArray()
                 if (intervalParts.size == 1 || intervalParts.size == 2) {
                     val intervalAmountStr: String
                     val timeUnitStr: String
@@ -215,23 +235,24 @@ class SqlBodoParserUtil {
                     // Here we support the time units supported by the other interval syntax only.
                     // TODO: Support all interval values supported by Snowflake in both interval paths.
                     val unit: TimeUnit
-                    unit = when (timeUnitStr) {
-                        "year", "years", "y", "yy", "yyy", "yyyy", "yr", "yrs" -> TimeUnit.YEAR
-                        "quarter", "quarters", "qtr", "qtrs", "q" -> TimeUnit.QUARTER
-                        "month", "months", "mm", "mon", "mons" -> TimeUnit.MONTH
-                        "week", "weeks", "w", "wk", "weekofyear", "woy", "wy" -> TimeUnit.WEEK
-                        "day", "days", "d", "dd", "dayofmonth" -> TimeUnit.DAY
-                        "hour", "hours", "h", "hh", "hr", "hrs" -> TimeUnit.HOUR
-                        "minute", "minutes", "m", "mi", "min", "mins" -> TimeUnit.MINUTE
-                        "second", "seconds", "s", "sec", "secs" -> TimeUnit.SECOND
-                        "millisecond", "milliseconds", "ms", "msec" -> TimeUnit.MILLISECOND
-                        "microsecond", "microseconds", "us", "usec" -> TimeUnit.MICROSECOND
-                        "nanosecond", "nanoseconds", "ns", "nsec", "nanosec", "nanosecs", "nsecond", "nseconds" -> TimeUnit.NANOSECOND
-                        else -> throw SqlUtil.newContextException(
-                            pos,
-                            RESOURCE.illegalIntervalLiteral(s, pos.toString()),
-                        )
-                    }
+                    unit =
+                        when (timeUnitStr) {
+                            "year", "years", "y", "yy", "yyy", "yyyy", "yr", "yrs" -> TimeUnit.YEAR
+                            "quarter", "quarters", "qtr", "qtrs", "q" -> TimeUnit.QUARTER
+                            "month", "months", "mm", "mon", "mons" -> TimeUnit.MONTH
+                            "week", "weeks", "w", "wk", "weekofyear", "woy", "wy" -> TimeUnit.WEEK
+                            "day", "days", "d", "dd", "dayofmonth" -> TimeUnit.DAY
+                            "hour", "hours", "h", "hh", "hr", "hrs" -> TimeUnit.HOUR
+                            "minute", "minutes", "m", "mi", "min", "mins" -> TimeUnit.MINUTE
+                            "second", "seconds", "s", "sec", "secs" -> TimeUnit.SECOND
+                            "millisecond", "milliseconds", "ms", "msec" -> TimeUnit.MILLISECOND
+                            "microsecond", "microseconds", "us", "usec" -> TimeUnit.MICROSECOND
+                            "nanosecond", "nanoseconds", "ns", "nsec", "nanosec", "nanosecs", "nsecond", "nseconds" -> TimeUnit.NANOSECOND
+                            else -> throw SqlUtil.newContextException(
+                                pos,
+                                RESOURCE.illegalIntervalLiteral(s, pos.toString()),
+                            )
+                        }
                     intervalQualifiers.add(SqlIntervalQualifier(unit, null, pos))
                 } else {
                     throw SqlUtil.newContextException(
@@ -248,7 +269,7 @@ class SqlBodoParserUtil {
             }
 
             var res: SqlNode = SqlLiteral.createInterval(sign, intervalStrings[0], intervalQualifiers[0], pos)
-            for (i in 1..(intervalStrings.size - 1)) {
+            for (i in 1 until intervalStrings.size) {
                 val interval = SqlLiteral.createInterval(sign, intervalStrings[i], intervalQualifiers[i], pos)
                 // we use COMBINE_INTERVALS instead of operator+ because adding day/time intervals to year/month intervals is not allowed.
                 res = SqlBodoOperatorTable.COMBINE_INTERVALS.createCall(pos, listOf(res, interval))

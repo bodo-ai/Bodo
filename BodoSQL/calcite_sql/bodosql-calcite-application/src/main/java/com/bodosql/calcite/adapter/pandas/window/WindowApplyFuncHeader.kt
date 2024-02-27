@@ -11,17 +11,14 @@ internal data class WindowApplyFuncHeader(
      * Input dataframe passed into the function.
      */
     val input: BodoEngineTable,
-
     /**
      * A variable that references the original index.
      */
     val index: Variable,
-
     /**
      * A variable that references the length of the dataframe.
      */
     val len: Variable,
-
     /**
      * Column index for the column with the original positioning information.
      */

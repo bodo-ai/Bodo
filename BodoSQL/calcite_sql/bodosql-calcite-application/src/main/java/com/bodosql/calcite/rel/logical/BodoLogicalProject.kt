@@ -22,8 +22,12 @@ class BodoLogicalProject(
     projects: List<RexNode>,
     rowType: RelDataType,
 ) : ProjectBase(cluster, traitSet, hints, input, projects, rowType) {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        projects: List<RexNode>,
+        rowType: RelDataType,
+    ): Project {
         return BodoLogicalProject(cluster, traitSet, hints, input, projects, rowType)
     }
 
@@ -37,10 +41,11 @@ class BodoLogicalProject(
         ): BodoLogicalProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet().replace(Convention.NONE)
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    RelMdCollation.project(mq, input, projects)
-                }
+            val traitSet =
+                cluster.traitSet().replace(Convention.NONE)
+                    .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                        RelMdCollation.project(mq, input, projects)
+                    }
             return BodoLogicalProject(cluster, traitSet, hints, input, projects, rowType)
         }
 
@@ -52,12 +57,13 @@ class BodoLogicalProject(
             fieldNames: List<String?>?,
         ): BodoLogicalProject {
             val cluster = input.cluster
-            val rowType = RexUtil.createStructType(
-                cluster.typeFactory,
-                projects,
-                fieldNames,
-                SqlValidatorUtil.F_SUGGESTER,
-            )
+            val rowType =
+                RexUtil.createStructType(
+                    cluster.typeFactory,
+                    projects,
+                    fieldNames,
+                    SqlValidatorUtil.F_SUGGESTER,
+                )
             return create(input, hints, projects, rowType)
         }
     }

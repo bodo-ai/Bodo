@@ -31,7 +31,6 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.util.Util
 
 object IcebergConvertProgram : ShuttleProgram(Visitor) {
-
     override fun run(
         planner: RelOptPlanner,
         rel: RelNode,
@@ -47,7 +46,6 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
     }
 
     private object Visitor : RelShuttleImpl() {
-
         /**
          * Note the RelShuttleImpl() is design for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -128,7 +126,14 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                 else -> {
                     // Try and push this node.
                     if (node.projects.all { x -> x is RexInputRef }) {
-                        IcebergProject.create(node.cluster, node.traitSet, newInput, node.projects, node.getRowType(), node.getCatalogTable())
+                        IcebergProject.create(
+                            node.cluster,
+                            node.traitSet,
+                            newInput,
+                            node.projects,
+                            node.getRowType(),
+                            node.getCatalogTable(),
+                        )
                     } else {
                         // This node can't be pushed
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
@@ -161,7 +166,14 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     } else {
                         // Part of the condition is pushable to Iceberg. Here we do the part that can
                         // be pushed in Iceberg and the other part in Pandas
-                        val icebergFilter = IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition!!, node.getCatalogTable())
+                        val icebergFilter =
+                            IcebergFilter.create(
+                                node.cluster,
+                                node.traitSet,
+                                newInput,
+                                icebergCondition!!,
+                                node.getCatalogTable(),
+                            )
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
                         PandasFilter.create(node.cluster, converter, pandasCondition!!)
                     }
@@ -180,7 +192,15 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     PandasSort.create(newInput, node.collation, node.offset, node.fetch)
                 }
                 else -> {
-                    IcebergSort.create(node.cluster, node.traitSet, newInput, node.collation, node.offset, node.fetch, node.getCatalogTable())
+                    IcebergSort.create(
+                        node.cluster,
+                        node.traitSet,
+                        newInput,
+                        node.collation,
+                        node.offset,
+                        node.fetch,
+                        node.getCatalogTable(),
+                    )
                 }
             }
         }
@@ -199,11 +219,12 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                         // the result based on metadata, which would be much slower for us.
                         node
                     } else {
-                        val aggInput = if (newInput is IcebergRel) {
-                            IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        } else {
-                            newInput
-                        }
+                        val aggInput =
+                            if (newInput is IcebergRel) {
+                                IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
+                            } else {
+                                newInput
+                            }
                         PandasAggregate.create(node.cluster, aggInput, node.groupSet, node.groupSets, node.aggCallList)
                     }
                 }
@@ -217,7 +238,10 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
          * https://bodo.atlassian.net/browse/BSE-2688
          */
         @JvmStatic
-        private fun allowAggToIceberg(agg: SnowflakeAggregate, newInput: RelNode): Boolean {
+        private fun allowAggToIceberg(
+            agg: SnowflakeAggregate,
+            newInput: RelNode,
+        ): Boolean {
             // This says we can compute in Iceberg despite the presence of an aggregate
             // if we are just computing a distinct or scalar computation depends on a filter,
             // which can likely prevent metadata usage.
@@ -228,19 +252,20 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
          * Determine if a given plan contains an IcebergFilter
          */
         private fun containsIcebergFilter(node: RelNode): Boolean {
-            val visitor = object : RelVisitor() {
-                // ~ Methods ----------------------------------------------------------------
-                override fun visit(
-                    node: RelNode,
-                    ordinal: Int,
-                    parent: RelNode?,
-                ) {
-                    if (node is IcebergFilter) {
-                        throw Util.FoundOne.NULL
+            val visitor =
+                object : RelVisitor() {
+                    // ~ Methods ----------------------------------------------------------------
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        if (node is IcebergFilter) {
+                            throw Util.FoundOne.NULL
+                        }
+                        node.childrenAccept(this)
                     }
-                    node.childrenAccept(this)
                 }
-            }
             return try {
                 visitor.go(node)
                 false

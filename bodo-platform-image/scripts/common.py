@@ -15,9 +15,7 @@ def login(auth_url, bot_username, bot_password):
     :return: access_token - token from auth service
     """
     response = requests.post(
-        "{}/identity/resources/auth/v1/user".format(
-            auth_url
-        ),
+        "{}/identity/resources/auth/v1/user".format(auth_url),
         json={
             "email": bot_username,
             "password": bot_password,
@@ -30,7 +28,7 @@ def login(auth_url, bot_username, bot_password):
 
     # use organization id to switch tenant with superadmin capability
     assert "ORGANIZATION_UUID" in os.environ
-    logging.info("ORGANIZATION_UUID: ",os.environ["ORGANIZATION_UUID"])
+    logging.info("ORGANIZATION_UUID: ", os.environ["ORGANIZATION_UUID"])
     payload = {"tenantId": os.environ["ORGANIZATION_UUID"]}
     url = f"{auth_url}/identity/resources/users/v1/tenant"
     headers = {
@@ -44,9 +42,7 @@ def login(auth_url, bot_username, bot_password):
 
     # Log back in to receive access token with superadmin capability
     response = requests.post(
-        "{}/identity/resources/auth/v1/user".format(
-            auth_url
-        ),
+        "{}/identity/resources/auth/v1/user".format(auth_url),
         json={
             "email": bot_username,
             "password": bot_password,
@@ -60,12 +56,14 @@ def login(auth_url, bot_username, bot_password):
     return response.json()["accessToken"]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     if len(sys.argv) == 4:
         # Only print here as the bash scripts captures the access token to use it for authentication
         print(login(sys.argv[1], sys.argv[2], sys.argv[3]))
         sys.exit(0)
     else:
-        print("Missing arguments, please provide the authentication endpoint, username and password")
+        print(
+            "Missing arguments, please provide the authentication endpoint, username and password"
+        )
         sys.exit(1)

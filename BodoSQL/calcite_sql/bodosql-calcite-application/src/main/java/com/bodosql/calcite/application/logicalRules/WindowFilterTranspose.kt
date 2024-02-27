@@ -22,7 +22,6 @@ import org.apache.calcite.util.Util
  * for all window functions.
  */
 class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
-
     // Track which columns can be filtered. The visitor will modify this by computing
     // an intersection.
     private var filterableColumns = ImmutableBitSet.range(numCols)
@@ -47,15 +46,15 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
     }
 
     companion object {
-
         /** Determine if a RexNode contains a RexOver.  */
         @JvmStatic
         fun containsRexOver(node: RexNode): Boolean {
-            val visitor = object : RexVisitorImpl<Unit>(true) {
-                override fun visitOver(over: RexOver) {
-                    throw Util.FoundOne.NULL
+            val visitor =
+                object : RexVisitorImpl<Unit>(true) {
+                    override fun visitOver(over: RexOver) {
+                        throw Util.FoundOne.NULL
+                    }
                 }
-            }
             return try {
                 node.accept(visitor)
                 false
@@ -69,7 +68,10 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
          * filtered.
          */
         @JvmStatic
-        fun getFilterableColumnIndices(nodes: List<RexNode>, numCols: Int): ImmutableBitSet {
+        fun getFilterableColumnIndices(
+            nodes: List<RexNode>,
+            numCols: Int,
+        ): ImmutableBitSet {
             val visitor = WindowFilterTranspose(numCols)
             for (node in nodes) {
                 node.accept(visitor)
@@ -86,7 +88,10 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
          * non-pushable filters.
          */
         @JvmStatic
-        fun findPushableFilterComponents(project: Project, filter: Filter): Pair<List<RexNode>, List<RexNode>> {
+        fun findPushableFilterComponents(
+            project: Project,
+            filter: Filter,
+        ): Pair<List<RexNode>, List<RexNode>> {
             if (!project.containsOver() || filter.containsOver()) {
                 return Pair(listOf(), listOf(filter.condition))
             }

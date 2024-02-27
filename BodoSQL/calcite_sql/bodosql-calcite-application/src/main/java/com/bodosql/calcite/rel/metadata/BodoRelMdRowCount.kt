@@ -32,11 +32,13 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class BodoRelMdRowCount : RelMdRowCount() {
-
     // TODO: extend the rest of the functions in RelMdRowCount, to cover all possible future Snowflake rels,
     // and/or move the snowflakeRel handling to a separate row count handler that runs before this one.
     // https://bodo.atlassian.net/browse/BSE-878
-    override fun getRowCount(rel: RelNode, mq: RelMetadataQuery?): Double? {
+    override fun getRowCount(
+        rel: RelNode,
+        mq: RelMetadataQuery?,
+    ): Double? {
         return if (rel is SnowflakeRel) {
             // If the rel is a Snowflake Rel, get the row count directly from snowflake,
             // if appropriate.
@@ -55,16 +57,25 @@ class BodoRelMdRowCount : RelMdRowCount() {
         }
     }
 
-    fun getRowCount(rel: RowSample, mq: RelMetadataQuery): Double? {
+    fun getRowCount(
+        rel: RowSample,
+        mq: RelMetadataQuery,
+    ): Double? {
         val inputRowCount = mq.getRowCount(rel.input)
         return inputRowCount?.let { min(it, rel.rowSamplingParameters.numberOfRows.toDouble()) }
     }
 
-    fun getRowCount(rel: SnowflakeFilter, mq: RelMetadataQuery?): Double? {
+    fun getRowCount(
+        rel: SnowflakeFilter,
+        mq: RelMetadataQuery?,
+    ): Double? {
         return rel.tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
     }
 
-    fun getRowCount(rel: Flatten, mq: RelMetadataQuery?): Double? {
+    fun getRowCount(
+        rel: Flatten,
+        mq: RelMetadataQuery?,
+    ): Double? {
         // For flatten, assume that each row of arrays has a certain number of elements
         // on average. However, flatten also drops null rows, so assume not every
         // row is copied over.
@@ -72,14 +83,20 @@ class BodoRelMdRowCount : RelMdRowCount() {
         return inputRowCount?.times(PandasCostEstimator.AVG_ARRAY_ENTRIES_PER_ROW)
     }
 
-    fun getRowCount(rel: TableFunctionScan, mq: RelMetadataQuery): Double? {
+    fun getRowCount(
+        rel: TableFunctionScan,
+        mq: RelMetadataQuery,
+    ): Double? {
         return (rel as TableFunctionScanBase).estimateRowCount(mq)
     }
 
     /**
      * This is a copy of RelMdRowCount, but it also handles named parameters.
      */
-    override fun getRowCount(rel: Sort, mq: RelMetadataQuery): Double? {
+    override fun getRowCount(
+        rel: Sort,
+        mq: RelMetadataQuery,
+    ): Double? {
         var rowCount: Double = mq.getRowCount(rel.input) ?: return null
 
         // This is the only change, allowing RexCall (the node type
@@ -87,11 +104,12 @@ class BodoRelMdRowCount : RelMdRowCount() {
         if (rel.offset is RexDynamicParam || rel.offset is RexCall) {
             return rowCount
         }
-        val offset = if (rel.offset == null) {
-            0
-        } else {
-            RexLiteral.intValue(rel.offset)
-        }
+        val offset =
+            if (rel.offset == null) {
+                0
+            } else {
+                RexLiteral.intValue(rel.offset)
+            }
 
         rowCount = (rowCount - offset).coerceAtLeast(0.0)
         if (rel.fetch != null) {
@@ -115,7 +133,10 @@ class BodoRelMdRowCount : RelMdRowCount() {
      * but that is not safe because we may call getSelectivity after we have already
      * calculated the row count, so we need to isolate this to Join's row count.
      */
-    override fun getRowCount(rel: Join, mq: RelMetadataQuery): Double? {
+    override fun getRowCount(
+        rel: Join,
+        mq: RelMetadataQuery,
+    ): Double? {
         val origLeft = mq.getRowCount(rel.left)
         val origRight = mq.getRowCount(rel.right)
         if (origLeft == null || origRight == null) {
@@ -154,7 +175,10 @@ class BodoRelMdRowCount : RelMdRowCount() {
      * Determine if the predicate being used as a portion of the Join condition
      * can be used to extra better statistics via approx_count_distinct calls on the keys.
      */
-    private fun isValidDistinctCountJoinPredicate(comparison: RexNode, leftCount: Int): Boolean {
+    private fun isValidDistinctCountJoinPredicate(
+        comparison: RexNode,
+        leftCount: Int,
+    ): Boolean {
         return if (comparison.kind == SqlKind.EQUALS) {
             val equalsCall = comparison as RexCall
             val firstOperand = equalsCall.operands[0]
@@ -179,18 +203,23 @@ class BodoRelMdRowCount : RelMdRowCount() {
      * not valid for this type of comparison then it returns null for each entry.
      *
      */
-    private fun generateDistinctCountEstimate(rel: Join, mq: BodoRelMetadataQuery, comparison: RexNode): Pair<Double?, Double?> {
+    private fun generateDistinctCountEstimate(
+        rel: Join,
+        mq: BodoRelMetadataQuery,
+        comparison: RexNode,
+    ): Pair<Double?, Double?> {
         val leftCount = rel.left.getRowType().fieldCount
         val valid = isValidDistinctCountJoinPredicate(comparison, leftCount)
         return if (valid) {
             val equalsCall = comparison as RexCall
             val firstOperand = equalsCall.operands[0] as RexInputRef
             val secondOperand = equalsCall.operands[1] as RexInputRef
-            val (leftColumn, rightColumn) = if (firstOperand.index < leftCount) {
-                Pair(firstOperand.index, secondOperand.index - leftCount)
-            } else {
-                Pair(secondOperand.index, firstOperand.index - leftCount)
-            }
+            val (leftColumn, rightColumn) =
+                if (firstOperand.index < leftCount) {
+                    Pair(firstOperand.index, secondOperand.index - leftCount)
+                } else {
+                    Pair(secondOperand.index, firstOperand.index - leftCount)
+                }
             Pair(mq.getColumnDistinctCount(rel.left, leftColumn), mq.getColumnDistinctCount(rel.right, rightColumn))
         } else {
             Pair(null, null)
@@ -234,11 +263,12 @@ class BodoRelMdRowCount : RelMdRowCount() {
     ): Double {
         // Look at all the clauses in the condition. In the future we may only want to look
         // at individual keys but this ensures we keep each equality clause.
-        val comparisons: List<RexNode> = if (rel.condition.kind == SqlKind.AND) {
-            (rel.condition as RexCall).operands
-        } else {
-            listOf(rel.condition)
-        }
+        val comparisons: List<RexNode> =
+            if (rel.condition.kind == SqlKind.AND) {
+                (rel.condition as RexCall).operands
+            } else {
+                listOf(rel.condition)
+            }
         // Selectivity impact of non equality conditions
         var nonEqualitySelectivity = 1.0
         // Determine the number of distinct entries. We use a list
@@ -304,12 +334,18 @@ class BodoRelMdRowCount : RelMdRowCount() {
 
         // Determine the impact of all other filters
         val extraEqualitySelectivity =
-            NO_STATS_EQUALITY_COMPARISON_FACTOR.pow(((sortedJoinDistinct.size - numFiltersApplied) + equalityNoStatsCount).toDouble())
-        val innerRowCount = EXPECTED_OVERLAP_FACTOR * matchingDistinctTotal * leftSize * rightSize * extraEqualitySelectivity * nonEqualitySelectivity / (leftDistinctTotal * rightDistinctTotal)
+            noStatsEqualityComparisonFactor.pow(((sortedJoinDistinct.size - numFiltersApplied) + equalityNoStatsCount).toDouble())
+        val innerRowCount =
+            expectedOverlapFactor * matchingDistinctTotal * leftSize * rightSize *
+                extraEqualitySelectivity * nonEqualitySelectivity / (leftDistinctTotal * rightDistinctTotal)
         // Now estimate a left and right selectivity for outer join.
         // For non-equality or comparisons for which we have no stats assume both tables are equally impacted.
-        val leftSelectivity = (matchingDistinctTotal / leftDistinctTotal) * sqrt(EXPECTED_OVERLAP_FACTOR) * sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
-        val rightSelectivity = (matchingDistinctTotal / rightDistinctTotal) * sqrt(EXPECTED_OVERLAP_FACTOR) * sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
+        val leftSelectivity =
+            (matchingDistinctTotal / leftDistinctTotal) * sqrt(expectedOverlapFactor) *
+                sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
+        val rightSelectivity =
+            (matchingDistinctTotal / rightDistinctTotal) * sqrt(expectedOverlapFactor) *
+                sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
         return when (rel.joinType) {
             JoinRelType.INNER -> innerRowCount
             JoinRelType.LEFT -> leftSize * (1.0 - leftSelectivity) + innerRowCount
@@ -321,11 +357,11 @@ class BodoRelMdRowCount : RelMdRowCount() {
 
     // Constant parameter to define what percent of estimated total groups we expect
     // to keep for the final join.
-    private val EXPECTED_OVERLAP_FACTOR = 0.90
+    private val expectedOverlapFactor = 0.90
 
     // Constant parameter to check the impact of additional equality comparisons for
     // which we have no statistics or are not dominant.
-    private val NO_STATS_EQUALITY_COMPARISON_FACTOR = 0.70
+    private val noStatsEqualityComparisonFactor = 0.70
 
     /**
      * Compute the default assumed unique count for a table without uniqueness estimates
@@ -341,7 +377,11 @@ class BodoRelMdRowCount : RelMdRowCount() {
     /**
      * Estimates the row count after a MIN_ROW_NUMBER_FILTER based on the partition keys.
      */
-    private fun getMinRowNumFilterRowCount(windowCond: RexOver, input: RelNode, mq: RelMetadataQuery): Double {
+    private fun getMinRowNumFilterRowCount(
+        windowCond: RexOver,
+        input: RelNode,
+        mq: RelMetadataQuery,
+    ): Double {
         // rowCount is the cardinality of the partition by columns, fallback to divided by 10
         // if anything goes wrong.
         val totalRows = mq.getRowCount(input)
@@ -359,7 +399,10 @@ class BodoRelMdRowCount : RelMdRowCount() {
         return minOf(partitionCountEstimate, totalRows * 0.999)
     }
 
-    override fun getRowCount(rel: Filter, mq: RelMetadataQuery): Double? {
+    override fun getRowCount(
+        rel: Filter,
+        mq: RelMetadataQuery,
+    ): Double? {
         // Separate the conditions into window functions vs others
         val conjunctions = RelOptUtil.conjunctions(rel.condition)
         val windowConds: MutableList<RexOver> = mutableListOf()

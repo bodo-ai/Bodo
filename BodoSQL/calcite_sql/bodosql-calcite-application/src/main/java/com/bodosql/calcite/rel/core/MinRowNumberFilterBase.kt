@@ -27,31 +27,36 @@ open class MinRowNumberFilterBase(
     val orderColSet: List<Int>
     val ascendingList: List<Boolean>
     val nullPosList: List<Boolean>
+
     init {
         if (condition is RexOver && condition.kind == SqlKind.MIN_ROW_NUMBER_FILTER) {
-            partitionColSet = ImmutableBitSet.of(
-                condition.window.partitionKeys.map {
-                    if (it is RexInputRef) {
-                        it.index
+            partitionColSet =
+                ImmutableBitSet.of(
+                    condition.window.partitionKeys.map {
+                        if (it is RexInputRef) {
+                            it.index
+                        } else {
+                            throw Exception("Malformed MinRowNumberFilter condition: $condition")
+                        }
+                    },
+                )
+            orderColSet =
+                condition.window.orderKeys.map {
+                    val lhs = it.left
+                    if (lhs is RexInputRef) {
+                        (lhs as RexInputRef).index
                     } else {
                         throw Exception("Malformed MinRowNumberFilter condition: $condition")
                     }
-                },
-            )
-            orderColSet = condition.window.orderKeys.map {
-                val lhs = it.left
-                if (lhs is RexInputRef) {
-                    (lhs as RexInputRef).index
-                } else {
-                    throw Exception("Malformed MinRowNumberFilter condition: $condition")
                 }
-            }
-            ascendingList = condition.window.orderKeys.map {
-                it.direction == RelFieldCollation.Direction.ASCENDING
-            }
-            nullPosList = condition.window.orderKeys.map {
-                it.nullDirection == RelFieldCollation.NullDirection.LAST
-            }
+            ascendingList =
+                condition.window.orderKeys.map {
+                    it.direction == RelFieldCollation.Direction.ASCENDING
+                }
+            nullPosList =
+                condition.window.orderKeys.map {
+                    it.nullDirection == RelFieldCollation.NullDirection.LAST
+                }
         } else {
             throw Exception("Malformed MinRowNumberFilter condition: $condition")
         }
@@ -71,7 +76,10 @@ open class MinRowNumberFilterBase(
             .item("inputsToKeep", inputsToKeep)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         // The cost relates to the aggregating of rows which depends on the number of
         // distinct values of the partition columns, but also scales with the size
         // of the pass-through columns.

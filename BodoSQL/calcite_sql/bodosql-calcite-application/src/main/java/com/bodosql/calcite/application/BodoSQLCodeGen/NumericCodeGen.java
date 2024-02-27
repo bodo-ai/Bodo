@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
+import static com.bodosql.calcite.ir.ExprKt.bodoSQLKernel;
 
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
@@ -71,9 +71,9 @@ public class NumericCodeGen {
    */
   public static Expr genFloorCeilCode(String func, List<Expr> operands) {
     if (operands.size() == 2) {
-      return BodoSQLKernel(func.toLowerCase(), operands, List.of());
+      return bodoSQLKernel(func.toLowerCase(), operands, List.of());
     } else if (operands.size() == 1) {
-      return BodoSQLKernel(
+      return bodoSQLKernel(
           func.toLowerCase(), List.of(operands.get(0), new Expr.IntegerLiteral(0)), List.of());
     } else {
       throw new BodoSQLCodegenException(
@@ -91,7 +91,7 @@ public class NumericCodeGen {
   public static Expr getNumericFnCode(String fnName, List<Expr> args) {
 
     if (equivalentFnMap.containsKey(fnName)) {
-      return BodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
+      return bodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
@@ -112,7 +112,7 @@ public class NumericCodeGen {
       assert args.size() == 2;
       fnName = "log";
     }
-    return BodoSQLKernel(fnName, args, List.of());
+    return bodoSQLKernel(fnName, args, List.of());
   }
 
   /**
@@ -154,7 +154,7 @@ public class NumericCodeGen {
     exprs.add(new Expr.IntegerLiteral(prec));
     exprs.add(new Expr.IntegerLiteral(scale));
     String name = is_try ? "try_to_number" : "to_number";
-    return BodoSQLKernel(name, exprs, streamingNamedArgs);
+    return bodoSQLKernel(name, exprs, streamingNamedArgs);
   }
 
   /**
@@ -170,7 +170,7 @@ public class NumericCodeGen {
       String fnName, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     // LEAST and GREATEST take in a variable number of arguments,
     // so we wrap these arguments in a tuple as input
-    return BodoSQLKernel(
+    return bodoSQLKernel(
         fnName.toLowerCase(), List.of(new Expr.Tuple(operands)), streamingNamedArgs);
   }
 
@@ -188,7 +188,7 @@ public class NumericCodeGen {
     } else {
       arg = input;
     }
-    return BodoSQLKernel("random_seedless", List.of(arg), List.of());
+    return bodoSQLKernel("random_seedless", List.of(arg), List.of());
   }
 
   /**
@@ -198,6 +198,6 @@ public class NumericCodeGen {
    * @return The Expr corresponding to the function call
    */
   public static Expr generateUniformFnInfo(List<Expr> operands) {
-    return BodoSQLKernel("uniform", operands, List.of());
+    return bodoSQLKernel("uniform", operands, List.of());
   }
 }

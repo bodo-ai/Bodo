@@ -17,7 +17,6 @@ import org.apache.calcite.util.ImmutableBitSet
 import kotlin.math.pow
 
 class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
-
     /**
      * Calculates an approximation of the number of distinct combinations of
      * several columns in a RelNode. This is useful for approximating how many
@@ -138,58 +137,74 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
         // to have the same value where all of the partition keys are already
         // grouping keys.
         val asProjExprs = rel.convertToProjExprs()
-        val passThroughKeys = ImmutableBitSet.of(
-            groupKey.map {
-                if (it < rel.inputsToKeep.cardinality()) {
-                    rel.inputsToKeep.nth(it)
-                } else {
-                    -1
-                }
-            }.filter { it >= 0 },
-        )
-        val newGroupKey = groupKey.filter { idx ->
-            val over = asProjExprs[idx]
-            if (over is RexOver) {
-                when (over.kind) {
-                    SqlKind.MIN,
-                    SqlKind.MAX,
-                    SqlKind.MODE,
-                    SqlKind.FIRST_VALUE,
-                    SqlKind.ANY_VALUE,
-                    SqlKind.LAST_VALUE,
-                    SqlKind.NTH_VALUE,
-                    SqlKind.LEAD,
-                    SqlKind.LAG,
-                    -> {
-                        val partitionKeys = over.window.partitionKeys.map {
-                            if (it is RexInputRef) {
-                                it.index
+        val passThroughKeys =
+            ImmutableBitSet.of(
+                groupKey.map {
+                    if (it < rel.inputsToKeep.cardinality()) {
+                        rel.inputsToKeep.nth(it)
+                    } else {
+                        -1
+                    }
+                }.filter { it >= 0 },
+            )
+        val newGroupKey =
+            groupKey.filter { idx ->
+                val over = asProjExprs[idx]
+                if (over is RexOver) {
+                    when (over.kind) {
+                        SqlKind.MIN,
+                        SqlKind.MAX,
+                        SqlKind.MODE,
+                        SqlKind.FIRST_VALUE,
+                        SqlKind.ANY_VALUE,
+                        SqlKind.LAST_VALUE,
+                        SqlKind.NTH_VALUE,
+                        SqlKind.LEAD,
+                        SqlKind.LAG,
+                        -> {
+                            val partitionKeys =
+                                over.window.partitionKeys.map {
+                                    if (it is RexInputRef) {
+                                        it.index
+                                    } else {
+                                        throw Exception("Malformed window call $over")
+                                    }
+                                }
+                            val needsOperandCheck = listOf(SqlKind.LEAD, SqlKind.LAG).contains(over.operator.kind)
+                            val lowerCheck =
+                                listOf(
+                                    SqlKind.LAST_VALUE,
+                                    SqlKind.LEAD,
+                                    SqlKind.LAG,
+                                ).contains(over.operator.kind) || over.window.lowerBound.isUnbounded
+                            val upperCheck =
+                                listOf(
+                                    SqlKind.FIRST_VALUE,
+                                    SqlKind.ANY_VALUE,
+                                    SqlKind.NTH_VALUE,
+                                    SqlKind.LEAD,
+                                    SqlKind.LAG,
+                                ).contains(over.operator.kind) || over.window.upperBound.isUnbounded
+                            if (lowerCheck && upperCheck) {
+                                // If any partition keys are not also grouping keys, keep this key
+                                partitionKeys.any { !passThroughKeys.get(it) } ||
+                                    // If the function is lead/lag and the operands are not grouping keys, keep this key
+                                    (
+                                        needsOperandCheck &&
+                                            over.operands.any {
+                                                (it is RexInputRef) && !passThroughKeys.get(it.index)
+                                            }
+                                    )
                             } else {
-                                throw Exception("Malformed window call $over")
+                                true
                             }
                         }
-                        val needsOperandCheck = listOf(SqlKind.LEAD, SqlKind.LAG).contains(over.operator.kind)
-                        val lowerCheck = listOf(SqlKind.LAST_VALUE, SqlKind.LEAD, SqlKind.LAG).contains(over.operator.kind) || over.window.lowerBound.isUnbounded
-                        val upperCheck = listOf(SqlKind.FIRST_VALUE, SqlKind.ANY_VALUE, SqlKind.NTH_VALUE, SqlKind.LEAD, SqlKind.LAG).contains(over.operator.kind) || over.window.upperBound.isUnbounded
-                        if (lowerCheck && upperCheck) {
-                            // If any partition keys are not also grouping keys, keep this key
-                            partitionKeys.any { !passThroughKeys.get(it) } ||
-                                // If the function is lead/lag and the operands are not grouping keys, keep this key
-                                (
-                                    needsOperandCheck && over.operands.any {
-                                        (it is RexInputRef) && !passThroughKeys.get(it.index)
-                                    }
-                                    )
-                        } else {
-                            true
-                        }
+                        else -> true
                     }
-                    else -> true
+                } else {
+                    true
                 }
-            } else {
-                true
             }
-        }
         return cartesianApproximationDistinctRowCount(rel, mq, ImmutableBitSet.of(newGroupKey))
     }
 

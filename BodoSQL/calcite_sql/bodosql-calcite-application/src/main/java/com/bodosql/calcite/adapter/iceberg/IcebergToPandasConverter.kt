@@ -24,8 +24,10 @@ import java.lang.RuntimeException
 
 class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): RelNode {
         return IcebergToPandasConverter(cluster, traitSet, sole(inputs))
     }
 
@@ -39,6 +41,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "reading table"
+
     override fun loggingTitle() = "ICEBERG TIMING"
 
     // TODO: What to do with this function?
@@ -49,11 +52,15 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost? {
         // Determine the average row size which determines how much data is returned.
         // If this data isn't available, just assume something like 4 bytes for each column.
-        val averageRowSize = mq.getAverageRowSize(this)
-            ?: (4.0 * getRowType().fieldCount)
+        val averageRowSize =
+            mq.getAverageRowSize(this)
+                ?: (4.0 * getRowType().fieldCount)
 
         // Complete data size using the row count.
         val rows = mq.getRowCount(this)
@@ -96,7 +103,10 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         return readerVar
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
@@ -108,57 +118,65 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as IcebergRel
-        val projectionArg = Expr.Dict(
-            getProjectionDict(input as IcebergRel).map { (k, v) -> (StringLiteral(k) to StringLiteral(v)) },
-        )
+        val projectionArg =
+            Expr.Dict(
+                getProjectionDict(input as IcebergRel).map { (k, v) -> (StringLiteral(k) to StringLiteral(v)) },
+            )
         val schemaName = getSchemaName(relInput)
 
-        val args = listOf(
-            StringLiteral(getTableName(relInput)),
-            StringLiteral("iceberg+" + relInput.generatePythonConnStr(getDatabaseName(relInput), "")),
-            StringLiteral(schemaName),
-        )
-        val namedArgs = listOf(
-            "_bodo_chunksize" to getStreamingBatchArg(ctx),
-            "_bodo_read_as_table" to Expr.BooleanLiteral(true),
-            "_bodo_projection" to projectionArg,
-        )
+        val args =
+            listOf(
+                StringLiteral(getTableName(relInput)),
+                StringLiteral("iceberg+" + relInput.generatePythonConnStr(getDatabaseName(relInput), "")),
+                StringLiteral(schemaName),
+            )
+        val namedArgs =
+            listOf(
+                "_bodo_chunksize" to getStreamingBatchArg(ctx),
+                "_bodo_read_as_table" to Expr.BooleanLiteral(true),
+                "_bodo_projection" to projectionArg,
+            )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)
     }
 
     private fun getProjectionDict(node: IcebergRel): Map<String, String> {
-        val onlyColumnSubsetVisitor = object : RelVisitor() {
-            // Initialize all columns to be in the original location.
-            val projectedColNames: List<String> = node.getRowType().fieldNames
-            val originalColNames: List<String> = node.getCatalogTable().columnNames
-            var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+        val onlyColumnSubsetVisitor =
+            object : RelVisitor() {
+                // Initialize all columns to be in the original location.
+                val projectedColNames: List<String> = node.getRowType().fieldNames
+                val originalColNames: List<String> = node.getCatalogTable().columnNames
+                var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
 
-            override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
-                when (node) {
-                    // Enable moving past filters to get the original table
-                    is IcebergFilter -> node.childrenAccept(this)
-                    is IcebergProject -> {
-                        for (i in 0..<colMap.size) {
-                            val project = node.projects[colMap[i]]
-                            if (project !is RexInputRef) {
-                                throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                override fun visit(
+                    node: RelNode,
+                    ordinal: Int,
+                    parent: RelNode?,
+                ) {
+                    when (node) {
+                        // Enable moving past filters to get the original table
+                        is IcebergFilter -> node.childrenAccept(this)
+                        is IcebergProject -> {
+                            for (i in 0..<colMap.size) {
+                                val project = node.projects[colMap[i]]
+                                if (project !is RexInputRef) {
+                                    throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                                }
+                                // Remap to the original location.
+                                colMap[i] = project.index
                             }
-                            // Remap to the original location.
-                            colMap[i] = project.index
+                            node.childrenAccept(this)
                         }
-                        node.childrenAccept(this)
-                    }
-                    is IcebergTableScan -> {
-                        for (value in colMap) {
-                            if (value >= originalColNames.size) {
-                                throw RuntimeException("IcebergProjection Invalid")
+                        is IcebergTableScan -> {
+                            for (value in colMap) {
+                                if (value >= originalColNames.size) {
+                                    throw RuntimeException("IcebergProjection Invalid")
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
         onlyColumnSubsetVisitor.go(node)
         return onlyColumnSubsetVisitor.colMap.mapIndexed {
@@ -168,7 +186,9 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
     }
 
     private fun getTableName(input: IcebergRel) = input.getCatalogTable().name
+
     private fun getSchemaName(input: IcebergRel) = input.getCatalogTable().fullPath[1]
+
     private fun getDatabaseName(input: IcebergRel) = input.getCatalogTable().fullPath[0]
 
     /**
@@ -185,7 +205,10 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
     /**
      * Generate the Table for the body of the streaming code.
      */
-    private fun generateStreamingTable(ctx: PandasRel.BuildContext, stateVar: StateVariable): BodoEngineTable {
+    private fun generateStreamingTable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ): BodoEngineTable {
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val tableChunkVar = builder.symbolTable.genTableVar()

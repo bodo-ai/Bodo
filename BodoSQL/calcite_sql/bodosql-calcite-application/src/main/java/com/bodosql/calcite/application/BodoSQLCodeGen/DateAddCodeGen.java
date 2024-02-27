@@ -20,7 +20,7 @@ public class DateAddCodeGen {
   public static Expr generateSnowflakeDateAddCode(List<Expr> operands, String unit) {
     // input check for time unit is moved to standardizeTimeUnit() function,
     // which is called in PandasCodeGenVisitor.java
-    return ExprKt.BodoSQLKernel("add_interval_" + unit + "s", operands, List.of());
+    return ExprKt.bodoSQLKernel("add_interval_" + unit + "s", operands, List.of());
   }
 
   /**
@@ -39,13 +39,13 @@ public class DateAddCodeGen {
   public static Expr generateMySQLDateAddCode(
       Expr arg0, Expr arg1, boolean adding_delta, String fnName) {
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
-      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
+      arg1 = ExprKt.bodoSQLKernel("negate", List.of(arg1), List.of());
     }
 
     if (adding_delta) {
-      return ExprKt.BodoSQLKernel("add_interval", List.of(arg0, arg1), List.of());
+      return ExprKt.bodoSQLKernel("add_interval", List.of(arg0, arg1), List.of());
     } else {
-      return ExprKt.BodoSQLKernel("add_interval_days", List.of(arg1, arg0), List.of());
+      return ExprKt.bodoSQLKernel("add_interval_days", List.of(arg1, arg0), List.of());
     }
   }
 }

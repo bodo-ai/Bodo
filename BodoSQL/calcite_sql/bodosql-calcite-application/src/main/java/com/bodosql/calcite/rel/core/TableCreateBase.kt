@@ -20,20 +20,28 @@ open class TableCreateBase(
     val createTableType: SqlCreateTable.CreateTableType,
     val path: List<String>,
     val meta: SnowflakeCreateTableMetadata,
-
 ) : TableCreate(cluster, traitSet, input) {
-
     override fun explainTerms(pw: RelWriter?): RelWriter? {
-        var result = super.explainTerms(pw)
-            .item("TableName", tableName)
-            .item("Target Schema", this.path)
-            .item("IsReplace", isReplace)
-            .item("CreateTableType", createTableType)
+        var result =
+            super.explainTerms(pw)
+                .item("TableName", tableName)
+                .item("Target Schema", this.path)
+                .item("IsReplace", isReplace)
+                .item("CreateTableType", createTableType)
         if (meta.tableComment != null) {
             result = result.item("Table Comment", meta.tableComment)
         }
         if (meta.columnComments != null) {
-            result = result.item("Column Comments", meta.columnComments!!.mapIndexed { idx, value -> value?.let { Pair(this.getRowType().fieldNames[idx], value) } }.filterNotNull())
+            result =
+                result.item(
+                    "Column Comments",
+                    meta.columnComments!!.mapIndexed {
+                            idx,
+                            value,
+                        ->
+                        value?.let { Pair(this.getRowType().fieldNames[idx], value) }
+                    }.filterNotNull(),
+                )
         }
         return result
     }

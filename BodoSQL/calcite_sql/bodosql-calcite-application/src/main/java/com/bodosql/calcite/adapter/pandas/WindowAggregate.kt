@@ -18,7 +18,11 @@ import org.apache.calcite.rex.RexOver
  * [RexOver] calls that have the same partition key will be organized together
  * to reduce the number of windowed aggregate invocations.
  */
-fun extractWindows(cluster: RelOptCluster, input: BodoEngineTable, exprs: List<RexNode>): MultiResult {
+fun extractWindows(
+    cluster: RelOptCluster,
+    input: BodoEngineTable,
+    exprs: List<RexNode>,
+): MultiResult {
     val windowBuilder = Builder(cluster, input)
     val newExprs = exprs.map { exp -> exp.accept(windowBuilder) }
     return MultiResult(windowBuilder.build(), newExprs)
@@ -32,7 +36,11 @@ fun extractWindows(cluster: RelOptCluster, input: BodoEngineTable, exprs: List<R
  *
  * @see [extract]
  */
-fun extractWindows(cluster: RelOptCluster, input: BodoEngineTable, expr: RexNode): Result {
+fun extractWindows(
+    cluster: RelOptCluster,
+    input: BodoEngineTable,
+    expr: RexNode,
+): Result {
     val (aggregate, exprs) = extractWindows(cluster, input, listOf(expr))
     return Result(aggregate, exprs[0])
 }

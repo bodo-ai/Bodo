@@ -19,7 +19,25 @@ import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction
 import java.lang.reflect.Type
 import java.math.BigDecimal
 
-class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, inputs: List<RelNode>, call: RexCall, elementType: Type?, rowType: RelDataType, columnMappings: Set<RelColumnMapping>?) : TableFunctionScanBase(cluster, traits.replace(PandasRel.CONVENTION), inputs, call, elementType, rowType, columnMappings), PandasRel {
+class PandasTableFunctionScan(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    inputs: List<RelNode>,
+    call: RexCall,
+    elementType: Type?,
+    rowType: RelDataType,
+    columnMappings: Set<RelColumnMapping>?,
+) :
+    TableFunctionScanBase(
+            cluster,
+            traits.replace(PandasRel.CONVENTION),
+            inputs,
+            call,
+            elementType,
+            rowType,
+            columnMappings,
+        ),
+        PandasRel {
     /**
      * Emits the code necessary for implementing this relational operator.
      *
@@ -46,7 +64,10 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
      * @param generatorCall the function call to GENERATOR
      * @return the variable that represents this relational expression.
      */
-    fun emitGenerator(ctx: PandasRel.BuildContext, generatorCall: RexCall): BodoEngineTable {
+    fun emitGenerator(
+        ctx: PandasRel.BuildContext,
+        generatorCall: RexCall,
+    ): BodoEngineTable {
         generatorCall.operands[0]
         val rowCountLiteral = generatorCall.operands[0] as RexLiteral
         val rowCountExpr = Expr.IntegerLiteral(rowCountLiteral.getValueAs(BigDecimal::class.java)!!.toInt())
@@ -60,18 +81,25 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
      * @param etfCall the function call to EXTERNAL_TABLE_FILES
      * @return the variable that represents this relational expression.
      */
-    private fun emitExternalTableFiles(ctx: PandasRel.BuildContext, etfCall: RexCall): BodoEngineTable {
+    private fun emitExternalTableFiles(
+        ctx: PandasRel.BuildContext,
+        etfCall: RexCall,
+    ): BodoEngineTable {
         // This is a defensive check since it should always be true by the manner in which
         // a  call to EXTERNAL_TABLE_FILES is constructed.
-        return if (etfCall.op is SqlUserDefinedTableFunction && etfCall.op.function is
-            SnowflakeNamedArgumentSqlCatalogTableFunction
+        return if (etfCall.op is SqlUserDefinedTableFunction &&
+            etfCall.op.function is
+                SnowflakeNamedArgumentSqlCatalogTableFunction
         ) {
             val function = etfCall.op.function as SnowflakeNamedArgumentSqlCatalogTableFunction
             val catalog = function.catalog
             val databaseName = if (function.functionPath.size < 2) catalog.getDefaultSchema(0)[0] else function.functionPath[0]
             val connStr = Expr.StringLiteral(catalog.generatePythonConnStr(databaseName, ""))
             val tableName = (etfCall.operands[0] as RexLiteral).getValueAs(String::class.java)!!
-            val query = Expr.StringLiteral("SELECT * FROM TABLE(\"$databaseName\".\"INFORMATION_SCHEMA\".\"EXTERNAL_TABLE_FILES\"(TABLE_NAME=>$$$tableName$$))")
+            val query =
+                Expr.StringLiteral(
+                    "SELECT * FROM TABLE(\"$databaseName\".\"INFORMATION_SCHEMA\".\"EXTERNAL_TABLE_FILES\"(TABLE_NAME=>$$$tableName$$))",
+                )
             val args = listOf(query, connStr)
             val kwargs = listOf("_bodo_read_as_table" to Expr.BooleanLiteral(true))
             return ctx.returns(Expr.Call("pd.read_sql", args, kwargs))
@@ -92,9 +120,13 @@ class PandasTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, input
      * Function to delete the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
+
     companion object {
         @JvmStatic
         fun create(

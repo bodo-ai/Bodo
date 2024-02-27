@@ -26,7 +26,6 @@ class PandasJoin(
     joinType: JoinRelType,
     val rebalanceOutput: Boolean,
 ) : JoinBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), left, right, condition, joinType), PandasRel {
-
     constructor(
         cluster: RelOptCluster,
         traitSet: RelTraitSet,
@@ -56,7 +55,10 @@ class PandasJoin(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
@@ -85,7 +87,12 @@ class PandasJoin(
     }
 
     companion object {
-        fun create(left: RelNode, right: RelNode, condition: RexNode, joinType: JoinRelType): PandasJoin {
+        fun create(
+            left: RelNode,
+            right: RelNode,
+            condition: RexNode,
+            joinType: JoinRelType,
+        ): PandasJoin {
             val cluster = left.cluster
             return PandasJoin(cluster, cluster.traitSet(), left, right, condition, joinType)
         }

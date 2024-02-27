@@ -19,7 +19,11 @@ class SqlTruncateTable(pos: SqlParserPos, val ifExists: Boolean, val name: SqlId
 
     override fun getOperandList(): List<SqlNode> = ImmutableList.of(name)
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword(operator.name)
         if (ifExists) {
             writer.keyword("IF EXISTS")

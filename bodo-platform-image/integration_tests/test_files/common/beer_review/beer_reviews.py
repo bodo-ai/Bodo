@@ -79,5 +79,6 @@ def find_top_words(review_filename):
     print("Low words: ")
     print(low_words)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     find_top_words("s3://bodo-example-data/beer/reviews_sample.csv")

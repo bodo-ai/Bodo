@@ -1,4 +1,5 @@
-/*  From https://github.com/Cyan4973/xxHash/commit/4a20afceb625f62278e11f630156475aee40b055
+/*  From
+ * https://github.com/Cyan4973/xxHash/commit/4a20afceb625f62278e11f630156475aee40b055
  * xxHash - Extremely Fast Hash algorithm
  * Development source file for `xxh3`
  * Copyright (C) 2019-2020 Yann Collet

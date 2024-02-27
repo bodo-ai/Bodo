@@ -6,7 +6,7 @@ import time
 @bodo.jit
 def logistic_regression(iterations):
     t1 = time.time()
-    N = 10 ** 8
+    N = 10**8
     D = 10
     g = 2 * np.random.ranf(D) - 1
     X = 2 * np.random.ranf((N, D)) - 1

@@ -215,11 +215,12 @@ object BodoRules {
      * Pushes full projects past joins when possible.
      */
     @JvmField
-    val FULL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule = ProjectJoinTransposeRule.Config.DEFAULT
-        .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
-        .withPreserveExprCondition { expr: RexNode -> !WindowFilterTranspose.containsRexOver(expr) }
-        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-        .toRule()
+    val FULL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
+        ProjectJoinTransposeRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
+            .withPreserveExprCondition { expr: RexNode -> !WindowFilterTranspose.containsRexOver(expr) }
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
 
     /**
      * Push only field references past a filter.
@@ -601,10 +602,11 @@ object BodoRules {
      * Pull up Constants used in Aggregates.
      */
     @JvmField
-    val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = AggregateProjectPullUpConstantsRule.Config.DEFAULT
-        .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
-        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-        .toRule()
+    val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule =
+        AggregateProjectPullUpConstantsRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
 
     /**
      * Rule that derives IS NOT NULL predicates from a inner {@link Join} and creates
@@ -613,18 +615,19 @@ object BodoRules {
      * TODO(njriasan) why can't I access JoinDeriveIsNotNullFilterRule.Config.DEFAULT
      */
     @JvmField
-    val JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE: RelOptRule = CoreRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE.config
-        .withOperandSupplier {
-                b: OperandBuilder ->
-            b.operand(BodoLogicalJoin::class.java).predicate { join: BodoLogicalJoin ->
-                (
-                    join.joinType == JoinRelType.INNER &&
-                        !join.condition.isAlwaysTrue
+    val JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE: RelOptRule =
+        CoreRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE.config
+            .withOperandSupplier {
+                    b: OperandBuilder ->
+                b.operand(BodoLogicalJoin::class.java).predicate { join: BodoLogicalJoin ->
+                    (
+                        join.joinType == JoinRelType.INNER &&
+                            !join.condition.isAlwaysTrue
                     )
-            }.anyInputs()
-        }
-        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-        .toRule()
+                }.anyInputs()
+            }
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
 
     /**
      * Converts a PandasFilter to a SnowflakeFilter if it is located directly on top of a
@@ -666,40 +669,44 @@ object BodoRules {
         }.withDescription("BodoUnionMergeRule").toRule()
 
     @JvmField
-    val CSE_IN_FILTERS_RULE: RelOptRule = InClauseCommonSubexpressionEliminationRule.Config.DEFAULT.withRelBuilderFactory(
-        BODO_LOGICAL_BUILDER,
-    ).toRule()
+    val CSE_IN_FILTERS_RULE: RelOptRule =
+        InClauseCommonSubexpressionEliminationRule.Config.DEFAULT.withRelBuilderFactory(
+            BODO_LOGICAL_BUILDER,
+        ).toRule()
 
     @JvmField
-    val EXTRACT_PUSHABLE_JOIN_CONDITIONS: RelOptRule = ExtractPushableExpressionsJoin.Config.DEFAULT.withRelBuilderFactory(
-        BODO_LOGICAL_BUILDER,
-    ).withOperandSupplier {
-            b0: OperandBuilder ->
-        b0.operand(BodoLogicalJoin::class.java).anyInputs()
-    }.toRule()
-
-    @JvmField
-    val PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS: RelOptRule = com.bodosql.calcite.application.logicalRules.ProjectFilterTransposePushableExpressionsRule.Config.DEFAULT
-        .withRelBuilderFactory(BODO_LOGICAL_BUILDER).withOperandSupplier {
+    val EXTRACT_PUSHABLE_JOIN_CONDITIONS: RelOptRule =
+        ExtractPushableExpressionsJoin.Config.DEFAULT.withRelBuilderFactory(
+            BODO_LOGICAL_BUILDER,
+        ).withOperandSupplier {
                 b0: OperandBuilder ->
-            b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
-                b1.operand(
-                    BodoLogicalFilter::class.java,
-                ).anyInputs()
-            }
+            b0.operand(BodoLogicalJoin::class.java).anyInputs()
         }.toRule()
 
     @JvmField
-    val PROJECT_SET_OP_TRANSPOSE: RelOptRule = com.bodosql.calcite.application.logicalRules.BodoProjectSetOpTransposeRule.Config.DEFAULT
-        .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-        .withOperandSupplier {
-                b0: OperandBuilder ->
-            b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
-                b1.operand(
-                    SetOp::class.java,
-                ).anyInputs()
-            }
-        }.toRule()
+    val PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS: RelOptRule =
+        com.bodosql.calcite.application.logicalRules.ProjectFilterTransposePushableExpressionsRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER).withOperandSupplier {
+                    b0: OperandBuilder ->
+                b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
+                    b1.operand(
+                        BodoLogicalFilter::class.java,
+                    ).anyInputs()
+                }
+            }.toRule()
+
+    @JvmField
+    val PROJECT_SET_OP_TRANSPOSE: RelOptRule =
+        com.bodosql.calcite.application.logicalRules.BodoProjectSetOpTransposeRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .withOperandSupplier {
+                    b0: OperandBuilder ->
+                b0.operand(BodoLogicalProject::class.java).oneInput { b1: OperandBuilder ->
+                    b1.operand(
+                        SetOp::class.java,
+                    ).anyInputs()
+                }
+            }.toRule()
 
     /**
      * Lock in SnowflakeProjects a top SnowflakeToPandasConverter
@@ -726,7 +733,10 @@ object BodoRules {
             .toRule()
 
     @JvmStatic
-    val PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE: RelOptRule = PartialJoinConditionIntoChildrenRule.Config.DEFAULT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+    val PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE: RelOptRule =
+        PartialJoinConditionIntoChildrenRule.Config.DEFAULT.withRelBuilderFactory(
+            BODO_LOGICAL_BUILDER,
+        ).toRule()
 
     /**
      * Planner rule that combines two SnowflakeFilters.
@@ -843,36 +853,39 @@ object BodoRules {
     /**
      * These are rules to remove sub-queries.
      */
-    val SUB_QUERY_REMOVAL_RULES: List<RelOptRule> = listOf(
-        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.FILTER.toRule(),
-        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.PROJECT.toRule(),
-        com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.JOIN.toRule(),
-    )
+    val SUB_QUERY_REMOVAL_RULES: List<RelOptRule> =
+        listOf(
+            com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.FILTER.toRule(),
+            com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.PROJECT.toRule(),
+            com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.Config.JOIN.toRule(),
+        )
 
     /**
      * Rules that handle generic projection pushdown. Currently, this just consists
      * of the available rules in Calcite. All of these rules run during FieldPushdown,
      * and some run in other locations.
      */
-    val ProjectionPushdownRules: List<RelOptRule> = listOf(
-        PROJECT_SET_OP_TRANSPOSE,
-        FULL_PROJECT_JOIN_TRANSPOSE_RULE,
-        AGGREGATE_PROJECT_MERGE_RULE,
-        PROJECT_MERGE_RULE,
-        FILTER_MERGE_RULE,
-        PROJECT_REMOVE_RULE,
-    )
+    val ProjectionPushdownRules: List<RelOptRule> =
+        listOf(
+            PROJECT_SET_OP_TRANSPOSE,
+            FULL_PROJECT_JOIN_TRANSPOSE_RULE,
+            AGGREGATE_PROJECT_MERGE_RULE,
+            PROJECT_MERGE_RULE,
+            FILTER_MERGE_RULE,
+            PROJECT_REMOVE_RULE,
+        )
 
     /**
      * Specialized rules that specifically handles field pushdown.
      */
-    val FieldPushdownRules: List<RelOptRule> = listOf(
-        EXTRACT_PUSHABLE_JOIN_CONDITIONS,
-        PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS,
-        // rules necessary to lock in pushed projects
-        SNOWFLAKE_PROJECT_LOCK_RULE,
-        SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE,
-    )
+    val FieldPushdownRules: List<RelOptRule> =
+        listOf(
+            EXTRACT_PUSHABLE_JOIN_CONDITIONS,
+            PROJECT_FILTER_TRANSPOSE_PUSHABLE_EXPRESSIONS,
+            // rules necessary to lock in pushed projects
+            SNOWFLAKE_PROJECT_LOCK_RULE,
+            SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE,
+        )
 
     /**
      * These are all the rules that allow for pulling a project closer to the root
@@ -880,61 +893,64 @@ object BodoRules {
      *
      * All of these run during ProjectionPullUpPass. Some of these also run during other volcano passes
      */
-    val PROJECTION_PULL_UP_RULES: List<RelOptRule> = listOf(
-        FILTER_PROJECT_TRANSPOSE_RULE,
-        LIMIT_PROJECT_TRANSPOSE_RULE,
-        SORT_PROJECT_TRANSPOSE_RULE,
-        JOIN_PROJECT_LEFT_TRANSPOSE_INCLUDE_OUTER,
-        JOIN_PROJECT_RIGHT_TRANSPOSE_INCLUDE_OUTER,
-        PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
-        PROJECT_REMOVE_RULE,
-    )
+    val PROJECTION_PULL_UP_RULES: List<RelOptRule> =
+        listOf(
+            FILTER_PROJECT_TRANSPOSE_RULE,
+            LIMIT_PROJECT_TRANSPOSE_RULE,
+            SORT_PROJECT_TRANSPOSE_RULE,
+            JOIN_PROJECT_LEFT_TRANSPOSE_INCLUDE_OUTER,
+            JOIN_PROJECT_RIGHT_TRANSPOSE_INCLUDE_OUTER,
+            PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
+            PROJECT_REMOVE_RULE,
+        )
 
     /**
      * These are rules that essentially "rewrite" an unsupported or non-ideal plan construction
      * into another. The assumption is all these are irreversible and are not generated by
      * any of our optimizations.
      */
-    val REWRITE_RULES: List<RelOptRule> = listOf(
-        FILTER_EXTRACT_CASE_RULE,
-        MIN_ROW_NUMBER_FILTER_RULE,
-    )
+    val REWRITE_RULES: List<RelOptRule> =
+        listOf(
+            FILTER_EXTRACT_CASE_RULE,
+            MIN_ROW_NUMBER_FILTER_RULE,
+        )
 
     /**
      * These are rules that push filters deeper into the plan and attempt to force filters
      * into source nodes.
      */
-    val FILTER_PUSH_DOWN_RULES: List<RelOptRule> = listOf(
-        // Rules for pushing filters
-        FILTER_PROJECT_TRANSPOSE_RULE,
-        FILTER_AGGREGATE_TRANSPOSE_RULE,
-        FILTER_SETOP_TRANSPOSE_RULE,
-        FILTER_INTO_JOIN_RULE,
-        FILTER_JOIN_RULE,
-        FILTER_FLATTEN_TRANSPOSE_RULE,
-        // Combining filters can simplify filters for pushing
-        FILTER_MERGE_RULE,
-        // Push some filters past filters in window functions.
-        FILTER_WINDOW_SPLIT_RULE,
-        // Reordering conditions can lead to greater filter pushing.
-        FILTER_REORDER_CONDITION_RULE,
-        JOIN_REORDER_CONDITION_RULE,
-        // Process for inserting new filters to push
-        JOIN_PUSH_TRANSITIVE_PREDICATES,
-        JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
-        // Locking in any filters that can become SnowflakeFilter
-        SNOWFLAKE_FILTER_LOCK_RULE,
-        // Locking in any Limit pushdown
-        SNOWFLAKE_LIMIT_LOCK_RULE,
-    )
+    val FILTER_PUSH_DOWN_RULES: List<RelOptRule> =
+        listOf(
+            // Rules for pushing filters
+            FILTER_PROJECT_TRANSPOSE_RULE,
+            FILTER_AGGREGATE_TRANSPOSE_RULE,
+            FILTER_SETOP_TRANSPOSE_RULE,
+            FILTER_INTO_JOIN_RULE,
+            FILTER_JOIN_RULE,
+            FILTER_FLATTEN_TRANSPOSE_RULE,
+            // Combining filters can simplify filters for pushing
+            FILTER_MERGE_RULE,
+            // Push some filters past filters in window functions.
+            FILTER_WINDOW_SPLIT_RULE,
+            // Reordering conditions can lead to greater filter pushing.
+            FILTER_REORDER_CONDITION_RULE,
+            JOIN_REORDER_CONDITION_RULE,
+            // Process for inserting new filters to push
+            JOIN_PUSH_TRANSITIVE_PREDICATES,
+            JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
+            // Locking in any filters that can become SnowflakeFilter
+            SNOWFLAKE_FILTER_LOCK_RULE,
+            // Locking in any Limit pushdown
+            SNOWFLAKE_LIMIT_LOCK_RULE,
+        )
 
     /**
      * These are rules related to pushing limits into source tables.
      */
-    val LIMIT_PUSH_DOWN_RULES: List<RelOptRule> = listOf(
-        LIMIT_PROJECT_TRANSPOSE_RULE,
-
-    )
+    val LIMIT_PUSH_DOWN_RULES: List<RelOptRule> =
+        listOf(
+            LIMIT_PROJECT_TRANSPOSE_RULE,
+        )
 
     /**
      * These are rules used for simplification of expressions.
@@ -944,12 +960,13 @@ object BodoRules {
      * fine to remove, but we may want to revisit in the future with a more concrete
      * reason or re-enabling this rule.
      */
-    val SIMPLIFICATION_RULES: List<RelOptRule> = listOf(
-        PROJECT_REDUCE_EXPRESSIONS_RULE,
-        // simplifies constants after aggregates
-        // This is needed to take advantage of constant prop done by the above rules
-        AGGREGATE_CONSTANT_PULL_UP_RULE,
-    )
+    val SIMPLIFICATION_RULES: List<RelOptRule> =
+        listOf(
+            PROJECT_REDUCE_EXPRESSIONS_RULE,
+            // simplifies constants after aggregates
+            // This is needed to take advantage of constant prop done by the above rules
+            AGGREGATE_CONSTANT_PULL_UP_RULE,
+        )
 
     /**
      * These are rules that work with some form of Common Subexpression Elimination
@@ -958,103 +975,112 @@ object BodoRules {
      * Note: These rules likely need to be written to enable tracking "existing expressions",
      * ideally through metadata.
      */
-    val CSE_RULES: List<RelOptRule> = listOf(
-        // NOTE: TRIVIAL_PROJECT_FILTER_TRANSPOSE can't be run with filter pushdown without Volcano.
-        // If we ever want to run CSE_RULES with filter pushdown, this needs to be removed.
-        TRIVIAL_PROJECT_FILTER_TRANSPOSE,
-        PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
-        PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
-    )
+    val CSE_RULES: List<RelOptRule> =
+        listOf(
+            // NOTE: TRIVIAL_PROJECT_FILTER_TRANSPOSE can't be run with filter pushdown without Volcano.
+            // If we ever want to run CSE_RULES with filter pushdown, this needs to be removed.
+            TRIVIAL_PROJECT_FILTER_TRANSPOSE,
+            PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
+            PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
+        )
 
     /**
      * These are the rules to construct a MultiJoin
      */
-    val MULTI_JOIN_CONSTRUCTION_RULES: List<RelOptRule> = listOf(
-        MULTI_JOIN_BOTH_PROJECT,
-        MULTI_JOIN_LEFT_PROJECT,
-        MULTI_JOIN_RIGHT_PROJECT,
-        JOIN_TO_MULTI_JOIN,
-        PROJECT_MULTI_JOIN_MERGE,
-        FILTER_MULTI_JOIN_MERGE,
-        // Need to merge filters/projects to prevent blocking multi-joins.
-        PROJECT_MERGE_RULE,
-        FILTER_MERGE_RULE,
-    )
+    val MULTI_JOIN_CONSTRUCTION_RULES: List<RelOptRule> =
+        listOf(
+            MULTI_JOIN_BOTH_PROJECT,
+            MULTI_JOIN_LEFT_PROJECT,
+            MULTI_JOIN_RIGHT_PROJECT,
+            JOIN_TO_MULTI_JOIN,
+            PROJECT_MULTI_JOIN_MERGE,
+            FILTER_MULTI_JOIN_MERGE,
+            // Need to merge filters/projects to prevent blocking multi-joins.
+            PROJECT_MERGE_RULE,
+            FILTER_MERGE_RULE,
+        )
 
     /**
      * These are rules that control join ordering.
      */
-    val JOIN_ORDERING_RULES: List<RelOptRule> = listOf(
-        JOIN_COMMUTE_RULE,
-        LOPT_OPTIMIZE_JOIN_RULE,
-    )
+    val JOIN_ORDERING_RULES: List<RelOptRule> =
+        listOf(
+            JOIN_COMMUTE_RULE,
+            LOPT_OPTIMIZE_JOIN_RULE,
+        )
 
     /**
      * Rules that use an Aggregate to remove another operator.
      */
-    private val AGGREGATE_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
-        AGGREGATE_PROJECT_MERGE_RULE,
-        AGGREGATE_JOIN_JOIN_REMOVE_RULE,
-        AGGREGATE_REMOVE_RULE,
-        AGGREGATE_JOIN_REMOVE_RULE,
-    )
+    private val AGGREGATE_OPERATOR_REMOVAL_RULES: List<RelOptRule> =
+        listOf(
+            AGGREGATE_PROJECT_MERGE_RULE,
+            AGGREGATE_JOIN_JOIN_REMOVE_RULE,
+            AGGREGATE_REMOVE_RULE,
+            AGGREGATE_JOIN_REMOVE_RULE,
+        )
 
     /**
      * Rules that use a Project to remove another operator.
      */
-    val PROJECT_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
-        PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
-        PROJECT_AGGREGATE_MERGE_RULE,
-        PROJECT_REMOVE_RULE,
-    )
+    val PROJECT_OPERATOR_REMOVAL_RULES: List<RelOptRule> =
+        listOf(
+            PROJECT_MERGE_ALLOW_NO_BLOAT_RULE,
+            PROJECT_AGGREGATE_MERGE_RULE,
+            PROJECT_REMOVE_RULE,
+        )
 
     /**
      * Rules that use a UNION to remove another operator.
      */
-    private val UNION_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
-        UNION_MERGE_RULE,
-    )
+    private val UNION_OPERATOR_REMOVAL_RULES: List<RelOptRule> =
+        listOf(
+            UNION_MERGE_RULE,
+        )
 
     /**
      * All rules that involve removing 1 or more operators.
      */
-    val OPERATOR_REMOVAL_RULES: List<RelOptRule> = Iterables.concat(
-        AGGREGATE_OPERATOR_REMOVAL_RULES,
-        PROJECT_OPERATOR_REMOVAL_RULES,
-        UNION_OPERATOR_REMOVAL_RULES,
-    ).toList()
+    val OPERATOR_REMOVAL_RULES: List<RelOptRule> =
+        Iterables.concat(
+            AGGREGATE_OPERATOR_REMOVAL_RULES,
+            PROJECT_OPERATOR_REMOVAL_RULES,
+            UNION_OPERATOR_REMOVAL_RULES,
+        ).toList()
 
     /**
      * Rules that enable a cost based decision for reordering operators.
      */
-    val OPERATOR_REORDERING_RULES: List<RelOptRule> = listOf(
-        AGGREGATE_JOIN_TRANSPOSE_RULE,
-    )
+    val OPERATOR_REORDERING_RULES: List<RelOptRule> =
+        listOf(
+            AGGREGATE_JOIN_TRANSPOSE_RULE,
+        )
 
     /**
      * These are rules that we will want to remove
      * because there is some issue with their implementation.
      */
-    val CANDIDATE_REMOVAL_RULES: List<RelOptRule> = listOf(
-        // This may conflict with other optimizations because it doesn't allow
-        // pushing filters that can enter 1 side of a join.
-        PANDAS_FILTER_INTO_JOIN_RULE,
-        // This rule needs to be rewritten/modified to only occur once a join is
-        // finalized. Ideally this should only run after every join is pushed
-        // as far as possible since this should be a correctness constraint.
-        JOIN_CONDITION_TO_FILTER_RULE,
-        LEFT_JOIN_REMOVE_RULE,
-        RIGHT_JOIN_REMOVE_RULE,
-        // Should be handled by RelFieldTrimmer now. Needs join fully supported.
-        TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
-
-    )
+    val CANDIDATE_REMOVAL_RULES: List<RelOptRule> =
+        listOf(
+            // This may conflict with other optimizations because it doesn't allow
+            // pushing filters that can enter 1 side of a join.
+            PANDAS_FILTER_INTO_JOIN_RULE,
+            // This rule needs to be rewritten/modified to only occur once a join is
+            // finalized. Ideally this should only run after every join is pushed
+            // as far as possible since this should be a correctness constraint.
+            JOIN_CONDITION_TO_FILTER_RULE,
+            LEFT_JOIN_REMOVE_RULE,
+            RIGHT_JOIN_REMOVE_RULE,
+            // Should be handled by RelFieldTrimmer now. Needs join fully supported.
+            TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
+        )
 
     /**
      * Rules that are used in the window conversion pass.
      */
     @JvmField
-    val WINDOW_CONVERSION_RULES = listOf(PROJECT_TO_WINDOW_RULE, FILTER_WINDOW_EJECT, FILTER_WINDOW_MRNF_RULE, PROJECT_REMOVE_RULE, FILTER_PROJECT_TRANSPOSE_RULE)
+    val WINDOW_CONVERSION_RULES =
+        listOf(PROJECT_TO_WINDOW_RULE, FILTER_WINDOW_EJECT, FILTER_WINDOW_MRNF_RULE, PROJECT_REMOVE_RULE, FILTER_PROJECT_TRANSPOSE_RULE)
 
     /**
      * Rules that are used to clean up a Snowflake section into a standard form
@@ -1062,51 +1088,61 @@ object BodoRules {
      * to avoid possible regressions.
      */
     @JvmField
-    val SNOWFLAKE_CLEANUP_RULES = listOf(SNOWFLAKE_FILTER_MERGE_RULE, SNOWFLAKE_FILTER_PROJECT_TRANSPOSE_RULE, SNOWFLAKE_FILTER_REDUCE_EXPRESSIONS_RULE, SNOWFLAKE_FILTER_AGGREGATE_TRANSPOSE_RULE, SNOWFLAKE_PROJECT_MERGE_RULE, SNOWFLAKE_PROJECT_REMOVE_RULE)
+    val SNOWFLAKE_CLEANUP_RULES =
+        listOf(
+            SNOWFLAKE_FILTER_MERGE_RULE,
+            SNOWFLAKE_FILTER_PROJECT_TRANSPOSE_RULE,
+            SNOWFLAKE_FILTER_REDUCE_EXPRESSIONS_RULE,
+            SNOWFLAKE_FILTER_AGGREGATE_TRANSPOSE_RULE,
+            SNOWFLAKE_PROJECT_MERGE_RULE,
+            SNOWFLAKE_PROJECT_REMOVE_RULE,
+        )
 
     // OPTIMIZER GROUPS
     @JvmField
-    val VOLCANO_MINIMAL_RULE_SET: List<RelOptRule> = Iterables.concat(
-        PandasRules.rules(),
-        listOf(
-            JOIN_CONDITION_TO_FILTER_RULE,
-            PANDAS_FILTER_INTO_JOIN_RULE,
-            FILTER_JOIN_RULE,
-            PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE,
-        ),
-    ).toList()
+    val VOLCANO_MINIMAL_RULE_SET: List<RelOptRule> =
+        Iterables.concat(
+            PandasRules.rules(),
+            listOf(
+                JOIN_CONDITION_TO_FILTER_RULE,
+                PANDAS_FILTER_INTO_JOIN_RULE,
+                FILTER_JOIN_RULE,
+                PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE,
+            ),
+        ).toList()
 
     @JvmField
-    val VOLCANO_OPTIMIZE_RULE_SET: List<RelOptRule> = listOf(
-        PROJECT_REMOVE_RULE,
-        FILTER_MERGE_RULE,
-        FILTER_WINDOW_SPLIT_RULE,
-        PROJECT_MERGE_RULE,
-        FILTER_AGGREGATE_TRANSPOSE_RULE,
-        AGGREGATE_JOIN_REMOVE_RULE,
-        AGGREGATE_JOIN_TRANSPOSE_RULE,
-        TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
-        FILTER_REDUCE_EXPRESSIONS_RULE,
-        PROJECT_REDUCE_EXPRESSIONS_RULE,
-        JOIN_PUSH_TRANSITIVE_PREDICATES,
-        AGGREGATE_REMOVE_RULE,
-        AGGREGATE_JOIN_JOIN_REMOVE_RULE,
-        AGGREGATE_PROJECT_MERGE_RULE,
-        PROJECT_AGGREGATE_MERGE_RULE,
-        FILTER_PROJECT_TRANSPOSE_RULE,
-        LEFT_JOIN_REMOVE_RULE,
-        RIGHT_JOIN_REMOVE_RULE,
-        JOIN_REORDER_CONDITION_RULE,
-        FILTER_REORDER_CONDITION_RULE,
-        LIMIT_PROJECT_TRANSPOSE_RULE,
-        PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
-        FILTER_EXTRACT_CASE_RULE,
-        PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
-        JOIN_COMMUTE_RULE,
-        LOPT_OPTIMIZE_JOIN_RULE,
-        UNION_MERGE_RULE,
-        FILTER_WINDOW_TRANSPOSE_RULE,
-        PROJECT_WINDOW_TRANSPOSE_RULE,
-        FILTER_WINDOW_MRNF_RULE,
-    )
+    val VOLCANO_OPTIMIZE_RULE_SET: List<RelOptRule> =
+        listOf(
+            PROJECT_REMOVE_RULE,
+            FILTER_MERGE_RULE,
+            FILTER_WINDOW_SPLIT_RULE,
+            PROJECT_MERGE_RULE,
+            FILTER_AGGREGATE_TRANSPOSE_RULE,
+            AGGREGATE_JOIN_REMOVE_RULE,
+            AGGREGATE_JOIN_TRANSPOSE_RULE,
+            TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
+            FILTER_REDUCE_EXPRESSIONS_RULE,
+            PROJECT_REDUCE_EXPRESSIONS_RULE,
+            JOIN_PUSH_TRANSITIVE_PREDICATES,
+            AGGREGATE_REMOVE_RULE,
+            AGGREGATE_JOIN_JOIN_REMOVE_RULE,
+            AGGREGATE_PROJECT_MERGE_RULE,
+            PROJECT_AGGREGATE_MERGE_RULE,
+            FILTER_PROJECT_TRANSPOSE_RULE,
+            LEFT_JOIN_REMOVE_RULE,
+            RIGHT_JOIN_REMOVE_RULE,
+            JOIN_REORDER_CONDITION_RULE,
+            FILTER_REORDER_CONDITION_RULE,
+            LIMIT_PROJECT_TRANSPOSE_RULE,
+            PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
+            FILTER_EXTRACT_CASE_RULE,
+            PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
+            JOIN_COMMUTE_RULE,
+            LOPT_OPTIMIZE_JOIN_RULE,
+            UNION_MERGE_RULE,
+            FILTER_WINDOW_TRANSPOSE_RULE,
+            PROJECT_WINDOW_TRANSPOSE_RULE,
+            FILTER_WINDOW_MRNF_RULE,
+        )
 }

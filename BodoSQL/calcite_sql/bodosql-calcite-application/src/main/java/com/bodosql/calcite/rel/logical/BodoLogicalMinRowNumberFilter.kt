@@ -19,23 +19,30 @@ class BodoLogicalMinRowNumberFilter(
     condition: RexNode,
     inputsToKeep: ImmutableBitSet,
 ) : MinRowNumberFilterBase(cluster, traitSet, child, condition, inputsToKeep) {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): BodoLogicalMinRowNumberFilter {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        condition: RexNode,
+    ): BodoLogicalMinRowNumberFilter {
         return BodoLogicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
     }
 
     companion object {
         @JvmStatic
-        fun create(input: RelNode, condition: RexNode): BodoLogicalMinRowNumberFilter {
+        fun create(
+            input: RelNode,
+            condition: RexNode,
+        ): BodoLogicalMinRowNumberFilter {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(Convention.NONE)
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    RelMdCollation.filter(mq, input)
-                }
-                .replaceIf(RelDistributionTraitDef.INSTANCE) {
-                    RelMdDistribution.filter(mq, input)
-                }
+            val traitSet =
+                cluster.traitSetOf(Convention.NONE)
+                    .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                        RelMdCollation.filter(mq, input)
+                    }
+                    .replaceIf(RelDistributionTraitDef.INSTANCE) {
+                        RelMdDistribution.filter(mq, input)
+                    }
             val inputsToKeep = ImmutableBitSet.range(input.rowType.fieldCount)
             return BodoLogicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
         }

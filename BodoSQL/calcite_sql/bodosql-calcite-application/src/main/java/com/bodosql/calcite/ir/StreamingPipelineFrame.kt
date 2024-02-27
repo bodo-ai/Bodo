@@ -7,8 +7,12 @@ package com.bodosql.calcite.ir
  * exitCond: The variable that controls when the pipeline loop is exited.
  * iterVar: The variable that tracks the count of iterations of the pipeline loop.
  * **/
-class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar: Variable, val scope: StreamingStateScope, val pipelineID: Int) : Frame {
-
+class StreamingPipelineFrame(
+    private var exitCond: Variable,
+    private var iterVar: Variable,
+    val scope: StreamingStateScope,
+    val pipelineID: Int,
+) : Frame {
     /** Values to initialize before the loop generation. **/
     private var initializations: MutableList<Op> = mutableListOf()
 
@@ -99,7 +103,12 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
         initializations.add(assign)
     }
 
-    fun initializeStreamingState(opID: Int, assign: Op.Assign, type: OperatorType, memoryEstimate: Int = -1) {
+    fun initializeStreamingState(
+        opID: Int,
+        assign: Op.Assign,
+        type: OperatorType,
+        memoryEstimate: Int = -1,
+    ) {
         scope.startOperator(opID, pipelineID, type, memoryEstimate)
         addInitialization(assign)
     }
@@ -113,7 +122,10 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
         terminations.add(term)
     }
 
-    fun deleteStreamingState(opID: Int, operation: Op) {
+    fun deleteStreamingState(
+        opID: Int,
+        operation: Op,
+    ) {
         scope.endOperator(opID, pipelineID)
         addTermination(operation)
     }

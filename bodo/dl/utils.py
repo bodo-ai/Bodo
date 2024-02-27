@@ -31,7 +31,7 @@ class DLStatus(object):  # pragma: no cover
 
 
 def get_num_gpus(framework):  # pragma: no cover
-    """ Get number of GPU devices on this host """
+    """Get number of GPU devices on this host"""
     if framework == "torch":
         import torch
 
@@ -45,7 +45,7 @@ def get_num_gpus(framework):  # pragma: no cover
 
 
 def get_gpu_ranks(framework):  # pragma: no cover
-    """ Calculate and return the global list of ranks to pin to GPUs """
+    """Calculate and return the global list of ranks to pin to GPUs"""
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     host_ranks = get_host_ranks()
@@ -93,7 +93,7 @@ def get_gpu_ranks(framework):  # pragma: no cover
 
 
 def is_cuda_available():  # pragma: no cover
-    """ Return true if the cluster on which Bodo is running has GPUs available """
+    """Return true if the cluster on which Bodo is running has GPUs available"""
     assert_dl_initialized()
     return len(dl_status.gpu_ranks) > 0
 

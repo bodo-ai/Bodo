@@ -14,7 +14,6 @@ rewriting data
 
 
 def create_table(table_name="large_delete_table", spark=None):
-
     if spark is None:
         spark = get_spark()
 

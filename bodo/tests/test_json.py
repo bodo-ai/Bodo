@@ -231,7 +231,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     arg_1D_var = (bodo_1D_var, _get_dist_arg(df, False, True), "df_1d_var.json")
     args = [arg_seq, arg_1D, arg_1D_var]
     # test writing sequentially, 1D distributed, and 1D Var-length
-    for (func, df_arg, fname_arg) in args:
+    for func, df_arg, fname_arg in args:
         with ensure_clean(fname_arg), ensure_clean_dir(fname_arg):
             func(df_arg, fname_arg)
             bodo.barrier()

@@ -3,7 +3,6 @@ package com.bodosql.calcite.ir
 import java.lang.Exception
 
 class StreamingStateScope {
-
     /**
      * Helper Class to Store Operator Info and Ranges
      */
@@ -18,7 +17,12 @@ class StreamingStateScope {
         return operators.isNotEmpty()
     }
 
-    fun startOperator(opID: Int, startPipelineID: Int, type: OperatorType, memoryEstimate: Int = -1) {
+    fun startOperator(
+        opID: Int,
+        startPipelineID: Int,
+        type: OperatorType,
+        memoryEstimate: Int = -1,
+    ) {
         if (operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Repeated Operator ID Found")
         }
@@ -26,7 +30,10 @@ class StreamingStateScope {
         operators[opID]!!.first.memEstimate = memoryEstimate
     }
 
-    fun endOperator(opID: Int, endPipelineID: Int) {
+    fun endOperator(
+        opID: Int,
+        endPipelineID: Int,
+    ) {
         if (!operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Ending Pipeline Range of Unknown Operator")
         }
@@ -40,9 +47,10 @@ class StreamingStateScope {
     }
 
     fun genOpComptrollerInit(): List<Op> {
-        val inits = mutableListOf<Op>(
-            Op.Stmt(Expr.Call("bodo.libs.memory_budget.init_operator_comptroller")),
-        )
+        val inits =
+            mutableListOf<Op>(
+                Op.Stmt(Expr.Call("bodo.libs.memory_budget.init_operator_comptroller")),
+            )
 
         for ((_, op) in operators) {
             val range = op.first
@@ -54,7 +62,12 @@ class StreamingStateScope {
                         Expr.IntegerLiteral(range.opID),
                         Expr.Attribute(Expr.Raw("bodo.libs.memory_budget.OperatorType"), type.toString()),
                         Expr.IntegerLiteral(range.startPipelineID),
-                        Expr.IntegerLiteral(range.endPipelineID ?: throw Exception("StreamingStateScope: An Operator's End Pipeline Not Set Before Generating Code")),
+                        Expr.IntegerLiteral(
+                            range.endPipelineID ?: throw Exception(
+                                "StreamingStateScope: An Operator's End Pipeline" +
+                                    " Not Set Before Generating Code",
+                            ),
+                        ),
                         Expr.IntegerLiteral(range.memEstimate),
                     ),
                 ),

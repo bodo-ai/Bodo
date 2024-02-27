@@ -26,7 +26,10 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
      * additional projection to prune any columns before the
      * exchange operator.
      */
-    private fun generateExchangeInput(input: RelNode, expectedInputProperty: BatchingProperty): RelNode {
+    private fun generateExchangeInput(
+        input: RelNode,
+        expectedInputProperty: BatchingProperty,
+    ): RelNode {
         return if (expectedInputProperty == BatchingProperty.STREAMING) {
             SeparateStreamExchange(input.cluster, input.traitSet.replace(expectedInputProperty), input)
         } else {
@@ -50,19 +53,20 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
             val usedColumns = RelOptUtil.InputFinder.bits(node.projects, null)
             // Note we cannot prune all columns, so don't insert a projection for 0 used columns.
             val pruneColumns = usedColumns.cardinality() != 0 && usedColumns.cardinality() != origInputRowType.fieldCount
-            val prunedInput = if (pruneColumns) {
-                builder.push(visitedInput)
-                // The builder doesn't extend the batching property yet. Instead
-                // we directly create a Pandas project to avoid updating the
-                // inputs(TODO: Remove).
-                val nodes = usedColumns.map { i -> builder.field(i) }
-                val fieldNames = usedColumns.map { i -> origInputRowType.fieldNames[i] }
-                val proj = PandasProject.create(visitedInput, nodes, fieldNames)
-                // Copy to update the traitset
-                proj.copy(proj.traitSet.replace(actualInputBatchingProperty), proj.input, proj.projects, proj.getRowType())
-            } else {
-                visitedInput
-            }
+            val prunedInput =
+                if (pruneColumns) {
+                    builder.push(visitedInput)
+                    // The builder doesn't extend the batching property yet. Instead
+                    // we directly create a Pandas project to avoid updating the
+                    // inputs(TODO: Remove).
+                    val nodes = usedColumns.map { i -> builder.field(i) }
+                    val fieldNames = usedColumns.map { i -> origInputRowType.fieldNames[i] }
+                    val proj = PandasProject.create(visitedInput, nodes, fieldNames)
+                    // Copy to update the traitset
+                    proj.copy(proj.traitSet.replace(actualInputBatchingProperty), proj.input, proj.projects, proj.getRowType())
+                } else {
+                    visitedInput
+                }
             // Insert the exchange
             val exchangeInput = generateExchangeInput(prunedInput, expectedInputProperty)
             // Generate an updated projection to remap columns if we pruned columns
@@ -96,19 +100,21 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
             // Note: We allow None to match to avoid special handling for other conventions
             // (e.g. Snowflake) where streaming doesn't exist.
             val expectedInputProperty = node.expectedInputBatchingProperty(actualInputBatchingProperty)
-            val newInput = if (!actualInputBatchingProperty.satisfies(expectedInputProperty)) {
-                generateExchangeInput(visitedInput, expectedInputProperty)
-            } else {
-                visitedInput
-            }
+            val newInput =
+                if (!actualInputBatchingProperty.satisfies(expectedInputProperty)) {
+                    generateExchangeInput(visitedInput, expectedInputProperty)
+                } else {
+                    visitedInput
+                }
             newInputs.add(newInput)
         }
-        val inputProperty = if (newInputs.size > 0) {
-            getOutputBatchingProperty(newInputs[0])
-        } else {
-            // If there are no inputs the input batching property shouldn't matter.
-            BatchingProperty.NONE
-        }
+        val inputProperty =
+            if (newInputs.size > 0) {
+                getOutputBatchingProperty(newInputs[0])
+            } else {
+                // If there are no inputs the input batching property shouldn't matter.
+                BatchingProperty.NONE
+            }
         val newTraitSet = node.traitSet.replace(node.expectedOutputBatchingProperty(inputProperty))
         return node.copy(newTraitSet, newInputs)
     }
@@ -132,7 +138,10 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
 
     companion object {
         @JvmStatic
-        fun applyBatchingInfo(rel: RelNode, builder: RelBuilder): RelNode {
+        fun applyBatchingInfo(
+            rel: RelNode,
+            builder: RelBuilder,
+        ): RelNode {
             return if (rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == null) {
                 // Ignore for non-streaming
                 rel

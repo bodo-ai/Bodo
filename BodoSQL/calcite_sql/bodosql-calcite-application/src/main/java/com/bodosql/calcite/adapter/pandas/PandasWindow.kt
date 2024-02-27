@@ -24,7 +24,6 @@ class PandasWindow(
     inputsToKeep: ImmutableBitSet,
 ) :
     WindowBase(cluster, traitSet.replace(PandasRel.CONVENTION), hints, input, constants, rowType, groups, inputsToKeep), PandasRel {
-
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
@@ -54,7 +53,10 @@ class PandasWindow(
      * Function to delete the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
@@ -71,7 +73,6 @@ class PandasWindow(
     }
 
     companion object {
-
         @JvmStatic
         fun create(
             cluster: RelOptCluster,

@@ -34,7 +34,6 @@ open class WindowBase(
     val inputsToKeep: ImmutableBitSet,
 ) :
     Window(cluster, traitSet, hints, input, constants, rowType, groups) {
-
     override fun explainTerms(pw: RelWriter): RelWriter? {
         super.explainTerms(pw)
         pw.item("constants", constants)
@@ -96,12 +95,13 @@ open class WindowBase(
         // Build a shuttle to replace each constant reference with
         // the actual constant
         val builder = cluster.rexBuilder
-        val replacer = BodoSQLReduceExpressionsRule.RexReplacer(
-            builder,
-            getConstantReferences(),
-            constants as List<RexNode>,
-            constants.map { false },
-        )
+        val replacer =
+            BodoSQLReduceExpressionsRule.RexReplacer(
+                builder,
+                getConstantReferences(),
+                constants as List<RexNode>,
+                constants.map { false },
+            )
 
         // Convert each agg call within each group to a RexOver
         groups.forEach {
@@ -110,20 +110,21 @@ open class WindowBase(
             val orderKeys = group.collation().fieldCollations.map { relFieldCollationToRexFieldCollation(it, input) }
             group.aggCalls.forEach {
                     aggCall ->
-                val asOver = builder.makeOver(
-                    aggCall.getType(),
-                    aggCall.operator as SqlAggFunction,
-                    aggCall.getOperands(),
-                    partitionKeys,
-                    ImmutableList.copyOf<RexFieldCollation>(orderKeys),
-                    group.lowerBound,
-                    group.upperBound,
-                    group.isRows,
-                    true,
-                    false,
-                    aggCall.distinct,
-                    aggCall.ignoreNulls,
-                )
+                val asOver =
+                    builder.makeOver(
+                        aggCall.getType(),
+                        aggCall.operator as SqlAggFunction,
+                        aggCall.getOperands(),
+                        partitionKeys,
+                        ImmutableList.copyOf<RexFieldCollation>(orderKeys),
+                        group.lowerBound,
+                        group.upperBound,
+                        group.isRows,
+                        true,
+                        false,
+                        aggCall.distinct,
+                        aggCall.ignoreNulls,
+                    )
                 exprs.add(asOver.accept(replacer))
             }
         }
@@ -135,7 +136,10 @@ open class WindowBase(
         // RexFieldCollation used for doing the same in a RexOver. Takes in the rel node
         // that the references refer to.
         @JvmStatic
-        fun relFieldCollationToRexFieldCollation(rfc: RelFieldCollation, rel: RelNode): RexFieldCollation {
+        fun relFieldCollationToRexFieldCollation(
+            rfc: RelFieldCollation,
+            rel: RelNode,
+        ): RexFieldCollation {
             val idx = rfc.fieldIndex
             val ref = RexInputRef(idx, rel.rowType.fieldList[idx].type)
             val sortInfo: MutableSet<SqlKind> = HashSet()
@@ -154,9 +158,12 @@ open class WindowBase(
         // RelFieldCollation used for doing the same in a Window.Group.
         @JvmStatic
         fun rexFieldCollationToRelFieldCollation(rfc: RexFieldCollation): RelFieldCollation {
-            val idx = if (rfc.left is RexInputRef) { (rfc.left as RexInputRef).index } else {
-                throw Exception("Unable to convert $rfc to RelFieldCollation")
-            }
+            val idx =
+                if (rfc.left is RexInputRef) {
+                    (rfc.left as RexInputRef).index
+                } else {
+                    throw Exception("Unable to convert $rfc to RelFieldCollation")
+                }
             return RelFieldCollation(idx, rfc.direction, rfc.nullDirection)
         }
 
@@ -164,7 +171,10 @@ open class WindowBase(
         // list of RexNodes used for doing the same in a RexOver. Takes in the rel node
         // that the references refer to.
         @JvmStatic
-        fun keyBitSetToInputRefs(keys: ImmutableBitSet, rel: RelNode): List<RexNode> {
+        fun keyBitSetToInputRefs(
+            keys: ImmutableBitSet,
+            rel: RelNode,
+        ): List<RexNode> {
             return keys.toList().map {
                 RexInputRef(it, rel.rowType.fieldList[it].type)
             }
@@ -176,7 +186,9 @@ open class WindowBase(
         fun inputRefsToKeyBitSet(exprs: List<RexNode>): ImmutableBitSet {
             val asIntList: MutableList<Int> = mutableListOf()
             exprs.forEach {
-                if (it is RexInputRef) { asIntList.add(it.index) } else {
+                if (it is RexInputRef) {
+                    asIntList.add(it.index)
+                } else {
                     throw Exception("Invalid column reference $it")
                 }
             }

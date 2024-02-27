@@ -35,7 +35,11 @@ abstract class Expr {
      * @param callee the function this expression will invoke.
      * @param args a list of expressions to be used as arguments.
      */
-    class Call(val callee: Expr, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
+    class Call(
+        val callee: Expr,
+        val args: kotlin.collections.List<Expr> = listOf(),
+        val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf(),
+    ) : Expr() {
         constructor(callee: Expr, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
         constructor(callee: Expr, vararg args: Expr) : this(callee, args.toList(), listOf())
         constructor(callee: String, args: kotlin.collections.List<Expr>, namedArgs: kotlin.collections.List<Pair<String, Expr>>) :
@@ -44,10 +48,11 @@ abstract class Expr {
         constructor(callee: String, vararg args: Expr) : this(callee, args.toList())
 
         override fun emit(): String {
-            val args = sequenceOf(
-                this.args.asSequence().map { it.emit() },
-                this.namedArgs.asSequence().map { (name, value) -> "$name=${value.emit()}" },
-            ).flatten().joinToString(separator = ", ")
+            val args =
+                sequenceOf(
+                    this.args.asSequence().map { it.emit() },
+                    this.namedArgs.asSequence().map { (name, value) -> "$name=${value.emit()}" },
+                ).flatten().joinToString(separator = ", ")
             return "${callee.emit()}($args)"
         }
     }
@@ -98,8 +103,8 @@ abstract class Expr {
         namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf(),
     ) :
         DelegateExpr(
-            Call(Attribute(inputVar, methodName), args, namedArgs),
-        )
+                Call(Attribute(inputVar, methodName), args, namedArgs),
+            )
 
     /**
      * Represents a call to groupby with the arguments that could change depending on the call.
@@ -146,14 +151,14 @@ abstract class Expr {
      *
      */
     class SortValues(val inputVar: Expr, val by: List, val ascending: List, val naPosition: List) : Expr() {
-
         override fun emit(): String {
             // Generate the keyword args
-            val keywordArgs = listOf(
-                Pair("by", by),
-                Pair("ascending", ascending),
-                Pair("na_position", naPosition),
-            )
+            val keywordArgs =
+                listOf(
+                    Pair("by", by),
+                    Pair("ascending", ascending),
+                    Pair("na_position", naPosition),
+                )
 
             return if (by.args.isEmpty() && ascending.args.isEmpty() && naPosition.args.isEmpty()) {
                 inputVar.emit()
@@ -184,7 +189,6 @@ abstract class Expr {
      * @param inputExpr: The input expression to apply the op to.
      */
     class Unary(private val opString: String, private val inputExpr: Expr) : Expr() {
-
         override fun emit(): String {
             return "$opString(${inputExpr.emit()})"
         }
@@ -201,7 +205,6 @@ abstract class Expr {
      * @param input2: The second input to the op.
      */
     class Binary(private val opString: String, private val input1: Expr, private val input2: Expr) : Expr() {
-
         override fun emit(): String {
             // TODO(jsternberg): As things get more complex in here, we'll have to mark
             // operations with their precedence.
@@ -226,13 +229,14 @@ abstract class Expr {
     class Tuple(val args: kotlin.collections.List<Expr>) : Expr() {
         constructor(vararg args: Expr) : this(args.toList())
 
-        override fun emit(): String = if (args.size == 1) {
-            // Special handling for length 1, so they aren't treated like
-            // parenthesis.
-            "(${args[0].emit()},)"
-        } else {
-            args.joinToString(separator = ", ", prefix = "(", postfix = ")") { it.emit() }
-        }
+        override fun emit(): String =
+            if (args.size == 1) {
+                // Special handling for length 1, so they aren't treated like
+                // parenthesis.
+                "(${args[0].emit()},)"
+            } else {
+                args.joinToString(separator = ", ", prefix = "(", postfix = ")") { it.emit() }
+            }
     }
 
     /**
@@ -267,8 +271,7 @@ abstract class Expr {
     class List(val args: kotlin.collections.List<Expr>) : Expr() {
         constructor(vararg args: Expr) : this(args.toList())
 
-        override fun emit(): String =
-            args.joinToString(separator = ", ", prefix = "[", postfix = "]") { it.emit() }
+        override fun emit(): String = args.joinToString(separator = ", ", prefix = "[", postfix = "]") { it.emit() }
     }
 
     /**
@@ -309,7 +312,6 @@ abstract class Expr {
      * @param indentLevel The indent level used for emitting the Frame.
      */
     class FrameTripleQuotedString(val arg: Frame, private val indentLevel: Int) : Expr() {
-
         override fun emit(): String {
             // Generate a doc with indent level provided + emit the frame
             val doc = Doc(level = indentLevel)
@@ -331,17 +333,18 @@ abstract class Expr {
      */
     class StringLiteral(val arg: String) : Expr() {
         override fun emit(): String {
-            val literal = arg
-                .replace("""["\\\n\r\t\u0008\f]""".toRegex()) { m ->
-                    when (val v = m.value) {
-                        "\n" -> """\n"""
-                        "\r" -> """\r"""
-                        "\t" -> """\t"""
-                        "\b" -> """\b"""
-                        "\u000c" -> """\f"""
-                        else -> "\\$v"
+            val literal =
+                arg
+                    .replace("""["\\\n\r\t\u0008\f]""".toRegex()) { m ->
+                        when (val v = m.value) {
+                            "\n" -> """\n"""
+                            "\r" -> """\r"""
+                            "\t" -> """\t"""
+                            "\b" -> """\b"""
+                            "\u000c" -> """\f"""
+                            else -> "\\$v"
+                        }
                     }
-                }
             return "\"$literal\""
         }
     }
@@ -368,6 +371,7 @@ abstract class Expr {
     }
 
     object True : DelegateExpr(BooleanLiteral(true))
+
     object False : DelegateExpr(BooleanLiteral(false))
 
     /**
@@ -407,10 +411,17 @@ abstract class Expr {
     }
 }
 
-fun BodoSQLKernel(callee: String, args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()): Expr {
+fun bodoSQLKernel(
+    callee: String,
+    args: List<Expr> = listOf(),
+    namedArgs: List<Pair<String, Expr>> = listOf(),
+): Expr {
     return Expr.Call("bodo.libs.bodosql_array_kernels.$callee", args, namedArgs)
 }
 
-fun initRangeIndex(args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()): Expr {
+fun initRangeIndex(
+    args: List<Expr> = listOf(),
+    namedArgs: List<Pair<String, Expr>> = listOf(),
+): Expr {
     return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs)
 }
