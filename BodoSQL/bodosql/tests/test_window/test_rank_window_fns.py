@@ -258,6 +258,64 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
     )
 
 
+@pytest.mark.parametrize(
+    "partition_cols, order_cols",
+    [
+        pytest.param(["A", "F"], ["NULL"], id="no_order"),
+        pytest.param(
+            ["G", "A", "E"],
+            ["C ASC", "J DESC", "E ASC", "A DESC", "F ASC"],
+            id="order_partial_overlap",
+        ),
+        pytest.param(["B", "D", "H"], ["H DESC", "D ASC"], id="order_total_overlap"),
+    ],
+)
+def test_mrnf_order_edgecases(
+    partition_cols, order_cols, spark_info, memory_leak_check
+):
+    """
+    Test that the MRNF output is correct when some or all of the orderby columns
+    are also partition columns, and when there are no orderby columns.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.arange(50) % 2,
+            "B": np.arange(50) // 5,
+            "C": np.arange(50) % 3,
+            "D": (np.arange(50) ** 2) % 10,
+            "E": [str(i)[0] for i in range(50)],
+            "F": np.sin(np.arange(50)),
+            "G": np.arange(50) % 4,
+            "H": np.arange(50) % 5,
+            "I": np.arange(50),
+            "J": np.arange(50) % 7,
+        }
+    )
+    # Shuffle the rows to ensure there are no coincidentally-correct answers
+    perm = np.random.default_rng(42).permutation(50)
+    df = df.iloc[perm]
+    query = f"""
+    SELECT I
+    FROM
+        (   
+            SELECT
+                I,
+                ROW_NUMBER() OVER(
+                    PARTITION BY {', '.join(partition_cols)} 
+                    ORDER BY {', '.join(order_cols)}) as rn
+            FROM table1
+        )
+    WHERE rn = 1
+    """
+
+    def py_mrnf(x: pd.DataFrame):
+        return x.sort_values(by=["C"], ascending=True, na_position="first").iloc[0]
+
+    expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+    ctx = {"TABLE1": df}
+    check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
+
+
 def test_mrnf_all_ties(memory_leak_check):
     """
     Test that the MRNF output is correct when all the values in the order-by

@@ -626,6 +626,43 @@ def test_data_col_correctness(memory_leak_check):
     )
 
 
+def test_mrnf_no_order(memory_leak_check):
+    """
+    Test that the output is correct when there are no orderby columns.
+    """
+    nrows = 1000
+    lengths = np.abs(np.round(np.tan(np.arange(nrows)))).astype(np.int32) % 20
+    df = pd.DataFrame(
+        {
+            # Partition Col:
+            "A": ["ABCDEFGHIJKLMNOPQRST"[:length] for length in lengths],
+            # Data column (only 1 distinct value per partition):
+            "B": [int(str(length) * ((length) % 4 + 1)) for length in lengths],
+        }
+    )
+
+    def py_mrnf(x: pd.DataFrame):
+        return x.iloc[0]
+
+    expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
+
+    _test_mrnf_helper(
+        df,
+        expected_df,
+        MetaType((0,)),
+        MetaType(("min_row_number_filter",)),
+        MetaType((0, 1)),
+        MetaType((1,)),
+        MetaType(()),
+        MetaType(()),
+        MetaType(()),
+        MetaType((0, 1)),
+        MetaType((0, 1)),
+        40,
+        ColNamesMetaType(tuple(list(df.columns))),
+    )
+
+
 @pytest_mark_one_rank
 def test_mrnf_err_handling(memory_leak_check):
     """
@@ -733,19 +770,7 @@ def test_mrnf_err_handling(memory_leak_check):
     f_in_cols = MetaType((1, 2))
     f_in_offsets = MetaType((0, n_cols - 1))
 
-    ## 3. No orderby cols
-    mrnf_sort_col_inds = MetaType(())
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "Groupby (Min Row-Number Filter): At least one sort column must be provided."
-        ),
-    ):
-        bodo.jit((bodo.typeof(df),))(test_mrnf)
-    # Restore:
-    mrnf_sort_col_inds = MetaType((1,))
-
-    ## 4. f_in_cols doesn't have all the columns
+    ## 3. f_in_cols doesn't have all the columns
     f_in_cols = MetaType((2,))
     with pytest.raises(
         BodoError,
@@ -758,7 +783,7 @@ def test_mrnf_err_handling(memory_leak_check):
     # Restore:
     f_in_cols = MetaType((1, 2))
 
-    ## 5. f_in_offsets isn't what's expected
+    ## 4. f_in_offsets isn't what's expected
     f_in_offsets = MetaType((0, n_cols - 2, n_cols - 1))
     with pytest.raises(
         BodoError,
@@ -771,7 +796,7 @@ def test_mrnf_err_handling(memory_leak_check):
     # Restore:
     f_in_offsets = MetaType((0, n_cols - 1))
 
-    ## 6. len(mrnf_sort_col_asc) isn't correct
+    ## 5. len(mrnf_sort_col_asc) isn't correct
     mrnf_sort_col_asc = MetaType((True, False))
     with pytest.raises(
         BodoError,
@@ -784,7 +809,7 @@ def test_mrnf_err_handling(memory_leak_check):
     # Restore:
     mrnf_sort_col_asc = MetaType((True,))
 
-    ## 7. len(mrnf_sort_col_na) isn't correct
+    ## 6. len(mrnf_sort_col_na) isn't correct
     mrnf_sort_col_na = MetaType((False, True))
     with pytest.raises(
         BodoError,
@@ -797,7 +822,7 @@ def test_mrnf_err_handling(memory_leak_check):
     # Restore:
     mrnf_sort_col_na = MetaType((False,))
 
-    ## 8. mrnf_col_inds_keep doesn't have a data column
+    ## 7. mrnf_col_inds_keep doesn't have a data column
     mrnf_col_inds_keep = MetaType((0,))
     with pytest.raises(
         BodoError,
@@ -811,7 +836,7 @@ def test_mrnf_err_handling(memory_leak_check):
     # Restore:
     mrnf_col_inds_keep = MetaType((0, 1, 2))
 
-    ## 9. Using a semi-structured sort array
+    ## 8. Using a semi-structured sort array
     semi_df = pd.DataFrame(
         {
             "A": get_random_col("string", nrows),
