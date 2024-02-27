@@ -94,8 +94,8 @@ public class BinOpCodeGen {
           // add/minus a date interval to a date object should return a date object
           Expr arg1 = args.get(1);
           if (binOpKind.equals(SqlKind.MINUS))
-            arg1 = ExprKt.BodoSQLKernel("negate", List.of(args.get(1)), List.of());
-          return ExprKt.BodoSQLKernel(
+            arg1 = ExprKt.bodoSQLKernel("negate", List.of(args.get(1)), List.of());
+          return ExprKt.bodoSQLKernel(
               "add_date_interval_to_date", List.of(args.get(0), arg1), List.of());
         }
         return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg1Interval);
@@ -103,7 +103,7 @@ public class BinOpCodeGen {
         assert binOpKind.equals(SqlKind.PLUS); // interval - timestamp/date is an invalid syntax
         if (arg1TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg0TypeName)) {
           // add/minus a date interval to a date object should return a date object
-          return ExprKt.BodoSQLKernel(
+          return ExprKt.bodoSQLKernel(
               "add_date_interval_to_date", List.of(args.get(1), args.get(0)), List.of());
         }
         return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg0Interval);
@@ -208,7 +208,7 @@ public class BinOpCodeGen {
             new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(i))));
       }
       if (supportsStreamingArgs) kwargs.addAll(streamingNamedArgs);
-      Expr callExpr = ExprKt.BodoSQLKernel(fn, List.of(prevVar, args.get(i)), kwargs);
+      Expr callExpr = ExprKt.bodoSQLKernel(fn, List.of(prevVar, args.get(i)), kwargs);
       // Generate a new variable
       outputVar = builder.getSymbolTable().genGenericTempVar();
       Op.Assign assign = new Assign(outputVar, callExpr);
@@ -232,11 +232,11 @@ public class BinOpCodeGen {
     Expr arg1 = args.get(1);
     if (binOp.equals(SqlKind.MINUS)) {
       // Negate the input for Minus
-      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
+      arg1 = ExprKt.bodoSQLKernel("negate", List.of(arg1), List.of());
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return ExprKt.BodoSQLKernel("interval_add_interval", List.of(arg0, arg1), List.of());
+    return ExprKt.bodoSQLKernel("interval_add_interval", List.of(arg0, arg1), List.of());
   }
 
   /**
@@ -265,11 +265,11 @@ public class BinOpCodeGen {
     if (binOp.equals(SqlKind.MINUS)) {
       assert isArg0TZAware;
       // Negate the input for Minus
-      arg1 = ExprKt.BodoSQLKernel("negate", List.of(arg1), List.of());
+      arg1 = ExprKt.bodoSQLKernel("negate", List.of(arg1), List.of());
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return ExprKt.BodoSQLKernel("tz_aware_interval_add", List.of(arg0, arg1), List.of());
+    return ExprKt.bodoSQLKernel("tz_aware_interval_add", List.of(arg0, arg1), List.of());
   }
 
   /**
@@ -282,7 +282,7 @@ public class BinOpCodeGen {
     assert args.size() == 2;
     final Expr arg0 = args.get(0);
     final Expr arg1 = args.get(1);
-    return ExprKt.BodoSQLKernel("diff_day", List.of(arg1, arg0), List.of());
+    return ExprKt.bodoSQLKernel("diff_day", List.of(arg1, arg0), List.of());
   }
 
   /**
@@ -340,6 +340,6 @@ public class BinOpCodeGen {
       arg0 = args.get(1);
       arg1 = args.get(0);
     }
-    return ExprKt.BodoSQLKernel("interval_multiply", List.of(arg0, arg1), List.of());
+    return ExprKt.bodoSQLKernel("interval_multiply", List.of(arg0, arg1), List.of());
   }
 }

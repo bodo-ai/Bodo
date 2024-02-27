@@ -18,8 +18,11 @@ class SqlSnowflakeCreateTableClone(
     val copyGrants: Boolean,
     comment: SqlNode?,
 ) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, cloneSource, comment) {
-
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("CLONE")
         cloneSource.unparse(writer, 0, 0)
         if (copyGrants) writer.keyword("COPY GRANTS")

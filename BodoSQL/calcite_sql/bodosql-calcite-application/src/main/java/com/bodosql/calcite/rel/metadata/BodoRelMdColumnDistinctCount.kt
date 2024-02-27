@@ -45,7 +45,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      *
      * @see ColumnDistinctCount
      */
-    fun getColumnDistinctCount(rel: RelNode, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: RelNode,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val isUnique = mq.areColumnsUnique(rel, ImmutableBitSet.of(column))
         return if (isUnique != null && isUnique) {
             mq.getRowCount(rel)
@@ -61,7 +65,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      *   the corresponding column of the child RelNode.
      * - If the requested column is a window function call, attempt to approximate its distinctness.
      */
-    fun getColumnDistinctCount(window: WindowBase, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        window: WindowBase,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val numPassThroughCols = window.inputsToKeep.cardinality()
         return if (column < numPassThroughCols) {
             (mq as BodoRelMetadataQuery).getColumnDistinctCount(window.input, window.inputsToKeep.nth(column))
@@ -86,7 +94,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      * @return An approximate guess for the number of distinct rows produced by the window function call,
      * or null if not one of the supported forms.
      */
-    fun getWindowCallDistinctCount(input: RelNode, over: RexOver, mq: BodoRelMetadataQuery): Double? {
+    fun getWindowCallDistinctCount(
+        input: RelNode,
+        over: RexOver,
+        mq: BodoRelMetadataQuery,
+    ): Double? {
         return when (over.operator.kind) {
             SqlKind.MIN,
             SqlKind.MAX,
@@ -104,15 +116,21 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
                  *   */
                 val inputColumn = over.operands[0]
                 val lowerCheck = listOf(SqlKind.LAST_VALUE).contains(over.operator.kind) || over.window.lowerBound.isUnbounded
-                val upperCheck = listOf(SqlKind.FIRST_VALUE, SqlKind.ANY_VALUE, SqlKind.NTH_VALUE).contains(over.operator.kind) || over.window.upperBound.isUnbounded
+                val upperCheck =
+                    listOf(
+                        SqlKind.FIRST_VALUE,
+                        SqlKind.ANY_VALUE,
+                        SqlKind.NTH_VALUE,
+                    ).contains(over.operator.kind) || over.window.upperBound.isUnbounded
                 if (inputColumn is RexInputRef && lowerCheck && upperCheck) {
-                    val partitionKeys = over.window.partitionKeys.map {
-                        if (it is RexInputRef) {
-                            it.index
-                        } else {
-                            throw Exception("Malformed window call $over")
+                    val partitionKeys =
+                        over.window.partitionKeys.map {
+                            if (it is RexInputRef) {
+                                it.index
+                            } else {
+                                throw Exception("Malformed window call $over")
+                            }
                         }
-                    }
                     val distinctRows = mq.getDistinctRowCount(input, ImmutableBitSet.of(partitionKeys), null)
                     val distinctInputs = mq.getColumnDistinctCount(input, inputColumn.index)
                     distinctInputs?.let { di -> distinctRows?.let { dr -> minOf(di, dr) } }
@@ -143,13 +161,14 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             SqlKind.ROW_NUMBER -> {
                 // ROW_NUMBER has at most as many distinct values as the largest partition
                 // size, which can be approximated by rowCount divided by # of partitions
-                val partitionKeys = over.window.partitionKeys.map {
-                    if (it is RexInputRef) {
-                        it.index
-                    } else {
-                        throw Exception("Malformed window call $over")
+                val partitionKeys =
+                    over.window.partitionKeys.map {
+                        if (it is RexInputRef) {
+                            it.index
+                        } else {
+                            throw Exception("Malformed window call $over")
+                        }
                     }
-                }
                 val distinctRows = mq.getDistinctRowCount(input, ImmutableBitSet.of(partitionKeys), null)
                 val inRows = mq.getRowCount(input)
                 distinctRows?.let { inRows / distinctRows }
@@ -160,11 +179,19 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(subset: RelSubset, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        subset: RelSubset,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         return (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.getBestOrOriginal(), column)
     }
 
-    fun getColumnDistinctCount(rel: Union, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: Union,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -180,7 +207,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(rel: Filter, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: Filter,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -192,7 +223,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(rel: MinRowNumberFilterBase, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: MinRowNumberFilterBase,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -223,7 +258,12 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      * @param targetType The type that rex gets casted to
      * @return The number of distinct rows produced by rex when casted, or null if we cannot infer it.
      */
-    private fun inferCastDistinctiveness(rel: Project, rex: RexNode, mq: RelMetadataQuery, targetType: SqlTypeName): Double? {
+    private fun inferCastDistinctiveness(
+        rel: Project,
+        rex: RexNode,
+        mq: RelMetadataQuery,
+        targetType: SqlTypeName,
+    ): Double? {
         // For certain types, the output always matches the input's distinctiveness
         return when (targetType) {
             SqlTypeName.TIMESTAMP,
@@ -253,7 +293,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      * @param mq The metadata query handler
      * @return The number of distinct rows produced by rex when concatenated, or null if we cannot infer it.
      */
-    private fun inferConcatDistinctiveness(rel: Project, operands: List<RexNode>, mq: RelMetadataQuery): Double? {
+    private fun inferConcatDistinctiveness(
+        rel: Project,
+        operands: List<RexNode>,
+        mq: RelMetadataQuery,
+    ): Double? {
         var index = -1
         for ((i, operand) in operands.withIndex()) {
             if (operand !is RexLiteral) {
@@ -281,9 +325,15 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
      * @param mq The metadata query handler
      * @return The number of distinct rows produced by rex, or null if we cannot infer it.
      */
-    private fun inferRexDistinctness(rel: Project, rex: RexNode, mq: RelMetadataQuery): Double? {
+    private fun inferRexDistinctness(
+        rel: Project,
+        rex: RexNode,
+        mq: RelMetadataQuery,
+    ): Double? {
         // Base case: known scalar values have only 1 distinct value
-        if (rex.accept(IsScalar())) { return 1.0 }
+        if (rex.accept(IsScalar())) {
+            return 1.0
+        }
         // Base case: once an InputRef is reached, its distinctiveness information is calculated
         // so that it can be propagated upward.
         if (rex is RexInputRef) {
@@ -306,7 +356,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         return null
     }
 
-    fun getColumnDistinctCount(rel: Project, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: Project,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -316,11 +370,19 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(rel: SingleRel, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: SingleRel,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
     }
 
-    fun getColumnDistinctCount(rel: Join, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: Join,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -328,21 +390,27 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             val leftCount = rel.left.getRowType().fieldCount
             val isLeftInput = column < leftCount
             // For join assume an unchanged ratio and fetch the inputs.
-            val input = if (isLeftInput) {
-                rel.left
-            } else {
-                rel.right
-            }
-            val inputColumn = if (isLeftInput) {
-                column
-            } else {
-                column - leftCount
-            }
+            val input =
+                if (isLeftInput) {
+                    rel.left
+                } else {
+                    rel.right
+                }
+            val inputColumn =
+                if (isLeftInput) {
+                    column
+                } else {
+                    column - leftCount
+                }
             // 1.0 if the join can create nulls in this column, otherwise 0.0.
             val extraValue =
                 if ((isLeftInput && rel.joinType.generatesNullsOnLeft()) ||
                     (!isLeftInput && rel.joinType.generatesNullsOnRight())
-                ) { 1.0 } else { 0.0 }
+                ) {
+                    1.0
+                } else {
+                    0.0
+                }
 
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(input, inputColumn)
             val expectedRowCount = mq.getRowCount(rel)
@@ -361,7 +429,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(rel: Aggregate, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: Aggregate,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
@@ -369,7 +441,9 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             val groupSetList = rel.groupSet.asList()
             return if (groupSetList.size == 0) {
                 1.0
-            } else if (column >= rel.groupSet.asList().size && rel.aggCallList[column - rel.groupSet.asList().size].aggregation.kind == SqlKind.LITERAL_AGG) {
+            } else if (column >= rel.groupSet.asList().size &&
+                rel.aggCallList[column - rel.groupSet.asList().size].aggregation.kind == SqlKind.LITERAL_AGG
+            ) {
                 // A LITERAL_AGG is always a single value.
                 return 1.0
             } else if (rel.groupSets.size != 1 || column >= rel.groupSet.asList().size) {
@@ -384,26 +458,51 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
-    fun getColumnDistinctCount(rel: SnowflakeToPandasConverter, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: SnowflakeToPandasConverter,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
     }
 
-    fun getColumnDistinctCount(rel: IcebergToPandasConverter, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: IcebergToPandasConverter,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
     }
 
-    fun getColumnDistinctCount(rel: SnowflakeTableScan, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: SnowflakeTableScan,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val trueCol = rel.keptColumns.nth(column)
         return rel.getCatalogTable().getColumnDistinctCount(trueCol)
     }
 
-    fun getColumnDistinctCount(rel: IcebergTableScan, mq: RelMetadataQuery, column: Int): Double? {
+    fun getColumnDistinctCount(
+        rel: IcebergTableScan,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
         val trueCol = rel.keptColumns.nth(column)
         return rel.getCatalogTable().getColumnDistinctCount(trueCol)
     }
 
-    fun getColumnDistinctCount(rel: Flatten, mq: RelMetadataQuery, column: Int): Double? {
-        val nonNullEstimate = if (rel.rowType.fieldList.get(column).type.isNullable()) { 0.9 } else { 1.0 }
+    fun getColumnDistinctCount(
+        rel: Flatten,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
+        val nonNullEstimate =
+            if (rel.rowType.fieldList.get(column).type.isNullable()) {
+                0.9
+            } else {
+                1.0
+            }
         val offset = rel.usedColOutputs.cardinality()
         return if (column >= offset) {
             (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, rel.repeatColumns.nth(column - offset))?.times(nonNullEstimate)
@@ -413,9 +512,10 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     companion object {
-        val SOURCE = ReflectiveRelMetadataProvider.reflectiveSource(
-            BodoRelMdColumnDistinctCount(),
-            ColumnDistinctCount.Handler::class.java,
-        )
+        val SOURCE =
+            ReflectiveRelMetadataProvider.reflectiveSource(
+                BodoRelMdColumnDistinctCount(),
+                ColumnDistinctCount.Handler::class.java,
+            )
     }
 }

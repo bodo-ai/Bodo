@@ -29,7 +29,11 @@ class SqlCopyIntoTable(
         val OPERATOR = SqlSpecialOperator("COPY INTO", SqlKind.OTHER_DDL)
     }
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("COPY INTO")
         target.unparse(writer, leftPrec, rightPrec)
         targetCols?.let {

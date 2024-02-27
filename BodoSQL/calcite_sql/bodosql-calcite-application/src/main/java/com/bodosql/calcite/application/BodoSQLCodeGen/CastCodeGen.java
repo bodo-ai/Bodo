@@ -2,7 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
-import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
+import static com.bodosql.calcite.ir.ExprKt.bodoSQLKernel;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
@@ -197,6 +197,6 @@ public class CastCodeGen {
         throw new BodoSQLCodegenException(
             String.format("%s is not supported by TRY_CAST.", outputTypeName));
     }
-    return BodoSQLKernel(fnName, args, streamingNamedArgs);
+    return bodoSQLKernel(fnName, args, streamingNamedArgs);
   }
 }

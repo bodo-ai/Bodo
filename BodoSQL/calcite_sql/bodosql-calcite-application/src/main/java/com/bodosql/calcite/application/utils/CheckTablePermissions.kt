@@ -11,9 +11,7 @@ import org.apache.calcite.util.Util
  * Helper functions related to checking table permissions in a RelNode tree.
  */
 class CheckTablePermissions {
-
     companion object {
-
         /**
          * Check that we can read every table in a tree of RelNodes.
          * Intended to return False if any table cannot be read.

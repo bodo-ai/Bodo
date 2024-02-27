@@ -18,6 +18,7 @@ from bodo.utils.typing import BodoError
 @pytest.mark.slow
 def test_session_box(memory_leak_check):
     """test boxing/unboxing for SparkSession object"""
+
     # just unbox
     def impl(arg):
         return True
@@ -55,6 +56,7 @@ def test_session_const_lowering(memory_leak_check):
 @pytest.mark.slow
 def test_row_box(memory_leak_check):
     """test boxing/unboxing for Row object"""
+
     # just unbox
     def impl(arg):
         return True
@@ -71,6 +73,7 @@ def test_row_box(memory_leak_check):
 @pytest.mark.slow
 def test_row_constructor(memory_leak_check):
     """test Row constructor calls"""
+
     # kws
     def impl():
         return Row(A=3, B="ABC")
@@ -86,6 +89,7 @@ def test_row_constructor(memory_leak_check):
 @pytest.mark.slow
 def test_row_get_field(memory_leak_check):
     """test Row constructor calls"""
+
     # getattr
     def impl1(r):
         return r.A
@@ -112,6 +116,7 @@ def test_row_get_field(memory_leak_check):
 @pytest.mark.slow
 def test_create_dataframe(memory_leak_check):
     """test spark.createDataFrame() calls"""
+
     # pandas input
     def impl(df):
         spark = SparkSession.builder.getOrCreate()

@@ -24,12 +24,10 @@ import org.apache.calcite.util.BuiltInMethod
  * should be able to query the catalog directly for top-level schema information.
  */
 class RootSchema {
-
     /**
      * Implementation of a root schema with a catalog.
      */
     private class CatalogRootSchema(catalog: BodoSQLCatalog) : CatalogSchema(rootName, rootDepth, ImmutableList.of(), catalog) {
-
         // The root schema should not support loading tables.
         // In a followup PR we will refactor getTableNames()
         // and getTable() for the CatalogSchema to enable multiple
@@ -134,17 +132,19 @@ class RootSchema {
 
         fun createRootSchema(catalog: BodoSQLCatalog?): SchemaPlus {
             // Create the schema, loading from cache if it already exists
-            val schema = if (rootMap.contains(catalog)) {
-                rootMap[catalog]
-            } else {
-                val newSchema = if (catalog == null) {
-                    LocalRootSchema()
+            val schema =
+                if (rootMap.contains(catalog)) {
+                    rootMap[catalog]
                 } else {
-                    CatalogRootSchema(catalog)
+                    val newSchema =
+                        if (catalog == null) {
+                            LocalRootSchema()
+                        } else {
+                            CatalogRootSchema(catalog)
+                        }
+                    rootMap[catalog] = newSchema
+                    newSchema
                 }
-                rootMap[catalog] = newSchema
-                newSchema
-            }
             // Wrap in a CachingCalciteSchema
             val cachedSchema = CalciteSchema.createRootSchema(false, true, rootName, schema)
             return cachedSchema.plus()

@@ -9,14 +9,15 @@ import org.apache.calcite.rel.core.Filter
 class PandasMinRowNumberFilterRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                BodoLogicalMinRowNumberFilter::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasMinRowNumberFilterRule",
-            )
-            .withRuleFactory { config -> PandasMinRowNumberFilterRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalMinRowNumberFilter::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasMinRowNumberFilterRule",
+                )
+                .withRuleFactory { config -> PandasMinRowNumberFilterRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

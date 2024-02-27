@@ -15,7 +15,7 @@ import java.io.IOException
 import java.lang.IllegalArgumentException
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationTargetException
-import java.util.*
+import java.util.Objects
 import java.util.stream.Collectors
 
 /**
@@ -23,7 +23,6 @@ import java.util.stream.Collectors
  * This is largely based on JaninoRelMetadataProvider inside Calcite.
  */
 class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadataProvider) : MetadataHandlerProvider {
-
     /**
      * This is largely replicated from both Calcite and Dremio. My understanding of the code (which
      * may not be fully correct) is:
@@ -39,9 +38,10 @@ class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadat
      *
      */
     override fun <MH : MetadataHandler<*>?> handler(handlerClass: Class<MH>): MH {
-        val handlers = relMetadataProvider.handlers(handlerClass).stream()
-            .distinct()
-            .collect(Collectors.toList())
+        val handlers =
+            relMetadataProvider.handlers(handlerClass).stream()
+                .distinct()
+                .collect(Collectors.toList())
         val generatedHandler = RelMetadataHandlerGeneratorUtil.generateHandler(handlerClass, handlers)
         return compile(generatedHandler.handlerName, generatedHandler.generatedCode, handlerClass, handlers)
     }
@@ -54,18 +54,20 @@ class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadat
         argList: List<Any?>,
     ): MH {
         val compilerFactory: ICompilerFactory
-        val classLoader = Objects.requireNonNull(
-            JaninoRelMetadataProvider::class.java.classLoader,
-            "classLoader",
-        )
-        compilerFactory = try {
-            CompilerFactoryFactory.getDefaultCompilerFactory(classLoader)
-        } catch (e: Exception) {
-            throw IllegalStateException(
-                "Unable to instantiate java compiler",
-                e,
+        val classLoader =
+            Objects.requireNonNull(
+                JaninoRelMetadataProvider::class.java.classLoader,
+                "classLoader",
             )
-        }
+        compilerFactory =
+            try {
+                CompilerFactoryFactory.getDefaultCompilerFactory(classLoader)
+            } catch (e: Exception) {
+                throw IllegalStateException(
+                    "Unable to instantiate java compiler",
+                    e,
+                )
+            }
         val compiler: ISimpleCompiler = compilerFactory.newSimpleCompiler()
         compiler.setParentClassLoader(JaninoRexCompiler::class.java.classLoader)
         if (CalciteSystemProperty.DEBUG.value()) {
@@ -77,8 +79,9 @@ class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadat
         val constructor: Constructor<*>
         val o: Any
         try {
-            constructor = compiler.classLoader.loadClass(className)
-                .declaredConstructors[0]
+            constructor =
+                compiler.classLoader.loadClass(className)
+                    .declaredConstructors[0]
             o = constructor.newInstance(*argList.toTypedArray())
         } catch (e: IllegalArgumentException) {
             throw java.lang.RuntimeException(e)

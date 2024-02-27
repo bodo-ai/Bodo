@@ -12,8 +12,11 @@ class BodoLogicalUnion(
     inputs: List<RelNode>,
     all: Boolean,
 ) : UnionBase(cluster, traitSet, inputs, all) {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): BodoLogicalUnion {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+        all: Boolean,
+    ): BodoLogicalUnion {
         return BodoLogicalUnion(cluster, traitSet, inputs, all)
     }
 

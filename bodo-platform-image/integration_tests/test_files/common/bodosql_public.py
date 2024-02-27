@@ -8,15 +8,20 @@ except:
     print(" ############## bodosql not Installed ##################### ")
     sys.exit(1)
 
+
 @bodo.jit()
 def use_case_1():
     start = time.time()
     bc = bodosql.BodoSQLContext(
         {
-            "lineitem":  bodosql.TablePath("s3://bodo-example-data/tpch/SF1/lineitem.pq", "parquet"),
-        })
+            "lineitem": bodosql.TablePath(
+                "s3://bodo-example-data/tpch/SF1/lineitem.pq", "parquet"
+            ),
+        }
+    )
 
-    fdf = bc.sql("""select
+    fdf = bc.sql(
+        """select
                 l_returnflag,
                 l_linestatus,
                 sum(l_quantity) as sum_qty,
@@ -36,11 +41,13 @@ def use_case_1():
                 l_linestatus
             order by
                 l_returnflag,
-                l_linestatus""")
-    
+                l_linestatus"""
+    )
+
     print(f"query took {time.time()-start} seconds", fdf)
     return fdf
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     df1 = use_case_1()
     print(df1)

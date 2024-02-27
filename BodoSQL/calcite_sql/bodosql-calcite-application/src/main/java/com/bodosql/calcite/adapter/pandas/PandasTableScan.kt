@@ -21,13 +21,17 @@ class PandasTableScan(
     traitSet: RelTraitSet,
     table: RelOptTable,
 ) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: MutableList<RelNode>?): RelNode {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: MutableList<RelNode>?,
+    ): RelNode {
         return PandasTableScan(cluster, traitSet, table)
     }
 
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
+
     override fun operationDescriptor() = "reading table"
+
     override fun loggingTitle() = "IO TIMING"
 
     override fun nodeDetails(): String {
@@ -64,7 +68,10 @@ class PandasTableScan(
         return readerVar
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
@@ -73,7 +80,10 @@ class PandasTableScan(
     /**
      * Generate the Table for the body of the streaming code.
      */
-    private fun generateStreamingTable(ctx: PandasRel.BuildContext, stateVar: StateVariable): BodoEngineTable {
+    private fun generateStreamingTable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ): BodoEngineTable {
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val tableChunkVar = builder.symbolTable.genTableVar()
@@ -121,7 +131,10 @@ class PandasTableScan(
 
     companion object {
         @JvmStatic
-        fun create(cluster: RelOptCluster, table: RelOptTable): PandasTableScan {
+        fun create(
+            cluster: RelOptCluster,
+            table: RelOptTable,
+        ): PandasTableScan {
             return PandasTableScan(cluster, cluster.traitSet(), table)
         }
     }

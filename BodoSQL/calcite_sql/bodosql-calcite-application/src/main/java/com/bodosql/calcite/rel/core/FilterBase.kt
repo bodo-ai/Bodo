@@ -19,12 +19,18 @@ open class FilterBase(
     child: RelNode,
     condition: RexNode,
 ) : Filter(cluster, traits, child, condition.accept(RexNormalizer(cluster.rexBuilder))) {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): FilterBase {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        condition: RexNode,
+    ): FilterBase {
         return FilterBase(cluster, traitSet, input, condition)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val inputRows = mq.getRowCount(input)
         // Filter cost consists of two parts. The cost to compute the actual filter
         // and the cost to filter each column.

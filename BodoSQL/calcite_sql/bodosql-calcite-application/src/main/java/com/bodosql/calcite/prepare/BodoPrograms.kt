@@ -73,105 +73,106 @@ object BodoPrograms {
     /**
      * Standard program utilizing the volcano planner to perform optimization and conversion.
      */
-    fun standard(optimize: Boolean = true): Program = Programs.sequence(
-        // When the HepStandardProgram is removed entirely, we would add the
-        // convention when the SnowflakeTableScan is created instead of here.
-        TrimFieldsProgram(false),
-        SnowflakeTraitAdder(),
-        SnowflakeColumnPruning(),
-        // CSE step. Several sections of the parsing calcite integration support may
-        // involve directly copying compute when aliases need to be inserted. Depending
-        // on the context different sections could be simplified differently, so we want to
-        // run our CSE changes up front until we can develop more robust CSE support. After
-        // simplification new similarities may be uncovered, so we also include those rules
-        // in the simplification step.
-        if (optimize) {
-            HepOptimizerProgram(BodoRules.CSE_RULES)
-        } else {
-            NoopProgram
-        },
-        // Simplification & filter push down step.
-        if (optimize) {
-            HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES))
-        } else {
-            NoopProgram
-        },
-        // We eliminate common subexpressions in filters only after all filters have been pushed down.
-        if (optimize) {
-            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
-        } else {
-            NoopProgram
-        },
-        // Field pushdown step
-        // This includes generic projection pushdown code,
-        // and some specialized rules to handle semi-structure field accesses
-        if (optimize) {
-            FieldPushdownPass()
-        } else {
-            NoopProgram
-        },
-        // Projection pull up pass
-        if (optimize) {
-            ProjectionPullUpPass()
-        } else {
-            NoopProgram
-        },
-        // Even when set to 0 bloat, several rules in the pushdown/pull up pass sometimes break CSE incorrectly,
-        // the reason for this is not immediately clear.
-        // Therefore, we perform a second CSE pass after the pushdown/pull up rules run in order to
-        // re-introduce CSE wherever possible
-        if (optimize) {
-            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
-        } else {
-            NoopProgram
-        },
-        // Rewrite step. The Filter Case changes risk keeping a filter from passing through a join by inserting
-        // a projection, so we run it after filter pushdown.
-        if (optimize) {
-            HepOptimizerProgram(BodoRules.REWRITE_RULES)
-        } else {
-            NoopProgram
-        },
-        // Multi Join building step.
-        if (optimize) {
-            Programs.of(
-                HepProgramBuilder()
-                    // Note: You must build the multi-join BOTTOM_UP
-                    .addMatchOrder(HepMatchOrder.BOTTOM_UP)
-                    .addRuleCollection(MULTI_JOIN_CONSTRUCTION_RULES)
-                    .build(),
-                false,
-                BodoRelMetadataProvider(),
-            )
-        } else {
-            NoopProgram
-        },
-        AnalysisSuite.multiJoinAnalyzer,
-        WindowConversionProgram(),
-        MetadataPreprocessProgram(),
-        RuleSetProgram(
-            Iterables.concat(
-                BodoRules.VOLCANO_MINIMAL_RULE_SET,
-                ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
+    fun standard(optimize: Boolean = true): Program =
+        Programs.sequence(
+            // When the HepStandardProgram is removed entirely, we would add the
+            // convention when the SnowflakeTableScan is created instead of here.
+            TrimFieldsProgram(false),
+            SnowflakeTraitAdder(),
+            SnowflakeColumnPruning(),
+            // CSE step. Several sections of the parsing calcite integration support may
+            // involve directly copying compute when aliases need to be inserted. Depending
+            // on the context different sections could be simplified differently, so we want to
+            // run our CSE changes up front until we can develop more robust CSE support. After
+            // simplification new similarities may be uncovered, so we also include those rules
+            // in the simplification step.
+            if (optimize) {
+                HepOptimizerProgram(BodoRules.CSE_RULES)
+            } else {
+                NoopProgram
+            },
+            // Simplification & filter push down step.
+            if (optimize) {
+                HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES))
+            } else {
+                NoopProgram
+            },
+            // We eliminate common subexpressions in filters only after all filters have been pushed down.
+            if (optimize) {
+                HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
+            } else {
+                NoopProgram
+            },
+            // Field pushdown step
+            // This includes generic projection pushdown code,
+            // and some specialized rules to handle semi-structure field accesses
+            if (optimize) {
+                FieldPushdownPass()
+            } else {
+                NoopProgram
+            },
+            // Projection pull up pass
+            if (optimize) {
+                ProjectionPullUpPass()
+            } else {
+                NoopProgram
+            },
+            // Even when set to 0 bloat, several rules in the pushdown/pull up pass sometimes break CSE incorrectly,
+            // the reason for this is not immediately clear.
+            // Therefore, we perform a second CSE pass after the pushdown/pull up rules run in order to
+            // re-introduce CSE wherever possible
+            if (optimize) {
+                HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
+            } else {
+                NoopProgram
+            },
+            // Rewrite step. The Filter Case changes risk keeping a filter from passing through a join by inserting
+            // a projection, so we run it after filter pushdown.
+            if (optimize) {
+                HepOptimizerProgram(BodoRules.REWRITE_RULES)
+            } else {
+                NoopProgram
+            },
+            // Multi Join building step.
+            if (optimize) {
+                Programs.of(
+                    HepProgramBuilder()
+                        // Note: You must build the multi-join BOTTOM_UP
+                        .addMatchOrder(HepMatchOrder.BOTTOM_UP)
+                        .addRuleCollection(MULTI_JOIN_CONSTRUCTION_RULES)
+                        .build(),
+                    false,
+                    BodoRelMetadataProvider(),
+                )
+            } else {
+                NoopProgram
+            },
+            AnalysisSuite.multiJoinAnalyzer,
+            WindowConversionProgram(),
+            MetadataPreprocessProgram(),
+            RuleSetProgram(
+                Iterables.concat(
+                    BodoRules.VOLCANO_MINIMAL_RULE_SET,
+                    ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
+                ),
             ),
-        ),
-        // This analysis pass has to come after VOLCANO_MINIMAL_RULE_SET which
-        // contains the filterPushdown step.
-        AnalysisSuite.filterPushdownAnalysis,
-        // Convert Window nodes back to Project nodes
-        WindowProjectTransformProgram,
-        // Cleanup Snowflake Nodes in preparation of Iceberg Conversion
-        SnowflakeCleanupProgram,
-        // Update Iceberg Nodes
-        IcebergConvertProgram,
-        // Add a final trim step.
-        TrimFieldsProgram(true),
-        // TODO(jsternberg): This can likely be adapted and integrated directly with
-        // the VolcanoPlanner, but that hasn't been done so leave this here.
-        DecorateAttributesProgram(),
-        BatchingPropertyProgram(),
-        MergeRelProgram(),
-    )
+            // This analysis pass has to come after VOLCANO_MINIMAL_RULE_SET which
+            // contains the filterPushdown step.
+            AnalysisSuite.filterPushdownAnalysis,
+            // Convert Window nodes back to Project nodes
+            WindowProjectTransformProgram,
+            // Cleanup Snowflake Nodes in preparation of Iceberg Conversion
+            SnowflakeCleanupProgram,
+            // Update Iceberg Nodes
+            IcebergConvertProgram,
+            // Add a final trim step.
+            TrimFieldsProgram(true),
+            // TODO(jsternberg): This can likely be adapted and integrated directly with
+            // the VolcanoPlanner, but that hasn't been done so leave this here.
+            DecorateAttributesProgram(),
+            BatchingPropertyProgram(),
+            MergeRelProgram(),
+        )
 
     /**
      * Preprocessor program to remove subqueries, correlations, and perform other
@@ -186,11 +187,12 @@ object BodoPrograms {
      * the relational expression before we perform code generation.
      */
     private open class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>) : Program {
-        private val program = HepProgramBuilder().also { b ->
-            for (rule in ruleSet) {
-                b.addRuleInstance(rule)
-            }
-        }.build()
+        private val program =
+            HepProgramBuilder().also { b ->
+                for (rule in ruleSet) {
+                    b.addRuleInstance(rule)
+                }
+            }.build()
 
         override fun run(
             planner: RelOptPlanner?,
@@ -223,7 +225,10 @@ object BodoPrograms {
             return lastOptimizedPlan
         }
 
-        private fun run(rel: RelNode, context: Context?): RelNode {
+        private fun run(
+            rel: RelNode,
+            context: Context?,
+        ): RelNode {
             val hepPlanner = HepPlanner(program, context)
             rel.cluster.planner.executor = RexExecutorImpl(null)
             hepPlanner.root = rel
@@ -266,7 +271,6 @@ object BodoPrograms {
      * This program removes subqueries from the query.
      */
     private class SubQueryRemoveProgram : HepOptimizerProgram(SUB_QUERY_REMOVAL_RULES) {
-
         override fun run(
             planner: RelOptPlanner?,
             rel: RelNode,
@@ -288,7 +292,6 @@ object BodoPrograms {
             ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
             SINGLE_VALUE_REMOVE_RULE,
         ),
-
     )
 
     /**
@@ -666,12 +669,17 @@ object BodoPrograms {
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
         ): RelNode {
-            val relBuilder = if (isPhysical) {
-                val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
-                physicalBuilder.transform { t -> t.withBloat(-1) }
-            } else {
-                com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
-            }
+            val relBuilder =
+                if (isPhysical) {
+                    val physicalBuilder =
+                        com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(
+                            rel.cluster,
+                            null,
+                        )
+                    physicalBuilder.transform { t -> t.withBloat(-1) }
+                } else {
+                    com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
+                }
             return BodoRelFieldTrimmer(null, relBuilder, isPhysical).trim(rel)
         }
     }
@@ -721,7 +729,10 @@ object BodoPrograms {
 /**
  * Return the passed in iterable on true otherwise return an empty iterable.
  */
-private fun <T> ifTrue(condition: Boolean, onTrue: Iterable<T>): Iterable<T> =
+private fun <T> ifTrue(
+    condition: Boolean,
+    onTrue: Iterable<T>,
+): Iterable<T> =
     if (condition) {
         onTrue
     } else {

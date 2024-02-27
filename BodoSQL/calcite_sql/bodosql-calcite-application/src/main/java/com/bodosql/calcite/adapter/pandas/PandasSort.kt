@@ -17,7 +17,6 @@ class PandasSort(
     offset: RexNode?,
     fetch: RexNode?,
 ) : SortBase(cluster, traitSet.replace(PandasRel.CONVENTION), input, collation, offset, fetch), PandasRel {
-
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
@@ -36,12 +35,20 @@ class PandasSort(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
     companion object {
-        fun create(child: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?): PandasSort {
+        fun create(
+            child: RelNode,
+            collation: RelCollation,
+            offset: RexNode?,
+            fetch: RexNode?,
+        ): PandasSort {
             val cluster = child.cluster
             val traitSet = cluster.traitSet().replace(collation)
             return PandasSort(cluster, traitSet, child, collation, offset, fetch)

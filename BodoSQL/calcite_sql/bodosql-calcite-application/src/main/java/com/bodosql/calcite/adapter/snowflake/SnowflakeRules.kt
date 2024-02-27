@@ -24,12 +24,13 @@ class SnowflakeRules private constructor() {
             SnowflakeToPandasConverterRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
-        val SNOWFLAKE_RULES: List<RelOptRule> = listOf(
-            SNOWFLAKE_AGGREGATE_RULE,
-            SNOWFLAKE_LIMIT_RULE,
-            SNOWFLAKE_FILTER_RULE,
-            SNOWFLAKE_PROJECT_RULE,
-        )
+        val SNOWFLAKE_RULES: List<RelOptRule> =
+            listOf(
+                SNOWFLAKE_AGGREGATE_RULE,
+                SNOWFLAKE_LIMIT_RULE,
+                SNOWFLAKE_FILTER_RULE,
+                SNOWFLAKE_PROJECT_RULE,
+            )
 
         fun rules(): List<RelOptRule> = SNOWFLAKE_RULES
     }

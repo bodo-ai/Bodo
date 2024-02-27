@@ -25,8 +25,10 @@ import org.apache.calcite.rex.RexInputRef
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): RelNode {
         return SnowflakeToPandasConverter(cluster, traitSet, sole(inputs))
     }
 
@@ -40,14 +42,16 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "reading table"
+
     override fun loggingTitle() = "IO TIMING"
 
-    override fun nodeDetails() = (
-        if (isWholeTableRead()) {
-            getTableName(input as SnowflakeRel)
-        } else {
-            getSnowflakeSQL()
-        }
+    override fun nodeDetails() =
+        (
+            if (isWholeTableRead()) {
+                getTableName(input as SnowflakeRel)
+            } else {
+                getSnowflakeSQL()
+            }
         )!!
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
@@ -62,17 +66,24 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return readerVar
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost? {
         // Determine the average row size which determines how much data is returned.
         // If this data isn't available, just assume something like 4 bytes for each column.
-        val averageRowSize = mq.getAverageRowSize(this)
-            ?: (4.0 * getRowType().fieldCount)
+        val averageRowSize =
+            mq.getAverageRowSize(this)
+                ?: (4.0 * getRowType().fieldCount)
 
         // Complete data size using the row count.
         val rows = mq.getRowCount(this)
@@ -102,14 +113,16 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * Generate the required read expression for processing the P
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
-        val readExpr = when {
-            (isWholeTableRead()) -> sqlReadTable(input as SnowflakeTableScan, ctx)
-            else -> readSql(ctx)
-        }
+        val readExpr =
+            when {
+                (isWholeTableRead()) -> sqlReadTable(input as SnowflakeTableScan, ctx)
+                else -> readSql(ctx)
+            }
         return readExpr
     }
 
     private fun getTableName(input: SnowflakeRel) = input.getCatalogTable().name
+
     private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().fullPath[1]
 
     private fun getDatabaseName(input: SnowflakeRel) = input.getCatalogTable().fullPath[0]
@@ -118,15 +131,19 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * Generate the code required to read a table. This path is necessary because the Snowflake
      * API allows for more accurate sampling when operating directly on a table.
      */
-    private fun sqlReadTable(tableScan: SnowflakeTableScan, ctx: PandasRel.BuildContext): Expr.Call {
+    private fun sqlReadTable(
+        tableScan: SnowflakeTableScan,
+        ctx: PandasRel.BuildContext,
+    ): Expr.Call {
         val tableName = getTableName(tableScan)
         val schemaName = getSchemaName(tableScan)
         val databaseName = getDatabaseName(tableScan)
         val relInput = input as SnowflakeRel
-        val args = listOf(
-            StringLiteral(tableName),
-            StringLiteral(relInput.generatePythonConnStr(databaseName, schemaName)),
-        )
+        val args =
+            listOf(
+                StringLiteral(tableName),
+                StringLiteral(relInput.generatePythonConnStr(databaseName, schemaName)),
+            )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
 
@@ -152,28 +169,31 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
         val passTableInfo = canUseOptimizedReadSqlPath(relInput)
 
-        val bodoTableNameExpr = if (passTableInfo) {
-            // Store the original indices to allow handling renaming.
-            val catalogTable = relInput.getCatalogTable()
-            // Get the fully qualified name.
-            StringLiteral(catalogTable.qualifiedName)
-        } else {
-            Expr.None
-        }
+        val bodoTableNameExpr =
+            if (passTableInfo) {
+                // Store the original indices to allow handling renaming.
+                val catalogTable = relInput.getCatalogTable()
+                // Get the fully qualified name.
+                StringLiteral(catalogTable.qualifiedName)
+            } else {
+                Expr.None
+            }
 
-        val originalIndices = if (passTableInfo) {
-            // TODO: Replace with a global variable?
-            Expr.Tuple(getOriginalColumnIndices(relInput).map { i -> Expr.IntegerLiteral(i) })
-        } else {
-            Expr.None
-        }
-        val args = listOf(
-            StringLiteral(sql),
-            // We don't use a schema name because we've already fully qualified
-            // all table references, and it's better if this doesn't have any
-            // potentially unexpected behavior.
-            StringLiteral(relInput.generatePythonConnStr("", "")),
-        )
+        val originalIndices =
+            if (passTableInfo) {
+                // TODO: Replace with a global variable?
+                Expr.Tuple(getOriginalColumnIndices(relInput).map { i -> Expr.IntegerLiteral(i) })
+            } else {
+                Expr.None
+            }
+        val args =
+            listOf(
+                StringLiteral(sql),
+                // We don't use a schema name because we've already fully qualified
+                // all table references, and it's better if this doesn't have any
+                // potentially unexpected behavior.
+                StringLiteral(relInput.generatePythonConnStr("", "")),
+            )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false, bodoTableNameExpr, originalIndices))
     }
 
@@ -183,47 +203,52 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * been called and evaluates to True.
      */
     private fun getOriginalColumnIndices(node: SnowflakeRel): List<Int> {
-        val onlyColumnSubsetVisitor = object : RelVisitor() {
-            // Initialize all columns to be in the original location.
-            var originalColumns: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+        val onlyColumnSubsetVisitor =
+            object : RelVisitor() {
+                // Initialize all columns to be in the original location.
+                var originalColumns: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
 
-            override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
-                if (node is SnowflakeProject) {
-                    for (i in 0..<originalColumns.size) {
-                        val project = node.projects[originalColumns[i]]
-                        if (project !is RexInputRef) {
-                            throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                override fun visit(
+                    node: RelNode,
+                    ordinal: Int,
+                    parent: RelNode?,
+                ) {
+                    if (node is SnowflakeProject) {
+                        for (i in 0..<originalColumns.size) {
+                            val project = node.projects[originalColumns[i]]
+                            if (project !is RexInputRef) {
+                                throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                            }
+                            // Remap to the original location.
+                            originalColumns[i] = project.index
                         }
-                        // Remap to the original location.
-                        originalColumns[i] = project.index
+                        node.childrenAccept(this)
+                    } else if (node is SnowflakeAggregate) {
+                        // Re-map columns to either the group or original column and
+                        // then visit the children.
+                        val groups = node.groupSet.toList()
+                        if (node.aggCallList.isNotEmpty()) {
+                            // Note: This is enforced in canUseOptimizedReadSqlPath
+                            throw RuntimeException("getOriginalColumnIndices() only support select distinct")
+                        }
+                        for (i in 0..<originalColumns.size) {
+                            val index = originalColumns[i]
+                            originalColumns[i] = groups[index]
+                        }
+                        node.childrenAccept(this)
+                    } else if (node is SnowflakeFilter || node is SnowflakeSort) {
+                        // Enable moving past filters to get the original table
+                        // for filter and limit.
+                        node.childrenAccept(this)
+                    } else if (node is SnowflakeTableScan) {
+                        for (i in 0..<originalColumns.size) {
+                            originalColumns[i] = node.getOriginalColumnIndex(originalColumns[i])
+                        }
+                    } else {
+                        return
                     }
-                    node.childrenAccept(this)
-                } else if (node is SnowflakeAggregate) {
-                    // Re-map columns to either the group or original column and
-                    // then visit the children.
-                    val groups = node.groupSet.toList()
-                    if (node.aggCallList.isNotEmpty()) {
-                        // Note: This is enforced in canUseOptimizedReadSqlPath
-                        throw RuntimeException("getOriginalColumnIndices() only support select distinct")
-                    }
-                    for (i in 0..<originalColumns.size) {
-                        val index = originalColumns[i]
-                        originalColumns[i] = groups[index]
-                    }
-                    node.childrenAccept(this)
-                } else if (node is SnowflakeFilter || node is SnowflakeSort) {
-                    // Enable moving past filters to get the original table
-                    // for filter and limit.
-                    node.childrenAccept(this)
-                } else if (node is SnowflakeTableScan) {
-                    for (i in 0..<originalColumns.size) {
-                        originalColumns[i] = node.getOriginalColumnIndex(originalColumns[i])
-                    }
-                } else {
-                    return
                 }
             }
-        }
 
         onlyColumnSubsetVisitor.go(node)
         return onlyColumnSubsetVisitor.originalColumns.toList()
@@ -237,48 +262,61 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      *      and possibly a filter or limit.
      */
     private fun canUseOptimizedReadSqlPath(node: SnowflakeRel): Boolean {
-        val onlyColumnSubsetVisitor = object : RelVisitor() {
-            var seenInvalidNode: Boolean = false
+        val onlyColumnSubsetVisitor =
+            object : RelVisitor() {
+                var seenInvalidNode: Boolean = false
 
-            override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
-                if (seenInvalidNode) {
-                    return
-                }
+                override fun visit(
+                    node: RelNode,
+                    ordinal: Int,
+                    parent: RelNode?,
+                ) {
+                    if (seenInvalidNode) {
+                        return
+                    }
 
-                if (node is SnowflakeProject) {
-                    // This is already enforced in the SnowflakeProject, but this will
-                    // help protect against unexpected changes.
-                    if (node.projects.any { x -> x !is RexInputRef }) {
-                        seenInvalidNode = true
-                    } else {
+                    if (node is SnowflakeProject) {
+                        // This is already enforced in the SnowflakeProject, but this will
+                        // help protect against unexpected changes.
+                        if (node.projects.any { x -> x !is RexInputRef }) {
+                            seenInvalidNode = true
+                        } else {
+                            node.childrenAccept(this)
+                        }
+                    } else if (node is SnowflakeFilter || node is SnowflakeSort) {
+                        // Enable moving past filters to get the original table
+                        // for filter and limit.
                         node.childrenAccept(this)
-                    }
-                } else if (node is SnowflakeFilter || node is SnowflakeSort) {
-                    // Enable moving past filters to get the original table
-                    // for filter and limit.
-                    node.childrenAccept(this)
-                } else if (node is SnowflakeAggregate) {
-                    // Aggregates may change types except for distinct,
-                    // so we don't want to point to the original table.
-                    if (node.aggCallList.isNotEmpty()) {
-                        seenInvalidNode = true
+                    } else if (node is SnowflakeAggregate) {
+                        // Aggregates may change types except for distinct,
+                        // so we don't want to point to the original table.
+                        if (node.aggCallList.isNotEmpty()) {
+                            seenInvalidNode = true
+                        } else {
+                            node.childrenAccept(this)
+                        }
+                    } else if (node is SnowflakeTableScan || node is Values) {
+                        // Found the root table.
+                        return
                     } else {
-                        node.childrenAccept(this)
+                        throw RuntimeException(
+                            "canUseOptimizedReadSqlPath(): Unexpected SnowflakeRel encountered. " +
+                                "Please explicitly support each SnowflakeRel",
+                        )
                     }
-                } else if (node is SnowflakeTableScan || node is Values) {
-                    // Found the root table.
-                    return
-                } else {
-                    throw RuntimeException("canUseOptimizedReadSqlPath(): Unexpected SnowflakeRel encountered. Please explicitly support each SnowflakeRel")
                 }
             }
-        }
 
         onlyColumnSubsetVisitor.go(node)
         return !onlyColumnSubsetVisitor.seenInvalidNode
     }
 
-    private fun getNamedArgs(ctx: PandasRel.BuildContext, isTable: Boolean, origTableExpr: Expr, origTableIndices: Expr): List<Pair<String, Expr>> {
+    private fun getNamedArgs(
+        ctx: PandasRel.BuildContext,
+        isTable: Boolean,
+        origTableExpr: Expr,
+        origTableIndices: Expr,
+    ): List<Pair<String, Expr>> {
         return listOf(
             "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
             "_bodo_orig_table_name" to origTableExpr,
@@ -302,7 +340,10 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     /**
      * Generate the Table for the body of the streaming code.
      */
-    private fun generateStreamingTable(ctx: PandasRel.BuildContext, stateVar: StateVariable): BodoEngineTable {
+    private fun generateStreamingTable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ): BodoEngineTable {
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val tableChunkVar = builder.symbolTable.genTableVar()

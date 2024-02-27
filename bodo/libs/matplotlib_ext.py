@@ -665,6 +665,7 @@ def overload_savefig(
     it doesn't need to), which fails assertion checks in
     gen_objmode_func_overload.
     """
+
     # Note: We omit papertype and frameon because these arguments are deprecated and will be removed in 2 minor releases.
     def impl(
         fname,

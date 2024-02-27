@@ -17,7 +17,6 @@ from the partition spec.
 
 
 def create_table(table_name="partitions_dropped_dt_table", spark=None):
-
     if spark is None:
         spark = get_spark()
 

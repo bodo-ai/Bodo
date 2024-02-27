@@ -30,7 +30,11 @@ class SqlCopyIntoLocation(
         val OPERATOR = SqlSpecialOperator("COPY INTO", SqlKind.OTHER_DDL)
     }
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("COPY INTO")
         when (targetType) {
             CopyIntoLocationTarget.STAGE -> {

@@ -25,7 +25,11 @@ class SqlDropTable(pos: SqlParserPos, ifExists: Boolean, val name: SqlIdentifier
 
     override fun getOperandList(): List<SqlNode> = ImmutableList.of(name)
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword(operator.name)
         if (ifExists) {
             writer.keyword("IF EXISTS")

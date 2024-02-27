@@ -44,5 +44,6 @@ def get_daily_pickups():
     print("Daily pickups Computation Time: ", (end - start))
     print(daily_pickups_taxi.head())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     get_daily_pickups()

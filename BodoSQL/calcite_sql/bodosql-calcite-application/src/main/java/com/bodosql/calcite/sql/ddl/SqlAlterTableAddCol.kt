@@ -11,8 +11,11 @@ class SqlAlterTableAddCol(
     table: SqlIdentifier,
     val addCol: SqlNode,
 ) : SqlAlterTable(pos, ifExists, table) {
-
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("ADD")
         writer.keyword("COLUMN")
         addCol.unparse(writer, leftPrec, rightPrec)

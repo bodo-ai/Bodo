@@ -7,14 +7,15 @@ import org.apache.calcite.rel.convert.ConverterRule
 class SnowflakeToPandasConverterRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                RelNode::class.java,
-                SnowflakeRel.CONVENTION,
-                PandasRel.CONVENTION,
-                "SnowflakeToPandasConverterRule",
-            )
-            .withRuleFactory { config -> SnowflakeToPandasConverterRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    RelNode::class.java,
+                    SnowflakeRel.CONVENTION,
+                    PandasRel.CONVENTION,
+                    "SnowflakeToPandasConverterRule",
+                )
+                .withRuleFactory { config -> SnowflakeToPandasConverterRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

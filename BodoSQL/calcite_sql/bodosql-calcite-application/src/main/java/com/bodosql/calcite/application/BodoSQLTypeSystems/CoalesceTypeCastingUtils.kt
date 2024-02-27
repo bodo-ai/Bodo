@@ -1,4 +1,6 @@
-package com.bodosql.calcite.application.BodoSQLTypeSystems // ktlint-disable
+@file:Suppress("ktlint")
+
+package com.bodosql.calcite.application.BodoSQLTypeSystems
 
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
@@ -32,6 +34,7 @@ class CoalesceTypeCastingUtils {
         OBJECT,
         ARRAY,
         ;
+
         // Geospatial (unsupported)
 //        GEOGRAPHY,
 //        GEOMETRY,

@@ -7,13 +7,11 @@ import org.apache.calcite.plan.RelTraitDef
 
 enum class PlannerType {
     VOLCANO {
-        override fun programs(): ProgramCollection =
-            ProgramCollection(BodoPrograms::standard)
+        override fun programs(): ProgramCollection = ProgramCollection(BodoPrograms::standard)
     },
 
     STREAMING {
-        override fun traitDefs(): List<RelTraitDef<out RelTrait>> =
-            listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
+        override fun traitDefs(): List<RelTraitDef<out RelTrait>> = listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
 
         override fun programs(): ProgramCollection = VOLCANO.programs()
     }, ;

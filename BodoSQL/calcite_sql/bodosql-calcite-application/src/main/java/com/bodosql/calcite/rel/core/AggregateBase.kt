@@ -23,20 +23,29 @@ open class AggregateBase(
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
 ) : Aggregate(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls) {
-
-    override fun copy(traitSet: RelTraitSet, input: RelNode, groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>): AggregateBase {
+    override fun copy(
+        traitSet: RelTraitSet,
+        input: RelNode,
+        groupSet: ImmutableBitSet,
+        groupSets: List<ImmutableBitSet>?,
+        aggCalls: List<AggregateCall>,
+    ): AggregateBase {
         return AggregateBase(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls)
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
         val distinctCost = AggCostEstimator.estimateInputCost(input)
-        val funcCost = if (aggCalls.isEmpty()) {
-            Cost()
-        } else {
-            aggCalls.map { aggCall -> AggCostEstimator.estimateFunctionCost(aggCall) }
-                .reduce { l, r -> l.plus(r) as Cost }
-        }
+        val funcCost =
+            if (aggCalls.isEmpty()) {
+                Cost()
+            } else {
+                aggCalls.map { aggCall -> AggCostEstimator.estimateFunctionCost(aggCall) }
+                    .reduce { l, r -> l.plus(r) as Cost }
+            }
         val cost = distinctCost + funcCost
         return planner.makeCost(from = cost).multiplyBy(rows)
     }

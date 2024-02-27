@@ -19,8 +19,11 @@ class SqlSnowflakeUpdate(
     alias: SqlIdentifier?,
     val from: SqlNode?,
 ) : SqlUpdate(pos, targetTable, targetColumnList, sourceExpressionList, condition, sourceSelect, alias) {
-
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         val frame = writer.startList(SqlWriter.FrameTypeEnum.SELECT, "UPDATE", "")
         val opLeft = operator.leftPrec
         val opRight = operator.rightPrec

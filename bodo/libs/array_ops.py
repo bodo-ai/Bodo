@@ -485,7 +485,6 @@ def array_op_mean(arr):  # pragma: no cover
 
 @overload(array_op_mean)
 def overload_array_op_mean(arr):
-
     # datetime
     if arr.dtype == bodo.datetime64ns:
 
@@ -585,7 +584,6 @@ def array_op_quantile(arr, q):  # pragma: no cover
 @overload(array_op_quantile)
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
-
         if arr.dtype == bodo.datetime64ns:
 
             def _impl_list_dt(arr, q):  # pragma: no cover
@@ -782,7 +780,6 @@ def array_op_isin(arr, values):  # pragma: no cover
 
 @overload(array_op_isin, inline="always")
 def overload_array_op_isin(arr, values):
-
     # For now we're only using the hash implementation when the dtypes of values
     # and the series are the same, and they are hashable.
     # TODO Optimize this further by casting values to a common dtype if possible

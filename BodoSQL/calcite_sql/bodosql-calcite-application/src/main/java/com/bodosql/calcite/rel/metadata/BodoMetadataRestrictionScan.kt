@@ -16,7 +16,7 @@ import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
-import java.util.*
+import java.util.Locale
 
 /**
  * Pre-scans a query plan to determine which columns should be allowed to have their
@@ -79,7 +79,10 @@ class BodoMetadataRestrictionScan {
          * @param columnName The name of the column being requested
          * @return Whether the column is allowed to have its metadata requested
          */
-        fun canRequestColumnDistinctiveness(tableName: List<String>, columnName: String): Boolean {
+        fun canRequestColumnDistinctiveness(
+            tableName: List<String>,
+            columnName: String,
+        ): Boolean {
             return columnsAllowedToRequest.contains("${tableName.joinToString(".")}.$columnName".uppercase(Locale.ROOT))
         }
 
@@ -152,15 +155,19 @@ class BodoMetadataRestrictionScan {
          * @param cols The set of column indices that must have their
          *
          */
-        fun findColumnsThatCanBeRequested(node: RelNode, cols: Set<Int>) {
+        fun findColumnsThatCanBeRequested(
+            node: RelNode,
+            cols: Set<Int>,
+        ) {
             if (node is SnowflakeTableScan || node is IcebergTableScan) {
                 // Once we have reached a scan, add every column from cols to
                 // the set of columns that are pre-cleared for metadata requests.
-                val table = if (node is SnowflakeTableScan) {
-                    node.getCatalogTable()
-                } else {
-                    (node as IcebergTableScan).getCatalogTable()
-                }
+                val table =
+                    if (node is SnowflakeTableScan) {
+                        node.getCatalogTable()
+                    } else {
+                        (node as IcebergTableScan).getCatalogTable()
+                    }
                 val names = node.getRowType().fieldNames
                 cols.forEach {
                     val columnName = names[it]
@@ -229,13 +236,14 @@ class BodoMetadataRestrictionScan {
                 // Find the cutoffs for the column indices corresponding to each of
                 // the inputs to a MultiJoin. E.g. if a MultiJoin has 3 inputs with
                 // 4, 11 and 5 columns, then cumeSizes = <0, 4, 15, 20>
-                val cumeSizes = sizes.fold(listOf(0)) { x, y ->
-                    if (x.isEmpty()) {
-                        listOf(y)
-                    } else {
-                        x + (x.last() + y)
+                val cumeSizes =
+                    sizes.fold(listOf(0)) { x, y ->
+                        if (x.isEmpty()) {
+                            listOf(y)
+                        } else {
+                            x + (x.last() + y)
+                        }
                     }
-                }
                 // Find all the columns that will need their metadata requested in order
                 // to infer the output row count of this join
                 val equiJoinCols =

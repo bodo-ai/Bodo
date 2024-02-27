@@ -16,7 +16,6 @@ class PandasSample(
     child: RelNode,
     val params: RelOptSamplingParameters,
 ) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), child), PandasRel {
-
     override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
             .item("mode", if (params.isBernoulli) "bernoulli" else "system")
@@ -27,7 +26,10 @@ class PandasSample(
             )
     }
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasSample {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): PandasSample {
         return PandasSample(cluster, traitSet, sole(inputs), params)
     }
 
@@ -39,17 +41,25 @@ class PandasSample(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
     companion object {
-        fun create(cluster: RelOptCluster, input: RelNode, params: RelOptSamplingParameters): PandasSample {
+        fun create(
+            cluster: RelOptCluster,
+            input: RelNode,
+            params: RelOptSamplingParameters,
+        ): PandasSample {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet()
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    mq.collations(input)
-                }
+            val traitSet =
+                cluster.traitSet()
+                    .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                        mq.collations(input)
+                    }
             return PandasSample(cluster, traitSet, input, params)
         }
     }

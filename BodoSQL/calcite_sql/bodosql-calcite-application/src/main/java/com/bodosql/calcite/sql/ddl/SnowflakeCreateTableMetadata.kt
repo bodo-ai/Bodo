@@ -18,20 +18,21 @@ class SnowflakeCreateTableMetadata() {
     }
 
     fun setColumnComments(commentNode: SqlNodeList) {
-        columnComments = commentNode.list.map {
-            if (it is SqlSnowflakeColumnDeclaration) {
-                if (it.comment is SqlLiteral && it.comment.typeName == SqlTypeName.CHAR) {
-                    it.comment.getValueAs(String::class.java)
-                } else if (it.comment != null) {
-                    throw Exception("Invalid column declaration: ${it.comment}")
+        columnComments =
+            commentNode.list.map {
+                if (it is SqlSnowflakeColumnDeclaration) {
+                    if (it.comment is SqlLiteral && it.comment.typeName == SqlTypeName.CHAR) {
+                        it.comment.getValueAs(String::class.java)
+                    } else if (it.comment != null) {
+                        throw Exception("Invalid column declaration: ${it.comment}")
+                    } else {
+                        null
+                    }
+                } else if (it != null) {
+                    throw Exception("Invalid column declaration: $it")
                 } else {
                     null
                 }
-            } else if (it != null) {
-                throw Exception("Invalid column declaration: $it")
-            } else {
-                null
             }
-        }
     }
 }

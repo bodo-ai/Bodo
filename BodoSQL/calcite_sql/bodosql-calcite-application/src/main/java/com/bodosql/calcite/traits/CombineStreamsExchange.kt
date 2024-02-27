@@ -12,13 +12,21 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
-class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), input), PandasRel {
-
+class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) :
+    SingleRel(
+        cluster,
+        traitSet.replace(PandasRel.CONVENTION),
+        input,
+    ),
+    PandasRel {
     init {
         assert(traitSet.contains(BatchingProperty.SINGLE_BATCH))
     }
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode? {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): RelNode? {
         return CombineStreamsExchange(cluster, traitSet, inputs[0])
     }
 
@@ -39,6 +47,7 @@ class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return BatchingProperty.SINGLE_BATCH
     }
+
     override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return BatchingProperty.STREAMING
     }
@@ -47,11 +56,17 @@ class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         val rows = mq.getRowCount(this)
         val averageRowSize = mq.getAverageRowSize(this)
         val rowMultiplier = rows ?: 1.0

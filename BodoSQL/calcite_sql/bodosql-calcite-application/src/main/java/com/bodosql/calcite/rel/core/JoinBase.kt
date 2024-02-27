@@ -26,14 +26,19 @@ abstract class JoinBase(
     condition: RexNode,
     joinType: JoinRelType,
 ) : Join(cluster, traitSet, hints, left, right, condition.accept(RexNormalizer(cluster.rexBuilder)), ImmutableSet.of(), joinType) {
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+    override fun computeSelfCost(
+        planner: RelOptPlanner,
+        mq: RelMetadataQuery,
+    ): RelOptCost {
         // Join conditions are still applied on the cross product of the inputs.
         // While we don't materialize all of these rows, the condition cost should
         // reflect that fact.
-        val conditionRows = inputs.map { mq.getRowCount(it) }
-            .reduce { a, b -> a * b }
-        val conditionCost = condition.accept(RexCostEstimator)
-            .multiplyBy(conditionRows)
+        val conditionRows =
+            inputs.map { mq.getRowCount(it) }
+                .reduce { a, b -> a * b }
+        val conditionCost =
+            condition.accept(RexCostEstimator)
+                .multiplyBy(conditionRows)
 
         // Compute the memory cost from each of the inputs. Join must use every column
         val probeRows = mq.getRowCount(this.left)
@@ -44,7 +49,12 @@ abstract class JoinBase(
         // If we have a RIGHT JOIN and similar sizes we may want to do a LEFT JOIN because
         // there is overhead to tracking the misses.
         val baseBuildMultiplier = 1.3
-        val buildMultiplier = if (this.joinType == JoinRelType.RIGHT) { baseBuildMultiplier * 1.0 } else { baseBuildMultiplier }
+        val buildMultiplier =
+            if (this.joinType == JoinRelType.RIGHT) {
+                baseBuildMultiplier * 1.0
+            } else {
+                baseBuildMultiplier
+            }
         val buildCost = Cost(mem = averageBuildRowSize).multiplyBy(buildRows).multiplyBy(buildMultiplier)
         val probeCost = Cost(mem = averageProbeRowSize).multiplyBy(probeRows)
 

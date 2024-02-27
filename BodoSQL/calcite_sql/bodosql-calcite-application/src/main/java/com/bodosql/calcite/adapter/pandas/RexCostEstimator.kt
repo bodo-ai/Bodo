@@ -21,8 +21,7 @@ object RexCostEstimator : RexVisitor<Cost> {
     // Input refs have no cost to either use or materialize.
     override fun visitInputRef(inputRef: RexInputRef): Cost = Cost()
 
-    override fun visitLocalRef(localRef: RexLocalRef): Cost =
-        throw UnsupportedOperationException()
+    override fun visitLocalRef(localRef: RexLocalRef): Cost = throw UnsupportedOperationException()
 
     override fun visitLiteral(literal: RexLiteral): Cost {
         // Literals are a bit strange. They can produce a memory cost,
@@ -39,17 +38,19 @@ object RexCostEstimator : RexVisitor<Cost> {
         // TODO(jsternberg): More complete usage but just doing something
         // very basic for now.
         // Base cost for this operation.
-        var cost = Cost(
-            cpu = if (call is RexOver) overFuncMultiplier(call.op) else 1.0,
-            mem = averageTypeValueSize(call.type),
-        )
+        var cost =
+            Cost(
+                cpu = if (call is RexOver) overFuncMultiplier(call.op) else 1.0,
+                mem = averageTypeValueSize(call.type),
+            )
         // If there are operands, include them in the cost.
         if (call.operands.isNotEmpty()) {
-            cost = cost.plus(
-                call.operands.asSequence()
-                    .map { op -> op.accept(this) }
-                    .reduce { l, r -> l.plus(r) as Cost },
-            ) as Cost
+            cost =
+                cost.plus(
+                    call.operands.asSequence()
+                        .map { op -> op.accept(this) }
+                        .reduce { l, r -> l.plus(r) as Cost },
+                ) as Cost
         }
         return cost
     }
@@ -97,23 +98,18 @@ object RexCostEstimator : RexVisitor<Cost> {
         // We don't support correlation variables.
         throw UnsupportedOperationException()
 
-    override fun visitDynamicParam(param: RexDynamicParam): Cost =
-        Cost(mem = averageTypeValueSize(param.type))
+    override fun visitDynamicParam(param: RexDynamicParam): Cost = Cost(mem = averageTypeValueSize(param.type))
 
-    override fun visitRangeRef(rangeRef: RexRangeRef): Cost =
-        throw UnsupportedOperationException()
+    override fun visitRangeRef(rangeRef: RexRangeRef): Cost = throw UnsupportedOperationException()
 
-    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Cost =
-        throw UnsupportedOperationException()
+    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Cost = throw UnsupportedOperationException()
 
     override fun visitSubQuery(subQuery: RexSubQuery): Cost =
         // Subqueries should have been removed by now.
         // We don't support them within any pandas operation.
         throw UnsupportedOperationException()
 
-    override fun visitTableInputRef(tableInputRef: RexTableInputRef): Cost =
-        visitInputRef(tableInputRef)
+    override fun visitTableInputRef(tableInputRef: RexTableInputRef): Cost = visitInputRef(tableInputRef)
 
-    override fun visitPatternFieldRef(patternFieldRef: RexPatternFieldRef): Cost =
-        visitInputRef(patternFieldRef)
+    override fun visitPatternFieldRef(patternFieldRef: RexPatternFieldRef): Cost = visitInputRef(patternFieldRef)
 }

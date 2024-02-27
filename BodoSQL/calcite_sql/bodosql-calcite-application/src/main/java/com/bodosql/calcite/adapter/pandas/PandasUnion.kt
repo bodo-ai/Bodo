@@ -17,8 +17,11 @@ class PandasUnion(
     inputs: List<RelNode>,
     all: Boolean,
 ) : UnionBase(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasUnion {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+        all: Boolean,
+    ): PandasUnion {
         return PandasUnion(cluster, traitSet, inputs, all)
     }
 
@@ -34,7 +37,10 @@ class PandasUnion(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 

@@ -13,8 +13,11 @@ class PandasMinus(
     inputs: List<RelNode>,
     all: Boolean,
 ) : Minus(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
-
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasMinus {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+        all: Boolean,
+    ): PandasMinus {
         return PandasMinus(cluster, traitSet, inputs, all)
     }
 
@@ -26,7 +29,10 @@ class PandasMinus(
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 }

@@ -142,7 +142,6 @@ def overload_xgbclassifier_fit(
     callbacks=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):  # pragma: no cover
-
     """XGBClassifier fit overload"""
 
     def _xgbclassifier_fit_impl(
@@ -371,7 +370,6 @@ def overload_xgbregressor_fit(
     callbacks=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):  # pragma: no cover
-
     """XGBRegressor fit overload"""
 
     def _xgbregressor_fit_impl(

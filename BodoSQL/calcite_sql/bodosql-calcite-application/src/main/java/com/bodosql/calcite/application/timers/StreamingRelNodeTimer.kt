@@ -11,8 +11,8 @@ import com.bodosql.calcite.ir.Variable
 
 private val noOpVar = Variable("NOOP")
 
-private const val IOTimingVerboseLevel = 1
-private const val RelNodeTimingVerboseLevel = 2
+private const val IO_TIMING_VERBOSE_LEVEL = 1
+private const val REL_NODE_TIMING_VERBOSE_LEVEL = 2
 
 /**
  * Class that builds the framework for implementing runtime timers around the various components in a streaming
@@ -20,24 +20,32 @@ private const val RelNodeTimingVerboseLevel = 2
  * the functions at the appropriate times. This class duplicates some code in SingleBatchRelNodeTimer
  * because that class is scheduled to be removed when everything is ported to streaming.
  */
-class StreamingRelNodeTimer(private val builder: Module.Builder, private val isNoOp: Boolean, private val operationDescriptor: String, private val loggingTitle: String, private val nodeDetails: String) {
-
+class StreamingRelNodeTimer(
+    private val builder: Module.Builder,
+    private val isNoOp: Boolean,
+    private val operationDescriptor: String,
+    private val loggingTitle: String,
+    private val nodeDetails: String,
+) {
     // Avoid impacting tests when timers are disabled.
-    private var accumulatorVar = if (isNoOp) {
-        noOpVar
-    } else {
-        builder.symbolTable.genGenericTempVar()
-    }
-    private var stateStartTimerVar = if (isNoOp) {
-        noOpVar
-    } else {
-        builder.symbolTable.genGenericTempVar()
-    }
-    private var loopStartTimerVar = if (isNoOp) {
-        noOpVar
-    } else {
-        builder.symbolTable.genGenericTempVar()
-    }
+    private var accumulatorVar =
+        if (isNoOp) {
+            noOpVar
+        } else {
+            builder.symbolTable.genGenericTempVar()
+        }
+    private var stateStartTimerVar =
+        if (isNoOp) {
+            noOpVar
+        } else {
+            builder.symbolTable.genGenericTempVar()
+        }
+    private var loopStartTimerVar =
+        if (isNoOp) {
+            noOpVar
+        } else {
+            builder.symbolTable.genGenericTempVar()
+        }
 
     /**
      * Initialize the accumulator state for a streaming operation. This must be
@@ -152,19 +160,22 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
         val nodeDetailsVariable = builder.symbolTable.genGenericTempVar()
         frame.addTermination(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
 
-        val printMessage = String.format(
-            "f'''Execution time for %s {%s}: {%s}'''",
-            operationDescriptor,
-            nodeDetailsVariable.emit(),
-            accumulatorVar.emit(),
-        )
-        val logMessageCall: Op = Stmt(
-            Expr.Call(
-                "bodo.user_logging.log_message",
-                Expr.StringLiteral(loggingTitle), // TODO: Add a format string op?
-                Expr.Raw(printMessage),
-            ),
-        )
+        val printMessage =
+            String.format(
+                "f'''Execution time for %s {%s}: {%s}'''",
+                operationDescriptor,
+                nodeDetailsVariable.emit(),
+                accumulatorVar.emit(),
+            )
+        val logMessageCall: Op =
+            Stmt(
+                Expr.Call(
+                    "bodo.user_logging.log_message",
+                    // TODO: Add a format string op?
+                    Expr.StringLiteral(loggingTitle),
+                    Expr.Raw(printMessage),
+                ),
+            )
         frame.addTermination(logMessageCall)
     }
 
@@ -178,11 +189,12 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
             nodeDetails: String,
             type: SingleBatchRelNodeTimer.OperationType,
         ): StreamingRelNodeTimer {
-            val verboseThreshold = if (type == SingleBatchRelNodeTimer.OperationType.BATCH) {
-                RelNodeTimingVerboseLevel
-            } else {
-                IOTimingVerboseLevel
-            }
+            val verboseThreshold =
+                if (type == SingleBatchRelNodeTimer.OperationType.BATCH) {
+                    REL_NODE_TIMING_VERBOSE_LEVEL
+                } else {
+                    IO_TIMING_VERBOSE_LEVEL
+                }
             return StreamingRelNodeTimer(
                 builder,
                 verboseLevel < verboseThreshold,

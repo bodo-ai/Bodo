@@ -11,7 +11,23 @@ import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
 import java.lang.reflect.Type
 
-class BodoLogicalTableFunctionScan(cluster: RelOptCluster, traits: RelTraitSet, inputs: List<RelNode>, call: RexCall, elementType: Type?, rowType: RelDataType, columnMappings: Set<RelColumnMapping>?) : TableFunctionScanBase(cluster, traits, inputs, call, elementType, rowType, columnMappings) {
+class BodoLogicalTableFunctionScan(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    inputs: List<RelNode>,
+    call: RexCall,
+    elementType: Type?,
+    rowType: RelDataType,
+    columnMappings: Set<RelColumnMapping>?,
+) : TableFunctionScanBase(
+        cluster,
+        traits,
+        inputs,
+        call,
+        elementType,
+        rowType,
+        columnMappings,
+    ) {
     override fun copy(
         traitSet: RelTraitSet?,
         inputs: MutableList<RelNode>?,

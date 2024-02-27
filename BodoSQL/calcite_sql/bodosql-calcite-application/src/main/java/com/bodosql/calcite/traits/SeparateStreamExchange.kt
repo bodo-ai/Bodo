@@ -8,13 +8,21 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 
-class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), input), PandasRel {
-
+class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) :
+    SingleRel(
+        cluster,
+        traitSet.replace(PandasRel.CONVENTION),
+        input,
+    ),
+    PandasRel {
     init {
         assert(traitSet.contains(BatchingProperty.STREAMING))
     }
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode? {
+    override fun copy(
+        traitSet: RelTraitSet,
+        inputs: List<RelNode>,
+    ): RelNode? {
         return SeparateStreamExchange(cluster, traitSet, inputs[0])
     }
 
@@ -35,6 +43,7 @@ class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return BatchingProperty.STREAMING
     }
+
     override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return BatchingProperty.SINGLE_BATCH
     }
@@ -43,7 +52,10 @@ class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
         TODO("Not yet implemented")
     }
 
-    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+    override fun deleteStateVariable(
+        ctx: PandasRel.BuildContext,
+        stateVar: StateVariable,
+    ) {
         TODO("Not yet implemented")
     }
 }

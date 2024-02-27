@@ -11,7 +11,6 @@ import org.apache.calcite.util.ImmutableBitSet
  */
 class BodoJoinProjectTransposeNoCSEUndoRuleHelper {
     companion object {
-
         /**
          * Returns true if there exists a non-trivial expression that can be pulled above the join, that is not
          * used in the condition of the join.
@@ -22,7 +21,12 @@ class BodoJoinProjectTransposeNoCSEUndoRuleHelper {
          * @param leftJoinCount The number of fields in the left input of the join.
          */
         @JvmStatic
-        fun bodoJoinProjectTransposeRuleCanMakeChange(joinConditionUsages: ImmutableBitSet, leftProject: Project?, rightProject: Project?, leftJoinCount: Int): Boolean {
+        fun bodoJoinProjectTransposeRuleCanMakeChange(
+            joinConditionUsages: ImmutableBitSet,
+            leftProject: Project?,
+            rightProject: Project?,
+            leftJoinCount: Int,
+        ): Boolean {
             assert(leftProject != null || rightProject != null)
 
             // Find all input project expressions and their indices

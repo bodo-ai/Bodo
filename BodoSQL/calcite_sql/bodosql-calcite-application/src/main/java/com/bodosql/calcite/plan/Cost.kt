@@ -26,10 +26,9 @@ class Cost private constructor(
     val mem: Double,
     cost: Double?,
 ) : RelOptCost {
-
     // Assign a fixed cost, so we prioritize fewer operators
     // in the case of a tie.
-    private val FIXED_OPERATOR_COST = 0.1
+    private val fixedOperatorCost = 0.1
 
     /**
      * Initializes a cost with the given resources.
@@ -65,7 +64,7 @@ class Cost private constructor(
      */
     val value = cost ?: cpu + io + mem
 
-    fun totalCost(): Double = value + FIXED_OPERATOR_COST
+    fun totalCost(): Double = value + fixedOperatorCost
 
     /**
      * Visually shows the cost value as a formatted string.
@@ -141,28 +140,29 @@ class Cost private constructor(
         return convert(other).let { c -> value / c.value }
     }
 
-    override fun toString(): String =
-        "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
+    override fun toString(): String = "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
 
     companion object {
         private val DECIMAL_FORMAT = DecimalFormat("##0.###E0")
 
-        private fun df(decimal: Double): String = DECIMAL_FORMAT
-            // Format in engineering notation (exponent is always a multiple of thousands).
-            .format(decimal)
-            // Remove extraneous E0.
-            .replace("E0", "")
-            // E to e because I find it easier to read.
-            .replace("E", "e")
+        private fun df(decimal: Double): String =
+            DECIMAL_FORMAT
+                // Format in engineering notation (exponent is always a multiple of thousands).
+                .format(decimal)
+                // Remove extraneous E0.
+                .replace("E0", "")
+                // E to e because I find it easier to read.
+                .replace("E", "e")
 
         @JvmField
         val INFINITY: Cost = Cost(0.0, 0.0, 0.0, 0.0, Double.POSITIVE_INFINITY)
 
-        private fun convert(cost: RelOptCost): Cost = if (cost is Cost) {
-            cost
-        } else {
-            Cost(cost.rows, cost.cpu, cost.io, 0.0)
-        }
+        private fun convert(cost: RelOptCost): Cost =
+            if (cost is Cost) {
+                cost
+            } else {
+                Cost(cost.rows, cost.cpu, cost.io, 0.0)
+            }
     }
 }
 
@@ -182,7 +182,12 @@ class Cost private constructor(
  * @param io amount of io resource utilized by this operation.
  * @param mem amount of mem resource utilized by this operation.
  */
-fun RelOptPlanner.makeCost(rows: Double = 1.0, cpu: Double = 0.0, io: Double = 0.0, mem: Double = 0.0): RelOptCost {
+fun RelOptPlanner.makeCost(
+    rows: Double = 1.0,
+    cpu: Double = 0.0,
+    io: Double = 0.0,
+    mem: Double = 0.0,
+): RelOptCost {
     return when (val factory = costFactory) {
         is CostFactory -> factory.makeCost(rows, cpu, io, mem)
         else -> factory.makeCost(rows, cpu, io)
@@ -195,7 +200,10 @@ fun RelOptPlanner.makeCost(rows: Double = 1.0, cpu: Double = 0.0, io: Double = 0
  * This uses the parameters from the passed in cost but replaces
  * the number of rows.
  */
-fun RelOptPlanner.makeCost(rows: Double = 1.0, from: RelOptCost): RelOptCost =
+fun RelOptPlanner.makeCost(
+    rows: Double = 1.0,
+    from: RelOptCost,
+): RelOptCost =
     when (from) {
         is Cost -> makeCost(rows, from = from)
         else -> makeCost(rows, cpu = from.cpu, io = from.io)
@@ -207,5 +215,7 @@ fun RelOptPlanner.makeCost(rows: Double = 1.0, from: RelOptCost): RelOptCost =
  * This uses the parameters from the passed in cost but replaces
  * the number of rows.
  */
-fun RelOptPlanner.makeCost(rows: Double = 1.0, from: Cost): RelOptCost =
-    makeCost(rows, cpu = from.cpu, io = from.io, mem = from.mem)
+fun RelOptPlanner.makeCost(
+    rows: Double = 1.0,
+    from: Cost,
+): RelOptCost = makeCost(rows, cpu = from.cpu, io = from.io, mem = from.mem)

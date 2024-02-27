@@ -16,75 +16,70 @@
  */
 package com.bodosql.calcite.rel.core;
 
+import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
+import java.util.List;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptCluster;
-import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelInput;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.SingleRel;
 
-import java.util.List;
-
 /**
- * Relational expression that returns a fixed-size sample of the rows from its
- * input.
+ * Relational expression that returns a fixed-size sample of the rows from its input.
  *
- * <p>In SQL, a sample is expressed using the {@code TABLESAMPLE BERNOULLI} or
- * {@code SYSTEM} keyword applied to a table, view or sub-query.
+ * <p>In SQL, a sample is expressed using the {@code TABLESAMPLE BERNOULLI} or {@code SYSTEM}
+ * keyword applied to a table, view or sub-query.
  */
 public class RowSample extends SingleRel {
-  //~ Instance fields --------------------------------------------------------
+  // ~ Instance fields --------------------------------------------------------
 
   private final RelOptRowSamplingParameters params;
 
-  //~ Constructors -----------------------------------------------------------
+  // ~ Constructors -----------------------------------------------------------
 
-  public RowSample(RelOptCluster cluster, RelNode child,
-      RelOptRowSamplingParameters params) {
+  public RowSample(RelOptCluster cluster, RelNode child, RelOptRowSamplingParameters params) {
     super(cluster, cluster.traitSetOf(Convention.NONE), child);
     this.params = params;
   }
 
-  /**
-   * Creates a RowSample by parsing serialized output.
-   */
+  /** Creates a RowSample by parsing serialized output. */
   public RowSample(RelInput input) {
     this(input.getCluster(), input.getInput(), getRowSamplingParameters(input));
   }
 
-  //~ Methods ----------------------------------------------------------------
+  // ~ Methods ----------------------------------------------------------------
 
-  private static RelOptRowSamplingParameters getRowSamplingParameters(
-      RelInput input) {
+  private static RelOptRowSamplingParameters getRowSamplingParameters(RelInput input) {
     String mode = input.getString("mode");
     Object rows = input.get("rows");
     Object repeatableSeed = input.get("repeatableSeed");
     boolean repeatable = repeatableSeed instanceof Number;
     int numberOfRows = rows != null ? ((Number) rows).intValue() : 0;
     return new RelOptRowSamplingParameters(
-        "bernoulli".equals(mode), numberOfRows, repeatable,
+        "bernoulli".equals(mode),
+        numberOfRows,
+        repeatable,
         repeatable && repeatableSeed != null ? ((Number) repeatableSeed).intValue() : 0);
   }
 
-  @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
+  @Override
+  public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
     assert traitSet.containsIfApplicable(Convention.NONE);
     return new RowSample(getCluster(), sole(inputs), params);
   }
 
-  /**
-   * Retrieve the row sampling parameters for this RowSample.
-   */
+  /** Retrieve the row sampling parameters for this RowSample. */
   public RelOptRowSamplingParameters getRowSamplingParameters() {
     return params;
   }
 
-  @Override public RelWriter explainTerms(RelWriter pw) {
+  @Override
+  public RelWriter explainTerms(RelWriter pw) {
     return super.explainTerms(pw)
         .item("mode", params.isBernoulli() ? "bernoulli" : "system")
         .item("rows", params.getNumberOfRows())
-        .item("repeatableSeed",
-            params.isRepeatable() ? params.getRepeatableSeed() : "-");
+        .item("repeatableSeed", params.isRepeatable() ? params.getRepeatableSeed() : "-");
   }
 }

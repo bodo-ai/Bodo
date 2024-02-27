@@ -21,6 +21,7 @@ class SqlSnowflakeCreateTable(
     comment: SqlNode?,
 ) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, columnList, null, comment) {
     val columnComments: List<SqlNode?>?
+
     init {
         // Regular CREATE TABLE only allows COPY GRANTS if OR REPLACE is also provided
         if (copyGrants && !replace) {
@@ -29,7 +30,11 @@ class SqlSnowflakeCreateTable(
         columnComments = columnList?.list?.map { (it as SqlSnowflakeColumnDeclaration).comment }
     }
 
-    override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         clusterExprs?.let {
             writer.keyword("CLUSTER BY")
             val frame = writer.startList("(", ")")

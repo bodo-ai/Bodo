@@ -21,13 +21,18 @@ abstract class SqlSnowflakeCreateTableBase(
     private val tableCommentNode: SqlNode?,
 ) : SqlCreateTable(pos, replace, ifNotExists, name, columnList, query) {
     val meta = SnowflakeCreateTableMetadata()
+
     init {
         createType = tableType
         tableCommentNode?.let { meta.setTableComment(it) }
         columnList?.let { meta.setColumnComments(it) }
     }
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+    override fun unparse(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
         writer.keyword("CREATE")
         if (replace) {
             writer.keyword("OR REPLACE")
@@ -58,5 +63,9 @@ abstract class SqlSnowflakeCreateTableBase(
 
     open fun getColumnCommentStrings(): List<String?>? = null
 
-    abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int)
+    abstract fun unparseSuffix(
+        writer: SqlWriter,
+        leftPrec: Int,
+        rightPrec: Int,
+    )
 }

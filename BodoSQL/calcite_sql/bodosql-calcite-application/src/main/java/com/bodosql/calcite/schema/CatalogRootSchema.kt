@@ -75,13 +75,14 @@ class CatalogRootSchema(catalog: BodoSQLCatalog?) : CatalogSchema(rootName, 0, I
 
         fun createRootSchema(catalog: BodoSQLCatalog?): SchemaPlus {
             // Create the schema, loading from cache if it already exists
-            val schema = if (rootMap.contains(catalog)) {
-                rootMap[catalog]
-            } else {
-                val newSchema = CatalogRootSchema(catalog)
-                rootMap[catalog] = newSchema
-                newSchema
-            }
+            val schema =
+                if (rootMap.contains(catalog)) {
+                    rootMap[catalog]
+                } else {
+                    val newSchema = CatalogRootSchema(catalog)
+                    rootMap[catalog] = newSchema
+                    newSchema
+                }
             // Wrap in a CachingCalciteSchema
             val cachedSchema = CalciteSchema.createRootSchema(false, true, rootName, schema)
             return cachedSchema.plus()

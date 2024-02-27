@@ -9,14 +9,15 @@ import org.apache.calcite.rel.core.Filter
 class PandasFilterRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                BodoLogicalFilter::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasFilterRule",
-            )
-            .withRuleFactory { config -> PandasFilterRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalFilter::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasFilterRule",
+                )
+                .withRuleFactory { config -> PandasFilterRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

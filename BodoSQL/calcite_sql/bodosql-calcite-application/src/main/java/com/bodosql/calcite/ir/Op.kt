@@ -17,7 +17,6 @@ interface Op {
      * @param expr Expression to evaluate.
      */
     data class Assign(val target: Variable, val expr: Expr) : Op {
-
         override fun emit(doc: Doc) {
             // Assertion to check that we're not shadowing variables
             // by assigning to them multiple times
@@ -38,12 +37,12 @@ interface Op {
             if (targets.isEmpty()) {
                 return
             }
-            var tuple_builder: StringBuilder = StringBuilder("")
+            var tupleBuilder: StringBuilder = StringBuilder("")
             for (target: Variable in targets) {
-                tuple_builder.append(target.emit())
-                tuple_builder.append(", ")
+                tupleBuilder.append(target.emit())
+                tupleBuilder.append(", ")
             }
-            doc.write("($tuple_builder) = ${expr.emit()}")
+            doc.write("($tupleBuilder) = ${expr.emit()}")
         }
     }
 
@@ -59,7 +58,6 @@ interface Op {
      * Represents an if operation with an optional else case.
      */
     data class If(val cond: Expr, val ifFrame: Frame, val elseFrame: Frame? = null) : Op {
-
         override fun emit(doc: Doc) {
             doc.write("if ${cond.emit()}:")
             ifFrame.emit(doc.indent())
@@ -74,7 +72,6 @@ interface Op {
      * Represents a return statement
      */
     data class ReturnStatement(val retVal: Variable?) : Op {
-
         override fun emit(doc: Doc) {
             if (retVal != null) {
                 doc.write("return ${this.retVal.emit()}")
@@ -88,7 +85,6 @@ interface Op {
      * Represents a while loop in python.
      */
     data class While(val cond: Expr, val body: Frame) : Op {
-
         override fun emit(doc: Doc) {
             doc.write("while ${cond.emit()}:")
             body.emit(doc.indent())

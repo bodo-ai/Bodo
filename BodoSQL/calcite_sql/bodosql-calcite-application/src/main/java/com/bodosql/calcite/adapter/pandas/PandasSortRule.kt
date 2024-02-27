@@ -9,14 +9,15 @@ import org.apache.calcite.rel.core.Sort
 class PandasSortRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
-        val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(
-                BodoLogicalSort::class.java,
-                Convention.NONE,
-                PandasRel.CONVENTION,
-                "PandasSortRule",
-            )
-            .withRuleFactory { config -> PandasSortRule(config) }
+        val DEFAULT_CONFIG: Config =
+            Config.INSTANCE
+                .withConversion(
+                    BodoLogicalSort::class.java,
+                    Convention.NONE,
+                    PandasRel.CONVENTION,
+                    "PandasSortRule",
+                )
+                .withRuleFactory { config -> PandasSortRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

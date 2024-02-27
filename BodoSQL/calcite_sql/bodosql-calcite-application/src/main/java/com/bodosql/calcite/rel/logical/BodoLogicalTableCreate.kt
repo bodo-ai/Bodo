@@ -20,7 +20,6 @@ open class BodoLogicalTableCreate(
     path: List<String>,
     meta: SnowflakeCreateTableMetadata,
 ) : TableCreateBase(cluster, traits, input, schema, tableName, isReplace, createTableType, path, meta) {
-
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,

@@ -41,7 +41,6 @@ import java.text.DecimalFormat
  * each relational operation.
  */
 class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
-
     // Holds a mapping of RelNode ids to their rewritten normalized
     // versions.
     private val normalizedIdMap: Map<Int, Int> = normalizeDuplicates(countRelIds(rel))
@@ -50,15 +49,23 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
     private val normalizer: com.bodosql.calcite.application.utils.RexNormalizer =
         com.bodosql.calcite.application.utils.RexNormalizer(rel.cluster.rexBuilder)
 
-    private fun newSection(s: StringBuilder, sectionName: String) {
+    private fun newSection(
+        s: StringBuilder,
+        sectionName: String,
+    ) {
         spacer.spaces(s)
         s.append("# $sectionName: ")
     }
 
-    override fun explain_(rel: RelNode, values: List<Pair<String, Any?>>) {
+    override fun explain_(
+        rel: RelNode,
+        values: List<Pair<String, Any?>>,
+    ) {
         val inputs = rel.inputs
         val uncastedMq = rel.cluster.metadataQuery
-        assert(uncastedMq is BodoRelMetadataQuery) { "Internal error in RelCostAndMetaDataWriter.explain_: metadataQuery should be of type BodoRelMetadataQuery" }
+        assert(uncastedMq is BodoRelMetadataQuery) {
+            "Internal error in RelCostAndMetaDataWriter.explain_: metadataQuery should be of type BodoRelMetadataQuery"
+        }
         val mq = uncastedMq as BodoRelMetadataQuery
 
         val s = StringBuilder()
@@ -104,13 +111,14 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
 
         // Add the types of each output column
         newSection(s, "types")
-        val types = rel.rowType.fieldList.map {
-            val outString = StringBuilder(it.type.toString())
-            if (!it.type.isNullable()) {
-                outString.append(" NOT NULL")
+        val types =
+            rel.rowType.fieldList.map {
+                val outString = StringBuilder(it.type.toString())
+                if (!it.type.isNullable()) {
+                    outString.append(" NOT NULL")
+                }
+                outString
             }
-            outString
-        }
         s.append(types.joinToString(", "))
         s.append("\n")
 
@@ -128,9 +136,10 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         // Relational node name and attributes.
         spacer.spaces(s)
         s.append(rel.relTypeName)
-        val attrs = values.asSequence()
-            .filter { it.right !is RelNode }
-            .joinToString(separator = ", ") { "${it.left}=[${normalize(it.right)}]" }
+        val attrs =
+            values.asSequence()
+                .filter { it.right !is RelNode }
+                .joinToString(separator = ", ") { "${it.left}=[${normalize(it.right)}]" }
         if (attrs.isNotBlank()) {
             s.append("(")
                 .append(attrs)
@@ -149,29 +158,34 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         }
     }
 
-    private fun normalize(value: Any?): Any? = value?.let {
-        when (it) {
-            is RexNode -> normalizeRexNode(it)
-            else -> it
+    private fun normalize(value: Any?): Any? =
+        value?.let {
+            when (it) {
+                is RexNode -> normalizeRexNode(it)
+                else -> it
+            }
         }
-    }
 
-    private fun normalizeRexNode(value: RexNode): RexNode =
-        value.accept(normalizer)
+    private fun normalizeRexNode(value: RexNode): RexNode = value.accept(normalizer)
 
     companion object {
         /**
          * Counts the number of times a RelNode appears in the plan.
          */
         private fun countRelIds(root: RelNode): Map<Int, Int> {
-            val visitor = object : RelVisitor() {
-                val nodeCount: MutableMap<Int, Int> = mutableMapOf()
+            val visitor =
+                object : RelVisitor() {
+                    val nodeCount: MutableMap<Int, Int> = mutableMapOf()
 
-                override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
-                    nodeCount.merge(node.id, 1) { a, b -> a + b }
-                    node.childrenAccept(this)
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        nodeCount.merge(node.id, 1) { a, b -> a + b }
+                        node.childrenAccept(this)
+                    }
                 }
-            }
             visitor.visit(root, 0, null)
             return visitor.nodeCount.toMap()
         }

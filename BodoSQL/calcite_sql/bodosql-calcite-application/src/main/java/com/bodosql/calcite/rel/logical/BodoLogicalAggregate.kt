@@ -19,7 +19,6 @@ class BodoLogicalAggregate(
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
 ) : AggregateBase(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls) {
-
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,

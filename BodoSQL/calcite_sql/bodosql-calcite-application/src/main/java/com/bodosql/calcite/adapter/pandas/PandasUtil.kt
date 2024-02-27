@@ -16,9 +16,10 @@ private fun RelRoot.createPandasProjectNode(input: RelNode): RelNode {
         throw AssertionError("input rel must have pandas convention")
     }
     val rexBuilder = input.cluster.rexBuilder
-    val projects = fields.map { (i, _) ->
-        rexBuilder.makeInputRef(input, i)
-    }
+    val projects =
+        fields.map { (i, _) ->
+            rexBuilder.makeInputRef(input, i)
+        }
     return PandasProject(input.cluster, input.traitSet, input, projects, validatedRowType)
 }
 
@@ -62,26 +63,28 @@ fun RelRoot.pandasProject(): RelNode =
  */
 private fun RelRoot.createLogicalProjectNode(input: RelNode): RelNode {
     val rexBuilder = input.cluster.rexBuilder
-    val projects = fields.map { (i, _) ->
-        rexBuilder.makeInputRef(input, i)
-    }
+    val projects =
+        fields.map { (i, _) ->
+            rexBuilder.makeInputRef(input, i)
+        }
     return BodoLogicalProject.create(input, listOf(), projects, validatedRowType)
 }
 
 private fun RelRoot.createCalciteLogicalProjectNode(input: RelNode): RelNode {
     val rexBuilder = input.cluster.rexBuilder
-    val projects = fields.map { (i, _) ->
-        val inputRef = rexBuilder.makeInputRef(input, i)
-        val expectedType = validatedRowType.fieldList[i].type
-        // Its possible the literal values may not match the Bodo
-        // expected types. This notably occurs when inlining views
-        // if we treat Number(38, 0) as BIGINT.
-        if (inputRef.type != expectedType) {
-            rexBuilder.makeCast(expectedType, inputRef)
-        } else {
-            inputRef
+    val projects =
+        fields.map { (i, _) ->
+            val inputRef = rexBuilder.makeInputRef(input, i)
+            val expectedType = validatedRowType.fieldList[i].type
+            // Its possible the literal values may not match the Bodo
+            // expected types. This notably occurs when inlining views
+            // if we treat Number(38, 0) as BIGINT.
+            if (inputRef.type != expectedType) {
+                rexBuilder.makeCast(expectedType, inputRef)
+            } else {
+                inputRef
+            }
         }
-    }
     return LogicalProject.create(input, listOf(), projects, validatedRowType)
 }
 

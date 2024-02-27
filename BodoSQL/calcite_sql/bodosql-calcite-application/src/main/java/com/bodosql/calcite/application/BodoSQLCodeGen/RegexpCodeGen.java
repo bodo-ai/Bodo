@@ -38,7 +38,7 @@ public class RegexpCodeGen {
     args.add(operands.get(0));
     args.add(operands.get(1));
     args.add(getCodeWithDefault(operands, 2, new Expr.StringLiteral("")));
-    return ExprKt.BodoSQLKernel("regexp_like", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("regexp_like", args, streamingNamedArgs);
   }
 
   /**
@@ -56,7 +56,7 @@ public class RegexpCodeGen {
     args.add(operands.get(1));
     args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne()));
     args.add(getCodeWithDefault(operands, 3, new Expr.StringLiteral("")));
-    return ExprKt.BodoSQLKernel("regexp_count", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("regexp_count", args, streamingNamedArgs);
   }
 
   /**
@@ -76,7 +76,7 @@ public class RegexpCodeGen {
     args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne()));
     args.add(getCodeWithDefault(operands, 4, Expr.Companion.getZero()));
     args.add(getCodeWithDefault(operands, 5, new Expr.StringLiteral("")));
-    return ExprKt.BodoSQLKernel("regexp_replace", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("regexp_replace", args, streamingNamedArgs);
   }
 
   /**
@@ -117,7 +117,7 @@ public class RegexpCodeGen {
           regexpParamsIndex,
           new Expr.Binary("+", args.get(regexpParamsIndex), new Expr.StringLiteral("e")));
     }
-    return ExprKt.BodoSQLKernel("regexp_substr", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("regexp_substr", args, streamingNamedArgs);
   }
 
   /**
@@ -160,6 +160,6 @@ public class RegexpCodeGen {
           regexpParamsIndex,
           new Expr.Binary("+", args.get(regexpParamsIndex), new Expr.StringLiteral("e")));
     }
-    return ExprKt.BodoSQLKernel("regexp_instr", args, streamingNamedArgs);
+    return ExprKt.bodoSQLKernel("regexp_instr", args, streamingNamedArgs);
   }
 }

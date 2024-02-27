@@ -20,7 +20,10 @@ interface IcebergRel : RelNode {
         val CONVENTION = Convention.Impl("ICEBERG", IcebergRel::class.java)
     }
 
-    fun generatePythonConnStr(databaseName: String, schemaName: String): String {
+    fun generatePythonConnStr(
+        databaseName: String,
+        schemaName: String,
+    ): String {
         val catalog = getCatalogTable().catalog
         return catalog.generatePythonConnStr(databaseName, schemaName)
     }

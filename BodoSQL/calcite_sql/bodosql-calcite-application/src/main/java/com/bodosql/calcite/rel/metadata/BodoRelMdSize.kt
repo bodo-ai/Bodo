@@ -14,12 +14,18 @@ class BodoRelMdSize : RelMdSize() {
      * Change the default to just return the average type value size
      * based on the column type.
      */
-    override fun averageColumnSizes(rel: RelNode, mq: RelMetadataQuery): List<Double?> =
+    override fun averageColumnSizes(
+        rel: RelNode,
+        mq: RelMetadataQuery,
+    ): List<Double?> =
         rel.rowType.fieldList.map { rowType ->
             averageTypeValueSize(rowType.type)
         }
 
-    fun averageColumnSizes(rel: PandasMinRowNumberFilter, mq: RelMetadataQuery): List<Double?> =
+    fun averageColumnSizes(
+        rel: PandasMinRowNumberFilter,
+        mq: RelMetadataQuery,
+    ): List<Double?> =
         rel.rowType.fieldList.map { rowType ->
             averageTypeValueSize(rowType.type)
         }

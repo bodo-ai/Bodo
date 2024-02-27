@@ -6,7 +6,6 @@ import bodo
 
 @bodo.jit
 def accel_infer(n):
-
     t1 = time.time()
     X = np.random.ranf(n)
     Y = np.random.ranf(n)
@@ -15,7 +14,7 @@ def accel_infer(n):
     df = pd.DataFrame({"X": X, "Y": Y, "Z": Z})
 
     g = 9.81
-    df["accel"] = np.sqrt(df.X ** 2 + df.Y ** 2 + (df.Z - g) ** 2)
+    df["accel"] = np.sqrt(df.X**2 + df.Y**2 + (df.Z - g) ** 2)
     threshold = df.accel.mean() + 5 * df.accel.std()
     df["is_brake"] = df.rolling(10)["accel"].mean() > threshold
 
@@ -26,5 +25,5 @@ def accel_infer(n):
     return checksum
 
 
-n = 10 ** 8
+n = 10**8
 accel_infer(n)
