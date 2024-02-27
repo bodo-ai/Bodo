@@ -377,4 +377,21 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
         check_logger_msg(stream, "Execution time for reading table parquet_table")
 
 
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_row_count_estimation(datapath, memory_leak_check):
+    """
+    Tests that loading a parquet table using TablePath produces a row count estimation.
+    """
+
+    f1 = datapath("sample-parquet-data/partitioned")
+    bc = bodosql.BodoSQLContext(
+        {
+            "PARQUET_TABLE": bodosql.TablePath(f1, "parquet"),
+        }
+    )
+
+    assert bc.estimated_row_counts == [10]
+
+
 # TODO: Add a test with multiple tables to check reorder_io works as expected.
