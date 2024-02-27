@@ -86,7 +86,12 @@ void min_row_number_filter_no_sort(
             grp_info.group_to_first_row[group_idx];
     }
 
-    if (orderby_cols.size() == 1) {
+    if (orderby_cols.size() == 0) {
+        // Special case: if there are no columns to order by, use the
+        // defaults where each group is mapped to an arbitrary row
+        // number from that group.
+        return;
+    } else if (orderby_cols.size() == 1) {
         /// We generate an optimized and templated path for 1 column.
         // Create an array to store min/max value
         std::shared_ptr<array_info> orderby_arr = orderby_cols[0];
