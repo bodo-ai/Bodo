@@ -136,7 +136,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             # dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
         },
         [
-            ("A", "MAP<string, long>", True),
+            ("A", "MAP<string, int>", True),
             ("B", "MAP<string, double>", True),
             ("C", "MAP<string, decimal(5,2)>", True),
             ("D", "MAP<string, int>", True),
@@ -246,8 +246,11 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
         ],
     ),
     "DECIMALS_TABLE": (
-        {"A": pd.Series([Decimal(1.0), Decimal(2.0)] * 25)},
-        [("A", "decimal(10,5)", True)],
+        {
+            "A": np.array([Decimal(1.0), Decimal(2.0)] * 25),
+            "B": np.array([Decimal(5.0), Decimal(10.0)] * 25),
+        },
+        [("A", "decimal(10,5)", True), ("B", "decimal(38,18)", True)],
     ),
     # TODO figure out why pyspark won't accept series with a pyarrow list type
     "DECIMALS_LIST_TABLE": (
@@ -260,8 +263,16 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
                 * 25,
                 dtype=pd.ArrowDtype(pa.large_list(pa.decimal128(5, 2))),
             ),
+            "B": pd.Series(
+                [
+                    [Decimal("000.34"), Decimal("021.50"), Decimal("202.90")],
+                    [Decimal("013.40"), Decimal("004.90")],
+                ]
+                * 25,
+                dtype=object,  # pd.ArrowDtype(pa.large_list(pa.decimal128(5, 2))),
+            ),
         },
-        [("A", "ARRAY<decimal(5,2)>", True)],
+        [("A", "ARRAY<decimal(5,2)>", True), ("B", "ARRAY<decimal(5,2)>", True)],
     ),
     "TZ_AWARE_TABLE": (
         {

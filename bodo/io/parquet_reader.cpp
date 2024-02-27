@@ -155,22 +155,23 @@ void ParquetReader::init_pq_scanner() {
 
     // Construct Python lists from C++ vectors for values used in
     // get_scanner_batches
-    PyObject* fnames_list_py = PyList_New(file_paths.size());
+    PyObject* fnames_list_py = PyList_New(this->file_paths.size());
     size_t i = 0;
-    for (auto p : file_paths) {
+    for (auto p : this->file_paths) {
         PyList_SetItem(fnames_list_py, i++, PyUnicode_FromString(p.c_str()));
     }
 
-    PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_colnames.size());
+    PyObject* str_as_dict_cols_py =
+        PyList_New(this->str_as_dict_colnames.size());
     i = 0;
-    for (auto field_name : str_as_dict_colnames) {
+    for (auto field_name : this->str_as_dict_colnames) {
         PyList_SetItem(str_as_dict_cols_py, i++,
                        PyUnicode_FromString(field_name.c_str()));
     }
 
     PyObject* selected_fields_py = PyList_New(selected_fields.size());
     i = 0;
-    for (auto field_num : selected_fields) {
+    for (int field_num : selected_fields) {
         PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
     }
 
@@ -178,18 +179,11 @@ void ParquetReader::init_pq_scanner() {
         batch_size == -1 ? Py_None : PyLong_FromLong(batch_size);
     PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
     // This only loads record batches that match the filter.
-    // get_scanner_batches returns a tuple with the dataset object
-    // and the record batch reader. We really just need the batch reader,
-    // but hdfs has an issue in the order in which objects are garbage
-    // collected, where Java will print error on trying to close a file
-    // saying that the filesystem is already closed. This happens when done
-    // reading.
-    // Keeping a reference to the dataset and deleting it in the last place
-    // seems to help, but the problem can still occur, so this needs
-    // further investigation,
+    // get_scanner_batches returns a tuple with the record batch reader and the
+    // updated offset for the first batch.
     PyObject* scanner_batches_tup = PyObject_CallMethod(
         pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
-        expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
+        this->expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
         this->count, this->ds_partitioning, pyarrow_schema, batch_size_py);
     if (scanner_batches_tup == NULL && PyErr_Occurred()) {
@@ -201,16 +195,16 @@ void ParquetReader::init_pq_scanner() {
     Py_INCREF(this->reader);  // call incref to keep the reference
 
     this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
-    this->rows_left_cur_piece = pieces_nrows[0];
+    this->rows_left_cur_piece = this->pieces_nrows[0];
 
     Py_DECREF(pq_mod);
-    Py_DECREF(expr_filters);
+    Py_DECREF(this->expr_filters);
     Py_DECREF(selected_fields_py);
-    Py_DECREF(storage_options);
+    Py_DECREF(this->storage_options);
     Py_DECREF(this->filesystem);
     Py_DECREF(fnames_list_py);
     Py_DECREF(str_as_dict_cols_py);
-    Py_DECREF(pyarrow_schema);
+    Py_DECREF(this->pyarrow_schema);
     Py_DECREF(this->ds_partitioning);
     Py_DECREF(batch_size_py);
 
@@ -263,6 +257,11 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
             // An iterator would clear this automatically, but we are
             // not using an interator, so we have to clear it manually
             PyErr_Clear();
+            // NOTE: We should never reach this because of the
+            // rows_left_to_emit == 0 check above.
+            throw std::runtime_error(
+                "ParquetReader::read_batch: Out of batches before reading the "
+                "expected number of rows!");
         } else if (batch_py == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
@@ -279,13 +278,13 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
                 "ParquetReader::read_batch(): The next batch is null");
         }
 
-        int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
+        int64_t batch_offset = std::min(this->rows_to_skip, batch->num_rows());
         int64_t length =
-            std::min(rows_left_to_read, batch->num_rows() - batch_offset);
+            std::min(this->rows_left_to_read, batch->num_rows() - batch_offset);
         auto table = arrow::Table::Make(
-            schema, batch->Slice(batch_offset, length)->columns());
+            this->schema, batch->Slice(batch_offset, length)->columns());
         rows_left_to_read -= length;
-        rows_to_skip -= batch_offset;
+        this->rows_to_skip -= batch_offset;
 
         // TODO: Replace with arrow_table_to_bodo once available
         TableBuilder builder(schema, selected_fields, length, is_nullable,
@@ -359,7 +358,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     while ((batch_py =
                 PyObject_CallMethod(this->reader, "read_next_batch", NULL))) {
         auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
-        int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
+        int64_t batch_offset = std::min(this->rows_to_skip, batch->num_rows());
         int64_t length =
             std::min(rows_left_to_read, batch->num_rows() - batch_offset);
         if (length > 0) {
@@ -393,7 +392,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
                 }
             }
         }
-        rows_to_skip -= batch_offset;
+        this->rows_to_skip -= batch_offset;
         Py_DECREF(batch_py);
     }
 

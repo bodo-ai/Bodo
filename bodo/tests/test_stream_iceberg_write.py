@@ -40,6 +40,7 @@ from bodo.tests.utils import (
     _gather_output,
     _get_dist_arg,
     _test_equal_guard,
+    convert_non_pandas_columns,
     reduce_sum,
 )
 
@@ -105,7 +106,16 @@ def test_iceberg_write_basic(
     comm = MPI.COMM_WORLD
     passed = None
     if comm.Get_rank() == 0:
-        passed = _test_equal_guard(df, py_out, sort_output=False, check_dtype=False)
+        if "LIST" in table_name or "STRUCT" in table_name:
+            df = convert_non_pandas_columns(df)
+            py_out = convert_non_pandas_columns(py_out)
+        passed = _test_equal_guard(
+            df,
+            py_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
     passed = comm.bcast(passed)
     assert passed == 1
 

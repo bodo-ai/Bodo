@@ -84,18 +84,29 @@ STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
     "STRUCT_FIELD_DROP": "STRUCT_TABLE",
     "STRUCT_FIELD_RENAME": "STRUCT_TABLE",
     "STRUCT_FIELD_REORDER": "STRUCT_TABLE",
-    "STRUCT_FIELD_RENAME": "STRUCT_TABLE",
     "STRUCT_FIELD_ADD": "STRUCT_TABLE",
+}
+STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
+    "STRUCT_FIELD_DROP": "Expected struct field 'A' (Iceberg Field ID: 1) to have 1 fields, got 2 instead!",
+    "STRUCT_FIELD_RENAME": "Expected struct field 'A' (Iceberg Field ID: 1) subfield #1 to have the name b_renamed but it was b instead!",
+    "STRUCT_FIELD_REORDER": "Expected struct field 'A' (Iceberg Field ID: 1) subfield #0 to have the name b but it was a instead!",
+    "STRUCT_FIELD_ADD": "Expected struct field 'A' (Iceberg Field ID: 1) to have 4 fields, got 2 instead!",
 }
 
 MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
     "MAP_VALUE_PROMOTE": "MAP_TABLE",
-    "MAP_KEY_NULLABLE": "MAP_TABLE",
+}
+
+MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
+    "MAP_VALUE_PROMOTE": "Bit-width of field 'A.value' (Iceberg Field ID: 6) doesn't match exactly. Expected 64, got 32 instead",
 }
 
 LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
     "LIST_VALUES_PROMOTE": "LIST_TABLE",
-    "LIST_VALUES_NULLABLE": "LIST_TABLE",
+}
+
+LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
+    "LIST_VALUES_PROMOTE": "Bit-width of field 'C.value' (Iceberg Field ID: 8) doesn't match exactly. Expected 64, got 32 instead.",
 }
 
 
@@ -593,6 +604,53 @@ def create_adversarial_table(table: str, spark=None, postfix: str = ""):
         append_to_iceberg_table(df, sql_schema, table, spark)
 
 
+def create_map_unsupported_operations_table(table: str, spark=None, postfix: str = ""):
+    """Create a table with unsupported map operations (value promotion, key nullability change). Postfix is added to the table name."""
+    if spark is None:
+        spark = get_spark()
+    base_name = MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP[table]
+    assert (
+        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
+    ), f"Didn't find table definition for {base_name}."
+    df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
+    df = deepcopy(df)
+    sql_schema = sql_schema.copy()
+    table = f"{table}{postfix}"
+    if create_iceberg_table(df, sql_schema, table, spark) is not None:
+        if table == "MAP_VALUE_PROMOTE":
+            spark.sql(
+                f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN A.value TYPE BIGINT"
+            )
+            sql_schema[0] = ("A", "MAP<STRING, BIGINT>", True)
+            append_to_iceberg_table(df, sql_schema, table, spark)
+
+
+def create_list_unsupported_operations_table(table: str, spark=None, postfix: str = ""):
+    if spark is None:
+        spark = get_spark()
+    base_name = LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP[table]
+    assert (
+        f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
+    ), f"Didn't find table definition for {base_name}."
+    df, sql_schema = SIMPLE_TABLE_MAP[f"SIMPLE_{base_name}"]
+    df = deepcopy(df)
+    sql_schema = sql_schema.copy()
+    table = f"{table}{postfix}"
+    if create_iceberg_table(df, sql_schema, table, spark) is not None:
+        if table == "LIST_VALUES_PROMOTE":
+            spark.sql(
+                f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN C.element TYPE BIGINT"
+            )
+            sql_schema[2] = ("C", "ARRAY<BIGINT>", True)
+            append_to_iceberg_table(df, sql_schema, table, spark)
+        elif table == "LIST_VALUES_NULLABLE":
+            for column in df.columns:
+                spark.sql(
+                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {column}.element DROP NOT NULL"
+                )
+            append_to_iceberg_table(df, sql_schema, table, spark)
+
+
 def create_schema_evolution_tables(tables: list[str], spark=None, postfix: str = ""):
     if spark is None:
         spark = get_spark()
@@ -619,6 +677,10 @@ def create_schema_evolution_tables(tables: list[str], spark=None, postfix: str =
             create_combo_table(table, spark, postfix=postfix)
         elif table in ADVERSARIAL_TABLES_MAP:
             create_adversarial_table(table, spark, postfix=postfix)
+        elif table in MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP:
+            create_map_unsupported_operations_table(table, spark, postfix=postfix)
+        elif table in LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP:
+            create_list_unsupported_operations_table(table, spark, postfix=postfix)
 
 
 if __name__ == "__main__":

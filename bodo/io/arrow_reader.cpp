@@ -837,8 +837,8 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                            const std::set<std::string>& str_as_dict_cols,
                            const bool create_dict_from_string,
                            const std::vector<int64_t>& dict_ids) {
-    total_rows = num_rows;
-    rem_rows = num_rows;
+    this->total_rows = num_rows;
+    this->rem_rows = num_rows;
 
     int j = 0;
     for (int i : selected_fields) {
@@ -1034,18 +1034,19 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         throw std::runtime_error("ArrowReader already initialized");
     }
 
-    tracing::Event ev("reader::init", parallel);
-    ev.add_attribute("g_parallel", parallel);
-    ev.add_attribute("g_tot_rows_to_read", tot_rows_to_read);
+    tracing::Event ev("reader::init", this->parallel);
+    ev.add_attribute("g_parallel", this->parallel);
+    ev.add_attribute("g_tot_rows_to_read", this->tot_rows_to_read);
 
     gilstate = PyGILState_Ensure();  // XXX is this needed??
     gil_held = true;
 
-    PyObject* ds = get_dataset();
+    this->create_dict_encoding_from_strings = create_dict_from_string;
 
-    create_dict_encoding_from_strings = create_dict_from_string;
+    // 'this->str_as_dict_colnames' must be initialized before calling
+    // 'get_dataset()' since it may depend on it.
     for (auto i : str_as_dict_cols) {
-        auto field = schema->field(i);
+        auto field = this->schema->field(i);
         this->str_as_dict_colnames.emplace(field->name());
     }
     if (ev.is_tracing()) {
@@ -1062,6 +1063,8 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         str_as_dict_colnames_str += "]";
         ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
     }
+
+    PyObject* ds = get_dataset();
 
     // total_rows = ds.total_rows
     PyObject* total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
@@ -1100,13 +1103,15 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL)
+                if (num_rows_piece_py == NULL) {
                     throw std::runtime_error(
                         "_bodo_num_rows attribute not in piece");
+                }
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
-                if (num_rows_piece > 0)
-                    add_piece(piece, num_rows_piece, this->count);
+                if (num_rows_piece > 0) {
+                    this->add_piece(piece, num_rows_piece, this->count);
+                }
                 Py_DECREF(piece);
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
@@ -1120,7 +1125,8 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         // calculate the portion of rows that this process needs to read
         size_t rank = dist_get_rank();
         size_t nranks = dist_get_size();
-        int64_t start_row_global = dist_get_start(total_rows, nranks, rank);
+        int64_t start_row_global =
+            dist_get_start(this->total_rows, nranks, rank);
         this->count = dist_get_node_portion(total_rows, nranks, rank);
 
         // head-only optimization ("limit pushdown"): user code may only use
@@ -1128,16 +1134,16 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         // in an imbalanced way. The assumed use case is printing df.head()
         // which looks better if the data is in fewer ranks.
         // TODO: explore if balancing data is necessary for some use cases
-        if (tot_rows_to_read != -1) {
+        if (this->tot_rows_to_read != -1) {
             // no rows to read on this process
-            if (start_row_global >= tot_rows_to_read) {
+            if (start_row_global >= this->tot_rows_to_read) {
                 start_row_global = 0;
                 this->count = 0;
             }
             // there may be fewer rows to read
             else {
-                int64_t new_end =
-                    std::min(start_row_global + this->count, tot_rows_to_read);
+                int64_t new_end = std::min(start_row_global + this->count,
+                                           this->tot_rows_to_read);
                 this->count = new_end - start_row_global;
             }
         }
@@ -1152,9 +1158,10 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL)
+                if (num_rows_piece_py == NULL) {
                     throw std::runtime_error(
                         "_bodo_num_rows attribute not in piece");
+                }
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
 
