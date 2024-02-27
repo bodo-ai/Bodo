@@ -2954,6 +2954,20 @@ BodoSQL currently supports the following string functions:
     an exception if the string is malformed in any way.
 
 
+#### PARSE_URL
+-   `#!sql PARSE_URL(string [, permissive])`
+
+    Parses the string into a struct containing the fields that compose the URL. The permissive flag is only supported for it's
+    default value, of False. For more information,
+    [see here for snowflake documentation.](https://docs.snowflake.com/en/sql-reference/functions-regexp.html).
+
+    Bodo's implementation has a two differences from Snowflake's implementation for certain edge cases. First, the "scheme"
+    field returned by bodo will always be in lowercase. Snowflake's implementation will return the capitalization present
+    in the URL string. Second, Bodo returns null for empty fields, where Snowflake's implementation will return empty string.
+    For example, the path field returned for the string "HTTPS://USER:PASS@EXAMPLE.INT:4345/" will be empty string in Snowflake,
+    and null in Bodo.
+
+
 ###  Regex Functions
 
 BodoSQL currently uses Python's regular expression library via the `re`

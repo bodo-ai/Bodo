@@ -1961,6 +1961,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             throw new BodoSQLCodegenException(
                 "Internal Error: PARSE_JSON currently only supported when it can be rewritten as"
                     + " ParseExtractCast sequence.");
+          case "PARSE_URL":
+            return ExprKt.BodoSQLKernel("parse_url", operands, List.of());
         }
       default:
         throw new BodoSQLCodegenException(

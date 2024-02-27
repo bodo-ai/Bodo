@@ -127,6 +127,13 @@ public final class ObjectOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  private static SqlBasicFunction PARSE_URL =
+      SqlBasicFunction.create(
+          "PARSE_URL",
+          BodoReturnTypes.PARSE_URL_RETURN_TYPE,
+          OperandTypes.STRING,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           GET_PATH,
@@ -139,7 +146,8 @@ public final class ObjectOperatorTable implements SqlOperatorTable {
           OBJECT_CONSTRUCT,
           PARSE_JSON,
           IS_ARRAY,
-          IS_OBJECT);
+          IS_OBJECT,
+          PARSE_URL);
 
   @Override
   public void lookupOperatorOverloads(
