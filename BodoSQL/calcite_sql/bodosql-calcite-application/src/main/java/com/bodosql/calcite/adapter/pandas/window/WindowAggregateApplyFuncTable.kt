@@ -328,7 +328,7 @@ internal object WindowAggregateApplyFuncTable {
         call: RexOver,
         operands: List<Expr>,
     ): Expr {
-        val operands =
+        val newOperands =
             when (operands.size) {
                 1 -> listOf(operands[0], Expr.Unary("-", Expr.Call("np.int32", Expr.One)))
                 else -> {
@@ -344,7 +344,7 @@ internal object WindowAggregateApplyFuncTable {
                 }
             }
         // Use the lag implementation now that we've modified the operands.
-        return lag(ctx, call, operands)
+        return lag(ctx, call, newOperands)
     }
 
     private fun lag(

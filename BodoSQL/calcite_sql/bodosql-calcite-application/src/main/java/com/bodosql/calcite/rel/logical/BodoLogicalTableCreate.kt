@@ -27,7 +27,7 @@ open class BodoLogicalTableCreate(
         assert(traitSet.containsIfApplicable(Convention.NONE))
         assert(inputs.size == 1)
         return BodoLogicalTableCreate(
-            cluster, traitSet, inputs[0]!!, schema, tableName,
+            cluster, traitSet, inputs[0], schema, tableName,
             isReplace, createTableType, path, this.meta,
         )
     }

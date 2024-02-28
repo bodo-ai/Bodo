@@ -162,7 +162,7 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                         PandasFilter.create(node.cluster, converter, pandasCondition!!)
                     } else if (pandasCondition == null) {
                         // Everything can be pushed to Iceberg
-                        IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition!!, node.getCatalogTable())
+                        IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition, node.getCatalogTable())
                     } else {
                         // Part of the condition is pushable to Iceberg. Here we do the part that can
                         // be pushed in Iceberg and the other part in Pandas
@@ -171,11 +171,11 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                                 node.cluster,
                                 node.traitSet,
                                 newInput,
-                                icebergCondition!!,
+                                icebergCondition,
                                 node.getCatalogTable(),
                             )
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
-                        PandasFilter.create(node.cluster, converter, pandasCondition!!)
+                        PandasFilter.create(node.cluster, converter, pandasCondition)
                     }
                 }
             }

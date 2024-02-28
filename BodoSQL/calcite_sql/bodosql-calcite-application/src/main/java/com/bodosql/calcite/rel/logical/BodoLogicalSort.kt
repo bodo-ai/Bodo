@@ -18,12 +18,12 @@ class BodoLogicalSort(
 ) : SortBase(cluster, traitSet, input, collation, offset, fetch) {
     override fun copy(
         traitSet: RelTraitSet,
-        newInput: RelNode,
+        input: RelNode,
         collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?,
     ): BodoLogicalSort {
-        return BodoLogicalSort(cluster, traitSet, newInput, collation, offset, fetch)
+        return BodoLogicalSort(cluster, traitSet, input, collation, offset, fetch)
     }
 
     companion object {
