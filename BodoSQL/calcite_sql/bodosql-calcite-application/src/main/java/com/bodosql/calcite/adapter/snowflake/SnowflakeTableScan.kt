@@ -93,7 +93,6 @@ class SnowflakeTableScan private constructor(
         }
 
         override fun register(planner: RelOptPlanner) {
-            planner.addRule(SnowflakeRules.TO_PANDAS)
             for (rule in SnowflakeRules.rules()) {
                 planner.addRule(rule)
             }

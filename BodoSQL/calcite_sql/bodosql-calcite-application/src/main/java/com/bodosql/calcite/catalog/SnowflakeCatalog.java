@@ -1502,7 +1502,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   @Override
-  public @Nullable Integer getWeekStart() {
+  public int getWeekStart() {
     if (this.weekStart == null) {
       try {
         this.weekStart = getSnowflakeWeekStart();
@@ -1515,7 +1515,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   @Override
-  public @Nullable Integer getWeekOfYearPolicy() {
+  public int getWeekOfYearPolicy() {
     if (this.weekOfYearPolicy == null) {
       try {
         this.weekOfYearPolicy = getSnowflakeWeekOfYearPolicy();
