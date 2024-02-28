@@ -111,7 +111,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce the append write.
    */
   Expr generateAppendWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, List<String> tableName);
+      PandasCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName);
 
   /**
    * Generates the code necessary to produce a write expression from the given catalog.
@@ -126,7 +126,7 @@ public interface BodoSQLCatalog {
   Expr generateWriteCode(
       PandasCodeGenVisitor visitor,
       Variable varName,
-      List<String> tableName,
+      ImmutableList<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       SnowflakeCreateTableMetadata meta);
@@ -140,7 +140,8 @@ public interface BodoSQLCatalog {
    *     table.
    * @return The generated code to produce the write-initialization code
    */
-  Expr generateStreamingAppendWriteInitCode(Expr.IntegerLiteral operatorID, List<String> tableName);
+  Expr generateStreamingAppendWriteInitCode(
+      Expr.IntegerLiteral operatorID, ImmutableList<String> tableName);
 
   /**
    * Generates the code necessary to produce the streaming write initialization code from the given
@@ -157,7 +158,7 @@ public interface BodoSQLCatalog {
    */
   Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
-      List<String> tableName,
+      ImmutableList<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Variable colNamesGlobal,
@@ -203,7 +204,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   Expr generateReadCode(
-      List<String> tableName, boolean useStreaming, StreamingOptions streamingOptions);
+      ImmutableList<String> tableName, boolean useStreaming, StreamingOptions streamingOptions);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a
@@ -275,4 +276,17 @@ public interface BodoSQLCatalog {
    * @return Can a schema at that depth contain functions.
    */
   boolean schemaDepthMayContainFunctions(int depth);
+
+  /**
+   * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
+   * Python code.
+   *
+   * <p>TODO(jsternberg): This method is needed for the XXXToPandasConverter nodes, but exposing
+   * this is a bad idea and this class likely needs to be refactored in a way that the connection
+   * information can be passed around more easily.
+   *
+   * @param schemaPath The schema component to define the connection not including the table name.
+   * @return The connection string
+   */
+  String generatePythonConnStr(ImmutableList<String> schemaPath);
 }

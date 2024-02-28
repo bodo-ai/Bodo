@@ -10,6 +10,7 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -110,7 +111,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         }
 
     /**
-     * Generate the required read expression for processing the P
+     * Generate the code required to read from Snowflake.
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val readExpr =
@@ -142,7 +143,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val args =
             listOf(
                 StringLiteral(tableName),
-                StringLiteral(relInput.generatePythonConnStr(databaseName, schemaName)),
+                StringLiteral(relInput.generatePythonConnStr(ImmutableList.of(databaseName, schemaName))),
             )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
@@ -192,7 +193,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                 // We don't use a schema name because we've already fully qualified
                 // all table references, and it's better if this doesn't have any
                 // potentially unexpected behavior.
-                StringLiteral(relInput.generatePythonConnStr("", "")),
+                StringLiteral(relInput.generatePythonConnStr(ImmutableList.of("", ""))),
             )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false, bodoTableNameExpr, originalIndices))
     }

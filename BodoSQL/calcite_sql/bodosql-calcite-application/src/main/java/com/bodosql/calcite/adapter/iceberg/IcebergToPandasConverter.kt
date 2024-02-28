@@ -10,6 +10,7 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -74,14 +75,6 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         return planner.makeCost(rows = rows, io = io, mem = io)
     }
 
-    /**
-     * Is the Iceberg read for a whole table without any column pruning,
-     * filtering, or other snowflake nodes.
-     */
-    private fun isWholeTableRead(): Boolean {
-        return input is IcebergTableScan && !(input as IcebergTableScan).prunesColumns()
-    }
-
     // ----------------------------------- Codegen Helpers -----------------------------------
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
@@ -113,8 +106,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
     }
 
     /**
-     * Generate the code required to read a table. This path is necessary because the Snowflake
-     * API allows for more accurate sampling when operating directly on a table.
+     * Generate the code required to read from Iceberg.
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as IcebergRel
@@ -127,7 +119,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         val args =
             listOf(
                 StringLiteral(getTableName(relInput)),
-                StringLiteral("iceberg+" + relInput.generatePythonConnStr(getDatabaseName(relInput), "")),
+                StringLiteral("iceberg+" + relInput.generatePythonConnStr(ImmutableList.of(getDatabaseName(relInput), ""))),
                 StringLiteral(schemaName),
             )
         val namedArgs =

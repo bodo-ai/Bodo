@@ -2,7 +2,7 @@ package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.rel.core.ProjectBase
-import com.bodosql.calcite.table.SnowflakeCatalogTable
+import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -22,7 +22,7 @@ class IcebergProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-    private val catalogTable: SnowflakeCatalogTable,
+    private val catalogTable: CatalogTable,
 ) : ProjectBase(cluster, traitSet.replace(IcebergRel.CONVENTION), ImmutableList.of(), input, projects, rowType), IcebergRel {
     override fun copy(
         traitSet: RelTraitSet,
@@ -49,7 +49,7 @@ class IcebergProject(
             input: RelNode,
             projects: List<RexNode>,
             rowType: RelDataType,
-            catalogTable: SnowflakeCatalogTable,
+            catalogTable: CatalogTable,
         ): IcebergProject {
             return IcebergProject(cluster, traitSet, input, projects, rowType, catalogTable)
         }
@@ -61,7 +61,7 @@ class IcebergProject(
             input: RelNode,
             projects: List<RexNode>,
             fieldNames: List<String?>?,
-            catalogTable: SnowflakeCatalogTable,
+            catalogTable: CatalogTable,
         ): IcebergProject {
             val rowType =
                 RexUtil.createStructType(
@@ -74,5 +74,5 @@ class IcebergProject(
         }
     }
 
-    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
+    override fun getCatalogTable(): CatalogTable = catalogTable
 }
