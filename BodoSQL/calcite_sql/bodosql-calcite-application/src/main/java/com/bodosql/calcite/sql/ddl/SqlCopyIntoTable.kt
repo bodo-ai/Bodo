@@ -66,11 +66,10 @@ class SqlCopyIntoTable(
                 writer.keyword("FROM")
                 val from = sourceSelect.from
                 if (from is SqlBasicCall) {
-                    val fromCall = (from as SqlBasicCall)
-                    assert(fromCall.operator.kind == SqlKind.AS)
-                    writer.literal(fromCall.operandList.get(0).toString())
+                    assert(from.operator.kind == SqlKind.AS)
+                    writer.literal(from.operandList[0].toString())
                     writer.keyword("AS")
-                    fromCall.operandList.get(1).unparse(writer, leftPrec, rightPrec)
+                    from.operandList[1].unparse(writer, leftPrec, rightPrec)
                 } else {
                     writer.literal(from.toString())
                 }

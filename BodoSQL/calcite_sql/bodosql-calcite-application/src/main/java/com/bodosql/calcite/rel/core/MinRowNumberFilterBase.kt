@@ -44,7 +44,7 @@ open class MinRowNumberFilterBase(
                 condition.window.orderKeys.map {
                     val lhs = it.left
                     if (lhs is RexInputRef) {
-                        (lhs as RexInputRef).index
+                        lhs.index
                     } else {
                         throw Exception("Malformed MinRowNumberFilter condition: $condition")
                     }

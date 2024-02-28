@@ -53,8 +53,15 @@ internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: BodoEngin
         node?.let {
             when {
                 node.isUnbounded -> Expr.StringLiteral("None")
-                node.isPreceding -> Expr.Unary("-", Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact()))
-                node.isFollowing -> Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact())
+                node.isPreceding ->
+                    Expr.Unary(
+                        "-",
+                        Expr.IntegerLiteral(
+                            (node.offset as RexLiteral)
+                                .getValueAs(BigDecimal::class.java)!!.intValueExact(),
+                        ),
+                    )
+                node.isFollowing -> Expr.IntegerLiteral((node.offset as RexLiteral).getValueAs(BigDecimal::class.java)!!.intValueExact())
                 node.isCurrentRow -> Expr.Zero
                 else -> throw AssertionError("invalid window bound")
             }

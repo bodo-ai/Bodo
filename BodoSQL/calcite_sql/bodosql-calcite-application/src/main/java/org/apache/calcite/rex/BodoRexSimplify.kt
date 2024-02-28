@@ -274,7 +274,7 @@ class BodoRexSimplify(
     /**
      * Simplify ::date and to_date functions for supported literals.
      */
-    private fun simplifyDateCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+    private fun simplifyDateCast(call: RexCall, operand: RexNode): RexNode {
         return if (operand is RexLiteral) {
             // Resolve constant casts for literals
             if (operand.type is TZAwareSqlType) {
@@ -1037,9 +1037,8 @@ class BodoRexSimplify(
      *
      * @param call The original cast call.
      * @param operand The argument being casted.
-     * @param isTryCast If true, returns null on invalid inputs.
      */
-    private fun simplifyTimeCast(call: RexCall, operand: RexNode, isTryCast: Boolean): RexNode {
+    private fun simplifyTimeCast(call: RexCall, operand: RexNode): RexNode {
         // If the cast is determined to be invalid, return NULL for TRY_ casts, and the original
         // call for non-TRY_ casts (since they need to raise an error at runtime).
         // We are conservative with String parsing here.
@@ -1092,11 +1091,11 @@ class BodoRexSimplify(
                     isTryCast,
                 )
 
-                SqlTypeName.DATE -> simplifyDateCast(call, operand, isTryCast)
+                SqlTypeName.DATE -> simplifyDateCast(call, operand)
                 SqlTypeName.TIMESTAMP -> simplifyTimestampNtzCast(call, operand, isTryCast)
                 SqlTypeName.CHAR, SqlTypeName.VARCHAR -> simplifyVarcharCast(call, operand, unknownAs)
                 SqlTypeName.BOOLEAN -> simplifyBooleanCast(call, operand, isTryCast)
-                SqlTypeName.TIME -> simplifyTimeCast(call, operand, isTryCast)
+                SqlTypeName.TIME -> simplifyTimeCast(call, operand)
                 SqlTypeName.BINARY, SqlTypeName.VARBINARY -> simplifyVarbinaryCast(call, operand, unknownAs, isTryCast)
                 else -> call
             }
@@ -1164,13 +1163,13 @@ class BodoRexSimplify(
                 lit1
             } else {
                 lit2
-            }!!
+            }
             val intVal = intLiteral.getValueAs(BigDecimal::class.java)!!
             val intervalLiteral = if (firstInteger) {
                 lit2
             } else {
                 lit1
-            }!!
+            }
             val intervalVal = intervalLiteral.getValueAs(BigDecimal::class.java)!!
             val newValue = intervalVal * intVal
             rexBuilder.makeIntervalLiteral(newValue, intervalLiteral.type.intervalQualifier)!!
@@ -1352,7 +1351,7 @@ class BodoRexSimplify(
             if (it is RexLiteral) {
                 if (compressedArgs.isNotEmpty() && compressedArgs[compressedArgs.size - 1] is RexLiteral) {
                     val lhs = (compressedArgs.removeAt(compressedArgs.size - 1) as RexLiteral).getValueAs(String::class.java)
-                    val rhs = (it as RexLiteral).getValueAs(String::class.java)
+                    val rhs = it.getValueAs(String::class.java)
                     compressedArgs.add(rexBuilder.makeLiteral(lhs + rhs))
                 } else {
                     compressedArgs.add(it)
@@ -1877,7 +1876,7 @@ class BodoRexSimplify(
             else -> when {
                 isCast(e) -> simplifyBodoCast(e as RexCall, e.operands[0], e.type, e.kind == SqlKind.SAFE_CAST, unknownAs)
                 // TODO: Remove when we simplify TO_DATE as ::DATE
-                isDateConversion(e) -> simplifyDateCast(e as RexCall, e.operands[0], isSafeDateConversion(e))
+                isDateConversion(e) -> simplifyDateCast(e as RexCall, e.operands[0])
                 isConcat(e) -> simplifyConcat(e as RexCall)
                 isStringCapitalizationOp(e) -> simplifyStringCapitalizationOp(e as RexCall)
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)

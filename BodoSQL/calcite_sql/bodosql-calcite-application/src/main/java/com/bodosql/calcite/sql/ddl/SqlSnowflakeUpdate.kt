@@ -47,7 +47,7 @@ class SqlSnowflakeUpdate(
         // the FROM clause is interleaved in the middle
         from?.let {
             writer.sep("FROM")
-            from!!.unparse(writer, opLeft, opRight)
+            from.unparse(writer, opLeft, opRight)
         }
         val condition = condition
         if (condition != null) {
