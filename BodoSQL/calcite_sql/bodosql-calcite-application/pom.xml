@@ -30,6 +30,10 @@
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
         <mockk.version>1.13.5</mockk.version>
+        <!-- Start Iceberg Dependencies. We may remove as we cleanup the relationship with the Iceberg Connector. -->
+        <iceberg.version>1.4.3</iceberg.version>
+        <hadoop.version>3.3.3</hadoop.version>
+        <!-- End Iceberg Dependencies -->
     </properties>
 
     <dependencies>
@@ -109,6 +113,27 @@
             <groupId>net.snowflake</groupId>
             <artifactId>snowflake-jdbc</artifactId>
             <version>${snowflake-jdbc-version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-api -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-api</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-core -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-core</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${hadoop.version}</version>
         </dependency>
 
         <!-- Protobuf to fix Reflective upgrade while waiting on avatica upgrade-->

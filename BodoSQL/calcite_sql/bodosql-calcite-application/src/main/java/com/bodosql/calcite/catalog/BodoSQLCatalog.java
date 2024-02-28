@@ -14,7 +14,6 @@ import java.util.Set;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 public interface BodoSQLCatalog {
   /**
@@ -91,7 +90,9 @@ public interface BodoSQLCatalog {
    * @param schemaPath The list of schemas to traverse before finding the function.
    * @return Set of function names.
    */
-  Set<String> getFunctionNames(ImmutableList<String> schemaPath);
+  default Set<String> getFunctionNames(ImmutableList<String> schemaPath) {
+    return Set.of();
+  }
 
   /**
    * Returns all functions defined in this catalog with a given name and schema path.
@@ -100,7 +101,9 @@ public interface BodoSQLCatalog {
    * @param funcName Name of functions with a given name.
    * @return Collection of all functions with that name.
    */
-  Collection<Function> getFunctions(ImmutableList<String> schemaPath, String funcName);
+  default Collection<Function> getFunctions(ImmutableList<String> schemaPath, String funcName) {
+    return List.of();
+  }
 
   /**
    * Generates the code necessary to produce an append write expression from the given catalog.
@@ -210,10 +213,12 @@ public interface BodoSQLCatalog {
    * Close any connections to the remote DataBase. If there are no connections this should be a
    * no-op.
    */
-  void closeConnections();
+  default void closeConnections() {}
 
   /**
-   * Generates the code necessary to submit the remote query to the catalog DB.
+   * TODO: REMOVE
+   *
+   * <p>Generates the code necessary to submit the remote query to the catalog DB.
    *
    * @param query Query to submit.
    * @return The generated code.
@@ -221,7 +226,9 @@ public interface BodoSQLCatalog {
   Expr generateRemoteQuery(String query);
 
   /**
-   * Return the db location to which this Catalog refers.
+   * TODO: REMOVE
+   *
+   * <p>Return the db location to which this Catalog refers.
    *
    * @return The source DB location.
    */
@@ -233,7 +240,9 @@ public interface BodoSQLCatalog {
    *
    * @return BodoTZInfo for the default timezone.
    */
-  BodoTZInfo getDefaultTimezone();
+  default BodoTZInfo getDefaultTimezone() {
+    return BodoTZInfo.UTC;
+  }
 
   /**
    * Fetch the WEEK_START session parameter for this catalog. If not specified it should return 0 as
@@ -241,8 +250,9 @@ public interface BodoSQLCatalog {
    *
    * @return Integer for the WEEK_START session parameter.
    */
-  @Nullable
-  Integer getWeekStart();
+  default int getWeekStart() {
+    return 0;
+  }
 
   /**
    * Fetch the WEEK_OF_YEAR_POLICY session parameter for this catalog. If not specified it should
@@ -250,8 +260,9 @@ public interface BodoSQLCatalog {
    *
    * @return Integer for the WEEK_OF_YEAR_POLICY session parameter.
    */
-  @Nullable
-  Integer getWeekOfYearPolicy();
+  default int getWeekOfYearPolicy() {
+    return 0;
+  }
 
   /**
    * Returns if a schema with the given depth is allowed to contain tables.
@@ -275,7 +286,9 @@ public interface BodoSQLCatalog {
    * @param depth The number of parent schemas that would need to be visited to reach the root.
    * @return Can a schema at that depth contain functions.
    */
-  boolean schemaDepthMayContainFunctions(int depth);
+  default boolean schemaDepthMayContainFunctions(int depth) {
+    return false;
+  }
 
   /**
    * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL

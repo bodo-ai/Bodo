@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.iceberg
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
+import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -73,11 +74,10 @@ class IcebergTableScan constructor(
             return copy(traitSet, finalColumns)
         }
 
-        /**
-         * Does this table scan include column pruning
-         */
-        fun prunesColumns(): Boolean {
-            return keptColumns.cardinality() != table.getRowType().fieldCount
+        override fun register(planner: RelOptPlanner) {
+            for (rule in IcebergRules.rules()) {
+                planner.addRule(rule)
+            }
         }
 
         companion object {

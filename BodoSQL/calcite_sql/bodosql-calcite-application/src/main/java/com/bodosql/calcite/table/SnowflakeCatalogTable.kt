@@ -42,6 +42,7 @@ open class SnowflakeCatalogTable(
     }
 
     /**
+     *
      * Check within the catalog if we have read access.
      *
      * @return Do we have read access?
@@ -273,9 +274,9 @@ open class SnowflakeCatalogTable(
 
     override fun toRel(
         toRelContext: RelOptTable.ToRelContext,
-        relOptTable: RelOptTable?,
+        relOptTable: RelOptTable,
     ): RelNode? {
-        val baseRelNode: RelNode = create(toRelContext.cluster, relOptTable!!, this)
+        val baseRelNode: RelNode = create(toRelContext.cluster, relOptTable, this)
         // Check if this table is a view and if so attempt to inline it.
         if (RelationalAlgebraGenerator.tryInlineViews && canSafelyInlineView()) {
             val viewDefinition = getViewDefinitionString()
