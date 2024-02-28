@@ -85,7 +85,7 @@ private fun RelRoot.createCalciteLogicalProjectNode(input: RelNode): RelNode {
                 inputRef
             }
         }
-    return LogicalProject.create(input, listOf(), projects, validatedRowType)
+    return LogicalProject.create(input, listOf(), projects, validatedRowType, setOf())
 }
 
 /**

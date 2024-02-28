@@ -65,7 +65,7 @@ class PandasTableFunctionScan(
      * @param generatorCall the function call to GENERATOR
      * @return the variable that represents this relational expression.
      */
-    fun emitGenerator(
+    private fun emitGenerator(
         ctx: PandasRel.BuildContext,
         generatorCall: RexCall,
     ): BodoEngineTable {
@@ -87,7 +87,7 @@ class PandasTableFunctionScan(
         etfCall: RexCall,
     ): BodoEngineTable {
         // This is a defensive check since it should always be true by the manner in which
-        // a  call to EXTERNAL_TABLE_FILES is constructed.
+        // a call to EXTERNAL_TABLE_FILES is constructed.
         return if (etfCall.op is SqlUserDefinedTableFunction &&
             etfCall.op.function is
                 SnowflakeNamedArgumentSqlCatalogTableFunction
@@ -103,7 +103,7 @@ class PandasTableFunctionScan(
                 )
             val args = listOf(query, connStr)
             val kwargs = listOf("_bodo_read_as_table" to Expr.BooleanLiteral(true))
-            return ctx.returns(Expr.Call("pd.read_sql", args, kwargs))
+            ctx.returns(Expr.Call("pd.read_sql", args, kwargs))
         } else {
             throw BodoSQLCodegenException("Cannot call EXTERNAL_TABLE_FILES without an associated SnowflakeCatalog")
         }

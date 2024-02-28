@@ -2,10 +2,7 @@
 
 package com.bodosql.calcite.application.BodoSQLTypeSystems
 
-import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
-import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlOperator
 import org.apache.calcite.sql.type.SqlTypeFamily
@@ -39,8 +36,8 @@ class CoalesceTypeCastingUtils {
 //        GEOGRAPHY,
 //        GEOMETRY,
 
-        fun is_numeric(): Boolean {
-            return this.equals(SF_TYPE.NUMBER) || this.equals(SF_TYPE.FLOAT)
+        fun isNumeric(): Boolean {
+            return this == NUMBER || this == FLOAT
         }
     }
 
@@ -256,7 +253,7 @@ class CoalesceTypeCastingUtils {
         // Pre-filtered version of the above. This should be used instead of pairTypeMap for any situation
         // EXCEPT for confirming if a type pair's coercion behavior has been checked.
         // NOTE: The explicit cast is necessary, compiler can't infer that the filter makes the output non-null
-        val validPairTypeMap: Map<Pair<SF_TYPE, SF_TYPE>, Pair<SF_TYPE, SqlOperator>> =
+        private val validPairTypeMap: Map<Pair<SF_TYPE, SF_TYPE>, Pair<SF_TYPE, SqlOperator>> =
             pairTypeMap.filterValues { v -> v != null }.toMap() as Map<Pair<SF_TYPE, SF_TYPE>, Pair<SF_TYPE, SqlOperator>>
 
         // Converts a relDataType to it's corresponding SF type
@@ -311,7 +308,7 @@ class CoalesceTypeCastingUtils {
                 SqlTypeFamily.MAP.contains(inputVal) -> {
                     SF_TYPE.OBJECT
                 }
-                inputVal.isStruct() -> {
+                inputVal.isStruct -> {
                     SF_TYPE.OBJECT
                 }
                 inputVal is VariantSqlType -> {
@@ -369,8 +366,8 @@ class CoalesceTypeCastingUtils {
             key: Pair<SF_TYPE, SF_TYPE>,
             value: Pair<SF_TYPE, SqlOperator>,
         ): Pair<List<String>, SF_TYPE> {
-            val lhs: String = SFTypeToColumNameDict.get(key.first)!!
-            val rhs: String = SFTypeToColumNameDict.get(key.second)!!
+            val lhs: String = SFTypeToColumNameDict[key.first]!!
+            val rhs: String = SFTypeToColumNameDict[key.second]!!
             val outputType: SF_TYPE = value.first
             return Pair(listOf(lhs, rhs), outputType)
         }
@@ -380,7 +377,7 @@ class CoalesceTypeCastingUtils {
          * see com.bodosql.calcite.application.CoalesceCastTest.testCoalescePairs for an example of where this
          * is used in the bodo testing suite
          */
-        public fun genCheckTwo(): List<Pair<List<String>, SF_TYPE>> {
+        fun genCheckTwo(): List<Pair<List<String>, SF_TYPE>> {
             return validPairTypeMap.map { cast -> checkTwoHelperFunction(cast.key, cast.value) }
         }
 
@@ -396,30 +393,30 @@ class CoalesceTypeCastingUtils {
          *                        of where this is used in the Bodo testing suite.
          */
         fun genSanityCheck(seed: Int): List<Pair<List<String>, SF_TYPE>> {
-            val reamainingKeys: MutableSet<Pair<SF_TYPE, SF_TYPE>> = validPairTypeMap.keys.toMutableSet()
+            val remainingKeys: MutableSet<Pair<SF_TYPE, SF_TYPE>> = validPairTypeMap.keys.toMutableSet()
             val outStmts: MutableList<Pair<List<String>, SF_TYPE>> = ArrayList()
 
             // Idea is fairly simple, pick a random key, chain conversions until there's no more to add, emit it,
             // and then start over. Repeat until there are no more valid conversions.
             var i = 0
             val rngGenerator = Random(seed)
-            while (reamainingKeys.isNotEmpty()) {
-                val baseKey: Pair<SF_TYPE, SF_TYPE> = reamainingKeys.random(rngGenerator)
-                reamainingKeys.remove(baseKey)
+            while (remainingKeys.isNotEmpty()) {
+                val baseKey: Pair<SF_TYPE, SF_TYPE> = remainingKeys.random(rngGenerator)
+                remainingKeys.remove(baseKey)
 
                 // List is in reverse order. IE:
                 // [typ1, typ2, typ3] --> COALESCE(typ3, typ2, typ1)
                 val argsList: MutableList<SF_TYPE> = mutableListOf(baseKey.second, baseKey.first)
 
                 var expectedOutType: SF_TYPE = validPairTypeMap.get(baseKey)!!.first
-                var nextKeyOptional = findValidCastIfExists(reamainingKeys, expectedOutType)
+                var nextKeyOptional = findValidCastIfExists(remainingKeys, expectedOutType)
 
                 while (nextKeyOptional.isPresent) {
                     val nextKeyInChain = nextKeyOptional.get()
                     expectedOutType = validPairTypeMap.get(nextKeyInChain)!!.first
                     argsList.add(nextKeyInChain.first)
-                    reamainingKeys.remove(nextKeyInChain)
-                    nextKeyOptional = findValidCastIfExists(reamainingKeys, expectedOutType)
+                    remainingKeys.remove(nextKeyInChain)
+                    nextKeyOptional = findValidCastIfExists(remainingKeys, expectedOutType)
                 }
 
                 val element: Pair<List<String>, SF_TYPE> = Pair(
@@ -461,18 +458,16 @@ class CoalesceTypeCastingUtils {
         fun genFormattedCoalesceStmt(argsList: List<SF_TYPE>, expectedOutType: SF_TYPE, suffix: Int): String {
             // map of type-> expression
 
-            val valuesListAsString: List<String> = argsList.map { t -> SFTypeToColumNameDict.get(t)!! }
+            val valuesListAsString: List<String> = argsList.map { t -> SFTypeToColumNameDict[t]!! }
             return genFormattedCoalesceStmt2(valuesListAsString, expectedOutType, suffix)
         }
 
         fun genFormattedCoalesceStmt2(argsListAsString: List<String>, expectedOutType: SF_TYPE, suffix: Int): String {
             // map of type-> expression
-            var suffix = suffix
-
             val valuesListAsString = argsListAsString.reduce { u, v -> "$u, $v" }
             val outColName = "EXPECT_${expectedOutType}_$suffix"
-            val coalesce_stmt = "COALESCE($valuesListAsString) as $outColName"
-            return coalesce_stmt
+            val coalesceStmt = "COALESCE($valuesListAsString) as $outColName"
+            return coalesceStmt
         }
 
         /**

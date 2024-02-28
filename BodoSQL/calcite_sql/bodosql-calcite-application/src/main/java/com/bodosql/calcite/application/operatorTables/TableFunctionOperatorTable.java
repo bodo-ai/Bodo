@@ -126,7 +126,11 @@ public class TableFunctionOperatorTable implements SqlOperatorTable {
           (RexBuilder builder, int i) -> {
             final RexNode literal;
             if (i == 0 || i == 1) {
-              literal = builder.makeNullLiteral(SqlTypeName.INTEGER);
+              RelDataTypeFactory typeFactory = builder.getTypeFactory();
+              RelDataType type =
+                  typeFactory.createTypeWithNullability(
+                      typeFactory.createSqlType(SqlTypeName.INTEGER), true);
+              literal = builder.makeNullLiteral(type);
             } else {
               throw new RuntimeException("Invalid input");
             }

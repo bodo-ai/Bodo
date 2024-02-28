@@ -44,8 +44,8 @@ abstract class AbstractSnowflakeProjectIntoScanRule protected constructor(config
             val newProjects =
                 proj.projects.map { x ->
                     val oldIndex = (x as RexInputRef).index
-                    val newIndex = projMap[oldIndex]!!
-                    relBuilder.field(newIndex)
+                    val updatedIndex = projMap[oldIndex]!!
+                    relBuilder.field(updatedIndex)
                 }
             relBuilder.project(newProjects)
             val newProject = relBuilder.build()
