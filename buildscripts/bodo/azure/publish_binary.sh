@@ -31,11 +31,7 @@ elif [[ "$OBFUSCATE" == 1 ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]\
     label="dev"
 fi
 
-if [[ $OS_DIR == "win-64" ]]; then
-    PACKAGE_DIR=`cygpath -u "$CONDA_PREFIX"`/conda-bld/$OS_DIR
-else
-    PACKAGE_DIR=$CONDA_PREFIX/conda-bld/$OS_DIR
-fi
+PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.tar.bz2 $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`
