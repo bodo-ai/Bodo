@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.table.SnowflakeCatalogTable
+import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -16,7 +16,7 @@ class IcebergFilter private constructor(
     traitSet: RelTraitSet,
     input: RelNode,
     condition: RexNode,
-    private val catalogTable: SnowflakeCatalogTable,
+    private val catalogTable: CatalogTable,
 ) : Filter(cluster, traitSet.replace(IcebergRel.CONVENTION), input, condition), IcebergRel {
     override fun copy(
         traitSet: RelTraitSet,
@@ -41,11 +41,11 @@ class IcebergFilter private constructor(
             traitSet: RelTraitSet,
             input: RelNode,
             condition: RexNode,
-            catalogTable: SnowflakeCatalogTable,
+            catalogTable: CatalogTable,
         ): IcebergFilter {
             return IcebergFilter(cluster, traitSet, input, condition, catalogTable)
         }
     }
 
-    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
+    override fun getCatalogTable(): CatalogTable = catalogTable
 }

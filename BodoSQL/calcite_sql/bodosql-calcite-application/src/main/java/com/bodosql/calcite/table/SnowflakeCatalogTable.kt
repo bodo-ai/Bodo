@@ -63,7 +63,7 @@ open class SnowflakeCatalogTable(
      *
      * @return Estimated distinct count for this table.
      */
-    fun getColumnDistinctCount(column: Int): Double? {
+    override fun getColumnDistinctCount(column: Int): Double? {
         return columnDistinctCount.apply(column)
     }
 

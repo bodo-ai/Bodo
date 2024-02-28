@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.iceberg
 
-import com.bodosql.calcite.table.SnowflakeCatalogTable
+import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
@@ -18,7 +18,7 @@ class IcebergTableScan constructor(
     traitSet: RelTraitSet,
     table: RelOptTable,
     val keptColumns: ImmutableBitSet,
-    private val catalogTable: SnowflakeCatalogTable,
+    private val catalogTable: CatalogTable,
 ) :
     TableScan(cluster, traitSet.replace(IcebergRel.CONVENTION), ImmutableList.of(), table), IcebergRel {
         /**
@@ -40,7 +40,7 @@ class IcebergTableScan constructor(
                 .item("Iceberg", true)
         }
 
-        override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
+        override fun getCatalogTable(): CatalogTable = catalogTable
 
         override fun copy(
             traitSet: RelTraitSet,
@@ -85,7 +85,7 @@ class IcebergTableScan constructor(
             fun create(
                 cluster: RelOptCluster,
                 table: RelOptTable,
-                catalogTable: SnowflakeCatalogTable,
+                catalogTable: CatalogTable,
             ): IcebergTableScan {
                 // Note: Types may be lazily computed so use getRowType() instead of rowType
                 val rowType = table.getRowType()

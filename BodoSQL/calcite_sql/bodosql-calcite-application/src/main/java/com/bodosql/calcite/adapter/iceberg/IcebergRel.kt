@@ -1,8 +1,9 @@
 package com.bodosql.calcite.adapter.iceberg
 
-import com.bodosql.calcite.table.SnowflakeCatalogTable
+import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 
@@ -20,15 +21,11 @@ interface IcebergRel : RelNode {
         val CONVENTION = Convention.Impl("ICEBERG", IcebergRel::class.java)
     }
 
-    fun generatePythonConnStr(
-        databaseName: String,
-        schemaName: String,
-    ): String {
-        val catalog = getCatalogTable().catalog
-        return catalog.generatePythonConnStr(databaseName, schemaName)
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
+        return getCatalogTable().generatePythonConnStr(schemaPath)
     }
 
-    fun getCatalogTable(): SnowflakeCatalogTable
+    fun getCatalogTable(): CatalogTable
 
     /**
      * Get the batching property.
