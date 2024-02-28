@@ -1087,15 +1087,21 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * Generate a Python connection string used to read from or write to Snowflake in Bodo's SQL
    * Python code.
    *
-   * <p>TODO(jsternberg): This method is needed for the SnowflakeAggregateTableScan, but exposing
-   * this is a bad idea and this class likely needs to be refactored in a way that the connection
-   * information can be passed around more easily.
+   * <p>TODO(jsternberg): This method is needed for the SnowflakeToPandasConverter nodes, but
+   * exposing this is a bad idea and this class likely needs to be refactored in a way that the
+   * connection information can be passed around more easily.
    *
-   * @param databaseName The name of the database which must be inserted into the connection string
-   * @param schemaName The name of the schema which must be inserted into the connection string.
+   * @param schemaPath The schema component to define the connection.
    * @return The connection string
    */
-  public String generatePythonConnStr(String databaseName, String schemaName) {
+  @Override
+  public String generatePythonConnStr(ImmutableList<String> schemaPath) {
+    if (schemaPath.size() != 2) {
+      throw new BodoSQLCodegenException(
+          "Internal Error: Snowflake requires exactly one database and one schema.");
+    }
+    String databaseName = schemaPath.get(0);
+    String schemaName = schemaPath.get(1);
     // First create the basic connection string that must
     // always be included.
     StringBuilder connString = new StringBuilder();
@@ -1172,7 +1178,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateAppendWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, List<String> tableName) {
+      PandasCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName) {
     return generateWriteCode(
         visitor,
         varName,
@@ -1194,14 +1200,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   public Expr generateWriteCode(
       PandasCodeGenVisitor visitor,
       Variable varName,
-      List<String> tableName,
+      ImmutableList<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType tableType,
       SnowflakeCreateTableMetadata meta) {
     List<Expr> args = new ArrayList<>();
     List<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
     args.add(new Expr.StringLiteral(tableName.get(2)));
-    args.add(new Expr.StringLiteral(generatePythonConnStr(tableName.get(0), tableName.get(1))));
+    args.add(new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))));
     kwargs.add(new kotlin.Pair("schema", new Expr.StringLiteral(tableName.get(1))));
     kwargs.add(new kotlin.Pair("if_exists", new Expr.StringLiteral(ifExists.asToSqlKwArgument())));
     kwargs.add(
@@ -1283,7 +1289,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   @Override
   public Expr generateStreamingAppendWriteInitCode(
-      Expr.IntegerLiteral operatorID, List<String> tableName) {
+      Expr.IntegerLiteral operatorID, ImmutableList<String> tableName) {
     return generateStreamingWriteInitCode(
         operatorID,
         tableName,
@@ -1296,7 +1302,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   @Override
   public Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
-      List<String> tableName,
+      ImmutableList<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Variable colNamesGlobal,
@@ -1316,7 +1322,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return new Expr.Call(
         "bodo.io.snowflake_write.snowflake_writer_init",
         operatorID,
-        new Expr.StringLiteral(generatePythonConnStr(tableName.get(0), tableName.get(1))),
+        new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))),
         new Expr.StringLiteral(tableName.get(2)),
         new Expr.StringLiteral(tableName.get(1)),
         new Expr.StringLiteral(ifExists.asToSqlKwArgument()),
@@ -1385,7 +1391,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @return Expr.Call for generated call
    */
   public Expr generateIcebergToSnowflakeTable(
-      List<String> tableName,
+      ImmutableList<String> tableName,
       String icebergBase,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
@@ -1394,7 +1400,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
     return new Expr.Call(
         "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
-        new Expr.StringLiteral(generatePythonConnStr(tableName.get(0), tableName.get(1))),
+        new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))),
         new Expr.StringLiteral(icebergBase),
         new Expr.StringLiteral(icebergVolume),
         new Expr.StringLiteral(tableName.get(1)),
@@ -1413,7 +1419,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateReadCode(
-      List<String> tableName, boolean useStreaming, StreamingOptions streamingOptions) {
+      ImmutableList<String> tableName, boolean useStreaming, StreamingOptions streamingOptions) {
     // TODO: Convert to use Expr.Call
     String streamingArg = "";
     if (useStreaming) {
@@ -1422,9 +1428,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return new Expr.Raw(
         String.format(
             "pd.read_sql('%s', '%s', _bodo_is_table_input=True, _bodo_read_as_table=True, %s)",
-            tableName.get(2),
-            generatePythonConnStr(tableName.get(0), tableName.get(1)),
-            streamingArg));
+            tableName.get(2), generatePythonConnStr(tableName.subList(0, 2)), streamingArg));
   }
 
   /**
@@ -1469,7 +1473,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return new Expr.Raw(
         String.format(
             "pd.read_sql('%s', '%s', _bodo_read_as_table=True)",
-            query, generatePythonConnStr(currentDatabase, schemaName)));
+            query, generatePythonConnStr(ImmutableList.of(currentDatabase, schemaName))));
   }
 
   /**

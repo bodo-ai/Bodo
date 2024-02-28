@@ -44,7 +44,7 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    * @param columns list of columns to be added to the table.
    * @param catalog The catalog used to submit remote requests.
    */
-  public CatalogTable(
+  protected CatalogTable(
       @NotNull String name,
       @NotNull ImmutableList<String> schemaPath,
       @NotNull List<BodoSQLColumn> columns,
@@ -232,5 +232,25 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   public RelNode toRel(RelOptTable.ToRelContext toRelContext, RelOptTable relOptTable) {
     throw new UnsupportedOperationException(
         "toRel() must be implemented by specific catalog table implementations");
+  }
+
+  /**
+   * Generate a Python connection string to read from the given catalog at the provided path.
+   *
+   * @param schemaPath The path to the table not including the table name.
+   * @return A string that can be passed to Python to read from the table.
+   */
+  public String generatePythonConnStr(ImmutableList<String> schemaPath) {
+    return catalog.generatePythonConnStr(schemaPath);
+  }
+
+  /**
+   * Determine the estimated approximate number of distinct values for the column. This is
+   * implemented by each individual catalog table which is responsible for caching the results.
+   *
+   * @return Estimated distinct count for this table.
+   */
+  public Double getColumnDistinctCount(int column) {
+    return null;
   }
 }
