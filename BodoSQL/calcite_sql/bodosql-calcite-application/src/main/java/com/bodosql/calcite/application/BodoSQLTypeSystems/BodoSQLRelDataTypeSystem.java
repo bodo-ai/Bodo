@@ -50,7 +50,10 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   }
 
   public BodoSQLRelDataTypeSystem(
-      BodoTZInfo tzInfo, Integer weekStart, Integer weekOfYearPolicy, String currentDatabase) {
+      BodoTZInfo tzInfo,
+      Integer weekStart,
+      Integer weekOfYearPolicy,
+      @Nullable String currentDatabase) {
     defaultTZInfo = tzInfo;
     this.weekStart = weekStart;
     this.weekOfYearPolicy = weekOfYearPolicy;

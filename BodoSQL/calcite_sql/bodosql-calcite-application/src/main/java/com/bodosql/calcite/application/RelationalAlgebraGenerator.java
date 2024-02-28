@@ -30,6 +30,7 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.Planner;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -199,7 +200,13 @@ public class RelationalAlgebraGenerator {
     this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     System.setProperty("calcite.default.charset", "UTF-8");
-    String currentDatabase = catalog.getDefaultSchema(0).get(0);
+    List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
+    final @Nullable String currentDatabase;
+    if (catalogDefaultSchema.isEmpty()) {
+      currentDatabase = null;
+    } else {
+      currentDatabase = catalogDefaultSchema.get(0);
+    }
     List<SchemaPlus> defaultSchemas =
         setupSchema(
             (root, defaults) -> {
@@ -215,23 +222,26 @@ public class RelationalAlgebraGenerator {
               //     (table_identifier) (Note: this case will never yield a match,
               //     as the root schema is currently always empty. This may change
               //     in the future)
-              SchemaPlus defaultDatabase = root.getSubSchema(currentDatabase);
-              if (defaultDatabase == null) {
-                throw new RuntimeException(
-                    String.format(
-                        Locale.ROOT, "Unable to find default database: %s", currentDatabase));
-              }
-              root.getSubSchemaNames();
-
-              for (String schemaName : catalog.getDefaultSchema(1)) {
-                SchemaPlus defaultSchema = defaultDatabase.getSubSchema(schemaName);
-                if (defaultSchema == null) {
+              if (currentDatabase != null) {
+                SchemaPlus defaultDatabase = root.getSubSchema(currentDatabase);
+                if (defaultDatabase == null) {
                   throw new RuntimeException(
-                      String.format(Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                      String.format(
+                          Locale.ROOT, "Unable to find default database: %s", currentDatabase));
                 }
-                defaults.add(defaultSchema);
+                root.getSubSchemaNames();
+
+                for (String schemaName : catalog.getDefaultSchema(1)) {
+                  SchemaPlus defaultSchema = defaultDatabase.getSubSchema(schemaName);
+                  if (defaultSchema == null) {
+                    throw new RuntimeException(
+                        String.format(
+                            Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                  }
+                  defaults.add(defaultSchema);
+                }
+                defaults.add(defaultDatabase);
               }
-              defaults.add(defaultDatabase);
               defaults.add(root.add(localSchema.getName(), localSchema));
             });
 
