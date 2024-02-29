@@ -42,6 +42,7 @@ const std::vector<size_t> numpy_item_size({
     sizeof(std::complex<float>),   // COMPLEX64
     sizeof(std::complex<double>),  // COMPLEX128
     0,                             // MAP
+    sizeof(int64_t),               // TIMESTAMPTZ data1
 });
 void bodo_common_init() {
     static bool initialized = false;
