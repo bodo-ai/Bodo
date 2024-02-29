@@ -336,8 +336,8 @@ void make_dictionary_global_and_unique(
     bool sort_dictionary_if_modified = false);
 
 /**
- * @brief Perform a reverse shuffle for data1 of either a
- * Numpy, Categorical, or Nullable array.
+ * @brief Perform a reverse shuffle for data of either a
+ * Numpy, Categorical, TimestampTZ, or Nullable array.
  *
  * @param[in] in_arr The input array to reverse-shuffle.
  * @param[out] out_arr The output array to fill.

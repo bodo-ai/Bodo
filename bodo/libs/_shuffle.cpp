@@ -1410,6 +1410,32 @@ std::shared_ptr<table_info> shuffle_table_kernel(
     ev.add_attribute("table_nrows_after", out_arrs[0]->length);
     return std::make_shared<table_info>(out_arrs);
 }
+/**
+ * @brief Perform a reverse shuffle for data
+ *
+ * @param[in] in_data_arr: The input data array to reverse-shuffle.
+ * @param[out] out_data_arr: The output data array to fill.
+ * @param[in] out_data_len: size of out array
+ * @param[in] siztype: sizeof(in_data_arr)
+ * @param[in] mpi_typ: MPI_Datatype
+ * @param[in] comm_info The communication information from the original shuffle.
+ */
+void reverse_shuffle_data(char* in_data_arr, char* out_data_arr,
+                          uint64_t out_data_len, uint64_t siztype,
+                          MPI_Datatype mpi_typ,
+                          mpi_comm_info const& comm_info) {
+    bodo::vector<char> tmp_recv(out_data_len * siztype);
+    bodo_alltoallv(in_data_arr, comm_info.recv_count, comm_info.recv_disp,
+                   mpi_typ, tmp_recv.data(), comm_info.send_count,
+                   comm_info.send_disp, mpi_typ, MPI_COMM_WORLD);
+    std::vector<int64_t> tmp_offset(comm_info.send_disp);
+    const bodo::vector<int>& row_dest = comm_info.row_dest;
+    for (size_t i = 0; i < out_data_len; i++) {
+        int64_t& ind = tmp_offset[row_dest[i]];
+        memcpy(out_data_arr + siztype * i, tmp_recv.data() + siztype * ind++,
+               siztype);
+    }
+}
 
 // Shuffle is basically to send data to other processes for operations like
 // drop_duplicates, etc. Usually though you want to know the indices in the
@@ -1467,22 +1493,27 @@ void reverse_shuffle_preallocated_data_array(
             tmp_offset[node]++;
         }
 
+    } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // data1
+        uint64_t siztype = numpy_item_size[in_arr->dtype];
+        MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
+        char* data1_i = in_arr->data1();
+        char* data1_o = out_arr->data1();
+        reverse_shuffle_data(data1_i, data1_o, out_arr->length, siztype,
+                             mpi_typ, comm_info);
+        // data2
+        mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+        char* data2_i = in_arr->data2();
+        char* data2_o = out_arr->data2();
+        reverse_shuffle_data(data2_i, data2_o, out_arr->length, sizeof(int16_t),
+                             mpi_typ, comm_info);
     } else {
         const uint64_t siztype = numpy_item_size[in_arr->dtype];
         MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
         char* data1_i = in_arr->data1();
         char* data1_o = out_arr->data1();
-        bodo::vector<char> tmp_recv(out_arr->length * siztype);
-        bodo_alltoallv(data1_i, comm_info.recv_count, comm_info.recv_disp,
-                       mpi_typ, tmp_recv.data(), comm_info.send_count,
-                       comm_info.send_disp, mpi_typ, MPI_COMM_WORLD);
-        std::vector<int64_t> tmp_offset(comm_info.send_disp);
-        const bodo::vector<int>& row_dest = comm_info.row_dest;
-        for (size_t i = 0; i < out_arr->length; i++) {
-            int64_t& ind = tmp_offset[row_dest[i]];
-            memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind++,
-                   siztype);
-        }
+        reverse_shuffle_data(data1_i, data1_o, out_arr->length, siztype,
+                             mpi_typ, comm_info);
     }
 }
 
@@ -1707,6 +1738,7 @@ std::shared_ptr<array_info> reverse_shuffle_array(
     }
     if (arr_type == bodo_array_type::NUMPY ||
         arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
         arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         out_arr = reverse_shuffle_data_array(in_arr, comm_info);
     }
@@ -1716,6 +1748,7 @@ std::shared_ptr<array_info> reverse_shuffle_array(
     if (arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
         arr_type == bodo_array_type::STRUCT) {
         reverse_shuffle_null_bitmap_array(in_arr, out_arr, comm_info);
     }

@@ -7811,3 +7811,22 @@ def test_nested_array_data(df, memory_leak_check, fstr):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_reverse_shuffle_timestamp_tz(memory_leak_check):
+    """Test reverse shuffle used in groupby/apply for TimestampTZ datatype"""
+
+    def impl(df):
+        return df.groupby("A").apply(lambda x: pd.DataFrame({"C": x["B"]}))
+
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 300),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2022-12-31 12:59:59"), 200),
+        ]
+    )
+    df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": tz_arr})
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)

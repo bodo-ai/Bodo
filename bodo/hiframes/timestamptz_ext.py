@@ -61,6 +61,7 @@ class TimestampTZ:
         return hash(self.utc_timestamp)
 
     def __repr__(self):
+        # If this representation changes, make sure to update GetColumn_as_ListString as well
         offset_sign = "+" if self.offset_minutes >= 0 else "-"
         # TODO: Add leading 0s
         offset_hrs = abs(self.offset_minutes) // 60
