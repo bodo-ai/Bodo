@@ -831,7 +831,7 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
 };
 
 TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
-                           std::set<int>& selected_fields,
+                           std::vector<int>& selected_fields,
                            const int64_t num_rows,
                            const std::vector<bool>& is_nullable,
                            const std::set<std::string>& str_as_dict_cols,
@@ -1203,10 +1203,10 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
     release_gil();
 
     if (ev.is_tracing()) {
-        ev.add_attribute("g_schema", schema->ToString());
+        ev.add_attribute("g_schema", this->schema->ToString());
         std::string selected_fields_str;
         for (auto i : selected_fields) {
-            selected_fields_str += schema->field(i)->ToString() + "\n";
+            selected_fields_str += this->schema->field(i)->ToString() + "\n";
         }
         ev.add_attribute("g_selected_fields", selected_fields_str);
         ev.add_attribute("num_pieces", static_cast<size_t>(get_num_pieces()));
@@ -1222,8 +1222,9 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
 }
 
 std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
-    std::shared_ptr<arrow::Table> table, bool downcast_decimal_to_double) {
-    if (table->schema()->Equals(this->schema)) {
+    std::shared_ptr<arrow::Table> table, std::shared_ptr<arrow::Schema> schema,
+    bool downcast_decimal_to_double) {
+    if (table->schema()->Equals(schema)) {
         return table;
     }
 
@@ -1233,8 +1234,8 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
         //  upcasting and no nullability changes
         auto col = table->column(i);
 
-        auto exp_type = this->schema->field(i)->type();
-        auto exp_nullable = this->schema->field(i)->nullable();
+        auto exp_type = schema->field(i)->type();
+        auto exp_nullable = schema->field(i)->nullable();
         auto act_type = col->type();
         auto act_nullable = table->schema()->field(i)->nullable();
 
@@ -1398,7 +1399,7 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
         }
     }
 
-    return arrow::Table::Make(this->schema, new_cols, table->num_rows());
+    return arrow::Table::Make(schema, new_cols, table->num_rows());
 }
 
 /**

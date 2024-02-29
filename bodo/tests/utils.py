@@ -11,6 +11,7 @@ import string
 import subprocess
 import time
 import types as pytypes
+import typing as pt
 import warnings
 from contextlib import contextmanager
 from decimal import Decimal
@@ -157,7 +158,7 @@ def check_func(
     check_dtype=True,
     reset_index=False,
     convert_columns_to_pandas=False,
-    py_output=no_default,
+    py_output: pt.Union[pt.Any, NoDefault] = no_default,
     dist_test=True,
     check_typing_issues=True,
     additional_compiler_arguments=None,

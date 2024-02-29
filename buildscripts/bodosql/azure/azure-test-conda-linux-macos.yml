@@ -18,6 +18,7 @@ parameters:
 jobs:
 - job: ${{ parameters.name }}
   variables:
+    - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
   timeoutInMinutes: 360
   pool: ScalingVMSet
@@ -142,5 +143,7 @@ jobs:
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
     displayName: 'Test BodoSQL'

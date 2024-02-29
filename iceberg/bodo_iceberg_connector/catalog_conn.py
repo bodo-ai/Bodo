@@ -74,7 +74,7 @@ def parse_conn_str(
     ]
 
     # Get Warehouse Location
-    if warehouse is None:
+    if catalog_type != "snowflake" and warehouse is None:
         warnings.warn(
             "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
             IcebergWarning,

@@ -23,10 +23,10 @@ class IcebergParquetReader : public ArrowReader {
                          int64_t tot_rows_to_read, PyObject* _dnf_filters,
                          std::string _expr_filter_f_str,
                          PyObject* _filter_scalars,
-                         std::set<int> _selected_fields,
+                         std::vector<int> _selected_fields,
                          std::vector<bool> is_nullable,
-                         PyObject* pyarrow_schema, int64_t batch_size)
-        : ArrowReader(_parallel, pyarrow_schema, tot_rows_to_read,
+                         PyObject* _pyarrow_schema, int64_t batch_size)
+        : ArrowReader(_parallel, _pyarrow_schema, tot_rows_to_read,
                       _selected_fields, is_nullable, batch_size),
           conn(_conn),
           database_schema(_database_schema),
@@ -522,7 +522,7 @@ table_info* iceberg_pq_read_py_entry(
     int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr) {
     try {
-        std::set<int> selected_fields(
+        std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
@@ -628,7 +628,7 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
     int32_t num_str_as_dict_cols, int64_t batch_size) {
     try {
-        std::set<int> selected_fields(
+        std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
