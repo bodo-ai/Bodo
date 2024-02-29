@@ -3,7 +3,7 @@
 These are our recommendations to tune your application environment and
 achieve the best possible performance with Bodo.
 
-!!! important
+!!! info "Important"
     These recommendations are only applicable when you are running your workload
     on a cluster. You do not need to do any of this on your laptop.
 

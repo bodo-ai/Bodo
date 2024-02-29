@@ -2,9 +2,8 @@
 
 ## sklearn.preprocessing.LabelEncoder
 
+- `sklearn.preprocessing.LabelEncoder`
 
-- <code><apihead>sklearn.preprocessing.<apiname>LabelEncoder</apiname></apihead></code>
-<br><br>
 
 This class provides LabelEncoder support to encode target labels `y`
 with values between 0 and n-classes-1.
@@ -13,9 +12,8 @@ with values between 0 and n-classes-1.
 
 #### sklearn.preprocessing.LabelEncoder.fit
 
+- `sklearn.preprocessing.LabelEncoder.fit(y)`
 
-- <code><apihead>sklearn.preprocessing.LabelEncoder.<apiname>fit</apiname>(y)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -23,9 +21,8 @@ with values between 0 and n-classes-1.
 
 #### sklearn.preprocessing.LabelEncoder.fit_transform
 
+- `sklearn.preprocessing.LabelEncoder.fit_transform(y)`
 
-- <code><apihead>sklearn.preprocessing.LabelEncoder.<apiname>fit_transform</apiname>(y)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -34,9 +31,8 @@ with values between 0 and n-classes-1.
 
 #### sklearn.preprocessing.LabelEncoder.transform
 
+- `sklearn.preprocessing.LabelEncoder.transform(y)`
 
-- <code><apihead>sklearn.preprocessing.LabelEncoder.<apiname>transform</apiname>(y)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -61,7 +57,8 @@ with values between 0 and n-classes-1.
 
 ## sklearn.preprocessing.MinMaxScaler
 
-<code><apihead>sklearn.preprocessing.<apiname>MinMaxScaler</apiname></apihead></code><br><br><br>
+`sklearn.preprocessing.MinMaxScaler`
+
 
 This class provides MinMax Scaler support to scale your data based on
 the range of its features.
@@ -70,9 +67,8 @@ the range of its features.
  
 #### sklearn.preprocessing.MinMaxScaler.fit
 
+- `sklearn.preprocessing.MinMaxScaler.fit(X, y=None)`
 
-- <code><apihead>sklearn.preprocessing.MinMaxScaler.<apiname>fit</apiname>(X, y=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -80,9 +76,8 @@ the range of its features.
 
 #### sklearn.preprocessing.MinMaxScaler.inverse_transform
 
+- `sklearn.preprocessing.MinMaxScaler.inverse_transform(X)`
 
-- <code><apihead>sklearn.preprocessing.MinMaxScaler.<apiname>inverse_transform</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -90,9 +85,8 @@ the range of its features.
 
 #### sklearn.preprocessing.MinMaxScaler.transform
 
-
-- <code><apihead>sklearn.preprocessing.MinMaxScaler.<apiname>transform</apiname>(X)</apihead></code>
-<br><br>    
+- `sklearn.preprocessing.MinMaxScaler.transform(X)`
+    
     ***Supported Arguments***
     <br>
     <br>
@@ -120,7 +114,8 @@ the range of its features.
 
 ## sklearn.preprocessing.StandardScaler
 
-<code><apihead>sklearn.preprocessing.<apiname>StandardScaler</apiname></apihead></code><br><br><br>
+`sklearn.preprocessing.StandardScaler`
+
 
 This class provides Standard Scaler support to center your data and to
 scale it to achieve unit variance.
@@ -129,9 +124,8 @@ scale it to achieve unit variance.
 
 #### sklearn.preprocessing.StandardScaler.fit
 
+- `sklearn.preprocessing.StandardScaler.fit(X, y=None, sample_weight=None)`
 
-- <code><apihead>sklearn.preprocessing.StandardScaler.<apiname>fit</apiname>(X, y=None, sample_weight=None)</apihead></code>
-<br><br>
 
     ***Supported Arguments***
     <br>
@@ -143,9 +137,8 @@ scale it to achieve unit variance.
 
 #### sklearn.preprocessing.StandardScaler.inverse_transform
 
+- `sklearn.preprocessing.StandardScaler.inverse_transform(X, copy=None)`
 
-- <code><apihead>sklearn.preprocessing.StandardScaler.<apiname>inverse_transform</apiname>(X, copy=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -154,9 +147,8 @@ scale it to achieve unit variance.
 
 #### sklearn.preprocessing.StandardScaler.transform
 
+- `sklearn.preprocessing.StandardScaler.transform(X, copy=None)`
 
-- <code><apihead>sklearn.preprocessing.StandardScaler.<apiname>transform</apiname>(X, copy=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -189,7 +181,8 @@ scale it to achieve unit variance.
 
 ## sklearn.preprocessing.RobustScaler
 
-<code><apihead>sklearn.preprocessing.<apiname>RobustScaler</apiname></apihead></code><br><br><br>
+`sklearn.preprocessing.RobustScaler`
+
 
 This class provides Robust Scaler support to scale your data while being
 robust to outliers.
@@ -198,9 +191,8 @@ robust to outliers.
  
 #### sklearn.preprocessing.RobustScaler.fit
 
+- `sklearn.preprocessing.RobustScaler.fit(X, y=None)`
 
-- <code><apihead>sklearn.preprocessing.RobustScaler.<apiname>fit</apiname>(X, y=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -208,9 +200,8 @@ robust to outliers.
 
 #### sklearn.preprocessing.RobustScaler.inverse_transform
 
+- `sklearn.preprocessing.RobustScaler.inverse_transform(X)`
 
-- <code><apihead>sklearn.preprocessing.RobustScaler.<apiname>inverse_transform</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -218,9 +209,8 @@ robust to outliers.
 
 #### sklearn.preprocessing.RobustScaler.transform
 
-
-- <code><apihead>sklearn.preprocessing.RobustScaler.<apiname>transform</apiname>(X)</apihead></code>
-<br><br>    
+- `sklearn.preprocessing.RobustScaler.transform(X)`
+    
     ***Supported Arguments***
     <br>
     <br>
@@ -247,4 +237,3 @@ robust to outliers.
  [-114.           -0.40816327]
  [   0.28571429   40.16326531]]
 ```
-         

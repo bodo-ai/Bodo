@@ -1,0 +1,16 @@
+# COUNT_IF
+`#!sql COUNT_IF`
+
+Compute the total number of occurrences of `#!sql true` in a column/group/window
+of booleans. For example:
+
+```sql
+SELECT COUNT_IF(A) FROM table1
+```
+
+Is equivalent to
+```sql
+SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
+```
+
+

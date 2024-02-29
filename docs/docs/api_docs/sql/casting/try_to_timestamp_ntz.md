@@ -1,0 +1,7 @@
+# TRY_TO_TIMESTAMP_NTZ
+
+
+`#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
+
+Equivalent to `#!sql TRY_TO_TIMESTAMP`.
+

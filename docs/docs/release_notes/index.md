@@ -1,3 +1,10 @@
+---
+hide:
+  - navigation
+  - toc
+  - footer
+---
+
 # Release Notes {#releases}
 
 -   [Bodo.ai 2024.2 Release][February_2024]

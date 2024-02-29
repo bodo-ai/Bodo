@@ -2,7 +2,8 @@
 
 ## sklearn.svm.LinearSVC
 
-<code><apihead>sklearn.svm.<apiname>LinearSVC</apiname></apihead></code><br><br><br>
+`sklearn.svm.LinearSVC`
+
 
 This class provides Linear Support Vector Classification.
 
@@ -10,9 +11,8 @@ This class provides Linear Support Vector Classification.
 
 #### sklearn.svm.LinearSVC.fit
 
+- `sklearn.svm.LinearSVC.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.svm.LinearSVC.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -23,9 +23,8 @@ This class provides Linear Support Vector Classification.
 
 #### sklearn.svm.LinearSVC.predict
 
+- `sklearn.svm.LinearSVC.predict(X)`
 
-- <code><apihead>sklearn.svm.LinearSVC.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -33,9 +32,8 @@ This class provides Linear Support Vector Classification.
 
 #### sklearn.svm.LinearSVC.score
 
+- `sklearn.svm.LinearSVC.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.svm.LinearSVC.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    

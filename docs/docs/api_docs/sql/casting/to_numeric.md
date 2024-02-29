@@ -1,0 +1,8 @@
+# TO_NUMERIC
+
+
+`#!sql TO_NUMERIC(EXPR [, PRECICION [, SCALE]])`
+
+Equivalent to `#!sql TO_NUMBER(EXPR, PRECICION, SCALE)`.
+
+

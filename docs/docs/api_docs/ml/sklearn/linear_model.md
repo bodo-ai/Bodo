@@ -2,7 +2,8 @@
 
 ## sklearn.linear_model.Lasso
 
-<code><apihead>sklearn.linear_model.<apiname>Lasso</apiname></apihead></code><br><br><br>
+`sklearn.linear_model.Lasso`
+
 
 This class provides Lasso regression support.
 
@@ -10,9 +11,8 @@ This class provides Lasso regression support.
 
 #### sklearn.linear_model.Lasso.fit
 
+- `sklearn.linear_model.Lasso.fit(X, y, sample_weight=None, check_input=True)`
 
-- <code><apihead>sklearn.linear_model.Lasso.<apiname>fit</apiname>(X, y, sample_weight=None, check_input=True)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -23,9 +23,8 @@ This class provides Lasso regression support.
 
 #### sklearn.linear_model.Lasso.predict
 
+- `sklearn.linear_model.Lasso.predict(X)`
 
-- <code><apihead>sklearn.linear_model.Lasso.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -33,9 +32,8 @@ This class provides Lasso regression support.
 
 #### sklearn.linear_model.Lasso.score
 
+- `sklearn.linear_model.Lasso.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.Lasso.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>     
@@ -74,7 +72,8 @@ score:  0.9999971902794988
 
 ## sklearn.linear_model.LinearRegression
 
-<code><apihead>sklearn.linear_model.<apiname>LinearRegression</apiname></apihead></code><br><br><br>
+`sklearn.linear_model.LinearRegression`
+
 
 
 This class provides linear regression support.
@@ -87,9 +86,8 @@ This class provides linear regression support.
 
 #### sklearn.linear_model.LinearRegression.fit
 
+- `sklearn.linear_model.LinearRegression.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.LinearRegression.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>     
@@ -100,9 +98,8 @@ This class provides linear regression support.
 
 #### sklearn.linear_model.LinearRegression.predict
 
+- `sklearn.linear_model.LinearRegression.predict(X)`
 
-- <code><apihead>sklearn.linear_model.LinearRegression.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>     
@@ -110,9 +107,8 @@ This class provides linear regression support.
 
 #### sklearn.linear_model.LinearRegression.score
 
+- `sklearn.linear_model.LinearRegression.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.LinearRegression.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>     
@@ -124,9 +120,8 @@ This class provides linear regression support.
 
 #### sklearn.linear_model.LinearRegression.coef_
 
+- `sklearn.linear_model.LinearRegression.<apiname>coef\_</apiname>`
 
-- <code><apihead>sklearn.linear_model.LinearRegression.<apiname>coef_</apiname></apihead></code>
-<br><br>
 ### Example Usage
 
 ```py 
@@ -152,7 +147,8 @@ coef_:  [1. 2.]
 
 ## sklearn.linear_model.LogisticRegression
 
-<code><apihead>sklearn.linear_model.<apiname>LogisticRegression</apiname></apihead></code><br><br><br>This class provides logistic regression classifier.
+`sklearn.linear_model.LogisticRegression`
+This class provides logistic regression classifier.
 
 !!! note
 
@@ -169,9 +165,8 @@ coef_:  [1. 2.]
 
 #### sklearn.linear_model.LogisticRegression.fit
 
+- `sklearn.linear_model.LogisticRegression.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -182,9 +177,8 @@ coef_:  [1. 2.]
 
 #### sklearn.linear_model.LogisticRegression.predict
 
+- `sklearn.linear_model.LogisticRegression.predict(X)`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -192,9 +186,8 @@ coef_:  [1. 2.]
 
 #### sklearn.linear_model.LogisticRegression.predict_log_proba
 
+- `sklearn.linear_model.LogisticRegression.predict_log_proba(X)`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>predict_log_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -202,9 +195,8 @@ coef_:  [1. 2.]
 
 #### sklearn.linear_model.LogisticRegression.predict_proba
 
+- `sklearn.linear_model.LogisticRegression.predict_proba(X)`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>predict_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -212,9 +204,8 @@ coef_:  [1. 2.]
     
 #### sklearn.linear_model.LogisticRegression.score
 
+- `sklearn.linear_model.LogisticRegression.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -226,9 +217,8 @@ coef_:  [1. 2.]
 
 #### sklearn.linear_model.LogisticRegression.coef_
 
+- `sklearn.linear_model.LogisticRegression.<apiname>coef\_</apiname>`
 
-- <code><apihead>sklearn.linear_model.LogisticRegression.<apiname>coef_</apiname></apihead></code>
-<br><br>
 ### Example Usage
 
 ```py 
@@ -258,16 +248,16 @@ score:  0.997
 
 ## sklearn.linear_model.Ridge
 
-<code><apihead>sklearn.linear_model.<apiname>Ridge</apiname></apihead></code><br><br><br>
+`sklearn.linear_model.Ridge`
+
 This class provides ridge regression support.
     
 ### Methods
     
 #### sklearn.linear_model.Ridge.fit
 
+- `sklearn.linear_model.Ridge.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.Ridge.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -278,9 +268,8 @@ This class provides ridge regression support.
 
 #### sklearn.linear_model.Ridge.predict
 
+- `sklearn.linear_model.Ridge.predict(X)`
 
-- <code><apihead>sklearn.linear_model.Ridge.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -288,9 +277,8 @@ This class provides ridge regression support.
 
 #### sklearn.linear_model.Ridge.score
 
+- `sklearn.linear_model.Ridge.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.Ridge.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -302,9 +290,8 @@ This class provides ridge regression support.
 
 #### sklearn.linear_model.Ridge.coef_
 
+- `sklearn.linear_model.Ridge.<apiname>coef\_</apiname>`
 
-- <code><apihead>sklearn.linear_model.Ridge.<apiname>coef_</apiname></apihead></code>
-<br><br>
 ### Example Usage
 
 ```py
@@ -332,7 +319,8 @@ coef_:  [ 1.07963671e-03  2.35051611e+01  9.46672751e+01  8.01581769e-03
 
 ## sklearn.linear_model.SGDClassifier
 
-<code><apihead>sklearn.linear_model.SGDClassifier</apihead></code><br><br><br>
+`sklearn.linear_model.SGDClassifier`
+
 
 This class provides linear classification models with SGD optimization
 which allows distributed large-scale learning.
@@ -346,9 +334,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.fit
 
+- `sklearn.linear_model.SGDClassifier.fit(X, y, coef_init=None, intercept_init=None, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.<apiname>fit</apiname>(X, y, coef_init=None, intercept_init=None, sample_weight=None)</apihead></code>
-<br><br>
 
     ***Supported Arguments***
     <br>
@@ -360,9 +347,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.predict
 
+- `sklearn.linear_model.SGDClassifier.predict(X)`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -370,9 +356,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.predict_log_proba
 
+- `sklearn.linear_model.SGDClassifier.predict_log_proba(X)`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.<apiname>predict_log_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -380,9 +365,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.predict_proba
 
+- `sklearn.linear_model.SGDClassifier.predict_proba(X)`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.<apiname>predict_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -390,9 +374,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.score
 
+- `sklearn.linear_model.SGDClassifier.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.score(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -404,9 +387,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDClassifier.coef_
 
+- `sklearn.linear_model.SGDClassifier.<apiname>coef\_<apiname>`
 
-- <code><apihead>sklearn.linear_model.SGDClassifier.<apiname>coef_<apiname></apihead></code>
-<br><br>
 ### Example Usage
 
 ```py 
@@ -434,7 +416,8 @@ coef_:  [[6.18236102 9.77517107]]
 
 ## sklearn.linear_model.SGDRegressor
 
-<code><apihead>sklearn.linear_model.<apiname>SGDRegressor</apiname></apihead></code><br><br><br>
+`sklearn.linear_model.SGDRegressor`
+
 
 This class provides linear regression models with SGD optimization
 which allows distributed large-scale learning.
@@ -455,9 +438,8 @@ which allows distributed large-scale learning.
 
 #### sklearn.linear_model.SGDRegressor.fit
 
+- `sklearn.linear_model.SGDRegressor.fit(X, y, coef_init=None, intercept_init=None, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.SGDRegressor.<apiname>fit</apiname>(X, y, coef_init=None, intercept_init=None, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -469,18 +451,16 @@ which allows distributed large-scale learning.
  
 #### sklearn.linear_model.SGDRegressor.predict
 
+- `sklearn.linear_model.SGDRegressor.predict(X)`
 
-- <code><apihead>sklearn.linear_model.SGDRegressor.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
 ***Supported Arguments***
 
     -   `X`: NumPy Array or Pandas Dataframes.
 
 #### sklearn.linear_model.SGDRegressor.score
 
+- `sklearn.linear_model.SGDRegressor.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.linear_model.SGDRegressor.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
