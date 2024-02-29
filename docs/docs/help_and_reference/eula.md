@@ -1,3 +1,8 @@
+---
+hide:
+  - toc
+  - navigation
+---
 # End User License Agreement {#eula}
 
 **THIS ONLINE END-USER LICENSE AGREEMENT ("AGREEMENT") IS A BINDING

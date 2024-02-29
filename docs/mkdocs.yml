@@ -6,7 +6,7 @@ site_description: >-
   Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.
 
 # Copyright
-copyright: Copyright &copy; 2019 - 2022 Bodo, Inc.
+copyright: Copyright &copy; 2019 - 2024 Bodo, Inc. <br/> <a href="https://docs.bodo.ai/latest/help_and_reference/eula">End User License Agreement</a>
 
 # Configuration
 theme:
@@ -22,35 +22,37 @@ theme:
     - navigation.top
     - navigation.tracking
     - navigation.indexes
-    - navigation.expand
+#    - navigation.expand  <-- this expands the side nav items.
     - search.highlight
     - search.suggest
     - toc.follow
     - navigation.path
     - content.tooltips
-
+    - navigation.footer
 
   palette:
     - media: '(prefers-color-scheme: light)'
-      primary: bodo-light
-      accent: bodo-green
+      scheme: bodo-light
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
     - media: '(prefers-color-scheme: dark)'
-      primary: bodo-light
-      accent: bodo-green
+      scheme: bodo-dark
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
   font:
     text: Archivo
     code: Roboto Mono
   favicon: assets/favicon.png
-  logo: assets/bodo-logo.png
+  logo_dark_mode: assets/bodo-white-green.svg
+  logo_light_mode: assets/bodo-grey-green.svg
 
 # Plugins
 plugins:
   - search
   - autorefs
-  - awesome-pages
-  - meta-descriptions
-  - tags
-#      tags_file: tags.md
 
 
 extra_css:
@@ -61,37 +63,18 @@ extra:
   generator: false
   status:
     new: Recently added
-  analytics:
-      provider: google
-      property: G-W019JWTQ1N
-      feedback:
-        title: Was this page helpful?
-        ratings:
-          - icon: material/emoticon-happy-outline
-            name: This page was helpful
-            data: 1
-            note: >-
-              Thanks for your feedback!
-          - icon: material/emoticon-sad-outline
-            name: This page could be improved
-            data: 0
-            note: >-
-              Thanks for your feedback! Help us improve this page by
-              filing an <a href="https://github.com/Bodo-inc/Feedback/issues/new" target=_blank>issue</a>.
-
   version:
     provider: mike
   social:
     - icon: fontawesome/brands/slack
       link: https://join.slack.com/t/bodocommunity/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA
-    - icon: fontawesome/brands/discourse
-      link: https://discourse.bodo.ai 
     - icon: fontawesome/brands/github
       link: https://github.com/Bodo-Inc/Feedback
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/bodo_ai
     - icon: fontawesome/brands/linkedin
       link: https://www.linkedin.com/company/19205698
+
 
 # Extensions
 markdown_extensions:
@@ -102,9 +85,10 @@ markdown_extensions:
   - footnotes
   - meta
   - md_in_html
-  - grid_tables
+  - tables
   - toc:
       permalink: true
+      title: On this page
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.betterem:
@@ -112,8 +96,8 @@ markdown_extensions:
   - pymdownx.caret
   - pymdownx.details
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+     emoji_index: !!python/name:material.extensions.emoji.twemoji
+     emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -133,51 +117,14 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - About Bodo: about_bodo.md
   - Getting Started:
     - quick_start/index.md
+    - Bodo SDK Trial: quick_start/sdktrial.md
     - Quick Start (Platform): quick_start/quick_start_platform.md
-    - Developer's Quick Start Guide: quick_start/dev_guide.md
-  - API Reference:
-      - api_docs/index.md
-      - Bodo Parallel API Reference: api_docs/bodo_parallel_apis.md
-      - Python Reference:
-        - api_docs/python/index.md
-        - Pandas:
-            - api_docs/pandas/index.md
-            - General Functions: api_docs/pandas/general.md
-            - DataFrame: api_docs/pandas/dataframe.md
-            - Groupby : api_docs/pandas/groupby.md
-            - Series : api_docs/pandas/series.md
-            - Window : api_docs/pandas/window.md
-            - DateOffsets: api_docs/pandas/dateoffsets.md
-            - Input/Output: api_docs/pandas/io.md
-            - Index Objects: api_docs/pandas/indexapi.md
-            - TimeDelta : api_docs/pandas/timedelta.md
-            - Timestamp : api_docs/pandas/timestamp.md
-        - Numpy: api_docs/numpy.md
-        - User Defined Functions (UDFs): api_docs/udfs.md
-        - Machine Learning:
-            - api_docs/ml/index.md
-            - Scikit Learn:
-                - api_docs/ml/sklearn/index.md
-                - sklearn.cluster : api_docs/ml/sklearn/cluster.md
-                - sklearn.ensemble: api_docs/ml/sklearn/ensemble.md
-                - sklearn.feature_extraction : api_docs/ml/sklearn/feature_extraction.md
-                - sklearn.linear_model: api_docs/ml/sklearn/linear_model.md
-                - sklearn.metrics: api_docs/ml/sklearn/metrics.md
-                - sklearn.model_selection: api_docs/ml/sklearn/model_selection.md
-                - sklearn.naive_bayes: api_docs/ml/sklearn/naive_bayes.md
-                - sklearn.preprocessing: api_docs/ml/sklearn/preprocessing.md
-                - sklearn.svm: api_docs/ml/sklearn/svm.md
-      - BodoSQL Reference:
-        - API: api_docs/BodoSQL.md
-        - Errors: api_docs/bodosqlerrors.md
-#      this following file is generated using a symlink. The latest version of bodo platform repo is
-#      required to generate this file.
-      - Bodo Platform SDK Reference: integrating_bodo/platform_sdk.md
-
   - Guides:
       - integrating_bodo/index.md
+      - Developer's Quick Start Guide: quick_start/dev_guide.md
       - Using native SQL with Catalogs: integrating_bodo/database_catalog.md
       - Installation and Setup Guides:
           - installation_and_setup/index.md
@@ -207,5 +154,892 @@ nav:
       - Compilation Tips: diagnostics_and_troubleshooting/compilation.md
       - Verbose Mode: diagnostics_and_troubleshooting/verbose_mode.md
       - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
+  - API Reference:
+      - api_docs/index.md
+      - BodoSQL Reference:
+          - api_docs/sql/index.md
+          - Supported DataFrame Types: api_docs/sql/data_types.md
+          - API Reference:
+            - Clauses:
+                - api_docs/sql/clauses/index.md
+                - api_docs/sql/clauses/aliasing.md
+                - api_docs/sql/clauses/case.md
+                - api_docs/sql/clauses/cast.md
+                - api_docs/sql/clauses/greatest.md
+                - api_docs/sql/clauses/group_by.md
+                - api_docs/sql/clauses/having.md
+                - api_docs/sql/clauses/infix.md
+                - api_docs/sql/clauses/intersect.md
+                - api_docs/sql/clauses/join.md
+                - api_docs/sql/clauses/least.md
+                - api_docs/sql/clauses/like.md
+                - api_docs/sql/clauses/limit.md
+                - api_docs/sql/clauses/natural_join.md
+                - api_docs/sql/clauses/not_between.md
+                - api_docs/sql/clauses/not_in.md
+                - api_docs/sql/clauses/order_by.md
+                - api_docs/sql/clauses/pivot.md
+                - api_docs/sql/clauses/qualify.md
+                - api_docs/sql/clauses/select.md
+                - api_docs/sql/clauses/select_distinct.md
+                - api_docs/sql/clauses/union.md
+                - api_docs/sql/clauses/where.md
+                - api_docs/sql/clauses/with.md
+            - Aggregations and Window Functions:
+                - api_docs/sql/agg/index.md
+                - api_docs/sql/agg/any_value.md
+                - api_docs/sql/agg/approx_percentile.md
+                - api_docs/sql/agg/array_agg.md
+                - api_docs/sql/agg/array_unique_agg.md
+                - api_docs/sql/agg/avg.md
+                - api_docs/sql/agg/bitand_agg.md
+                - api_docs/sql/agg/bitor_agg.md
+                - api_docs/sql/agg/bitxor_agg.md
+                - api_docs/sql/agg/booland_agg.md
+                - api_docs/sql/agg/boolor_agg.md
+                - api_docs/sql/agg/boolxor_agg.md
+                - api_docs/sql/agg/conditional_change_event.md
+                - api_docs/sql/agg/conditional_true_event.md
+                - api_docs/sql/agg/corr.md
+                - api_docs/sql/agg/count.md
+                - api_docs/sql/agg/count_if.md
+                - api_docs/sql/agg/covar_pop.md
+                - api_docs/sql/agg/covar_samp.md
+                - api_docs/sql/agg/cume_dist.md
+                - api_docs/sql/agg/dense_rank.md
+                - api_docs/sql/agg/first_value.md
+                - api_docs/sql/agg/kurtosis.md
+                - api_docs/sql/agg/lag.md
+                - api_docs/sql/agg/last_value.md
+                - api_docs/sql/agg/lead.md
+                - api_docs/sql/agg/listagg.md
+                - api_docs/sql/agg/max.md
+                - api_docs/sql/agg/median.md
+                - api_docs/sql/agg/min.md
+                - api_docs/sql/agg/mode.md
+                - api_docs/sql/agg/nth_value.md
+                - api_docs/sql/agg/ntile.md
+                - api_docs/sql/agg/object_agg.md
+                - api_docs/sql/agg/percent_rank.md
+                - api_docs/sql/agg/percentile_cont.md
+                - api_docs/sql/agg/percentile_disc.md
+                - api_docs/sql/agg/rank.md
+                - api_docs/sql/agg/ratio_to_report.md
+                - api_docs/sql/agg/row_number.md
+                - api_docs/sql/agg/skew.md
+                - api_docs/sql/agg/stddev.md
+                - api_docs/sql/agg/stddev_pop.md
+                - api_docs/sql/agg/stddev_samp.md
+                - api_docs/sql/agg/sum.md
+                - api_docs/sql/agg/var_pop.md
+                - api_docs/sql/agg/var_samp.md
+                - api_docs/sql/agg/variance.md
+                - api_docs/sql/agg/variance_pop.md
+                - api_docs/sql/agg/variance_samp.md
+            - Array Functions:
+                - api_docs/sql/array/index.md
+                - api_docs/sql/array/array_cat.md
+                - api_docs/sql/array/array_compact.md
+                - api_docs/sql/array/array_construct.md
+                - api_docs/sql/array/array_construct_compact.md
+                - api_docs/sql/array/array_contains.md
+                - api_docs/sql/array/array_except.md
+                - api_docs/sql/array/array_intersection.md
+                - api_docs/sql/array/array_position.md
+                - api_docs/sql/array/array_remove.md
+                - api_docs/sql/array/array_remove_at.md
+                - api_docs/sql/array/array_size.md
+                - api_docs/sql/array/array_slice.md
+                - api_docs/sql/array/array_to_string.md
+                - api_docs/sql/array/arrays_overlap.md
+                - api_docs/sql/array/get.md
+                - api_docs/sql/array/get_ignore_case.md
+            - Casting Functions:
+                - api_docs/sql/casting/index.md
+                - api_docs/sql/casting/to_array.md
+                - api_docs/sql/casting/to_binary.md
+                - api_docs/sql/casting/to_boolean.md
+                - api_docs/sql/casting/to_char.md
+                - api_docs/sql/casting/to_date.md
+                - api_docs/sql/casting/to_decimal.md
+                - api_docs/sql/casting/to_double.md
+                - api_docs/sql/casting/to_number.md
+                - api_docs/sql/casting/to_numeric.md
+                - api_docs/sql/casting/to_object.md
+                - api_docs/sql/casting/to_time.md
+                - api_docs/sql/casting/to_timestamp.md
+                - api_docs/sql/casting/to_timestamp_ltz.md
+                - api_docs/sql/casting/to_timestamp_ntz.md
+                - api_docs/sql/casting/to_timestamp_tz.md
+                - api_docs/sql/casting/to_varchar.md
+                - api_docs/sql/casting/try_to_binary.md
+                - api_docs/sql/casting/try_to_boolean.md
+                - api_docs/sql/casting/try_to_date.md
+                - api_docs/sql/casting/try_to_decimal.md
+                - api_docs/sql/casting/try_to_double.md
+                - api_docs/sql/casting/try_to_number.md
+                - api_docs/sql/casting/try_to_numeric.md
+                - api_docs/sql/casting/try_to_time.md
+                - api_docs/sql/casting/try_to_timestamp.md
+                - api_docs/sql/casting/try_to_timestamp_ltz.md
+                - api_docs/sql/casting/try_to_timestamp_ntz.md
+                - api_docs/sql/casting/try_to_timestamp_tz.md
+            - Context Functions:
+                - api_docs/sql/context/index.md
+                - api_docs/sql/context/current_database.md
+            - Control Flow Functions:
+                - api_docs/sql/control/index.md
+                - api_docs/sql/control/coalesce.md
+                - api_docs/sql/control/decode.md
+                - api_docs/sql/control/equal_null.md
+                - api_docs/sql/control/if.md
+                - api_docs/sql/control/iff.md
+                - api_docs/sql/control/ifnull.md
+                - api_docs/sql/control/index.md
+                - api_docs/sql/control/nullif.md
+                - api_docs/sql/control/nullifzero.md
+                - api_docs/sql/control/nvl.md
+                - api_docs/sql/control/nvl2.md
+                - api_docs/sql/control/zeroifnull.md
+            - Data Generation Functions:
+                - api_docs/sql/data_gen/index.md
+                - api_docs/sql/data_gen/random.md
+                - api_docs/sql/data_gen/uniform.md
+                - api_docs/sql/data_gen/uuid_string.md
+            - Numeric Functions:
+                - api_docs/sql/numeric/index.md
+                - api_docs/sql/numeric/abs.md
+                - api_docs/sql/numeric/acos.md
+                - api_docs/sql/numeric/asin.md
+                - api_docs/sql/numeric/atan.md
+                - api_docs/sql/numeric/atan2.md
+                - api_docs/sql/numeric/bitand.md
+                - api_docs/sql/numeric/bitnot.md
+                - api_docs/sql/numeric/bitor.md
+                - api_docs/sql/numeric/bitshiftleft.md
+                - api_docs/sql/numeric/bitshiftright.md
+                - api_docs/sql/numeric/bitxor.md
+                - api_docs/sql/numeric/booland.md
+                - api_docs/sql/numeric/boolnot.md
+                - api_docs/sql/numeric/boolor.md
+                - api_docs/sql/numeric/boolxor.md
+                - api_docs/sql/numeric/ceil.md
+                - api_docs/sql/numeric/ceiling.md
+                - api_docs/sql/numeric/conv.md
+                - api_docs/sql/numeric/cos.md
+                - api_docs/sql/numeric/cotan.md
+                - api_docs/sql/numeric/degrees.md
+                - api_docs/sql/numeric/exp.md
+                - api_docs/sql/numeric/floor.md
+                - api_docs/sql/numeric/getbit.md
+                - api_docs/sql/numeric/hash.md
+                - api_docs/sql/numeric/ln.md
+                - api_docs/sql/numeric/log.md
+                - api_docs/sql/numeric/log10.md
+                - api_docs/sql/numeric/mod.md
+                - api_docs/sql/numeric/pi.md
+                - api_docs/sql/numeric/power.md
+                - api_docs/sql/numeric/radians.md
+                - api_docs/sql/numeric/regr_valx.md
+                - api_docs/sql/numeric/regr_valy.md
+                - api_docs/sql/numeric/round.md
+                - api_docs/sql/numeric/sign.md
+                - api_docs/sql/numeric/sin.md
+                - api_docs/sql/numeric/sqrt.md
+                - api_docs/sql/numeric/tan.md
+                - api_docs/sql/numeric/trunc.md
+                - api_docs/sql/numeric/truncate.md
+            - Object Functions:
+                - api_docs/sql/object/index.md
+                - api_docs/sql/object/get_path.md
+                - api_docs/sql/object/json_extract_path_text.md
+                - api_docs/sql/object/object_construct.md
+                - api_docs/sql/object/object_construct_keep_null.md
+                - api_docs/sql/object/object_delete.md
+                - api_docs/sql/object/object_insert.md
+                - api_docs/sql/object/object_keys.md
+                - api_docs/sql/object/object_pick.md
+                - api_docs/sql/object/parse_json.md
+            - Operators: api_docs/sql/operators.md
+            - Regular Expressions: api_docs/sql/regex.md
+            - String Functions:
+                - api_docs/sql/string/index.md
+                - api_docs/sql/string/base64_decode_binary.md
+                - api_docs/sql/string/base64_decode_string.md
+                - api_docs/sql/string/base64_encode.md
+                - api_docs/sql/string/char.md
+                - api_docs/sql/string/charindex.md
+                - api_docs/sql/string/concat.md
+                - api_docs/sql/string/concat_ws.md
+                - api_docs/sql/string/editdistance.md
+                - api_docs/sql/string/endswith.md
+                - api_docs/sql/string/hex_decode_binary.md
+                - api_docs/sql/string/hex_decode_string.md
+                - api_docs/sql/string/hex_encode.md
+                - api_docs/sql/string/insert.md
+                - api_docs/sql/string/jarowinkler_similarity.md
+                - api_docs/sql/string/lcase.md
+                - api_docs/sql/string/left.md
+                - api_docs/sql/string/length.md
+                - api_docs/sql/string/lower.md
+                - api_docs/sql/string/lpad.md
+                - api_docs/sql/string/ltrim.md
+                - api_docs/sql/string/md5.md
+                - api_docs/sql/string/md5_hex.md
+                - api_docs/sql/string/mid.md
+                - api_docs/sql/string/ord.md
+                - api_docs/sql/string/position.md
+                - api_docs/sql/string/repeat.md
+                - api_docs/sql/string/replace.md
+                - api_docs/sql/string/reverse.md
+                - api_docs/sql/string/right.md
+                - api_docs/sql/string/rpad.md
+                - api_docs/sql/string/rtrim.md
+                - api_docs/sql/string/sha2.md
+                - api_docs/sql/string/sha2_hex.md
+                - api_docs/sql/string/space.md
+                - api_docs/sql/string/split_part.md
+                - api_docs/sql/string/startswith.md
+                - api_docs/sql/string/strcmp.md
+                - api_docs/sql/string/strtok.md
+                - api_docs/sql/string/substr.md
+                - api_docs/sql/string/substring.md
+                - api_docs/sql/string/substring_index.md
+                - api_docs/sql/string/trim.md
+                - api_docs/sql/string/try_base64_decode_binary.md
+                - api_docs/sql/string/try_base64_decode_string.md
+                - api_docs/sql/string/try_hex_decode_binary.md
+                - api_docs/sql/string/try_hex_decode_string.md
+                - api_docs/sql/string/ucase.md
+                - api_docs/sql/string/upper.md
+            - Table Functions:
+                - api_docs/sql/table/index.md
+                - api_docs/sql/table/external_table_files.md
+                - api_docs/sql/table/flatten.md
+                - api_docs/sql/table/generator.md
+                - api_docs/sql/table/split_to_table.md
+            - Timestamp Functions:
+                - api_docs/sql/timestamp/index.md
+                - api_docs/sql/timestamp/adddate.md
+                - api_docs/sql/timestamp/curdate.md
+                - api_docs/sql/timestamp/current_date.md
+                - api_docs/sql/timestamp/current_time.md
+                - api_docs/sql/timestamp/current_timestamp.md
+                - api_docs/sql/timestamp/date_add.md
+                - api_docs/sql/timestamp/date_format.md
+                - api_docs/sql/timestamp/date_from_parts.md
+                - api_docs/sql/timestamp/date_part.md
+                - api_docs/sql/timestamp/date_sub.md
+                - api_docs/sql/timestamp/date_trunc.md
+                - api_docs/sql/timestamp/dateadd.md
+                - api_docs/sql/timestamp/datediff.md
+                - api_docs/sql/timestamp/datefromparts.md
+                - api_docs/sql/timestamp/dayname.md
+                - api_docs/sql/timestamp/extract.md
+                - api_docs/sql/timestamp/from_days.md
+                - api_docs/sql/timestamp/from_unixtime.md
+                - api_docs/sql/timestamp/getdate.md
+                - api_docs/sql/timestamp/hour.md
+                - api_docs/sql/timestamp/last_day.md
+                - api_docs/sql/timestamp/localtime.md
+                - api_docs/sql/timestamp/localtimestamp.md
+                - api_docs/sql/timestamp/makedate.md
+                - api_docs/sql/timestamp/microsecond.md
+                - api_docs/sql/timestamp/minute.md
+                - api_docs/sql/timestamp/month.md
+                - api_docs/sql/timestamp/month_name.md
+                - api_docs/sql/timestamp/monthname.md
+                - api_docs/sql/timestamp/now.md
+                - api_docs/sql/timestamp/quarter.md
+                - api_docs/sql/timestamp/second.md
+                - api_docs/sql/timestamp/str_to_date.md
+                - api_docs/sql/timestamp/subdate.md
+                - api_docs/sql/timestamp/sysdate.md
+                - api_docs/sql/timestamp/systimestamp.md
+                - api_docs/sql/timestamp/time_from_parts.md
+                - api_docs/sql/timestamp/time_slice.md
+                - api_docs/sql/timestamp/timeadd.md
+                - api_docs/sql/timestamp/timefromparts.md
+                - api_docs/sql/timestamp/timestamp_from_parts.md
+                - api_docs/sql/timestamp/timestamp_ltz_from_parts.md
+                - api_docs/sql/timestamp/timestamp_ntz_from_parts.md
+                - api_docs/sql/timestamp/timestamp_tz_from_parts.md
+                - api_docs/sql/timestamp/timestampadd.md
+                - api_docs/sql/timestamp/timestampdiff.md
+                - api_docs/sql/timestamp/timestampfromparts.md
+                - api_docs/sql/timestamp/timestampltzfromparts.md
+                - api_docs/sql/timestamp/timestampntzfromparts.md
+                - api_docs/sql/timestamp/timestamptzfromparts.md
+                - api_docs/sql/timestamp/to_days.md
+                - api_docs/sql/timestamp/to_seconds.md
+                - api_docs/sql/timestamp/trunc.md
+                - api_docs/sql/timestamp/unix_timestamp.md
+                - api_docs/sql/timestamp/utc_date.md
+                - api_docs/sql/timestamp/utc_timestamp.md
+                - api_docs/sql/timestamp/week.md
+                - api_docs/sql/timestamp/weekday.md
+                - api_docs/sql/timestamp/weekiso.md
+                - api_docs/sql/timestamp/weekofyear.md
+                - api_docs/sql/timestamp/year.md
+                - api_docs/sql/timestamp/yearofweekiso.md
+                - api_docs/sql/timestamp/yearweek.md
+            - Type Predicates:
+                - api_docs/sql/type/index.md
+                - api_docs/sql/type/is_array.md
+                - api_docs/sql/type/is_object.md
+
+          - Errors: api_docs/sql/bodosqlerrors.md
+      - Bodo Parallel API Reference:
+        - api_docs/bodo_parallel_apis/index.md
+        - api_docs/bodo_parallel_apis/allgatherv.md
+        - api_docs/bodo_parallel_apis/barrier.md
+        - api_docs/bodo_parallel_apis/gatherv.md
+        - api_docs/bodo_parallel_apis/get_rank_.md
+        - api_docs/bodo_parallel_apis/get_size_.md
+        - api_docs/bodo_parallel_apis/random_shuffle.md
+        - api_docs/bodo_parallel_apis/rebalance.md
+        - api_docs/bodo_parallel_apis/scatterv.md
+      - Python Reference:
+        - api_docs/python/index.md
+        - Pandas:
+            - api_docs/pandas/index.md
+            - General Functions:
+                - api_docs/pandas/general_functions/index.md
+                - api_docs/pandas/general_functions/crosstab.md
+                - api_docs/pandas/general_functions/concat.md
+                - api_docs/pandas/general_functions/merge.md
+                - api_docs/pandas/general_functions/cut.md
+                - api_docs/pandas/general_functions/pivot.md
+                - api_docs/pandas/general_functions/pivot_table.md
+                - api_docs/pandas/general_functions/qcut.md
+                - api_docs/pandas/general_functions/unique.md
+                - api_docs/pandas/general_functions/get_dummies.md
+                - api_docs/pandas/general_functions/isna.md
+                - api_docs/pandas/general_functions/notna.md
+                - api_docs/pandas/general_functions/isnull.md
+                - api_docs/pandas/general_functions/notnull.md
+                - api_docs/pandas/general_functions/to_numeric.md
+                - api_docs/pandas/general_functions/to_datetime.md
+                - api_docs/pandas/general_functions/to_timedelta.md
+                - api_docs/pandas/general_functions/date_range.md
+                - api_docs/pandas/general_functions/timedelta_range.md
+            - DataFrame:
+                - api_docs/pandas/dataframe/index.md
+                - pd.Dataframe: api_docs/pandas/dataframe/dataframe.md
+                - api_docs/pandas/dataframe/abs.md
+                - api_docs/pandas/dataframe/append.md
+                - api_docs/pandas/dataframe/apply.md
+                - api_docs/pandas/dataframe/assign.md
+                - api_docs/pandas/dataframe/astype.md
+                - api_docs/pandas/dataframe/columns.md
+                - api_docs/pandas/dataframe/copy.md
+                - api_docs/pandas/dataframe/corr.md
+                - api_docs/pandas/dataframe/count.md
+                - api_docs/pandas/dataframe/cov.md
+                - api_docs/pandas/dataframe/cumprod.md
+                - api_docs/pandas/dataframe/cumsum.md
+                - api_docs/pandas/dataframe/dataframe.md
+                - api_docs/pandas/dataframe/describe.md
+                - api_docs/pandas/dataframe/df_index.md
+                - api_docs/pandas/dataframe/diff.md
+                - api_docs/pandas/dataframe/drop.md
+                - api_docs/pandas/dataframe/drop_duplicates.md
+                - api_docs/pandas/dataframe/dropna.md
+                - api_docs/pandas/dataframe/dtypes.md
+                - api_docs/pandas/dataframe/duplicated.md
+                - api_docs/pandas/dataframe/empty.md
+                - api_docs/pandas/dataframe/explode.md
+                - api_docs/pandas/dataframe/fillna.md
+                - api_docs/pandas/dataframe/filter.md
+                - api_docs/pandas/dataframe/first.md
+                - api_docs/pandas/dataframe/groupby.md
+                - api_docs/pandas/dataframe/head.md
+                - api_docs/pandas/dataframe/iat.md
+                - api_docs/pandas/dataframe/idxmax.md
+                - api_docs/pandas/dataframe/idxmin.md
+                - api_docs/pandas/dataframe/iloc.md
+                - api_docs/pandas/dataframe/index.md
+                - api_docs/pandas/dataframe/infer_objects.md
+                - api_docs/pandas/dataframe/info.md
+                - api_docs/pandas/dataframe/insert.md
+                - api_docs/pandas/dataframe/isin.md
+                - api_docs/pandas/dataframe/isna.md
+                - api_docs/pandas/dataframe/isnull.md
+                - api_docs/pandas/dataframe/itertuples.md
+                - api_docs/pandas/dataframe/join.md
+                - api_docs/pandas/dataframe/last.md
+                - api_docs/pandas/dataframe/mask.md
+                - api_docs/pandas/dataframe/max.md
+                - api_docs/pandas/dataframe/mean.md
+                - api_docs/pandas/dataframe/median.md
+                - api_docs/pandas/dataframe/melt.md
+                - api_docs/pandas/dataframe/memory_usage.md
+                - api_docs/pandas/dataframe/merge.md
+                - api_docs/pandas/dataframe/min.md
+                - api_docs/pandas/dataframe/ndim.md
+                - api_docs/pandas/dataframe/notna.md
+                - api_docs/pandas/dataframe/notnull.md
+                - api_docs/pandas/dataframe/nunique.md
+                - api_docs/pandas/dataframe/pct_change.md
+                - api_docs/pandas/dataframe/pipe.md
+                - api_docs/pandas/dataframe/pivot.md
+                - api_docs/pandas/dataframe/pivot_table.md
+                - api_docs/pandas/dataframe/plot.md
+                - api_docs/pandas/dataframe/prod.md
+                - api_docs/pandas/dataframe/product.md
+                - api_docs/pandas/dataframe/quantile.md
+                - api_docs/pandas/dataframe/query.md
+                - api_docs/pandas/dataframe/rank.md
+                - api_docs/pandas/dataframe/rename.md
+                - api_docs/pandas/dataframe/replace.md
+                - api_docs/pandas/dataframe/reset_index.md
+                - api_docs/pandas/dataframe/rolling.md
+                - api_docs/pandas/dataframe/sample.md
+                - api_docs/pandas/dataframe/select_dtypes.md
+                - api_docs/pandas/dataframe/set_index.md
+                - api_docs/pandas/dataframe/shape.md
+                - api_docs/pandas/dataframe/shift.md
+                - api_docs/pandas/dataframe/size.md
+                - api_docs/pandas/dataframe/sort_index.md
+                - api_docs/pandas/dataframe/sort_values.md
+                - api_docs/pandas/dataframe/std.md
+                - api_docs/pandas/dataframe/sum.md
+                - api_docs/pandas/dataframe/tail.md
+                - api_docs/pandas/dataframe/take.md
+                - api_docs/pandas/dataframe/to_csv.md
+                - api_docs/pandas/dataframe/to_json.md
+                - api_docs/pandas/dataframe/to_numpy.md
+                - api_docs/pandas/dataframe/to_parquet.md
+                - api_docs/pandas/dataframe/to_sql.md
+                - api_docs/pandas/dataframe/to_string.md
+                - api_docs/pandas/dataframe/values.md
+                - api_docs/pandas/dataframe/var.md
+                - api_docs/pandas/dataframe/where.md
+            - Groupby :
+                - api_docs/pandas/groupby/index.md
+                - api_docs/pandas/groupby/agg.md
+                - api_docs/pandas/groupby/aggregate.md
+                - api_docs/pandas/groupby/apply.md
+                - api_docs/pandas/groupby/count.md
+                - api_docs/pandas/groupby/cumsum.md
+                - api_docs/pandas/groupby/first.md
+                - api_docs/pandas/groupby/groupby.md
+                - api_docs/pandas/groupby/head.md
+                - api_docs/pandas/groupby/idxmax.md
+                - api_docs/pandas/groupby/idxmin.md
+                - api_docs/pandas/groupby/last.md
+                - api_docs/pandas/groupby/max.md
+                - api_docs/pandas/groupby/mean.md
+                - api_docs/pandas/groupby/median.md
+                - api_docs/pandas/groupby/min.md
+                - api_docs/pandas/groupby/nunique.md
+                - api_docs/pandas/groupby/pipe.md
+                - api_docs/pandas/groupby/prod.md
+                - api_docs/pandas/groupby/rolling.md
+                - api_docs/pandas/groupby/series_groupby.md
+                - api_docs/pandas/groupby/shift.md
+                - api_docs/pandas/groupby/size.md
+                - api_docs/pandas/groupby/std.md
+                - api_docs/pandas/groupby/sum.md
+                - api_docs/pandas/groupby/transform.md
+                - api_docs/pandas/groupby/value_counts.md
+                - api_docs/pandas/groupby/var.md
+            - Series :
+              - api_docs/pandas/series/index.md
+              - api_docs/pandas/series/series.md
+              - api_docs/pandas/series/abs.md
+              - api_docs/pandas/series/add.md
+              - api_docs/pandas/series/all.md
+              - api_docs/pandas/series/any.md
+              - api_docs/pandas/series/append.md
+              - api_docs/pandas/series/apply.md
+              - api_docs/pandas/series/argsort.md
+              - api_docs/pandas/series/astype.md
+              - api_docs/pandas/series/autocorr.md
+              - api_docs/pandas/series/backfill.md
+              - api_docs/pandas/series/between.md
+              - api_docs/pandas/series/bfill.md
+              - api_docs/pandas/series/cat.codes.md
+              - api_docs/pandas/series/combine.md
+              - api_docs/pandas/series/copy.md
+              - api_docs/pandas/series/corr.md
+              - api_docs/pandas/series/count.md
+              - api_docs/pandas/series/cov.md
+              - api_docs/pandas/series/cummax.md
+              - api_docs/pandas/series/cummin.md
+              - api_docs/pandas/series/cumprod.md
+              - api_docs/pandas/series/cumsum.md
+              - api_docs/pandas/series/describe.md
+              - api_docs/pandas/series/diff.md
+              - api_docs/pandas/series/div.md
+              - api_docs/pandas/series/dot.md
+              - api_docs/pandas/series/drop_duplicates.md
+              - api_docs/pandas/series/dropna.md
+              - api_docs/pandas/series/dt.ceil.md
+              - api_docs/pandas/series/dt.date.md
+              - api_docs/pandas/series/dt.day.md
+              - api_docs/pandas/series/dt.day_name.md
+              - api_docs/pandas/series/dt.day_of_week.md
+              - api_docs/pandas/series/dt.day_of_year.md
+              - api_docs/pandas/series/dt.dayofyear.md
+              - api_docs/pandas/series/dt.days_in_month.md
+              - api_docs/pandas/series/dt.daysinmonth.md
+              - api_docs/pandas/series/dt.floor.md
+              - api_docs/pandas/series/dt.hour.md
+              - api_docs/pandas/series/dt.is_month_end.md
+              - api_docs/pandas/series/dt.is_month_start.md
+              - api_docs/pandas/series/dt.is_quarter_end.md
+              - api_docs/pandas/series/dt.is_quarter_start.md
+              - api_docs/pandas/series/dt.is_year_end.md
+              - api_docs/pandas/series/dt.is_year_start.md
+              - api_docs/pandas/series/dt.microsecond.md
+              - api_docs/pandas/series/dt.minute.md
+              - api_docs/pandas/series/dt.month.md
+              - api_docs/pandas/series/dt.month_name.md
+              - api_docs/pandas/series/dt.nanosecond.md
+              - api_docs/pandas/series/dt.normalize.md
+              - api_docs/pandas/series/dt.quarter.md
+              - api_docs/pandas/series/dt.round.md
+              - api_docs/pandas/series/dt.second.md
+              - api_docs/pandas/series/dt.strftime.md
+              - api_docs/pandas/series/dt.week.md
+              - api_docs/pandas/series/dt.weekday.md
+              - api_docs/pandas/series/dt.weekofyear.md
+              - api_docs/pandas/series/dt.year.md
+              - api_docs/pandas/series/dtype.md
+              - api_docs/pandas/series/dtypes.md
+              - api_docs/pandas/series/duplicated.md
+              - api_docs/pandas/series/empty.md
+              - api_docs/pandas/series/eq.md
+              - api_docs/pandas/series/equals.md
+              - api_docs/pandas/series/explode.md
+              - api_docs/pandas/series/ffill.md
+              - api_docs/pandas/series/fillna.md
+              - api_docs/pandas/series/first.md
+              - api_docs/pandas/series/floordiv.md
+              - api_docs/pandas/series/ge.md
+              - api_docs/pandas/series/groupby.md
+              - api_docs/pandas/series/gt.md
+              - api_docs/pandas/series/hasnans.md
+              - api_docs/pandas/series/head.md
+              - api_docs/pandas/series/iat.md
+              - api_docs/pandas/series/idxmax.md
+              - api_docs/pandas/series/idxmin.md
+              - api_docs/pandas/series/iloc.md
+              - api_docs/pandas/series/is_monotonic.md
+              - api_docs/pandas/series/is_monotonic_decreasing.md
+              - api_docs/pandas/series/is_monotonic_increasing.md
+              - api_docs/pandas/series/isin.md
+              - api_docs/pandas/series/isna.md
+              - api_docs/pandas/series/isnull.md
+              - api_docs/pandas/series/kurt.md
+              - api_docs/pandas/series/kurtosis.md
+              - api_docs/pandas/series/last.md
+              - api_docs/pandas/series/le.md
+              - api_docs/pandas/series/loc.md
+              - api_docs/pandas/series/lt.md
+              - api_docs/pandas/series/mad.md
+              - api_docs/pandas/series/map.md
+              - api_docs/pandas/series/mask.md
+              - api_docs/pandas/series/max.md
+              - api_docs/pandas/series/mean.md
+              - api_docs/pandas/series/median.md
+              - api_docs/pandas/series/memory_usage.md
+              - api_docs/pandas/series/min.md
+              - api_docs/pandas/series/mod.md
+              - api_docs/pandas/series/mul.md
+              - api_docs/pandas/series/name.md
+              - api_docs/pandas/series/nbytes.md
+              - api_docs/pandas/series/ndim.md
+              - api_docs/pandas/series/ne.md
+              - api_docs/pandas/series/nlargest.md
+              - api_docs/pandas/series/notna.md
+              - api_docs/pandas/series/notnull.md
+              - api_docs/pandas/series/nsmallest.md
+              - api_docs/pandas/series/nunique.md
+              - api_docs/pandas/series/pad.md
+              - api_docs/pandas/series/pct_change.md
+              - api_docs/pandas/series/pipe.md
+              - api_docs/pandas/series/pow.md
+              - api_docs/pandas/series/prod.md
+              - api_docs/pandas/series/product.md
+              - api_docs/pandas/series/quantile.md
+              - api_docs/pandas/series/radd.md
+              - api_docs/pandas/series/rank.md
+              - api_docs/pandas/series/rdiv.md
+              - api_docs/pandas/series/rename.md
+              - api_docs/pandas/series/repeat.md
+              - api_docs/pandas/series/replace.md
+              - api_docs/pandas/series/reset_index.md
+              - api_docs/pandas/series/rfloordiv.md
+              - api_docs/pandas/series/rmod.md
+              - api_docs/pandas/series/rmul.md
+              - api_docs/pandas/series/rolling.md
+              - api_docs/pandas/series/round.md
+              - api_docs/pandas/series/rpow.md
+              - api_docs/pandas/series/rsub.md
+              - api_docs/pandas/series/rtruediv.md
+              - api_docs/pandas/series/sem.md
+              - api_docs/pandas/series/series_index.md
+              - api_docs/pandas/series/shape.md
+              - api_docs/pandas/series/shift.md
+              - api_docs/pandas/series/size.md
+              - api_docs/pandas/series/skew.md
+              - api_docs/pandas/series/sort_index.md
+              - api_docs/pandas/series/sort_values.md
+              - api_docs/pandas/series/std.md
+              - api_docs/pandas/series/str.capitalize.md
+              - api_docs/pandas/series/str.cat.md
+              - api_docs/pandas/series/str.center.md
+              - api_docs/pandas/series/str.contains.md
+              - api_docs/pandas/series/str.count.md
+              - api_docs/pandas/series/str.endswith.md
+              - api_docs/pandas/series/str.extract.md
+              - api_docs/pandas/series/str.extractall.md
+              - api_docs/pandas/series/str.find.md
+              - api_docs/pandas/series/str.get.md
+              - api_docs/pandas/series/str.isalnum.md
+              - api_docs/pandas/series/str.isalpha.md
+              - api_docs/pandas/series/str.isdecimal.md
+              - api_docs/pandas/series/str.isdigit.md
+              - api_docs/pandas/series/str.islower.md
+              - api_docs/pandas/series/str.isnumeric.md
+              - api_docs/pandas/series/str.isspace.md
+              - api_docs/pandas/series/str.istitle.md
+              - api_docs/pandas/series/str.isupper.md
+              - api_docs/pandas/series/str.join.md
+              - api_docs/pandas/series/str.len.md
+              - api_docs/pandas/series/str.ljust.md
+              - api_docs/pandas/series/str.lower.md
+              - api_docs/pandas/series/str.lstrip.md
+              - api_docs/pandas/series/str.pad.md
+              - api_docs/pandas/series/str.repeat.md
+              - api_docs/pandas/series/str.replace.md
+              - api_docs/pandas/series/str.restrip.md
+              - api_docs/pandas/series/str.rfind.md
+              - api_docs/pandas/series/str.rjist.md
+              - api_docs/pandas/series/str.slice.md
+              - api_docs/pandas/series/str.slice_replace.md
+              - api_docs/pandas/series/str.split.md
+              - api_docs/pandas/series/str.startswith.md
+              - api_docs/pandas/series/str.strip.md
+              - api_docs/pandas/series/str.swapcase.md
+              - api_docs/pandas/series/str.title.md
+              - api_docs/pandas/series/str.upper.md
+              - api_docs/pandas/series/str.zfill.md
+              - api_docs/pandas/series/sub.md
+              - api_docs/pandas/series/sum.md
+              - api_docs/pandas/series/t.md
+              - api_docs/pandas/series/tail.md
+              - api_docs/pandas/series/take.md
+              - api_docs/pandas/series/to_csv.md
+              - api_docs/pandas/series/to_dict.md
+              - api_docs/pandas/series/to_frame.md
+              - api_docs/pandas/series/to_numpy.md
+              - api_docs/pandas/series/tolist.md
+              - api_docs/pandas/series/truediv.md
+              - api_docs/pandas/series/unique.md
+              - api_docs/pandas/series/value_counts.md
+              - api_docs/pandas/series/values.md
+              - api_docs/pandas/series/var.md
+              - api_docs/pandas/series/where.md
+            - Window :
+              - api_docs/pandas/window/index.md
+              - api_docs/pandas/window/apply.md
+              - api_docs/pandas/window/corr.md
+              - api_docs/pandas/window/count.md
+              - api_docs/pandas/window/cov.md
+              - api_docs/pandas/window/max.md
+              - api_docs/pandas/window/mean.md
+              - api_docs/pandas/window/median.md
+              - api_docs/pandas/window/min.md
+              - api_docs/pandas/window/std.md
+              - api_docs/pandas/window/sum.md
+              - api_docs/pandas/window/var.md
+            - DateOffsets:
+              - api_docs/pandas/dateoffsets/index.md
+              - api_docs/pandas/dateoffsets/dateoffset.md
+              - api_docs/pandas/dateoffsets/monthbegin.md
+              - api_docs/pandas/dateoffsets/monthend.md
+              - api_docs/pandas/dateoffsets/n.md
+              - api_docs/pandas/dateoffsets/normalize.md
+              - api_docs/pandas/dateoffsets/week.md
+            - Input/Output:
+              - api_docs/pandas/io/index.md
+              - api_docs/pandas/io/read_csv.md
+              - api_docs/pandas/io/read_excel.md
+              - api_docs/pandas/io/read_json.md
+              - api_docs/pandas/io/read_parquet.md
+              - api_docs/pandas/io/read_sql.md
+              - api_docs/pandas/io/read_sql_table.md
+            - Index Objects:
+              - api_docs/pandas/indexapi/index.md
+              - api_docs/pandas/indexapi/all.md
+              - api_docs/pandas/indexapi/any.md
+              - api_docs/pandas/indexapi/argmax.md
+              - api_docs/pandas/indexapi/argmin.md
+              - api_docs/pandas/indexapi/argsort.md
+              - api_docs/pandas/indexapi/copy.md
+              - api_docs/pandas/indexapi/date.md
+              - api_docs/pandas/indexapi/datetimeindex.md
+              - api_docs/pandas/indexapi/day.md
+              - api_docs/pandas/indexapi/day_of_week.md
+              - api_docs/pandas/indexapi/day_of_year.md
+              - api_docs/pandas/indexapi/dayofweek.md
+              - api_docs/pandas/indexapi/dayofyear.md
+              - api_docs/pandas/indexapi/days.md
+              - api_docs/pandas/indexapi/difference.md
+              - api_docs/pandas/indexapi/drop_duplicates.md
+              - api_docs/pandas/indexapi/dtype.md
+              - api_docs/pandas/indexapi/duplicated.md
+              - api_docs/pandas/indexapi/empty.md
+              - api_docs/pandas/indexapi/float64index.md
+              - api_docs/pandas/indexapi/from_product.md
+              - api_docs/pandas/indexapi/get_loc.md
+              - api_docs/pandas/indexapi/hour.md
+              - api_docs/pandas/indexapi/inferred_type.md
+              - api_docs/pandas/indexapi/int64index.md
+              - api_docs/pandas/indexapi/intersection.md
+              - api_docs/pandas/indexapi/is_all_dates.md
+              - api_docs/pandas/indexapi/is_boolean.md
+              - api_docs/pandas/indexapi/is_categorical.md
+              - api_docs/pandas/indexapi/is_floating.md
+              - api_docs/pandas/indexapi/is_integer.md
+              - api_docs/pandas/indexapi/is_interval.md
+              - api_docs/pandas/indexapi/is_leap_year.md
+              - api_docs/pandas/indexapi/is_monotonic_decreasing.md
+              - api_docs/pandas/indexapi/is_monotonic_increasing.md
+              - api_docs/pandas/indexapi/is_month_end.md
+              - api_docs/pandas/indexapi/is_month_start.md
+              - api_docs/pandas/indexapi/is_numeric.md
+              - api_docs/pandas/indexapi/is_object.md
+              - api_docs/pandas/indexapi/is_quarter_end.md
+              - api_docs/pandas/indexapi/is_quarter_start.md
+              - api_docs/pandas/indexapi/is_year_end.md
+              - api_docs/pandas/indexapi/is_year_start.md
+              - api_docs/pandas/indexapi/isin.md
+              - api_docs/pandas/indexapi/isna.md
+              - api_docs/pandas/indexapi/isnull.md
+              - api_docs/pandas/indexapi/map.md
+              - api_docs/pandas/indexapi/max.md
+              - api_docs/pandas/indexapi/microsecond.md
+              - api_docs/pandas/indexapi/microseconds.md
+              - api_docs/pandas/indexapi/min.md
+              - api_docs/pandas/indexapi/minute.md
+              - api_docs/pandas/indexapi/month.md
+              - api_docs/pandas/indexapi/name.md
+              - api_docs/pandas/indexapi/names.md
+              - api_docs/pandas/indexapi/nanosecond.md
+              - api_docs/pandas/indexapi/nanoseconds.md
+              - api_docs/pandas/indexapi/nbytes.md
+              - api_docs/pandas/indexapi/ndim.md
+              - api_docs/pandas/indexapi/nlevels.md
+              - api_docs/pandas/indexapi/nunique.md
+              - api_docs/pandas/indexapi/putmask.md
+              - api_docs/pandas/indexapi/quarter.md
+              - api_docs/pandas/indexapi/rangeindex.md
+              - api_docs/pandas/indexapi/rename.md
+              - api_docs/pandas/indexapi/repeat.md
+              - api_docs/pandas/indexapi/second.md
+              - api_docs/pandas/indexapi/seconds.md
+              - api_docs/pandas/indexapi/shape.md
+              - api_docs/pandas/indexapi/size.md
+              - api_docs/pandas/indexapi/sort_values.md
+              - api_docs/pandas/indexapi/symmetric_difference.md
+              - api_docs/pandas/indexapi/t.md
+              - api_docs/pandas/indexapi/take.md
+              - api_docs/pandas/indexapi/timedeltaindex.md
+              - api_docs/pandas/indexapi/to_frame.md
+              - api_docs/pandas/indexapi/to_list.md
+              - api_docs/pandas/indexapi/to_numpy.md
+              - api_docs/pandas/indexapi/to_series.md
+              - api_docs/pandas/indexapi/tolist.md
+              - api_docs/pandas/indexapi/uint64index.md
+              - api_docs/pandas/indexapi/union.md
+              - api_docs/pandas/indexapi/unique.md
+              - api_docs/pandas/indexapi/values.md
+              - api_docs/pandas/indexapi/week.md
+              - api_docs/pandas/indexapi/weekday.md
+              - api_docs/pandas/indexapi/weekofyear.md
+              - api_docs/pandas/indexapi/where.md
+              - api_docs/pandas/indexapi/year.md
+            - TimeDelta :
+              - api_docs/pandas/timedelta/index.md
+              - api_docs/pandas/timedelta/ceil.md
+              - api_docs/pandas/timedelta/components.md
+              - api_docs/pandas/timedelta/days.md
+              - api_docs/pandas/timedelta/delta.md
+              - api_docs/pandas/timedelta/floor.md
+              - api_docs/pandas/timedelta/microseconds.md
+              - api_docs/pandas/timedelta/nanoseconds.md
+              - api_docs/pandas/timedelta/round.md
+              - api_docs/pandas/timedelta/seconds.md
+              - api_docs/pandas/timedelta/timedelta.md
+              - api_docs/pandas/timedelta/to_numpy.md
+              - api_docs/pandas/timedelta/to_pytimedelta.md
+              - api_docs/pandas/timedelta/to_timedelta64.md
+              - api_docs/pandas/timedelta/total_seconds.md
+              - api_docs/pandas/timedelta/value.md
+            - Timestamp :
+              - api_docs/pandas/timestamp/index.md
+              - api_docs/pandas/timestamp/ceil.md
+              - api_docs/pandas/timestamp/date.md
+              - api_docs/pandas/timestamp/day.md
+              - api_docs/pandas/timestamp/day_name.md
+              - api_docs/pandas/timestamp/day_of_week.md
+              - api_docs/pandas/timestamp/day_of_year.md
+              - api_docs/pandas/timestamp/dayofweek.md
+              - api_docs/pandas/timestamp/dayofyear.md
+              - api_docs/pandas/timestamp/days_in_month.md
+              - api_docs/pandas/timestamp/daysinmonth.md
+              - api_docs/pandas/timestamp/floor.md
+              - api_docs/pandas/timestamp/hour.md
+              - api_docs/pandas/timestamp/is_leap_year.md
+              - api_docs/pandas/timestamp/is_month_end.md
+              - api_docs/pandas/timestamp/is_month_start.md
+              - api_docs/pandas/timestamp/is_quarter_end.md
+              - api_docs/pandas/timestamp/is_quarter_start.md
+              - api_docs/pandas/timestamp/is_year_end.md
+              - api_docs/pandas/timestamp/is_year_start.md
+              - api_docs/pandas/timestamp/isocalendar.md
+              - api_docs/pandas/timestamp/isoformat.md
+              - api_docs/pandas/timestamp/microsecond.md
+              - api_docs/pandas/timestamp/month.md
+              - api_docs/pandas/timestamp/month_name.md
+              - api_docs/pandas/timestamp/nanosecond.md
+              - api_docs/pandas/timestamp/normalize.md
+              - api_docs/pandas/timestamp/now.md
+              - api_docs/pandas/timestamp/quarter.md
+              - api_docs/pandas/timestamp/round.md
+              - api_docs/pandas/timestamp/second.md
+              - api_docs/pandas/timestamp/strftime.md
+              - api_docs/pandas/timestamp/timestamp.md
+              - api_docs/pandas/timestamp/toordinal.md
+              - api_docs/pandas/timestamp/value.md
+              - api_docs/pandas/timestamp/week.md
+              - api_docs/pandas/timestamp/weekday.md
+              - api_docs/pandas/timestamp/weekofyear.md
+              - api_docs/pandas/timestamp/year.md
+        - Numpy: api_docs/numpy.md
+        - User Defined Functions (UDFs): api_docs/udfs.md
+        - Machine Learning:
+            - api_docs/ml/index.md
+            - Scikit Learn:
+                - api_docs/ml/sklearn/index.md
+                - sklearn.cluster : api_docs/ml/sklearn/cluster.md
+                - sklearn.ensemble: api_docs/ml/sklearn/ensemble.md
+                - sklearn.feature_extraction : api_docs/ml/sklearn/feature_extraction.md
+                - sklearn.linear_model: api_docs/ml/sklearn/linear_model.md
+                - sklearn.metrics: api_docs/ml/sklearn/metrics.md
+                - sklearn.model_selection: api_docs/ml/sklearn/model_selection.md
+                - sklearn.naive_bayes: api_docs/ml/sklearn/naive_bayes.md
+                - sklearn.preprocessing: api_docs/ml/sklearn/preprocessing.md
+                - sklearn.svm: api_docs/ml/sklearn/svm.md
+        - Miscellaneous Functions: api_docs/miscellaneous.md
+
+#      this following file is generated using a symlink. The latest version of bodo platform repo is
+#      required to generate this file.
+      - Bodo Platform SDK Reference: integrating_bodo/platform_sdk.md
+
   - Release Notes:
       - release_notes/index.md

@@ -16,9 +16,6 @@ $(VENV):
 pip-install: $(VENV)
 	$(PYTHON) -m ensurepip --upgrade
 	$(PIP) install -r requirements.txt
-	$(PIP) install ./extensions/Markdown-GridTables-master.zip
-	$(PIP) install ./extensions/material.zip
-
 
 #
 # MKDOCS
@@ -31,6 +28,3 @@ mkdocs-build: pip-install
 mkdocs-serve: pip-install
 	$(PYTHON) -m mkdocs serve
 
-.PHONY: gen_api
-gen_api: pip-install
-	$(PYTHON) gen_api.py

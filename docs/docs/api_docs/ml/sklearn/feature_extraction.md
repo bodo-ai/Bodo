@@ -4,7 +4,8 @@
 
 ## sklearn.feature_extraction.text.CountVectorizer
 
-<code><apihead>sklearn.feature_extraction.text.<apiname>CountVectorizer</apiname></apihead></code><br><br><br>
+`sklearn.feature_extraction.text.CountVectorizer`
+
 
 This class provides CountVectorizer support to convert a collection of
 text documents to a matrix of token counts.
@@ -16,9 +17,8 @@ text documents to a matrix of token counts.
 
 #### sklearn.feature_extraction.text.CountVectorizer.fit_transform
 
+- `sklearn.feature_extraction.text.CountVectorizer.fit_transform ( raw_documents, y=None ) `
 
-- <code><apihead>sklearn.feature_extraction.text.CountVectorizer.<apiname>fit_transform</apiname> ( raw_documents, y=None ) </apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -31,9 +31,8 @@ text documents to a matrix of token counts.
         
 #### sklearn.feature_extraction.text.CountVectorizer.get_feature_names_out
 
+- `sklearn.feature_extraction.text.CountVectorizer. get_feature_names_out()`
 
-- <code><apihead>sklearn.feature_extraction.text.CountVectorizer. <apiname>get_feature_names_out</apiname>()</apihead></code>
-<br><br>
 ### Example Usage
 
 ```py
@@ -57,7 +56,8 @@ text documents to a matrix of token counts.
 
 ## sklearn.feature_extraction.text.HashingVectorizer
 
-<code><apihead>sklearn.feature_extraction.text.<apiname>HashingVectorizer</apiname></apihead></code><br><br><br>
+`sklearn.feature_extraction.text.HashingVectorizer`
+
 
 This class provides `HashingVectorizer` support to convert a collection
 of text documents to a matrix of token occurrences.
@@ -66,9 +66,8 @@ of text documents to a matrix of token occurrences.
 
 #### sklearn.feature_extraction.text.HashingVectorizer.fit_transform
 
+- `sklearn.feature_extraction.text.HashingVectorizer.fit_transform(X, y=None)`
 
-- <code><apihead>sklearn.feature_extraction.text.HashingVectorizer.<apiname>fit_transform</apiname>(X, y=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 

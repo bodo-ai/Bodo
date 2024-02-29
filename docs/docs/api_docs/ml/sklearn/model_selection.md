@@ -2,7 +2,8 @@
 
 #### sklearn.model_selection.train_test_split
 
-<code><apihead>sklearn.model_selection.<apiname>train_test_split</apiname>(X, y, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None)</apihead></code><br><br><br>
+`sklearn.model_selection.train_test_split(X, y, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None)`
+
 ***Supported Arguments***
 
 -   `X`: NumPy array or Pandas Dataframes.

@@ -2,9 +2,8 @@
 
 ## sklearn.naive_bayes.MultinomialNB
 
+- `sklearn.naive_bayes.MultinomialNB`
 
-- <code><apihead>sklearn.naive_bayes.<apiname>MultinomialNB</apiname></apihead></code>
-<br><br>
 
 This class provides Naive Bayes classifier for multinomial models with
 distributed large-scale learning.
@@ -13,9 +12,8 @@ distributed large-scale learning.
 
 #### sklearn.naive_bayes.MultinomialNB.fit
 
+- `sklearn.naive_bayes.MultinomialNB.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.naive_bayes.MultinomialNB.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -24,9 +22,8 @@ distributed large-scale learning.
 
 #### sklearn.naive_bayes.MultinomialNB.predict
 
+- `sklearn.naive_bayes.MultinomialNB.predict(X)`
 
-- <code><apihead>sklearn.naive_bayes.MultinomialNB.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -34,9 +31,8 @@ distributed large-scale learning.
 
 #### sklearn.naive_bayes.MultinomialNB.score
 
+- `sklearn.naive_bayes.MultinomialNB.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.naive_bayes.MultinomialNB.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
