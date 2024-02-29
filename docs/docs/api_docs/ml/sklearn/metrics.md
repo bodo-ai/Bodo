@@ -2,9 +2,8 @@
 
 #### sklearn.metrics.accuracy_score
 
+- `sklearn.metrics.accuracy_score(y_true, y_pred, normalize=True, sample_weight=None)`
 
-- <code><apihead>sklearn.metrics.<apiname>accuracy_score</apiname>(y_true, y_pred, normalize=True, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>
@@ -34,9 +33,8 @@
 
 #### sklearn.metrics.confusion_matrix
 
+- `sklearn.metrics.confusion_matrix(y_true, y_pred, labels=None, sample_weight=None, normalize=None)`
 
-- <code><apihead>sklearn.metrics.<apiname>confusion_matrix</apiname>(y_true, y_pred, labels=None, sample_weight=None, normalize=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -68,9 +66,8 @@
 
 #### sklearn.metrics.f1_score
 
+- `sklearn.metrics.f1_score(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')`
 
-- <code><apihead>sklearn.metrics.<apiname>f1_score</apiname>(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -98,9 +95,8 @@
 
 #### sklearn.metrics.mean_absolute_error
 
+- `sklearn.metrics.mean_absolute_error(y_true, y_pred, sample_weight=None, multioutput='uniform_average')`
 
-- <code><apihead>sklearn.metrics.<apiname>mean_absolute_error</apiname>(y_true, y_pred, sample_weight=None, multioutput='uniform_average')</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -132,9 +128,8 @@
 
 #### sklearn.metrics.mean_squared_error
 
+- `sklearn.metrics.mean_squared_error(y_true, y_pred, sample_weight=None, multioutput='uniform_average', squared=True)`
 
-- <code><apihead>sklearn.metrics.<apiname>mean_squared_error</apiname>(y_true, y_pred, sample_weight=None, multioutput='uniform_average', squared=True)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -165,9 +160,8 @@
 
 #### sklearn.metrics.precision_score
 
+- `sklearn.metrics.precision_score(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')`
 
-- <code><apihead>sklearn.metrics.<apiname>precision_score</apiname>(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -195,9 +189,8 @@
 
 #### sklearn.metrics.r2_score
 
+- `sklearn.metrics.r2_score(y_true, y_pred, sample_weight=None, multioutput='uniform_average')`
 
-- <code><apihead>sklearn.metrics.<apiname>r2_score</apiname>(y_true, y_pred, sample_weight=None, multioutput='uniform_average')</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    
@@ -229,9 +222,8 @@
 
 #### sklearn.metrics.recall_score
 
+- `sklearn.metrics.recall_score(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')`
 
-- <code><apihead>sklearn.metrics.<apiname>recall_score</apiname>(y_true, y_pred, labels=None, pos_label=1, average='binary', sample_weight=None, zero_division='warn')</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br>    

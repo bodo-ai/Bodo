@@ -220,77 +220,59 @@ JIT uses Python's `re` package as backend and therefore the compute
 speed of these functions is similar to Python.
 
 ####   re.A
+- `re.A`
 
-- <code><apihead>re.<apiname>A</apiname></apihead></code>
-<br><br>
 ####   re.ASCII
+- `re.ASCII`
 
-- <code><apihead>re.<apiname>ASCII</apiname></apihead></code>
-<br><br>
 ####   re.DEBUG
+- `re.DEBUG`
 
-- <code><apihead>re.<apiname>DEBUG</apiname></apihead></code>
-<br><br>
 ####   re.I
+- `re.I`
 
-- <code><apihead>re.<apiname>I</apiname></apihead></code>
-<br><br>
 ####   re.IGNORECASE
+- `re.IGNORECASE`
 
-- <code><apihead>re.<apiname>IGNORECASE</apiname></apihead></code>
-<br><br>
 ####   re.L
+- `re.L`
 
-- <code><apihead>re.<apiname>L</apiname></apihead></code>
-<br><br>
 ####   re.LOCALE
+- `re.LOCALE`
 
-- <code><apihead>re.<apiname>LOCALE</apiname></apihead></code>
-<br><br>
 ####   re.M
+- `re.M`
 
-- <code><apihead>re.<apiname>M</apiname></apihead></code>
-<br><br>
 ####   re.MULTILINE
+- `re.MULTILINE`
 
-- <code><apihead>re.<apiname>MULTILINE</apiname></apihead></code>
-<br><br>
 ####   re.S
+- `re.S`
 
-- <code><apihead>re.<apiname>S</apiname></apihead></code>
-<br><br>
 ####   re.DOTALL
+- `re.DOTALL`
 
-- <code><apihead>re.<apiname>DOTALL</apiname></apihead></code>
-<br><br>
 ####   re.X
+- `re.X`
 
-- <code><apihead>re.<apiname>X</apiname></apihead></code>
-<br><br>
 ####   re.VERBOSE
+- `re.VERBOSE`
 
-- <code><apihead>re.<apiname>VERBOSE</apiname></apihead></code>
-<br><br>
 ####   re.search
+- `re.search(pattern, string, flags=0)`
 
-- <code><apihead>re.<apiname>search</apiname>(pattern, string, flags=0)</apihead></code>
-<br><br>
 ####   re.match
+- `re.match(pattern, string, flags=0)`
 
-- <code><apihead>re.<apiname>match</apiname>(pattern, string, flags=0)</apihead></code>
-<br><br>
 ####   re.fullmatch
+- `re.fullmatch(pattern, string, flags=0)`
 
-- <code><apihead>re.<apiname>fullmatch</apiname>(pattern, string, flags=0)</apihead></code>
-<br><br>
 ####   re.split
+- `re.split(pattern, string, maxsplit=0, flags=0)`
 
-- <code><apihead>re.<apiname>split</apiname>(pattern, string, maxsplit=0, flags=0)</apihead></code>
-<br><br>
 ####   re.findall
+- `re.findall(pattern, string, flags=0)`
 
-- <code><apihead>re.<apiname>findall</apiname>(pattern, string, flags=0)</apihead></code>
-<br><br>
     The `pattern` argument should be a constant string for
     multi-group patterns (for Bodo to know the output will be a list of
     string tuples). An error is raised otherwise.
@@ -333,125 +315,97 @@ speed of these functions is similar to Python.
     ```
 
 ####  re.sub
+- `re.sub(pattern, repl, string, count=0, flags=0)`
 
-- <code><apihead>re.<apiname>sub</apiname>(pattern, repl, string, count=0, flags=0)</apihead></code>
-<br><br>
 ####  re.subn
+- `re.subn(pattern, repl, string, count=0, flags=0)`
 
-- <code><apihead>re.<apiname>subn</apiname>(pattern, repl, string, count=0, flags=0)</apihead></code>
-<br><br>
 ####  re.escape
+- `re.escape(pattern)`
 
-- <code><apihead>re.<apiname>escape</apiname>(pattern)</apihead></code>
-<br><br>
 ####  re.purge
+- `re.purge`
 
-- <code><apihead>re.<apiname>purge</apiname></apihead></code>
-<br><br>
 ####  re.Pattern.search
+- `re.Pattern.search(string[, pos[, endpos]])`
 
-- <code><apihead>re.Pattern.<apiname>search</apiname>(string[, pos[, endpos]])</apihead></code>
-<br><br>
 ####  re.Pattern.match
+- `re.Pattern.match(string[, pos[, endpos]])`
 
-- <code><apihead>re.Pattern.<apiname>match</apiname>(string[, pos[, endpos]])</apihead></code>
-<br><br>
 ####  re.Pattern.fullmatch
+- `re.Pattern.fullmatch(string[, pos[, endpos]])`
 
-- <code><apihead>re.Pattern.<apiname>fullmatch</apiname>(string[, pos[, endpos]])</apihead></code>
-<br><br>
 ####  re.Pattern.split
+- `re.Pattern.split(string, maxsplit=0)`
 
-- <code><apihead>re.Pattern.<apiname>split</apiname>(string, maxsplit=0)</apihead></code>
-<br><br>
 ####  re.Pattern.findall
+- `re.Pattern.findall(string[, pos[, endpos]])`
 
-- <code><apihead>re.Pattern.<apiname>findall</apiname>(string[, pos[, endpos]])</apihead></code>
-<br><br>
 This has the same limitation as [`re.findall`](#refindall). 
 
 ####  re.Pattern.sub
+- `re.Pattern.sub(repl, string, count=0)`
 
-- <code><apihead>re.Pattern.<apiname>sub</apiname>(repl, string, count=0)</apihead></code>
-<br><br>
 ####   re.Pattern.subn
+- `re.Pattern.subn(repl, string, count=0)`
 
-- <code><apihead>re.Pattern.<apiname>subn</apiname>(repl, string, count=0)</apihead></code>
-<br><br>
 ####   re.Pattern.flags
+- `re.Pattern.flags`
 
-- <code><apihead>re.Pattern.<apiname>flags</apiname></apihead></code>
-<br><br>
 ####   re.Pattern.groups
+- `re.Pattern.groups`
 
-- <code><apihead>re.Pattern.<apiname>groups</apiname></apihead></code>
-<br><br>
 ####   re.Pattern.groupindex
+- `re.Pattern.groupindex`
 
-- <code><apihead>re.Pattern.<apiname>groupindex</apiname></apihead></code>
-<br><br>
 ####   re.Pattern.pattern
+- `re.Pattern.pattern`
 
-- <code><apihead>re.Pattern.<apiname>pattern</apiname></apihead></code>
-<br><br>
 ####   re.Match.expand
+- `re.Match.expand(template)`
 
-- <code><apihead>re.Match.<apiname>expand</apiname>(template)</apihead></code>
-<br><br>
 ####   re.Match.group
+- `re.Match.group([group1, ...])`
 
-- <code><apihead>re.Match.<apiname>group</apiname>([group1, ...])</apihead></code>
-<br><br>
 ####   re.Match.\_\_getitem\_\_
 - <code><apihead>re.Match.<apiname>\_\_getitem\_\_</apiname>(g)</apihead></code>
 
 ####   re.Match.groups
+- `re.Match.groups(default=None)`
 
-- <code><apihead>re.Match.<apiname>groups</apiname>(default=None)</apihead></code>
-<br><br>
 ####   re.Match.groupdict
+- `re.Match.groupdict(default=None)`
 
-- <code><apihead>re.Match.<apiname>groupdict</apiname>(default=None)</apihead></code>
-<br><br>
 (does not support default=None for groups that did not participate
     in the match)
     
 ####   re.Match.start
+- `re.Match.start([group])`
 
-- <code><apihead>re.Match.<apiname>start</apiname>([group])</apihead></code>
-<br><br>
 ####   re.Match.end
+- `re.Match.end([group])`
 
-- <code><apihead>re.Match.<apiname>end</apiname>([group])</apihead></code>
-<br><br>
 ####   re.Match.span
+- `re.Match.span([group])`
 
-- <code><apihead>re.Match.<apiname>span</apiname>([group])</apihead></code>
-<br><br>
 ####   re.Match.pos
+- `re.Match.pos`
 
-- <code><apihead>re.Match.<apiname>pos</apiname></apihead></code>
-<br><br>
 ####   re.Match.endpos
+- `re.Match.endpos`
 
-- <code><apihead>re.Match.<apiname>endpos</apiname></apihead></code>
-<br><br>
 ####   re.Match.lastindex
+- `re.Match.lastindex`
 
-- <code><apihead>re.Match.<apiname>lastindex</apiname></apihead></code>
-<br><br>
 ####   re.Match.lastgroup
+- `re.Match.lastgroup`
 
-- <code><apihead>re.Match.<apiname>lastgroup</apiname></apihead></code>
-<br><br>
 ####   re.Match.re
+- `re.Match.re`
 
-- <code><apihead>re.Match.<apiname>re</apiname></apihead></code>
-<br><br>
 ####   re.Match.string
+- `re.Match.string`
 
-- <code><apihead>re.Match.<apiname>string</apiname></apihead></code>
-<br><br>
 ## Class Support using `@jitclass`
 
 Bodo supports Python classes using the `@bodo.jitclass` decorator. It
@@ -459,7 +413,7 @@ requires type annotation of the fields, as well as distributed
 annotation where applicable. For example, the example class below holds
 a distributed dataframe and a name filed. Types can either be specified
 directly using the imports in the bodo package or can be inferred from
-existing types using `bodo.typeof`. The `%%init%%` function is required,
+existing types using `bodo.typeof`. The `init` function is required,
 and has to initialize the attributes. In addition, subclasses are not
 supported in `jitclass` yet.
 
@@ -478,7 +432,7 @@ supported in `jitclass` yet.
 )
 
 class MyClass:
-    def %%init%%(self, n, name):
+    def init(self, n, name):
         self.df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
         self.name = name
 

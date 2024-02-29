@@ -184,7 +184,7 @@ Platform.
 ![Create Cloud Configuration AWS Manual ](../platform_onboarding_screenshots/cloud_configuration_aws_manual.png#center)
 
 
-!!! important 
+!!! info "Important" 
     We highly recommend that you ensure sufficient limits on
     your AWS account to launch resources. See
     [here][resources_created_in_aws_env] for details on the

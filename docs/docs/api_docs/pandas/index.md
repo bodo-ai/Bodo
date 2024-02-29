@@ -2,7 +2,7 @@
 
 <div class="grid cards" markdown>
 
-- [General Functions][general]
+- [General Functions][general-functions]
 - [Dataframe API][dataframe]
 - [Groupby][pd_groupby_section]
 - [Series API][series]

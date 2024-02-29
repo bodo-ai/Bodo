@@ -2,21 +2,21 @@
 
 ## sklearn.ensemble.RandomForestClassifier
 
-<code><apihead>sklearn.ensemble.<apiname>RandomForestClassifier</apiname></apihead></code><br><br><br>
+`sklearn.ensemble.RandomForestClassifier`
+
 
 This class provides Random Forest Classifier, an ensemble learning
 model, for distributed large-scale learning.
 
-!!! important
+!!! info "Important"
     `random_state` value is ignored when running on a multi-node cluster.
 
 ### Methods
 
 #### sklearn.ensemble.RandomForestClassifier.fit 
 
+- `sklearn.ensemble.RandomForestClassifier.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.ensemble.RandomForestClassifier.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -27,9 +27,8 @@ model, for distributed large-scale learning.
     
     
 #### sklearn.ensemble.RandomForestClassifier.predict
+- `sklearn.ensemble.RandomForestClassifier.predict(X)`
 
-- <code><apihead>sklearn.ensemble.RandomForestClassifier.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -37,9 +36,8 @@ model, for distributed large-scale learning.
 
 #### sklearn.ensemble.RandomForestClassifier.predict_log_proba
 
+- `sklearn.ensemble.RandomForestClassifier.predict_log_proba(X)`
 
-- <code><apihead>sklearn.ensemble.RandomForestClassifier.<apiname>predict_log_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -47,9 +45,8 @@ model, for distributed large-scale learning.
 
 #### sklearn.ensemble.RandomForestClassifier.predict_proba
 
+- `sklearn.ensemble.RandomForestClassifier.predict_proba(X)`
 
-- <code><apihead>sklearn.ensemble.RandomForestClassifier.<apiname>predict_proba</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -57,9 +54,8 @@ model, for distributed large-scale learning.
 
 #### sklearn.ensemble.RandomForestClassifier.score
 
+- `sklearn.ensemble.RandomForestClassifier.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.ensemble.RandomForestClassifier.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -91,20 +87,20 @@ model, for distributed large-scale learning.
      
 ## sklearn.ensemble.RandomForestRegressor
 
-<code><apihead>sklearn.ensemble.<apiname>RandomForestRegressor</apiname></apihead></code><br><br><br>
+`sklearn.ensemble.RandomForestRegressor`
+
 This class provides Random Forest Regressor, an ensemble learning
 model, for distributed large-scale learning.
 
-!!! important
+!!! info "Important"
     `random_state` value is ignored when running on a multi-node cluster.
 
 ### Methods
 
 #### sklearn.ensemble.RandomForestRegressor.fit
 
+- `sklearn.ensemble.RandomForestRegressor.fit(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.ensemble.RandomForestRegressor.<apiname>fit</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -115,9 +111,8 @@ model, for distributed large-scale learning.
 
 #### sklearn.ensemble.RandomForestRegressor.predict
 
+- `sklearn.ensemble.RandomForestRegressor.predict(X)`
 
-- <code><apihead>sklearn.ensemble.RandomForestRegressor.<apiname>predict</apiname>(X)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 
@@ -125,9 +120,8 @@ model, for distributed large-scale learning.
 
 #### sklearn.ensemble.RandomForestRegressor.score
 
+- `sklearn.ensemble.RandomForestRegressor.score(X, y, sample_weight=None)`
 
-- <code><apihead>sklearn.ensemble.RandomForestRegressor.<apiname>score</apiname>(X, y, sample_weight=None)</apihead></code>
-<br><br>
     ***Supported Arguments***
     <br>
     <br> 

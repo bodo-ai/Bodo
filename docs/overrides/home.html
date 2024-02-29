@@ -1,0 +1,98 @@
+<!-- Custom HTML site displayed as the Home chapter -->
+
+{% extends "main.html" %}
+{% block tabs %}
+{{ super() }}
+
+<style>
+
+    .tx-container {
+        padding-top: .0rem;
+        background: var(--bodo-gradient)
+    }
+
+    .tx-hero {
+        margin: 32px 2.8rem;
+        color: var(--md-primary-bg-color);
+        justify-content: left;
+    }
+
+    .tx-hero h1 {
+        margin-bottom: 1rem;
+        color: currentColor;
+        font-weight: 700
+    }
+
+    .tx-hero__content {
+        padding-bottom: 1rem;
+
+    }
+
+    .tx-hero__content h2 {
+      margin-bottom: 1rem;
+      color: currentColor;
+      font-weight: 600;
+      font-size: 2rem;
+    }
+
+    .tx-hero__image{
+        width:20rem;
+        height:20rem;
+        order:1;
+        /*padding-right: rem;*/
+    }
+
+
+    @media screen and (max-width:30em) {
+        .tx-hero h1 {
+            font-size: 1.4rem
+        }
+    }
+
+    @media screen and (min-width:60em) {
+
+      .tx-hero {
+            display: flex;
+            align-items: flex-start;
+            justify-content: left;
+        }
+
+        .tx-hero__content {
+            max-width: 22rem;
+            margin-top: 3.5rem;
+            margin-bottom: 3.5rem;
+            margin-left: 1.0rem;
+            margin-right: 4.0rem;
+            align-items: center;
+        }
+    }
+
+    @media screen and (min-width:76.25em) {
+
+    }
+
+    .logos img {
+        flex: 1 1 auto;
+        padding: 25px;
+        max-height: 130px;
+        vertical-align: middle;
+    }
+
+</style>
+
+<!-- Main site descriptions -->
+<section class="tx-container">
+    <div class="md-grid md-typeset">
+      <div class="tx-hero">
+        <div class="tx-hero__image">
+          <img src="assets/product-layers.png" draggable="false">
+        </div>
+        <div class="tx-hero__content">
+          <h2> Bodo.ai Developer Documentation</h2>
+          <p>Access all your Bodo resources in one place</p>
+        </div>
+      </div>
+    </div>
+</section>
+
+{% endblock %}

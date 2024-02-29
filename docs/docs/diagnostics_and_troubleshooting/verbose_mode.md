@@ -50,7 +50,7 @@ Columns loaded ['id']
 
 You can also log this information to a valid `logging.Logger` instance with Bodo.
 
-!!! important
+!!! info "Important"
     The logger should be a variable set in a global scope.
 
 ```py

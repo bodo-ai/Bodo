@@ -41,7 +41,7 @@ A workspace is tied to a particular cloud-configuration and has its own user-man
 you can have different subsets of users with different sets of roles
 and permissions in different workspaces within the same organization.
 
-!!! important
+!!! info "Important"
      If a user that is not part of the organization, is invited to a workspace in the organization,
     it is automatically added to the organization with minimal permissions.
 
