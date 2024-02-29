@@ -2206,6 +2206,19 @@ bodo::vector<std::string> GetColumn_as_ListString(
             ListStr[iRow] = strOut;
         }
     }
+    if (arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        uint64_t siztype1 = numpy_item_size[Bodo_CTypes::INT64];
+        uint64_t siztype2 = numpy_item_size[Bodo_CTypes::INT16];
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            char* ptrdata1 = &(arr->data1()[siztype1 * iRow]);
+            strOut =
+                GetStringExpression(Bodo_CTypes::INT64, ptrdata1, arr->scale);
+            char* ptrdata2 = &(arr->data2()[siztype2 * iRow]);
+            strOut += "+" + GetStringExpression(Bodo_CTypes::INT16, ptrdata2,
+                                                arr->scale);
+            ListStr[iRow] = strOut;
+        }
+    }
     return ListStr;
 }
 

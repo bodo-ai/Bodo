@@ -465,6 +465,7 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
         case Bodo_CTypes::INT64:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
+        case Bodo_CTypes::TIMESTAMPTZ:
         // TODO: [BE-4106] Split Time into Time32 and Time64
         case Bodo_CTypes::TIME:
             return MPI_LONG_LONG_INT;
