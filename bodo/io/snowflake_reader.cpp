@@ -21,13 +21,13 @@ class SnowflakeReader : public ArrowReader {
      * See snowflake_read_py_entry function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
-                    bool _is_independent, PyObject* pyarrow_schema,
-                    std::set<int> selected_fields,
+                    bool _is_independent, PyObject* _pyarrow_schema,
+                    std::vector<int> selected_fields,
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols, bool _only_length_query,
                     bool _is_select_query, bool _downcast_decimal_to_double,
                     int64_t batch_size = -1)
-        : ArrowReader(_parallel, pyarrow_schema, -1, selected_fields,
+        : ArrowReader(_parallel, _pyarrow_schema, -1, selected_fields,
                       is_nullable, batch_size),
           query(_query),
           conn(_conn),
@@ -90,14 +90,14 @@ class SnowflakeReader : public ArrowReader {
         PyObject* py_is_parallel = PyBool_FromLong(parallel);
         PyObject* py_is_independent = PyBool_FromLong(this->is_independent);
         PyObject* ds_tuple = PyObject_CallMethod(
-            sf_mod, "get_dataset", "ssOOOOO", query, conn, pyarrow_schema,
+            sf_mod, "get_dataset", "ssOOOOO", query, conn, this->pyarrow_schema,
             py_only_length_query, py_is_select_query, py_is_parallel,
             py_is_independent);
         if (ds_tuple == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
         Py_DECREF(sf_mod);
-        Py_DECREF(pyarrow_schema);
+        Py_DECREF(this->pyarrow_schema);
         Py_DECREF(py_only_length_query);
         Py_DECREF(py_is_select_query);
         Py_DECREF(py_is_parallel);
@@ -124,7 +124,7 @@ class SnowflakeReader : public ArrowReader {
 
     std::shared_ptr<table_info> get_empty_out_table() override {
         if (this->empty_out_table == nullptr) {
-            TableBuilder builder(schema, selected_fields, 0, is_nullable,
+            TableBuilder builder(this->schema, selected_fields, 0, is_nullable,
                                  str_as_dict_colnames, false);
             this->empty_out_table =
                 std::shared_ptr<table_info>(builder.get_table());
@@ -170,8 +170,8 @@ class SnowflakeReader : public ArrowReader {
 
         // Upcast Arrow table to expected schema
         // TODO: Integrate within TableBuilder
-        table =
-            ArrowReader::cast_arrow_table(table, downcast_decimal_to_double);
+        table = ArrowReader::cast_arrow_table(table, this->schema,
+                                              downcast_decimal_to_double);
         end = steady_clock::now();
         cast_arrow_table_time =
             duration_cast<microseconds>((end - start)).count();
@@ -234,8 +234,8 @@ class SnowflakeReader : public ArrowReader {
         // TODO: Handle when len(piece) < batch_size and remove this special
         // case
         if (batch_size == -1) {
-            TableBuilder builder(schema, selected_fields, count, is_nullable,
-                                 str_as_dict_colnames,
+            TableBuilder builder(this->schema, selected_fields, count,
+                                 is_nullable, str_as_dict_colnames,
                                  create_dict_encoding_from_strings);
 
             while (!result_batches.empty()) {
@@ -412,9 +412,9 @@ ArrowReader* snowflake_reader_init_py_entry(
     int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
     bool downcast_decimal_to_double, int64_t batch_size) {
     try {
-        std::set<int> selected_fields;
+        std::vector<int> selected_fields;
         for (auto i = 0; i < n_fields; i++) {
-            selected_fields.insert(i);
+            selected_fields.push_back(i);
         }
         std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
         std::vector<int> str_as_dict_cols(
@@ -472,9 +472,9 @@ table_info* snowflake_read_py_entry(
     std::optional<const char*> err_str;
 
     try {
-        std::set<int> selected_fields;
+        std::vector<int> selected_fields;
         for (auto i = 0; i < n_fields; i++) {
-            selected_fields.insert(i);
+            selected_fields.push_back(i);
         }
         std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
         std::vector<int> str_as_dict_cols(

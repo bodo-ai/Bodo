@@ -125,7 +125,8 @@ PyObject* ParquetReader::get_dataset() {
     PyObject* ds = PyObject_CallMethod(
         pq_mod, "get_parquet_dataset", "OOOOOOOLOO", path, Py_True, dnf_filters,
         expr_filters, storage_options, Py_False, PyBool_FromLong(parallel),
-        tot_rows_to_read, pyarrow_schema, PyBool_FromLong(this->use_hive));
+        tot_rows_to_read, this->pyarrow_schema,
+        PyBool_FromLong(this->use_hive));
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -185,7 +186,8 @@ void ParquetReader::init_pq_scanner() {
         pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
         this->expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
-        this->count, this->ds_partitioning, pyarrow_schema, batch_size_py);
+        this->count, this->ds_partitioning, this->pyarrow_schema,
+        batch_size_py);
     if (scanner_batches_tup == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -239,6 +241,13 @@ std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
 }
 
 std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
+    // Generate out_schema from schema and selected_columns
+    std::vector<std::shared_ptr<arrow::Field>> out_schema_fields;
+    std::transform(this->selected_fields.begin(), this->selected_fields.end(),
+                   std::back_inserter(out_schema_fields),
+                   [this](int32_t i) { return schema->field(i); });
+    auto out_schema = arrow::schema(out_schema_fields);
+
     // If batch_size is set, then we need to iteratively read a
     // batch at a time. For now, ignore partitioning
     if (batch_size != -1) {
@@ -282,7 +291,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         int64_t length =
             std::min(this->rows_left_to_read, batch->num_rows() - batch_offset);
         auto table = arrow::Table::Make(
-            this->schema, batch->Slice(batch_offset, length)->columns());
+            out_schema, batch->Slice(batch_offset, length)->columns());
         rows_left_to_read -= length;
         this->rows_to_skip -= batch_offset;
 
@@ -364,7 +373,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         if (length > 0) {
             // this is zero-copy slice
             auto table = arrow::Table::Make(
-                schema, batch->Slice(batch_offset, length)->columns());
+                out_schema, batch->Slice(batch_offset, length)->columns());
             builder.append(table);
             rows_left_to_read -= length;
 
@@ -517,7 +526,7 @@ table_info* pq_read_py_entry(
     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
     bool input_file_name_col, bool use_hive) {
     try {
-        std::set<int> selected_fields(
+        std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
@@ -590,7 +599,7 @@ ArrowReader* pq_reader_init_py_entry(
     int32_t num_str_as_dict_cols, bool input_file_name_col, int64_t batch_size,
     bool use_hive) {
     try {
-        std::set<int> selected_fields(
+        std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);

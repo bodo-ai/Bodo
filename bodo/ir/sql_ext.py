@@ -5,6 +5,7 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+import sys
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -23,6 +24,7 @@ import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
+from numba.core.extending import overload
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     next_label,
@@ -56,6 +58,7 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
@@ -160,6 +163,7 @@ class SqlReader(Connector):
         # Treated as compile-time constant for simplicity
         # But not enforced that all chunks are this size
         chunksize: Optional[int] = None,
+        used_cols: Optional[list[str]] = None,
     ):
         # Column Names and Types. Common for all Connectors
         # - Output Columns
@@ -207,8 +211,7 @@ class SqlReader(Connector):
         # at compile time.
         self.database_schema = database_schema
         # This is the PyArrow schema object.
-        # Only relevant for Iceberg at the moment,
-        # but potentially for Snowflake in the future
+        # Only relavent for Iceberg and Snowflake
         self.pyarrow_schema = pyarrow_schema
         # Is this table load done as part of a merge into operation.
         # If so we have special behavior regarding filtering.
@@ -228,6 +231,7 @@ class SqlReader(Connector):
 
         self.downcast_decimal_to_double = downcast_decimal_to_double
         self.chunksize = chunksize
+        self.used_cols = used_cols
 
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -478,7 +482,6 @@ def sql_distributed_run(
             sql_cols,
         )
         # Log if any columns use dictionary encoded arrays.
-        # TODO: Test. Dictionary encoding isn't supported yet.
         if dict_encoded_cols:
             encoding_msg = "Finished optimized encoding on read_sql node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
             bodo.user_logging.log_message(
@@ -632,7 +635,7 @@ def sql_distributed_run(
     exec(func_text, {}, loc_vars)
     sql_impl = loc_vars["sql_impl"]
 
-    genargs = {
+    genargs: dict[str, Any] = {
         "col_names": sql_node.out_table_col_names,
         "col_typs": sql_node.out_table_col_types,
         "index_column_name": sql_node.index_column_name,
@@ -644,12 +647,12 @@ def sql_distributed_run(
         "parallel": parallel,
         "typemap": typemap,
         "filters": sql_node.filters,
-        "pyarrow_schema": sql_node.pyarrow_schema,
         "is_dead_table": not sql_node.is_live_table,
         "is_select_query": sql_node.is_select_query,
         "is_merge_into": sql_node.is_merge_into,
         "is_independent": is_independent,
         "downcast_decimal_to_double": sql_node.downcast_decimal_to_double,
+        "pyarrow_schema": sql_node.pyarrow_schema,
     }
     if sql_node.is_streaming:
         assert sql_node.chunksize is not None
@@ -659,8 +662,7 @@ def sql_distributed_run(
             )
         else:
             sql_reader_py = _gen_iceberg_reader_chunked_py(
-                **genargs,
-                chunksize=sql_node.chunksize,
+                **genargs, chunksize=sql_node.chunksize, used_cols=sql_node.used_cols
             )
     else:
         sql_reader_py = _gen_sql_reader_py(**genargs)
@@ -1385,6 +1387,7 @@ def _gen_iceberg_reader_chunked_py(
     is_independent: bool,
     downcast_decimal_to_double: bool,
     chunksize: int,
+    used_cols: Optional[list[str]],
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
 
@@ -1396,9 +1399,18 @@ def _gen_iceberg_reader_chunked_py(
     assert (
         db_type == "iceberg"
     ), f"Database {db_type} not supported in streaming IO mode, and should not go down this path"
+    source_pyarrow_schema = pyarrow_schema
     assert (
-        pyarrow_schema is not None
-    ), "SQLNode must contain a pyarrow_schema if reading from Iceberg"
+        source_pyarrow_schema is not None
+    ), "SQLReader node must contain a source_pyarrow_schema if reading from Iceberg"
+
+    # Generate output pyarrow schema for used cols (from BodoSQL)
+    if used_cols is None:  # pragma: no cover
+        out_pyarrow_schema = source_pyarrow_schema
+    else:  # pragma: no cover
+        out_pyarrow_schema = pa.schema(
+            [source_pyarrow_schema.field(i) for i in used_cols]
+        )
 
     call_id = next_label()
 
@@ -1434,17 +1446,20 @@ def _gen_iceberg_reader_chunked_py(
     # table / schema, assuming that Iceberg and Parquet field ordering is the same
     # Note that this does not include any locally generated columns (row id, file list, ...)
     # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
-    selected_cols: list[int] = [
-        pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
+    out_selected_cols: list[int] = [
+        out_pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
     nullable_cols = [
-        int(is_nullable_ignore_sentinals(col_typs[i])) for i in selected_cols
+        int(is_nullable_ignore_sentinals(col_typs[i])) for i in out_selected_cols
+    ]
+    source_selected_cols: list[int] = [
+        source_pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
 
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
     str_as_dict_cols = [
-        i for i in selected_cols if col_typs[i] == bodo.dict_str_arr_type
+        i for i in out_selected_cols if col_typs[i] == bodo.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"
@@ -1471,9 +1486,9 @@ def _gen_iceberg_reader_chunked_py(
         f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
         f"    filter_scalars_pyobject,\n"
         f"    selected_cols_arr_{call_id}.ctypes,\n"
-        f"    {len(selected_cols)},\n"
+        f"    {len(source_selected_cols)},\n"
         f"    nullable_cols_arr_{call_id}.ctypes,\n"
-        f"    pyarrow_schema_{call_id},\n"
+        f"    source_pyarrow_schema_{call_id},\n"
         f"    {dict_str_cols_str},\n"
         f"    {chunksize},\n"
         f"    out_type,\n"
@@ -1484,16 +1499,17 @@ def _gen_iceberg_reader_chunked_py(
     glbls = globals().copy()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
         {
+            "objmode": numba.objmode,
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
             "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "out_type": ArrowReaderType(col_names, col_typs),
-            f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
+            f"selected_cols_arr_{call_id}": np.array(source_selected_cols, np.int32),
             f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
             f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),
-            f"pyarrow_schema_{call_id}": pyarrow_schema,
+            f"source_pyarrow_schema_{call_id}": source_pyarrow_schema,
         }
     )
 
@@ -1940,7 +1956,6 @@ def _gen_sql_reader_py(
                 f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),  # type: ignore
                 f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),  # type: ignore
                 f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
-                f"py_table_type_{call_id}": py_table_type,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
                 f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
                 "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
@@ -2133,7 +2148,7 @@ def iceberg_pq_reader_init_py_entry(
     typingctx,
     conn_str,
     db_schema,
-    sql_request_str,
+    table_name,
     parallel,
     limit,
     dnf_filters,
@@ -2155,7 +2170,7 @@ def iceberg_pq_reader_init_py_entry(
         typingctx (Context): Context used for typing
         conn_str (types.voidptr): C string for the connection
         db_schema (types.voidptr): C string for the db_schema
-        sql_request_str (types.voidptr): C string for sql request
+        table_name (types.voidptr): C string for sql request
         parallel (types.boolean): Is the read in parallel
         limit (types.int64): Max number of rows to read. -1 if all rows
         dnf_filters (parquet_predicate_type): PyObject for DNF filters.
@@ -2181,9 +2196,9 @@ def iceberg_pq_reader_init_py_entry(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(8).as_pointer(),  # table_name void*
                 lir.IntType(8).as_pointer(),  # conn_str void*
                 lir.IntType(8).as_pointer(),  # schema void*
+                lir.IntType(8).as_pointer(),  # table_name void*
                 lir.IntType(1),  # parallel bool
                 lir.IntType(64),  # tot_rows_to_read int64
                 lir.IntType(8).as_pointer(),  # dnf_filters void*
@@ -2192,7 +2207,7 @@ def iceberg_pq_reader_init_py_entry(
                 lir.IntType(8).as_pointer(),  # _selected_fields void*
                 lir.IntType(32),  # num_selected_fields int32
                 lir.IntType(8).as_pointer(),  # _is_nullable void*
-                lir.IntType(8).as_pointer(),  # pyarrow_schema void*
+                lir.IntType(8).as_pointer(),  # pyarrow_schema PyObject*
                 lir.IntType(8).as_pointer(),  # _str_as_dict_cols void*
                 lir.IntType(32),  # num_str_as_dict_cols int32
                 lir.IntType(64),  # chunksize int64

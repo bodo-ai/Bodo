@@ -12,12 +12,11 @@ import random
 import re
 import sys
 import time
-import traceback
+import typing as pt
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import numba
 import numpy as np
@@ -57,7 +56,7 @@ from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
 
-if TYPE_CHECKING:  # pragma: no cover
+if pt.TYPE_CHECKING:  # pragma: no cover
     from pyarrow._dataset import Scanner
     from pyarrow._fs import PyFileSystem
 
@@ -103,15 +102,24 @@ def format_iceberg_conn(conn_str: str) -> str:
         )
 
     # Remove Iceberg Prefix when using Internally
-    # For support before Python 3.9
-    # TODO: Remove after deprecating Python 3.8
-    if sys.version_info.minor < 9:  # pragma: no cover
-        if conn_str.startswith("iceberg+"):
-            conn_str = conn_str[len("iceberg+") :]
-        if conn_str.startswith("iceberg://"):
-            conn_str = conn_str[len("iceberg://") :]
-    else:
-        conn_str = conn_str.removeprefix("iceberg+").removeprefix("iceberg://")
+    conn_str = conn_str.removeprefix("iceberg+").removeprefix("iceberg://")
+
+    # Reformat Snowflake connection string to be iceberg-connector compatible
+    if conn_str.startswith("snowflake://"):
+        from bodo.io.snowflake import parse_conn_str
+
+        conn_contents = parse_conn_str(conn_str)
+        account: str = conn_contents.pop("account")
+        # Flatten Session Parameters
+        session_params = conn_contents.pop("session_parameters", {})
+        conn_contents.update(session_params)
+        # Remove Snowflake Specific Parameters
+        conn_contents.pop("warehouse", None)
+        conn_contents.pop("database", None)
+        conn_contents.pop("schema", None)
+        conn_str = (
+            f"snowflake://{account}.snowflakecomputing.com/?{urlencode(conn_contents)}"
+        )
 
     return conn_str
 
@@ -134,7 +142,11 @@ def format_iceberg_conn_njit(conn_str):  # pragma: no cover
 
 # ----------------------------- Iceberg Read -----------------------------#
 def get_iceberg_type_info(
-    table_name: str, con: str, database_schema: str, is_merge_into_cow: bool = False
+    table_name: str,
+    con: str,
+    database_schema: str,
+    columns: pt.Optional[list[str]] = None,
+    is_merge_into_cow: bool = False,
 ):
     """
     Helper function to fetch Bodo types for an Iceberg table with the given
@@ -181,6 +193,11 @@ def get_iceberg_type_info(
     col_types = comm.bcast(col_types)
     pyarrow_schema = comm.bcast(pyarrow_schema)
 
+    if columns is not None:
+        name_to_type = {name: typ for name, typ in zip(col_names, col_types)}
+        col_names = columns
+        col_types = [name_to_type[col] for col in col_names]
+
     bodo_types = [
         _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types
     ]
@@ -195,7 +212,7 @@ def get_iceberg_type_info(
 
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Gets the list of parquet data files that need to be read from an Iceberg table.
 
@@ -263,7 +280,7 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
 
 def generate_expr_filter(
     expr_filter_f_str: str,
-    filter_scalars: list[tuple[str, Any]],
+    filter_scalars: list[tuple[str, pt.Any]],
     col_rename_map: dict[str, str],
 ) -> pc.Expression:
     """
@@ -365,8 +382,8 @@ class IcebergSchemaGroup:
         iceberg_field_ids: tuple[int],
         parquet_field_names: tuple[str],
         final_schema: pa.Schema,
-        expr_filter_f_str: Optional[str] = None,
-        filter_scalars: Optional[list[tuple[str, Any]]] = None,
+        expr_filter_f_str: pt.Optional[str] = None,
+        filter_scalars: pt.Optional[list[tuple[str, pt.Any]]] = None,
     ):
         """
         Construct a new Schema Group.
@@ -396,7 +413,7 @@ class IcebergSchemaGroup:
         self.read_schema: pa.Schema = self.gen_read_schema(
             self.iceberg_field_ids, self.parquet_field_names, self.final_schema
         )
-        self.expr_filter: Optional[pc.Expression] = None
+        self.expr_filter: pt.Optional[pc.Expression] = None
         if (expr_filter_f_str is not None) and (len(expr_filter_f_str) > 0):
             filter_scalars = [] if filter_scalars is None else filter_scalars
             col_rename_map: dict[str, str] = {
@@ -1012,7 +1029,9 @@ def get_iceberg_file_list_parallel(
             f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
         )
 
-    return pq_abs_path_file_list_or_e, snapshot_id_or_e, iceberg_relative_path_file_list
+    pq_abs_path_file_list: list[str] = pq_abs_path_file_list_or_e
+    snapshot_id: int = snapshot_id_or_e
+    return pq_abs_path_file_list, snapshot_id, iceberg_relative_path_file_list
 
 
 def group_files_by_schema_group_identifier(
@@ -1087,7 +1106,7 @@ def get_row_counts_for_schema_group(
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     expr_filter_f_str: str = None,
-    filter_scalars: list[tuple[str, Any]] = None,
+    filter_scalars: list[tuple[str, pt.Any]] = None,
 ) -> tuple[list[int], int, int, float, float]:
     """
     Get the row counts for files belonging to the same
@@ -1233,7 +1252,7 @@ def get_row_counts_for_schema_group(
     )
 
 
-def flatten_concatenation(list_of_lists: list[list[Any]]) -> list[Any]:
+def flatten_concatenation(list_of_lists: list[list[pt.Any]]) -> list[pt.Any]:
     """
     Helper function to flatten a list of lists into a
     single list.
@@ -1246,7 +1265,7 @@ def flatten_concatenation(list_of_lists: list[list[Any]]) -> list[Any]:
     Returns:
         list[Any]: Flattened list.
     """
-    flat_list: list[Any] = []
+    flat_list: list[pt.Any] = []
     for row in list_of_lists:
         flat_list += row
     return flat_list
@@ -1303,7 +1322,7 @@ def get_iceberg_pq_dataset(
     str_as_dict_cols: list[str],
     dnf_filters=None,
     expr_filter_f_str: str = None,
-    filter_scalars: list[tuple[str, Any]] = None,
+    filter_scalars: list[tuple[str, pt.Any]] = None,
 ) -> IcebergParquetDataset:
     """
     Get IcebergParquetDataset object for the specified table.
@@ -1540,7 +1559,7 @@ def get_scanner_for_schema_group(
     filesystem: "PyFileSystem" | pa.fs.FileSystem,
     start_offset: int,
     len_all_fpaths: int,
-    batch_size: Optional[int] = None,
+    batch_size: pt.Optional[int] = None,
 ) -> tuple["Scanner", int]:
     """
     Create an Arrow Dataset Scanner for files belonging
@@ -1643,7 +1662,7 @@ def get_dataset_scanners(
     str_as_dict_cols: list[str],
     start_offset: int,
     final_schema: pa.Schema,
-    batch_size: Optional[int] = None,
+    batch_size: pt.Optional[int] = None,
 ) -> tuple[list["Scanner"], int]:
     """
     Get the Arrow Dataset Scanners for the given files.
@@ -2126,7 +2145,7 @@ def with_iceberg_field_id_md_from_ref_field(
 
 
 def add_iceberg_field_id_md_to_pa_schema(
-    schema: pa.Schema, ref_schema: Optional[pa.Schema] = None
+    schema: pa.Schema, ref_schema: pt.Optional[pa.Schema] = None
 ) -> pa.Schema:
     """
     Create a new Schema where all the fields (including nested fields)
@@ -2324,7 +2343,7 @@ def get_table_details_before_write(
     )
 
 
-def collect_file_info(iceberg_files_info) -> Tuple[List[str], List[int], List[int]]:
+def collect_file_info(iceberg_files_info) -> tuple[list[str], list[int], list[int]]:
     """
     Collect C++ Iceberg File Info to a single rank
     and process before handing off to the connector / committing functions
@@ -2371,8 +2390,8 @@ def register_table_write(
     db_name: str,
     table_name: str,
     table_loc: str,
-    fnames: List[str],
-    all_metrics: Dict[str, List[Any]],  # TODO: Explain?
+    fnames: list[str],
+    all_metrics: dict[str, list[pt.Any]],  # TODO: Explain?
     iceberg_schema_id: int,
     pa_schema,
     partition_spec,
@@ -2417,9 +2436,9 @@ def register_table_merge_cow(
     db_name: str,
     table_name: str,
     table_loc: str,
-    old_fnames: List[str],
-    new_fnames: List[str],
-    all_metrics: Dict[str, List[Any]],  # TODO: Explain?
+    old_fnames: list[str],
+    new_fnames: list[str],
+    all_metrics: dict[str, list[pt.Any]],  # TODO: Explain?
     snapshot_id: int,
 ):  # pragma: no cover
     """
