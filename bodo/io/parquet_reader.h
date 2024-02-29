@@ -13,11 +13,11 @@ class ParquetReader : public ArrowReader {
      */
     ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
                   PyObject* _expr_filters, PyObject* _storage_options,
-                  PyObject* pyarrow_schema, int64_t _tot_rows_to_read,
-                  std::set<int> _selected_fields, std::vector<bool> is_nullable,
-                  bool _input_file_name_col, int64_t batch_size,
-                  bool _use_hive = true)
-        : ArrowReader(_parallel, pyarrow_schema, _tot_rows_to_read,
+                  PyObject* _pyarrow_schema, int64_t _tot_rows_to_read,
+                  std::vector<int> _selected_fields,
+                  std::vector<bool> is_nullable, bool _input_file_name_col,
+                  int64_t batch_size, bool _use_hive = true)
+        : ArrowReader(_parallel, _pyarrow_schema, _tot_rows_to_read,
                       _selected_fields, is_nullable, batch_size),
           empty_out_table(nullptr),
           dnf_filters(_dnf_filters),
@@ -106,7 +106,9 @@ class ParquetReader : public ArrowReader {
     // columns or not)
     PyObject* ds_partitioning = nullptr;
 
-   private:
+    // Parquet files that this process has to read
+    std::vector<std::string> file_paths;
+
     PyObject* path;  // path passed to pd.read_parquet() call
     PyObject* storage_options;
     bool input_file_name_col;
@@ -115,10 +117,7 @@ class ParquetReader : public ArrowReader {
     std::vector<int64_t> pieces_nrows;
     double avg_num_pieces = 0;
 
-    // Parquet files that this process has to read
-    std::vector<std::string> file_paths;
-
-    // selected partition columns
+    // Selected partition columns
     std::vector<int> selected_part_cols;
     // for each piece that this process reads, store the value of each partition
     // column (value is stored as the categorical code). Note that a given
@@ -151,7 +150,7 @@ class ParquetReader : public ArrowReader {
      * @brief Set up the Arrow Scanner to read the Parquet files
      * (pieces) associated for the current rank
      */
-    void init_pq_scanner();
+    virtual void init_pq_scanner();
 
     // Arrow Batched Reader to get next table iteratively
     PyObject* reader = nullptr;

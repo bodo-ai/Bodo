@@ -148,9 +148,9 @@ std::unique_ptr<table_info> cppToBodo(
     auto schema = arrow::schema(std::move(fields));
     auto arrow_table = arrow::Table::Make(schema, arrays);
 
-    std::set<int> selected_fields;
+    std::vector<int> selected_fields;
     for (size_t i = 0; i < arrays.size(); i++) {
-        selected_fields.insert(i);
+        selected_fields.push_back(i);
     }
     TableBuilder builder(schema, selected_fields, input_column.size(),
                          is_nullable, str_as_dict_cols, true);

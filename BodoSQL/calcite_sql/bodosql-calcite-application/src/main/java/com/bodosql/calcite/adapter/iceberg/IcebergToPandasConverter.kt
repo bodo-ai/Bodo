@@ -110,35 +110,35 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as IcebergRel
-        val projectionArg =
-            Expr.Dict(
-                getProjectionDict(input as IcebergRel).map { (k, v) -> (StringLiteral(k) to StringLiteral(v)) },
+        val columnsArg =
+            Expr.List(
+                flattenIcebergTree(input as IcebergRel).map { v -> StringLiteral(v) },
             )
+        val databaseName = getDatabaseName(relInput)
         val schemaName = getSchemaName(relInput)
 
         val args =
             listOf(
                 StringLiteral(getTableName(relInput)),
                 StringLiteral("iceberg+" + relInput.generatePythonConnStr(ImmutableList.of(getDatabaseName(relInput), ""))),
-                StringLiteral(schemaName),
+                StringLiteral("$databaseName.$schemaName"),
             )
         val namedArgs =
             listOf(
                 "_bodo_chunksize" to getStreamingBatchArg(ctx),
                 "_bodo_read_as_table" to Expr.BooleanLiteral(true),
-                "_bodo_projection" to projectionArg,
+                "_bodo_columns" to columnsArg,
             )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)
     }
 
-    private fun getProjectionDict(node: IcebergRel): Map<String, String> {
-        val onlyColumnSubsetVisitor =
+    private fun flattenIcebergTree(node: IcebergRel): List<String> {
+        val visitor =
             object : RelVisitor() {
                 // Initialize all columns to be in the original location.
-                val projectedColNames: List<String> = node.getRowType().fieldNames
-                val originalColNames: List<String> = node.getCatalogTable().columnNames
                 var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+                var baseScan: IcebergTableScan? = null
 
                 override fun visit(
                     node: RelNode,
@@ -154,14 +154,15 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                                 if (project !is RexInputRef) {
                                     throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
                                 }
-                                // Remap to the original location.
-                                colMap[i] = project.index
+                                node.childrenAccept(this)
                             }
                             node.childrenAccept(this)
                         }
+
                         is IcebergTableScan -> {
+                            baseScan = node
                             for (value in colMap) {
-                                if (value >= originalColNames.size) {
+                                if (value >= node.deriveRowType().fieldNames.size) {
                                     throw RuntimeException("IcebergProjection Invalid")
                                 }
                             }
@@ -170,11 +171,12 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 }
             }
 
-        onlyColumnSubsetVisitor.go(node)
-        return onlyColumnSubsetVisitor.colMap.mapIndexed {
-                k, v ->
-            onlyColumnSubsetVisitor.projectedColNames[k] to onlyColumnSubsetVisitor.originalColNames[v]
-        }.toMap()
+        visitor.go(node)
+        val colMap = visitor.colMap
+        val baseScan = visitor.baseScan!!
+
+        val origColNames = baseScan.deriveRowType().fieldNames
+        return colMap.mapIndexed { _, v -> origColNames[v] }.toList()
     }
 
     private fun getTableName(input: IcebergRel) = input.getCatalogTable().name

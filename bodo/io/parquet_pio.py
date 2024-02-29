@@ -4,10 +4,11 @@ from __future__ import annotations
 import os
 import random
 import time
+import typing as pt
 import warnings
 from collections import defaultdict
 from glob import has_magic
-from typing import Any, List, Optional
+from typing import Any, Optional
 from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
@@ -208,7 +209,10 @@ def overload_get_filter_scalars_pyobject(var_tup):
     return loc_vars["impl"]
 
 
-def unify_schemas(schemas):
+def unify_schemas(
+    schemas: pt.Iterable[pa.Schema],
+    promote_options: pt.Literal["default", "permissive"] = "default",
+) -> pa.Schema:
     """
     Same as pyarrow.unify_schemas with the difference
     that we unify `large_string` and `string` types to `string`,
@@ -259,7 +263,7 @@ def unify_schemas(schemas):
             # TODO handle arbitrary nested types
         new_schemas.append(schema)
     # now we run Arrow's regular schema unification
-    return pa.unify_schemas(new_schemas)
+    return pa.unify_schemas(new_schemas, promote_options=promote_options)
 
 
 class ParquetDataset:
@@ -864,7 +868,9 @@ def populate_row_counts_in_pq_dataset_pieces(
                     msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
                     raise BodoError(msg)
                 try:
-                    dataset.schema = unify_schemas([dataset.schema, file_schema])
+                    dataset.schema = unify_schemas(
+                        [dataset.schema, file_schema], "permissive"
+                    )
                 except Exception as e:
                     msg = f"Schema in {piece} was different.\n" + str(e)
                     raise BodoError(msg)
@@ -1081,7 +1087,7 @@ def get_parquet_dataset(
     if isinstance(dataset_or_err, Exception):  # pragma: no cover
         error = dataset_or_err
         raise error
-    dataset: ParquetDataset = dataset_or_err
+    dataset = pt.cast(ParquetDataset, dataset_or_err)
 
     # As mentioned above, we don't want to broadcast the filesystem because it
     # adds time (so initially we didn't include it in the dataset). We add
@@ -1247,13 +1253,13 @@ def schema_with_dict_cols(schema: pa.Schema, str_as_dict_cols: list[str]) -> pa.
 def get_scanner_batches(
     fpaths,
     expr_filters,
-    selected_fields,
+    selected_fields: list[int],
     avg_num_pieces,
     is_parallel,
     filesystem,
     str_as_dict_cols,
     start_offset: int,  # starting row offset in the pieces this process is going to read
-    rows_to_read,  # total number of rows this process is going to read
+    rows_to_read: int,  # total number of rows this process is going to read
     partitioning,
     schema: pa.Schema,
     batch_size: Optional[int] = None,
@@ -1380,7 +1386,7 @@ def get_pandas_metadata(schema, num_pieces):
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
     index_col = None
     # column_name -> is_nullable (or None if unknown)
-    nullable_from_metadata = defaultdict(lambda: None)
+    nullable_from_metadata: defaultdict[str, bool | None] = defaultdict(lambda: None)
     key = b"pandas"
     if schema.metadata is not None and key in schema.metadata:
         import json
@@ -1408,11 +1414,11 @@ def get_pandas_metadata(schema, num_pieces):
     return index_col, nullable_from_metadata
 
 
-def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> List[str]:
+def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> list[str]:
     """
     Get the list of string type columns in the schema.
     """
-    str_columns: List[str] = []
+    str_columns: list[str] = []
     for col_name in pa_schema.names:
         field = pa_schema.field(col_name)
         if field.type in (pa.string(), pa.large_string()):

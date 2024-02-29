@@ -18,6 +18,9 @@ class SnowflakeBuilder {
     // Snowflake uses a JDBC connection, so we need to add the JDBC properties
     properties.put(JdbcCatalog.PROPERTY_PREFIX + "user", properties.get("user"));
     properties.put(JdbcCatalog.PROPERTY_PREFIX + "password", properties.get("password"));
+    if (properties.containsKey("role")) {
+      properties.put(JdbcCatalog.PROPERTY_PREFIX + "role", properties.get("role"));
+    }
 
     catalog.initialize("snowflake_catalog", properties);
     return catalog;

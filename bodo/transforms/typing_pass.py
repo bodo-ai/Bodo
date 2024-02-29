@@ -4114,12 +4114,36 @@ class TypingTransforms:
         if chunksize and not isinstance(chunksize, int):
             raise BodoError(err_msg)
 
+        _bodo_columns_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_columns",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_columns_var', if provided, must be a constant."
+        columns_obj = (
+            self._get_const_value(_bodo_columns_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_columns_var
+            else None
+        )
+        if chunksize is None and columns_obj is not None:  # pragma: no cover
+            raise BodoError(
+                "pandas.read_sql_table(): '_bodo_columns' can only be used with '_bodo_chunksize'"
+            )
+
         (
             col_names,
             arr_types,
             pyarrow_table_schema,
         ) = bodo.io.iceberg.get_iceberg_type_info(
-            table_name, con, database_schema, is_merge_into_cow=_bodo_merge_into
+            table_name,
+            con,
+            database_schema,
+            columns_obj,
+            is_merge_into_cow=_bodo_merge_into,
         )
 
         # check user-provided dict-encoded columns for errors
@@ -4230,6 +4254,7 @@ class TypingTransforms:
                 snapshot_id_type,  # snapshot_id_type
                 False,  # downcast_decimal_to_double
                 chunksize=chunksize,
+                used_cols=columns_obj,
             )
         ]
 

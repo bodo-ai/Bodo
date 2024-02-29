@@ -52,7 +52,7 @@ class TableBuilder {
      * streaming.
      */
     TableBuilder(std::shared_ptr<arrow::Schema> schema,
-                 std::set<int>& selected_fields, const int64_t num_rows,
+                 std::vector<int>& selected_fields, const int64_t num_rows,
                  const std::vector<bool>& is_nullable,
                  const std::set<std::string>& str_as_dict_cols,
                  const bool create_dict_from_string,
@@ -135,12 +135,12 @@ class ArrowReader {
      * entire dataset all at once
      */
     ArrowReader(bool parallel, PyObject* pyarrow_schema,
-                int64_t tot_rows_to_read, std::set<int> selected_fields,
+                int64_t tot_rows_to_read, std::vector<int> selected_fields,
                 std::vector<bool> is_nullable, int64_t batch_size = -1)
         : parallel(parallel),
           tot_rows_to_read(tot_rows_to_read),
-          is_nullable(is_nullable),
           selected_fields(selected_fields),
+          is_nullable(is_nullable),
           batch_size(batch_size) {
         this->set_arrow_schema(pyarrow_schema);
     }
@@ -261,10 +261,21 @@ class ArrowReader {
     const bool parallel;
     const int64_t tot_rows_to_read;  // used for df.head(N) case
     bool initialized = false;
+
+    /// Schema of the input, before column pruning, rearranging, or casting
+    /// Note for SnowflakeReader, this is the output of the query, not a table
+    ///     so it accounts for any transformations done inside of the query
+    /// For Parquet & Iceberg, it is the original schema of the files / table
     PyObject* pyarrow_schema;
     std::shared_ptr<arrow::Schema> schema;
+
+    /// Index of fields to select from the input
+    /// Equivalent to the field ID of Arrow schema
+    /// Note that order matters for the BodoSQL Iceberg case,
+    /// so we have to use a vector. Uniqueness is enforced at compilation
+    std::vector<int> selected_fields;
+
     std::vector<bool> is_nullable;
-    std::set<int> selected_fields;
 
     // For dictionary encoded columns, load them directly as
     // dictionaries (as in the case of parquet), or convert them
@@ -302,10 +313,12 @@ class ArrowReader {
      * before adding to TableBuilder. This is currently only used in
      * SnowflakeReader
      * @param table : Input source table to upcast
+     * @param schema : Expected schema of the table
      * @return Casted output table
      */
     std::shared_ptr<arrow::Table> cast_arrow_table(
-        std::shared_ptr<arrow::Table> table, bool downcast_decimal_to_double);
+        std::shared_ptr<arrow::Table> table,
+        std::shared_ptr<arrow::Schema> schema, bool downcast_decimal_to_double);
 
     /**
      * Register a piece for this process to read

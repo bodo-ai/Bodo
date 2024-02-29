@@ -1,10 +1,8 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.adapter.iceberg.AbstractIcebergFilterRule.Companion.splitFilterConditions
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
-import com.bodosql.calcite.adapter.iceberg.IcebergSort
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
 import com.bodosql.calcite.adapter.pandas.PandasAggregate
@@ -154,29 +152,32 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     PandasFilter.create(node.cluster, newInput, node.condition)
                 }
                 else -> {
+                    // TODO: Support for Codegen for IcebergFilter
+                    node
+
                     // Try and push this node.
-                    val (icebergCondition, pandasCondition) = splitFilterConditions(node)
-                    if (icebergCondition == null) {
-                        // Nothing can be pushed to Iceberg
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        PandasFilter.create(node.cluster, converter, pandasCondition!!)
-                    } else if (pandasCondition == null) {
-                        // Everything can be pushed to Iceberg
-                        IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition, node.getCatalogTable())
-                    } else {
-                        // Part of the condition is pushable to Iceberg. Here we do the part that can
-                        // be pushed in Iceberg and the other part in Pandas
-                        val icebergFilter =
-                            IcebergFilter.create(
-                                node.cluster,
-                                node.traitSet,
-                                newInput,
-                                icebergCondition,
-                                node.getCatalogTable(),
-                            )
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
-                        PandasFilter.create(node.cluster, converter, pandasCondition)
-                    }
+                    // val (icebergCondition, pandasCondition) = splitFilterConditions(node)
+                    // if (icebergCondition == null) {
+                    //     // Nothing can be pushed to Iceberg
+                    //     val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
+                    //     PandasFilter.create(node.cluster, converter, pandasCondition!!)
+                    // } else if (pandasCondition == null) {
+                    //     // Everything can be pushed to Iceberg
+                    //     IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition, node.getCatalogTable())
+                    // } else {
+                    //     // Part of the condition is pushable to Iceberg. Here we do the part that can
+                    //     // be pushed in Iceberg and the other part in Pandas
+                    //     val icebergFilter =
+                    //         IcebergFilter.create(
+                    //             node.cluster,
+                    //             node.traitSet,
+                    //             newInput,
+                    //             icebergCondition,
+                    //             node.getCatalogTable(),
+                    //         )
+                    //     val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
+                    //     PandasFilter.create(node.cluster, converter, pandasCondition)
+                    // }
                 }
             }
         }
@@ -192,15 +193,19 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     PandasSort.create(newInput, node.collation, node.offset, node.fetch)
                 }
                 else -> {
-                    IcebergSort.create(
-                        node.cluster,
-                        node.traitSet,
-                        newInput,
-                        node.collation,
-                        node.offset,
-                        node.fetch,
-                        node.getCatalogTable(),
-                    )
+                    // Abort. Current, there is no codegen support for Limit Pushdown
+                    // BSE-2796 Uncomment this and add codegen
+                    node
+
+//                    IcebergSort.create(
+//                        node.cluster,
+//                        node.traitSet,
+//                        newInput,
+//                        node.collation,
+//                        node.offset,
+//                        node.fetch,
+//                        node.getCatalogTable(),
+//                    )
                 }
             }
         }

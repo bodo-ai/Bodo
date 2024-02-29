@@ -1252,7 +1252,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    *
    * @return storage path
    */
-  private String getIcebergBaseURL(String icebergVolume_) {
+  public String getIcebergBaseURL(String icebergVolume_) {
     return getIcebergBaseURLFn.apply(icebergVolume_);
   }
 
