@@ -20,11 +20,11 @@ class SnowflakeRules private constructor() {
         @JvmField
         val SNOWFLAKE_RULES: List<RelOptRule> =
             listOf(
-                TO_PANDAS,
                 SNOWFLAKE_AGGREGATE_RULE,
                 SNOWFLAKE_LIMIT_RULE,
                 SNOWFLAKE_FILTER_RULE,
                 SNOWFLAKE_PROJECT_RULE,
+                TO_PANDAS,
             )
 
         fun rules(): List<RelOptRule> = SNOWFLAKE_RULES

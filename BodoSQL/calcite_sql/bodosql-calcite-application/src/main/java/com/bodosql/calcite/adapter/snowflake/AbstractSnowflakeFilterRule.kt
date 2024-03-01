@@ -1,7 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.adapter.common.FilterSplitUtils
-import com.bodosql.calcite.adapter.common.FilterSplitUtils.Companion.extractPushableConditions
+import com.bodosql.calcite.adapter.common.FilterUtils
+import com.bodosql.calcite.adapter.common.FilterUtils.Companion.extractFilterNodes
+import com.bodosql.calcite.adapter.common.FilterUtils.Companion.extractPushableConditions
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter.Companion.create
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
@@ -29,12 +30,9 @@ import org.immutables.value.Value
 @Value.Enclosing
 abstract class AbstractSnowflakeFilterRule protected constructor(config: Config) :
     RelRule<AbstractSnowflakeFilterRule.Config>(config) {
-        override fun onMatch(call: RelOptRuleCall?) {
-            if (call == null) {
-                return
-            }
+        override fun onMatch(call: RelOptRuleCall) {
             val builder = call.builder()
-            val (filter, rel) = extractNodes(call)
+            val (filter, rel) = extractFilterNodes<SnowflakeRel>(call)
             val catalogTable = rel.getCatalogTable()
 
             // Calculate the subset of the conjunction that is pushable versus the
@@ -59,6 +57,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                         catalogTable,
                     )
                 call.transformTo(newNode)
+                // New plan is absolutely better than old plan.
+                call.planner.prune(filter)
             } else {
                 // If at least 1 condition cannot be pushed, split the filter into
                 // the component that can be pushed and the component that can not be.
@@ -76,22 +76,12 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                 // Create the PandasFilter from the subset that is not pushable.
                 builder.filter(pandasConditions)
                 call.transformTo(builder.build())
+                // New plan is absolutely better than old plan.
+                call.planner.prune(filter)
             }
         }
 
-        private fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
-            return when (call.rels.size) {
-                // Inputs are:
-                // Filter ->
-                //     SnowflakeToPandasConverter ->
-                //         SnowflakeRel
-                3 -> Pair(call.rel(0), call.rel(2))
-                // Inputs are:
-                // Filter ->
-                //     SnowflakeRel
-                else -> Pair(call.rel(0), call.rel(1))
-            }
-        }
+        interface Config : RelRule.Config
 
         companion object {
             private val SUPPORTED_CALLS =
@@ -325,7 +315,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
              */
             @JvmStatic
             fun isPartiallyPushableFilter(filter: Filter): Boolean {
-                return FilterSplitUtils.isPartiallyPushableFilter(filter, ::isPushableCondition)
+                return FilterUtils.isPartiallyPushableFilter(filter, ::isPushableCondition)
             }
 
             /**
@@ -333,9 +323,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
              */
             @JvmStatic
             fun isFullyPushableFilter(filter: Filter): Boolean {
-                return FilterSplitUtils.isFullyPushableFilter(filter, ::isPushableCondition)
+                return FilterUtils.isFullyPushableFilter(filter, ::isPushableCondition)
             }
         }
-
-        interface Config : RelRule.Config
     }

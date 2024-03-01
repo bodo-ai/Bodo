@@ -1,4 +1,4 @@
-package com.bodosql.calcite.adapter.snowflake;
+package com.bodosql.calcite.adapter.iceberg;
 
 import com.bodosql.calcite.adapter.common.LimitUtils;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
@@ -9,26 +9,26 @@ import org.jetbrains.annotations.NotNull;
 
 @BodoSQLStyleImmutable
 @Value.Enclosing
-public class SnowflakeLimitLockRule extends AbstractSnowflakeLimitRule {
-  protected SnowflakeLimitLockRule(@NotNull SnowflakeLimitLockRule.Config config) {
+public class IcebergLimitLockRule extends AbstractIcebergLimitRule {
+  protected IcebergLimitLockRule(@NotNull IcebergLimitLockRule.Config config) {
     super(config);
   }
 
   @Value.Immutable
-  public interface Config extends AbstractSnowflakeLimitRule.Config {
+  public interface Config extends AbstractIcebergLimitRule.Config {
     Config DEFAULT_CONFIG =
-        ImmutableSnowflakeLimitLockRule.Config.of()
+        ImmutableIcebergLimitLockRule.Config.of()
             .withOperandSupplier(
                 b0 ->
                     b0.operand(BodoLogicalSort.class)
                         .predicate(LimitUtils::isOnlyLimit)
-                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
+                        .oneInput(b1 -> b1.operand(IcebergRel.class).anyInputs()))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
-            .as(Config.class);
+            .as(IcebergLimitLockRule.Config.class);
 
     @Override
-    default @NotNull SnowflakeLimitLockRule toRule() {
-      return new SnowflakeLimitLockRule(this);
+    default @NotNull IcebergLimitLockRule toRule() {
+      return new IcebergLimitLockRule(this);
     }
   }
 }
