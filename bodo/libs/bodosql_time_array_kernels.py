@@ -74,6 +74,9 @@ def to_time_util(
     elif is_valid_tz_naive_datetime_arg(arr) or is_valid_tz_aware_datetime_arg(arr):
         scalar_text = "ts = bodo.utils.conversion.box_if_dt64(arg0)\n"
         scalar_text += "res[i] = bodo.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
+    elif is_valid_timestamptz_arg(arr):
+        scalar_text = "ts = arg0.local_timestamp()\n"
+        scalar_text += "res[i] = bodo.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
     else:
         raise_bodo_error(
             "TIME/TO_TIME/TRY_TO_TIME argument must be a string, timestamp, or null"

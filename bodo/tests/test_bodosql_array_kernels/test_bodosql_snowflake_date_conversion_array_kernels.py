@@ -816,6 +816,44 @@ def test_to_time_valid_strings_with_format(
     )
 
 
+@pytest.mark.parametrize("_try", [False, True])
+def test_to_time_timestamptz(_try, memory_leak_check):
+    """
+    Tests to_time kernel with timestamptz input
+    """
+    input_ = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05.123456789"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06.000123000"), 60),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07.000000123"), -60),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), 90),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), -90),
+        ]
+    )
+    answer = np.array(
+        [
+            bodo.Time(3, 4, 5, 123, 456, 789, precision=9),
+            bodo.Time(5, 5, 6, 0, 123, 0, precision=9),
+            bodo.Time(4, 6, 7, 0, 0, 123, precision=9),
+            None,
+            bodo.Time(1, 30, 0, precision=9),
+            bodo.Time(22, 30, 0, precision=9),
+        ]
+    )
+
+    def to_time_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.to_time(val, format, _try=_try)
+
+    check_func(
+        to_time_impl,
+        (input_, None),
+        py_output=answer,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
 @pytest.mark.slow
 def test_to_dates_option(memory_leak_check):
     def impl(A, flag):
@@ -832,6 +870,50 @@ def test_to_dates_option(memory_leak_check):
 
         answer = (fn_output, fn_output)
         check_func(impl, ("2022-02-18", flag), py_output=answer)
+
+
+@pytest.mark.parametrize("_try", [False, True])
+def test_to_date_timestamptz(_try, memory_leak_check):
+    """
+    Tests to_date kernel with timestamptz input
+    """
+    input_ = pd.Series(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 60),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), -60),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), 90),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), -90),
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 23:00:00"), 60),
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 23:00:00"), -60),
+        ]
+    )
+    answer = pd.Series(
+        [
+            pd.Timestamp("2021-01-02").date(),
+            pd.Timestamp("2022-02-03").date(),
+            pd.Timestamp("2023-03-04").date(),
+            None,
+            pd.Timestamp("2024-04-05").date(),
+            pd.Timestamp("2024-04-04").date(),
+            pd.Timestamp("2024-01-02").date(),
+            pd.Timestamp("2024-01-01").date(),
+        ]
+    ).to_numpy()
+
+    def to_time_impl(val, format):
+        if _try:
+            return bodo.libs.bodosql_array_kernels.try_to_date(val, None)
+        return bodo.libs.bodosql_array_kernels.to_date(val, None)
+
+    check_func(
+        to_time_impl,
+        (input_, None),
+        py_output=answer,
+        check_dtype=False,
+        sort_output=False,
+    )
 
 
 @pytest.mark.parametrize(
