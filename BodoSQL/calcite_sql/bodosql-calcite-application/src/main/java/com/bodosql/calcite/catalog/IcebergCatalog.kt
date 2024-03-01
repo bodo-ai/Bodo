@@ -58,6 +58,13 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         return icebergConnection.loadTable(tableIdentifier)
     }
 
+    /**
+     * Load a table's metadata map if it exists for the current snapshot.
+     */
+    private fun loadTableMetadataMap(table: Table): Map<String, String> {
+        return table.currentSnapshot()?.summary() ?: mapOf()
+    }
+
     private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType {
         return when (type.typeId()) {
             Type.TypeID.BOOLEAN -> BodoSQLColumnDataType.BOOL8
@@ -71,6 +78,12 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         }
     }
 
+    /**
+     * Convert an Iceberg File type to its corresponding ColumnDataTypeInfo
+     * used for BodoSQL types.
+     * @param field The Iceberg Field to type.
+     * @return The BodoSQL ColumnDataTypeInfo
+     */
     private fun icebergTypeToTypeInfo(field: NestedField): ColumnDataTypeInfo {
         val dataType = icebergTypeToBodoSQLColumnDataType(field.type())
         val isNullable = field.isOptional
@@ -93,5 +106,21 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         val table = loadIcebergTable(schemaPath, tableName)
         val schema = table.schema()
         return schema.columns().map { BodoSQLColumnImpl(it.name(), it.name(), icebergTypeToTypeInfo(it)) }
+    }
+
+    /**
+     * Estimate the row count for an Iceberg table.
+     * @param schemaPath The schema path to the table.
+     * @param tableName The name of the table.
+     * @return The row count for the iceberg table. If the metadata doesn't exist
+     * we return null.
+     */
+    fun estimateIcebergTableRowCount(
+        schemaPath: ImmutableList<String>,
+        tableName: String,
+    ): Double? {
+        val table = loadIcebergTable(schemaPath, tableName)
+        val metadata = loadTableMetadataMap(table)
+        return metadata["total-records"]?.toDouble()
     }
 }
