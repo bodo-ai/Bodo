@@ -1392,6 +1392,9 @@ def get_pandas_metadata(schema, num_pieces):
         import json
 
         pandas_metadata = json.loads(schema.metadata[key].decode("utf8"))
+        if pandas_metadata is None:
+            return index_col, nullable_from_metadata
+
         n_indices = len(pandas_metadata["index_columns"])
         if n_indices > 1:
             raise BodoError("read_parquet: MultiIndex not supported yet")
@@ -1697,6 +1700,7 @@ from numba.core import cgutils
 from bodo.io import arrow_cpp
 
 ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
+ll.add_symbol("pq_write_create_dir_py_entry", arrow_cpp.pq_write_create_dir_py_entry)
 ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
 
 
@@ -1722,6 +1726,7 @@ def parquet_write_table_cpp(
     convert_timedelta_to_int64,
     timestamp_tz,
     downcast_time_ns_to_us,
+    create_dir,
 ):
     """
     Call C++ parquet write function
@@ -1750,6 +1755,7 @@ def parquet_write_table_cpp(
                 lir.IntType(1),  # convert_timedelta_to_int64
                 lir.IntType(8).as_pointer(),  # tz
                 lir.IntType(1),  # downcast_time_ns_to_us
+                lir.IntType(1),  # create_dir
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -1780,6 +1786,37 @@ def parquet_write_table_cpp(
             types.boolean,  # convert_timedelta_to_int64
             types.voidptr,  # tz
             types.boolean,  # downcast_time_ns_to_us
+            types.boolean,  # create dir
+        ),
+        codegen,
+    )
+
+
+@intrinsic(prefer_literal=True)
+def pq_write_create_dir(
+    typingctx,
+    filename_t,
+):
+    """
+    Call C++ parquet write directory creation function
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="pq_write_create_dir_py_entry"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    return (
+        types.none(
+            types.voidptr,
         ),
         codegen,
     )

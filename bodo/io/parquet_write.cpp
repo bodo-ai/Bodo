@@ -170,6 +170,31 @@ static arrow::Status WriteTable(
 }
 // ----------------------------------------------------------------------------
 
+void pq_write_create_dir_py_entry(const char *_path_name) {
+    try {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        std::string orig_path(_path_name);
+        std::string path_name;
+        std::string dirname;
+        std::string fname;
+        std::shared_ptr<::arrow::io::OutputStream> out_stream;
+        Bodo_Fs::FsEnum fs_option;
+        bool is_parallel = true;
+        const char *prefix = "";
+
+        extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
+                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                            &path_name);
+
+        create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
+                            "parquet");
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
+
 int64_t pq_write(
     const char *_path_name, const std::shared_ptr<table_info> table,
     const std::shared_ptr<array_info> col_names_arr,
@@ -178,7 +203,7 @@ int64_t pq_write(
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
     int64_t row_group_size, const char *prefix, bool convert_timedelta_to_int64,
-    std::string tz, bool downcast_time_ns_to_us,
+    std::string tz, bool downcast_time_ns_to_us, bool create_dir,
     arrow::TimeUnit::type time_unit,
     std::unordered_map<std::string, std::string> schema_metadata_pairs,
     std::string filename, std::shared_ptr<arrow::Schema> expected_schema) {
@@ -245,7 +270,7 @@ int64_t pq_write(
 
     // We need to create a directory when writing a distributed
     // table to a posix or hadoop filesystem.
-    if (is_parallel) {
+    if (is_parallel && create_dir) {
         create_dir_parallel(fs_option, myrank, dirname, path_name, orig_path,
                             "parquet");
     }
@@ -483,7 +508,7 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           const char *idx_name, const char *bucket_region,
                           int64_t row_group_size, const char *prefix,
                           bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us) {
+                          bool downcast_time_ns_to_us, bool create_dir) {
     try {
         int64_t file_size = pq_write(
             _path_name, std::shared_ptr<table_info>(table),
@@ -491,7 +516,7 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
             std::shared_ptr<array_info>(index), write_index, metadata,
             compression, is_parallel, write_rangeindex_to_metadata, ri_start,
             ri_stop, ri_step, idx_name, bucket_region, row_group_size, prefix,
-            convert_timedelta_to_int64, tz, downcast_time_ns_to_us);
+            convert_timedelta_to_int64, tz, downcast_time_ns_to_us, create_dir);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

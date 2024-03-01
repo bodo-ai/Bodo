@@ -72,6 +72,9 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * @param downcast_time_ns_to_us (default False): Is time data required to be
  * written in microseconds? NOTE: this is needed for snowflake write operation.
  * See gen_snowflake_schema comments.
+ * @param create_dir (default true): flag to create directory for Parquet
+ * parallel write if it doesn't exist. Set to false in streaming Parquet write
+ * since the writer init function creates the directory.
  * @returns size of the written file (in bytes)
  */
 int64_t pq_write(
@@ -83,7 +86,7 @@ int64_t pq_write(
     const int ri_step, const char *idx_name, const char *bucket_region,
     int64_t row_group_size, const char *prefix,
     bool convert_timedelta_to_int64 = false, std::string tz = "",
-    bool downcast_time_ns_to_us = false,
+    bool downcast_time_ns_to_us = false, bool create_dir = true,
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     std::unordered_map<std::string, std::string> schema_metadata_pairs = {},
     std::string filename = "",
@@ -98,7 +101,15 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           const char *idx_name, const char *bucket_region,
                           int64_t row_group_size, const char *prefix,
                           bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us);
+                          bool downcast_time_ns_to_us, bool create_dir);
+
+/**
+ * @brief Create a directory for streaming Parquet write if not exists (called
+ * from streaming Parquet writer init function)
+ *
+ * @param _path_name directory path
+ */
+void pq_write_create_dir_py_entry(const char *_path_name);
 
 /**
  * Write the Bodo table (this process' chunk) to a partitioned directory of

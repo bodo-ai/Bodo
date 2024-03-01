@@ -673,6 +673,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                     True,  # Explicitly cast timedelta to int64
                     unicode_to_utf8("UTC"),  # Explicitly set tz='UTC'
                     True,  # Explicitly downcast nanoseconds to microseconds
+                    False,  # Create write directory if not exists
                 )
                 ev_pq_write_cpp.finalize()
                 # In case of Snowflake PUT, upload local parquet to internal stage

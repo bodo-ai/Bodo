@@ -556,16 +556,19 @@ class DistributedPass:
                 )
                 return [assign]
 
-        if fdef == (
-            "snowflake_writer_init",
-            "bodo.io.snowflake_write",
-        ) and self._is_1D_or_1D_Var_arr(lhs):
-            set_last_arg_to_true(self, assign.value)
-            return [assign]
-
-        if fdef == (
-            "iceberg_writer_init",
-            "bodo.io.stream_iceberg_write",
+        if fdef in (
+            (
+                "snowflake_writer_init",
+                "bodo.io.snowflake_write",
+            ),
+            (
+                "iceberg_writer_init",
+                "bodo.io.stream_iceberg_write",
+            ),
+            (
+                "parquet_writer_init",
+                "bodo.io.stream_parquet_write",
+            ),
         ) and self._is_1D_or_1D_Var_arr(lhs):
             set_last_arg_to_true(self, assign.value)
             return [assign]
