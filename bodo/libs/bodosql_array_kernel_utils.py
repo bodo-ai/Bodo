@@ -1172,6 +1172,12 @@ def is_valid_tz_aware_datetime_arg(arg):
     )
 
 
+def is_valid_timestamptz_arg(arg):
+    return arg == bodo.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    )
+
+
 def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a datetime
        (scalar or vector)

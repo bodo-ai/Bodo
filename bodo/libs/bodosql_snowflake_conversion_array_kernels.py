@@ -252,6 +252,10 @@ def create_date_cast_util(func, error_on_fail):
         elif is_valid_datetime_or_date_arg(conversionVal):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).date())\n"
 
+        # If a tz timestamp, extract the date from the local timestamp
+        elif is_valid_timestamptz_arg(conversionVal):
+            scalar_text = f"res[i] = arg0.local_timestamp().date()\n"
+
         else:  # pragma: no cover
             raise raise_bodo_error(
                 f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
