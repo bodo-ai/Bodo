@@ -2,7 +2,6 @@ package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.application.operatorTables.AggOperatorTable
 import com.bodosql.calcite.application.utils.AggHelpers
-import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.rel.core.AggregateCall
@@ -11,7 +10,6 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
-import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
@@ -205,13 +203,9 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        fun tableCreateProperty(
-            schema: Schema,
-            inputRowType: RelDataType,
-        ): BatchingProperty {
-            val canStream = (schema is CatalogSchema) && (schema.dbType.equals("SNOWFLAKE"))
+        fun tableCreateProperty(inputRowType: RelDataType): BatchingProperty {
             val nodeTypes = rowTypeToTypes(inputRowType)
-            return getBatchingProperty(canStream, nodeTypes)
+            return getBatchingProperty(true, nodeTypes)
         }
     }
 }

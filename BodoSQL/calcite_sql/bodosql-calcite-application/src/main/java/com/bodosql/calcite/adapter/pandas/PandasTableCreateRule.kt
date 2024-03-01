@@ -22,14 +22,14 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
     override fun convert(rel: RelNode): RelNode {
         val create = rel as BodoLogicalTableCreate
         val traitSet = rel.traitSet.replace(PandasRel.CONVENTION)
-        return PandasTableCreate(
+        return PandasTableCreate.create(
             rel.cluster,
             traitSet,
             convert(
                 create.input,
                 create.input.traitSet.replace(PandasRel.CONVENTION),
             ),
-            create.schema,
+            create.getSchema(),
             create.tableName,
             create.isReplace,
             create.createTableType,

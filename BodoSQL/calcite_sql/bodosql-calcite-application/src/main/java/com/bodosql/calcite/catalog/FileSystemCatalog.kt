@@ -2,6 +2,9 @@ package com.bodosql.calcite.catalog
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions
 import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.application.write.IcebergWriteTarget
+import com.bodosql.calcite.application.write.WriteTarget
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.schema.CatalogSchema
@@ -10,6 +13,7 @@ import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
@@ -208,7 +212,7 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
         visitor: PandasCodeGenVisitor?,
         varName: Variable?,
         tableName: ImmutableList<String>?,
-        ifExists: BodoSQLCatalog.ifExistsBehavior?,
+        ifExists: IfExistsBehavior,
         createTableType: SqlCreateTable.CreateTableType?,
         meta: SnowflakeCreateTableMetadata?,
     ): Expr {
@@ -247,7 +251,7 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
     override fun generateStreamingWriteInitCode(
         operatorID: Expr.IntegerLiteral,
         tableName: ImmutableList<String>,
-        ifExists: BodoSQLCatalog.ifExistsBehavior,
+        ifExists: IfExistsBehavior,
         createTableType: SqlCreateTable.CreateTableType,
         colNamesGlobal: Variable,
         icebergBase: String,
@@ -279,7 +283,7 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
         iterVarName: Variable?,
         columnPrecisions: Expr?,
         meta: SnowflakeCreateTableMetadata?,
-        ifExists: BodoSQLCatalog.ifExistsBehavior?,
+        ifExists: IfExistsBehavior,
         createTableType: SqlCreateTable.CreateTableType?,
     ): Expr {
         TODO("Not yet implemented")
@@ -430,4 +434,31 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
             return conf
         }
     }
+
+    /**
+     * Return the desired WriteTarget for a create table operation.
+     * Currently, we only allow writing as an Iceberg table.
+     *
+     * @param schema The schemaPath to the table.
+     * @param tableName The name of the type that will be created.
+     * @param createTableType The createTable type.
+     * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+     * @param columnNamesGlobal Global Variable holding the output column names.
+     * @return The selected WriteTarget.
+     */
+    override fun getCreateTableWriteTarget(
+        schema: ImmutableList<String>,
+        tableName: String,
+        createTableType: CreateTableType,
+        ifExistsBehavior: IfExistsBehavior,
+        columnNamesGlobal: Variable,
+    ): WriteTarget =
+        IcebergWriteTarget(
+            tableName,
+            schema,
+            createTableType,
+            ifExistsBehavior,
+            columnNamesGlobal,
+            rootPath.joinToString(separator = "/"),
+        )
 }
