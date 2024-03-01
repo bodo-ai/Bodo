@@ -1,5 +1,7 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.iceberg.IcebergFilterLockRule
+import com.bodosql.calcite.adapter.iceberg.IcebergLimitLockRule
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
@@ -638,19 +640,36 @@ object BodoRules {
         SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
+     * Converts a PandasFilter to an IcebergFilter if it is located directly on top of a
+     * IcebergRel.
+     */
+    @JvmField
+    val ICEBERG_FILTER_LOCK_RULE: RelOptRule =
+        IcebergFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
+    /**
      * Converts a BodoLogicalProject to a SnowflakeProject if it is located directly on top of a
      * SnowflakeRel.
      */
+    @JvmField
     val SNOWFLAKE_PROJECT_LOCK_RULE: RelOptRule =
         SnowflakeProjectLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
-     * Converts a BodoLogicalSort with only limit to a SnowflakeFilter if it is located directly on top of a
+     * Converts a BodoLogicalSort with only limit to a SnowflakeLimit if it is located directly on top of a
      * SnowflakeRel.
      */
     @JvmField
     val SNOWFLAKE_LIMIT_LOCK_RULE: RelOptRule =
         SnowflakeLimitLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
+    /**
+     * Converts a BodoLogicalSort with only limit to a IcebergLimit if it is located directly on top of a
+     * SnowflakeRel.
+     */
+    @JvmField
+    val ICEBERG_LIMIT_LOCK_RULE: RelOptRule =
+        IcebergLimitLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
      * Merge two UNION operators together into a single UNION operator.
@@ -938,10 +957,12 @@ object BodoRules {
             // Process for inserting new filters to push
             JOIN_PUSH_TRANSITIVE_PREDICATES,
             JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
-            // Locking in any filters that can become SnowflakeFilter
+            // Locking in any filters
             SNOWFLAKE_FILTER_LOCK_RULE,
-            // Locking in any Limit pushdown
+            ICEBERG_FILTER_LOCK_RULE,
+            // Locking in any limits
             SNOWFLAKE_LIMIT_LOCK_RULE,
+            ICEBERG_LIMIT_LOCK_RULE,
         )
 
     /**

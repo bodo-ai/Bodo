@@ -19,10 +19,7 @@ import org.immutables.value.Value
 @Value.Enclosing
 abstract class AbstractSnowflakeProjectIntoScanRule protected constructor(config: Config) :
     RelRule<AbstractSnowflakeProjectIntoScanRule.Config>(config) {
-        override fun onMatch(call: RelOptRuleCall?) {
-            if (call == null) {
-                return
-            }
+        override fun onMatch(call: RelOptRuleCall) {
             val (proj, tableScan) = extractNodes(call)
             // Update the used columns in the table scan.
             val usedColumns = InputFinder.bits(proj.projects, null)
@@ -59,6 +56,8 @@ abstract class AbstractSnowflakeProjectIntoScanRule protected constructor(config
             } else {
                 call.transformTo(newProject)
             }
+            // New plan is absolutely better than old plan.
+            call.planner.prune(proj)
         }
 
         private fun extractNodes(call: RelOptRuleCall): Pair<Project, SnowflakeTableScan> {

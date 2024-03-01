@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.common
 
+import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rex.RexBuilder
@@ -9,11 +10,28 @@ import java.util.function.Predicate
 
 /**
  * Common utilities for converting a Filter from logical to a convention
- * (or across conventions) by splitting a filter into a component supported
- * in the new convention and those that cannot be pushed down.
+ * (or across conventions).
  */
-class FilterSplitUtils {
+class FilterUtils private constructor() {
     companion object {
+        /**
+         * Extract the nodes for standard Filter conversion rules.
+         */
+        @JvmStatic
+        fun <E> extractFilterNodes(call: RelOptRuleCall): Pair<Filter, E> {
+            return when (call.rels.size) {
+                // Inputs are:
+                // Filter ->
+                //     XXXToPandasConverter ->
+                //         XXXRel
+                3 -> Pair(call.rel(0), call.rel(2))
+                // Inputs are:
+                // Filter ->
+                //     XXXRel
+                else -> Pair(call.rel(0), call.rel(1))
+            }
+        }
+
         /**
          * @param condition The conditions to a filter that are being checked to see if it is a
          * conjunction of conditions that can be partially pushed into a target convention.

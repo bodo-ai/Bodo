@@ -29,6 +29,8 @@ import kotlin.io.path.name
  * The current version of this class is just written to work on a local directory
  * and needs to be refactored to be more general, especially to use a connection string
  * and a properly configurable FileSystem.
+ *
+ * Note: Hardcoding HadoopCatalog will likely change in the future to be more abstract/robust.
  */
 class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configuration(), unixRoot)) {
     private val rootPath: Path
@@ -365,6 +367,6 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
      * @return The connection string
      */
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
-        TODO("Not yet implemented")
+        return rootPath.toString()
     }
 }

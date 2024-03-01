@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake;
 
+import com.bodosql.calcite.adapter.common.LimitUtils;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import org.apache.calcite.rel.core.Sort;
 import org.immutables.value.Value;
@@ -19,7 +20,7 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
             .withOperandSupplier(
                 b0 ->
                     b0.operand(Sort.class)
-                        .predicate(SnowflakeLimitRule::isOnlyLimit)
+                        .predicate(LimitUtils::isOnlyLimit)
                         .oneInput(
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
