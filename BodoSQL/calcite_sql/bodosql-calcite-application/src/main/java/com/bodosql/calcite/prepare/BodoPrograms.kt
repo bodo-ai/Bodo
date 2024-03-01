@@ -2,8 +2,6 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.pandas.PandasWindow
-import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
-import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoSubQueryRemaining
@@ -43,7 +41,6 @@ import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
-import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.logical.LogicalAggregate
 import org.apache.calcite.rel.logical.LogicalFilter
 import org.apache.calcite.rel.logical.LogicalJoin
@@ -75,10 +72,7 @@ object BodoPrograms {
      */
     fun standard(optimize: Boolean = true): Program =
         Programs.sequence(
-            // When the HepStandardProgram is removed entirely, we would add the
-            // convention when the SnowflakeTableScan is created instead of here.
             TrimFieldsProgram(false),
-            SnowflakeTraitAdder(),
             SnowflakeColumnPruning(),
             // CSE step. Several sections of the parsing calcite integration support may
             // involve directly copying compute when aliases need to be inserted. Depending
@@ -611,21 +605,6 @@ object BodoPrograms {
         ): RelNode {
             val builder = com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
             return rel.accept(Visitor(builder))
-        }
-    }
-
-    /**
-     * Adds SnowflakeRel.CONVENTION to any SnowflakeTableScan nodes.
-     * See the comment in SnowflakeTableScan about why this is needed.
-     */
-    class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
-        private object Visitor : RelShuttleImpl() {
-            override fun visit(scan: TableScan): RelNode {
-                return when (scan) {
-                    is SnowflakeTableScan -> scan.copy(scan.traitSet.replace(SnowflakeRel.CONVENTION), scan.inputs)
-                    else -> super.visit(scan)
-                }
-            }
         }
     }
 
