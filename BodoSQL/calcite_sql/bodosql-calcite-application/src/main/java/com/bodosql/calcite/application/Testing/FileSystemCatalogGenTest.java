@@ -17,7 +17,7 @@ import org.apache.calcite.rel.RelRoot;
 public class FileSystemCatalogGenTest {
   public static void main(String[] args) throws Exception {
     String sql =
-        "select A from LEVEL_1.LEVEL_2.SIMPLE_BOOL_BINARY_TABLE where B IS NOT NULL limit 10";
+        "select A from \"iceberg_db\".LEVEL_1.SIMPLE_NUMERIC_TABLE where B IS NOT NULL limit 10";
     Map envVars = System.getenv();
     BodoSQLCatalog catalog = new FileSystemCatalog((String) envVars.get("ROOT_PATH"));
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");

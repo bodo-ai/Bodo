@@ -10,7 +10,6 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
-import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -114,14 +113,14 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
             Expr.List(
                 flattenIcebergTree(input as IcebergRel).map { v -> StringLiteral(v) },
             )
-        val databaseName = getDatabaseName(relInput)
-        val schemaName = getSchemaName(relInput)
+        val schemaPath = getSchemaPath(relInput)
 
         val args =
             listOf(
                 StringLiteral(getTableName(relInput)),
-                StringLiteral("iceberg+" + relInput.generatePythonConnStr(ImmutableList.of(getDatabaseName(relInput), ""))),
-                StringLiteral("$databaseName.$schemaName"),
+                // TODO: Replace with an implementation for the IcebergCatalog
+                StringLiteral("iceberg+" + relInput.generatePythonConnStr(schemaPath)),
+                StringLiteral(schemaPath.joinToString(separator = ".")),
             )
         val namedArgs =
             listOf(
@@ -181,9 +180,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
 
     private fun getTableName(input: IcebergRel) = input.getCatalogTable().name
 
-    private fun getSchemaName(input: IcebergRel) = input.getCatalogTable().fullPath[1]
-
-    private fun getDatabaseName(input: IcebergRel) = input.getCatalogTable().fullPath[0]
+    private fun getSchemaPath(input: IcebergRel) = input.getCatalogTable().parentFullPath
 
     /**
      * Generate the argument that will be passed for '_bodo_chunksize' in a read_sql call. If
