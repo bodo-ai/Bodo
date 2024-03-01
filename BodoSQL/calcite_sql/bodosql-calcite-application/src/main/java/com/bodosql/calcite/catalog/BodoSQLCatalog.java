@@ -1,7 +1,10 @@
 package com.bodosql.calcite.catalog;
 
+import static com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
@@ -15,30 +18,11 @@ import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 
+/**
+ * See the design described on Confluence:
+ * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Catalog
+ */
 public interface BodoSQLCatalog {
-  /**
-   * See the design described on Confluence:
-   * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Catalog
-   */
-
-  /** Enum describing the write behavior when the table already exists. */
-  enum ifExistsBehavior {
-    REPLACE,
-    APPEND,
-    FAIL;
-
-    public String asToSqlKwArgument() {
-      switch (this) {
-        case REPLACE:
-          return "replace";
-        case FAIL:
-          return "fail";
-        case APPEND:
-          return "append";
-      }
-      throw new RuntimeException("Reached Unreachable code in toToSqlKwArgument");
-    }
-  }
 
   /**
    * Returns a set of all table names with the given schema name.
@@ -130,7 +114,7 @@ public interface BodoSQLCatalog {
       PandasCodeGenVisitor visitor,
       Variable varName,
       ImmutableList<String> tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       SnowflakeCreateTableMetadata meta);
 
@@ -162,7 +146,7 @@ public interface BodoSQLCatalog {
   Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
       ImmutableList<String> tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Variable colNamesGlobal,
       String icebergBase);
@@ -191,7 +175,7 @@ public interface BodoSQLCatalog {
       Variable iterVarName,
       Expr columnPrecisions,
       SnowflakeCreateTableMetadata meta,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType);
 
   /**
@@ -302,4 +286,24 @@ public interface BodoSQLCatalog {
    * @return The connection string
    */
   String generatePythonConnStr(ImmutableList<String> schemaPath);
+
+  /**
+   * Return the desired WriteTarget for a create table operation. We provide both creation details
+   * and the desired target as these may influence the WriteTarget or modify the selected
+   * WriteTarget. For example, a catalog may have feature gaps for its preferred WriteTable which
+   * may prompt selecting a different WriteTable.
+   *
+   * @param schema The schemaPath to the table.
+   * @param tableName The name of the type that will be created.
+   * @param createTableType The createTable type.
+   * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+   * @param columnNamesGlobal Global Variable holding the output column names.
+   * @return The selected WriteTarget.
+   */
+  WriteTarget getCreateTableWriteTarget(
+      ImmutableList<String> schema,
+      String tableName,
+      SqlCreateTable.CreateTableType createTableType,
+      IfExistsBehavior ifExistsBehavior,
+      Variable columnNamesGlobal);
 }

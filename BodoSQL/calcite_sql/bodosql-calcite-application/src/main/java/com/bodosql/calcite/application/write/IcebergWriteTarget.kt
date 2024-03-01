@@ -1,0 +1,71 @@
+package com.bodosql.calcite.application.write
+
+import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.google.common.collect.ImmutableList
+import org.apache.calcite.sql.ddl.SqlCreateTable
+
+/**
+ * A WriteTarget implementation for writing to an Iceberg table.
+ */
+open class IcebergWriteTarget(
+    tableName: String,
+    schema: ImmutableList<String>,
+    createTableType: SqlCreateTable.CreateTableType,
+    ifExistsBehavior: IfExistsBehavior,
+    columnNamesGlobal: Variable,
+    protected val icebergPath: String,
+) : WriteTarget(tableName, schema, createTableType, ifExistsBehavior, columnNamesGlobal) {
+    protected val icebergConnectionString = pathToIcebergConnectionString(icebergPath)
+
+    private fun pathToIcebergConnectionString(path: String): String {
+        return "iceberg+$path"
+    }
+
+    /**
+     * Initialize the streaming create table state information for an Iceberg Table.
+     * @param operatorID The operatorID used for tracking memory allocation.
+     * @return A code generation expression for initializing the table.
+     */
+    override fun streamingCreateTableInit(operatorID: Expr.IntegerLiteral): Expr {
+        return Expr.Call(
+            "bodo.io.stream_iceberg_write.iceberg_writer_init",
+            operatorID,
+            Expr.StringLiteral(icebergConnectionString),
+            Expr.StringLiteral(tableName),
+            Expr.StringLiteral(schema.joinToString(separator = ".")),
+            columnNamesGlobal,
+            Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
+        )
+    }
+
+    /**
+     * Implement append to an Iceberg table.
+     * @param visitor The PandasCodeGenVisitor used to lower globals. This is unused
+     * by this implementation. (TODO: REMOVE)
+     * @param stateVar The variable for the write state.
+     * @param tableVar The variable for the current table chunk we want to write.
+     * @param isLastVar The variable tracking if this is the last iteration.
+     * @param iterVar The variable tracking what iteration we are on.
+     * @param columnPrecisions Expression containing any column precisions for create
+     * table information. This is unused by this implementation. TODO: Move to init.
+     * @param meta Expression containing the metadata information for init table information.
+     * This is unused by this implementation. TODO: Move to init.
+     * @return The write expression call.
+     *
+     */
+    override fun streamingWriteAppend(
+        visitor: PandasCodeGenVisitor,
+        stateVar: Variable,
+        tableVar: Variable,
+        isLastVar: Variable,
+        iterVar: Variable,
+        columnPrecisions: Expr,
+        meta: SnowflakeCreateTableMetadata,
+    ): Expr {
+        val args = listOf(stateVar, tableVar, columnNamesGlobal, isLastVar, iterVar)
+        return Expr.Call("bodo.io.stream_iceberg_write.iceberg_writer_append_table", args)
+    }
+}

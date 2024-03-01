@@ -1,6 +1,8 @@
 package com.bodosql.calcite.schema;
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.write.WriteTarget;
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -199,51 +201,11 @@ public class CatalogSchema extends BodoSqlSchema {
       PandasCodeGenVisitor visitor,
       Variable varName,
       String tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       SnowflakeCreateTableMetadata meta) {
     return this.catalog.generateWriteCode(
         visitor, varName, createTablePath(tableName), ifExists, createTableType, meta);
-  }
-
-  public Expr generateStreamingWriteInitCode(
-      Expr.IntegerLiteral operatorID,
-      String tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType,
-      Variable colNamesGlobal,
-      String icebergBase) {
-    return this.catalog.generateStreamingWriteInitCode(
-        operatorID,
-        createTablePath(tableName),
-        ifExists,
-        createTableType,
-        colNamesGlobal,
-        icebergBase);
-  }
-
-  public Expr generateStreamingWriteAppendCode(
-      PandasCodeGenVisitor visitor,
-      Variable stateVarName,
-      Variable tableVarName,
-      Variable colNamesGlobal,
-      Variable isLastVarName,
-      Variable iterVarName,
-      Expr columnPrecision,
-      SnowflakeCreateTableMetadata meta,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
-    return this.catalog.generateStreamingWriteAppendCode(
-        visitor,
-        stateVarName,
-        tableVarName,
-        colNamesGlobal,
-        isLastVarName,
-        iterVarName,
-        columnPrecision,
-        meta,
-        ifExists,
-        createTableType);
   }
 
   /** @return The catalog for the schema. */
@@ -258,5 +220,26 @@ public class CatalogSchema extends BodoSqlSchema {
    */
   public String getDBType() {
     return catalog.getDBType();
+  }
+
+  /**
+   * Return the desired WriteTarget for a create table operation based on the provided catalog. Each
+   * catalog may opt of a different write target based on the creation details and the desired
+   * table. For example, if we are replacing a table a catalog could opt to keep the table type the
+   * same or a catalog could have restrictions based on the type of create attempted.
+   *
+   * @param tableName The name of the type that will be created.
+   * @param createTableType The createTable type.
+   * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+   * @param columnNamesGlobal Global Variable holding the output column names.
+   * @return The selected write target.
+   */
+  public WriteTarget getCreateTableWriteTarget(
+      String tableName,
+      SqlCreateTable.CreateTableType createTableType,
+      IfExistsBehavior ifExistsBehavior,
+      Variable columnNamesGlobal) {
+    return catalog.getCreateTableWriteTarget(
+        getFullPath(), tableName, createTableType, ifExistsBehavior, columnNamesGlobal);
   }
 }

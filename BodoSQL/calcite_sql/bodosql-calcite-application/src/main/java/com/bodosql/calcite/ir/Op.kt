@@ -171,4 +171,13 @@ interface Op {
             doc.write("continue")
         }
     }
+
+    /**
+     * Implementation of OP that does nothing including code generation.
+     * This is not appropriate for a section where an OP logically belongs,
+     * but can be used to represent an "optional" OP.
+     */
+    object NoOp : Op {
+        override fun emit(doc: Doc) {}
+    }
 }

@@ -6,7 +6,7 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
-import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
@@ -243,7 +243,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       Variable iterVarName,
       Expr columnPrecisions,
       SnowflakeCreateTableMetadata meta,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType);
 
   /**
