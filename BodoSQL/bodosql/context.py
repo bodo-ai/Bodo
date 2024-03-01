@@ -47,22 +47,26 @@ class SqlTypeEnum(Enum):
     UInt64 = 8
     Float32 = 9
     Float64 = 10
-    Bool = 11
-    Date = 12
-    Time = 13
-    Datetime = 14
-    TZ_AWARE_TIMESTAMP = 15
-    Timedelta = 16
-    DateOffset = 17
-    String = 18
-    Binary = 19
-    Categorical = 20
-    # Note Array, Object, and Variant are currently unused
+    # Note: This is only used for General Iceberg and isn't used for
+    # decimal arrays yet.
+    Decimal = 11
+    Bool = 12
+    Date = 13
+    Time = 14
+    Datetime = 15
+    TZ_AWARE_TIMESTAMP = 16
+    Timedelta = 17
+    DateOffset = 18
+    String = 19
+    Binary = 20
+    Categorical = 21
+    # Note Array, Object, Struct, and Variant are currently unused
     # on the Python side but this enum is updated to be consistent.
-    Array = 21
-    Json_Object = 22
-    Variant = 23
-    Unsupported = 24
+    Array = 22
+    Json_Object = 23
+    Struct = 24
+    Variant = 25
+    Unsupported = 26
 
 
 # Scalar dtypes for supported Bodo Arrays

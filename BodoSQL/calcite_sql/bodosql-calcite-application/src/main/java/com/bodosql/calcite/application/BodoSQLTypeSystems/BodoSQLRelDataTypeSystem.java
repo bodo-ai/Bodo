@@ -17,7 +17,6 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   // Added it here for simplicity.
   // TODO (HA): update with other default tickets.
   public static final int MAX_DATETIME_PRECISION = 9;
-
   /*
   WEEK_START parameter that determines which weekday a week starts with.
   We follow Snowflake behavior, mapping 0 and 1 to Monday (default), and
