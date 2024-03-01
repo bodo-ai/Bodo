@@ -78,7 +78,9 @@ int64_t pq_write_py_entry(const char* _path_name, table_info* table,
                           const char* idx_name, const char* bucket_region,
                           int64_t row_group_size, const char* prefix,
                           bool convert_timedelta_to_int64, const char* tz,
-                          bool downcast_time_ns_to_us);
+                          bool downcast_time_ns_to_us, bool create_dir);
+
+void pq_write_create_dir_py_entry(const char* _path_name);
 
 void pq_write_partitioned_py_entry(
     const char* _path_name, table_info* in_table, array_info* in_col_names_arr,
@@ -109,6 +111,7 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     SetAttrStringFromVoidPtr(m, iceberg_pq_reader_init_py_entry);
 
     SetAttrStringFromVoidPtr(m, pq_write_py_entry);
+    SetAttrStringFromVoidPtr(m, pq_write_create_dir_py_entry);
     SetAttrStringFromVoidPtr(m, iceberg_pq_write_py_entry);
     SetAttrStringFromVoidPtr(m, pq_write_partitioned_py_entry);
     SetAttrStringFromVoidPtr(m, snowflake_read_py_entry);

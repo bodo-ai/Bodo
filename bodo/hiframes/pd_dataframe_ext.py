@@ -4104,7 +4104,8 @@ def to_parquet_overload(
         func_text += (
             "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
         )
-        func_text += "                              False)\n"  # downcast_time_ns_to_us
+        func_text += "                              False,\n"  # downcast_time_ns_to_us
+        func_text += "                              True)\n"  # create_dir
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -4122,7 +4123,8 @@ def to_parquet_overload(
         func_text += (
             "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
         )
-        func_text += "                              False)\n"  # downcast_time_ns_to_us
+        func_text += "                              False,\n"  # downcast_time_ns_to_us
+        func_text += "                              True)\n"  # create_dir
 
     loc_vars = {}
     if df.has_runtime_cols:
@@ -4630,6 +4632,7 @@ def to_sql_overload(
         "                True,\n"  # Explicitly cast timedelta to int64 in the bodo_array_to_arrow step (convert_timedelta_to_int64)
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
         "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
+        "                True,\n"  # Create directory
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
