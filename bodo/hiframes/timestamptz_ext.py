@@ -63,13 +63,12 @@ class TimestampTZ:
     def __repr__(self):
         # If this representation changes, make sure to update GetColumn_as_ListString as well
         offset_sign = "+" if self.offset_minutes >= 0 else "-"
-        # TODO: Add leading 0s
         offset_hrs = abs(self.offset_minutes) // 60
         offset_min = abs(self.offset_minutes) % 60
+        offset_str = f"{offset_sign}{offset_hrs:02}:{offset_min:02}"
+
         # TODO: Convert the utc_timestamp to the local timestamp.
-        return (
-            f"TimestampTZ({self.utc_timestamp}, {offset_sign}{offset_hrs}:{offset_min})"
-        )
+        return f"TimestampTZ({self.local_timestamp()}, {offset_str})"
 
     @property
     def utc_timestamp(self):
@@ -78,6 +77,9 @@ class TimestampTZ:
     @property
     def offset_minutes(self):
         return self._offset_minutes
+
+    def local_timestamp(self):
+        return self.utc_timestamp + pd.Timedelta(minutes=self.offset_minutes)
 
     def __str__(self):
         return self.__repr__()
@@ -215,6 +217,13 @@ def overload_timestamptz(utc_timestamp, offset_minutes):
         return init_timestamptz(utc_timestamp, offset_minutes)
 
     return impl
+
+
+@overload_method(TimestampTZType, "local_timestamp")
+def overload_timestamptz_local_timestamp(A):
+    return lambda A: A.utc_timestamp + pd.Timedelta(
+        minutes=A.offset_minutes
+    )  # pragma: no cover
 
 
 class TimestampTZArrayType(types.IterableType, types.ArrayCompatible):
