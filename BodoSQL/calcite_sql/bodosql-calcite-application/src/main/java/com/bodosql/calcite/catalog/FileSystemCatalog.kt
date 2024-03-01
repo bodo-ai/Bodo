@@ -11,11 +11,12 @@ import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 import org.apache.iceberg.hadoop.HadoopCatalog
-import java.nio.file.FileSystems
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.io.path.name
+import org.apache.iceberg.hadoop.Util
+import org.apache.iceberg.util.LocationUtil
+import java.io.FileNotFoundException
 
 /**
  * Implementation of a BodoSQLCatalog catalog for a filesystem catalog implementation.
@@ -26,21 +27,12 @@ import kotlin.io.path.name
  * connection string, but certain file systems may require additional dependencies
  * which may be more suitable for subclasses.
  *
- * The current version of this class is just written to work on a local directory
- * and needs to be refactored to be more general, especially to use a connection string
- * and a properly configurable FileSystem.
+ * Generating code for iceberg tables has been manually tested locally and on s3
  *
  * Note: Hardcoding HadoopCatalog will likely change in the future to be more abstract/robust.
  */
-class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configuration(), unixRoot)) {
-    private val rootPath: Path
-
-    init {
-        rootPath = FileSystems.getDefault().getPath(unixRoot)
-        if (!Files.isDirectory(rootPath)) {
-            throw RuntimeException("FileSystemCatalog Error: Root Path provided is not a valid directory.")
-        }
-    }
+class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(connStr)) {
+    private val fs = createFileSystem(connStr)
 
     /**
      * Convert a given schemaPath which is a list of components to the
@@ -50,7 +42,7 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
      * of the location.
      */
     private fun schemaPathToFilePath(schemaPath: ImmutableList<String>): Path {
-        return rootPath.resolve(schemaPath.joinToString(separator = "/"))
+        return if (schemaPath.size != 0) fs.resolvePath(Path(schemaPath.joinToString(separator = "/"))) else fs.workingDirectory
     }
 
     /**
@@ -65,17 +57,11 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
         schemaPath: ImmutableList<String>,
         tableName: String,
     ): Path {
-        return schemaPathToFilePath(schemaPath).resolve(tableName)
+        return Path(schemaPathToFilePath(schemaPath), Path(tableName))
     }
 
     private fun getDirectoryContents(path: Path): List<Path> {
-        val result: MutableList<Path> = ArrayList()
-        Files.newDirectoryStream(path).use { stream ->
-            for (entry in stream) {
-                result.add(entry)
-            }
-        }
-        return result.toList()
+        return fs.listStatus(path).map { it.path }
     }
 
     /**
@@ -85,7 +71,7 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
      * @return Is this path referring to a schema?
      */
     private fun isSchema(path: Path): Boolean {
-        return !isTable(path) && Files.isDirectory(path)
+        return !isTable(path) && fs.getFileStatus(path).isDirectory
     }
 
     /**
@@ -109,11 +95,17 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
      * @return Is this path referring to an Iceberg table?
      */
     private fun isIcebergTable(path: Path): Boolean {
-        return if (!Files.isDirectory(path)) {
+        return if (!fs.getFileStatus(path).isDirectory) {
             false
         } else {
-            val metadataPath = path.resolve("metadata")
-            return Files.exists(metadataPath) && Files.isDirectory(metadataPath)
+            val metadataPath = Path(path, Path("metadata"))
+            val metadataStatus =
+                try {
+                    fs.getFileStatus(metadataPath)
+                } catch (e: FileNotFoundException) {
+                    null
+                }
+            return metadataStatus?.isDirectory ?: false
         }
     }
 
@@ -367,6 +359,75 @@ class FileSystemCatalog(unixRoot: String) : IcebergCatalog(HadoopCatalog(Configu
      * @return The connection string
      */
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
-        return rootPath.toString()
+        return fs.workingDirectory.toString()
+    }
+
+    /**
+     *  Create a FileSystem object from the given connection string.
+     *  @param connStr The connection string to the file system.
+     *  @return The file system object.
+     */
+    private fun createFileSystem(connStr: String): FileSystem {
+        val updatedConnStr = updateConnStr(connStr)
+        val conf = createConf()
+
+        val fs =
+            Util.getFs(
+                Path(LocationUtil.stripTrailingSlash(updatedConnStr)),
+                conf,
+            )
+        val rootPath = Path(updatedConnStr)
+        fs.workingDirectory = rootPath
+        if (!fs.getFileStatus(rootPath).isDirectory) {
+            throw RuntimeException("FileSystemCatalog Error: Root Path provided is not a valid directory.")
+        }
+        return fs
+    }
+
+    companion object {
+        /**
+         * Create a HadoopCatalog object from the given connection string.
+         * @param connStr The connection string to the file system.
+         * @return The HadoopCatalog object.
+         */
+        @JvmStatic
+        private fun createHadoopCatalog(connStr: String): HadoopCatalog {
+            val updatedConnStr = updateConnStr(connStr)
+            val conf = createConf()
+            return HadoopCatalog(conf, updatedConnStr)
+        }
+
+        /**
+         * Update the connection string to be compatible with Hadoop.
+         * @param connStr The connection string to the file system.
+         * @return The updated connection string.
+         */
+        @JvmStatic
+        private fun updateConnStr(connStr: String): String {
+            if (connStr.isEmpty()) {
+                throw RuntimeException("FileSystemCatalog Error: Connection string must be provided.")
+            }
+            // Hadoop wants s3a:// instead of s3://
+            return if (connStr.startsWith("s3://")) connStr.replace("s3://", "s3a://") else connStr
+        }
+
+        /**
+         * Create a Configuration object additional AWS authentication providers enabled.
+         * @return The Configuration object.
+         */
+        @JvmStatic
+        private fun createConf(): Configuration {
+            val conf = Configuration()
+            // This is to add the Profile credential provider which for some reason isn't used by default
+            conf.set(
+                "fs.s3a.aws.credentials.provider",
+                "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider," +
+                    "com.amazonaws.auth.EnvironmentVariableCredentialsProvider," +
+                    "com.amazonaws.auth.profile.ProfileCredentialsProvider," +
+                    "com.amazonaws.auth.InstanceProfileCredentialsProvider," +
+                    "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider",
+            )
+            return conf
+        }
     }
 }
