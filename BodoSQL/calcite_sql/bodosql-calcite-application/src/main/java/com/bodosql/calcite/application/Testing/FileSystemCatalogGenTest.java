@@ -16,8 +16,7 @@ import org.apache.calcite.rel.RelRoot;
 /** Class for locally testing codegen using a FileSystem Catalog */
 public class FileSystemCatalogGenTest {
   public static void main(String[] args) throws Exception {
-    String sql =
-        "select A from \"iceberg_db\".LEVEL_1.SIMPLE_NUMERIC_TABLE where B IS NOT NULL limit 10";
+    String sql = "select * from LEVEL_1.LEVEL_2.ISAAC_TEST";
     Map envVars = System.getenv();
     BodoSQLCatalog catalog = new FileSystemCatalog((String) envVars.get("ROOT_PATH"));
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
