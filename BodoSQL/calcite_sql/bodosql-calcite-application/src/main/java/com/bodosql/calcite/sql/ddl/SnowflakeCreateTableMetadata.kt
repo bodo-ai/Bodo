@@ -1,5 +1,6 @@
 package com.bodosql.calcite.sql.ddl
 
+import com.bodosql.calcite.ir.Expr
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
@@ -34,5 +35,26 @@ class SnowflakeCreateTableMetadata() {
                     null
                 }
             }
+    }
+
+    fun emitCtasExpr(): Expr {
+        val ctasMetaKwargs: MutableList<Pair<String, Expr>> = ArrayList()
+        if (tableComment != null) {
+            val tableCommentExpr: Expr = Expr.StringLiteral(tableComment!!)
+            ctasMetaKwargs.add(Pair("table_comments", tableCommentExpr))
+        }
+        if (columnComments != null) {
+            val columnCommentExprs: MutableList<Expr> = ArrayList()
+            for (columnComment in columnComments!!) {
+                if (columnComment == null) {
+                    columnCommentExprs.add(Expr.None)
+                } else {
+                    columnCommentExprs.add(Expr.StringLiteral(columnComment))
+                }
+            }
+            val columnCommentTuple: Expr = Expr.Tuple(columnCommentExprs)
+            ctasMetaKwargs.add(Pair("column_comments", columnCommentTuple))
+        }
+        return Expr.Call("bodo.utils.typing.SnowflakeCreateTableMetaType", listOf(), ctasMetaKwargs)
     }
 }

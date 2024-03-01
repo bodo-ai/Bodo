@@ -4,12 +4,15 @@ import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
@@ -128,7 +131,7 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
       Variable iterVarName,
       Expr columnPrecisions,
       SnowflakeCreateTableMetadata meta,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     return catalog.generateStreamingWriteAppendCode(
         visitor,

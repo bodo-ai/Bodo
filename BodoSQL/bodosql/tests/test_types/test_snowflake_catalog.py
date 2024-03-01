@@ -1498,7 +1498,7 @@ def test_snowflake_catalog_create_table_orderby_with():
     # so I included a smaller test that runs on PR CI to catch potential regressions earlier.
     with pytest.raises(
         BodoError,
-        match=".*CREATE TABLE is only supported for Snowflake Catalog Schemas.*",
+        match=".*BodoSQL only supports create table with Catalog Schemas.*",
     ):
         bodo_impl(bc, ctas_query)
 

@@ -52,8 +52,8 @@ import com.bodosql.calcite.adapter.pandas.StreamingRexToPandasTranslator;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.application.utils.RelationalOperatorCache;
-import com.bodosql.calcite.catalog.BodoSQLCatalog;
-import com.bodosql.calcite.catalog.SnowflakeCatalog;
+import com.bodosql.calcite.application.write.WriteTarget;
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
@@ -76,12 +76,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Stack;
-import java.util.UUID;
 import java.util.function.Supplier;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import kotlin.jvm.functions.Function2;
-import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -98,7 +96,6 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
@@ -973,7 +970,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void genSingleBatchTableCreate(
       PandasTableCreate node,
       CatalogSchema outputSchemaAsCatalog,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     BuildContext ctx = new BuildContext(node);
     singleBatchTimer(
@@ -992,15 +989,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Generate Code for Streaming CREATE TABLE
    *
    * @param node Create Table Node that Code is Generated For
-   * @param outputSchemaAsCatalog Catalog of Output Table
+   * @param schema Catalog of Output Table
    * @param ifExists Action if Table Already Exists
    * @param createTableType Type of Table to Create
    * @param columnPrecisions Name of the metatype tuple storing the precision of each column.
    */
   public void genStreamingTableCreate(
       PandasTableCreate node,
-      CatalogSchema outputSchemaAsCatalog,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      CatalogSchema schema,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Expr columnPrecisions) {
     // Generate Streaming Code in this case
@@ -1031,23 +1028,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
     Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
 
-    // Generate storage base address to write Iceberg data in Snowflake volume
-    String icebergBase = "bodo_write_temp/" + node.getTableName() + "_" + UUID.randomUUID();
+    // Generate write destination information.
+    WriteTarget writeTarget =
+        schema.getCreateTableWriteTarget(
+            node.getTableName(), createTableType, ifExists, colNamesGlobal);
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer();
-    Expr writeInitCode =
-        outputSchemaAsCatalog.generateStreamingWriteInitCode(
-            new Expr.IntegerLiteral(operatorID),
-            node.getTableName(),
-            ifExists,
-            createTableType,
-            colNamesGlobal,
-            icebergBase);
+    Expr writeState = writeTarget.streamingCreateTableInit(new Expr.IntegerLiteral(operatorID));
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
-        new Op.Assign(writerVar, writeInitCode),
+        new Op.Assign(writerVar, writeState),
         OperatorType.SNOWFLAKE_WRITE,
         SNOWFLAKE_WRITE_MEMORY_ESTIMATE);
     timerInfo.insertStateEndTimer();
@@ -1059,17 +1051,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate append call
     Variable globalIsLast = genGenericTempVar();
     Expr writerAppendCall =
-        outputSchemaAsCatalog.generateStreamingWriteAppendCode(
+        writeTarget.streamingWriteAppend(
             this,
             writerVar,
             inTable,
-            colNamesGlobal,
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
             columnPrecisions,
-            node.getMeta(),
-            ifExists,
-            createTableType);
+            node.getMeta());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
@@ -1079,43 +1068,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
     this.generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
-
-    // Create Snowflake-managed Iceberg table if using Iceberg
-    // NOTE: update when other catalogs support writing tables
-    SnowflakeCatalog catalog = (SnowflakeCatalog) outputSchemaAsCatalog.getCatalog();
-    @Nullable
-    Expr icebergConvertCall =
-        catalog.generateIcebergToSnowflakeTable(
-            outputSchemaAsCatalog.createTablePath(node.getTableName()),
-            icebergBase,
-            ifExists,
-            createTableType);
-    if (icebergConvertCall != null) {
-      this.generatedCode.add(new Op.Assign(genGenericTempVar(), icebergConvertCall));
-    }
+    this.generatedCode.add(writeTarget.streamingCreateTableFinalize());
   }
 
   public void visitLogicalTableCreate(PandasTableCreate node) {
     this.visit(node.getInput(0), 0, node);
-    // Not going to do a relNodeTimer on this
+    CatalogSchema outputSchema = node.getSchema();
 
-    Schema outputSchema = node.getSchema();
-
-    // Fow now, we only support CREATE TABLE AS with CatalogSchema
-    if (!(outputSchema instanceof CatalogSchema)) {
-      throw new BodoSQLCodegenException(
-          "CREATE TABLE is only supported for Snowflake Catalog Schemas");
-    }
-
-    CatalogSchema outputSchemaAsCatalog = (CatalogSchema) outputSchema;
-
-    BodoSQLCatalog.ifExistsBehavior ifExists;
-    if (node.isReplace()) {
-      ifExists = BodoSQLCatalog.ifExistsBehavior.REPLACE;
-    } else {
-      ifExists = BodoSQLCatalog.ifExistsBehavior.FAIL;
-    }
-
+    IfExistsBehavior ifExists = node.getIfExistsBehavior();
     SqlCreateTable.CreateTableType createTableType = node.getCreateTableType();
 
     // No streaming or single batch case
@@ -1126,10 +1086,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         precisions.add(new Expr.IntegerLiteral(typ.getType().getPrecision()));
       }
       Variable columnPrecisions = lowerAsMetaType(new Expr.Tuple(precisions));
-      genStreamingTableCreate(
-          node, outputSchemaAsCatalog, ifExists, createTableType, columnPrecisions);
+      genStreamingTableCreate(node, outputSchema, ifExists, createTableType, columnPrecisions);
     } else {
-      genSingleBatchTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
+      genSingleBatchTableCreate(node, outputSchema, ifExists, createTableType);
     }
   }
 
@@ -1374,7 +1333,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             currentPipeline.getIterVar(),
             Expr.None.INSTANCE,
             new SnowflakeCreateTableMetadata(),
-            BodoSQLCatalog.ifExistsBehavior.APPEND,
+            IfExistsBehavior.APPEND,
             SqlCreateTable.CreateTableType.DEFAULT);
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);

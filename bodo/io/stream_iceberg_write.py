@@ -672,7 +672,7 @@ def lower_iceberg_writer_append_table(context, builder, sig, args):
 
 
 def convert_to_snowflake_iceberg_table_py(
-    snowflake_conn, iceberg_base, iceberg_volume, schema, table_name
+    snowflake_conn, iceberg_base, iceberg_volume, table_name
 ):  # pragma: no cover
     """Convert Iceberg table written by Bodo to object storage to a Snowflake-managed
     Iceberg table.
@@ -681,7 +681,6 @@ def convert_to_snowflake_iceberg_table_py(
         snowflake_conn (str): Snowflake connection string
         iceberg_base (str): base storage path for Iceberg table (excluding volume bucket path)
         iceberg_volume (str): Snowflake Iceberg volume name
-        schema (str): schema name
         table_name (str): table name
     """
 
@@ -706,9 +705,9 @@ def convert_to_snowflake_iceberg_table_py(
             cursor.execute(catalog_integration_query)
 
             # Create Iceberg table
-            base = f"{iceberg_base}/{schema}/{table_name}"
+            base = f"{iceberg_base}/{table_name}"
             create_query = f"""
-                CREATE ICEBERG TABLE {schema}.{table_name}
+                CREATE ICEBERG TABLE {table_name}
                 EXTERNAL_VOLUME='{iceberg_volume}'
                 CATALOG='{catalog_integration_name}'
                 METADATA_FILE_PATH='{base}/metadata/v1.metadata.json';
@@ -717,7 +716,7 @@ def convert_to_snowflake_iceberg_table_py(
 
             # Convert Iceberg table to Snowflake managed
             convert_query = f"""
-                ALTER ICEBERG TABLE {schema}.{table_name} CONVERT TO MANAGED
+                ALTER ICEBERG TABLE {table_name} CONVERT TO MANAGED
                     BASE_LOCATION = '{base}';
             """
             cursor.execute(convert_query)
@@ -740,16 +739,16 @@ def convert_to_snowflake_iceberg_table(
 
 @overload(convert_to_snowflake_iceberg_table)
 def overload_convert_to_snowflake_iceberg_table(
-    snowflake_conn, iceberg_base, iceberg_volume, schema, table_name
+    snowflake_conn, iceberg_base, iceberg_volume, table_name
 ):  # pragma: no cover
     """JIT wrapper around convert_to_snowflake_iceberg_table_py above"""
 
     def impl(
-        snowflake_conn, iceberg_base, iceberg_volume, schema, table_name
+        snowflake_conn, iceberg_base, iceberg_volume, table_name
     ):  # pragma: no cover
         with bodo.objmode:
             convert_to_snowflake_iceberg_table_py(
-                snowflake_conn, iceberg_base, iceberg_volume, schema, table_name
+                snowflake_conn, iceberg_base, iceberg_volume, table_name
             )
 
     return impl

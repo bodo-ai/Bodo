@@ -1,5 +1,6 @@
-package com.bodosql.calcite.adapter.pandas
+package com.bodosql.calcite.rel.core
 
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -7,17 +8,16 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.TableCreate
 import org.apache.calcite.schema.Schema
-import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
 open class TableCreateBase(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     input: RelNode,
-    val schema: Schema,
+    private val schema: Schema,
     val tableName: String,
     val isReplace: Boolean,
-    val createTableType: SqlCreateTable.CreateTableType,
+    val createTableType: CreateTableType,
     val path: List<String>,
     val meta: SnowflakeCreateTableMetadata,
 ) : TableCreate(cluster, traitSet, input) {
@@ -46,7 +46,19 @@ open class TableCreateBase(
         return result
     }
 
-    open fun getSchemaPath(): List<String?>? {
+    open fun getSchema(): Schema {
+        return schema
+    }
+
+    fun getSchemaPath(): List<String> {
         return path
+    }
+
+    fun getIfExistsBehavior(): IfExistsBehavior {
+        return if (isReplace) {
+            IfExistsBehavior.REPLACE
+        } else {
+            IfExistsBehavior.FAIL
+        }
     }
 }

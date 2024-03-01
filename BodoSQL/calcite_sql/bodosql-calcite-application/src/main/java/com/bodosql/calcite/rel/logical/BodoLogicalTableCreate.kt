@@ -1,6 +1,6 @@
 package com.bodosql.calcite.rel.logical
 
-import com.bodosql.calcite.adapter.pandas.TableCreateBase
+import com.bodosql.calcite.rel.core.TableCreateBase
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptCluster
@@ -9,7 +9,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
-open class BodoLogicalTableCreate(
+open class BodoLogicalTableCreate private constructor(
     cluster: RelOptCluster,
     traits: RelTraitSet,
     input: RelNode,
@@ -27,7 +27,7 @@ open class BodoLogicalTableCreate(
         assert(traitSet.containsIfApplicable(Convention.NONE))
         assert(inputs.size == 1)
         return BodoLogicalTableCreate(
-            cluster, traitSet, inputs[0], schema, tableName,
+            cluster, traitSet, inputs[0], getSchema(), tableName,
             isReplace, createTableType, path, this.meta,
         )
     }

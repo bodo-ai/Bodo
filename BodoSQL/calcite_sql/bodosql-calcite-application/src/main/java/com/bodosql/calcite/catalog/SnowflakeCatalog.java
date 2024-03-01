@@ -16,6 +16,10 @@ import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable;
 import com.bodosql.calcite.application.utils.Memoizer;
+import com.bodosql.calcite.application.write.SnowflakeIcebergWriteTarget;
+import com.bodosql.calcite.application.write.SnowflakeNativeWriteTarget;
+import com.bodosql.calcite.application.write.WriteTarget;
+import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
@@ -1183,7 +1187,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         visitor,
         varName,
         tableName,
-        ifExistsBehavior.APPEND,
+        IfExistsBehavior.APPEND,
         SqlCreateTable.CreateTableType.DEFAULT,
         new SnowflakeCreateTableMetadata());
   }
@@ -1201,7 +1205,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       PandasCodeGenVisitor visitor,
       Variable varName,
       ImmutableList<String> tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType tableType,
       SnowflakeCreateTableMetadata meta) {
     List<Expr> args = new ArrayList<>();
@@ -1227,14 +1231,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @return Iceberg write flag
    */
   private boolean useIcebergWrite(
-      BodoSQLCatalog.ifExistsBehavior ifExists, SqlCreateTable.CreateTableType createTableType) {
+      IfExistsBehavior ifExists, SqlCreateTable.CreateTableType createTableType) {
     if (icebergVolume == null) {
       return false;
     }
-    if ((ifExists == ifExistsBehavior.APPEND)
+    if ((ifExists == IfExistsBehavior.APPEND)
         || (createTableType != SqlCreateTable.CreateTableType.DEFAULT)) {
       String reason =
-          (ifExists == ifExistsBehavior.APPEND) ? "table inserts." : "non-default tables.";
+          (ifExists == IfExistsBehavior.APPEND) ? "table inserts." : "non-default tables.";
       VERBOSE_LEVEL_ONE_LOGGER.warning("Iceberg write not supported for " + reason);
       return false;
     }
@@ -1293,7 +1297,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     return generateStreamingWriteInitCode(
         operatorID,
         tableName,
-        ifExistsBehavior.APPEND,
+        IfExistsBehavior.APPEND,
         SqlCreateTable.CreateTableType.DEFAULT,
         null,
         null);
@@ -1303,17 +1307,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   public Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
       ImmutableList<String> tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Variable colNamesGlobal,
       String icebergBase) {
     if (useIcebergWrite(ifExists, createTableType)) {
       assert colNamesGlobal != null;
-      String iceberg_path = "iceberg+" + getIcebergBaseURL(icebergVolume) + icebergBase;
+      String icebergPath = "iceberg+" + getIcebergBaseURL(icebergVolume) + icebergBase;
       return new Expr.Call(
           "bodo.io.stream_iceberg_write.iceberg_writer_init",
           operatorID,
-          new Expr.StringLiteral(iceberg_path),
+          new Expr.StringLiteral(icebergPath),
           new Expr.StringLiteral(tableName.get(2)),
           new Expr.StringLiteral(tableName.get(1)),
           colNamesGlobal,
@@ -1339,7 +1343,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       Variable iterVarName,
       Expr columnPrecisions,
       SnowflakeCreateTableMetadata meta,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
+      IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
 
     List<Expr> args = new ArrayList<>();
@@ -1356,55 +1360,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     args.add(columnPrecisions);
-
-    List<kotlin.Pair<String, Expr>> ctasMetaKwargs = new ArrayList<>();
-    if (meta.getTableComment() != null) {
-      Expr tableCommentExpr = new Expr.StringLiteral(meta.getTableComment());
-      ctasMetaKwargs.add(new kotlin.Pair("table_comments", tableCommentExpr));
-    }
-    if (meta.getColumnComments() != null) {
-      List<Expr> columnCommentExprs = new ArrayList<>();
-      for (String columnComment : meta.getColumnComments()) {
-        if (columnComment == null) {
-          columnCommentExprs.add(Expr.None.INSTANCE);
-        } else {
-          columnCommentExprs.add(new Expr.StringLiteral(columnComment));
-        }
-      }
-      Expr columnCommentTuple = new Expr.Tuple(columnCommentExprs);
-      ctasMetaKwargs.add(new kotlin.Pair("column_comments", columnCommentTuple));
-    }
-    Expr ctasMetaCall =
-        new Expr.Call("bodo.utils.typing.SnowflakeCreateTableMetaType", List.of(), ctasMetaKwargs);
+    Expr ctasMetaCall = meta.emitCtasExpr();
     Expr ctasMetaGlobal = visitor.lowerAsGlobal(ctasMetaCall);
     args.add(ctasMetaGlobal);
     return new Expr.Call("bodo.io.snowflake_write.snowflake_writer_append_table", args);
-  }
-
-  /**
-   * Generate call to convert Iceberg table to Snowflake-managed table
-   *
-   * @param tableName table name
-   * @param icebergBase base storage path for Iceberg table (excluding volume bucket)
-   * @param ifExists Behavior if table exists (e.g. replace)
-   * @param createTableType table type to create (e.g. default)
-   * @return Expr.Call for generated call
-   */
-  public Expr generateIcebergToSnowflakeTable(
-      ImmutableList<String> tableName,
-      String icebergBase,
-      BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
-    if (!useIcebergWrite(ifExists, createTableType)) {
-      return null;
-    }
-    return new Expr.Call(
-        "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
-        new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))),
-        new Expr.StringLiteral(icebergBase),
-        new Expr.StringLiteral(icebergVolume),
-        new Expr.StringLiteral(tableName.get(1)),
-        new Expr.StringLiteral(tableName.get(2)));
   }
 
   /**
@@ -2033,6 +1992,45 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       return true;
     } catch (SQLException e) {
       return false;
+    }
+  }
+
+  /**
+   * Return the desired WriteTarget for a create table operation. We prioritize Iceberg writes if
+   * Iceberg is enabled and, we have sufficient feature support.
+   *
+   * @param schema The schemaPath to the table.
+   * @param tableName The name of the type that will be created.
+   * @param createTableType The createTable type.
+   * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+   * @param columnNamesGlobal Global Variable holding the output column names.
+   * @return The selected WriteTarget.
+   */
+  public WriteTarget getCreateTableWriteTarget(
+      ImmutableList<String> schema,
+      String tableName,
+      SqlCreateTable.CreateTableType createTableType,
+      IfExistsBehavior ifExistsBehavior,
+      Variable columnNamesGlobal) {
+    String snowflakeConnectionString = generatePythonConnStr(schema);
+    if (useIcebergWrite(ifExistsBehavior, createTableType)) {
+      return new SnowflakeIcebergWriteTarget(
+          tableName,
+          schema,
+          createTableType,
+          ifExistsBehavior,
+          columnNamesGlobal,
+          getIcebergBaseURL(icebergVolume),
+          icebergVolume,
+          snowflakeConnectionString);
+    } else {
+      return new SnowflakeNativeWriteTarget(
+          tableName,
+          schema,
+          createTableType,
+          ifExistsBehavior,
+          columnNamesGlobal,
+          generatePythonConnStr(schema));
     }
   }
 }
