@@ -1,4 +1,4 @@
-package com.bodosql.calcite.adapter.snowflake
+package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.common.LimitUtils.Companion.extractSortNodes
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
@@ -8,14 +8,14 @@ import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
 @Value.Enclosing
-abstract class AbstractSnowflakeLimitRule protected constructor(config: Config) :
-    RelRule<AbstractSnowflakeLimitRule.Config>(config) {
+abstract class AbstractIcebergLimitRule protected constructor(config: Config) :
+    RelRule<AbstractIcebergLimitRule.Config>(config) {
         override fun onMatch(call: RelOptRuleCall) {
-            val (sort, rel) = extractSortNodes<SnowflakeRel>(call)
+            val (sort, rel) = extractSortNodes<IcebergRel>(call)
             val catalogTable = rel.getCatalogTable()
 
             val newNode =
-                SnowflakeSort.create(
+                IcebergSort.create(
                     sort.cluster,
                     sort.traitSet,
                     rel,

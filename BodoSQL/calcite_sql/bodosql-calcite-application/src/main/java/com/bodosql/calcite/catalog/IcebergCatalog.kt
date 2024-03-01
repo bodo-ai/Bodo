@@ -62,6 +62,10 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         return when (type.typeId()) {
             Type.TypeID.BOOLEAN -> BodoSQLColumnDataType.BOOL8
             Type.TypeID.BINARY -> BodoSQLColumnDataType.BINARY
+            Type.TypeID.INTEGER -> BodoSQLColumnDataType.INT32
+            Type.TypeID.LONG -> BodoSQLColumnDataType.INT64
+            Type.TypeID.FLOAT -> BodoSQLColumnDataType.FLOAT32
+            Type.TypeID.DOUBLE -> BodoSQLColumnDataType.FLOAT64
             // TODO: Support other types
             else -> throw RuntimeException("Unsupported Iceberg Type")
         }

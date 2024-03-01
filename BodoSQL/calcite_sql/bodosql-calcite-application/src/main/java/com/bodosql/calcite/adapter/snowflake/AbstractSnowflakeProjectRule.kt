@@ -159,10 +159,7 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
             )
         }
 
-        override fun onMatch(call: RelOptRuleCall?) {
-            if (call == null) {
-                return
-            }
+        override fun onMatch(call: RelOptRuleCall) {
             val (proj, snowflakeRel) = extractNodes(call)
             val pushableNodes = getPushableNodes(proj)
             // If every node in the project is pushable, just turn the PandasProject
@@ -174,6 +171,8 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
                     splitComputeProjection(proj, snowflakeRel, call.builder(), pushableNodes)
                 }
             call.transformTo(newNode)
+            // New plan is absolutely better than old plan.
+            call.planner.prune(proj)
         }
 
         private fun extractNodes(call: RelOptRuleCall): Pair<Project, SnowflakeRel> {

@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.WindowBase
+import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
@@ -162,7 +163,7 @@ class BodoMetadataRestrictionScan {
             if (node is SnowflakeTableScan || node is IcebergTableScan) {
                 // Once we have reached a scan, add every column from cols to
                 // the set of columns that are pre-cleared for metadata requests.
-                val table =
+                val table: CatalogTable =
                     if (node is SnowflakeTableScan) {
                         node.getCatalogTable()
                     } else {

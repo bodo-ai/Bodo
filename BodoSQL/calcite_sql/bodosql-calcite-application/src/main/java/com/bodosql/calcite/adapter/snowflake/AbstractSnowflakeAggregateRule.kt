@@ -15,10 +15,7 @@ import org.immutables.value.Value
 @Value.Enclosing
 abstract class AbstractSnowflakeAggregateRule protected constructor(config: Config) :
     RelRule<AbstractSnowflakeAggregateRule.Config>(config) {
-        override fun onMatch(call: RelOptRuleCall?) {
-            if (call == null) {
-                return
-            }
+        override fun onMatch(call: RelOptRuleCall) {
             val (aggregate, rel) = extractNodes(call)
             val catalogTable = rel.getCatalogTable()
             // Do we need a transformation with a projection for any literal values.
@@ -66,6 +63,8 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
                     newAggregate
                 }
             call.transformTo(newNode)
+            // New plan is absolutely better than old plan.
+            call.planner.prune(aggregate)
         }
 
         private fun extractNodes(call: RelOptRuleCall): Pair<Aggregate, SnowflakeRel> {
