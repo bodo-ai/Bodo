@@ -1684,17 +1684,20 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
-        if fdef == (
-            "snowflake_writer_append_table",
-            "bodo.io.snowflake_write",
-        ):  # pragma: no cover
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            return
-
-        if fdef == (
-            "iceberg_writer_append_table",
-            "bodo.io.stream_iceberg_write",
-        ):  # pragma: no cover
+        if fdef in (
+            (
+                "snowflake_writer_append_table",
+                "bodo.io.snowflake_write",
+            ),
+            (
+                "iceberg_writer_append_table",
+                "bodo.io.stream_iceberg_write",
+            ),
+            (
+                "parquet_writer_append_table",
+                "bodo.io.stream_parquet_write",
+            ),
+        ):
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
