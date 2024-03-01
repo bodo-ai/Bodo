@@ -242,7 +242,7 @@ class SnowflakeCatalog(DatabaseCatalog):
 
 
 class SnowflakeCatalogType(DatabaseCatalogType):
-    """JIT class for storing the account infomation
+    """JIT class for storing the account information
     needed to connect to a remote Snowflake account from
     Java.
     """

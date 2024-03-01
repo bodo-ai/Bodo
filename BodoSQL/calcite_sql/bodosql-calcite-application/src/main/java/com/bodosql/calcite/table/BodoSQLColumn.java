@@ -7,6 +7,7 @@ import java.util.List;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.StructKind;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
@@ -58,22 +59,24 @@ public interface BodoSQLColumn {
     UINT64(8, "UINT64"), // /< 8 byte unsigned integer
     FLOAT32(9, "FLOAT32"), // /< 4 byte floating point
     FLOAT64(10, "FLOAT64"), // /< 8 byte floating point
-    BOOL8(11, "BOOL8"), // /< Boolean using one byte per value, 0 == false, else true
-    DATE(12, "DATE"), // /< equivalent to datetime.date value
-    TIME(13, "TIME"), // /< equivalent to bodo.Time value
-    DATETIME(14, "DATETIME"), // /< equivalent to datetime64[ns] value
-    TZ_AWARE_TIMESTAMP(15, "TZ_AWARE_TIMESTAMP"), // /< equivalent to Timestamp with tz info
-    TIMEDELTA(16, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
-    DATEOFFSET(17, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
-    STRING(18, "STRING"), // /< String elements
-    BINARY(19, "BINARY"), // /< Binary (byte) array
-    CATEGORICAL(20, "CATEGORICAL"),
-    ARRAY(21, "ARRAY"),
-    JSON_OBJECT(22, "JSON_OBJECT"),
-    VARIANT(23, "VARIANT"),
-    UNSUPPORTED(24, "UNSUPPORTED"), // Unknown type we may be able to prune
+    DECIMAL(11, "DECIMAL"), // Decimal Type
+    BOOL8(12, "BOOL8"), // /< Boolean using one byte per value, 0 == false, else true
+    DATE(13, "DATE"), // /< equivalent to datetime.date value
+    TIME(14, "TIME"), // /< equivalent to bodo.Time value
+    DATETIME(15, "DATETIME"), // /< equivalent to datetime64[ns] value
+    TZ_AWARE_TIMESTAMP(16, "TZ_AWARE_TIMESTAMP"), // /< equivalent to Timestamp with tz info
+    TIMEDELTA(17, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
+    DATEOFFSET(18, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
+    STRING(19, "STRING"), // /< String elements
+    BINARY(20, "BINARY"), // /< Binary (byte) array
+    CATEGORICAL(21, "CATEGORICAL"),
+    ARRAY(22, "ARRAY"),
+    JSON_OBJECT(23, "JSON_OBJECT"),
+    STRUCT(24, "STRUCT"),
+    VARIANT(25, "VARIANT"),
+    UNSUPPORTED(26, "UNSUPPORTED"), // Unknown type we may be able to prune
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(25, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(27, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -149,7 +152,8 @@ public interface BodoSQLColumn {
         BodoTZInfo tzInfo,
         int precision,
         int scale,
-        List<RelDataType> children) {
+        List<RelDataType> children,
+        List<String> fieldNames) {
       RelDataType temp;
       switch (this) {
         case INT8:
@@ -173,6 +177,9 @@ public interface BodoSQLColumn {
           break;
         case FLOAT64:
           temp = typeFactory.createSqlType(SqlTypeName.DOUBLE);
+          break;
+        case DECIMAL:
+          temp = typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
           break;
         case BOOL8:
           temp = typeFactory.createSqlType(SqlTypeName.BOOLEAN);
@@ -214,6 +221,9 @@ public interface BodoSQLColumn {
           break;
         case ARRAY:
           temp = typeFactory.createArrayType(children.get(0), -1);
+          break;
+        case STRUCT:
+          temp = typeFactory.createStructType(StructKind.FULLY_QUALIFIED, children, fieldNames);
           break;
         case STRING:
           temp = typeFactory.createSqlType(SqlTypeName.VARCHAR, precision);
@@ -260,6 +270,8 @@ public interface BodoSQLColumn {
           return "Float32";
         case FLOAT64:
           return "Float64";
+        case DECIMAL:
+          return "Decimal";
         case BOOL8:
           return "boolean";
         case STRING:

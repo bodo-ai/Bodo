@@ -19,19 +19,20 @@ data class ColumnDataTypeInfo(
     val scale: Int,
     val tzInfo: BodoTZInfo?,
     val children: List<ColumnDataTypeInfo>,
+    val fieldNames: List<String>,
 ) {
     // Constructor for most data types without precision or scale
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(), listOf())
 
     // Constructor for String/Binary data types
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
         precision: Int,
-    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, null, listOf())
+    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(), listOf())
 
     // Constructor for timestamp
     constructor(
@@ -39,7 +40,7 @@ data class ColumnDataTypeInfo(
         isNullable: Boolean,
         precision: Int,
         tzInfo: BodoTZInfo?,
-    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, tzInfo, listOf())
+    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, tzInfo, listOf(), listOf())
 
     // Constructor for decimal
     constructor(
@@ -47,14 +48,22 @@ data class ColumnDataTypeInfo(
         isNullable: Boolean,
         precision: Int,
         scale: Int,
-    ) : this(dataType, isNullable, precision, scale, null, listOf())
+    ) : this(dataType, isNullable, precision, scale, null, listOf(), listOf())
 
     // Constructor for Array and Categorical
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
         child: ColumnDataTypeInfo,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(child))
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(child), listOf())
+
+    // Constructor for Struct
+    constructor(
+        dataType: BodoSQLColumnDataType,
+        isNullable: Boolean,
+        fields: List<ColumnDataTypeInfo>,
+        fieldNames: List<String>,
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, fields, fieldNames)
 
     // Constructor for Map
     constructor(
@@ -62,7 +71,15 @@ data class ColumnDataTypeInfo(
         isNullable: Boolean,
         keyType: ColumnDataTypeInfo,
         valueType: ColumnDataTypeInfo,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(keyType, valueType))
+    ) : this(
+        dataType,
+        isNullable,
+        RelDataType.PRECISION_NOT_SPECIFIED,
+        RelDataType.SCALE_NOT_SPECIFIED,
+        null,
+        listOf(keyType, valueType),
+        listOf(),
+    )
 
     fun convertToSqlType(typeFactory: RelDataTypeFactory): RelDataType {
         if (dataType == BodoSQLColumnDataType.CATEGORICAL) {
@@ -82,12 +99,16 @@ data class ColumnDataTypeInfo(
             if (children.size != 2) {
                 throw BodoSQLCodegenException("Object Column must have exactly 2 children")
             }
+        } else if (dataType == BodoSQLColumnDataType.STRUCT) {
+            if (children.size != fieldNames.size) {
+                throw BodoSQLCodegenException("Struct Column must have the same number of names and children")
+            }
         } else if (children.isNotEmpty()) {
             throw BodoSQLCodegenException("Non-Nested Data Columns should not have any children")
         }
         // Recurse on the children if they exist.
         val mappedChildren = children.map { c -> c.convertToSqlType(typeFactory) }
-        return dataType.convertToSqlType(typeFactory, isNullable, tzInfo, precision, scale, mappedChildren)
+        return dataType.convertToSqlType(typeFactory, isNullable, tzInfo, precision, scale, mappedChildren, fieldNames)
     }
 
     companion object {
