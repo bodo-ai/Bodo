@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.Testing;
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
+import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.FileSystemCatalog;
 import com.bodosql.calcite.schema.LocalSchema;
@@ -16,9 +17,13 @@ import org.apache.calcite.rel.RelRoot;
 /** Class for locally testing codegen using a FileSystem Catalog */
 public class FileSystemCatalogGenTest {
   public static void main(String[] args) throws Exception {
-    String sql = "select * from LEVEL_1.LEVEL_2.ISAAC_TEST";
+    String sql =
+        "create table \"iceberg_db\".LEVEL_1.new_table as select A from"
+            + " \"iceberg_db\".LEVEL_1.SIMPLE_NUMERIC_TABLE where B IS NOT NULL limit 10";
     Map envVars = System.getenv();
-    BodoSQLCatalog catalog = new FileSystemCatalog((String) envVars.get("ROOT_PATH"));
+    BodoSQLCatalog catalog =
+        new FileSystemCatalog(
+            (String) envVars.get("ROOT_PATH"), WriteTarget.WriteTargetEnum.fromString("parquet"));
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
 
     RelationalAlgebraGenerator generator =

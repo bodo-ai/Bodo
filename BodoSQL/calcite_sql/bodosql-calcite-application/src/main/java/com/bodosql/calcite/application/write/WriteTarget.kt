@@ -84,4 +84,29 @@ abstract class WriteTarget(
             throw RuntimeException("Reached Unreachable code in toToSqlKwArgument")
         }
     }
+
+    enum class WriteTargetEnum {
+        PARQUET,
+        ICEBERG,
+        ;
+
+        companion object {
+            @JvmStatic
+            fun fromString(strVal: String): WriteTargetEnum {
+                return when (strVal) {
+                    "parquet" -> {
+                        PARQUET
+                    }
+
+                    "iceberg" -> {
+                        ICEBERG
+                    }
+
+                    else -> {
+                        throw java.lang.RuntimeException("Unsupported Write Target Enum")
+                    }
+                }
+            }
+        }
+    }
 }

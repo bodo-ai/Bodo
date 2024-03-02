@@ -3,6 +3,7 @@ package com.bodosql.calcite.catalog
 import com.bodosql.calcite.adapter.pandas.StreamingOptions
 import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.application.write.IcebergWriteTarget
+import com.bodosql.calcite.application.write.ParquetWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.ir.Expr
@@ -35,8 +36,34 @@ import java.io.FileNotFoundException
  *
  * Note: Hardcoding HadoopCatalog will likely change in the future to be more abstract/robust.
  */
-class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(connStr)) {
+class FileSystemCatalog(
+    connStr: String,
+    private val writeDefault: WriteTarget.WriteTargetEnum,
+) : IcebergCatalog(createHadoopCatalog(connStr)) {
     private val fs = createFileSystem(connStr)
+    private val rootPath = fs.resolvePath(Path("."))
+
+    /**
+     * Convert a Hadoop FileSystem Path to a Bodo supported connection string.
+     * To do this we need to reformat the local file system.
+     *
+     * @param path The path to convert.
+     * @return The converted path to a Bodo supported connection string.
+     */
+    private fun pathToBodoString(
+        path: Path,
+        useUriScheme: Boolean,
+    ): String {
+        val baseString = path.toString()
+        return if (baseString.startsWith("s3a://")) {
+            baseString.replace("s3a://", "s3://")
+        } else if (baseString.startsWith("file:")) {
+            val replacement = if (useUriScheme) "file://" else ""
+            baseString.replace("file:", replacement)
+        } else {
+            baseString
+        }
+    }
 
     /**
      * Convert a given schemaPath which is a list of components to the
@@ -46,7 +73,11 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
      * of the location.
      */
     private fun schemaPathToFilePath(schemaPath: ImmutableList<String>): Path {
-        return if (schemaPath.size != 0) fs.resolvePath(Path(schemaPath.joinToString(separator = "/"))) else fs.workingDirectory
+        return if (schemaPath.isEmpty()) {
+            rootPath
+        } else {
+            fs.resolvePath(Path(schemaPath.joinToString(separator = "/")))
+        }
     }
 
     /**
@@ -363,7 +394,7 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
      * @return The connection string
      */
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
-        return fs.workingDirectory.toString()
+        return pathToBodoString(rootPath, true)
     }
 
     /**
@@ -452,13 +483,26 @@ class FileSystemCatalog(connStr: String) : IcebergCatalog(createHadoopCatalog(co
         createTableType: CreateTableType,
         ifExistsBehavior: IfExistsBehavior,
         columnNamesGlobal: Variable,
-    ): WriteTarget =
-        IcebergWriteTarget(
-            tableName,
-            schema,
-            createTableType,
-            ifExistsBehavior,
-            columnNamesGlobal,
-            rootPath.joinToString(separator = "/"),
-        )
+    ): WriteTarget {
+        return if (writeDefault == WriteTarget.WriteTargetEnum.ICEBERG) {
+            IcebergWriteTarget(
+                tableName,
+                schema,
+                createTableType,
+                ifExistsBehavior,
+                columnNamesGlobal,
+                pathToBodoString(rootPath, true),
+            )
+        } else {
+            assert(writeDefault == WriteTarget.WriteTargetEnum.PARQUET)
+            ParquetWriteTarget(
+                tableName,
+                schema,
+                createTableType,
+                ifExistsBehavior,
+                columnNamesGlobal,
+                pathToBodoString(tableInfoToFilePath(schema, tableName), false),
+            )
+        }
+    }
 }
