@@ -147,6 +147,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                     when (node) {
                         // Enable moving past filters to get the original table
                         is IcebergFilter -> node.childrenAccept(this)
+                        is IcebergSort -> node.childrenAccept(this)
                         is IcebergProject -> {
                             for (i in 0..<colMap.size) {
                                 val project = node.projects[colMap[i]]
