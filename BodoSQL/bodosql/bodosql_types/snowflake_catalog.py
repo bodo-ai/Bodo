@@ -126,7 +126,7 @@ def _create_java_snowflake_catalog(
 
 
 class SnowflakeCatalog(DatabaseCatalog):
-    """Python class for storing the account infomation
+    """Python class for storing the account information
     needed to connect to a remote Snowflake account from
     Java.
     """
@@ -226,7 +226,7 @@ class SnowflakeCatalog(DatabaseCatalog):
             self.iceberg_volume,
         )
 
-    # Define == fot testing
+    # Define == for testing
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SnowflakeCatalog):
             return (

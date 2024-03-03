@@ -18,7 +18,7 @@ gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
-        ColumnDataEnumClass = (
+        ColumnDataEnum = (
             gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
         )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
@@ -37,12 +37,18 @@ if bodo.get_rank() == 0:
             gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
         )
         PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
+        FileSystemCatalogClass = (
+            gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
+        )
+        WriteTargetEnum = (
+            gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
+        )
     except Exception as e:
         saw_error = True
         msg = str(e)
 else:
     ArrayListClass = None
-    ColumnDataEnumClass = None
+    ColumnDataEnum = None
     ColumnClass = None
     ColumnDataTypeClass = None
     LocalTableClass = None
@@ -54,6 +60,8 @@ else:
     SnowflakeDriver = None
     CommonsExceptionUtilsClass = None
     PythonLoggersClass = None
+    FileSystemCatalogClass = None
+    WriteTargetEnum = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
