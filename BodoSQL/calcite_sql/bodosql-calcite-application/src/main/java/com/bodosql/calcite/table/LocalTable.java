@@ -4,10 +4,9 @@ import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
-import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +14,6 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -131,30 +129,6 @@ public class LocalTable extends BodoSqlTable {
   }
 
   /**
-   * Generate the streaming code needed to initialize a writer for the given variable.
-   *
-   * @return The generated streaming code to write the table.
-   */
-  @Override
-  public Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID) {
-    throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
-  }
-
-  public Expr generateStreamingWriteAppendCode(
-      PandasCodeGenVisitor visitor,
-      Variable stateVarName,
-      Variable dfVarName,
-      Variable colNamesGlobal,
-      Variable isLastVarName,
-      Variable iterVarName,
-      Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta,
-      IfExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
-    throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
-  }
-
-  /**
    * Return the location from which the table is generated. The return value is always entirely
    * capitalized.
    *
@@ -243,6 +217,20 @@ public class LocalTable extends BodoSqlTable {
   @Override
   public boolean readRequiresIO() {
     return useIORead;
+  }
+
+  /**
+   * Get the insert into write target for a particular table. This is not yet implemented for local
+   * tables, but can be extended as part of the constructor to add write support in the future.
+   *
+   * @param columnNamesGlobal The global variable containing the column names. This should be
+   *     possible to remove in the future since we append to a table.
+   * @return The WriteTarget for the table.
+   */
+  @Override
+  public WriteTarget getInsertIntoWriteTarget(Variable columnNamesGlobal) {
+    throw new UnsupportedOperationException(
+        "Streaming insert into is not supported for local tables");
   }
 
   @Override

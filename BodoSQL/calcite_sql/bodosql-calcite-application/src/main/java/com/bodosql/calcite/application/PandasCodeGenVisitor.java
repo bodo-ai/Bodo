@@ -1035,7 +1035,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer();
-    Expr writeState = writeTarget.streamingCreateTableInit(new Expr.IntegerLiteral(operatorID));
+    Expr writeState =
+        writeTarget.streamingCreateTableInit(new Expr.IntegerLiteral(operatorID), createTableType);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1285,6 +1286,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
     int operatorID = this.generatedCode.newOperatorID();
 
+    // Get column names for write append call
+    Variable colNamesGlobal =
+        lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
+    WriteTarget writeTarget = bodoSqlTable.getInsertIntoWriteTarget(colNamesGlobal);
+
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections,
@@ -1306,8 +1312,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer();
-    Expr writeInitCode =
-        bodoSqlTable.generateStreamingWriteInitCode(new Expr.IntegerLiteral(operatorID));
+    Expr writeInitCode = writeTarget.streamingInsertIntoInit(new Expr.IntegerLiteral(operatorID));
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1318,23 +1323,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
-    // Get column names for write append call
-    Variable colNamesGlobal =
-        lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
     Variable globalIsLast = genGenericTempVar();
     // Generate append call
     Expr writerAppendCall =
-        bodoSqlTable.generateStreamingWriteAppendCode(
+        writeTarget.streamingWriteAppend(
             this,
             writerVar,
             inputTable,
-            colNamesGlobal,
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
             Expr.None.INSTANCE,
-            new SnowflakeCreateTableMetadata(),
-            IfExistsBehavior.APPEND,
-            SqlCreateTable.CreateTableType.DEFAULT);
+            new SnowflakeCreateTableMetadata());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
@@ -1344,6 +1343,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
     this.generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
+    this.generatedCode.add(writeTarget.streamingInsertIntoFinalize());
   }
 
   /**

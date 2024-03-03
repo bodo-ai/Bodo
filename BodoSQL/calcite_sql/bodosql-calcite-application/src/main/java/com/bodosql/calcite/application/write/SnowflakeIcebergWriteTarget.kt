@@ -4,7 +4,6 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Variable
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.ddl.SqlCreateTable
 import java.util.UUID
 
 /**
@@ -17,7 +16,6 @@ import java.util.UUID
 class SnowflakeIcebergWriteTarget(
     tableName: String,
     schema: ImmutableList<String>,
-    createTableType: SqlCreateTable.CreateTableType,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
     icebergPath: String,
@@ -28,7 +26,6 @@ class SnowflakeIcebergWriteTarget(
         // Note: Conceptually for Iceberg we add extra levels of indirection to ensure we don't conflict with
         // the other files in the Iceberg volume.
         ImmutableList.of("bodo_write_temp", schema[0], schema[1], tableName + "_" + UUID.randomUUID()),
-        createTableType,
         ifExistsBehavior,
         columnNamesGlobal,
         icebergPath,

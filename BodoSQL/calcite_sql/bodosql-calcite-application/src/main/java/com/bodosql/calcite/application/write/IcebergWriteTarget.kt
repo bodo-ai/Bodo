@@ -5,7 +5,7 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
 /**
  * A WriteTarget implementation for writing to an Iceberg table.
@@ -13,11 +13,10 @@ import org.apache.calcite.sql.ddl.SqlCreateTable
 open class IcebergWriteTarget(
     tableName: String,
     schema: ImmutableList<String>,
-    createTableType: SqlCreateTable.CreateTableType,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
     protected val icebergPath: String,
-) : WriteTarget(tableName, schema, createTableType, ifExistsBehavior, columnNamesGlobal) {
+) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     protected val icebergConnectionString = pathToIcebergConnectionString(icebergPath)
 
     private fun pathToIcebergConnectionString(path: String): String {
@@ -27,9 +26,13 @@ open class IcebergWriteTarget(
     /**
      * Initialize the streaming create table state information for an Iceberg Table.
      * @param operatorID The operatorID used for tracking memory allocation.
+     * @param createTableType The type of the create table operation. This is unused by Iceberg.
      * @return A code generation expression for initializing the table.
      */
-    override fun streamingCreateTableInit(operatorID: Expr.IntegerLiteral): Expr {
+    override fun streamingCreateTableInit(
+        operatorID: Expr.IntegerLiteral,
+        createTableType: CreateTableType,
+    ): Expr {
         return Expr.Call(
             "bodo.io.stream_iceberg_write.iceberg_writer_init",
             operatorID,
@@ -39,6 +42,15 @@ open class IcebergWriteTarget(
             columnNamesGlobal,
             Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
         )
+    }
+
+    /**
+     * Initialize the streaming insert into state information for a given write target.
+     * @param operatorID The operatorID used for tracking memory allocation.
+     * @return A code generation expression for initializing the insert into.
+     */
+    override fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr {
+        return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
     }
 
     /**

@@ -5,7 +5,10 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan.Companion.create
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.utils.CheckTablePermissions.Companion.canRead
+import com.bodosql.calcite.application.write.SnowflakeNativeWriteTarget
+import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.SnowflakeCatalog
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
 import com.bodosql.calcite.schema.ExpandViewInput
 import com.bodosql.calcite.schema.InlineViewMetadata
@@ -18,7 +21,6 @@ import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import java.util.Locale
-import kotlin.collections.HashMap
 
 /**
  * Implementation of CatalogTable for Snowflake Catalogs.
@@ -384,6 +386,25 @@ open class SnowflakeCatalogTable(
             return false
         }
         return catalog.isIcebergTable(this.fullPath)
+    }
+
+    /**
+     * Get the insert into write target for a particular table.
+     * Ideally we would like to write native tables using a native
+     * target and iceberg tables with Iceberg, but we don't have
+     * Iceberg insert into support yet.
+     * @param columnNamesGlobal The global variable containing the column names. This should
+     *                          be possible to remove in the future since we append to a table.
+     * @return The WriteTarget for the table.
+     */
+    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget {
+        return SnowflakeNativeWriteTarget(
+            name,
+            parentFullPath,
+            WriteTarget.IfExistsBehavior.APPEND,
+            columnNamesGlobal,
+            generatePythonConnStr(parentFullPath),
+        )
     }
 
     private inner class StatisticImpl : Statistic {

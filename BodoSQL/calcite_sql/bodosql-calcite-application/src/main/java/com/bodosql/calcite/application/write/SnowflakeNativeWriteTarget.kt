@@ -5,7 +5,7 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
 /**
  * A WriteTarget implementation for writing to a Snowflake
@@ -14,17 +14,20 @@ import org.apache.calcite.sql.ddl.SqlCreateTable
 class SnowflakeNativeWriteTarget(
     tableName: String,
     schema: ImmutableList<String>,
-    createTableType: SqlCreateTable.CreateTableType,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
     private val connectionString: String,
-) : WriteTarget(tableName, schema, createTableType, ifExistsBehavior, columnNamesGlobal) {
+) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     /**
      * Initialize the streaming create table state information for a Snowflake Native Table.
      * @param operatorID The operatorID used for tracking memory allocation.
+     * @param createTableType The type of the create table operation. This is unused by parquet.
      * @return A code generation expression for initializing the table.
      */
-    override fun streamingCreateTableInit(operatorID: Expr.IntegerLiteral): Expr {
+    override fun streamingCreateTableInit(
+        operatorID: Expr.IntegerLiteral,
+        createTableType: CreateTableType,
+    ): Expr {
         return Expr.Call(
             "bodo.io.snowflake_write.snowflake_writer_init",
             operatorID,
@@ -35,6 +38,15 @@ class SnowflakeNativeWriteTarget(
             Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
             Expr.StringLiteral(createTableType.asStringKeyword()),
         )
+    }
+
+    /**
+     * Initialize the streaming insert into state information for a given write target.
+     * @param operatorID The operatorID used for tracking memory allocation.
+     * @return A code generation expression for initializing the insert into.
+     */
+    override fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr {
+        return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
     }
 
     /**
