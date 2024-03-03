@@ -5,23 +5,26 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
 class ParquetWriteTarget(
     tableName: String,
     schema: ImmutableList<String>,
-    createTableType: SqlCreateTable.CreateTableType,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
     // Note: This should be the full path, including the table name.
     private val parquetPath: String,
-) : WriteTarget(tableName, schema, createTableType, ifExistsBehavior, columnNamesGlobal) {
+) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     /**
      * Initialize the streaming create table state information for a Parquet Table.
      * @param operatorID The operatorID used for tracking memory allocation.
+     * @param createTableType The type of the create table operation. This is unused by parquet.
      * @return A code generation expression for initializing the table.
      */
-    override fun streamingCreateTableInit(operatorID: Expr.IntegerLiteral): Expr {
+    override fun streamingCreateTableInit(
+        operatorID: Expr.IntegerLiteral,
+        createTableType: CreateTableType,
+    ): Expr {
         return Expr.Call(
             "bodo.io.stream_parquet_write.parquet_writer_init",
             operatorID,
@@ -34,6 +37,15 @@ class ParquetWriteTarget(
             // We don't pass timezone information yet.
             Expr.StringLiteral(""),
         )
+    }
+
+    /**
+     * Initialize the streaming insert into state information for a given write target.
+     * @param operatorID The operatorID used for tracking memory allocation.
+     * @return A code generation expression for initializing the insert into.
+     */
+    override fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr {
+        return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
     }
 
     /**

@@ -6,7 +6,7 @@ import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
 /**
  * Base abstract class for any write destination. This provides a standard
@@ -22,7 +22,6 @@ import org.apache.calcite.sql.ddl.SqlCreateTable
 abstract class WriteTarget(
     protected val tableName: String,
     protected val schema: ImmutableList<String>,
-    protected val createTableType: SqlCreateTable.CreateTableType,
     protected val ifExistsBehavior: IfExistsBehavior,
     // TODO: Standardize to have all write targets use it init and move to init.
     protected val columnNamesGlobal: Variable,
@@ -30,9 +29,20 @@ abstract class WriteTarget(
     /**
      * Initialize the streaming create table state information for a given write target.
      * @param operatorID The operatorID used for tracking memory allocation.
+     * @param createTableType The type of the create table operation.
      * @return A code generation expression for initializing the table.
      */
-    abstract fun streamingCreateTableInit(operatorID: Expr.IntegerLiteral): Expr
+    abstract fun streamingCreateTableInit(
+        operatorID: Expr.IntegerLiteral,
+        createTableType: CreateTableType,
+    ): Expr
+
+    /**
+     * Initialize the streaming insert into state information for a given write target.
+     * @param operatorID The operatorID used for tracking memory allocation.
+     * @return A code generation expression for initializing the insert into.
+     */
+    abstract fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr
 
     /**
      * Implement append to a table for a given write target.
@@ -65,6 +75,16 @@ abstract class WriteTarget(
      * @return An operation that includes the finalization behavior.
      */
     open fun streamingCreateTableFinalize(): Op {
+        return Op.NoOp
+    }
+
+    /**
+     * Final step to mark an insert into operation as done.
+     * Most writes don't need to truly "finalize" anything yet,
+     * so we default to a NoOp.
+     * @return An operation that includes the finalization behavior.
+     */
+    open fun streamingInsertIntoFinalize(): Op {
         return Op.NoOp
     }
 

@@ -119,66 +119,6 @@ public interface BodoSQLCatalog {
       SnowflakeCreateTableMetadata meta);
 
   /**
-   * Generates the code necessary to produce the streaming write initialization code from the given
-   * catalog for an append operation.
-   *
-   * @param operatorID ID of operation to use for retrieving memory budget.
-   * @param tableName The path of schema used to reach the table from the root that includes the
-   *     table.
-   * @return The generated code to produce the write-initialization code
-   */
-  Expr generateStreamingAppendWriteInitCode(
-      Expr.IntegerLiteral operatorID, ImmutableList<String> tableName);
-
-  /**
-   * Generates the code necessary to produce the streaming write initialization code from the given
-   * catalog.
-   *
-   * @param operatorID ID of operation to use for retrieving memory budget.
-   * @param tableName The path of schema used to reach the table from the root that includes the
-   *     table.
-   * @param ifExists Behavior to perform if the table already exists
-   * @param createTableType Type of table to create if it doesn't exist
-   * @param colNamesGlobal Column names of table to write
-   * @param icebergBase path for writing Iceberg table data (excluding volume bucket path)
-   * @return The generated code to produce the write-initialization code
-   */
-  Expr generateStreamingWriteInitCode(
-      Expr.IntegerLiteral operatorID,
-      ImmutableList<String> tableName,
-      IfExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType,
-      Variable colNamesGlobal,
-      String icebergBase);
-
-  /**
-   * Generates the code necessary to produce code to append tables to the streaming writer of the
-   * given object.
-   *
-   * @param stateVarName Name of the variable of the write state
-   * @param tableVarName Name of the variable storing the table to append
-   * @param colNamesGlobal Column names of table to append
-   * @param isLastVarName Name of the variable indicating the is_last flag
-   * @param iterVarName Name of the variable storing the loop iteration
-   * @param columnPrecisions Name of the metatype tuple storing the precision of each column.
-   * @param meta Metadata of table to write (e.g. comments).
-   * @param ifExists Behavior if table exists (e.g. replace).
-   * @param createTableType type of table to create (e.g. transient).
-   * @return The generated code to produce the write-appending code
-   */
-  Expr generateStreamingWriteAppendCode(
-      PandasCodeGenVisitor visitor,
-      Variable stateVarName,
-      Variable tableVarName,
-      Variable colNamesGlobal,
-      Variable isLastVarName,
-      Variable iterVarName,
-      Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta,
-      IfExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType);
-
-  /**
    * Generates the code necessary to produce a read expression from the given catalog.
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only

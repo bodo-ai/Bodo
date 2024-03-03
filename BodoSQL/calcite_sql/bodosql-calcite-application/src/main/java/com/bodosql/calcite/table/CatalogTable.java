@@ -4,11 +4,10 @@ import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
-import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +18,6 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
-import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -111,39 +109,6 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   public Variable generateWriteCode(
       PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
-  }
-
-  /**
-   * Generate the streaming code needed to initialize a writer for the given variable.
-   *
-   * @return The generated streaming code to write the table.
-   */
-  public Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID) {
-    return catalog.generateStreamingAppendWriteInitCode(operatorID, getFullPath());
-  }
-
-  public Expr generateStreamingWriteAppendCode(
-      PandasCodeGenVisitor visitor,
-      Variable stateVarName,
-      Variable dfVarName,
-      Variable colNamesGlobal,
-      Variable isLastVarName,
-      Variable iterVarName,
-      Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta,
-      IfExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
-    return catalog.generateStreamingWriteAppendCode(
-        visitor,
-        stateVarName,
-        dfVarName,
-        colNamesGlobal,
-        isLastVarName,
-        iterVarName,
-        columnPrecisions,
-        meta,
-        ifExists,
-        createTableType);
   }
 
   /**
@@ -255,5 +220,20 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    */
   public Double getColumnDistinctCount(int column) {
     return null;
+  }
+
+  /**
+   * Get the insert into write target for a particular table. Most tables must maintain the same
+   * table type as already exists for the table, so this will generally be implemented by
+   * subclasses.
+   *
+   * <p>TODO: Remove as an API when the CatalogTable becomes an abstract class
+   *
+   * @param columnNamesGlobal The global variable containing the column names. This should be
+   *     possible to remove in the future since we append to a table.
+   * @return The WriteTarget for the table.
+   */
+  public WriteTarget getInsertIntoWriteTarget(Variable columnNamesGlobal) {
+    throw new UnsupportedOperationException("Insert into is not supported for this table");
   }
 }

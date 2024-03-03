@@ -6,10 +6,9 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
-import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +23,6 @@ import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 public abstract class BodoSqlTable implements ExtensibleTable {
   /**
@@ -228,25 +226,6 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       PandasCodeGenVisitor visitor, Variable varName, String extraArgs);
 
   /**
-   * Generate the streaming code needed to initialize a writer for the given variable.
-   *
-   * @return The generated streaming code to write the table.
-   */
-  public abstract Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID);
-
-  public abstract Expr generateStreamingWriteAppendCode(
-      PandasCodeGenVisitor visitor,
-      Variable stateVarName,
-      Variable tableVarName,
-      Variable colNamesGlobal,
-      Variable isLastVarName,
-      Variable iterVarName,
-      Expr columnPrecisions,
-      SnowflakeCreateTableMetadata meta,
-      IfExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType);
-
-  /**
    * Return the location from which the table is generated. The return value is always entirely
    * capitalized.
    *
@@ -298,4 +277,14 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @return Does the table require IO?
    */
   public abstract boolean readRequiresIO();
+
+  /**
+   * Get the insert into write target for a particular table. Most tables must maintain the same
+   * table type as already exists for the table, so this will generally be a property of the table.
+   *
+   * @param columnNamesGlobal The global variable containing the column names. This should be
+   *     possible to remove in the future since we append to a table.
+   * @return The WriteTarget for the table.
+   */
+  public abstract WriteTarget getInsertIntoWriteTarget(Variable columnNamesGlobal);
 }
