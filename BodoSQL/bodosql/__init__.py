@@ -4,6 +4,10 @@ import bodosql.context_ext
 # Import BodoSQL types
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
+from bodosql.bodosql_types.filesystem_catalog import (
+    FileSystemCatalog,
+    FileSystemCatalogType,
+)
 from bodosql.bodosql_types.snowflake_catalog import (
     SnowflakeCatalog,
     SnowflakeCatalogType,
