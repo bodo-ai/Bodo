@@ -251,76 +251,6 @@ class FileSystemCatalog(
     }
 
     /**
-     * Generates the code necessary to produce the streaming write initialization code from the given
-     * catalog for an append operation.
-     *
-     * @param operatorID ID of operation to use for retrieving memory budget.
-     * @param tableName The path of schema used to reach the table from the root that includes the
-     * table.
-     * @return The generated code to produce the write-initialization code
-     */
-    override fun generateStreamingAppendWriteInitCode(
-        operatorID: Expr.IntegerLiteral?,
-        tableName: ImmutableList<String>?,
-    ): Expr {
-        TODO("Not yet implemented")
-    }
-
-    /**
-     * Generates the code necessary to produce the streaming write initialization code from the given
-     * catalog.
-     *
-     * @param operatorID ID of operation to use for retrieving memory budget.
-     * @param tableName The path of schema used to reach the table from the root that includes the
-     * table.
-     * @param ifExists Behavior to perform if the table already exists
-     * @param createTableType Type of table to create if it doesn't exist
-     * @param colNamesGlobal Column names of table to write
-     * @param icebergBase path for writing Iceberg table data (excluding volume bucket path)
-     * @return The generated code to produce the write-initialization code
-     */
-    override fun generateStreamingWriteInitCode(
-        operatorID: Expr.IntegerLiteral,
-        tableName: ImmutableList<String>,
-        ifExists: IfExistsBehavior,
-        createTableType: SqlCreateTable.CreateTableType,
-        colNamesGlobal: Variable,
-        icebergBase: String,
-    ): Expr {
-        TODO("Not yet implemented")
-    }
-
-    /**
-     * Generates the code necessary to produce code to append tables to the streaming writer of the
-     * given object.
-     *
-     * @param stateVarName Name of the variable of the write state
-     * @param tableVarName Name of the variable storing the table to append
-     * @param colNamesGlobal Column names of table to append
-     * @param isLastVarName Name of the variable indicating the is_last flag
-     * @param iterVarName Name of the variable storing the loop iteration
-     * @param columnPrecisions Name of the metatype tuple storing the precision of each column.
-     * @param meta Metadata of table to write (e.g. comments).
-     * @param ifExists Behavior if table exists (e.g. replace).
-     * @param createTableType type of table to create (e.g. transient).
-     * @return The generated code to produce the write-appending code
-     */
-    override fun generateStreamingWriteAppendCode(
-        visitor: PandasCodeGenVisitor?,
-        stateVarName: Variable?,
-        tableVarName: Variable?,
-        colNamesGlobal: Variable?,
-        isLastVarName: Variable?,
-        iterVarName: Variable?,
-        columnPrecisions: Expr?,
-        meta: SnowflakeCreateTableMetadata?,
-        ifExists: IfExistsBehavior,
-        createTableType: SqlCreateTable.CreateTableType?,
-    ): Expr {
-        TODO("Not yet implemented")
-    }
-
-    /**
      * Generates the code necessary to produce a read expression from the given catalog.
      *
      * @param useStreaming Should we generate code to read the table as streaming (currently only
@@ -472,7 +402,7 @@ class FileSystemCatalog(
      *
      * @param schema The schemaPath to the table.
      * @param tableName The name of the type that will be created.
-     * @param createTableType The createTable type.
+     * @param createTableType The createTable type. This is unused by the file system catalog.
      * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
      * @param columnNamesGlobal Global Variable holding the output column names.
      * @return The selected WriteTarget.
@@ -488,7 +418,6 @@ class FileSystemCatalog(
             IcebergWriteTarget(
                 tableName,
                 schema,
-                createTableType,
                 ifExistsBehavior,
                 columnNamesGlobal,
                 pathToBodoString(rootPath, true),
@@ -498,7 +427,6 @@ class FileSystemCatalog(
             ParquetWriteTarget(
                 tableName,
                 schema,
-                createTableType,
                 ifExistsBehavior,
                 columnNamesGlobal,
                 pathToBodoString(tableInfoToFilePath(schema, tableName), false),
