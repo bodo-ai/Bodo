@@ -22,7 +22,7 @@ from bodosql.imported_java_classes import (
     ArrayListClass,
     BodoTZInfoClass,
     ColumnClass,
-    ColumnDataEnumClass,
+    ColumnDataEnum,
     ColumnDataTypeClass,
     LocalSchemaClass,
     LocalTableClass,
@@ -140,10 +140,10 @@ def construct_tz_aware_array_type(typ, nullable):
     # Timestamps only support precision 9 right now.
     precision = 9
     if typ.tz is None:
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Datetime.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Datetime.value)
         return ColumnDataTypeClass(type_enum, nullable, precision)
     else:
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
         # Create the BodoTzInfo Java object.
         tz_info = BodoTZInfoClass(
             str(typ.tz), "int" if isinstance(typ.tz, int) else "str"
@@ -163,7 +163,7 @@ def construct_time_array_type(
     Returns:
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
-    type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Time.value)
+    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Time.value)
     return ColumnDataTypeClass(type_enum, nullable, typ.precision)
 
 
@@ -179,7 +179,7 @@ def construct_array_item_array_type(arr_type):
         JavaObject: The Java Object for the BodoSQL column type data info.
     """
     child = get_sql_data_type(arr_type.dtype)
-    type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Array.value)
+    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Array.value)
     return ColumnDataTypeClass(type_enum, True, child)
 
 
@@ -197,17 +197,17 @@ def construct_json_array_type(arr_type):
     if isinstance(arr_type, bodo.StructArrayType):
         # TODO: FIXME. We don't support full structs of types yet.
         # As a placeholder we will just match Snowflake.
-        key_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.String.value)
+        key_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.String.value)
         key = ColumnDataTypeClass(key_enum, True)
-        value_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Variant.value)
+        value_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Variant.value)
         value = ColumnDataTypeClass(value_enum, True)
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Json_Object.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
         return ColumnDataTypeClass(type_enum, True, key, value)
     else:
         # TODO: Add map scalar support
         key = get_sql_data_type(arr_type.key_arr_type)
         value = get_sql_data_type(arr_type.value_arr_type)
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Json_Object.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Json_Object.value)
         return ColumnDataTypeClass(type_enum, True, key, value)
 
 
@@ -237,19 +237,19 @@ def get_sql_data_type(arr_type):
         warnings.warn(
             f"Type {arr_type} is not properly supported from a Python + Pandas DataFrame. BodoSQL will implicitly treat this column as a float64, which may lead to unexpected conversion errors. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
         )
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Float64.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Float64.value)
         return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
         return construct_array_item_array_type(arr_type)
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
         return construct_json_array_type(arr_type)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
-        type_enum = ColumnDataEnumClass.fromTypeId(
+        type_enum = ColumnDataEnum.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
         return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Categorical.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Categorical.value)
         child = get_sql_data_type(dtype_to_array_type(arr_type.dtype.elem_type, True))
         return ColumnDataTypeClass(type_enum, nullable, child)
     else:
@@ -257,7 +257,7 @@ def get_sql_data_type(arr_type):
         # error but we generate a dummy type because we may be able to support it
         # if its optimized out.
         warnings.warn(BodoSQLWarning(warning_msg))
-        type_enum = ColumnDataEnumClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Unsupported.value)
         return ColumnDataTypeClass(type_enum, nullable)
 
 
@@ -288,7 +288,7 @@ def get_sql_param_type(param_type, param_name):
             is_literal,
         )
     elif unliteral_type in _numba_to_sql_param_type_map:
-        type_enum = ColumnDataEnumClass.fromTypeId(
+        type_enum = ColumnDataEnum.fromTypeId(
             _numba_to_sql_param_type_map[unliteral_type]
         )
         data_type = ColumnDataTypeClass(type_enum, nullable)
