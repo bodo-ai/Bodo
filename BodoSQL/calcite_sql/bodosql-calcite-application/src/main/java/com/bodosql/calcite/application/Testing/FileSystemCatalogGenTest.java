@@ -17,13 +17,13 @@ import org.apache.calcite.rel.RelRoot;
 /** Class for locally testing codegen using a FileSystem Catalog */
 public class FileSystemCatalogGenTest {
   public static void main(String[] args) throws Exception {
-    String sql =
-        "create table \"iceberg_db\".LEVEL_1.new_table as select A from"
-            + " \"iceberg_db\".LEVEL_1.SIMPLE_NUMERIC_TABLE where B IS NOT NULL limit 10";
+    String sql = "create table new_table as select A from SIMPLE_BOOL_BINARY_TABLE";
     Map envVars = System.getenv();
     BodoSQLCatalog catalog =
         new FileSystemCatalog(
-            (String) envVars.get("ROOT_PATH"), WriteTarget.WriteTargetEnum.fromString("parquet"));
+            (String) envVars.get("ROOT_PATH"),
+            WriteTarget.WriteTargetEnum.fromString("parquet"),
+            (String) envVars.get("DEFAULT_SCHEMA"));
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
 
     RelationalAlgebraGenerator generator =

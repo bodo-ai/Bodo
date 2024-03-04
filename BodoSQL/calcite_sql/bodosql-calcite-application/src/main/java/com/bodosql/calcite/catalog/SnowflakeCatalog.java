@@ -826,6 +826,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   /**
+   * Return the number of levels at which a default schema may be found. Snowflake only has 2
+   * levels, so this is always 2.
+   *
+   * @return The number of levels a default schema can be found.
+   */
+  @Override
+  public int numDefaultSchemaLevels() {
+    return 2;
+  }
+
+  /**
    * Returns a set of all function names with the given schema name.
    *
    * @param schemaPath The list of schemas to traverse before finding the function.

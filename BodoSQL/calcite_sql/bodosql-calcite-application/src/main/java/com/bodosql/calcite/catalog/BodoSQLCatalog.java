@@ -69,6 +69,13 @@ public interface BodoSQLCatalog {
   List<String> getDefaultSchema(int depth);
 
   /**
+   * Return the number of levels at which a default schema may be found.
+   *
+   * @return The number of levels a default schema can be found.
+   */
+  int numDefaultSchemaLevels();
+
+  /**
    * Returns a set of all function names with the given schema name.
    *
    * @param schemaPath The list of schemas to traverse before finding the function.
