@@ -6,6 +6,57 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 
 
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        pytest.param([4, 3, 2, 1, 0], id="small-no_null"),
+        pytest.param([1, 11, 4, 11, 2, 11, 0, 11, 3], id="small-some_null"),
+        pytest.param([11, 11, 8, 11, 11] * 3, id="small-most_null"),
+        pytest.param((np.arange(1000) ** 3) % 12, id="large-some_null"),
+        pytest.param(
+            np.round(np.tan(np.arange(1000))).astype(np.int64) % 11,
+            id="large-no_null",
+        ),
+        pytest.param(([11] * 400 + [3]) * 5, id="large-most_null"),
+    ],
+)
+def test_timestamptz_sort(pattern, memory_leak_check):
+    """Test that sorting an array of TIMESTAMP_TZ values returns
+    them in the correct order"""
+
+    def impl(df):
+        return df.sort_values(by=["T"], na_position="last")
+
+    base_values = np.array(
+        [
+            bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+            bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+            bodo.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
+            bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
+            bodo.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
+            None,
+        ]
+    )
+    arr = base_values[pattern]
+    expected = base_values[sorted(pattern)]
+    df = pd.DataFrame({"T": arr})
+    refsol = pd.DataFrame({"T": expected})
+    check_func(
+        impl,
+        (df,),
+        py_output=refsol,
+        check_dtype=False,
+        check_names=False,
+        reset_index=True,
+    )
+
+
 def test_timestamptz_array_creation(memory_leak_check):
     """Test creation of TimestampTZ array"""
 

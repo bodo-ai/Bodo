@@ -1560,6 +1560,33 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             }
         }
     }
+    if (arr1->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // NULLABLE case. We need to consider the bitmask and the values.
+        uint8_t* null_bitmask1 =
+            (uint8_t*)arr1->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
+        uint8_t* null_bitmask2 =
+            (uint8_t*)arr2->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
+        bool bit1 = GetBit(null_bitmask1, iRow1);
+        bool bit2 = GetBit(null_bitmask2, iRow2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        int reply = process_bits(bit1, bit2);
+        if (reply != 0) {
+            return reply;
+        }
+        // If bit1 is true it means that both rows are non-null, so
+        // we need to compare their UTC timestamps.
+        if (bit1) {
+            uint64_t siztype = numpy_item_size[arr1->dtype];
+            char* ptr1 =
+                arr1->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow1);
+            char* ptr2 =
+                arr2->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow2);
+            int test =
+                NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+            return test;
+        }
+    }
     if (arr1->arr_type == bodo_array_type::STRING) {
         // For STRING case we need to deal bitmask and the values.
         bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
@@ -1901,6 +1928,36 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
     return "no matching type";
 }
 
+std::string GetTimestamptzString(const std::shared_ptr<array_info>& arr,
+                                 size_t idx) {
+    int64_t ts_utc = ((int64_t*)(arr->data1()))[idx];
+    int16_t offset_mintues_raw = ((int16_t*)(arr->data2()))[idx];
+    int16_t offset_hours = std::abs(offset_mintues_raw) / 60;
+    int16_t offset_minutes = std::abs(offset_mintues_raw) % 60;
+    std::string sign = (offset_mintues_raw > 0 ? " +" : " -");
+    // Conver the offset to ±hh:mm format
+    std::string hour_str = std::to_string(offset_hours);
+    std::string minute_str = std::to_string(offset_minutes);
+    if (hour_str.size() == 1)
+        hour_str = "0" + hour_str;
+    if (minute_str.size() == 1)
+        minute_str = "0" + minute_str;
+    // Extract the second & subsecond components, then convert
+    // the seconds to a timestamp (format: "YYYY-MM-DD HH:MM:SS")
+    int64_t subsecond = ts_utc % 1000000000;
+    auto seconds = (time_t)(ts_utc / 1000000000);
+    auto ts = std::gmtime(&seconds);
+    char ts_buff[32];
+    std::strftime(ts_buff, 32, "%Y-%m-%d %T", ts);
+    // Connvert the subsecond components into a length-9 string
+    // by left-padding with zeros
+    std::string subsecond_str = std::to_string(subsecond);
+    while (subsecond_str.size() < 9)
+        subsecond_str = "0" + subsecond_str;
+    return std::string(ts_buff) + "." + subsecond_str + sign + hour_str + ":" +
+           minute_str;
+}
+
 template <typename T>
 void DEBUG_append_to_primitive_T(const T* values, int64_t offset,
                                  int64_t length, std::string& string_builder,
@@ -2207,15 +2264,13 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
-        uint64_t siztype1 = numpy_item_size[Bodo_CTypes::INT64];
-        uint64_t siztype2 = numpy_item_size[Bodo_CTypes::INT16];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            char* ptrdata1 = &(arr->data1()[siztype1 * iRow]);
-            strOut =
-                GetStringExpression(Bodo_CTypes::INT64, ptrdata1, arr->scale);
-            char* ptrdata2 = &(arr->data2()[siztype2 * iRow]);
-            strOut += "+" + GetStringExpression(Bodo_CTypes::INT16, ptrdata2,
-                                                arr->scale);
+            bool bit = arr->get_null_bit(iRow);
+            if (bit) {
+                strOut = GetTimestamptzString(arr, iRow);
+            } else {
+                strOut = "NA";
+            }
             ListStr[iRow] = strOut;
         }
     }

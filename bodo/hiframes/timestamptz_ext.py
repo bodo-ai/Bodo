@@ -53,6 +53,20 @@ class TimestampTZ:
         self._utc_timestamp = utc_timestamp
         self._offset_minutes = offset_minutes
 
+    @staticmethod
+    def fromLocal(local_timestamp_string, offset_minutes):
+        """
+        Alternative constructor for TimestampTZ taking in the timestamp string
+        in local time and the offset in hours/minutes from UTC time.
+
+        For example, fromLocal("2018-12-15 20:45:00", -330) represents the
+        UTC timestamp "2018-12-16 02:15:00" with an offset of "-05:30"
+        """
+        utc_timestamp = pd.Timestamp(local_timestamp_string) - pd.Timedelta(
+            minutes=offset_minutes
+        )
+        return TimestampTZ(utc_timestamp, offset_minutes)
+
     def __int__(self):
         # Dummy method for pandas' is_scalar, throw error if called
         raise Exception("Conversion to int not implemented")
@@ -67,7 +81,6 @@ class TimestampTZ:
         offset_min = abs(self.offset_minutes) % 60
         offset_str = f"{offset_sign}{offset_hrs:02}:{offset_min:02}"
 
-        # TODO: Convert the utc_timestamp to the local timestamp.
         return f"TimestampTZ({self.local_timestamp()}, {offset_str})"
 
     @property

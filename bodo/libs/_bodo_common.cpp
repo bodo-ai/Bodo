@@ -1197,6 +1197,15 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         }
         memcpy(farr->data1(), earr->data1(), data_copy_size);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        int64_t timestamp_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
+        int64_t offset_bytes =
+            earr->length * numpy_item_size[Bodo_CTypes::INT16];
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->data1(), earr->data1(), timestamp_bytes);
+        memcpy(farr->data2(), earr->data2(), offset_bytes);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
     } else if (earr->arr_type == bodo_array_type::STRING) {
         memcpy(farr->data1(), earr->data1(), earr->n_sub_elems());
         memcpy(farr->data2(), earr->data2(),

@@ -1049,7 +1049,7 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
         }
         case bodo_array_type::TIMESTAMPTZ: {
             // timestamp_data
-            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT64);
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::TIMESTAMPTZ);
             bodo_alltoallv(send_arr->data1(), comm_info.send_count,
                            comm_info.send_disp, mpi_typ, out_arr->data1(),
                            comm_info.recv_count, comm_info.recv_disp, mpi_typ,
@@ -2116,6 +2116,18 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         }
         MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
         MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
+        MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr);
+        } else {
+            out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
+        }
+        MPI_Bcast(out_arr->data1(), n_rows, utc_mpi_typ, mpi_root,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data2(), n_rows, offset_mpi_typ, mpi_root,
+                  MPI_COMM_WORLD);
     } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
@@ -2183,6 +2195,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
             GetArrType_as_string(arr_type));
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
         arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::ARRAY_ITEM ||
         arr_type == bodo_array_type::STRUCT) {
@@ -2637,6 +2650,31 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             out_arr =
                 create_dict_string_array(in_arr->child_arrays[0], out_arr);
         }
+    } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        // The null bitmask is handled at the bottom of the function.
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += rows_counts[i_p];
+        }
+        MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
+        MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
+        // Copy the UTC timestamp and offset minutes buffers
+        char* data1_ptr = nullptr;
+        char* data2_ptr = nullptr;
+        if (myrank == mpi_root || all_gather) {
+            out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
+                                            -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+            data2_ptr = out_arr->data2();
+        }
+        MPI_Gengatherv(in_arr->data1(), n_rows, utc_mpi_typ, data1_ptr,
+                       rows_counts.data(), rows_disps.data(), utc_mpi_typ,
+                       mpi_root, MPI_COMM_WORLD, all_gather);
+        MPI_Gengatherv(in_arr->data2(), n_rows, offset_mpi_typ, data2_ptr,
+                       rows_counts.data(), rows_disps.data(), offset_mpi_typ,
+                       mpi_root, MPI_COMM_WORLD, all_gather);
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_rows_tot = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
@@ -2697,6 +2735,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
     }
     if (arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::TIMESTAMPTZ ||
         arr_type == bodo_array_type::ARRAY_ITEM ||
         arr_type == bodo_array_type::STRUCT) {
         char* null_bitmask_i = in_arr->null_bitmask();
