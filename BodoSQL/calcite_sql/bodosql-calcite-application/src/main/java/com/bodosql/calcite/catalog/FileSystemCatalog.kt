@@ -13,8 +13,10 @@ import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
+import org.apache.calcite.sql.parser.SqlParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
@@ -39,9 +41,11 @@ import java.io.FileNotFoundException
 class FileSystemCatalog(
     connStr: String,
     private val writeDefault: WriteTarget.WriteTargetEnum,
+    defaultSchema: String,
 ) : IcebergCatalog(createHadoopCatalog(connStr)) {
     private val fs = createFileSystem(connStr)
     private val rootPath = fs.resolvePath(Path("."))
+    private val defaultSchemaList = parseDefaultSchema(defaultSchema)
 
     /**
      * Convert a Hadoop FileSystem Path to a Bodo supported connection string.
@@ -184,7 +188,9 @@ class FileSystemCatalog(
     override fun getSchemaNames(schemaPath: ImmutableList<String>): Set<String> {
         val fullPath = schemaPathToFilePath(schemaPath)
         val elements = getDirectoryContents(fullPath).filter { isSchema(it) }.map { it.name }
-        return elements.toSet()
+        // Insert "." because it always exists. We use this to handle having
+        // the default schema be the root if not provided by the user.
+        return elements.toSet() + setOf(".")
     }
 
     /**
@@ -204,13 +210,25 @@ class FileSystemCatalog(
     /**
      * Return the list of implicit/default schemas for the given catalog, in the order that they
      * should be prioritized during table resolution. The provided depth gives the "level" at which to
-     * provide the default.
+     * provide the default. Each entry in the list is a schema name at that level, not the path to reach
+     * that level.
      *
      * @param depth The depth at which to find the default.
      * @return List of default Schema for this catalog.
      */
     override fun getDefaultSchema(depth: Int): List<String> {
+        if (depth < defaultSchemaList.size) {
+            return listOf(defaultSchemaList[depth])
+        }
         return listOf()
+    }
+
+    /**
+     * Return the number of levels at which a default schema may be found.
+     * @return The number of levels a default schema can be found.
+     */
+    override fun numDefaultSchemaLevels(): Int {
+        return defaultSchemaList.size
     }
 
     /**
@@ -349,6 +367,44 @@ class FileSystemCatalog(
         return fs
     }
 
+    /**
+     * Return the desired WriteTarget for a create table operation.
+     * Currently, we only allow writing as an Iceberg table.
+     *
+     * @param schema The schemaPath to the table.
+     * @param tableName The name of the type that will be created.
+     * @param createTableType The createTable type. This is unused by the file system catalog.
+     * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
+     * @param columnNamesGlobal Global Variable holding the output column names.
+     * @return The selected WriteTarget.
+     */
+    override fun getCreateTableWriteTarget(
+        schema: ImmutableList<String>,
+        tableName: String,
+        createTableType: CreateTableType,
+        ifExistsBehavior: IfExistsBehavior,
+        columnNamesGlobal: Variable,
+    ): WriteTarget {
+        return if (writeDefault == WriteTarget.WriteTargetEnum.ICEBERG) {
+            IcebergWriteTarget(
+                tableName,
+                schema,
+                ifExistsBehavior,
+                columnNamesGlobal,
+                pathToBodoString(rootPath, true),
+            )
+        } else {
+            assert(writeDefault == WriteTarget.WriteTargetEnum.PARQUET)
+            ParquetWriteTarget(
+                tableName,
+                schema,
+                ifExistsBehavior,
+                columnNamesGlobal,
+                pathToBodoString(tableInfoToFilePath(schema, tableName), false),
+            )
+        }
+    }
+
     companion object {
         /**
          * Create a HadoopCatalog object from the given connection string.
@@ -394,43 +450,24 @@ class FileSystemCatalog(
             )
             return conf
         }
-    }
 
-    /**
-     * Return the desired WriteTarget for a create table operation.
-     * Currently, we only allow writing as an Iceberg table.
-     *
-     * @param schema The schemaPath to the table.
-     * @param tableName The name of the type that will be created.
-     * @param createTableType The createTable type. This is unused by the file system catalog.
-     * @param ifExistsBehavior The createTable behavior for if there is already a table defined.
-     * @param columnNamesGlobal Global Variable holding the output column names.
-     * @return The selected WriteTarget.
-     */
-    override fun getCreateTableWriteTarget(
-        schema: ImmutableList<String>,
-        tableName: String,
-        createTableType: CreateTableType,
-        ifExistsBehavior: IfExistsBehavior,
-        columnNamesGlobal: Variable,
-    ): WriteTarget {
-        return if (writeDefault == WriteTarget.WriteTargetEnum.ICEBERG) {
-            IcebergWriteTarget(
-                tableName,
-                schema,
-                ifExistsBehavior,
-                columnNamesGlobal,
-                pathToBodoString(rootPath, true),
-            )
-        } else {
-            assert(writeDefault == WriteTarget.WriteTargetEnum.PARQUET)
-            ParquetWriteTarget(
-                tableName,
-                schema,
-                ifExistsBehavior,
-                columnNamesGlobal,
-                pathToBodoString(tableInfoToFilePath(schema, tableName), false),
-            )
+        @JvmStatic
+        private fun parseDefaultSchema(defaultSchema: String): ImmutableList<String> {
+            // Special handling for "." so we always have a default schema.
+            if (defaultSchema == ".") {
+                return ImmutableList.of(".")
+            }
+            // Note: We don't need a config for basic functionality
+            // because we only need identifier parsing and the casing
+            // matches the default.
+            // TODO: Match our Parser config static and use it for
+            // additional peace of mind.
+            val parser = SqlParser.create(defaultSchema)
+            val node = parser.parseExpression()
+            if (node !is SqlIdentifier) {
+                throw RuntimeException("FileSystemCatalog Error: Default schema must be a valid SQL DOT separated compound identifier.")
+            }
+            return node.names
         }
     }
 }

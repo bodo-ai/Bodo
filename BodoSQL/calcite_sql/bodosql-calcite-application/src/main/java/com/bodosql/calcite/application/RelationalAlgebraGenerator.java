@@ -13,6 +13,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -222,26 +223,44 @@ public class RelationalAlgebraGenerator {
               //     (table_identifier) (Note: this case will never yield a match,
               //     as the root schema is currently always empty. This may change
               //     in the future)
-              if (currentDatabase != null) {
-                SchemaPlus defaultDatabase = root.getSubSchema(currentDatabase);
-                if (defaultDatabase == null) {
+
+              List<SchemaPlus> schemas = new ArrayList();
+              int numLevels = catalog.numDefaultSchemaLevels();
+              SchemaPlus parent = root;
+              for (int i = 0; i < catalog.numDefaultSchemaLevels(); i++) {
+                List<String> schemaNames = catalog.getDefaultSchema(i);
+                // The current default schema API is awkward and needs to be
+                // rewritten. Snowflake allows there to be multiple current
+                // schemas, but this doesn't generalize to other catalogs as
+                // this can lead to diverging paths. We add this check as a
+                // temporary fix and will revisit the API later.
+                // TODO: Fix the API.
+                if ((i + 1) != numLevels && schemaNames.size() > 1) {
                   throw new RuntimeException(
                       String.format(
-                          Locale.ROOT, "Unable to find default database: %s", currentDatabase));
+                          Locale.ROOT,
+                          "BodoSQL only supports multiple default schema paths that differ in the"
+                              + " last level"));
                 }
-                root.getSubSchemaNames();
-
-                for (String schemaName : catalog.getDefaultSchema(1)) {
-                  SchemaPlus defaultSchema = defaultDatabase.getSubSchema(schemaName);
-                  if (defaultSchema == null) {
+                SchemaPlus newParent = parent;
+                for (int j = schemaNames.size() - 1; j >= 0; j--) {
+                  String schemaName = schemaNames.get(j);
+                  SchemaPlus newSchema = parent.getSubSchema(schemaName);
+                  if (newSchema == null) {
                     throw new RuntimeException(
                         String.format(
                             Locale.ROOT, "Unable to find default schema: %s", schemaName));
                   }
-                  defaults.add(defaultSchema);
+                  schemas.add(newSchema);
+                  newParent = newSchema;
                 }
-                defaults.add(defaultDatabase);
+                parent = newParent;
               }
+              // Add the list in reverse order.
+              for (int i = schemas.size() - 1; i >= 0; i--) {
+                defaults.add(schemas.get(i));
+              }
+              // Add the local schema to the list of schemas.
               defaults.add(root.add(localSchema.getName(), localSchema));
             });
 
