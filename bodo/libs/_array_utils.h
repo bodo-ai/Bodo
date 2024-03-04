@@ -650,9 +650,10 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
-    // For DATETIME and TIMEDELTA the NA is done via the
+    // For DATETIME/TIMESTAMPTZ/TIMEDELTA the NA is done via the
     // std::numeric_limits<int64_t>::min()
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
+        dtype == Bodo_CTypes::TIMESTAMPTZ)
         return NumericComparison_date<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT32)
         return NumericComparison_float<float>(ptr1, ptr2, na_position);
