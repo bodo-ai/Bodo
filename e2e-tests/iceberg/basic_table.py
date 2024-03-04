@@ -180,7 +180,7 @@ s3_tests = lambda table_name: test_builder(
 )
 
 snowflake_tests = lambda table_name: test_builder(
-    f"iceberg+snowflake://{os.environ['SF_ACCOUNT']}.snowflakecomputing.com/?warehouse=DEMO_WH&user={os.environ['SF_USERNAME']}&password={os.environ['SF_PASSWORD']}",
+    f"iceberg+snowflake://{os.environ['SF_ACCOUNT']}/?warehouse=DEMO_WH&user={os.environ['SF_USERNAME']}&password={os.environ['SF_PASSWORD']}",
     "TEST_DB.PUBLIC",
     table_name,
     write_impl=functools.partial(snowflake_write_impl, table_name=table_name),
