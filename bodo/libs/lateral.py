@@ -158,14 +158,14 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
 
     # Create the tuple of columns that need to be kept when converting the input to a C++ table. This
     # includes all columns in keep_cols as well as the column that is to be exploded.
-    keep_cols_tup = unwrap_typeref(keep_cols).key
+    keep_cols_tup = unwrap_typeref(keep_cols).meta
     in_col_inds = MetaType(
         (explode_col,)
         + tuple(i for i in range(len(in_arr_types)) if i in keep_cols_tup)
     )
-    n_in_cols = len(in_col_inds.key)
+    n_in_cols = len(in_col_inds.meta)
 
-    outputs_tup = unwrap_typeref(outputs).key
+    outputs_tup = unwrap_typeref(outputs).meta
     if not isinstance(outputs_tup, tuple) or len(outputs_tup) != 6:  # pragma: no cover
         raise_bodo_error(f"lateral_flatten invalid outputs tuple: {outputs_tup}")
     (

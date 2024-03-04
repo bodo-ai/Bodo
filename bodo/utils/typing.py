@@ -1310,6 +1310,27 @@ def unbox_func_literal(typ, obj, c):
 types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda: 0)
 
 
+def _get_key_bool_safe(meta):
+    """Convert bool values to string to use as key since values like (True, False) and
+    (1, 0) are equal in Python, but shouldn't be equal in this context.
+    This causes Numba's type instance interning to assume instances are the same
+    which is wrong.
+    See https://bodo.atlassian.net/browse/BSE-2809
+
+    Args:
+        meta (any): input meta value to convert to key (typically tuple of string or int or bool)
+
+    Returns:
+        any: meta value with bools replaced with string key
+    """
+    if isinstance(meta, bool):
+        return f"_$BODO_BOOL_{meta}"
+    if isinstance(meta, tuple):
+        return tuple(_get_key_bool_safe(a) for a in meta)
+
+    return meta
+
+
 # type used to pass metadata to type inference functions
 # see untyped_pass.py and df.pivot_table()
 class MetaType(types.Type):
@@ -1326,7 +1347,7 @@ class MetaType(types.Type):
 
     @property
     def key(self):
-        return self.meta
+        return _get_key_bool_safe(self.meta)
 
     @property
     def mangling_args(self):
