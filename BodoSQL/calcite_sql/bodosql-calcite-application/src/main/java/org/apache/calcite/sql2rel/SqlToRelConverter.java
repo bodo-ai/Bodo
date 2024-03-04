@@ -824,6 +824,15 @@ public class SqlToRelConverter {
      */
     int qualifyInsertionIdx = -1;
     if (select.getQualify() != null) {
+      // We need to temporarily modify this Sqlnode's SelectList to handle Qualify. This is a problem,
+      // because this SqlNode
+      // could be used in several locations, IE, a WITH statement.
+      // However, we also cannot just make a copy, because then we have problems because the copy doesn't have an
+      // associated scope in the validator. The current solution is to modify the node's selectlist,
+      // and then modify it back once we've handled qualify. This seems very unsafe to me, but a better solution
+      // will likely take some time to implement. See this ticket for information:
+      // https://bodo.atlassian.net/browse/BSE-2818
+      //
       qualifyInsertionIdx = select.getSelectList().size();
       SqlNodeList selectList = select.getSelectList();
       selectList.add(select.getQualify());
@@ -844,6 +853,8 @@ public class SqlToRelConverter {
     // Bodo Change: Use convertQualifyBodo() instead of convertQualify.
     if (select.getQualify() != null) {
       convertQualifyBodo(bb, qualifyInsertionIdx);
+      // Remove the qualify statement from the selectList to keep the SqlNode consistent.
+      select.getSelectList().remove(qualifyInsertionIdx);
     }
 
     if (select.isDistinct()) {
@@ -5610,7 +5621,7 @@ public class SqlToRelConverter {
    * a filter and projection (see
    * https://docs.snowflake.com/en/sql-reference/constructs/qualify.html)
    *
-   * Bodo Change: Use this instead of convertQualify for hanlding group by.
+   * Bodo Change: Use this instead of convertQualify for handling group by.
    */
   private void convertQualifyBodo(Blackboard bb, int qualifyInsertionIdx) {
     RelNode rel = bb.root();
