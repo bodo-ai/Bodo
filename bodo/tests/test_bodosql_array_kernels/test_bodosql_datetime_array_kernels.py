@@ -2357,6 +2357,216 @@ def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "fname, extra_args, answer",
+    [
+        pytest.param(
+            "get_year",
+            [],
+            pd.array([1999, 2023, 2023, None, 2024], dtype=pd.Int64Dtype()),
+            id="year",
+        ),
+        pytest.param(
+            "get_quarter",
+            [],
+            pd.array([4, 1, 2, None, 3], dtype=pd.Int64Dtype()),
+            id="quarter",
+        ),
+        pytest.param(
+            "get_month",
+            [],
+            pd.array([12, 3, 4, None, 7], dtype=pd.Int64Dtype()),
+            id="month",
+        ),
+        pytest.param(
+            "get_weekofyear",
+            [],
+            pd.array([50, 11, 13, None, 27], dtype=pd.Int64Dtype()),
+            id="weekiso",
+        ),
+        pytest.param(
+            "get_hour",
+            [],
+            pd.array([23, 0, 4, None, 18], dtype=pd.Int64Dtype()),
+            id="hour",
+        ),
+        pytest.param(
+            "get_minute",
+            [],
+            pd.array([59, 0, 30, None, 45], dtype=pd.Int64Dtype()),
+            id="minute",
+        ),
+        pytest.param(
+            "get_second",
+            [],
+            pd.array([59, 0, 1, None, 0], dtype=pd.Int64Dtype()),
+            id="second",
+        ),
+        pytest.param(
+            "get_millisecond",
+            [],
+            pd.array([999, 0, 500, None, 0], dtype=pd.Int64Dtype()),
+            id="millisecond",
+        ),
+        pytest.param(
+            "get_microsecond",
+            [],
+            pd.array([874, 0, 0, None, 0], dtype=pd.Int64Dtype()),
+            id="microsecond",
+        ),
+        pytest.param(
+            "get_nanosecond",
+            [],
+            pd.array([250, 0, 0, None, 0], dtype=pd.Int64Dtype()),
+            id="nanosecond",
+        ),
+        pytest.param(
+            "dayofmonth",
+            [],
+            pd.array([13, 14, 1, None, 4], dtype=pd.Int64Dtype()),
+            id="dayofmonth",
+        ),
+        pytest.param(
+            "weekofyear",
+            ["1", "7"],
+            pd.array([50, 11, 13, None, 27], dtype=pd.Int64Dtype()),
+            id="weekofyear",
+        ),
+        pytest.param(
+            "dayofweekiso",
+            [],
+            pd.array([1, 2, 6, None, 4], dtype=pd.Int64Dtype()),
+            id="dayofweekiso",
+        ),
+        pytest.param(
+            "dayofyear",
+            [],
+            pd.array([347, 73, 91, None, 186], dtype=pd.Int64Dtype()),
+            id="dayofyear",
+        ),
+        pytest.param(
+            "week",
+            ["1", "7"],
+            pd.array([50, 11, 13, None, 27], dtype=pd.Int64Dtype()),
+            id="week",
+        ),
+        pytest.param(
+            "monthname",
+            [],
+            pd.array(["Dec", "Mar", "Apr", None, "Jul"]),
+            id="monthname",
+        ),
+        pytest.param(
+            "dayname", [], pd.array(["Mon", "Tue", "Sat", None, "Thu"]), id="dayname"
+        ),
+        pytest.param(
+            "get_epoch",
+            ["'s'"],
+            pd.array(
+                [945129599, 1678750200, 1680331501, None, 1720089900],
+                dtype=pd.Int64Dtype(),
+            ),
+            id="epoch_second",
+        ),
+        pytest.param(
+            "get_epoch",
+            ["'ms'"],
+            pd.array(
+                [945129599999, 1678750200000, 1680331501500, None, 1720089900000],
+                dtype=pd.Int64Dtype(),
+            ),
+            id="epoch_millisecond",
+        ),
+        pytest.param(
+            "get_epoch",
+            ["'us'"],
+            pd.array(
+                [
+                    945129599999874,
+                    1678750200000000,
+                    1680331501500000,
+                    None,
+                    1720089900000000,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            id="epoch_microsecond",
+        ),
+        pytest.param(
+            "get_epoch",
+            ["'ns'"],
+            pd.array(
+                [
+                    945129599999874250,
+                    1678750200000000000,
+                    1680331501500000000,
+                    None,
+                    1720089900000000000,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            id="epoch_nanosecond",
+        ),
+        pytest.param(
+            "get_timezone_offset",
+            ["'hr'"],
+            pd.array([0, 0, -2, None, 8], dtype=pd.Int64Dtype()),
+            id="tz_hour",
+        ),
+        pytest.param(
+            "get_timezone_offset",
+            ["'min'"],
+            pd.array([0, 30, -15, None, 0], dtype=pd.Int64Dtype()),
+            id="tz_minute",
+        ),
+    ],
+)
+def test_timestamp_tz_extract(fname, extra_args, answer, memory_leak_check):
+    """
+    Tests that all datetime extraction functions behave correctly on TIMESTAMP_TZ
+    values. Reference solutions obtained from Snowflake.
+    """
+    ts_arr = np.array(
+        [
+            bodo.TimestampTZ.fromLocal("1999-12-13 23:59:59.999874250", 0),
+            bodo.TimestampTZ.fromLocal("2023-03-14", 30),
+            bodo.TimestampTZ.fromLocal("2023-04-01 04:30:01.500", -135),
+            None,
+            bodo.TimestampTZ.fromLocal("2024-07-04 18:45:00", 480),
+        ]
+    )
+
+    # Parametrically generate the test impl based on the function to test
+    args = ["ts"] + extra_args
+    args_str = ", ".join(args)
+    func_text = f"impl_vector = lambda ts: pd.Series(bodo.libs.bodosql_array_kernels.{fname}({args_str}))\n"
+    func_text += (
+        f"impl_scalar = lambda ts: bodo.libs.bodosql_array_kernels.{fname}({args_str})"
+    )
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "pd": pd}, loc_vars)
+    impl_vector = loc_vars["impl_vector"]
+    impl_scalar = loc_vars["impl_scalar"]
+
+    # Check the impl on the entire array
+    check_func(
+        impl_vector,
+        (ts_arr,),
+        py_output=pd.Series(answer),
+        check_dtype=False,
+        reset_index=True,
+    )
+
+    # Check the impl on a scalar
+    check_func(
+        impl_scalar,
+        (ts_arr[0],),
+        py_output=answer[0],
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "interval_input",
     [
         pytest.param(pd.DateOffset(months=-4), id="date-offset-scalar"),

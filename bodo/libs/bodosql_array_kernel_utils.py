@@ -1216,7 +1216,9 @@ def verify_date_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
-def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
+def verify_datetime_arg_allow_tz(
+    arg, f_name, a_name, allow_timestamp_tz=False
+):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a datetime
        (scalar or vector) that allows timezones.
 
@@ -1224,6 +1226,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
         a_name (string): the name of the argument being checked
+        allow_timestamp_tz (bool): True if TIMESTAMP_TZ arguments are allowed
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
@@ -1232,6 +1235,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         or is_valid_date_arg(arg)
         or is_valid_tz_naive_datetime_arg(arg)
         or is_valid_tz_aware_datetime_arg(arg)
+        or (allow_timestamp_tz and is_valid_timestamptz_arg(arg))
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a datetime, datetime column, or null, but was {arg}"
@@ -1254,6 +1258,7 @@ def verify_timestamp_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         is_overload_none(arg)
         or is_valid_tz_naive_datetime_arg(arg)
         or is_valid_tz_aware_datetime_arg(arg)
+        or is_valid_timestamptz_arg(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a timestamp, timestamp column, or null, but was {arg}"
@@ -1344,7 +1349,9 @@ def is_valid_time_arg(arg):
     )
 
 
-def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
+def verify_time_or_datetime_arg_allow_tz(
+    arg, f_name, a_name, allow_timestamp_tz=False
+):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a time/datetime
        (scalar or vector) that allows timezones.
 
@@ -1352,6 +1359,7 @@ def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cov
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
         a_name (string): the name of the argument being checked
+        allow_timestamp_tz (bool): True if TIMESTAMP_TZ arguments are allowed
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
@@ -1361,6 +1369,7 @@ def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cov
         or is_valid_time_arg(arg)
         or is_valid_tz_naive_datetime_arg(arg)
         or is_valid_tz_aware_datetime_arg(arg)
+        or (allow_timestamp_tz and is_valid_timestamptz_arg(arg))
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz, but was {arg}"

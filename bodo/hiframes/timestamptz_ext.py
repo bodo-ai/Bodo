@@ -204,6 +204,57 @@ def box_timestamptz(typ, val, c):
     return res
 
 
+def get_utc_timestamp(ts):  # pragma: no cover
+    pass
+
+
+@overload(get_utc_timestamp)
+def overload_get_utc_timestamp(ts):
+    """
+    Converts a timestamp_tz to the corresponding UTC timestamp.
+
+    Args:
+        ts (TimestampTZType): the timestamp to convert
+
+    Returns:
+        (pd_timestamp_tz_naive_type): the UTC timestamp
+    """
+    if ts != TimestampTZType():
+        return
+
+    def impl(ts):  # pragma: no cover
+        return ts.utc_timestamp
+
+    return impl
+
+
+def get_local_timestamp(ts):  # pragma: no cover
+    pass
+
+
+@overload(get_local_timestamp)
+def overload_get_local_timestamp(ts):
+    """
+    Converts a timestamp_tz to the corresponding regular timestamp
+    in local time. E.g. a timestamp_tz with UTC timestamp of
+    "2024-07-04 16:30:00" and an offset of +08:15 would have
+    a local timestamp of "2024-07-05 00:45:00"
+
+    Args:
+        ts (TimestampTZType): the timestamp to convert
+
+    Returns:
+        (pd_timestamp_tz_naive_type): the local timestamp
+    """
+    if ts != TimestampTZType():
+        return
+
+    def impl(ts):  # pragma: no cover
+        return ts.utc_timestamp + pd.Timedelta(minutes=ts.offset_minutes)
+
+    return impl
+
+
 @intrinsic(prefer_literal=True)
 def init_timestamptz(typingctx, utc_timestamp, offset_minutes):
     """Create a TimestampTZ object"""
