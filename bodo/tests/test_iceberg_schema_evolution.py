@@ -1,12 +1,12 @@
 import io
 import re
 from datetime import date, datetime
-from decimal import Decimal
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyspark.sql.types as spark_types
 import pytest
 from mpi4py import MPI
 
@@ -21,14 +21,11 @@ from bodo.tests.iceberg_database_helpers.partition_tables import (
     create_partition_tables,
 )
 from bodo.tests.iceberg_database_helpers.schema_evolution_tables import (
-    LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP,
-    LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR,
-    MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP,
-    MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR,
     SCHEMA_EVOLUTION_TABLE_NAME_MAP,
-    STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP,
-    STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR,
     create_schema_evolution_tables,
+)
+from bodo.tests.iceberg_database_helpers.simple_tables import (
+    BASE_MAP,
 )
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLE_MAP,
@@ -76,10 +73,6 @@ def test_read_schema_evolved_table(
     different types of evolutions (promotion, nullability, reordering,
     renaming, dropping, etc.) and multiple combinations of these.
     """
-    if "STRUCT_FIELD_TYPE_PROMOTION" in table_name:
-        pytest.skip(
-            reason="Schema evolution within struct fields is not yet supported."
-        )
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
@@ -88,6 +81,22 @@ def test_read_schema_evolved_table(
         return df
 
     py_out, _, _ = run_rank0(spark_reader.read_iceberg_table)(table_name, db_schema)
+    if "STRUCT_FIELD_ADD" in table_name:
+        # In the STRUCT FIELD ADD case, Spark returns integers
+        # in the new_column_one sub-field as floats since there
+        # are nulls in there.
+        py_out["A"] = py_out["A"].astype(
+            pd.ArrowDtype(
+                pa.struct(
+                    [
+                        ("a", pa.int32()),
+                        ("b", pa.int64()),
+                        ("new_column_one", pa.int32()),
+                        ("new_column_two", pa.string()),
+                    ]
+                )
+            )
+        )
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -122,10 +131,6 @@ def test_write_schema_evolved_table(
         "DECIMALS_PRECISION_PROMOTION_TABLE" in table_name
     ):
         pytest.skip(reason="Bodo only supports decimals with type (38,18).")
-    if "STRUCT_FIELD_TYPE_PROMOTION" in table_name:
-        pytest.skip(
-            reason="Schema evolution within struct fields is not yet supported."
-        )
 
     db_schema, warehouse_loc = iceberg_database()
     postfix = "_WRITE_TEST"
@@ -196,10 +201,6 @@ def test_filter_pushdown(
     even when the tables have gone through one or more levels
     of schema evolution.
     """
-    if table_name == "NUMERIC_TABLE_RENAME_COLUMN":
-        pytest.skip(
-            "NUMERIC_TABLE_RENAME_COLUMN test will be fixed in schema evolution PR"
-        )
 
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -576,7 +577,7 @@ def test_filter_pushdown_on_newly_added_column(
     if (dtype == "date") and (filter == "IS_IN"):
         # TODO Open a task for this.
         pytest.skip(
-            reason="Gap in DNF filter conversion where datetime.date objects are not handled properly when passing them to Java."
+            reason="[BSE-2800] Gap in DNF filter conversion where datetime.date objects are not handled properly when passing them to Java."
         )
     if (dtype == "timestamp") and (filter == "IS_IN"):
         pytest.skip(reason="Series.isin() on Timezone-aware series not yet supported.")
@@ -952,7 +953,10 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check)
     ],
 )
 def test_read_partition_schema_evolved_table(
-    table_name, iceberg_database, iceberg_table_conn
+    table_name,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
 ):
     """
     Test that we can read from tables that have gone through
@@ -996,7 +1000,10 @@ def test_read_partition_schema_evolved_table(
     ],
 )
 def test_write_partition_schema_evolved_table(
-    table_name, iceberg_database, iceberg_table_conn
+    table_name,
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
 ):
     """
     Test that we can write to and then read from tables that
@@ -1122,7 +1129,9 @@ def test_partition_schema_evolved_table_filter_pushdown(
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-def test_mixed_partition_schema_evolution(iceberg_database, iceberg_table_conn):
+def test_mixed_partition_schema_evolution(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
     Smoke test that we can read from tables that have gone through
     both schema and partition evolution.
@@ -1188,83 +1197,916 @@ def test_mixed_partition_schema_evolution(iceberg_database, iceberg_table_conn):
     )
 
 
-@pytest.mark.parametrize(
-    "table_name",
-    list(STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP.keys()),
-)
-def test_unsupported_struct_operations(
-    table_name, iceberg_database, iceberg_table_conn
+def test_evolved_struct_fields_within_list_and_map(
+    iceberg_database, iceberg_table_conn, memory_leak_check
 ):
     """
-    Test that we can detect schema evolution within struct
-    fields (which is unsupported) and can raise reasonable
-    errors when we encounter this.
+    Test that we are able to read tables after the sub-fields
+    of a struct within list/map fields have been modified.
     """
-    db_schema, warehouse_loc = iceberg_database(table_name)
+    db_schema, warehouse_loc = iceberg_database()
+    table_name = "ADD_DROP_FIELD_TO_STRUCT_IN_LIST_TEST"
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+        df = pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [[{"A": 435, "b": "something"}, {"A": 52356, "b": "to say"}]] * 50,
+                    dtype=pd.ArrowDtype(
+                        pa.large_list(
+                            pa.struct([("A", pa.int32()), ("b", pa.string())])
+                        )
+                    ),
+                ),
+                "B": pd.Series(
+                    [["abc", "rtf"], ["def", "xyz", "typ"]] * 25,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                ),
+                "C": pd.Series(
+                    [[0, 1, 2], [3, 4]] * 25,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+                ),
+                "D": pd.Series(
+                    [
+                        {
+                            "init": {"a": 123, "pl": "init"},
+                            "init2": {"a": 123, "pl": "init2"},
+                        },
+                        {"init3": {"a": 456, "pl": "init3"}},
+                    ]
+                    * 25,
+                    dtype=object,
+                    # dtype=pd.ArrowDtype(
+                    #     pa.map_(
+                    #         pa.string(),
+                    #         pa.struct([("a", pa.int32()), ("pl", pa.string())]),
+                    #     )
+                    # ),
+                ),
+            },
+        )
+        spark.sql(
+            f"""
+            CREATE TABLE hadoop_prod.{DATABASE_NAME}.{table_name} (
+                    A ARRAY<STRUCT<A: int, b: string>> not null,
+                    B ARRAY<string>,
+                    C ARRAY<int>,
+                    D MAP<string, STRUCT<a: int, pl: string>>
+                )
+            USING iceberg
+            TBLPROPERTIES ('format-version'='2', 'write.delete.mode'='merge-on-read');
+        """
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField(
+                    "A",
+                    spark_types.ArrayType(
+                        spark_types.StructType(
+                            [
+                                spark_types.StructField("A", spark_types.IntegerType()),
+                                spark_types.StructField("b", spark_types.StringType()),
+                            ]
+                        )
+                    ),
+                    False,
+                ),
+                spark_types.StructField(
+                    "B", spark_types.ArrayType(spark_types.StringType()), True
+                ),
+                spark_types.StructField(
+                    "C", spark_types.ArrayType(spark_types.IntegerType()), True
+                ),
+                spark_types.StructField(
+                    "D",
+                    spark_types.MapType(
+                        spark_types.StringType(),
+                        spark_types.StructType(
+                            [
+                                spark_types.StructField("a", spark_types.IntegerType()),
+                                spark_types.StructField("pl", spark_types.StringType()),
+                            ]
+                        ),
+                    ),
+                ),
+            ]
+        )
+        df = spark.createDataFrame(df, schema=spark_schema)
+        df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
+
+        # Changing nullability.
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ALTER COLUMN A DROP NOT NULL
+            """
+        )
+
+        # Type promotion for element.
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ALTER COLUMN C.element TYPE long
+            """
+        )
+
+        # Rename outer field.
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            RENAME COLUMN A to F
+            """
+        )
+
+        # Value nullability change.
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ALTER COLUMN B.element DROP NOT NULL
+            """
+        )
+
+        # Add field inside the struct.
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ADD COLUMN F.element.C string
+            """
+        )
+
+        # Add more data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            (
+                array((43, 'todo', 'something'), (43, 'todo', 'something'), null), 
+                array('pizza'),
+                array(0, 1, 2),
+                map('post1', (45, 'post1'))
+            ),
+            (
+                array(null, null, (43, 'todo', 'something'), null),
+                array('pasta'),
+                array(0, 1, 2),
+                map('post2', (50, 'post2'))
+            )
+        """
+        )
+
+        # Drop field from struct inside D
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            DROP COLUMN D.value.pl
+            """
+        )
+
+        # Add more data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            (
+                array((90, 'it', 'marvel'), (43, 'iron', 'mag'), null), 
+                array('kebab'),
+                array(0, 1, 90),
+                map('post3', struct(90))
+            ),
+            (
+                array(null, null, (43, 'todo', 'something'), null),
+                array('pasta'),
+                array(0, 1, 2),
+                map('post4', struct(50))
+            )
+        """
+        )
+
+        # Drop field from struct inside F
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            DROP COLUMN F.element.b
+            """
+        )
+
+        # Add more data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            (
+                array((190, 'op'), (430, 'msg'), null), 
+                array('mango'),
+                array(0, 876, 90),
+                map('post4', struct(990))
+            ),
+            (
+                array(null, null, (43, 'something'), null),
+                array('pasta'),
+                array(0, 871, 2),
+                map('post5', struct(590))
+            )
+        """
+        )
+
+        # Add field to struct inside map
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ADD COLUMN D.value.t long
+            """
+        )
+
+        # Add more data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            (
+                array((190, 'red'), (430, 'orange'), null), 
+                array('blue'),
+                array(0, 8760, 90),
+                map('post6', (90, 782348))
+            ),
+            (
+                array(null, null, (4903, 'hill'), null),
+                array('pasta'),
+                array(0, 871, 2),
+                map('post7', (59, 1237438))
+            )
+        """
+        )
+
+        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out["F"] = py_out["F"].astype(
+            pd.ArrowDtype(
+                pa.large_list(pa.struct([("A", pa.int32()), ("C", pa.string())]))
+            ),
+        )
+        py_out["D"] = py_out["D"].astype(
+            pd.ArrowDtype(
+                pa.map_(pa.string(), pa.struct([("a", pa.int32()), ("t", pa.int64())]))
+            ),
+        )
+        return py_out
+
+    py_out = setup()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    expected_error_msg = STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR[
-        table_name
-    ]
-    with pytest.raises(BodoError, match=re.escape(expected_error_msg)):
-        bodo.jit(impl)(table_name, conn, db_schema)
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
 
 
-@pytest.mark.parametrize(
-    "table_name",
-    list(MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP.keys()),
-)
-def test_unsupported_map_operations(table_name, iceberg_database, iceberg_table_conn):
+def test_rename_and_swap_struct_fields(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
-    Test that we can detect schema evolution within map
-    fields (which is unsupported) and can raise reasonable
-    errors when we encounter this.
+    Test a complicated and adversarial schema evolution case
+    where two sub-fields of a struct have been renamed and
+    swapped over time.
     """
-    db_schema, warehouse_loc = iceberg_database(table_name)
+    db_schema, warehouse_loc = iceberg_database()
+    table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_TEST"
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+        # Start with simple struct table.
+        df = pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [{"a": 1, "b": 3}, {"a": 2, "b": 666}] * 25,
+                    dtype=pd.ArrowDtype(
+                        pa.struct([("a", pa.int32()), ("b", pa.int64())])
+                    ),
+                ),
+                "B": pd.Series(
+                    [{"a": 2.0, "b": 5, "c": 78.23}, {"a": 1.98, "b": 45, "c": 12.90}]
+                    * 25,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                ("a", pa.float64()),
+                                ("b", pa.int64()),
+                                ("c", pa.float64()),
+                            ]
+                        )
+                    ),
+                ),
+            }
+        )
+        spark.sql(
+            f"""
+            CREATE TABLE hadoop_prod.{DATABASE_NAME}.{table_name} (
+                    A STRUCT<a: int, b: long>,
+                    B STRUCT<a: double, b: long, c: double>
+                )
+            USING iceberg
+            TBLPROPERTIES ('format-version'='2', 'write.delete.mode'='merge-on-read');
+        """
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField(
+                    "A",
+                    spark_types.StructType(
+                        [
+                            spark_types.StructField("a", spark_types.IntegerType()),
+                            spark_types.StructField("b", spark_types.LongType()),
+                        ]
+                    ),
+                ),
+                spark_types.StructField(
+                    "B",
+                    spark_types.StructType(
+                        [
+                            spark_types.StructField("a", spark_types.DoubleType()),
+                            spark_types.StructField("b", spark_types.LongType()),
+                            spark_types.StructField("c", spark_types.DoubleType()),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        df = spark.createDataFrame(df, schema=spark_schema)
+        df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
+
+        # Rename A.a to t
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            RENAME COLUMN A.a to t
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (100, 900), (100.0, 90, 100.0) ),
+            ( (101, 901), (101.11, 91, 101.902) )
+        """
+        )
+
+        # Rename A to P
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            RENAME COLUMN A to P
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (200, 800), (200.0, 80, 200.0) ),
+            ( (201, 801), (202.22, 81, 202.805) )
+        """
+        )
+
+        # Rename P.b to a
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            RENAME COLUMN P.b to a
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (300, 700), (300.0, 70, 300.0) ),
+            ( (302, 702), (303.33, 71, 303.707) )
+        """
+        )
+
+        # Rename P.t to b
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            RENAME COLUMN P.t to b
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (400, 600), (400.0, 60, 400.0) ),
+            ( (403, 603), (404.44, 62, 404.606) )
+        """
+        )
+
+        # Swap P.b and P.a
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ALTER COLUMN P.b AFTER a
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (500, 500), (500.0, 50, 500.0) ),
+            ( (504, 504), (505.55, 53, 505.707) )
+        """
+        )
+
+        # Swap P and B
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ALTER COLUMN P AFTER B
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (600.0, 60, 600.0), (600, 600) ),
+            ( (606.66, 64, 606.808), (603, 603) )
+        """
+        )
+
+        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        return py_out
+
+    py_out = setup()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    expected_error_msg = MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR[
-        table_name
-    ]
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
 
-    with pytest.raises(
-        BodoError,
-        match=re.escape(expected_error_msg),
-    ):
-        bodo.jit(impl)(table_name, conn, db_schema)
 
-
-@pytest.mark.parametrize(
-    "table_name",
-    list(LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP.keys()),
-)
-def test_unsupported_list_operations(table_name, iceberg_database, iceberg_table_conn):
+def test_rename_and_swap_struct_fields_inside_other_semi_types(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
-    Test that we can detect schema evolution within list
-    fields (which is unsupported) and can raise reasonable
-    errors when we encounter this.
+    Similar to 'test_rename_and_swap_struct_fields', except this
+    time the struct itself is within other nested types like
+    another struct or a map or a list.
     """
-    db_schema, warehouse_loc = iceberg_database(table_name)
+    db_schema, warehouse_loc = iceberg_database()
+    table_name = "RENAME_AND_SWAP_STRUCT_FIELDS_INSIDE_OTHERS_TEST"
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+
+        # Start with a df with
+        # A: map where value is a struct,
+        # B: list where the element is a struct and
+        # C: struct where one of the sub-fields is a struct.
+        df = pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        {
+                            "init0": {"a": 100, "b": 100.001},
+                            "init1": {"a": 100, "b": 100.001},
+                        },
+                        {
+                            "init0": {"a": 101, "b": 101.001},
+                        },
+                    ]
+                    * 10,
+                    dtype=object,
+                    # dtype=pd.ArrowDtype(
+                    #     pa.map_(
+                    #         pa.string(),
+                    #         pa.struct([("a", pa.int32()), ("b", pa.float64())]),
+                    #     )
+                    # ),
+                ),
+                "B": pd.Series(
+                    [
+                        [{"a": 100, "b": 100.001}, {"a": 101, "b": 101.001}],
+                        [{"a": 102, "b": 102.001}, {"a": 103, "b": 103.003}],
+                    ]
+                    * 10,
+                    dtype=pd.ArrowDtype(
+                        pa.large_list(
+                            pa.struct([("a", pa.int32()), ("b", pa.float64())])
+                        )
+                    ),
+                ),
+                "C": pd.Series(
+                    [
+                        {"a": {"a": 100, "b": 100.001}, "b": "init0"},
+                        {"a": {"a": 101, "b": 101.001}, "b": "init1"},
+                    ]
+                    * 10,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                (
+                                    "a",
+                                    pa.struct([("a", pa.int32()), ("b", pa.float64())]),
+                                ),
+                                ("b", pa.string()),
+                            ]
+                        )
+                    ),
+                ),
+            }
+        )
+
+        spark.sql(
+            f"""
+            CREATE TABLE hadoop_prod.{DATABASE_NAME}.{table_name} (
+                    A MAP<string, STRUCT<a: int, b: double>>,
+                    B ARRAY<STRUCT<a: int, b: double>>,
+                    C STRUCT<a: STRUCT<a: int, b: double>, b: string>
+                )
+            USING iceberg
+            TBLPROPERTIES ('format-version'='2', 'write.delete.mode'='merge-on-read');
+        """
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField(
+                    "A",
+                    spark_types.MapType(
+                        spark_types.StringType(),
+                        spark_types.StructType(
+                            [
+                                spark_types.StructField("a", spark_types.IntegerType()),
+                                spark_types.StructField("b", spark_types.DoubleType()),
+                            ]
+                        ),
+                    ),
+                ),
+                spark_types.StructField(
+                    "B",
+                    spark_types.ArrayType(
+                        spark_types.StructType(
+                            [
+                                spark_types.StructField("a", spark_types.IntegerType()),
+                                spark_types.StructField("b", spark_types.DoubleType()),
+                            ]
+                        ),
+                    ),
+                ),
+                spark_types.StructField(
+                    "C",
+                    spark_types.StructType(
+                        [
+                            spark_types.StructField(
+                                "a",
+                                spark_types.StructType(
+                                    [
+                                        spark_types.StructField(
+                                            "a", spark_types.IntegerType()
+                                        ),
+                                        spark_types.StructField(
+                                            "b", spark_types.DoubleType()
+                                        ),
+                                    ]
+                                ),
+                            ),
+                            spark_types.StructField("b", spark_types.StringType()),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        df = spark.createDataFrame(df, schema=spark_schema)
+        df.writeTo(f"hadoop_prod.{DATABASE_NAME}.{table_name}").append()
+
+        # Rename A.value.a to t, B.element.a to t and C.a.a to t
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN A.value.a to t;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN B.element.a to t;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN C.a.a to t;
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( map('post1', (200, 200.002)), array((200, 201.002), (201, 202.002)), ((202, 203.003), 'post2') ),
+            ( map('post2', (202, 201.002)), array((201, 202.002), (202, 201.002)), ((203, 204.004), 'post1') )
+        """
+        )
+
+        # Rename A.value.b to a, B.element.b to a and C.a.b to a
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN A.value.b to a;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN B.element.b to a;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN C.a.b to a;
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( map('post3', (300, 300.003)), array((300, 301.003), (301, 303.003)), ((302, 303.004), 'post4') ),
+            ( map('post4', (303, 302.003)), array((302, 303.003), (303, 301.003)), ((305, 305.005), 'post3') )
+        """
+        )
+
+        # Rename A.value.t to b, B.element.t to b and C.a.t to b
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN A.value.t to b;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN B.element.t to b;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} RENAME COLUMN C.a.t to b;
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( map('post5', (400, 400.004)), array((400, 402.004), (402, 404.004)), ((403, 404.005), 'post6') ),
+            ( map('post6', (404, 403.004)), array((403, 404.004), (404, 402.004)), ((406, 406.006), 'post5') )
+        """
+        )
+
+        # Swap A.value.b with a, B.element.b with a and C.a.b with a
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN A.value.b AFTER a;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN B.element.b AFTER a;
+            """
+        )
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN C.a.b AFTER a;
+            """
+        )
+
+        # Promote some types
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN A.value.b TYPE long"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN B.element.a TYPE double"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN C.a.b TYPE long"
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( map('post7', (500.005, 500)), array((503.005, 500), (505.005, 503)), ((505.006, 504), 'post8') ),
+            ( map('post8', (504.005, 505)), array((505.005, 504), (503.005, 505)), ((507.007, 507), 'post7') )
+        """
+        )
+
+        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        return py_out
+
+    py_out = setup()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
         return df
 
-    expected_error_msg = LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR[
-        table_name
-    ]
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
 
-    with pytest.raises(
-        BodoError,
-        match=re.escape(expected_error_msg),
-    ):
-        bodo.jit(impl)(table_name, conn, db_schema)
+
+def test_drop_and_readd_struct_field(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test an adversarial schema evolution case where a sub-field
+    of a struct is dropped and then re-added with the same name
+    in the same location. We test this when its a top-level struct
+    and also when the struct itself is inside another nested field
+    like another struct or a map or a list.
+    """
+    db_schema, warehouse_loc = iceberg_database()
+    table_name = "DROP_AND_READD_STRUCT_FIELDS_TEST"
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+
+        # Start with a dataframe:
+        # A: struct<a, b>
+        # B: struct<a: struct<a, b>, b: struct<c, d>>
+        # C: map<string, struct<a, b>>
+        # D: list<struct<a,b>>
+        spark.sql(
+            f"""
+            CREATE TABLE hadoop_prod.{DATABASE_NAME}.{table_name} (
+                    A STRUCT<a: int, b: string>,
+                    B STRUCT<a: struct<a: int, b: string>, b: struct<c: int, d: string>>,
+                    C MAP<string, struct<a: int, b: string>>,
+                    D ARRAY<struct<a: int, b: string>>
+                )
+            USING iceberg
+            TBLPROPERTIES ('format-version'='2', 'write.delete.mode'='merge-on-read');
+        """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( (100, 'init0'), ( (101, 'init0'), (102, 'init0') ), map('init00', (103, 'init00')), array((104, 'init02'), (105, 'init03')) ),
+            ( (200, 'init1'), ( (201, 'init1'), (202, 'init1') ), map('init10', (203, 'init10')), array((204, 'init12'), (205, 'init13')) )
+        """
+        )
+
+        # Drop A.a, B.a.a, B.b.d, C.value.a and D.element.a
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP COLUMN A.a"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP COLUMN B.a.a"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP COLUMN B.b.d"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP COLUMN C.value.a"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} DROP COLUMN D.element.a"
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( struct('post1'), ( struct('post1'), struct(303) ), map('post1', struct('post11')), array(struct('post1102'), struct('post1103')) ),
+            ( struct('post2'), ( struct('post2'), struct(404) ), map('post2', struct('post22')), array(struct('post2203'), struct('post2204')) )
+        """
+        )
+
+        # Add columns A.a, B.a.a, B.b.d, C.value.a and D.element.a
+        spark.sql(
+            f"""
+            ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+            ADD COLUMNS (A.a int, B.a.a int, B.b.d string, C.value.a int, D.element.a int)
+            """
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( struct('post3', 505), ( struct('post3', 502), struct(505, 'post3') ), map('post3', struct('post51', 503)), array(struct('post3102', 590), struct('post3103', 534)) ),
+            ( struct('post4', 606), ( struct('post4', 603), struct(606, 'post4') ), map('post4', struct('post51', 609)), array(struct('post4102', 690), struct('post4103', 634)) )
+        """
+        )
+
+        # Move columns A.a, B.a.a, C.value.a and D.element.a to the front
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN A.a FIRST"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN B.a.a FIRST"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN C.value.a FIRST"
+        )
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name} ALTER COLUMN D.element.a FIRST"
+        )
+
+        # Add data
+        spark.sql(
+            f"""
+            INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
+            VALUES
+            ( struct(606, 'post5'), ( struct(603, 'post5'), struct(606, 'post5') ), map('post5', struct(699, 'post51')), array(struct(684, 'post5102'), struct(654, 'post5103')) ),
+            ( struct(707, 'post6'), ( struct(703, 'post6'), struct(707, 'post6') ), map('post6', struct(794, 'post61')), array(struct(780, 'post6102'), struct(765, 'post6103')) )
+        """
+        )
+
+        py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        py_out["A"] = py_out["A"].astype(
+            pd.ArrowDtype(pa.struct([("a", pa.int32()), ("b", pa.string())]))
+        )
+        py_out["B"] = py_out["B"].astype(
+            pd.ArrowDtype(
+                pa.struct(
+                    [
+                        ("a", pa.struct([("a", pa.int32()), ("b", pa.string())])),
+                        ("b", pa.struct([("c", pa.int32()), ("d", pa.string())])),
+                    ]
+                )
+            )
+        )
+        py_out["C"] = py_out["C"].astype(
+            pd.ArrowDtype(
+                pa.map_(
+                    pa.string(),
+                    pa.struct([("a", pa.int32()), ("b", pa.string())]),
+                )
+            )
+        )
+        py_out["D"] = py_out["D"].astype(
+            pd.ArrowDtype(
+                pa.large_list(
+                    pa.struct([("a", pa.int32()), ("b", pa.string())]),
+                )
+            )
+        )
+        return py_out
+
+    py_out = setup()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df
+
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )

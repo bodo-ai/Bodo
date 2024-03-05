@@ -10,6 +10,7 @@ import re
 import string
 import subprocess
 import time
+import traceback
 import types as pytypes
 import typing as pt
 import warnings
@@ -3009,6 +3010,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
             try:
                 result = func(*args, **kwargs)
             except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
                 err = e
         # Synchronize and re-raise any exception on all ranks.
         err = comm.bcast(err)

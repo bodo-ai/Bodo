@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import time
+import traceback
 from pathlib import Path
 from typing import Callable, Generator, List, Protocol, Tuple, Union
 
@@ -559,7 +560,7 @@ def iceberg_database() -> (
                 database_schema_or_e = create_tables(tables, spark)
             except Exception as e:
                 database_schema_or_e = e
-                print(e)
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
         database_schema_or_e = comm.bcast(database_schema_or_e)
         if isinstance(database_schema_or_e, Exception):
             raise database_schema_or_e
