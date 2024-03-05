@@ -13,6 +13,10 @@ import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
+import org.apache.arrow.dataset.file.FileFormat
+import org.apache.arrow.dataset.file.FileSystemDatasetFactory
+import org.apache.arrow.dataset.jni.NativeMemoryPool
+import org.apache.arrow.memory.RootAllocator
 import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
@@ -24,6 +28,7 @@ import org.apache.iceberg.hadoop.HadoopCatalog
 import org.apache.iceberg.hadoop.Util
 import org.apache.iceberg.util.LocationUtil
 import java.io.FileNotFoundException
+import java.net.URI
 
 /**
  * Implementation of a BodoSQLCatalog catalog for a filesystem catalog implementation.
@@ -100,7 +105,11 @@ class FileSystemCatalog(
     }
 
     private fun getDirectoryContents(path: Path): List<Path> {
-        return fs.listStatus(path).map { it.path }
+        return if (fs.getFileStatus(path).isDirectory) {
+            fs.listStatus(path).map { it.path }
+        } else {
+            listOf()
+        }
     }
 
     /**
@@ -123,7 +132,7 @@ class FileSystemCatalog(
      * @return Is this path referring to a table?
      */
     private fun isTable(path: Path): Boolean {
-        return isIcebergTable(path)
+        return isIcebergTable(path) || isParquetTable(path)
     }
 
     /**
@@ -145,6 +154,22 @@ class FileSystemCatalog(
                     null
                 }
             return metadataStatus?.isDirectory ?: false
+        }
+    }
+
+    /**
+     * Is the given path a Parquet table which is represented
+     * by a single file. A parquet table is a file that ends in
+     * either ".parquet" or ".pq".
+     * @param path The file system path.
+     * @return Is this path referring to a Parquet table?
+     */
+    private fun isParquetTable(path: Path): Boolean {
+        return if (!fs.getFileStatus(path).isFile) {
+            false
+        } else {
+            val name = path.name
+            name.endsWith(".parquet") || name.endsWith(".pq")
         }
     }
 
@@ -171,12 +196,17 @@ class FileSystemCatalog(
         schemaPath: ImmutableList<String>,
         tableName: String,
     ): CatalogTable {
-        val fullPath = tableInfoToFilePath(schemaPath, tableName)
-        if (!isIcebergTable(fullPath)) {
+        val path = tableInfoToFilePath(schemaPath, tableName)
+        if (isIcebergTable(path)) {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } else {
+            val allocator = RootAllocator()
+            val factory =
+                FileSystemDatasetFactory(allocator, NativeMemoryPool.getDefault(), FileFormat.PARQUET, uriToArrowString(path.toUri()))
+            val schema = factory.inspect()
             throw RuntimeException("FileSystemCatalog Error: Only Iceberg tables are currently supported.")
         }
-        val columns = getIcebergTableColumns(schemaPath, tableName)
-        return IcebergCatalogTable(tableName, schemaPath, columns, this)
     }
 
     /**
@@ -468,6 +498,22 @@ class FileSystemCatalog(
                 throw RuntimeException("FileSystemCatalog Error: Default schema must be a valid SQL DOT separated compound identifier.")
             }
             return node.names
+        }
+
+        /**
+         * Converts a URI to the format usable by Arrow,
+         * including changing any filesystem information.
+         * @param uri The URI to convert.
+         * @return The converted URI as a string.
+         */
+        @JvmStatic
+        private fun uriToArrowString(uri: URI): String {
+            val strVal = uri.toString()
+            return if (strVal.startsWith("s3a://")) {
+                strVal.replace("s3a://", "s3://")
+            } else {
+                strVal
+            }
         }
     }
 }
