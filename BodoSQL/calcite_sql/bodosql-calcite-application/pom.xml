@@ -30,10 +30,13 @@
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
         <mockk.version>1.13.5</mockk.version>
-        <!-- Start Iceberg Dependencies. We may remove as we cleanup the relationship with the Iceberg Connector. -->
+        <!-- Start Iceberg Dependencies. We may remove these as we cleanup the relationship with the Iceberg Connector. -->
         <iceberg.version>1.4.3</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
         <!-- End Iceberg Dependencies -->
+        <!-- Start Arrow Dependencies. We may remove these as we cleanup the relationship with file formats. -->
+        <arrow.version>15.0.0</arrow.version>
+        <!-- End Arrow Dependencies -->
     </properties>
 
     <dependencies>
@@ -136,11 +139,26 @@
             <version>${hadoop.version}</version>
         </dependency>
 
-            <dependency>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-aws</artifactId>
-                <version>${hadoop.version}</version>
-            </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aws</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-dataset -->
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-dataset</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-memory-netty -->
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+
 
         <!-- Protobuf to fix Reflective upgrade while waiting on avatica upgrade-->
         <dependency>
