@@ -1021,8 +1021,8 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
     // account the offset and length attributes of the Arrow arrays in the
     // table
     rem_rows -= table->num_rows();
-    for (size_t i = 0; i < columns.size(); i++) {
-        columns[i]->append(table->column(i));
+    for (size_t i = 0; i < this->columns.size(); i++) {
+        this->columns[i]->append(table->column(i));
     }
 }
 

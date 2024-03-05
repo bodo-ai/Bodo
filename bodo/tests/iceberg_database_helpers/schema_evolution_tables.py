@@ -80,33 +80,27 @@ STRUCT_FIELD_NULLABLE_TABLES_MAP: dict[str, str] = {
     "STRUCT_FIELD_NULLABLE": "STRUCT_TABLE"
 }
 
-STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
+STRUCT_FIELD_EVOLUTIONS_TABLES_MAP: dict[str, str] = {
     "STRUCT_FIELD_DROP": "STRUCT_TABLE",
     "STRUCT_FIELD_RENAME": "STRUCT_TABLE",
     "STRUCT_FIELD_REORDER": "STRUCT_TABLE",
     "STRUCT_FIELD_ADD": "STRUCT_TABLE",
-}
-STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
-    "STRUCT_FIELD_DROP": "Expected struct field 'A' (Iceberg Field ID: 1) to have 1 fields, got 2 instead!",
-    "STRUCT_FIELD_RENAME": "Expected struct field 'A' (Iceberg Field ID: 1) subfield #1 to have the name b_renamed but it was b instead!",
-    "STRUCT_FIELD_REORDER": "Expected struct field 'A' (Iceberg Field ID: 1) subfield #0 to have the name b but it was a instead!",
-    "STRUCT_FIELD_ADD": "Expected struct field 'A' (Iceberg Field ID: 1) to have 4 fields, got 2 instead!",
+    "STRUCT_ADD_STRUCT_LIST_MAP_FIELDS": "STRUCT_TABLE",
 }
 
-MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
+MAP_FIELDS_EVOLUTION_TABLES_MAP: dict[str, str] = {
     "MAP_VALUE_PROMOTE": "MAP_TABLE",
+    # Spark doesn't seem to allow updating the key type!
+    # In Spark there's no way to create a non-nullable
+    # value type, so there's no way to go from non-nullable
+    # to nullable.
 }
 
-MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
-    "MAP_VALUE_PROMOTE": "Bit-width of field 'A.value' (Iceberg Field ID: 6) doesn't match exactly. Expected 64, got 32 instead",
-}
-
-LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP: dict[str, str] = {
+LIST_ELEMENT_EVOLUTION_TABLES_MAP: dict[str, str] = {
     "LIST_VALUES_PROMOTE": "LIST_TABLE",
-}
-
-LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP_EXPECTED_ERROR: dict[str, str] = {
-    "LIST_VALUES_PROMOTE": "Bit-width of field 'C.value' (Iceberg Field ID: 8) doesn't match exactly. Expected 64, got 32 instead.",
+    # In Spark, there's no way to create a non-nullable
+    # element type, so there's no way to go from non-nullable
+    # to nullable.
 }
 
 
@@ -139,6 +133,9 @@ SCHEMA_EVOLUTION_TABLE_NAME_MAP: dict[str, str] = (
     | COLUMN_REORDER_TABLES_MAP
     | STRUCT_FIELD_TYPE_PROMOTION_TABLES_MAP
     | STRUCT_FIELD_NULLABLE_TABLES_MAP
+    | STRUCT_FIELD_EVOLUTIONS_TABLES_MAP
+    | MAP_FIELDS_EVOLUTION_TABLES_MAP
+    | LIST_ELEMENT_EVOLUTION_TABLES_MAP
     | COMBO_TABLES_MAP
     | ADVERSARIAL_TABLES_MAP
 )
@@ -356,13 +353,16 @@ def create_struct_field_nullable_table(table: str, spark=None, postfix: str = ""
         append_to_iceberg_table(df, sql_schema, table, spark)
 
 
-def create_struct_unsupported_operation_table(
-    table: str, spark=None, postfix: str = ""
-):
-    """Create a table with unsupported struct operations (field drop, rename, addition and reorder). Postfix is added to the table name."""
+def create_struct_field_evolution_table(table: str, spark=None, postfix: str = ""):
+    """
+    Create a table with evolution operations performed on
+    the fields of a struct (field drop, rename, addition,
+    reorder, etc.).
+    Postfix is added to the table name.
+    """
     if spark is None:
         spark = get_spark()
-    base_name = STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP[table]
+    base_name = STRUCT_FIELD_EVOLUTIONS_TABLES_MAP[table]
     assert (
         f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
     ), f"Didn't find table definition for {base_name}."
@@ -418,6 +418,108 @@ def create_struct_unsupported_operation_table(
                 }
             )
             sql_schema[0] = ("A", "STRUCT<b: long, a: int>", True)
+            append_to_iceberg_table(df, sql_schema, table, spark)
+        elif table == "STRUCT_ADD_STRUCT_LIST_MAP_FIELDS":
+            spark.sql(
+                f"""
+                      ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ADD COLUMNS 
+                      (
+                        B.d struct<t: array<string>, up: map<int, string>>,
+                        A.pld array<string>,
+                        A.iwi map<string, int>
+                      )
+            """
+            )
+            sql_schema[0] = (
+                "A",
+                "STRUCT<a: int, b: long, pld: array<string>, iwi: map<string, int>>",
+                True,
+            )
+            sql_schema[1] = (
+                "B",
+                "STRUCT<a: double, b: long, c: double, d: struct<t: array<string>, up: map<int, string>>>",
+                True,
+            )
+            df = pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            {
+                                "a": 100,
+                                "b": 300,
+                                "pld": ["abc", "def", "ghi"],
+                                "iwi": {"abc": 300, "pqu": 100},
+                            },
+                            {
+                                "a": 2,
+                                "b": 666,
+                                "pld": ["def", "oip", "abc"],
+                                "iwi": {"def": 666, "oip": 2},
+                            },
+                        ]
+                        * 10,
+                        dtype=object,
+                        # Using 'object' since PySpark can have issues with
+                        # converting some of these types. Including the exact
+                        # type in comments for reference.
+                        # dtype=pd.ArrowDtype(
+                        #     pa.struct(
+                        #         [
+                        #             ("a", pa.int32()),
+                        #             ("b", pa.int64()),
+                        #             ("pld", pa.large_list(pa.string())),
+                        #             ("iwi", pa.map_(pa.string(), pa.int32())),
+                        #         ]
+                        #     )
+                        # ),
+                    ),
+                    "B": pd.Series(
+                        [
+                            {
+                                "a": 2.0,
+                                "b": 5,
+                                "c": 78.23,
+                                "d": {
+                                    "t": ["pizza", "pie"],
+                                    "up": {23: "aty", 90: "234 hi9"},
+                                },
+                            },
+                            {
+                                "a": 1.98,
+                                "b": 45,
+                                "c": 12.90,
+                                "d": {
+                                    "t": ["pizza", "crust"],
+                                    "up": {203: "aty", 980: "234 hi9"},
+                                },
+                            },
+                        ]
+                        * 10,
+                        dtype=object,
+                        # dtype=pd.ArrowDtype(
+                        #     pa.struct(
+                        #         [
+                        #             ("a", pa.float64()),
+                        #             ("b", pa.int64()),
+                        #             ("c", pa.float64()),
+                        #             (
+                        #                 "d",
+                        #                 pa.struct(
+                        #                     [
+                        #                         ("t", pa.large_list(pa.string())),
+                        #                         (
+                        #                             "up",
+                        #                             pa.map_(pa.string(), pa.string()),
+                        #                         ),
+                        #                     ]
+                        #                 ),
+                        #             ),
+                        #         ]
+                        #     )
+                        # ),
+                    ),
+                }
+            )
             append_to_iceberg_table(df, sql_schema, table, spark)
 
 
@@ -604,11 +706,15 @@ def create_adversarial_table(table: str, spark=None, postfix: str = ""):
         append_to_iceberg_table(df, sql_schema, table, spark)
 
 
-def create_map_unsupported_operations_table(table: str, spark=None, postfix: str = ""):
-    """Create a table with unsupported map operations (value promotion, key nullability change). Postfix is added to the table name."""
+def create_map_fields_evolution_table(table: str, spark=None, postfix: str = ""):
+    """
+    Create a table with evolution operations performed on the value
+    field of a map. Only promoting the value type is supported at this time.
+    Postfix is added to the table name.
+    """
     if spark is None:
         spark = get_spark()
-    base_name = MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP[table]
+    base_name = MAP_FIELDS_EVOLUTION_TABLES_MAP[table]
     assert (
         f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
     ), f"Didn't find table definition for {base_name}."
@@ -619,16 +725,21 @@ def create_map_unsupported_operations_table(table: str, spark=None, postfix: str
     if create_iceberg_table(df, sql_schema, table, spark) is not None:
         if table == "MAP_VALUE_PROMOTE":
             spark.sql(
-                f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN A.value TYPE BIGINT"
+                f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN A.value TYPE LONG"
             )
-            sql_schema[0] = ("A", "MAP<STRING, BIGINT>", True)
+            sql_schema[0] = ("A", "MAP<STRING, LONG>", True)
             append_to_iceberg_table(df, sql_schema, table, spark)
 
 
-def create_list_unsupported_operations_table(table: str, spark=None, postfix: str = ""):
+def create_list_element_evolution_table(table: str, spark=None, postfix: str = ""):
+    """
+    Create a table with evolution operations performed on the element
+    field of a list. Only promoting the element type is supported at this time.
+    Postfix is added to the table name.
+    """
     if spark is None:
         spark = get_spark()
-    base_name = LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP[table]
+    base_name = LIST_ELEMENT_EVOLUTION_TABLES_MAP[table]
     assert (
         f"SIMPLE_{base_name}" in SIMPLE_TABLE_MAP
     ), f"Didn't find table definition for {base_name}."
@@ -642,12 +753,6 @@ def create_list_unsupported_operations_table(table: str, spark=None, postfix: st
                 f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN C.element TYPE BIGINT"
             )
             sql_schema[2] = ("C", "ARRAY<BIGINT>", True)
-            append_to_iceberg_table(df, sql_schema, table, spark)
-        elif table == "LIST_VALUES_NULLABLE":
-            for column in df.columns:
-                spark.sql(
-                    f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN {column}.element DROP NOT NULL"
-                )
             append_to_iceberg_table(df, sql_schema, table, spark)
 
 
@@ -671,16 +776,16 @@ def create_schema_evolution_tables(tables: list[str], spark=None, postfix: str =
             create_struct_field_type_promotion_table(table, spark, postfix=postfix)
         elif table in STRUCT_FIELD_NULLABLE_TABLES_MAP:
             create_struct_field_nullable_table(table, spark, postfix=postfix)
-        elif table in STRUCT_UNSUPPORTED_OPERATIONS_TABLES_MAP:
-            create_struct_unsupported_operation_table(table, spark, postfix=postfix)
+        elif table in STRUCT_FIELD_EVOLUTIONS_TABLES_MAP:
+            create_struct_field_evolution_table(table, spark, postfix=postfix)
         elif table in COMBO_TABLES_MAP:
             create_combo_table(table, spark, postfix=postfix)
         elif table in ADVERSARIAL_TABLES_MAP:
             create_adversarial_table(table, spark, postfix=postfix)
-        elif table in MAP_UNSUPPORTED_OPERATIONS_TABLES_MAP:
-            create_map_unsupported_operations_table(table, spark, postfix=postfix)
-        elif table in LIST_UNSUPPORTED_OPERATIONS_TABLES_MAP:
-            create_list_unsupported_operations_table(table, spark, postfix=postfix)
+        elif table in MAP_FIELDS_EVOLUTION_TABLES_MAP:
+            create_map_fields_evolution_table(table, spark, postfix=postfix)
+        elif table in LIST_ELEMENT_EVOLUTION_TABLES_MAP:
+            create_list_element_evolution_table(table, spark, postfix=postfix)
 
 
 if __name__ == "__main__":

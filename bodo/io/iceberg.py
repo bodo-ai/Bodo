@@ -435,9 +435,218 @@ class IcebergSchemaGroup:
         return (self.iceberg_field_ids, self.parquet_field_names)
 
     @staticmethod
+    def gen_read_field(
+        iceberg_field_ids: int | tuple,
+        parquet_field_names: str | tuple,
+        final_field: pa.Field,
+        field_name_for_err_msg: str,
+    ) -> pa.Field:
+        """
+        Recursive helper for gen_read_schema to generate
+        the Iceberg Schema Group's read field.
+
+        Args:
+            iceberg_field_ids (int | tuple): Iceberg Field ID
+                of this field in the parquet file. In the
+                semi-structured type case, this will be a tuple
+                where the first element is the Field ID of the
+                semi-structured type itself and the rest will
+                be Field IDs of it sub-fields (each of these may
+                also be tuples since they might be semi-structured
+                themselves).
+            parquet_field_names (str | tuple): Corresponding
+                fields' names.
+            final_field (pa.Field): The target field.
+            field_name_for_err_msg (str): Since this function is
+                called recursively, we use this to build up
+                a more meaningful name for any error messages that
+                we raise.
+
+        Returns:
+            pa.Field: Field to use when reading the files in this
+                schema group.
+        """
+
+        assert (
+            final_field.metadata is not None
+        ), f"Field {field_name_for_err_msg} does not have metadata! This is most likely a bug in Bodo."
+        assert b_ICEBERG_FIELD_ID_MD_KEY in final_field.metadata, (
+            f"Field {field_name_for_err_msg} does not have the Iceberg Field ID in its metadata. "
+            f"Metadata:\n{final_field.metadata}\nThis is most likely a bug in Bodo."
+        )
+        iceberg_field_id = int(final_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
+
+        if isinstance(iceberg_field_ids, int):
+            assert isinstance(parquet_field_names, str)
+            if iceberg_field_id != iceberg_field_ids:
+                raise RuntimeError(
+                    f"Field {field_name_for_err_msg} does not have the expected Iceberg Field ID! "
+                    f"Expected {iceberg_field_id} but got {iceberg_field_ids} instead."
+                )
+            if (
+                pa.types.is_map(final_field.type)
+                or pa.types.is_list(final_field.type)
+                or pa.types.is_large_list(final_field.type)
+                or pa.types.is_struct(final_field.type)
+            ):
+                raise RuntimeError(
+                    f"Expected field type for Iceberg Field ID {iceberg_field_id} ({field_name_for_err_msg}) "
+                    f"to be a nested type ({final_field.type}), but it was a primitive type instead!"
+                )
+            # Note that "final_field" is assumed to be "compatible",
+            # i.e. the same or less strict (in terms of type and
+            # nullability) than whatever is in the files. The actual
+            # validation is performed at read-time at a
+            # per-file basis.
+            # During the read, we will use the "old" name for this
+            # file.
+            return final_field.with_name(parquet_field_names)
+        else:
+            assert isinstance(iceberg_field_ids, tuple)
+            assert isinstance(parquet_field_names, tuple)
+            assert len(iceberg_field_ids) == len(parquet_field_names)
+            assert isinstance(iceberg_field_ids[0], int)
+            assert isinstance(parquet_field_names[0], str)
+            if iceberg_field_id != iceberg_field_ids[0]:
+                raise RuntimeError(
+                    f"Field {field_name_for_err_msg} does not have the expected Iceberg Field ID! "
+                    f"Expected {iceberg_field_id} but got {iceberg_field_ids[0]} instead."
+                )
+            if not (
+                pa.types.is_map(final_field.type)
+                or pa.types.is_list(final_field.type)
+                or pa.types.is_large_list(final_field.type)
+                or pa.types.is_struct(final_field.type)
+            ):
+                raise RuntimeError(
+                    f"Expected field type for Iceberg Field ID {iceberg_field_id} ({field_name_for_err_msg}) "
+                    f"to be a primitive type ({final_field.type}), but it was a nested type instead!"
+                )
+
+            if pa.types.is_struct(final_field.type):
+                # Struct is the tricky case where we must handle
+                # evolution ourselves at read time. Unlike
+                # top-level fields, Arrow doesn't like it if
+                # we add extra sub-fields to the struct (to fill
+                # them with nulls). It also doesn't like it if we
+                # don't provide the fields in the same order as they
+                # will appear in the parquet files. However, it
+                # does allow "skipping" sub-fields as long as the order
+                # of the rest of the fields is consistent with that in the
+                # parquet file. It can also still
+                # perform nullability/type promotion (including multiple
+                # levels down in its sub-fields). Therefore, we will
+                # only include the sub-fields that exist in the parquet
+                # file and will maintain the order.
+                # If a sub-field from the final_field doesn't exist in the parquet file,
+                # we won't add it to the read_schema at this point. We
+                # will add it later (see 'EvolveRecordBatch' in 'iceberg_parquet_reader.cpp').
+                # We will keep the fields in the same original order and with
+                # the same names. We will do the re-ordering and renaming later
+                # as part of 'EvolveRecordBatch'.
+                # We will however skip the fields that we no longer need.
+                # We will also perform the type/nullability promotion
+                # as per the final_field.
+
+                final_sub_fields_iceberg_field_id_to_idx: dict[int, int] = {
+                    int(
+                        final_field.type.field(i).metadata[b_ICEBERG_FIELD_ID_MD_KEY]
+                    ): i
+                    for i in range(final_field.type.num_fields)
+                }
+
+                read_fields: list[pa.Field] = []
+                iceberg_field_ids_in_schema_group_sub_fields: set[int] = set([])
+                # Sub-fields start at index 1.
+                for i in range(1, len(iceberg_field_ids)):
+                    sub_field_iceberg_field_id: int = (
+                        iceberg_field_ids[i]
+                        if isinstance(iceberg_field_ids[i], int)
+                        else iceberg_field_ids[i][0]
+                    )
+                    iceberg_field_ids_in_schema_group_sub_fields.add(
+                        sub_field_iceberg_field_id
+                    )
+                    if (
+                        sub_field_iceberg_field_id
+                        in final_sub_fields_iceberg_field_id_to_idx
+                    ):
+                        final_sub_field_: pa.Field = final_field.type.field(
+                            final_sub_fields_iceberg_field_id_to_idx[
+                                sub_field_iceberg_field_id
+                            ]
+                        )
+                        read_schema_sub_field = IcebergSchemaGroup.gen_read_field(
+                            iceberg_field_ids[i],
+                            parquet_field_names[i],
+                            final_sub_field_,
+                            field_name_for_err_msg=f"{field_name_for_err_msg}.{final_sub_field_.name}",
+                        )
+                        read_fields.append(read_schema_sub_field)
+
+                # Verify that all the required sub fields in the final field exist
+                # in the schema group field.
+                for i in range(final_field.type.num_fields):
+                    final_sub_field: pa.Field = final_field.type.field(i)
+                    assert final_sub_field.metadata is not None
+                    assert b_ICEBERG_FIELD_ID_MD_KEY in final_sub_field.metadata
+                    final_sub_field_iceberg_field_id = int(
+                        final_sub_field.metadata[b_ICEBERG_FIELD_ID_MD_KEY]
+                    )
+                    if (not final_sub_field.nullable) and (
+                        final_sub_field_iceberg_field_id
+                        not in iceberg_field_ids_in_schema_group_sub_fields
+                    ):
+                        raise RuntimeError(
+                            f"Non-nullable field '{field_name_for_err_msg}.{final_sub_field.name}' "
+                            f"(Iceberg Field ID: {final_sub_field_iceberg_field_id}) not found in "
+                            "the schema group!"
+                        )
+
+                return final_field.with_type(pa.struct(read_fields)).with_name(
+                    parquet_field_names[0]
+                )
+            elif pa.types.is_list(final_field.type) or pa.types.is_large_list(
+                final_field.type
+            ):
+                assert len(iceberg_field_ids) == len(parquet_field_names) == 2
+                read_value_field = IcebergSchemaGroup.gen_read_field(
+                    iceberg_field_ids[1],
+                    parquet_field_names[1],
+                    final_field.type.value_field,
+                    field_name_for_err_msg=f"{field_name_for_err_msg}.element",
+                )
+                if pa.types.is_list(final_field.type):
+                    return final_field.with_type(pa.list_(read_value_field)).with_name(
+                        parquet_field_names[0]
+                    )
+                else:
+                    return final_field.with_type(
+                        pa.large_list(read_value_field)
+                    ).with_name(parquet_field_names[0])
+            else:
+                assert pa.types.is_map(final_field.type)
+                assert len(iceberg_field_ids) == len(parquet_field_names) == 3
+                read_key_field = IcebergSchemaGroup.gen_read_field(
+                    iceberg_field_ids[1],
+                    parquet_field_names[1],
+                    final_field.type.key_field,
+                    field_name_for_err_msg=f"{field_name_for_err_msg}.key",
+                )
+                read_item_field = IcebergSchemaGroup.gen_read_field(
+                    iceberg_field_ids[2],
+                    parquet_field_names[2],
+                    final_field.type.item_field,
+                    field_name_for_err_msg=f"{field_name_for_err_msg}.value",
+                )
+                return final_field.with_type(
+                    pa.map_(read_key_field, read_item_field)
+                ).with_name(parquet_field_names[0])
+
+    @staticmethod
     def gen_read_schema(
-        iceberg_field_ids: tuple[int],
-        parquet_field_names: tuple[str],
+        iceberg_field_ids: tuple[int | tuple],
+        parquet_field_names: tuple[str | tuple],
         final_schema: pa.Schema,
     ) -> pa.Schema:
         """
@@ -451,29 +660,39 @@ class IcebergSchemaGroup:
         in the same order as the "final_schema".
         The "final_schema" must have Iceberg Field IDs
         in the metadata of the fields.
-        Note that at this point just the top-level fields
-        are considered and nested fields are assumed
-        to be the same. The validation for the nested fields
-        is done at read time at a per-file basis.
+        Nested fields are handled by calling 'gen_read_field'
+        on them recursively.
 
         Args:
-            iceberg_field_ids (tuple[int]): Iceberg field IDs
+            iceberg_field_ids (tuple[int | tuple]): Iceberg field IDs
                 of the fields in the schema of the files in
                 the schema-group.
-            parquet_field_names (tuple[str]): The corresponding
+            parquet_field_names (tuple[str | tuple]): The corresponding
                 field names.
             final_schema (pa.Schema): The target schema.
 
         Returns:
             pa.Schema: 'read_schema' for the schema group.
         """
-        read_schema_fields: list[pa.Field] = []
-        schema_group_field_id_to_col_name_map: dict[int, str] = {
-            iceberg_field_ids[i]: parquet_field_names[i]
-            for i in range(len(iceberg_field_ids))
-        }
 
-        for field in final_schema:
+        # Create a map from Iceberg Field Id to the column index for the
+        # top-level fields.
+        schema_group_field_id_to_schema_group_col_idx: dict[int, int] = {}
+        for i in range(len(iceberg_field_ids)):
+            if isinstance(iceberg_field_ids[i], int):
+                assert isinstance(parquet_field_names[i], str)
+                schema_group_field_id_to_schema_group_col_idx[iceberg_field_ids[i]] = i
+            else:
+                assert isinstance(iceberg_field_ids[i], tuple)
+                assert isinstance(parquet_field_names[i], tuple)
+                assert isinstance(iceberg_field_ids[i][0], int)
+                assert isinstance(parquet_field_names[i][0], str)
+                schema_group_field_id_to_schema_group_col_idx[
+                    iceberg_field_ids[i][0]
+                ] = i
+
+        read_schema_fields: list[pa.Field] = []
+        for i, field in enumerate(final_schema):
             assert (
                 field.metadata is not None
             ), f"Target schema field doesn't have metadata! This is most likely a bug in Bodo. Field:\n{field}."
@@ -482,28 +701,18 @@ class IcebergSchemaGroup:
                 f"This is most likely a bug in Bodo.\nField: {field}\nField metadata: {field.metadata}."
             )
             iceberg_field_id = int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
-            if iceberg_field_id in schema_group_field_id_to_col_name_map:
+            if iceberg_field_id in schema_group_field_id_to_schema_group_col_idx:
                 # If this field exists in the file:
-                schema_group_field_name = schema_group_field_id_to_col_name_map[
+                schema_group_field_idx = schema_group_field_id_to_schema_group_col_idx[
                     iceberg_field_id
                 ]
-                if schema_group_field_name == field.name:
-                    # Append the field from final schema as is.
-                    # Note that "field" is assumed to be "compatible",
-                    # i.e. the same or less strict (in terms of type and
-                    # nullability) than whatever is in the files. The actual
-                    # validation is performed at read-time at a
-                    # per-file basis.
-                    read_schema_fields.append(field)
-                else:
-                    # This means that the field name has changed
-                    # since the file was written. During the read,
-                    # we will use the "old" name for files in this
-                    # group. We will however use the type from the
-                    # final schema (which is assumed to be compatible
-                    # at this point and verified at read time) for
-                    # consistency.
-                    read_schema_fields.append(field.with_name(schema_group_field_name))
+                read_schema_field = IcebergSchemaGroup.gen_read_field(
+                    iceberg_field_ids[schema_group_field_idx],
+                    parquet_field_names[schema_group_field_idx],
+                    field,
+                    field_name_for_err_msg=field.name,
+                )
+                read_schema_fields.append(read_schema_field)
             else:
                 # Field is not in the file, i.e. it was added to the table
                 # after these files were written or the column in optional
@@ -511,9 +720,11 @@ class IcebergSchemaGroup:
                 # To avoid name conflicts, we will use a unique name.
                 # The column will automatically be filled with nulls at read
                 # time.
-                assert (
-                    field.nullable
-                ), f"Non-nullable field '{field.name}' (Field ID: {iceberg_field_id}) not found in the schema group!"
+                if not field.nullable:
+                    raise RuntimeError(
+                        f"Non-nullable field '{field.name}' (Field ID: "
+                        f"{iceberg_field_id}) not found in the schema group!"
+                    )
                 sanitized_field_name = sanitize_col_name(field.name)
                 _uniq_name = f"_BODO_TEMP_{iceberg_field_id}_{sanitized_field_name}"
                 assert _uniq_name not in parquet_field_names, (
@@ -593,7 +804,6 @@ def validate_file_schema_field_compatible_with_read_schema_field(
     file_schema_field: pa.Field,
     read_schema_field: pa.Field,
     field_name_for_err_msg: str,
-    must_match_exactly: bool = False,
 ):
     """
     Helper function for 'validate_file_schema_compatible_with_read_schema'
@@ -609,11 +819,6 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             e.g. Instead of saying that the field 'a' is
             incompatible, this allows us to say that the field
             'A.a' is incompatible.
-        must_match_exactly (bool, optional): Whether the field
-            should match exactly. This is used for handling
-            nested fields. Until we have full support for
-            schema evolution within nested fields, nested
-            fields must match exactly. Defaults to False.
 
     Raises:
         RuntimeError: If the file_schema_field is incompatible with
@@ -646,13 +851,6 @@ def validate_file_schema_field_compatible_with_read_schema_field(
     # - It shouldn't be nullable if the read schema field isn't nullable.
     if (not read_schema_field.nullable) and file_schema_field.nullable:
         raise RuntimeError(f"Required {field_repr} is optional in the file!")
-    # - In the 'must_match_exactly' case, the nullability must also match exactly.
-    if must_match_exactly and (
-        read_schema_field.nullable != file_schema_field.nullable
-    ):
-        raise RuntimeError(
-            f"Nullability mismatch for {field_repr}. Expected nullable={read_schema_field.nullable}, got {file_schema_field.nullable} instead."
-        )
 
     # - Check that that the types are in the same 'class', i.e. can be upcast safely.
     read_schema_field_type: pa.DataType = read_schema_field.type
@@ -663,13 +861,8 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
     elif pa.types.is_unsigned_integer(read_schema_field_type):
         if not pa.types.is_unsigned_integer(file_schema_field.type):
@@ -678,13 +871,8 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
     elif pa.types.is_floating(read_schema_field_type):
         if not pa.types.is_floating(file_schema_field.type):
@@ -693,13 +881,8 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
     elif pa.types.is_decimal(read_schema_field_type):
         if not pa.types.is_decimal(file_schema_field.type):
@@ -708,27 +891,18 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
         if read_schema_field_type.scale != file_schema_field.type.scale:
             raise RuntimeError(
-                f"Scale of decimal {field_repr} doesn't match exactly. Expected {read_schema_field_type.scale}, got {file_schema_field.type.scale} instead."
+                f"Scale of decimal {field_repr} doesn't match exactly. Expected {read_schema_field_type.scale}, "
+                f"got {file_schema_field.type.scale} instead."
             )
         if read_schema_field_type.precision < file_schema_field.type.precision:
             raise RuntimeError(
-                f"Precision of decimal {field_repr} in file is larger ({file_schema_field.type.precision}) than what's allowed ({read_schema_field_type.precision})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.precision != file_schema_field.type.precision
-        ):
-            raise RuntimeError(
-                f"Precision of decimal {field_repr} doesn't match exactly. Expected {read_schema_field_type.precision}, got {file_schema_field.type.precision} instead."
+                f"Precision of decimal {field_repr} in file is larger ({file_schema_field.type.precision}) "
+                f"than what's allowed ({read_schema_field_type.precision})!"
             )
     elif pa.types.is_boolean(read_schema_field_type):
         if not pa.types.is_boolean(file_schema_field.type):
@@ -745,12 +919,6 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             raise RuntimeError(
                 f"Expected {field_repr} to be a string, got {file_schema_field.type} instead!"
             )
-        if must_match_exactly and (
-            read_schema_field_type.id != file_schema_field.type.id
-        ):
-            raise RuntimeError(
-                f"String {field_repr} doesn't match exactly. Expected {read_schema_field_type}, got {file_schema_field.type} instead!"
-            )
     elif (
         pa.types.is_binary(read_schema_field_type)
         or pa.types.is_large_binary(read_schema_field_type)
@@ -764,12 +932,6 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             raise RuntimeError(
                 f"Expected {field_repr} to be a binary, got {file_schema_field.type} instead!"
             )
-        if must_match_exactly and (
-            read_schema_field_type.id != file_schema_field.type.id
-        ):
-            raise RuntimeError(
-                f"Binary {field_repr} doesn't match exactly. Expected {read_schema_field_type}, got {file_schema_field.type} instead!"
-            )
     elif pa.types.is_date(read_schema_field_type):
         if not pa.types.is_date(file_schema_field.type):
             raise RuntimeError(
@@ -777,13 +939,8 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
     elif pa.types.is_time(read_schema_field_type):
         if not pa.types.is_time(file_schema_field.type):
@@ -792,13 +949,8 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             )
         if read_schema_field_type.bit_width < file_schema_field.type.bit_width:
             raise RuntimeError(
-                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) than what's allowed ({read_schema_field_type.bit_width})!"
-            )
-        if must_match_exactly and (
-            read_schema_field_type.bit_width != file_schema_field.type.bit_width
-        ):
-            raise RuntimeError(
-                f"Bit-width of {field_repr} doesn't match exactly. Expected {read_schema_field_type.bit_width}, got {file_schema_field.type.bit_width} instead."
+                f"Bit-width of {field_repr} in file is larger ({file_schema_field.type.bit_width}) "
+                f"than what's allowed ({read_schema_field_type.bit_width})!"
             )
     elif pa.types.is_timestamp(read_schema_field_type):
         if not pa.types.is_timestamp(file_schema_field.type):
@@ -820,63 +972,79 @@ def validate_file_schema_field_compatible_with_read_schema_field(
             raise RuntimeError(
                 f"Expected {field_repr} to be a list, got {file_schema_field.type} instead!"
             )
-        # Check the value field recursively. At this time, the value
-        # field must match exactly since we don't support schema
-        # evolution on nested fields.
+        # Check the value field recursively.
         validate_file_schema_field_compatible_with_read_schema_field(
             file_schema_field.type.value_field,
             read_schema_field_type.value_field,
             field_name_for_err_msg=f"{field_name_for_err_msg}.value",
-            must_match_exactly=True,
         )
     elif pa.types.is_map(read_schema_field_type):
         if not pa.types.is_map(file_schema_field.type):
             raise RuntimeError(
                 f"Expected {field_repr} to be a map, got {file_schema_field.type} instead!"
             )
-        # Check the key and item fields recursively. At this time,
-        # these fields must match exactly since we don't support schema
-        # evolution on nested fields.
+        # Check the key and item fields recursively.
         validate_file_schema_field_compatible_with_read_schema_field(
             file_schema_field.type.key_field,
             read_schema_field_type.key_field,
             field_name_for_err_msg=f"{field_name_for_err_msg}.key",
-            must_match_exactly=True,
         )
         validate_file_schema_field_compatible_with_read_schema_field(
             file_schema_field.type.item_field,
             read_schema_field_type.item_field,
             field_name_for_err_msg=f"{field_name_for_err_msg}.value",
-            must_match_exactly=True,
         )
     elif pa.types.is_struct(read_schema_field_type):
         if not pa.types.is_struct(file_schema_field.type):
             raise RuntimeError(
                 f"Expected {field_repr} to be a struct, got {file_schema_field.type} instead!"
             )
-        # At this time, the number of fields must match exactly
-        # and so should the field names and their properties
-        # (since we don't support schema evolution on nested fields).
-        if read_schema_field_type.num_fields != file_schema_field.type.num_fields:
-            raise RuntimeError(
-                f"Expected struct {field_repr} to have {read_schema_field_type.num_fields} fields, got {file_schema_field.type.num_fields} instead!"
-            )
+
+        # We need all fields in the read schema to exist in the file schema, but not vice-versa.
+        # However, all the the fields in the file must be in the same order as they are in the
+        # read_schema.
+        file_schema_field_type = file_schema_field.type
+        file_schema_last_idx: int = -1
         for sub_idx in range(read_schema_field_type.num_fields):
             read_schema_sub_field: pa.Field = read_schema_field_type.field(sub_idx)
-            file_schema_sub_field: pa.Field = file_schema_field.type.field(sub_idx)
-            if read_schema_sub_field.name != file_schema_sub_field.name:
+            file_schema_sub_field_idx: int = file_schema_field_type.get_field_index(
+                read_schema_sub_field.name
+            )
+            if file_schema_sub_field_idx == -1:
                 raise RuntimeError(
-                    f"Expected struct {field_repr} subfield #{sub_idx} to have the name {read_schema_sub_field.name} but it was {file_schema_sub_field.name} instead!"
+                    f"Expected struct {field_repr} to have subfield {read_schema_sub_field.name} "
+                    "but it was not found!"
                 )
+            # file_schema_last_idx should be strictly lower than file_schema_sub_field_idx.
+            # If it isn't, then that means the fields are not in the required order.
+            # If it always is, then we are guaranteed that the fields are in the
+            # required order.
+            if file_schema_last_idx >= file_schema_sub_field_idx:
+                expected_field_order: list[str] = [
+                    read_schema_field_type.field(i).name
+                    for i in range(read_schema_field_type.num_fields)
+                ]
+                actual_field_order: list[str] = [
+                    file_schema_field_type.field(i).name
+                    for i in range(file_schema_field_type.num_fields)
+                ]
+                raise RuntimeError(
+                    f"Struct {field_repr} does not have subfield {read_schema_sub_field.name} in the right order! "
+                    f"Expected ordered subset: {expected_field_order}, but got {actual_field_order} instead."
+                )
+            file_schema_last_idx = file_schema_sub_field_idx
+            file_schema_sub_field: pa.Field = file_schema_field_type.field(
+                file_schema_sub_field_idx
+            )
             validate_file_schema_field_compatible_with_read_schema_field(
                 file_schema_sub_field,
                 read_schema_sub_field,
                 field_name_for_err_msg=f"{field_name_for_err_msg}.{read_schema_sub_field.name}",
-                must_match_exactly=True,
             )
     else:
         raise RuntimeError(
-            f"bodo.io.iceberg.validate_file_schema_field_compatible_with_read_schema_field: Unsupported dtype '{read_schema_field_type}' for {field_repr}."
+            "bodo.io.iceberg.validate_file_schema_field_compatible_with_read_schema_field: "
+            f"Unsupported dtype '{read_schema_field_type}' for {field_repr}."
         )
 
 
@@ -903,14 +1071,10 @@ def validate_file_schema_compatible_with_read_schema(
         field_name: str = read_schema_field.name
         if (file_schema_field_idx := file_schema.get_field_index(field_name)) != -1:
             file_schema_field: pa.Field = file_schema.field(file_schema_field_idx)
-            # At this time, the top-level fields don't need to match exactly,
-            # but nested fields will need to (handled by this helper
-            # when recursing on nested fields).
             validate_file_schema_field_compatible_with_read_schema_field(
                 file_schema_field,
                 read_schema_field,
                 field_name_for_err_msg=field_name,
-                must_match_exactly=False,
             )
         else:
             # If a field by that name doesn't exist in the file,
@@ -1034,9 +1198,112 @@ def get_iceberg_file_list_parallel(
     return pq_abs_path_file_list, snapshot_id, iceberg_relative_path_file_list
 
 
+def get_schema_group_identifier_from_pa_field(
+    field: pa.Field,
+    field_name_for_err_msg: str,
+) -> tuple[tuple | int, tuple | str]:
+    """
+    Recursive helper for 'get_schema_group_identifier_from_pa_schema'
+    to get the schema group identifier for a specific
+    field (or sub-field of a nested field). These will
+    then be stitched back together to form the
+    full schema group identifier.
+
+    Args:
+        field (pa.Field): The field to generate the group
+            identifier based off of. This could be
+            a nested field.
+        field_name_for_err_msg (str): Since this function
+            is called recursively, we use this field to
+            have a more meaningful field name that can be
+            used in the error messages.
+
+    Returns:
+        tuple[tuple | int, tuple | str]: Schema group identifier
+            for this field.
+    """
+    field_type = field.type
+
+    if (field.metadata is None) or (b_ICEBERG_FIELD_ID_MD_KEY not in field.metadata):
+        raise RuntimeError(
+            f"Field {field_name_for_err_msg} does not have an Iceberg Field ID!"
+        )
+
+    iceberg_field_id: int = int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
+
+    if pa.types.is_struct(field_type):
+        sub_field_schema_group_identifiers: list[tuple[tuple, tuple]] = [
+            get_schema_group_identifier_from_pa_field(
+                field_type.field(i),
+                f"{field_name_for_err_msg}.{field_type.field(i).name}",
+            )
+            for i in range(field_type.num_fields)
+        ]
+        field_ids = [iceberg_field_id] + [
+            x[0] for x in sub_field_schema_group_identifiers
+        ]
+        field_names = [field.name] + [x[1] for x in sub_field_schema_group_identifiers]
+        return tuple(field_ids), tuple(field_names)
+
+    elif pa.types.is_map(field_type):
+        key_field_schema_group_identifier = get_schema_group_identifier_from_pa_field(
+            field_type.key_field, f"{field_name_for_err_msg}.key"
+        )
+        item_field_schema_group_identifier = get_schema_group_identifier_from_pa_field(
+            field_type.item_field, f"{field_name_for_err_msg}.value"
+        )
+        return (
+            iceberg_field_id,
+            key_field_schema_group_identifier[0],
+            item_field_schema_group_identifier[0],
+        ), (
+            field.name,
+            key_field_schema_group_identifier[1],
+            item_field_schema_group_identifier[1],
+        )
+    elif pa.types.is_list(field_type) or pa.types.is_large_list(field_type):
+        value_field_schema_group_identifier = get_schema_group_identifier_from_pa_field(
+            field_type.value_field, f"{field_name_for_err_msg}.element"
+        )
+        return (iceberg_field_id, value_field_schema_group_identifier[0]), (
+            field.name,
+            value_field_schema_group_identifier[1],
+        )
+    else:
+        return (iceberg_field_id, field.name)
+
+
+def get_schema_group_identifier_from_pa_schema(
+    schema: pa.Schema,
+) -> tuple[tuple[int | tuple], tuple[str | tuple]]:
+    """
+    Generate the schema group identifier from
+    the schema of a parquet file. The schema group
+    identifier is a tuple of tuples. The first
+    is a tuple of Iceberg Field IDs and the second
+    is a tuple of the corresponding field names
+    in the Parquet file. Nested fields are represented
+    by nested tuples within the top-level tuples.
+
+    Args:
+        schema (pa.Schema): Schema to generate the
+            schema group identifier based on.
+
+    Returns:
+        tuple[tuple[int | tuple], tuple[str | tuple]]:
+            The schema group identifier.
+    """
+    field_identifiers = [
+        get_schema_group_identifier_from_pa_field(f, f.name) for f in schema
+    ]
+    iceberg_field_ids = [x[0] for x in field_identifiers]
+    pq_field_names = [x[1] for x in field_identifiers]
+    return tuple(iceberg_field_ids), tuple(pq_field_names)
+
+
 def group_files_by_schema_group_identifier(
     fpaths: list[str], fs: "PyFileSystem" | pa.fs.FileSystem
-) -> dict[tuple[tuple[int], tuple[str]], list[str]]:
+) -> dict[tuple[tuple[int | tuple], tuple[str | tuple]], list[str]]:
     """
     Group a list of files by their Schema Group identifier,
     i.e. based on the Iceberg Field IDs and corresponding
@@ -1070,22 +1337,24 @@ def group_files_by_schema_group_identifier(
         # the schema and metadata.
         # TODO Check if there's a faster way to get this information.
         pq_file = pq.ParquetFile(fpath, filesystem=fs)
-        pq_field_names.append(tuple(pq_file.schema_arrow.names))
-        field_ids = []
-        for field in pq_file.schema_arrow:
-            if (
-                field.metadata is None
-                or b_ICEBERG_FIELD_ID_MD_KEY not in field.metadata
-            ):
-                raise RuntimeError(
-                    f"Iceberg Parquet File ({fpath}) does not have Field IDs!"
-                )
-            field_ids.append(int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY]))
-        iceberg_field_ids.append(tuple(field_ids))
 
-    fpaths_schema_group_ids: list[tuple[str, tuple[int], tuple[int]]] = list(
-        zip(fpaths, iceberg_field_ids, pq_field_names)
-    )
+        try:
+            schema_group_identifier = get_schema_group_identifier_from_pa_schema(
+                pq_file.schema_arrow
+            )
+        except Exception as e:
+            msg = (
+                f"Encountered an error while generating the schema group identifier for file {fpath}. "
+                "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
+                f"{str(e)}"
+            )
+            raise BodoError(msg)
+        iceberg_field_ids.append(schema_group_identifier[0])
+        pq_field_names.append(schema_group_identifier[1])
+
+    fpaths_schema_group_ids: list[
+        tuple[str, tuple[int | tuple], tuple[str | tuple]]
+    ] = list(zip(fpaths, iceberg_field_ids, pq_field_names))
     # Sort/Groupby the field-ids and field-names tuples.
     keyfunc = lambda item: (item[1], item[2])
 
@@ -1560,7 +1829,7 @@ def get_scanner_for_schema_group(
     start_offset: int,
     len_all_fpaths: int,
     batch_size: pt.Optional[int] = None,
-) -> tuple["Scanner", int]:
+) -> tuple["Scanner", pa.Schema, int]:
     """
     Create an Arrow Dataset Scanner for files belonging
     to the same Iceberg Schema Group.
@@ -1594,6 +1863,10 @@ def get_scanner_for_schema_group(
         tuple[Scanner, int]:
             - Arrow Dataset Scanner for the files in the
             schema group.
+            - The schema that the Dataset Scanner will use
+            while reading the file(s). This may be slightly
+            different than the read_schema of the schema-group
+            since some columns may be dict-encoded.
             - Updated start_offset.
     """
     read_schema: pa.Schema = schema_group.read_schema
@@ -1647,7 +1920,7 @@ def get_scanner_for_schema_group(
         # XXX Specify memory pool?
     )
 
-    return scanner, start_offset
+    return scanner, read_schema, start_offset
 
 
 def get_dataset_scanners(
@@ -1663,7 +1936,7 @@ def get_dataset_scanners(
     start_offset: int,
     final_schema: pa.Schema,
     batch_size: pt.Optional[int] = None,
-) -> tuple[list["Scanner"], int]:
+) -> tuple[list["Scanner"], list[pa.Schema], int]:
     """
     Get the Arrow Dataset Scanners for the given files.
     This will return one Scanner for every unique schema
@@ -1701,9 +1974,11 @@ def get_dataset_scanners(
             Defaults to None.
 
     Returns:
-        tuple[list["Scanner"], int]:
+        tuple[list["Scanner"], list[pa.Schema], int]:
             - List of Arrow Dataset Scanners. There will be one
             per Schema Group that this rank will end up reading from.
+            - List of the corresponding read_schema for each of
+            the scanners.
             - Update row offset into the first file/piece.
     """
     cpu_count = os.cpu_count()
@@ -1729,6 +2004,7 @@ def get_dataset_scanners(
         return []
 
     scanners: list["Scanner"] = []
+    scanner_read_schemas: list[pa.Schema] = []
 
     # Assuming the files are ordered by their corresponding
     # schema group index, we can iterate and group files that way.
@@ -1750,7 +2026,7 @@ def get_dataset_scanners(
         # Get schema group for this set of files.
         schema_group: IcebergSchemaGroup = schema_groups[curr_schema_group_idx]
         # Get the row counts for these files.
-        scanner, new_start_offset = get_scanner_for_schema_group(
+        scanner, scanner_read_schema, new_start_offset = get_scanner_for_schema_group(
             schema_group,
             curr_schema_group_files,
             curr_schema_group_files_rows_to_read,
@@ -1768,12 +2044,13 @@ def get_dataset_scanners(
         # schema-group.
         start_offset = new_start_offset if len(scanners) == 0 else start_offset
         scanners.append(scanner)
+        scanner_read_schemas.append(scanner_read_schema)
 
         # Update the schema group index.
         if curr_file_idx < len(fpaths):
             curr_schema_group_idx = file_schema_group_idxs[curr_file_idx]
 
-    return scanners, start_offset
+    return scanners, scanner_read_schemas, start_offset
 
 
 def determine_str_as_dict_columns(

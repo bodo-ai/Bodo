@@ -1,14 +1,344 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-// Implementation of IcebergParquetReader (subclass of ParquetReader) with
+// Implementation of IcebergParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading iceberg datasets (made up of
 // parquet files)
 
-#include <arrow/record_batch.h>
-#include <arrow/result.h>
+#include <arrow/util/key_value_metadata.h>
+#include <fmt/format.h>
+#include <numeric>
 #include "arrow_reader.h"
 
-#include <numeric>
+// Copied from Arrow:
+// https://github.com/apache/arrow/blob/a61f4af724cd06c3a9b4abd20491345997e532c0/cpp/src/parquet/arrow/schema.cc#L243
+// Must match ICEBERG_FIELD_ID_MD_KEY in bodo/io/iceberg.py
+// and bodo_iceberg_connector/schema_helper.py
+static constexpr char ICEBERG_FIELD_ID_MD_KEY[] = "PARQUET:field_id";
+
+/**
+ * @brief Get the Iceberg Field ID from an Arrow field.
+ *
+ * @param field Arrow field to get the Iceberg field ID from.
+ * @return int Iceberg Field ID extracted from the Arrow field.
+ */
+int get_iceberg_field_id(const std::shared_ptr<arrow::Field>& field) {
+    std::shared_ptr<const arrow::KeyValueMetadata> field_md = field->metadata();
+    if (!field_md->Contains(ICEBERG_FIELD_ID_MD_KEY)) {
+        throw std::runtime_error(
+            fmt::format("Iceberg Field ID not found in the field! Field:\n{}",
+                        field->ToString(/*show_metadata*/ true)));
+    }
+    int iceberg_field_id = static_cast<int>(
+        std::stoi(field_md->Get(ICEBERG_FIELD_ID_MD_KEY).ValueOrDie()));
+    return iceberg_field_id;
+}
+
+/**
+ * @brief Recursive helper for EvolveRecordBatch to handle the evolution of
+ * columns, including nested columns by calling this function recursively on the
+ * sub-fields.
+ *
+ * @param column Column from the RecordBatch to evolve.
+ * @param source_field Expected field of the column. This is the field from the
+ * read_schema of the IcebergSchemaGroup that the record batch belongs to.
+ * @param target_field Target field to evolve the column to.
+ * @return std::shared_ptr<::arrow::Array> Evolved column.
+ */
+std::shared_ptr<::arrow::Array> EvolveArray(
+    std::shared_ptr<::arrow::Array> column,
+    const std::shared_ptr<::arrow::Field>& source_field,
+    const std::shared_ptr<::arrow::Field>& target_field) {
+    // Verify that the Iceberg field ID is the same.
+    int source_field_iceberg_field_id = get_iceberg_field_id(source_field);
+    int target_field_iceberg_field_id = get_iceberg_field_id(target_field);
+    if (source_field_iceberg_field_id != target_field_iceberg_field_id) {
+        throw std::runtime_error(fmt::format(
+            "IcebergParquetReader::EvolveArray: Iceberg field ID of the source "
+            "({}) and target ({}) fields do not match!",
+            source_field_iceberg_field_id, target_field_iceberg_field_id));
+    }
+    // Verify that the source field is the same type as the column (including
+    // dict-encoding).
+    if (column->type()->id() != source_field->type()->id()) {
+        throw std::runtime_error(fmt::format(
+            "IcebergParquetReader::EvolveArray: Column field type ({}) "
+            "does not match expected field type ({})!",
+            column->type()->ToString(), source_field->type()->ToString()));
+    }
+    // Verify that the overarching type is the same between the
+    // source and target fields.
+    if (target_field->type()->id() != source_field->type()->id()) {
+        // Source field being a dict-encoded string while the target field
+        // being a string is fine. If that's not the case, then raise
+        // an exception.
+        if (!(arrow::is_dictionary(source_field->type()->id()) &&
+              (std::dynamic_pointer_cast<arrow::DictionaryType>(
+                   source_field->type())
+                   ->value_type()
+                   ->id() == target_field->type()->id()) &&
+              (arrow::is_base_binary_like(target_field->type()->id())))) {
+            throw std::runtime_error(fmt::format(
+                "IcebergParquetReader::EvolveArray: Source ({}) and "
+                "target ({}) field types do not match!",
+                source_field->type()->ToString(),
+                target_field->type()->ToString()));
+        }
+    }
+
+    if (::arrow::is_list(source_field->type()->id())) {
+        // Just recurse on the value field, put the
+        // outputs back together and return.
+
+        // Get the values array out from the column. Call
+        // this function recursively on it with target field.
+        const std::shared_ptr<::arrow::Field>& source_value_field =
+            std::dynamic_pointer_cast<arrow::BaseListType>(source_field->type())
+                ->value_field();
+        const std::shared_ptr<::arrow::Field>& target_value_field =
+            std::dynamic_pointer_cast<arrow::BaseListType>(target_field->type())
+                ->value_field();
+
+        if (source_field->type()->id() == ::arrow::Type::LIST) {
+            std::shared_ptr<::arrow::ListArray> column_ =
+                std::dynamic_pointer_cast<::arrow::ListArray>(column);
+            std::shared_ptr<::arrow::Array> values_column = column_->values();
+            std::shared_ptr<::arrow::Array> evolved_values_column = EvolveArray(
+                values_column, source_value_field, target_value_field);
+            // Create a new ListArray using this as the new values array (use
+            // existing offsets, null-bitmask, etc.) and return it.
+            return std::make_shared<::arrow::ListArray>(
+                target_field->type(), column_->length(),
+                column_->value_offsets(), evolved_values_column,
+                column_->null_bitmap(), column_->null_count(),
+                column_->offset());
+        } else if (source_field->type()->id() == ::arrow::Type::LARGE_LIST) {
+            // Get the values array out from the column. Call
+            // this function recursively on it with target field.
+            std::shared_ptr<::arrow::LargeListArray> column_ =
+                std::dynamic_pointer_cast<::arrow::LargeListArray>(column);
+            std::shared_ptr<::arrow::Array> values_column = column_->values();
+            std::shared_ptr<::arrow::Array> evolved_values_column = EvolveArray(
+                values_column, source_value_field, target_value_field);
+            // Create a new ListArray using this as the new values array (use
+            // existing offsets, null-bitmask, etc.) and return it.
+            return std::make_shared<::arrow::LargeListArray>(
+                target_field->type(), column_->length(),
+                column_->value_offsets(), evolved_values_column,
+                column_->null_bitmap(), column_->null_count(),
+                column_->offset());
+        } else {
+            throw std::runtime_error(fmt::format(
+                "IcebergParquetReader::EvolveArray: Unsupported "
+                "list type ({})! This is most likely a bug in Bodo.",
+                source_field->type()->ToString()));
+        }
+
+    } else if (source_field->type()->id() == ::arrow::Type::MAP) {
+        // Just recurse on the key and item fields, put the
+        // outputs back together and return.
+        const std::shared_ptr<::arrow::Field>& source_key_field =
+            std::dynamic_pointer_cast<arrow::MapType>(source_field->type())
+                ->key_field();
+        const std::shared_ptr<::arrow::Field>& target_key_field =
+            std::dynamic_pointer_cast<arrow::MapType>(target_field->type())
+                ->key_field();
+        const std::shared_ptr<::arrow::Field>& source_item_field =
+            std::dynamic_pointer_cast<arrow::MapType>(source_field->type())
+                ->item_field();
+        const std::shared_ptr<::arrow::Field>& target_item_field =
+            std::dynamic_pointer_cast<arrow::MapType>(target_field->type())
+                ->item_field();
+        std::shared_ptr<::arrow::MapArray> column_ =
+            std::dynamic_pointer_cast<::arrow::MapArray>(column);
+        std::shared_ptr<::arrow::Array> keys_column = column_->keys();
+        std::shared_ptr<::arrow::Array> items_column = column_->items();
+
+        std::shared_ptr<::arrow::Array> evolved_keys_column =
+            EvolveArray(keys_column, source_key_field, target_key_field);
+        std::shared_ptr<::arrow::Array> evolved_items_column =
+            EvolveArray(items_column, source_item_field, target_item_field);
+
+        return std::make_shared<::arrow::MapArray>(
+            target_field->type(), column_->length(), column_->value_offsets(),
+            evolved_keys_column, evolved_items_column, column_->null_bitmap(),
+            column_->null_count(), column_->offset());
+
+    } else if (source_field->type()->id() == ::arrow::Type::STRUCT) {
+        // This is the only real case where we perform any real evolution
+        // since Arrow doesn't do it for us.
+        // In particular, we need to re-order and rename the sub-fields to match
+        // the order and their names in the target field. This is done based on
+        // the sub-fields' Iceberg Field IDs.
+        // In case a sub-field from the target field does not exist, we need
+        // to insert an all-null sub-field.
+
+        const std::shared_ptr<arrow::StructType>& source_field_type =
+            std::dynamic_pointer_cast<arrow::StructType>(source_field->type());
+        const std::shared_ptr<arrow::StructType>& target_field_type =
+            std::dynamic_pointer_cast<arrow::StructType>(target_field->type());
+        const std::shared_ptr<arrow::StructType>& column_type =
+            std::dynamic_pointer_cast<arrow::StructType>(column->type());
+        if (source_field_type->num_fields() != column_type->num_fields()) {
+            throw std::runtime_error(fmt::format(
+                "IcebergParquetReader::EvolveArray: Number of struct "
+                "sub-fields in the source ({}) and actual column ({}) do "
+                "not match!",
+                source_field_type->num_fields(), column_type->num_fields()));
+        }
+
+        std::shared_ptr<::arrow::StructArray> column_ =
+            std::dynamic_pointer_cast<::arrow::StructArray>(column);
+
+        // Loop over the source field's sub-fields.
+        // Ensure they match the sub-fields in the column and create a map that
+        // maps the Iceberg Field ID to the index of the sub-field in the
+        // column.
+        std::unordered_map<int, int>
+            source_sub_field_iceberg_field_id_to_field_idx;
+        for (int i = 0; i < source_field_type->num_fields(); i++) {
+            if (source_field_type->field(i)->name() !=
+                column_type->field(i)->name()) {
+                throw std::runtime_error(fmt::format(
+                    "IcebergParquetReader::EvolveArray: Name of struct "
+                    "sub-field at index {} does not match! Expected '{}', but "
+                    "got '{}' instead.",
+                    i, source_field_type->field(i)->name(),
+                    column_type->field(i)->name()));
+            }
+            int iceberg_field_id =
+                get_iceberg_field_id(source_field_type->field(i));
+            source_sub_field_iceberg_field_id_to_field_idx[iceberg_field_id] =
+                i;
+        }
+
+        std::vector<std::shared_ptr<arrow::Array>> new_child_arrays;
+        new_child_arrays.reserve(target_field_type->num_fields());
+        // Now, loop over the sub-fields in the target field.
+        // Get the Iceberg Field ID of this sub-field. Check
+        // if the Iceberg Field ID exists in the map we created
+        // above.
+        for (int i = 0; i < target_field_type->num_fields(); i++) {
+            int iceberg_field_id =
+                get_iceberg_field_id(target_field_type->field(i));
+            if (source_sub_field_iceberg_field_id_to_field_idx.contains(
+                    iceberg_field_id)) {
+                // If it does, use that to get the sub-field
+                // from the column, evolve it and add it to the final
+                // evolved column.
+                int source_sub_field_idx =
+                    source_sub_field_iceberg_field_id_to_field_idx
+                        [iceberg_field_id];
+                new_child_arrays.emplace_back(
+                    EvolveArray(column_->field(source_sub_field_idx),
+                                source_field_type->field(source_sub_field_idx),
+                                target_field_type->field(i)));
+            } else {
+                // If it doesn't exist, create an all-null column of the
+                // required type using Arrow's MakeArrayOfNull.
+                arrow::Result<std::shared_ptr<arrow::Array>> null_arr_res =
+                    ::arrow::MakeArrayOfNull(
+                        target_field_type->field(i)->type(), column_->length(),
+                        bodo::BufferPool::DefaultPtr());
+                std::shared_ptr<arrow::Array> null_arr;
+                CHECK_ARROW_AND_ASSIGN(
+                    null_arr_res,
+                    fmt::format(
+                        "IcebergParquetReader::EvolveArray: Failed to "
+                        "create null array of type {}:",
+                        target_field_type->field(i)->type()->ToString()),
+                    null_arr);
+                new_child_arrays.push_back(null_arr);
+            }
+        }
+
+        return std::make_shared<arrow::StructArray>(
+            target_field_type, column_->length(), new_child_arrays,
+            column_->null_bitmap(), column_->null_count(), column_->offset());
+
+    } else if (::arrow::is_dictionary(source_field->type()->id())) {
+        // If it's a dict-encoded column, ensure that the value types match
+        // and that it is (large)_string/binary.
+        std::shared_ptr<arrow::DictionaryType> source_field_type =
+            std::dynamic_pointer_cast<arrow::DictionaryType>(
+                source_field->type());
+        std::shared_ptr<arrow::DictionaryType> column_type =
+            std::dynamic_pointer_cast<arrow::DictionaryType>(column->type());
+        if (source_field_type->value_type()->id() !=
+            column_type->value_type()->id()) {
+            throw std::runtime_error(
+                fmt::format("IcebergParquetReader::EvolveArray: Value type of "
+                            "dictionary-encoded column ({}) does not match "
+                            "expected type ({}).",
+                            column_type->value_type()->ToString(),
+                            source_field_type->value_type()->ToString()));
+        }
+        if (!arrow::is_base_binary_like(
+                source_field_type->value_type()->id())) {
+            throw std::runtime_error(
+                fmt::format("IcebergParquetReader::EvolveArray: Value type of "
+                            "a dictionary-encoded column must be "
+                            "string/binary. Got '{}' instead.",
+                            source_field_type->value_type()->ToString()));
+        }
+        // If everything is as expected, return the column as is.
+        return column;
+    } else {
+        // Primitive type. No evolution required.
+        return column;
+    }
+}
+
+/**
+ * @brief Helper function to evolve an Arrow Record Batch to the target schema.
+ * No data is copied since we expect all data to be of the right type already.
+ * We may add some all-null columns in the struct case. These will be allocated
+ * from the default buffer pool.
+ * We traverse recursively over the target schema. The source schema and the
+ * schema of the record-batch is expected to match exactly (verified by this
+ * function).
+ * Most of the evolution is already handled by Arrow. The only evolution we
+ * handle ourselves is related to struct fields where we need to re-order and
+ * rename the sub-fields. We may also need to insert all-null sub-fields to a
+ * struct when they don't exist in the record-batch.
+ *
+ * @param batch Record Batch to evolve.
+ * @param source_schema Expected schema of the record batch. This is the
+ * "read_schema" of the IcebergSchemaGroup that the record batch belongs to.
+ * @param target_schema Target schema to evolve the record batch to. This is the
+ * final schema of the table.
+ * @param selected_fields Since we only load the required fields, this lists the
+ * indices of the fields that are expected to have been loaded. These indices
+ * correspond to both the target and source schemas.
+ * @return std::shared_ptr<::arrow::RecordBatch> Evolved Record Batch.
+ */
+std::shared_ptr<::arrow::RecordBatch> EvolveRecordBatch(
+    std::shared_ptr<::arrow::RecordBatch> batch,
+    std::shared_ptr<::arrow::Schema> source_schema,
+    std::shared_ptr<::arrow::Schema> target_schema,
+    const std::vector<int>& selected_fields) {
+    std::vector<std::shared_ptr<::arrow::Array>> out_batch_columns;
+    out_batch_columns.reserve(selected_fields.size());
+    std::vector<std::shared_ptr<arrow::Field>> output_schema_fields;
+    output_schema_fields.reserve(selected_fields.size());
+    int j = 0;
+    for (int field_idx : selected_fields) {
+        std::shared_ptr<::arrow::Array> orig_col = batch->column(j);
+        const std::shared_ptr<::arrow::Field>& source_field =
+            source_schema->field(field_idx);
+        const std::shared_ptr<::arrow::Field>& target_field =
+            target_schema->field(field_idx);
+        out_batch_columns.push_back(
+            EvolveArray(orig_col, source_field, target_field));
+        output_schema_fields.push_back(target_field);
+        j++;
+    }
+    std::shared_ptr<arrow::Schema> output_schema =
+        std::make_shared<arrow::Schema>(output_schema_fields,
+                                        target_schema->metadata());
+
+    return ::arrow::RecordBatch::Make(output_schema, batch->num_rows(),
+                                      out_batch_columns);
+}
 
 // -------- IcebergParquetReader --------
 
@@ -215,6 +545,10 @@ class IcebergParquetReader : public ArrowReader {
                     "null");
             }
 
+            // Transform the batch to the required target schema.
+            batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
+                                      this->schema, this->selected_fields);
+
             int64_t batch_offset =
                 std::min(this->rows_to_skip, batch->num_rows());
             int64_t length =
@@ -255,6 +589,9 @@ class IcebergParquetReader : public ArrowReader {
             } while (batch_py == NULL);
             std::shared_ptr<::arrow::RecordBatch> batch =
                 arrow::py::unwrap_batch(batch_py).ValueOrDie();
+            // Transform the batch to the required target schema.
+            batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
+                                      this->schema, this->selected_fields);
             int64_t batch_offset =
                 std::min(this->rows_to_skip, batch->num_rows());
             int64_t length = std::min(this->rows_left_to_read,
@@ -332,7 +669,8 @@ class IcebergParquetReader : public ArrowReader {
             batch_size == -1 ? Py_None : PyLong_FromLong(batch_size);
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         // get_dataset_scanners returns a tuple with the a list of PyArrow
-        // Scanners and the updated offset for the first batch.
+        // Scanners, a list of the corresponding read_schemas and the updated
+        // offset for the first batch.
         PyObject* scanners_updated_offset_tup = PyObject_CallMethod(
             iceberg_mod, "get_dataset_scanners", "OOOOOdiOOlOO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
@@ -349,14 +687,34 @@ class IcebergParquetReader : public ArrowReader {
         size_t n_scanners = PyList_Size(scanners_py);
         this->scanners.reserve(n_scanners);
         for (size_t i = 0; i < n_scanners; i++) {
-            // This returns a borrowed reference, so we must increment it to
+            // This returns a borrowed reference, so we must incref it to
             // keep the object around.
             this->scanners.push_back(PyList_GetItem(scanners_py, i));
             Py_INCREF(this->scanners.back());
         }
 
+        // PyTuple_GetItem returns a borrowed reference, so we don't need to
+        // DECREF it explicitly.
+        PyObject* scanner_read_schemas_py =
+            PyTuple_GetItem(scanners_updated_offset_tup, 1);
+        size_t n_read_schemas = PyList_Size(scanner_read_schemas_py);
+        assert(n_scanners == n_read_schemas);
+        this->scanner_read_schemas.reserve(n_read_schemas);
+        for (size_t i = 0; i < n_read_schemas; i++) {
+            // This returns a borrowed reference, so we don't need to
+            // decref it.
+            PyObject* read_schema_py =
+                PyList_GetItem(scanner_read_schemas_py, i);
+            std::shared_ptr<arrow::Schema> read_schema;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow::py::unwrap_schema(read_schema_py),
+                "Iceberg Scanner Read Schema Couldn't Unwrap from Python",
+                read_schema);
+            this->scanner_read_schemas.push_back(read_schema);
+        }
+
         this->rows_to_skip =
-            PyLong_AsLong(PyTuple_GetItem(scanners_updated_offset_tup, 1));
+            PyLong_AsLong(PyTuple_GetItem(scanners_updated_offset_tup, 2));
 
         Py_DECREF(iceberg_mod);
         Py_DECREF(fpaths_py);
@@ -411,10 +769,16 @@ class IcebergParquetReader : public ArrowReader {
     // Scanners to use. There's one per IcebergSchemaGroup
     // that this rank will read from.
     std::vector<PyObject*> scanners;
+    // The schemas that the scanners will use for reading.
+    // These will be used as the 'source' schemas when evolving
+    // the record batches returned by the corresponding scanners.
+    std::vector<std::shared_ptr<arrow::Schema>> scanner_read_schemas;
     // Next scanner to use.
     size_t next_scanner_idx = 0;
     // Arrow Batched Reader to get next batch iteratively.
     PyObject* curr_reader = nullptr;
+    // Corresponding read schema.
+    std::shared_ptr<arrow::Schema> curr_read_schema = nullptr;
     // Number of remaining rows to skip outputting
     // from the first file assigned to this process.
     int64_t rows_to_skip = -1;
@@ -445,6 +809,8 @@ class IcebergParquetReader : public ArrowReader {
                 if (this->curr_reader == NULL && PyErr_Occurred()) {
                     throw std::runtime_error("python");
                 }
+                this->curr_read_schema =
+                    this->scanner_read_schemas[this->next_scanner_idx];
                 // Decref the corresponding scanner since we don't
                 // need it anymore.
                 Py_XDECREF(this->scanners[this->next_scanner_idx]);
