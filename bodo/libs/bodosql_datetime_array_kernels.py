@@ -1223,6 +1223,30 @@ def create_dt_extract_fn_overload(fn_name):  # pragma: no cover
     return overload_func
 
 
+def get_timestamp_unwrapping_str(ts_type, tz_to_utc=False):
+    """
+    Returns the string representation of the function required to
+    unwrap a scalar of the given timestamp type.
+
+    Args:
+        ts_type (datatype): the type of the timestamp input
+        tz_to_utc (bool): if True, convert timestamp_tz to its underlying
+        UTC timestamp, if false convert it to its local timestamp.
+    """
+    if is_valid_timestamptz_arg(ts_type):
+        # TIMESTAMP_TZ: extract the timestamp struct
+        if tz_to_utc:
+            return "bodo.hiframes.timestamptz_ext.get_utc_timestamp"
+        else:
+            return "bodo.hiframes.timestamptz_ext.get_local_timestamp"
+    elif get_tz_if_exists(ts_type) is None:
+        # TIMESTAMP_NTZ: convert datetime64 to a timestamp struct
+        return "bodo.utils.conversion.box_if_dt64"
+    else:
+        # TIMESTAMP_LTZ: no unwrapping required
+        return ""
+
+
 def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
     """Creates an overload function to support datetime extraction functions
        on a datetime.
@@ -1245,15 +1269,20 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_millisecond",
             "get_nanosecond",
         ):
-            verify_time_or_datetime_arg_allow_tz(arr, fn_name, "arr")
+            verify_time_or_datetime_arg_allow_tz(
+                arr, fn_name, "arr", allow_timestamp_tz=True
+            )
         else:
-            verify_datetime_arg_allow_tz(arr, fn_name, "arr")
-        tz = get_tz_if_exists(arr)
-        is_date = is_valid_date_arg(arr)
-        box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+            verify_datetime_arg_allow_tz(arr, fn_name, "arr", allow_timestamp_tz=True)
+
+        # Generate the code to convert arg0 to a timestamp once extracted
+        # from the corresponding array
+        unwrap_str = get_timestamp_unwrapping_str(arr)
+
         # For Timestamp, ms and us are stored in the same value.
         # For Time, they are stored separately.
         ms_str = "microsecond // 1000" if not is_valid_time_arg(arr) else "millisecond"
+        us_str = "microsecond % 1000" if not is_valid_time_arg(arr) else "microsecond"
 
         # The specifications of how kernel should extract the relevent value
         # if the input is a date type
@@ -1269,25 +1298,25 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         # The specifications of how kernel should extract the relevent value
         # if the input is a time or timestamp type
         other_format_strings = {
-            "get_year": f"{box_str}(arg0).year",
-            "get_quarter": f"{box_str}(arg0).quarter",
-            "get_month": f"{box_str}(arg0).month",
-            "get_weekofyear": f"{box_str}(arg0).weekofyear",
-            "get_hour": f"{box_str}(arg0).hour",
-            "get_minute": f"{box_str}(arg0).minute",
-            "get_second": f"{box_str}(arg0).second",
-            "get_millisecond": f"{box_str}(arg0).{ms_str}",
-            "get_microsecond": f"{box_str}(arg0).microsecond",
-            "get_nanosecond": f"{box_str}(arg0).nanosecond",
-            "dayofmonth": f"{box_str}(arg0).day",
-            "dayofweekiso": f"{box_str}(arg0).dayofweek + 1",
-            "dayofyear": f"{box_str}(arg0).dayofyear",
+            "get_year": f"{unwrap_str}(arg0).year",
+            "get_quarter": f"{unwrap_str}(arg0).quarter",
+            "get_month": f"{unwrap_str}(arg0).month",
+            "get_weekofyear": f"{unwrap_str}(arg0).weekofyear",
+            "get_hour": f"{unwrap_str}(arg0).hour",
+            "get_minute": f"{unwrap_str}(arg0).minute",
+            "get_second": f"{unwrap_str}(arg0).second",
+            "get_millisecond": f"{unwrap_str}(arg0).{ms_str}",
+            "get_microsecond": f"{unwrap_str}(arg0).{us_str}",
+            "get_nanosecond": f"{unwrap_str}(arg0).nanosecond",
+            "dayofmonth": f"{unwrap_str}(arg0).day",
+            "dayofweekiso": f"{unwrap_str}(arg0).dayofweek + 1",
+            "dayofyear": f"{unwrap_str}(arg0).dayofyear",
         }
 
         arg_names = ["arr"]
         arg_types = [arr]
         propagate_null = [True]
-        if is_date:
+        if is_valid_date_arg(arr):
             scalar_text = f"res[i] = {date_format_strings[fn_name]}"
         else:
             scalar_text = f"res[i] = {other_format_strings[fn_name]}"
@@ -2025,16 +2054,15 @@ def dayname_util(arr):
         string array/scalar: the name of the day of the week of the datetime(s).
         Returns a dictionary encoded array if the input is an array.
     """
-    verify_datetime_arg_allow_tz(arr, "dayname", "arr")
-    tz = get_tz_if_exists(arr)
-    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+    verify_datetime_arg_allow_tz(arr, "dayname", "arr", allow_timestamp_tz=True)
+    unwrap_str = get_timestamp_unwrapping_str(arr)
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
     if is_valid_date_arg(arr):
         scalar_text = f"val = day_of_week_dict_arr[arg0.weekday()]\n"
     else:
-        scalar_text = f"val = {box_str}(arg0).day_name()\n"
+        scalar_text = f"val = {unwrap_str}(arg0).day_name()\n"
     scalar_text += f"res[i] = val[:3]\n"
 
     out_dtype = bodo.string_array_type
@@ -2058,7 +2086,7 @@ def dayname_util(arr):
     if is_valid_date_arg(arr):
         synthesize_dict_scalar_text = f"res[i] = arg0.weekday()"
     else:
-        synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).dayofweek"
+        synthesize_dict_scalar_text = f"res[i] = {unwrap_str}(arg0).dayofweek"
 
     return gen_vectorized(
         arg_names,
@@ -2150,9 +2178,8 @@ def monthname_util(arr):
         string series/scalar: the month name from the input timestamp(s)
         Returns a dictionary encoded array if the input is an array.
     """
-    verify_datetime_arg_allow_tz(arr, "monthname", "arr")
-    tz = get_tz_if_exists(arr)
-    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+    verify_datetime_arg_allow_tz(arr, "monthname", "arr", allow_timestamp_tz=True)
+    unwrap_str = get_timestamp_unwrapping_str(arr)
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
@@ -2163,7 +2190,7 @@ def monthname_util(arr):
         )
         scalar_text += f"val = mons[arg0.month - 1]\n"
     else:
-        scalar_text = f"val = {box_str}(arg0).month_name()\n"
+        scalar_text = f"val = {unwrap_str}(arg0).month_name()\n"
     scalar_text += f"res[i] = val[:3]\n"
     out_dtype = bodo.string_array_type
 
@@ -2187,7 +2214,7 @@ def monthname_util(arr):
     )
     extra_globals = {"month_names_dict_arr": mons}
     synthesize_dict_setup_text = "dict_res = month_names_dict_arr"
-    synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).month - 1"
+    synthesize_dict_scalar_text = f"res[i] = {unwrap_str}(arg0).month - 1"
 
     return gen_vectorized(
         arg_names,
@@ -3247,7 +3274,7 @@ def overload_get_epoch_util(arr, unit):
     Returns:
         An int64 giving the time since the start of Unix time in the specified units.
     """
-    verify_datetime_arg_allow_tz(arr, "get_epoch", "arr")
+    verify_datetime_arg_allow_tz(arr, "get_epoch", "arr", allow_timestamp_tz=True)
     if not is_overload_constant_str(unit):  # pragma: no cover
         raise_bodo_error("get_epoch(): unit must be a string literal")
 
@@ -3264,9 +3291,8 @@ def overload_get_epoch_util(arr, unit):
     arg_names = ["arr", "unit"]
     arg_types = [arr, unit]
     propagate_null = [True, False] * 2
-    tz = get_tz_if_exists(arr)
-    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
-    scalar_text = f"res[i] = {box_str}(arg0).value // {divisor}\n"
+    unwrap_str = get_timestamp_unwrapping_str(arr, tz_to_utc=True)
+    scalar_text = f"res[i] = {unwrap_str}(arg0).value // {divisor}\n"
     out_dtype = bodo.IntegerArrayType(numba.int64)
 
     return gen_vectorized(
@@ -3369,7 +3395,17 @@ def overload_get_timezone_offset_util(arr, unit):
     scalar_text = ""
     extra_globals = None
     tz = get_tz_if_exists(arr)
-    if tz is None:
+    if is_valid_timestamptz_arg(arr):
+        scalar_text += "sign = 1 if arg0.offset_minutes >= 0 else -1\n"
+        if unit == "hr":
+            # For tzh, extract the hour component of the offset
+            # e.g. -08:15 -> -510 minuntes, so -510 would return -8
+            scalar_text += "res[i] = sign * (abs(arg0.offset_minutes) // 60)"
+        else:
+            # For tzh, extract the minute component of the offset
+            # e.g. -08:15 -> -510 minuntes, so -510 would return -15
+            scalar_text += "res[i] = sign * (abs(arg0.offset_minutes) % 60)"
+    elif tz is None:
         # No timezone is always 0.
         scalar_text += "res[i] = 0\n"
     else:
@@ -3436,7 +3472,6 @@ def overload_get_timezone_offset_util(arr, unit):
     arg_names = ["arr", "unit"]
     arg_types = [arr, unit]
     propagate_null = [True, False] * 2
-    tz = get_tz_if_exists(arr)
     # Note: This might be smaller but snowflake bound it at a Number(9, 0), which is
     # an int32. Since they/we may need to support out dated transition times, we will
     # be conservative and match Snowflake.
@@ -3593,7 +3628,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
     Returns:
         datetime/timestamp scalar/series: week of year values
     """
-    verify_datetime_arg_allow_tz(arr, "weekofyear", "arr")
+    verify_datetime_arg_allow_tz(arr, "weekofyear", "arr", allow_timestamp_tz=True)
 
     assert is_overload_constant_int(
         week_start
@@ -3612,9 +3647,8 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
     arg_names = ["arr", "week_start", "week_of_year_policy"]
     arg_types = [arr, week_start, week_of_year_policy]
     propagate_null = [True] * 3
-    tz = get_tz_if_exists(arr)
 
-    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+    unwrap_str = get_timestamp_unwrapping_str(arr)
 
     date_to_int_str = "bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns"
     if is_valid_date_arg(arr):
@@ -3622,7 +3656,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
             f"arg0 = pd.Timestamp({date_to_int_str}(arg0)).tz_localize(None)\n"
         )
     else:
-        scalar_text = f"arg0 = {box_str}(arg0).tz_localize(None)\n"
+        scalar_text = f"arg0 = {unwrap_str}(arg0).tz_localize(None)\n"
 
     scalar_text += f"start_day = max(0, arg1 - 1)\n"
 
