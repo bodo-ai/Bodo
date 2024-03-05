@@ -36,10 +36,10 @@ jobs:
     if: github.event.inputs.updateDev == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5.0.0
         with:
           python-version: 3.8
 
@@ -52,7 +52,7 @@ jobs:
 
       - name: Update Images with Dev Platform
         env:
-          AUTH_SERVICE_URL: "https://bodo-dev.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-dev.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_DEV_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
@@ -61,12 +61,11 @@ jobs:
           UPDATED_IMAGE_NAME: ${{ inputs.updatedBodoVersion }}
           UPDATE_IMAGE: true
         run: |
+          cd bodo-platform-image
           sleep 5
           if [[ '${{ inputs.deregisterImage }}' == 'false' ]]; then
-            cd bodo-platform-image
             python manage_images.py
           else
-            cd bodo-platform-image
             python manage_images.py --deregister
           fi;
 
@@ -75,10 +74,10 @@ jobs:
     if: github.event.inputs.updateTesting == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5.0.0
         with:
           python-version: 3.8
 
@@ -91,7 +90,7 @@ jobs:
 
       - name: Update Images with Testing Platform
         env:
-          AUTH_SERVICE_URL: "https://bodo-test.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-test.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
@@ -100,6 +99,7 @@ jobs:
           UPDATED_IMAGE_NAME: ${{ inputs.updatedBodoVersion }}
           UPDATE_IMAGE: true
         run: |
+          cd bodo-platform-image
           sleep 5
           if [[ '${{ inputs.deregisterImage }}' == 'false' ]]; then
             python manage_images.py
@@ -112,10 +112,10 @@ jobs:
     if: github.event.inputs.updateStaging == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5.0.0
         with:
           python-version: 3.8
 
@@ -128,7 +128,7 @@ jobs:
 
       - name: Update Images with Platform
         env:
-          AUTH_SERVICE_URL: "https://bodo-staging.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo-staging.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_STAGING_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
@@ -149,10 +149,10 @@ jobs:
     if: github.event.inputs.updateProd == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5.0.0
         with:
           python-version: 3.8
 
@@ -165,7 +165,7 @@ jobs:
 
       - name: Update Images with Platform
         env:
-          AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
+          AUTH_SERVICE_URL: "https://bodo.us.frontegg.com"
           BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api.bodo.ai"
@@ -187,7 +187,7 @@ jobs:
     if: ${{ success() &&  inputs.deregisterImage==false }}
     steps:
       - name: slack-send
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
             {
@@ -210,7 +210,7 @@ jobs:
     if: ${{ success() &&  inputs.deregisterImage==true }}
     steps:
       - name: slack-send
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
             {
