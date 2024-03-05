@@ -17,7 +17,7 @@ import org.apache.calcite.rel.RelRoot;
 /** Class for locally testing codegen using a FileSystem Catalog */
 public class FileSystemCatalogGenTest {
   public static void main(String[] args) throws Exception {
-    String sql = "create table new_table as select A from SIMPLE_BOOL_BINARY_TABLE";
+    String sql = "select * from \"example.parquet\"";
     Map envVars = System.getenv();
     BodoSQLCatalog catalog =
         new FileSystemCatalog(
