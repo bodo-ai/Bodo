@@ -201,7 +201,7 @@ def dt_fn_dataframe():
         "2021-03-03",
         "2021-05-31",
         None,
-        "2020-12-01T13:56:03.172",
+        "2020-12-01T13:56:03.172345689",
         "2007-01-01T03:30",
         None,
         "2001-12-01T12:12:02.21",
@@ -969,7 +969,7 @@ def test_microseconds(dt_fn_dataframe, memory_leak_check):
     query1 = "SELECT MICROSECOND(timestamps) as microsec_time from table1"
 
     expected_output = pd.DataFrame(
-        {"MICROSEC_TIME": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
+        {"MICROSEC_TIME": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond % 1000}
     )
 
     check_query(
@@ -986,7 +986,7 @@ def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
     """simplest test for microsecond on timezone aware data"""
     query = "SELECT MICROSECOND(A) as microsec_time from table1"
     expected_output = pd.DataFrame(
-        {"MICROSEC_TIME": tz_aware_df["TABLE1"]["A"].dt.microsecond}
+        {"MICROSEC_TIME": tz_aware_df["TABLE1"]["A"].dt.microsecond % 1000}
     )
 
     check_query(
@@ -1003,7 +1003,7 @@ def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     """test for microsecond within case statement on timezone aware data"""
     query = "SELECT CASE WHEN MICROSECOND(A) > 1 THEN MICROSECOND(A) ELSE -1 END as microsec_time from table1"
 
-    micro_series = tz_aware_df["TABLE1"]["A"].dt.microsecond
+    micro_series = tz_aware_df["TABLE1"]["A"].dt.microsecond % 1000
     micro_series[micro_series <= 1] = -1
 
     expected_output = pd.DataFrame({"MICROSEC_TIME": micro_series})
@@ -1336,7 +1336,7 @@ def test_extract_cols(
         )
     elif valid_extract_strings == "MICROSECOND":
         expected_output = pd.DataFrame(
-            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond % 1000}
         )
     else:
         expected_output = None
@@ -1365,7 +1365,7 @@ def test_extract_scalars(
         )
     elif valid_extract_strings == "MICROSECOND":
         expected_output = pd.DataFrame(
-            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond}
+            {"OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.microsecond % 1000}
         )
     else:
         expected_output = None
