@@ -155,6 +155,7 @@ def main(args):
             warehouse=warehouse,
             database=database,
             connection_params=cparams,
+            iceberg_volume=args.iceberg_volume,
         )
 
         # Create context
@@ -305,6 +306,12 @@ if __name__ == "__main__":
         nargs="*",
         help="Add a table into the local catalog. Tables should be specified like 'tablename:tablefile[:format]'.",
         metavar="TABLENAME:TABLEFILE[:FORMAT]",
+    )
+    parser.add_argument(
+        "--iceberg_volume",
+        required=False,
+        default=None,
+        help="Optional: Iceberg volume to use for writing as an iceberg table",
     )
 
     args = parser.parse_args()

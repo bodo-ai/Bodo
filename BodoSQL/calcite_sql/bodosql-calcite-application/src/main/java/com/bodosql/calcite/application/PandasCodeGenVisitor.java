@@ -156,7 +156,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // when encountering a merge into operation
   private final boolean debuggingDeltaTable;
 
-  // The typesystem, used to access timezone info during codegen
+  // The type system, used to access timezone info during codegen
   private final RelDataTypeSystem typeSystem;
 
   // Bodo verbose level. This is used to generate code/compiler information
@@ -194,7 +194,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.mergeIntoTargetNode = null;
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
-    this.generatedCode = new Module.Builder();
+    this.generatedCode = new Module.Builder(typeSystem);
     this.streamingOptions = new StreamingOptions(batchSize);
   }
 
