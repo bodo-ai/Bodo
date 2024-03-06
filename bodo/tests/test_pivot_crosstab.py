@@ -1735,6 +1735,8 @@ def test_pivot_table_dict_encoded(memory_leak_check):
         bodo.barrier()
 
 
+@pytest.mark.timeout(1000)
+@pytest.mark.slow
 def test_pivot_dict_encoded(memory_leak_check):
     """
     Tests support for df.pivot_table with dictionary
