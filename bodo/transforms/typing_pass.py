@@ -971,6 +971,12 @@ class TypingTransforms:
             # Filter pushdown is only supported for snowflake and iceberg
             # right now.
             require(read_node.db_type in ("snowflake", "iceberg"))
+        # If the reader is streaming, and thus implied from BodoSQL
+        # and the filters are already present in the reader, then we
+        # can assume BodoSQL has already done the filter pushdown.
+        # Bodo doesn't need to attempt further
+        if read_node.is_streaming:
+            require(read_node.filters is None)
 
         return table_def_node, read_node
 
@@ -3960,6 +3966,64 @@ class TypingTransforms:
 
         return nodes + [assign]
 
+    def _extract_filter_arg(
+        self, var: ir.Var, label
+    ) -> pt.Optional[List[List[Tuple[str, str, Union[ir.Var, str]]]]]:
+        """
+        Convert an IR expression that represents a Bodo compiler filter
+        in DNF form such that it can be used by Connector nodes.
+
+        Filters are either null or a list of list of tuples of 3 values, where:
+        - The outer list are clauses that are ORed together
+        - The inner lists are terms that are ANDed together
+        - The tuple consists of:
+            - A string representing the column name (TODO: Support complex expressions)
+            - A string representing the operator (e.g. '==', '>', 'in', 'is', etc.)
+            - Either a
+                - ir.Var pointing to a IR expression representing a value
+                  the value can be a constant or runtime computation
+                - The string 'NULL' in the case the operator is 'is' or 'is not'
+        """
+
+        top_out = []
+        top_def = get_definition(self.func_ir, var)
+
+        if is_expr(top_def, "build_list"):
+            for clause in top_def.items:
+                clause_out = []
+                clause_def = get_definition(self.func_ir, clause)
+                assert clause_def.op == "build_list"
+                for term in clause_def.items:
+                    term_def = get_definition(self.func_ir, term)
+                    assert term_def.op == "build_tuple" and len(term_def.items) == 3
+                    col_name = self._get_const_value(
+                        term_def.items[0], label, term_def.loc
+                    )
+                    op_str = self._get_const_value(
+                        term_def.items[1], label, term_def.loc
+                    )
+                    value = term_def.items[2]
+
+                    # Special case for NULL checking operations
+                    if op_str == "is" or op_str == "is not":
+                        value = self._get_const_value(value, label, term_def.loc)
+                        if value != "NULL":
+                            raise BodoError(
+                                "_extract_filter_arg(): Filter value for 'is'/'is not' must be 'NULL",
+                                term_def.loc,
+                            )
+
+                    clause_out.append((col_name, op_str, value))
+                top_out.append(clause_out)
+            return top_out
+
+        if isinstance(top_def, ir.Const) and is_overload_none(top_def):
+            return None
+
+        raise BodoError(
+            "Filter argument must be a list of list of tuples or None", label
+        )
+
     def _run_call_read_sql_table(
         self, assign: ir.Assign, rhs: ir.Expr, func_name, label
     ):
@@ -4138,17 +4202,41 @@ class TypingTransforms:
                 "pandas.read_sql_table(): '_bodo_columns' can only be used with '_bodo_chunksize'"
             )
 
+        _bodo_filter_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_filter",
+            default=None,
+            use_default=True,
+        )
+        filter_obj = (
+            self._extract_filter_arg(_bodo_filter_var, label)
+            if _bodo_filter_var
+            else None
+        )
+
         (
-            col_names,
-            arr_types,
+            orig_col_names,
+            orig_arr_types,
             pyarrow_table_schema,
         ) = bodo.io.iceberg.get_iceberg_type_info(
             table_name,
             con,
             database_schema,
-            columns_obj,
             is_merge_into_cow=_bodo_merge_into,
         )
+
+        if columns_obj is not None:
+            name_to_type = {
+                name: typ for name, typ in zip(orig_col_names, orig_arr_types)
+            }
+            col_names = columns_obj
+            arr_types = [name_to_type[col] for col in col_names]
+        else:
+            col_names = orig_col_names
+            arr_types = orig_arr_types
 
         # check user-provided dict-encoded columns for errors
         col_name_map = {c: i for i, c in enumerate(col_names)}
@@ -4259,6 +4347,9 @@ class TypingTransforms:
                 False,  # downcast_decimal_to_double
                 chunksize=chunksize,
                 used_cols=columns_obj,
+                initial_filter=filter_obj,
+                orig_col_names=orig_col_names,
+                orig_col_types=orig_arr_types,
             )
         ]
 

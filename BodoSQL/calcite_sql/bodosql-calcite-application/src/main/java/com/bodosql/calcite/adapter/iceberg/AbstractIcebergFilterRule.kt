@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.common.FilterUtils
-import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import com.bodosql.calcite.application.utils.IsScalar
@@ -14,6 +13,7 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.util.Sarg
 import org.immutables.value.Value
 
 /**
@@ -98,19 +98,22 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                 setOf(
                     // Logical operators.
                     SqlKind.AND,
-                    SqlKind.OR,
-                    SqlKind.NOT,
+//            SqlKind.OR,
+//            SqlKind.NOT,
                     // Comparison operators.
                     SqlKind.EQUALS,
                     SqlKind.NOT_EQUALS,
-                    SqlKind.NULL_EQUALS,
+                    // Equivalent to A == B OR A IS NULL AND B IS NULL
+//            SqlKind.NULL_EQUALS,
                     SqlKind.LESS_THAN,
                     SqlKind.LESS_THAN_OR_EQUAL,
                     SqlKind.GREATER_THAN,
                     SqlKind.GREATER_THAN_OR_EQUAL,
                     SqlKind.SEARCH,
-                    SqlKind.IS_DISTINCT_FROM,
-                    SqlKind.IS_NOT_DISTINCT_FROM,
+                    // Equivalent to A == B OR A IS NULL AND B IS NULL
+//            SqlKind.IS_DISTINCT_FROM,
+                    // Equivalent to A != B AND A IS NOT NULL OR A != B AND B IS NULL
+//            SqlKind.IS_NOT_DISTINCT_FROM,
                     // Logical identity operators.
                     SqlKind.IS_FALSE,
                     SqlKind.IS_NOT_FALSE,
@@ -118,7 +121,6 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                     SqlKind.IS_NOT_TRUE,
                     SqlKind.IS_NULL,
                     SqlKind.IS_NOT_NULL,
-                    SqlKind.GREATEST,
                     // Other functions
                     SqlKind.IN,
                 )
@@ -132,7 +134,7 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
             private val SUPPORTED_GENERIC_CALL_NAME =
                 setOf(
                     StringOperatorTable.STARTSWITH.name,
-                    CondOperatorTable.EQUAL_NULL.name,
+//                CondOperatorTable.EQUAL_NULL.name,
                 )
 
             @JvmStatic
@@ -153,11 +155,38 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
 
                         override fun visitInputRef(inputRef: RexInputRef): Boolean = true
 
+                        // Sarg with multiple ranges would generate OR clauses, which we currently
+                        // don't support in Iceberg
+                        // Note: This is not full-proof. It seems like in some tests, additional
+                        // clauses are added in later stages
+                        fun visitSearch(call: RexCall): Boolean {
+                            val op0 = call.operands[0]
+                            val op1 = call.operands[1]
+                            val sarg =
+                                if (op0 is RexLiteral) {
+                                    op0.value as Sarg<*>
+                                } else {
+                                    (op1 as RexLiteral).value as Sarg<*>
+                                }
+
+                            return sarg.rangeSet.asRanges().size > 1
+                        }
+
                         override fun visitCall(call: RexCall): Boolean {
                             return if (IsScalar.isScalar(call)) {
-                                // All scalars can always be computed.
-                                true
+                                // No scalars can be computed right now
+                                false
                             } else if (SUPPORTED_BUILTIN_CALLS.contains(call.kind) || isSupportedGenericCall(call)) {
+                                // Search Calls in Some Formats Not Supported Yet
+                                if (call.kind == SqlKind.SEARCH && !visitSearch(call)) {
+                                    return false
+                                }
+
+                                // Call Operands on Multiple Columns Not Supported Yet
+                                if (call.operands.size > 1 && call.operands.all { op -> op is RexInputRef }) {
+                                    return false
+                                }
+
                                 // Arguments also need to be pushable.
                                 call.operands.all { op -> op.accept(this) ?: false }
                             } else {
