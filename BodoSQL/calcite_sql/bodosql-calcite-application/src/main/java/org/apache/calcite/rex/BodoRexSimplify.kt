@@ -1232,6 +1232,43 @@ class BodoRexSimplify(
     }
 
     /**
+     * Simplify a Bodo Row operation if it directly matches in the input.
+     * Assume we have plan that looks like this:
+     *
+     * <code>
+     *  Project(A=[ROW($0.a, $0.b), $1)
+     *     INPUT TYPE - RecordType(INTEGER a, BIGINT b), BIGINT
+     *     RELNODE(...)
+     * </code>
+     *
+     * If we detect that the ROW operation is directly matching the input, we can
+     * remove it entirely.
+     * @param call The original call to ROW.
+     * @return Either the ROW or an input ref.
+     */
+    private fun simplifyBodoRow(call: RexCall): RexNode {
+        val operands = call.operands
+        // Check that every element is a field access and that element i is field i for its reference inputRef.
+        // This prevents possible reordering.
+        return if (operands.withIndex().all { it.value is RexFieldAccess && (it.value as RexFieldAccess).referenceExpr is RexInputRef && (it.value as RexFieldAccess).field.index == it.index}) {
+            val inputRefs = operands.map { (it as RexFieldAccess).referenceExpr as RexInputRef }.toSet()
+            if (inputRefs.size != 1) {
+                call
+            } else {
+                // Verify we don't prune any trailing fields.
+                val inputRef = inputRefs.first()
+                if (operands.size != inputRef.getType().fieldCount) {
+                    call
+                } else {
+                    inputRef
+                }
+            }
+        } else {
+            call
+        }
+    }
+
+    /**
      * Simplify Bodo calls that involve the * operator
      * and are not implemented in Calcite
      */
@@ -1873,6 +1910,7 @@ class BodoRexSimplify(
             SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
             SqlKind.MINUS_PREFIX -> simplifyBodoMinusPrefix(e as RexCall)
+            SqlKind.ROW -> simplifyBodoRow(e as RexCall)
             else -> when {
                 isCast(e) -> simplifyBodoCast(e as RexCall, e.operands[0], e.type, e.kind == SqlKind.SAFE_CAST, unknownAs)
                 // TODO: Remove when we simplify TO_DATE as ::DATE
