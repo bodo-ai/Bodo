@@ -4,6 +4,7 @@ import os
 import random
 import re
 import shutil
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -61,9 +62,9 @@ def test_pivot_distributed_metadata(memory_leak_check):
     df = test_pivot()
     # df should have distirbuted metadata. If not, gatherv will raise a warning
     # that df is not distributed.
-    with pytest.warns(None) as record:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         test_gatherv(df)
-    assert len(record) == 0
 
 
 @pytest.mark.parametrize(
