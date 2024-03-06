@@ -1,5 +1,4 @@
-Common Bodo SQL Errors  {#bodosql_errors}
-======================= 
+# Common Bodo SQL Errors  {#bodosql_errors}
 
 BodoSQL can raise a number of different errors when parsing SQL queries.
 This page contains a list of the most commonly encountered parsing errors and their causes.
