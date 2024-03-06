@@ -16,7 +16,7 @@ jobs:
       curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
       eval "$(./bin/micromamba shell hook -s posix)"
 
-      micromamba create -y -n iceberg_build python=$PYTHON_VERSION boa anaconda-client conda-verify setuptools_scm -c conda-forge
+      micromamba create -y -n iceberg_build boa anaconda-client setuptools_scm -c conda-forge
     env:
       PYTHON_VERSION: ${{ parameters.pythonVersion }}
     displayName: 'Create Micromamba Env'
