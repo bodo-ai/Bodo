@@ -328,6 +328,21 @@ struct multi_col_key {
                     }
                 }
                     continue;
+                case bodo_array_type::TIMESTAMPTZ:
+                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row)) {
+                        return false;
+                    }
+                    if (!c1->get_null_bit(row)) {
+                        continue;
+                    }
+                    // compare data1 only. (Ignore offsets)
+                    size_type = numpy_item_size[c1->dtype];
+                    if (memcmp(c1->data1() + size_type * row,
+                               c2->data1() + size_type * other.row,
+                               size_type) != 0) {
+                        return false;
+                    }
+                    continue;
                 default: {
                     throw std::runtime_error(
                         "multi_col_key_hash : Unsupported type");
@@ -979,8 +994,17 @@ inline constexpr decltype(auto) type_dispatcher(
                     throw std::runtime_error("invalid dtype for map arrays " +
                                              std::to_string(dtype));
             }
+        case bodo_array_type::TIMESTAMPTZ:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::TIMESTAMPTZ,
+                              Bodo_CTypes::TIMESTAMPTZ);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for timestamptz arrays " +
+                        GetDtype_as_string(dtype));
+            }
         default:
-            throw std::runtime_error("invalid array type " +
+            throw std::runtime_error("type_dispatcher invalid array type " +
                                      GetArrType_as_string(arr_type));
     }
 }

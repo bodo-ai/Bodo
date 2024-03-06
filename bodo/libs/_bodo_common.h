@@ -420,7 +420,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
                              "In DATE case missing values are handled by "
                              "NULLABLE_INT_BOOL so this case is impossible");
     }
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
+        dtype == Bodo_CTypes::TIMESTAMPTZ)
         return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
     if (dtype == Bodo_CTypes::FLOAT32)
         return GetCharVector<float>(std::nanf("1"));

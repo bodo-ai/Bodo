@@ -204,6 +204,8 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
         return double(GetTentry<int32_t>(ptr));
     if (dtype == Bodo_CTypes::DATETIME)
         return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::TIMESTAMPTZ)
+        return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA)
         return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
@@ -788,6 +790,7 @@ inline bool does_keys_have_nulls(
               key_col->dtype == Bodo_CTypes::FLOAT64 ||
               key_col->dtype == Bodo_CTypes::DATETIME ||
               key_col->dtype == Bodo_CTypes::TIMEDELTA)) ||
+            key_col->dtype == Bodo_CTypes::TIMESTAMPTZ ||
             key_col->arr_type == bodo_array_type::STRING ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
             key_col->arr_type == bodo_array_type::DICT ||
@@ -811,6 +814,7 @@ inline bool does_row_has_nulls(
             }
         } else if (key_col->arr_type == bodo_array_type::STRING ||
                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+                   key_col->arr_type == bodo_array_type::TIMESTAMPTZ ||
                    key_col->arr_type == bodo_array_type::DICT) {
             if (!GetBit((uint8_t*)key_col->null_bitmask(), i)) {
                 return true;
