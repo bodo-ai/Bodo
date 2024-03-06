@@ -145,7 +145,6 @@ def get_iceberg_type_info(
     table_name: str,
     con: str,
     database_schema: str,
-    columns: pt.Optional[list[str]] = None,
     is_merge_into_cow: bool = False,
 ):
     """
@@ -192,11 +191,6 @@ def get_iceberg_type_info(
     col_names = col_names_or_err
     col_types = comm.bcast(col_types)
     pyarrow_schema = comm.bcast(pyarrow_schema)
-
-    if columns is not None:
-        name_to_type = {name: typ for name, typ in zip(col_names, col_types)}
-        col_names = columns
-        col_types = [name_to_type[col] for col in col_names]
 
     bodo_types = [
         _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types

@@ -841,7 +841,7 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)
-        df = df[df["A"] <= date(2018, 12, 12)]  # type: ignore
+        df = df[df["A"] <= date(2018, 12, 12)]
         return df
 
     spark = get_spark()
@@ -3711,3 +3711,86 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
     with set_logging_stream(logger, 1):
         check_func(impl, (table_name, conn, db_schema), py_output=200)
         check_logger_msg(stream, "Columns loaded []")
+
+
+@pytest.mark.slow
+def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_check):
+    """
+    Test reading an Iceberg with the _bodo_filter flag
+    """
+
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_filter=[[("A", ">", date(2015, 1, 1))]]
+        )  # type: ignore
+        return df
+
+    spark = get_spark()
+    py_out = spark.sql(
+        f"""
+    select * from hadoop_prod.{db_schema}.{table_name}
+    where A > '2015-01-01';
+    """
+    )
+    py_out = py_out.toPandas()
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (table_name, conn, db_schema),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(stream, "Arrow filters pushed down:\n[[('A', '>', f0)]]")
+
+
+@pytest.mark.slow
+def test_filter_pushdown_arg_disable(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test reading an Iceberg table with the _bodo_filter flag
+    and make sure the Bodo compiler doesn't push down
+    any following filters
+    """
+
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_filter=[[("TY", "startswith", "W")]]
+        )  # type:ignore
+        return df[df["B"] == 45]
+
+    spark = get_spark()
+    py_out = spark.sql(
+        f"""
+    select * from hadoop_prod.{db_schema}.{table_name}
+    where TY LIKE 'W%' AND B = 45;
+    """
+    )
+    py_out = py_out.toPandas()
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (table_name, conn, db_schema),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            "Arrow filters pushed down:\nNone\n(((pa.compute.starts_with(ds.field('{TY}'), f0))))",
+        )

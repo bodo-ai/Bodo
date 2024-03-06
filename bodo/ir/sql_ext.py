@@ -164,6 +164,9 @@ class SqlReader(Connector):
         # But not enforced that all chunks are this size
         chunksize: Optional[int] = None,
         used_cols: Optional[list[str]] = None,
+        initial_filter: Optional[Filter] = None,
+        orig_col_names=None,
+        orig_col_types=None,
     ):
         # Column Names and Types. Common for all Connectors
         # - Output Columns
@@ -195,7 +198,7 @@ class SqlReader(Connector):
         self.db_type = db_type
         # Support for filter pushdown. Currently only used with snowflake
         # and iceberg.
-        self.filters = None
+        self.filters = initial_filter
 
         self.is_select_query = is_select_query
         # Does this query have side effects (e.g. DELETE). If so
@@ -232,6 +235,8 @@ class SqlReader(Connector):
         self.downcast_decimal_to_double = downcast_decimal_to_double
         self.chunksize = chunksize
         self.used_cols = used_cols
+        self.orig_col_names = orig_col_names
+        self.orig_col_types = orig_col_types
 
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -662,7 +667,11 @@ def sql_distributed_run(
             )
         else:
             sql_reader_py = _gen_iceberg_reader_chunked_py(
-                **genargs, chunksize=sql_node.chunksize, used_cols=sql_node.used_cols
+                **genargs,
+                chunksize=sql_node.chunksize,
+                used_cols=sql_node.used_cols,
+                orig_col_names=sql_node.orig_col_names,
+                orig_col_types=sql_node.orig_col_types,
             )
     else:
         sql_reader_py = _gen_sql_reader_py(**genargs)
@@ -1388,6 +1397,8 @@ def _gen_iceberg_reader_chunked_py(
     downcast_decimal_to_double: bool,
     chunksize: int,
     used_cols: Optional[list[str]],
+    orig_col_names,
+    orig_col_types,
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
 
@@ -1434,9 +1445,9 @@ def _gen_iceberg_reader_chunked_py(
         filters,
         filter_map,
         filter_vars,
-        col_names,
-        col_names,
-        col_typs,
+        orig_col_names,
+        orig_col_names,
+        orig_col_types,
         typemap,
         "iceberg",
         output_expr_filters_as_f_string=True,
@@ -1468,7 +1479,7 @@ def _gen_iceberg_reader_chunked_py(
     )
 
     # Create a dummy one for the get_filters_pyobject call.
-    expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in col_names})
+    expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in orig_col_names})
     comma = "," if filter_args else ""
     func_text = (
         f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}):\n"

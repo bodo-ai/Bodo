@@ -104,6 +104,94 @@ def test_column_pruning(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
 
 
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_filter_pushdown(memory_leak_check):
+    """
+    Test reading an Iceberg table from Snowflake with filter pushdown
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame(
+        {
+            "B": [10.5, 11.11, 456.2],
+            "A": ["ally", "cassie", "david"],
+        }
+    )
+
+    # A IS NOT NULL can be pushed down to iceberg
+    # LIKE A '%a%' cannot be pushed down to iceberg
+    query = "SELECT ABS(B) as B, A FROM BODOSQL_ICEBERG_READ_TEST WHERE B > 0 AND A LIKE '%a%'"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(stream, "Columns loaded ['A', 'B']")
+        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_filter_pushdown_col_not_read(memory_leak_check):
+    """
+    Test reading a Iceberg table with BodoSQL filter pushdown
+    where a column used in the filter is not read in
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame(
+        {
+            "A": ["ally", "cassie", "david"],
+        }
+    )
+
+    # A IS NOT NULL can be pushed down to iceberg
+    # LIKE A '%a%' cannot be pushed down to iceberg
+    query = "SELECT A FROM BODOSQL_ICEBERG_READ_TEST WHERE B > 0 AND A LIKE '%a%'"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(stream, "Columns loaded ['A']")
+        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+
+
 def test_snowflake_catalog_iceberg_write(memory_leak_check):
     """tests that writing tables using Iceberg works"""
 
