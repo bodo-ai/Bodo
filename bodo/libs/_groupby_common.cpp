@@ -635,6 +635,7 @@ void alloc_init_keys(
         std::shared_ptr<array_info> new_key_col = nullptr;
         if (key_col->arr_type == bodo_array_type::NUMPY ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
+            key_col->arr_type == bodo_array_type::TIMESTAMPTZ ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             new_key_col = alloc_array_top_level(
                 num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
@@ -664,6 +665,22 @@ void alloc_init_keys(
                     bool bit = key_col->get_null_bit(key_row);
                     new_key_col->set_null_bit(j, bit);
                 }
+            }
+        }
+        if (key_col->arr_type == bodo_array_type::TIMESTAMPTZ) {
+            int64_t dtype_size = numpy_item_size[key_col->dtype];
+            for (size_t j = 0; j < num_groups; j++) {
+                std::tie(key_col, key_row) =
+                    find_key_for_group(j, from_tables, i, grp_infos);
+                // data1
+                memcpy(new_key_col->data1() + j * dtype_size,
+                       key_col->data1() + key_row * dtype_size, dtype_size);
+                // data2
+                memcpy(new_key_col->data2() + j * sizeof(int16_t),
+                       key_col->data2() + key_row * dtype_size, dtype_size);
+                // null bitmask
+                bool bit = key_col->get_null_bit(key_row);
+                new_key_col->set_null_bit(j, bit);
             }
         }
         if (key_col->arr_type == bodo_array_type::DICT) {

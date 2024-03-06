@@ -1,9 +1,41 @@
 #include <sstream>
+#include "../libs/_array_hash.h"
 #include "../libs/_array_operations.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 #include "./test.hpp"
 
+// Taken from _array_hash.cpp
+
+#if defined(_MSC_VER)
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x, r)
+#else
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
+#endif
+
+static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
+    // This is a single 32-bit murmur iteration.
+    // See this comment and its discussion for more information:
+    // https://stackoverflow.com/a/50978188
+
+    const uint32_t c1 = 0xcc9e2d51;
+    const uint32_t c2 = 0x1b873593;
+
+    k1 *= c1;
+    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1, 15);
+    k1 *= c2;
+
+    h1 ^= k1;
+    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1, 13);
+    h1 = h1 * 5 + 0xe6546b64;
+}
+
+void fill_timestmaptz_arr(const std::shared_ptr<array_info>& arr, int len) {
+    for (int i = 0; i < len; i++) {
+        ((int64_t*)arr->data1())[i] = i + 1;
+        ((int64_t*)arr->data2())[i] = i + 100;
+    }
+}
 std::unique_ptr<table_info> make_timestamptz_arr() {
     std::shared_ptr<array_info> arr = alloc_array_top_level(
         5, 0, 0, bodo_array_type::arr_type_enum::TIMESTAMPTZ,
@@ -45,6 +77,40 @@ bodo::tests::suite timestamptz_array_tests([] {
         bodo::tests::check(arr->buffers[0] != nullptr);
         bodo::tests::check(arr->buffers[1] != nullptr);
         bodo::tests::check(arr->buffers[2] != nullptr);
+    });
+    bodo::tests::test("test_hash_array_timestamptz", [] {
+        // testing infrastructure.
+        int len = 5;
+        std::shared_ptr<array_info> arr = alloc_timestamptz_array(len);
+        fill_timestmaptz_arr(arr, len);
+        std::unique_ptr<uint32_t[]> res_hashes =
+            std::make_unique<uint32_t[]>(len);
+        std::unique_ptr<uint32_t[]> out_hashes =
+            std::make_unique<uint32_t[]>(len);
+        hash_array(out_hashes, arr, len, 0, false, false);
+        for (int i = 0; i < len; i++) {
+            int64_t val = (int64_t)((int64_t*)arr->data1())[i];
+            hash_inner_32<int64_t>(&val, 0, &res_hashes[i]);
+            bodo::tests::check(out_hashes[i] == res_hashes[i]);
+        }
+    });
+    bodo::tests::test("test_hash_array_combine_timestamptz", [] {
+        // testing infrastructure.
+        int len = 5;
+        std::shared_ptr<array_info> arr = alloc_timestamptz_array(len);
+        fill_timestmaptz_arr(arr, len);
+        std::unique_ptr<uint32_t[]> res_hashes =
+            std::make_unique<uint32_t[]>(len);
+        std::unique_ptr<uint32_t[]> out_hashes =
+            std::make_unique<uint32_t[]>(len);
+        hash_array_combine(out_hashes, arr, len, 0, false, false);
+        uint32_t hash = 0;
+        for (int i = 0; i < len; i++) {
+            int64_t val = (int64_t)((int64_t*)arr->data1())[i];
+            hash_inner_32<int64_t>(&val, 0, &hash);
+            hash_combine_boost(res_hashes[i], hash);
+            bodo::tests::check(out_hashes[i] == res_hashes[i]);
+        }
     });
 
     bodo::tests::test("test_timestamptz_array_to_string", [] {

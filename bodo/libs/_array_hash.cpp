@@ -676,8 +676,11 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
             (uint8_t*)array->null_bitmask(), use_murmurhash, start_row_offset);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
+    // NOTE: TimestampTZ hash only on data1 (ignores the offset buffer since
+    // values in data1 is already normalized in UTC values)
     if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
+        array->dtype == Bodo_CTypes::TIMESTAMPTZ ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(
             out_hashes, (int64_t*)array->data1(), n_rows, seed,
@@ -990,8 +993,11 @@ void hash_array_combine(const hashes_t& out_hashes,
             (uint8_t*)array->null_bitmask(), start_row_offset);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
+    // NOTE: TimestampTZ hash only on data1 (ignores the offset buffer since
+    // values in data1 is already normalized in UTC values)
     if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
+        array->dtype == Bodo_CTypes::TIMESTAMPTZ ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_combine_inner<int64_t>(
             out_hashes, (int64_t*)array->data1(), n_rows, seed,
@@ -1168,12 +1174,13 @@ void coherent_hash_array(const hashes_t& out_hashes,
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
-    // For DATE / TIME / DATETIME / TIMEDELTA / DECIMAL no type conversion is
-    // allowed
+    // For DATE / TIME / DATETIME / TIMEDELTA / TIMESTAMPTZ / DECIMAL no type
+    // conversion is allowed
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA ||
+        array->arr_type == bodo_array_type::TIMESTAMPTZ ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
@@ -1361,10 +1368,12 @@ void coherent_hash_array_combine(const hashes_t& out_hashes,
                                   is_parallel);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
-    // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
+    // For DATE / DATETIME / TIMEDELTA / TIMESTAMPTZ/ DECIMAL no type conversion
+    // is allowed
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA ||
+        array->arr_type == bodo_array_type::TIMESTAMPTZ ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_combine(out_hashes, array, n_rows, seed, true,
