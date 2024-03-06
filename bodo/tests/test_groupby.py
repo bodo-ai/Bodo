@@ -7830,3 +7830,31 @@ def test_reverse_shuffle_timestamp_tz(memory_leak_check):
     )
     df = pd.DataFrame({"A": [1, 3, 1, 4, 0], "B": tz_arr})
     check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
+def test_timestamptz_gb_key(memory_leak_check):
+    """Tests groupby where key is timestamptz
+    as_index=False to avoid timestamptz as an index
+    dropna=False Snowflake Keeps Null as Keys
+    """
+
+    def impl(df):
+        return df.groupby("B", as_index=False, dropna=False).sum()
+
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 300),
+            None,
+        ]
+        * 5
+    )
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 5,
+            "B": tz_arr,
+            "C": list("abcdefgABCDEFGhijkML"),
+        }
+    )
+    check_func(impl, (df,), sort_output=True, reset_index=True)

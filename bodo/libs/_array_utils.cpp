@@ -987,6 +987,10 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
 
         out_arr = arrow_array_to_bodo(out_arrow_array);
     }
+    if (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        throw std::runtime_error(
+            "RetrieveArray_TwoColumns: doesn't support TIMESTAMPTZ");
+    }
     return out_arr;
 }
 
@@ -1458,6 +1462,26 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
             return is_na_equal;
         }
     }
+    if (arr1->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // Check the bitmask and the values.
+        bool bit1 = arr1->get_null_bit(pos1);
+        bool bit2 = arr2->get_null_bit(pos2);
+        // If bitmask is opposite then they are clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        // If both bitmasks are false, then no need to check the data values
+        if (bit1) {
+            uint64_t siztype = numpy_item_size[arr1->dtype];
+            char* ptr1 = arr1->data1() + siztype * pos1;
+            char* ptr2 = arr2->data1() + siztype * pos2;
+            if (memcmp(ptr1, ptr2, siztype) != 0) {
+                return false;
+            }
+        } else {
+            return is_na_equal;
+        }
+    }
     return true;
 };
 
@@ -1899,7 +1923,7 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
     if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
-        dtype == Bodo_CTypes::TIME) {
+        dtype == Bodo_CTypes::TIME || dtype == Bodo_CTypes::TIMESTAMPTZ) {
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
