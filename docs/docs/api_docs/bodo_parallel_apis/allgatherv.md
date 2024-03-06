@@ -1,6 +1,7 @@
 # `bodo.allgatherv`
     
 `bodo.allgatherv(data, warn_if_rep=True)`
+<br/>
 Gather data from all ranks and send to all, effectively replicating the data.
 
 ### Arguments

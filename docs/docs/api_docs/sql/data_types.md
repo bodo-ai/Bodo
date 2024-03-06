@@ -1,4 +1,4 @@
-## Supported DataFrame Data Types
+# Supported DataFrame Data Types
 
 BodoSQL uses Pandas DataFrames to represent SQL tables in memory and
 converts SQL types to corresponding Python types which are used by Bodo.

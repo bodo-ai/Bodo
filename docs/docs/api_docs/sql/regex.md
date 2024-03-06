@@ -1,4 +1,4 @@
-###  Regex Functions
+# Regex Functions
 
 BodoSQL currently uses Python's regular expression library via the `re`
 module. Although this may be subject to change, it means that there are

@@ -9,7 +9,7 @@ SQL code to run on the tables in the connected remote database.
 ## Adding a Database Catalog
 
 :fontawesome-brands-aws: Supported On AWS ·
-material-microsoft-azure:{.azure} Supported on Azure 
+:material-microsoft-azure:{.azure} Supported on Azure 
 
 
 In your workspaces view, navigate to the _Catalogs_ section in the sidebar.
@@ -61,6 +61,6 @@ bodo_platform_utils.catalog.get_data("catalog_name")
 ```
 
 
-!!! seealso
+!!! seealso "See Also"
 
     [Database Catalogs][database-catalogs], [BodoSDK Catalog API](https://pypi.org/project/bodosdk/#catalog)
