@@ -25,7 +25,7 @@ jobs:
       bash mambaforge.sh -b
       export PATH=$HOME/mambaforge/bin:$PATH
 
-      mamba create -n $CONDA_ENV -y -c conda-forge conda-build anaconda-client conda-verify curl python-libarchive-c setuptools_scm
+      mamba create -n $CONDA_ENV -y -c conda-forge conda-build anaconda-client curl python-libarchive-c setuptools_scm
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}

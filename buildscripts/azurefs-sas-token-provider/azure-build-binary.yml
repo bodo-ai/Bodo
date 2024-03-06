@@ -16,7 +16,7 @@ jobs:
       set -exo pipefail
       curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
       eval "$(./bin/micromamba shell hook -s posix)"
-      micromamba create -y -n sas_build python=$PYTHON_VERSION maven credstash boa anaconda-client conda-verify -c conda-forge
+      micromamba create -y -n sas_build maven credstash boa anaconda-client -c conda-forge
     env:
       PYTHON_VERSION: ${{ parameters.pythonVersion }}
     displayName: 'Setup Conda Installation + Dependencies'

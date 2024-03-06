@@ -14,4 +14,4 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mamba
 ENV PATH /root/mambaforge/bin:${PATH}
 RUN echo "export PATH=/root/mambaforge/bin:${PATH}" >> /root/.bashrc
 
-RUN mamba install -y conda-build anaconda-client conda-verify
+RUN mamba install -y conda-build anaconda-client 

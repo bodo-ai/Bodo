@@ -50,7 +50,7 @@ jobs:
 
   - bash: |
       set -eo pipefail
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
+      conda create -y -n bodo_build conda-build anaconda-client conda=4.12
     displayName: 'Create Conda Env'
 
   - bash: |
