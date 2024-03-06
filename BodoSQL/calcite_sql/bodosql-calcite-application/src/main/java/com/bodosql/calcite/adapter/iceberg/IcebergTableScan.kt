@@ -43,6 +43,8 @@ class IcebergTableScan constructor(
 
         override fun getCatalogTable(): CatalogTable = catalogTable
 
+        override fun containsIcebergSort(): Boolean = false
+
         override fun copy(
             traitSet: RelTraitSet,
             inputs: List<RelNode>,

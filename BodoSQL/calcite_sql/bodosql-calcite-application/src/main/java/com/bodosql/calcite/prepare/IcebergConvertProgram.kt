@@ -153,12 +153,13 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     PandasFilter.create(node.cluster, newInput, node.condition)
                 }
                 else -> {
+                    val canPush = !(newInput as IcebergRel).containsIcebergSort()
                     // Try and push this node.
                     val (icebergCondition, pandasCondition) = splitFilterConditions(node)
-                    if (icebergCondition == null) {
+                    if (!canPush || icebergCondition == null) {
                         // Nothing can be pushed to Iceberg
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        PandasFilter.create(node.cluster, converter, pandasCondition!!)
+                        PandasFilter.create(node.cluster, converter, node.condition)
                     } else if (pandasCondition == null) {
                         // Everything can be pushed to Iceberg
                         IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition!!, node.getCatalogTable())
