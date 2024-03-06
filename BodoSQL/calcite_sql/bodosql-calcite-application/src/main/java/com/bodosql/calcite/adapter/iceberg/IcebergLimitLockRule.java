@@ -22,7 +22,11 @@ public class IcebergLimitLockRule extends AbstractIcebergLimitRule {
                 b0 ->
                     b0.operand(BodoLogicalSort.class)
                         .predicate(LimitUtils::isOnlyLimit)
-                        .oneInput(b1 -> b1.operand(IcebergRel.class).anyInputs()))
+                        .oneInput(
+                            b1 ->
+                                b1.operand(IcebergRel.class)
+                                    .predicate(x -> !x.containsIcebergSort())
+                                    .anyInputs()))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(IcebergLimitLockRule.Config.class);
 

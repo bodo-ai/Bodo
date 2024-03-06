@@ -31,4 +31,11 @@ interface IcebergRel : RelNode {
      * Get the batching property.
      */
     fun batchingProperty(): BatchingProperty = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
+
+    /**
+     * Determine if the Iceberg Subtree contains a sort.
+     * This is used because some rules have limitations based
+     * on the presence of an IcebergSort.
+     */
+    fun containsIcebergSort(): Boolean
 }
