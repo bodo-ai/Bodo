@@ -69,7 +69,9 @@ public class IsScalar implements RexVisitor<Boolean> {
 
   @Override
   public Boolean visitFieldAccess(RexFieldAccess fieldAccess) {
-    throw unsupportedNode();
+    // Field access is scalar if the reference expression is scalar as
+    // we are always just selecting an element from the expression.
+    return fieldAccess.getReferenceExpr().accept(this);
   }
 
   @Override

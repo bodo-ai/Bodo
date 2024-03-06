@@ -102,7 +102,11 @@ object RexCostEstimator : RexVisitor<Cost> {
 
     override fun visitRangeRef(rangeRef: RexRangeRef): Cost = throw UnsupportedOperationException()
 
-    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Cost = throw UnsupportedOperationException()
+    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Cost {
+        // This is used by either correlation variables or accessing struct
+        // members. Either of these should have 0 cost.
+        return Cost()
+    }
 
     override fun visitSubQuery(subQuery: RexSubQuery): Cost =
         // Subqueries should have been removed by now.
