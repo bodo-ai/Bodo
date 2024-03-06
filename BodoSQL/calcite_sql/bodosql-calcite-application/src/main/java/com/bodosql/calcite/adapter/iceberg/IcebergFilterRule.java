@@ -24,7 +24,11 @@ public class IcebergFilterRule extends AbstractIcebergFilterRule {
                         .oneInput(
                             b1 ->
                                 b1.operand(IcebergToPandasConverter.class)
-                                    .oneInput(b2 -> b2.operand(IcebergRel.class).anyInputs())))
+                                    .oneInput(
+                                        b2 ->
+                                            b2.operand(IcebergRel.class)
+                                                .predicate(x -> !x.containsIcebergSort())
+                                                .anyInputs())))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(IcebergFilterRule.Config.class);
 
