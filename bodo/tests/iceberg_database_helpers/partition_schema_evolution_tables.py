@@ -32,8 +32,17 @@ PROMOTION_TABLES_MAP: dict[str, str] = gen_promotion_tables(PARTITION_TABLE_NAME
 # It seems we can't drop a column that was ever a partition field in spark, not sure what the spec says
 # COLUMN_DROP_TABLES_MAP
 
-# It seems like we can't rename a column that was ever a partition in spark, not sure what the spec says
-# COLUMN_RENAME_TABLES_MAP
+
+def gen_column_rename_tables(input_tables: list[str]):
+    tables = {}
+    for table in input_tables:
+        tables[f"{table}_RENAME_COLUMN"] = table
+    return tables
+
+
+COLUMN_RENAME_TABLES_MAP: dict[str, str] = gen_column_rename_tables(
+    PARTITION_TABLE_NAME_MAP
+)
 
 COLUMN_REORDER_TABLES_MAP: dict[str, str] = gen_column_reorder_tables(
     PARTITION_TABLE_NAME_MAP
@@ -82,6 +91,7 @@ PARTITION_SCHEMA_EVOLUTION_TABLE_NAME_MAP: dict[str, str] = (
     NULLABLE_TABLES_MAP
     | PROMOTION_TABLES_MAP
     | COLUMN_REORDER_TABLES_MAP
+    | COLUMN_RENAME_TABLES_MAP
     | STRUCT_FIELD_TYPE_PROMOTION_TABLES_MAP
     | STRUCT_FIELD_NULLABLE_TABLES_MAP
     | CHANGE_PART_COLUMN_TABLES_MAP
@@ -205,6 +215,37 @@ def create_column_reorder_table(table: str, spark=None, postfix=""):
         append_to_iceberg_table(df, sql_schema, f"{base_name}{postfix}", spark)
 
 
+def create_column_rename_table(table: str, spark=None, postfix=""):
+    """
+    Create a table with the same schema and data as the base partition table but
+    with a column renamed.
+    """
+    if spark is None:
+        spark = get_spark()
+    base_name = COLUMN_RENAME_TABLES_MAP[table]
+    assert (
+        base_name in PARTITION_TABLE_NAME_MAP
+    ), f"Didn't find table definition for {base_name}."
+    postfix = f"_RENAME_COLUMN{postfix}"
+    df, sql_schema = SIMPLE_TABLE_MAP[
+        f"SIMPLE_{PARTITION_TABLE_NAME_MAP[base_name][0]}"
+    ]
+    part_cols = PARTITION_TABLE_NAME_MAP[base_name]
+    df = df.copy()
+    sql_schema = list(sql_schema)
+    rename_col = part_cols[1][0].col_name
+    if base_name in create_partition_tables([base_name], spark, postfix):
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{base_name}{postfix} RENAME COLUMN {rename_col} TO {rename_col}_NEW"
+        )
+        df = df.rename(columns={rename_col: f"{rename_col}_NEW"})
+        sql_schema = [
+            (name if name != rename_col else f"{rename_col}_NEW", type, nullable)
+            for (name, type, nullable) in sql_schema
+        ]
+        append_to_iceberg_table(df, sql_schema, f"{base_name}{postfix}", spark)
+
+
 def create_struct_field_type_promotion_table(table: str, spark=None, postfix=""):
     """
     Create a table with the same schema and data as the base partition table which is partitioned by a struct's field but
@@ -301,6 +342,8 @@ def create_partition_schema_evolution_tables(
             create_promotion_table(table, spark, postfix=postfix)
         elif table in COLUMN_REORDER_TABLES_MAP:
             create_column_reorder_table(table, spark, postfix=postfix)
+        elif table in COLUMN_RENAME_TABLES_MAP:
+            create_column_rename_table(table, spark, postfix=postfix)
         elif table in STRUCT_FIELD_TYPE_PROMOTION_TABLES_MAP:
             create_struct_field_type_promotion_table(table, spark, postfix=postfix)
         elif table in STRUCT_FIELD_NULLABLE_TABLES_MAP:

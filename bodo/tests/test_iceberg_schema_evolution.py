@@ -13,6 +13,12 @@ from mpi4py import MPI
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers.part_sort_table import (
+    SORT_ORDER as partsort_order,
+)
+from bodo.tests.iceberg_database_helpers.part_sort_table import (
+    create_table as create_partsort_table,
+)
 from bodo.tests.iceberg_database_helpers.partition_schema_evolution_tables import (
     PARTITION_SCHEMA_EVOLUTION_TABLE_NAME_MAP,
     create_partition_schema_evolution_tables,
@@ -32,9 +38,11 @@ from bodo.tests.iceberg_database_helpers.simple_tables import (
 )
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
+    SortField,
     append_to_iceberg_table,
     create_iceberg_table,
     get_spark,
+    transform_str,
 )
 from bodo.tests.test_iceberg import _check_for_sql_read_head_only
 from bodo.tests.user_logging_utils import (
@@ -1930,6 +1938,64 @@ def test_rename_and_swap_struct_fields_inside_other_semi_types(
 
         py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
         return py_out
+
+    py_out = setup()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df
+
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
+
+
+def test_change_sort_order(iceberg_database, iceberg_table_conn, memory_leak_check):
+    db_schema, warehouse_loc = iceberg_database()
+    table_name = "PARTSORT_EVOLUTION_TEST_TABLE"
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+        create_partsort_table(table_name, spark)
+
+        # Reverse the sort order
+        sort_order = [
+            SortField(
+                field.col_name,
+                field.transform,
+                field.transform_val,
+                not field.asc,
+                field.nulls_first,
+            )
+            for field in partsort_order
+        ]
+        sort_defs = []
+        for sort_field in sort_order:
+            col_name, transform, transform_val, asc, nulls_first = sort_field
+            trans_str = transform_str(col_name, transform, transform_val)
+            asc_str = "ASC" if asc else "DESC"
+            null_str = "FIRST" if nulls_first else "LAST"
+            sort_defs.append(f"{trans_str} {asc_str} NULLS {null_str}")
+        spark.sql(
+            f"""
+                ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
+                WRITE ORDERED BY {', '.join(sort_defs)}
+            """
+        )
+
+        df, schema = SIMPLE_TABLE_MAP["SIMPLE_PRIMITIVES_TABLE"]
+        append_to_iceberg_table(df, schema, table_name, spark)
+        return spark.sql(
+            f"select * from hadoop_prod.{DATABASE_NAME}.{table_name}"
+        ).toPandas()
 
     py_out = setup()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
