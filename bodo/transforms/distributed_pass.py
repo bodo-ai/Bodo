@@ -48,6 +48,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.time_ext import TimeType
 from bodo.io import csv_cpp
+from bodo.ir.connector import log_limit_pushdown
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import (
     string_type,
@@ -301,6 +302,9 @@ class DistributedPass:
                     if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
                         and inst.db_type in ("iceberg", "snowflake")
+                        # If streaming SQL has pushed down another limit its not necessarily
+                        # safe to push down another limit as there may be a filter in the query.
+                        and (inst.chunksize is None or inst.limit is None)
                     ):
                         # check if getting shape and/or head of parquet dataset is
                         # enough for the program
@@ -5030,19 +5034,7 @@ class DistributedPass:
         for stmt in shape_nodes:
             stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
 
-        if bodo.user_logging.get_verbose_level() >= 1:
-            if io_node.connector_typ == "sql":
-                node_name = f"{io_node.db_type} sql node"
-            else:
-                node_name = f"{io_node.connector_typ} node"
-            msg = f"Successfully performed limit pushdown on {node_name}: %s\n %s\n"
-            io_source = io_node.loc.strformat()
-            constant_limit_message = (
-                f"Constant limit detected, reading at most {read_size} rows"
-            )
-            bodo.user_logging.log_message(
-                "Limit Pushdown", msg, io_source, constant_limit_message
-            )
+        log_limit_pushdown(io_node, read_size)
 
         return read_size, total_len_var
 

@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.iceberg.AbstractIcebergFilterRule.Companion.s
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
+import com.bodosql.calcite.adapter.iceberg.IcebergSort
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
 import com.bodosql.calcite.adapter.pandas.PandasAggregate
@@ -192,19 +193,21 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     PandasSort.create(newInput, node.collation, node.offset, node.fetch)
                 }
                 else -> {
-                    // Abort. Current, there is no codegen support for Limit Pushdown
-                    // BSE-2796 Uncomment this and add codegen
-                    node
-
-//                    IcebergSort.create(
-//                        node.cluster,
-//                        node.traitSet,
-//                        newInput,
-//                        node.collation,
-//                        node.offset,
-//                        node.fetch,
-//                        node.getCatalogTable(),
-//                    )
+                    val canPush = !(newInput as IcebergRel).containsIcebergSort()
+                    if (canPush) {
+                        IcebergSort.create(
+                            node.cluster,
+                            node.traitSet,
+                            newInput,
+                            node.collation,
+                            node.offset,
+                            node.fetch,
+                            node.getCatalogTable(),
+                        )
+                    } else {
+                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
+                        PandasSort.create(converter, node.collation, node.offset, node.fetch)
+                    }
                 }
             }
         }
@@ -247,15 +250,16 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
             newInput: RelNode,
         ): Boolean {
             // This says we can compute in Iceberg despite the presence of an aggregate
-            // if we are just computing a distinct or scalar computation depends on a filter,
-            // which can likely prevent metadata usage.
-            return !agg.groupSet.isEmpty || containsIcebergFilter(newInput)
+            // if we are just computing a distinct or scalar computation depends on a filter
+            // or limit, which can likely prevent metadata usage.
+            return !agg.groupSet.isEmpty || containsIcebergFilterOrLimit(newInput)
         }
 
         /**
          * Determine if a given plan contains an IcebergFilter
+         * or an IcebergSort.
          */
-        private fun containsIcebergFilter(node: RelNode): Boolean {
+        private fun containsIcebergFilterOrLimit(node: RelNode): Boolean {
             val visitor =
                 object : RelVisitor() {
                     // ~ Methods ----------------------------------------------------------------
@@ -264,7 +268,7 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                         ordinal: Int,
                         parent: RelNode?,
                     ) {
-                        if (node is IcebergFilter) {
+                        if (node is IcebergFilter || node is IcebergSort) {
                             throw Util.FoundOne.NULL
                         }
                         node.childrenAccept(this)

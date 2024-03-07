@@ -655,7 +655,7 @@ def generate_arrow_filters(
         # If any expressions are not hive partitions then the DNF filters should treat
         # them as true
         #
-        # For example if A, C are parition column names and B is not
+        # For example if A, C are partition column names and B is not
         #
         # Then for partition expressions:
         # ((A > 4) & (B < 2)) | ((A < 2) & (C == 1))
@@ -665,7 +665,7 @@ def generate_arrow_filters(
         # Similarly if any OR expression consist of all True we do not have
         # any partition filters.
         #
-        # For example f A, C are parition column names and B is not
+        # For example f A, C are partition column names and B is not
         # (B < 2) | ((A < 2) & (C == 1))
         # => True | ((A < 2) & (C == 1))
         # => True
@@ -1051,3 +1051,28 @@ def _generate_column_expr_filter(
             # (~ds.field('A').is_null())
             expr_val = f"({prefix}{col_expr}.is_null())"
     return expr_val
+
+
+def log_limit_pushdown(io_node: Connector, read_size: int):
+    """Log that either Bodo or BodoSQL has performed limit pushdown.
+    This may not capture all limit pushdown to Snowflake from BodoSQL, but will
+    capture limit pushdown to Iceberg from BodoSQL.
+
+    Args:
+        io_node (Connector): The connector used for logging.
+        read_size (int): The constant number of rows to read. If/When we support
+            non-constant limits, this will need to be updated.
+    """
+    if bodo.user_logging.get_verbose_level() >= 1:
+        if io_node.connector_typ == "sql":
+            node_name = f"{io_node.db_type} sql node"
+        else:
+            node_name = f"{io_node.connector_typ} node"
+        msg = f"Successfully performed limit pushdown on {node_name}: %s\n %s\n"
+        io_source = io_node.loc.strformat()
+        constant_limit_message = (
+            f"Constant limit detected, reading at most {read_size} rows"
+        )
+        bodo.user_logging.log_message(
+            "Limit Pushdown", msg, io_source, constant_limit_message
+        )
