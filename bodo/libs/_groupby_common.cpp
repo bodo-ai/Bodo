@@ -304,6 +304,15 @@ void aggfunc_output_initialize_kernel(
                               (int64_t*)out_col->data1() + out_col->length,
                               default_value);
                     return;
+                case Bodo_CTypes::TIMESTAMPTZ:
+                    std::fill((int64_t*)out_col->data1() + start_row,
+                              (int64_t*)out_col->data1() + out_col->length,
+                              std::numeric_limits<int64_t>::max());
+                    std::fill((int64_t*)out_col->data2() + start_row,
+                              (int64_t*)out_col->data2() + out_col->length, 0);
+                    InitializeBitMask((uint8_t*)out_col->null_bitmask(),
+                                      out_col->length, false, start_row);
+                    return;
                 // TODO: [BE-4106] Split Time into Time32 and Time64
                 case Bodo_CTypes::TIME:
                     std::fill((int64_t*)out_col->data1() + start_row,
@@ -402,6 +411,15 @@ void aggfunc_output_initialize_kernel(
                               (int64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int64_t>::min());
                     return;
+                case Bodo_CTypes::TIMESTAMPTZ:
+                    std::fill((int64_t*)out_col->data1() + start_row,
+                              (int64_t*)out_col->data1() + out_col->length,
+                              std::numeric_limits<int64_t>::min());
+                    std::fill((int64_t*)out_col->data2() + start_row,
+                              (int64_t*)out_col->data2() + out_col->length, 0);
+                    InitializeBitMask((uint8_t*)out_col->null_bitmask(),
+                                      out_col->length, false, start_row);
+                    return;
                 case Bodo_CTypes::FLOAT32:
                     // initialize to quiet_NaN so that result is nan if all
                     // input values are nan
@@ -463,6 +481,17 @@ void aggfunc_output_initialize_kernel(
                     std::fill((double*)out_col->data1() + start_row,
                               (double*)out_col->data1() + out_col->length,
                               std::numeric_limits<double>::quiet_NaN());
+                    return;
+                case Bodo_CTypes::TIMESTAMPTZ:
+                    // store nat (int64_t min value) in data1 (timestamp) and 0
+                    // in data2 (offset)
+                    std::fill((int64_t*)out_col->data1() + start_row,
+                              (int64_t*)out_col->data1() + out_col->length,
+                              std::numeric_limits<int64_t>::min());
+                    std::fill((int64_t*)out_col->data2() + start_row,
+                              (int64_t*)out_col->data2() + out_col->length, 0);
+                    InitializeBitMask((uint8_t*)out_col->null_bitmask(),
+                                      out_col->length, false, start_row);
                     return;
                 default:
                     // for most cases we don't need an initial value, first/last

@@ -7858,3 +7858,107 @@ def test_timestamptz_gb_key(memory_leak_check):
         }
     )
     check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "fstr, expected",
+    [
+        pytest.param(
+            "count",
+            pd.DataFrame({"A": ["A", "B", "C", "D"], "B": [6, 3, 6, 0]}),
+            id="count",
+        ),
+        pytest.param(
+            "size",
+            pd.DataFrame({"A": ["A", "B", "C", "D"], "size": [6, 6, 6, 6]}),
+            id="size",
+        ),
+        pytest.param(
+            "first",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-01 01:00:00"), 0),
+                        None,
+                    ],
+                }
+            ),
+            id="first",
+        ),
+        pytest.param(
+            "last",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 0),
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 60),
+                        None,
+                    ],
+                }
+            ),
+            id="last",
+        ),
+        pytest.param(
+            "min",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 60),
+                        None,
+                    ],
+                }
+            ),
+            id="min",
+        ),
+        pytest.param(
+            "max",
+            pd.DataFrame(
+                {
+                    "A": ["A", "B", "C", "D"],
+                    "B": [
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-01 01:00:00"), 0),
+                        None,
+                    ],
+                }
+            ),
+            id="max",
+        ),
+    ],
+)
+def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
+    """Tests groupby with timestamptz column and aggregation"""
+
+    def impl(df):
+        return df.groupby("A", as_index=False, dropna=False).agg(fstr)
+
+    # groups A and C always have values, B has some nulls, D has all nulls
+    tz_arr = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 01:00:00"), 0),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 400),
+            bodo.TimestampTZ(pd.Timestamp("2024-01-01 00:00:00"), 60),
+            None,
+        ]
+        * 3
+    )
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 6,
+            "B": tz_arr,
+        }
+    )
+    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
