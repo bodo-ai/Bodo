@@ -21,8 +21,10 @@ import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import java.lang.RuntimeException
+import java.math.BigDecimal
 
 class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
@@ -111,7 +113,11 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as IcebergRel
-        val (cols, filters, tableScanNode) = flattenIcebergTree(input as IcebergRel)
+        val flattenedInfo = flattenIcebergTree(relInput)
+        val cols = flattenedInfo.colNames
+        val filters = flattenedInfo.filters
+        val tableScanNode = flattenedInfo.scan
+        val limit = flattenedInfo.limit
         val columnsArg = Expr.List(cols.map { v -> StringLiteral(v) })
         val typeSystem =
             ctx.builder().typeSystem
@@ -148,18 +154,27 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 "_bodo_read_as_table" to Expr.BooleanLiteral(true),
                 "_bodo_columns" to columnsArg,
                 "_bodo_filter" to filtersArg,
+                "_bodo_limit" to limit,
             )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)
     }
 
-    private fun flattenIcebergTree(node: IcebergRel): Triple<List<String>, List<RexNode>, IcebergTableScan> {
+    private data class FlattenedIcebergInfo(
+        val colNames: List<String>,
+        val filters: List<RexNode>,
+        val scan: IcebergTableScan,
+        val limit: Expr,
+    )
+
+    private fun flattenIcebergTree(node: IcebergRel): FlattenedIcebergInfo {
         val visitor =
             object : RelVisitor() {
                 // Initialize all columns to be in the original location.
                 var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
                 var filters: MutableList<RexNode> = mutableListOf()
                 var baseScan: IcebergTableScan? = null
+                var limit: Expr = Expr.None
 
                 override fun visit(
                     node: RelNode,
@@ -172,7 +187,10 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                             filters.add(node.condition)
                             node.childrenAccept(this)
                         }
-                        is IcebergSort -> node.childrenAccept(this)
+                        is IcebergSort -> {
+                            limit = Expr.DecimalLiteral((node.fetch!! as RexLiteral).getValueAs(BigDecimal::class.java)!!)
+                            node.childrenAccept(this)
+                        }
                         is IcebergProject -> {
                             for (i in 0..<colMap.size) {
                                 val project = node.projects[colMap[i]]
@@ -198,11 +216,11 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         visitor.go(node)
         val baseScan = visitor.baseScan!!
         val origColNames = baseScan.deriveRowType().fieldNames
-
-        return Triple(
+        return FlattenedIcebergInfo(
             visitor.colMap.mapIndexed { _, v -> origColNames[v] }.toList(),
             visitor.filters,
             baseScan,
+            visitor.limit,
         )
     }
 

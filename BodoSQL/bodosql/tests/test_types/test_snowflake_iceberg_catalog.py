@@ -9,6 +9,7 @@ import bodo
 import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -270,3 +271,227 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_limit_pushdown(memory_leak_check):
+    """
+    Test reading an Iceberg from Snowflake with limit pushdown.
+    Since the planner has access to length statistics, we need to actually
+    reduce the amount of data being read to test limit pushdown.
+
+    As a result, since this is no longer order we will instead compute summary
+    statistics and check that the number of rows read is identical
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame({"OUTPUT": [2]})
+
+    query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST LIMIT 2)"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            # We have a scalar output.
+            is_out_distributed=False,
+        )
+        check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_limit_filter_pushdown(memory_leak_check):
+    """
+    Test reading an Iceberg from Snowflake with limit + filter pushdown.
+    Since the planner has access to length statistics, we need to actually
+    reduce the amount of data being read to test limit pushdown.
+
+    As a result, since this is no longer order we will instead compute summary
+    statistics and check that the number of rows read is identical
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame({"OUTPUT": [1]})
+
+    query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST where B > 200 LIMIT 2)"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            # We have a scalar output.
+            is_out_distributed=False,
+        )
+        check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
+        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_multi_limit_pushdown(memory_leak_check):
+    """
+    Verify multiple limits are still simplified even though Iceberg trees
+    only support a single limit.
+
+    As a result, since this is no longer order we will instead compute summary
+    statistics and check that the number of rows read is identical
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame({"OUTPUT": [1]})
+    query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST LIMIT 2) LIMIT 1)"
+    print(bc.generate_plan(query))
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            # We have a scalar output.
+            is_out_distributed=False,
+        )
+        # The planner should simplify the two limits into a single limit
+        check_logger_msg(stream, "Constant limit detected, reading at most 1 rows")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_limit_filter_limit_pushdown(memory_leak_check):
+    """
+    Test reading an Iceberg from Snowflake with limit pushdown the first limit
+    is pushed down, but an additional limit + filter after the first isn't pushed down.
+    Since the planner has access to length statistics, we need to actually
+    reduce the amount of data being read to test limit pushdown.
+
+    As a result, since this is no longer order we will instead compute summary
+    statistics and check that the number of rows read is identical
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame({"OUTPUT": [2]})
+
+    query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST LIMIT 4) where B > 11 LIMIT 2)"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            # We have a scalar output.
+            is_out_distributed=False,
+        )
+        check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
+        # Verify no limit pushdown as its after the limit
+        check_logger_msg(stream, "Arrow filters pushed down:\nNone")
+        # Verify we don't push down the second limit
+        check_logger_no_msg(stream, "Constant limit detected, reading at most 2 rows")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_filter_limit_filter_pushdown(memory_leak_check):
+    """
+    Test reading an Iceberg from Snowflake with filter + limit pushdown, any
+    filter before the limit is pushed down with the limit, but not after.
+    Since the planner has access to length statistics, we need to actually
+    reduce the amount of data being read to test limit pushdown.
+
+    As a result, since this is no longer order we will instead compute summary
+    statistics and check that the number of rows read is identical
+    """
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame({"OUTPUT": [1]})
+
+    query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST where B > 11 LIMIT 4) where A <> 'david')"
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            # We have a scalar output.
+            is_out_distributed=False,
+        )
+        check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
+        # Verify no limit pushdown as its after the limit
+        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")

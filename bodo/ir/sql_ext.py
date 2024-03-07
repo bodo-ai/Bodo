@@ -41,7 +41,7 @@ from bodo.io import arrow_cpp
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import map_cpp_to_py_table_column_idxs, pyarrow_schema_type
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
-from bodo.ir.connector import Connector
+from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
     array_from_cpp_table,
@@ -165,6 +165,7 @@ class SqlReader(Connector):
         chunksize: Optional[int] = None,
         used_cols: Optional[list[str]] = None,
         initial_filter: Optional[Filter] = None,
+        initial_limit: Optional[int] = None,
         orig_col_names=None,
         orig_col_types=None,
     ):
@@ -194,7 +195,7 @@ class SqlReader(Connector):
         # index column.
         self.converted_colnames = converted_colnames
         self.loc = loc
-        self.limit = req_limit(sql_request)
+        self.limit = req_limit(sql_request) if initial_limit is None else initial_limit
         self.db_type = db_type
         # Support for filter pushdown. Currently only used with snowflake
         # and iceberg.
@@ -237,6 +238,9 @@ class SqlReader(Connector):
         self.used_cols = used_cols
         self.orig_col_names = orig_col_names
         self.orig_col_types = orig_col_types
+        # Log limit pushdown from BodoSQL
+        if self.limit is not None:
+            log_limit_pushdown(self, self.limit)
 
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)

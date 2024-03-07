@@ -12,6 +12,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
+import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
@@ -81,6 +82,7 @@ import org.apache.calcite.rel.rules.ProjectJoinTransposeRule
 import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 import org.apache.calcite.rel.rules.PruneEmptyRules
+import org.apache.calcite.rel.rules.SortMergeRule
 import org.apache.calcite.rel.rules.SortProjectTransposeRule
 import org.apache.calcite.rel.rules.UnionMergeRule
 import org.apache.calcite.rex.RexNode
@@ -867,6 +869,29 @@ object BodoRules {
             .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
             .toRule()
 
+    /**
+     * Planner rule that merges two Snowflake Limit rules together.
+     * In general, we can/should move this to the Volcano planner,
+     * but we need to refactor how this occurs.
+     *
+     * Note: We don't need the previous limitations in the LIMIT_MERGE
+     * configuration because these are already invariants of SnowflakeSorts.
+     */
+    @JvmField
+    val SNOWFLAKE_LIMIT_MERGE_RULE: RelOptRule =
+        SortMergeRule.Config.LIMIT_MERGE
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .withOperandSupplier { b0: OperandBuilder ->
+                b0.operand(SnowflakeSort::class.java)
+                    .predicate { p: SnowflakeSort -> p.getCatalogTable().isIcebergTable() }
+                    .oneInput { b1: OperandBuilder ->
+                        b1.operand(SnowflakeSort::class.java)
+                            .predicate { p: SnowflakeSort -> p.getCatalogTable().isIcebergTable() }
+                            .anyInputs()
+                    }
+            }
+            .toRule()
+
     // RULE GROUPINGS
 
     /**
@@ -1117,6 +1142,7 @@ object BodoRules {
             SNOWFLAKE_FILTER_AGGREGATE_TRANSPOSE_RULE,
             SNOWFLAKE_PROJECT_MERGE_RULE,
             SNOWFLAKE_PROJECT_REMOVE_RULE,
+            SNOWFLAKE_LIMIT_MERGE_RULE,
         )
 
     // OPTIMIZER GROUPS
