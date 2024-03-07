@@ -2379,19 +2379,31 @@ def test_datedadd_date_literals(query, expected_output, basic_df, memory_leak_ch
 
 
 @pytest.mark.slow
-def test_timestamp_add_scalar(
-    spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
-):
+def test_timestamp_add_scalar(mysql_interval_str, dt_fn_dataframe, memory_leak_check):
+    interval_str_to_offset_fn = {
+        "SECOND": lambda x: None if pd.isna(x) else pd.Timedelta(seconds=x),
+        "MINUTE": lambda x: None if pd.isna(x) else pd.Timedelta(minutes=x),
+        "HOUR": lambda x: None if pd.isna(x) else pd.Timedelta(hours=x),
+        "DAY": lambda x: None if pd.isna(x) else pd.Timedelta(days=x),
+        "WEEK": lambda x: None if pd.isna(x) else pd.Timedelta(weeks=x),
+        "MONTH": lambda x: None if pd.isna(x) else pd.DateOffset(months=x),
+        "YEAR": lambda x: None if pd.isna(x) else pd.DateOffset(years=x),
+    }
+    offset_fn = interval_str_to_offset_fn[mysql_interval_str]
     query = f"SELECT CASE WHEN timestampadd({mysql_interval_str}, small_positive_integers, timestamps) < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE timestampadd({mysql_interval_str}, small_positive_integers, timestamps) END from table1"
-    spark_interval = make_spark_interval(mysql_interval_str, "small_positive_integers")
-    spark_query = f"SELECT CASE WHEN ADD_TS < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE ADD_TS END from (SELECT timestamps + {spark_interval} as ADD_TS from table1)"
+    timestamps = dt_fn_dataframe["TABLE1"]["TIMESTAMPS"]
+    integers = dt_fn_dataframe["TABLE1"]["SMALL_POSITIVE_INTEGERS"]
+    offsets = integers.apply(offset_fn)
+    result = pd.DataFrame(
+        {"result": pd.Series([ts + offset for ts, offset in zip(timestamps, offsets)])}
+    )
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        expected_output=result,
         only_jit_1DVar=True,
     )
 
