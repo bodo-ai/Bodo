@@ -37,6 +37,7 @@ void fill_timestmaptz_arr(const std::shared_ptr<array_info>& arr, int len) {
         ((int64_t*)arr->data2())[i] = i + 100;
     }
 }
+
 std::unique_ptr<table_info> make_timestamptz_arr() {
     std::shared_ptr<array_info> arr = alloc_array_top_level(
         5, 0, 0, bodo_array_type::arr_type_enum::TIMESTAMPTZ,

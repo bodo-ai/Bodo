@@ -1173,6 +1173,123 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
  * that require multiple columns (e.g. mean).
  * @param[in] grp_info The grouping information.
  */
+template <int ftype>
+void apply_to_column_timestamptz(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info) {
+    constexpr Bodo_CTypes::CTypeEnum CType = Bodo_CTypes::TIMESTAMPTZ;
+    using DType = typename dtype_to_type<CType>::type;
+
+    switch (ftype) {
+        case Bodo_FTypes::count:
+        case Bodo_FTypes::size:
+            return apply_to_column_nullable<DType, ftype, CType>(
+                in_col, out_col, aux_cols, grp_info);
+        case Bodo_FTypes::first:
+        case Bodo_FTypes::last:
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp == -1) {
+                    continue;
+                }
+
+                if (!in_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(i)) {
+                    continue;
+                }
+
+                // For first, if we've already set a value, continue
+                if constexpr (ftype == Bodo_FTypes::first) {
+                    if (out_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                            i_grp)) {
+                        continue;
+                    }
+                }
+
+                if (in_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(i)) {
+                    int64_t ts =
+                        ((int64_t*)
+                             in_col->data1<bodo_array_type::TIMESTAMPTZ>())[i];
+                    int16_t offset =
+                        ((int16_t*)
+                             in_col->data2<bodo_array_type::TIMESTAMPTZ>())[i];
+
+                    ((int64_t*)out_col
+                         ->data1<bodo_array_type::TIMESTAMPTZ>())[i_grp] = ts;
+                    ((int16_t*)out_col
+                         ->data2<bodo_array_type::TIMESTAMPTZ>())[i_grp] =
+                        offset;
+                    out_col->set_null_bit<bodo_array_type::TIMESTAMPTZ>(i_grp,
+                                                                        true);
+                }
+            }
+            break;
+        case Bodo_FTypes::max:
+        case Bodo_FTypes::min:
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp == -1) {
+                    continue;
+                }
+
+                if (!in_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(i)) {
+                    continue;
+                }
+
+                int64_t ts =
+                    ((int64_t*)
+                         in_col->data1<bodo_array_type::TIMESTAMPTZ>())[i];
+                int16_t offset =
+                    ((int16_t*)
+                         in_col->data2<bodo_array_type::TIMESTAMPTZ>())[i];
+
+                bool set_value = false;
+                if (!out_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                        i_grp)) {
+                    set_value = true;
+                } else {
+                    auto curr_ts =
+                        ((int64_t*)out_col
+                             ->data1<bodo_array_type::TIMESTAMPTZ>())[i_grp];
+                    if constexpr (ftype == Bodo_FTypes::max) {
+                        set_value = ts > curr_ts;
+                    } else {
+                        set_value = ts < curr_ts;
+                    }
+                }
+
+                if (set_value) {
+                    ((int64_t*)out_col
+                         ->data1<bodo_array_type::TIMESTAMPTZ>())[i_grp] = ts;
+                    ((int16_t*)out_col
+                         ->data2<bodo_array_type::TIMESTAMPTZ>())[i_grp] =
+                        offset;
+                    out_col->set_null_bit<bodo_array_type::TIMESTAMPTZ>(i_grp,
+                                                                        true);
+                }
+            }
+            break;
+        default:
+            throw std::runtime_error(
+                std::string(
+                    "apply_to_column_timestamptz: unsupported function: ") +
+                get_name_for_Bodo_FTypes(ftype));
+    }
+}
+
+/**
+ * @brief Apply the given aggregation function to an input nullable
+ * array.
+ *
+ * @tparam T The actual C++ type for the underlying array data.
+ * @tparam ftype The function type.
+ * @tparam dtype The Bodo dtype for the array.
+ * @param[in] in_col The input column. This must be a nullable array type.
+ * @param[in, out] out_col The output column.
+ * @param[in, out] aux_cols Auxillary columns used to for certain operations
+ * that require multiple columns (e.g. mean).
+ * @param[in] grp_info The grouping information.
+ */
 template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
 void apply_to_column_nullable(
     std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
@@ -1736,6 +1853,11 @@ void apply_to_column(
         case bodo_array_type::NULLABLE_INT_BOOL:
             return apply_to_column_nullable<T, ftype, DType>(
                 in_col, out_col, aux_cols, grp_info);
+
+        case bodo_array_type::TIMESTAMPTZ:
+            return apply_to_column_timestamptz<ftype>(in_col, out_col, aux_cols,
+                                                      grp_info);
+
         default:
             throw std::runtime_error("apply_to_column: incorrect array type");
     }
@@ -1936,6 +2058,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::min, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::min, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::min, Bodo_CTypes::DECIMAL)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::min, Bodo_CTypes::TIMESTAMPTZ)
             break;
         case Bodo_FTypes::max:
             // MAX
@@ -1955,6 +2078,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::max, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::max, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::max, Bodo_CTypes::DECIMAL)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::max, Bodo_CTypes::TIMESTAMPTZ)
             break;
         case Bodo_FTypes::prod:
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::prod, Bodo_CTypes::_BOOL)
@@ -1989,6 +2113,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::TIME)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::DATETIME)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::TIMEDELTA)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::TIMESTAMPTZ)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::first, Bodo_CTypes::DECIMAL)
@@ -2008,6 +2133,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::TIME)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::DATETIME)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::TIMEDELTA)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::TIMESTAMPTZ)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::last, Bodo_CTypes::DECIMAL)
