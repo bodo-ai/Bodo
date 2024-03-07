@@ -1244,6 +1244,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
             break;
         case bodo_array_type::STRING:
         case bodo_array_type::NULLABLE_INT_BOOL:
+        case bodo_array_type::TIMESTAMPTZ:
         case bodo_array_type::STRUCT:
         case bodo_array_type::ARRAY_ITEM:
         case bodo_array_type::MAP:
@@ -1272,6 +1273,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
         case Bodo_CTypes::TIME:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
+        case Bodo_CTypes::TIMESTAMPTZ:
             return (nullable + numpy_item_size[c_type]) << 3;
         case Bodo_CTypes::STRING:
         case Bodo_CTypes::LIST:

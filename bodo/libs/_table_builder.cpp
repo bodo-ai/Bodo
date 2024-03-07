@@ -429,6 +429,21 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
             }
 
         } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            uint64_t utc_size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
+            CHECK_ARROW_MEM(
+                data_array->buffers[0]->SetSize(new_size * utc_size_type),
+                "ArrayBuildBuffer::IncrementSize: SetSize failed!");
+            CHECK_ARROW_MEM(
+                data_array->buffers[1]->SetSize(
+                    arrow::bit_util::BytesForBits(new_size * offset_size_type)),
+                "ArrayBuildBuffer::IncrementSize: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(
+                                arrow::bit_util::BytesForBits(new_size)),
+                            "ArrayBuildBuffer::IncrementSize: SetSize failed!");
+
+        } break;
         case bodo_array_type::STRING: {
             throw std::runtime_error(
                 "ArrayBuildBuffer::IncrementSize: String arrays unsupported");
@@ -656,7 +671,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             }
         } break;
         case bodo_array_type::TIMESTAMPTZ: {
-            uint64_t ts_size_type = numpy_item_size[Bodo_CTypes::INT64];
+            uint64_t ts_size_type = numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
             uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
