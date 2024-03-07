@@ -974,9 +974,14 @@ class TypingTransforms:
         # If the reader is streaming, and thus implied from BodoSQL
         # and the filters are already present in the reader, then we
         # can assume BodoSQL has already done the filter pushdown.
+        # The same is true for a limit from BodoSQL.
         # Bodo doesn't need to attempt further
         if read_node.is_streaming:
-            require(read_node.filters is None)
+            is_sql_node = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+            require(
+                read_node.filters is None
+                and (not is_sql_node or read_node.limit is None)
+            )
 
         return table_def_node, read_node
 
@@ -4217,6 +4222,21 @@ class TypingTransforms:
             else None
         )
 
+        _bodo_limit_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_limit",
+            default=None,
+            use_default=True,
+        )
+        limit_obj = (
+            self._get_const_value(_bodo_limit_var, label, rhs.loc)
+            if _bodo_limit_var
+            else None
+        )
+
         (
             orig_col_names,
             orig_arr_types,
@@ -4348,6 +4368,7 @@ class TypingTransforms:
                 chunksize=chunksize,
                 used_cols=columns_obj,
                 initial_filter=filter_obj,
+                initial_limit=limit_obj,
                 orig_col_names=orig_col_names,
                 orig_col_types=orig_arr_types,
             )
