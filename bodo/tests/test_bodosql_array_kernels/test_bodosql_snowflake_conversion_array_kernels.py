@@ -488,6 +488,26 @@ _timestamps_nans[2] = _timestamps_nans[7] = np.nan
             '[[{"map":{"a":[0,1],"b":[undefined,3]},"struct":{"S":"abc","D":1.200000}}],[{"map":{"a":[undefined,1]},"struct":{"D":3.500000}}],[{"struct":{"S":"efg"}},{"map":{},"struct":{}},{"map":{"a":[0,1],"b":[]}}],undefined,[],[undefined,{"struct":{"S":"ok"}},{"map":{}}]]',
             id="nested_array-scalar",
         ),
+        pytest.param(
+            [
+                bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 100),
+                bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 200),
+                bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), 300),
+                bodo.TimestampTZ(pd.Timestamp("2024-04-05 06:07:08"), 400),
+                bodo.TimestampTZ(pd.Timestamp("2025-05-06 07:08:09"), 500),
+            ],
+            False,
+            pd.array(
+                [
+                    "2021-01-02 04:44:05 +0140",
+                    "2022-02-03 07:25:06 +0320",
+                    "2023-03-04 10:06:07 +0500",
+                    "2024-04-05 12:47:08 +0640",
+                    "2025-05-06 15:28:09 +0820",
+                ]
+            ),
+            id="timestamptz-vector",
+        ),
     ],
 )
 def test_to_char(input, is_scalar, expected):

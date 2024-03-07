@@ -735,6 +735,336 @@ def test_to_timestamp_valid_strings_with_format(
 
 
 @pytest.mark.parametrize(
+    "tz, answer",
+    [
+        pytest.param(
+            None,
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-02 03:04:05"),
+                    pd.Timestamp("2022-02-03 05:05:06"),
+                    pd.Timestamp("2023-03-04 04:06:07"),
+                    pd.Timestamp("2024-03-10 18:00:01"),
+                    pd.Timestamp("2024-03-10 19:00:01"),
+                    pd.Timestamp("2024-04-05 01:30:00"),
+                    pd.Timestamp("2024-04-04 22:30:00"),
+                    pd.Timestamp("2024-04-04 23:30:00"),
+                ]
+            ).to_numpy(),
+            id="no_tz",
+        ),
+        pytest.param(
+            "America/Los_Angeles",
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-01 19:04:05", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-02-02 20:05:06", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-03 21:06:07", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-03-10 11:00:01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-03-10 12:00:01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-04-04 17:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-04-04 17:30:00", tz="America/Los_Angeles"),
+                ]
+            ).to_numpy(),
+            id="with_tz_LA",
+        ),
+        pytest.param(
+            "Asia/Kathmandu",
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-02 8:49:05", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2022-02-03 9:50:06", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2023-03-04 10:51:07", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2024-03-10 23:45:01", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2024-03-11 00:45:01", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2024-04-05 5:45:00", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2024-04-05 6:15:00", tz="Asia/Kathmandu"),
+                ]
+            ).to_numpy(),
+            id="with_tz_KTM",
+        ),
+    ],
+)
+def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
+    """
+    Tests to_timestamp kernel with timestamptz input
+    """
+    input_ = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2021-01-02 03:04:05"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2022-02-03 04:05:06"), 60),
+            bodo.TimestampTZ(pd.Timestamp("2023-03-04 05:06:07"), -60),
+            bodo.TimestampTZ(pd.Timestamp("2024-03-10 18:00:01"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2024-03-10 19:00:01"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), 90),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:00:00"), -90),
+            bodo.TimestampTZ(pd.Timestamp("2024-04-05 00:30:00"), -60),
+        ]
+    )
+
+    def to_timestamp_impl(val):
+        return bodo.libs.bodosql_array_kernels.to_timestamp(val, None, tz, 0)
+
+    check_func(
+        to_timestamp_impl,
+        (input_,),
+        py_output=answer,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "input_, is_scalar, tz, expected",
+    [
+        pytest.param(
+            0,
+            True,
+            None,
+            "1970-01-01 00:00:00 +0000",
+            id="int-scalar",
+        ),
+        pytest.param(
+            pd.array([1, 2, 3600, 102973109, None], pd.Int32Dtype()),
+            False,
+            None,
+            np.array(
+                [
+                    "1970-01-01 00:00:01 +0000",
+                    "1970-01-01 00:00:02 +0000",
+                    "1970-01-01 01:00:00 +0000",
+                    "1973-04-06 19:38:29 +0000",
+                    None,
+                ]
+            ),
+            id="int-vector",
+        ),
+        pytest.param(
+            pd.array([None] * 5, pd.ArrowDtype(pa.null())),
+            False,
+            None,
+            [(None, None)] * 5,
+            id="null-vector",
+            marks=pytest.mark.skip("[BSE-2857]: nulls not supported by to_timestamp"),
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "2021-01-02 04:49:05 +0145",
+                    "2022-02-03 01:00:06 -0305",
+                    "2023-03-04 10:06:07 +0500",
+                    "2024-04-05 12:47:08 +0640",
+                    "2025-05-06 15:28:09 +0820",
+                    "2025-05-06 15:28:09",
+                    "0",
+                    "2025-05-06 15:28:09+0820",
+                    "2025-05-06 15:28:09-0820",
+                    "2025-01-01 1:2:3",
+                    None,
+                ],
+                pd.StringDtype(),
+            ),
+            False,
+            None,
+            np.array(
+                [
+                    "2021-01-02 04:49:05 +0145",
+                    "2022-02-03 01:00:06 -0305",
+                    "2023-03-04 10:06:07 +0500",
+                    "2024-04-05 12:47:08 +0640",
+                    "2025-05-06 15:28:09 +0820",
+                    "2025-05-06 15:28:09 +0000",
+                    "1970-01-01 00:00:00 +0000",
+                    "2025-05-06 15:28:09 +0820",
+                    "2025-05-06 15:28:09 -0820",
+                    "2025-01-01 01:02:03 +0000",
+                    None,
+                ]
+            ),
+            id="string-no_tz-vector",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "2025-05-06 15:28:09",
+                    "0",
+                    "2025-05-06 15:28:09+0820",
+                    "2025-01-01 1:2:3",
+                    None,
+                ],
+                pd.StringDtype(),
+            ),
+            False,
+            "Asia/Kathmandu",
+            np.array(
+                [
+                    "2025-05-06 15:28:09 +0545",
+                    "1970-01-01 00:00:00 +0000",
+                    "2025-05-06 15:28:09 +0820",
+                    "2025-01-01 01:02:03 +0545",
+                    None,
+                ]
+            ),
+            id="string-with_tz-vector",
+        ),
+        pytest.param(
+            # Using pd.Series here because np.array converts timestamp to date
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-02 03:04:05"),
+                    pd.Timestamp("2022-02-03 04:05:06"),
+                    pd.Timestamp("2023-03-04 05:06:07"),
+                    pd.Timestamp("2024-04-05 06:07:08"),
+                    pd.Timestamp("2025-05-06 07:08:09"),
+                ]
+            ),
+            False,
+            None,
+            np.array(
+                [
+                    "2021-01-02 03:04:05 +0000",
+                    "2022-02-03 04:05:06 +0000",
+                    "2023-03-04 05:06:07 +0000",
+                    "2024-04-05 06:07:08 +0000",
+                    "2025-05-06 07:08:09 +0000",
+                ]
+            ),
+            id="timestamp_tz_naive-no_tz-vector",
+        ),
+        pytest.param(
+            # Using pd.Series here because np.array converts timestamp to date
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-02 03:04:05"),
+                    pd.Timestamp("2022-02-03 04:05:06"),
+                    pd.Timestamp("2023-03-04 05:06:07"),
+                    pd.Timestamp("2024-04-05 06:07:08"),
+                    pd.Timestamp("2025-05-06 07:08:09"),
+                ]
+            ),
+            False,
+            "America/Los_Angeles",
+            np.array(
+                [
+                    "2021-01-02 03:04:05 -0800",
+                    "2022-02-03 04:05:06 -0800",
+                    "2023-03-04 05:06:07 -0800",
+                    "2024-04-05 06:07:08 -0700",
+                    "2025-05-06 07:08:09 -0700",
+                ]
+            ),
+            id="timestamp_tz_naive-with_tz-vector",
+        ),
+        pytest.param(
+            # Using pd.Series here because np.array converts timestamp to date
+            pd.Series(
+                [
+                    pd.Timestamp("2021-01-02 03:04:05", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-02-03 04:05:06", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-04 05:06:07", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-04-05 06:07:08", tz="America/Los_Angeles"),
+                    pd.Timestamp("2025-05-06 07:08:09", tz="America/Los_Angeles"),
+                ]
+            ),
+            False,
+            "Asia/Kathmandu",
+            np.array(
+                [
+                    "2021-01-02 03:04:05 -0800",
+                    "2022-02-03 04:05:06 -0800",
+                    "2023-03-04 05:06:07 -0800",
+                    "2024-04-05 06:07:08 -0700",
+                    "2025-05-06 07:08:09 -0700",
+                ]
+            ),
+            id="timestamp_tz_aware-vector",
+        ),
+        pytest.param(
+            # Using pd.Series here because np.array converts timestamp to date
+            pd.Series(
+                [
+                    datetime.date(2021, 1, 2),
+                    datetime.date(2022, 2, 3),
+                    datetime.date(2023, 3, 4),
+                    datetime.date(2024, 4, 5),
+                    datetime.date(2025, 5, 6),
+                ]
+            ),
+            False,
+            None,
+            np.array(
+                [
+                    "2021-01-02 00:00:00 +0000",
+                    "2022-02-03 00:00:00 +0000",
+                    "2023-03-04 00:00:00 +0000",
+                    "2024-04-05 00:00:00 +0000",
+                    "2025-05-06 00:00:00 +0000",
+                ]
+            ),
+            id="date-no_tz-vector",
+        ),
+        pytest.param(
+            # Using pd.Series here because np.array converts timestamp to date
+            pd.Series(
+                [
+                    datetime.date(2021, 1, 2),
+                    datetime.date(2022, 2, 3),
+                    datetime.date(2023, 3, 4),
+                    datetime.date(2024, 4, 5),
+                    datetime.date(2025, 5, 6),
+                ]
+            ),
+            False,
+            "America/Los_Angeles",
+            np.array(
+                [
+                    "2021-01-02 00:00:00 -0800",
+                    "2022-02-03 00:00:00 -0800",
+                    "2023-03-04 00:00:00 -0800",
+                    "2024-04-05 00:00:00 -0700",
+                    "2025-05-06 00:00:00 -0700",
+                ]
+            ),
+            id="date-with_tz-vector",
+        ),
+    ],
+)
+def test_to_timestamptz(input_, is_scalar, tz, expected):
+    """
+    Tests to_timestamptz kernel - note that we convert TimestampTZ to a tuple of
+    (utc_timestamp, offset_minutes) to avoid only comparing the utc_timestamp
+    part of the TimestampTZ
+    """
+    if not is_scalar:
+
+        def impl(arr):
+            return bodo.libs.bodosql_array_kernels.to_char(
+                bodo.libs.bodosql_array_kernels.to_timestamptz(arr, tz, 0),
+                None,
+                is_scalar=False,
+            )
+
+    else:
+
+        def impl(arr):
+            return bodo.libs.bodosql_array_kernels.to_char(
+                bodo.libs.bodosql_array_kernels.to_timestamptz(arr, tz, 0),
+                None,
+                is_scalar=True,
+            )
+
+    check_func(
+        impl,
+        (input_,),
+        py_output=expected,
+        check_dtype=False,
+        reset_index=False,
+    )
+
+
+@pytest.mark.parametrize(
     "time_str, format_str, answer",
     [
         pytest.param(
