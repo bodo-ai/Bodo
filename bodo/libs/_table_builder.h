@@ -890,6 +890,44 @@ struct ArrayBuildBuffer {
                              size, bit);
                 }
             } break;
+            case bodo_array_type::TIMESTAMPTZ: {
+                uint64_t utc_size_type =
+                    numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
+                uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->SetSize((size + 1) * utc_size_type),
+                    "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[1]->SetSize(
+                        arrow::bit_util::BytesForBits(size + 1) *
+                        offset_size_type),
+                    "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[2]->SetSize(
+                        arrow::bit_util::BytesForBits(size + 1)),
+                    "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
+                char* utc_out_ptr =
+                    data_array->data1<bodo_array_type::TIMESTAMPTZ>() +
+                    utc_size_type * size;
+                const char* utc_in_ptr =
+                    in_arr->data1<bodo_array_type::TIMESTAMPTZ>() +
+                    utc_size_type * row_ind;
+                char* offset_out_ptr =
+                    data_array->data2<bodo_array_type::TIMESTAMPTZ>() +
+                    offset_size_type * size;
+                const char* offset_in_ptr =
+                    in_arr->data2<bodo_array_type::NULLABLE_INT_BOOL>() +
+                    offset_size_type * row_ind;
+                memcpy(utc_out_ptr, utc_in_ptr, utc_size_type);
+                memcpy(offset_out_ptr, offset_in_ptr, offset_size_type);
+                bool bit = GetBit(
+                    (uint8_t*)
+                        in_arr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(),
+                    row_ind);
+                SetBitTo((uint8_t*)data_array
+                             ->null_bitmask<bodo_array_type::TIMESTAMPTZ>(),
+                         size, bit);
+            } break;
             case bodo_array_type::STRING: {
                 CHECK_ARROW_MEM(
                     data_array->buffers[1]->SetSize((size + 2) *

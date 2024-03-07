@@ -1387,6 +1387,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         }
     }
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr1->arr_type == bodo_array_type::TIMESTAMPTZ ||
         arr1->arr_type == bodo_array_type::DICT) {
         if (arr1->arr_type == bodo_array_type::DICT) {
             if (!is_matching_dictionary(arr1->child_arrays[0],

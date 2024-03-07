@@ -161,8 +161,21 @@ struct ChunkedTableArrayBuilder {
                          bodo_array_type::NUMPY)
         CASE_APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
                          bodo_array_type::NULLABLE_INT_BOOL)
-        if (this->data_array->arr_type == bodo_array_type::STRING &&
-            in_arr->arr_type == bodo_array_type::STRING) {
+        if (this->data_array->arr_type == bodo_array_type::TIMESTAMPTZ &&
+            in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::TIMESTAMPTZ,
+                                       bodo_array_type::TIMESTAMPTZ,
+                                       Bodo_CTypes::TIMESTAMPTZ)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
+        } else if (this->data_array->arr_type == bodo_array_type::STRING &&
+                   in_arr->arr_type == bodo_array_type::STRING) {
             switch (this->data_array->dtype) {
                 CASE_APPEND_ROWS_DTYPE(bodo_array_type::STRING,
                                        bodo_array_type::STRING,
@@ -273,6 +286,57 @@ struct ChunkedTableArrayBuilder {
             int64_t row_idx = idxs[i + idx_start];
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
             out_data[this->size + i] = new_data;
+        }
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
+        }
+        this->data_array->length += idx_length;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are TIMESTAMPTZ arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::TIMESTAMPTZ &&
+                 in_arr_type == bodo_array_type::TIMESTAMPTZ &&
+                 dtype == Bodo_CTypes::TIMESTAMPTZ)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        using T_utc = typename dtype_to_type<Bodo_CTypes::TIMESTAMPTZ>::type;
+        using T_offset = typename dtype_to_type<Bodo_CTypes::INT16>::type;
+        T_utc* out_data = (T_utc*)this->data_array->data1<out_arr_type>();
+        T_utc* in_data = (T_utc*)in_arr->data1<in_arr_type>();
+        T_offset* out_offsets =
+            (T_offset*)this->data_array->data2<out_arr_type>();
+        T_offset* in_offsets = (T_offset*)in_arr->data2<in_arr_type>();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+        const uint8_t* in_bitmask =
+            (uint8_t*)in_arr->null_bitmask<in_arr_type>();
+
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            T_utc new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            T_offset new_offset = row_idx < 0 ? 0 : in_offsets[row_idx];
+            out_data[this->size + i] = new_data;
+            out_offsets[this->size + i] = new_offset;
         }
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];

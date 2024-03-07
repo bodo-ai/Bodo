@@ -121,6 +121,37 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                             "ChunkedTableArrayBuilder::"
                             "ChunkedTableArrayBuilder: Resize failed!");
         } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            uint64_t utc_size_type = numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
+            int64_t utc_buffer_alloc_size =
+                static_cast<int64_t>(this->capacity * utc_size_type);
+            utc_buffer_alloc_size =
+                std::max(utc_buffer_alloc_size, min_buffer_allocation_size);
+
+            uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
+            int64_t offset_buffer_alloc_size =
+                static_cast<int64_t>(this->capacity * offset_size_type);
+            offset_buffer_alloc_size =
+                std::max(offset_buffer_alloc_size, min_buffer_allocation_size);
+
+            int64_t null_bitmap_buffer_alloc_size =
+                ::arrow::bit_util::BytesForBits(this->capacity);
+            null_bitmap_buffer_alloc_size = std::max(
+                null_bitmap_buffer_alloc_size, min_buffer_allocation_size);
+
+            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
+                                utc_buffer_alloc_size, false),
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
+            CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
+                                offset_buffer_alloc_size, false),
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
+            CHECK_ARROW_MEM(this->data_array->buffers[2]->Resize(
+                                null_bitmap_buffer_alloc_size, false),
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
+        } break;
         case bodo_array_type::DICT: {
             if (_dict_builder == nullptr) {
                 throw std::runtime_error(
@@ -341,6 +372,50 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                 "ChunkedTableArrayBuilder::Finalize: Resize failed!");
 
         } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            uint64_t utc_size_type = numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
+            int64_t utc_buffer_req_size =
+                static_cast<int64_t>(this->size * utc_size_type);
+            int64_t utc_buffer_alloc_size =
+                std::max(utc_buffer_req_size, min_buffer_allocation_size);
+
+            uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
+            int64_t offset_buffer_req_size =
+                static_cast<int64_t>(this->size * offset_size_type);
+            int64_t offset_buffer_alloc_size =
+                std::max(offset_buffer_req_size, min_buffer_allocation_size);
+
+            int64_t null_bitmap_buffer_req_size =
+                ::arrow::bit_util::BytesForBits(this->size);
+            int64_t null_bitmap_buffer_alloc_size = std::max(
+                null_bitmap_buffer_req_size, min_buffer_allocation_size);
+
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(utc_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[1]->Resize(offset_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[2]->Resize(
+                    null_bitmap_buffer_alloc_size, shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(utc_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[1]->Resize(offset_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[2]->Resize(
+                    null_bitmap_buffer_req_size, /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+
+        } break;
         case bodo_array_type::STRING: {
             int64_t data_buffer_req_size =
                 static_cast<int64_t>(this->data_array->n_sub_elems());
@@ -459,6 +534,14 @@ void ChunkedTableArrayBuilder::Reset() {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
                             "ChunkedTableArrayBuilder::Reset: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
+        } break;
+        case bodo_array_type::TIMESTAMPTZ: {
+            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(0, false),
                             "ChunkedTableArrayBuilder::Reset: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
@@ -695,6 +778,13 @@ void ChunkedTableBuilder::AppendBatch(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::MAP);
             } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRUCT);
+            } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::TIMESTAMPTZ);
+            } else {
+                throw std::runtime_error(
+                    "ChunkedTableArrayBuilder::AppendJoinOutput: invalid "
+                    "array type" +
+                    GetArrType_as_string(in_arr->arr_type));
             }
         }
         // Append the actual rows.
@@ -1080,6 +1170,10 @@ void ChunkedTableBuilder::AppendBatch(
                     APPEND_ROWS_COL(bodo_array_type::DICT,
                                     bodo_array_type::DICT, Bodo_CTypes::STRING);
                 }
+            } else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+                APPEND_ROWS_COL(bodo_array_type::TIMESTAMPTZ,
+                                bodo_array_type::TIMESTAMPTZ,
+                                Bodo_CTypes::TIMESTAMPTZ);
             } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
                 if (in_arr->dtype == Bodo_CTypes::LIST) {
                     APPEND_ROWS_COL(bodo_array_type::ARRAY_ITEM,
@@ -1208,6 +1302,13 @@ void ChunkedTableBuilder::AppendJoinOutput(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::MAP);
             } else if (col->arr_type == bodo_array_type::STRUCT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRUCT);
+            } else if (col->arr_type == bodo_array_type::TIMESTAMPTZ) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::TIMESTAMPTZ);
+            } else {
+                throw std::runtime_error(
+                    "ChunkedTableArrayBuilder::AppendJoinOutput: invalid "
+                    "array type" +
+                    GetArrType_as_string(col->arr_type));
             }
         }
         // Append the actual rows.
@@ -1512,6 +1613,24 @@ void ChunkedTableBuilder::AppendJoinOutput(
                     APPEND_ROWS_COL(bodo_array_type::MAP, bodo_array_type::MAP,
                                     Bodo_CTypes::MAP);
                 }
+            }
+
+            // TIMESTAMPTZ ARRAY
+            else if (out_arr_type == bodo_array_type::TIMESTAMPTZ &&
+                     in_arr_type == bodo_array_type::TIMESTAMPTZ) {
+                if (col->dtype == Bodo_CTypes::TIMESTAMPTZ) {
+                    APPEND_ROWS_COL(bodo_array_type::TIMESTAMPTZ,
+                                    bodo_array_type::TIMESTAMPTZ,
+                                    Bodo_CTypes::TIMESTAMPTZ);
+                }
+            }
+
+            else {
+                throw std::runtime_error(
+                    "ChunkedTableArrayBuilder::AppendJoinOutput: invalid "
+                    "array types " +
+                    GetArrType_as_string(in_arr_type) + " and " +
+                    GetArrType_as_string(out_arr_type));
             }
         }
         // Update the metadata.
