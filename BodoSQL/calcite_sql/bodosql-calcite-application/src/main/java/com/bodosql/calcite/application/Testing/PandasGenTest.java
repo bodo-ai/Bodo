@@ -111,7 +111,8 @@ public class PandasGenTest {
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Always inline views
-            true // Enable Iceberg for testing
+            true, // Enable Iceberg for testing
+            true // Enable TIMESTMAP_TZ for testing
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");

@@ -6,7 +6,6 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
 
 /**
@@ -125,8 +124,6 @@ data class ColumnDataTypeInfo(
                 return ColumnDataTypeInfo(BodoSQLColumnDataType.JSON_OBJECT, isNullable, key, value)
             } else if (relDataType is VariantSqlType) {
                 return ColumnDataTypeInfo(BodoSQLColumnDataType.VARIANT, isNullable)
-            } else if (relDataType is TZAwareSqlType) {
-                return ColumnDataTypeInfo(BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP, isNullable, relDataType.precision)
             } else {
                 return when (typeName) {
                     SqlTypeName.TINYINT -> ColumnDataTypeInfo(BodoSQLColumnDataType.INT8, isNullable)
@@ -152,6 +149,20 @@ data class ColumnDataTypeInfo(
                     SqlTypeName.TIMESTAMP ->
                         ColumnDataTypeInfo(
                             BodoSQLColumnDataType.DATETIME,
+                            isNullable,
+                            relDataType.precision,
+                        )
+
+                    SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.TIMESTAMP_LTZ,
+                            isNullable,
+                            relDataType.precision,
+                        )
+
+                    SqlTypeName.TIMESTAMP_TZ ->
+                        ColumnDataTypeInfo(
+                            BodoSQLColumnDataType.TIMESTAMP_TZ,
                             isNullable,
                             relDataType.precision,
                         )

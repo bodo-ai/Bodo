@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.rex;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.ByteString;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.Spaces;
@@ -44,13 +45,14 @@ import org.apache.calcite.sql.type.MultisetSqlType;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Sarg;
 import org.apache.calcite.util.TimeString;
+import org.apache.calcite.util.TimeWithTimeZoneString;
 import org.apache.calcite.util.TimestampString;
+import org.apache.calcite.util.TimestampWithTimeZoneString;
 import org.apache.calcite.util.Util;
 
 import com.google.common.base.Preconditions;
@@ -1015,18 +1017,34 @@ public class RexBuilder {
                 assert o instanceof TimeString;
                 p = type.getPrecision();
                 if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
-                    p = 0;
+                    p = 9;
                 }
                 o = ((TimeString) o).round(p);
+                break;
+            case TIME_TZ:
+                assert o instanceof TimeWithTimeZoneString;
+                p = type.getPrecision();
+                if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
+                    p = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+                }
+                o = ((TimeWithTimeZoneString) o).round(p);
                 break;
             case TIMESTAMP:
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 assert o instanceof TimestampString;
                 p = type.getPrecision();
                 if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
-                    p = 0;
+                    p = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
                 }
                 o = ((TimestampString) o).round(p);
+                break;
+            case TIMESTAMP_TZ:
+                assert o instanceof TimestampWithTimeZoneString;
+                p = type.getPrecision();
+                if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
+                    p = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
+                }
+                o = ((TimestampWithTimeZoneString) o).round(p);
                 break;
             default:
                 break;
@@ -1279,6 +1297,16 @@ public class RexBuilder {
                 SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE);
     }
 
+    /** Creates a Time with time-zone literal. */
+    public RexLiteral makeTimeTzLiteral(
+            TimeWithTimeZoneString time,
+            int precision) {
+        return makeLiteral(
+                requireNonNull(time, "time"),
+                typeFactory.createSqlType(SqlTypeName.TIME_TZ, precision),
+                SqlTypeName.TIME_TZ);
+    }
+
     // CHECKSTYLE: IGNORE 1
     /** @deprecated Use {@link #makeTimestampLiteral(TimestampString, int)}. */
     @Deprecated // to be removed before 2.0
@@ -1308,6 +1336,15 @@ public class RexBuilder {
                 requireNonNull(timestamp, "timestamp"),
                 typeFactory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, precision),
                 SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE);
+    }
+
+    public RexLiteral makeTimestampTzLiteral(
+            TimestampWithTimeZoneString timestamp,
+            int precision) {
+        return makeLiteral(
+                requireNonNull(timestamp, "timestamp"),
+                typeFactory.createSqlType(SqlTypeName.TIMESTAMP_TZ, precision),
+                SqlTypeName.TIMESTAMP_TZ);
     }
 
     /**
@@ -1553,8 +1590,13 @@ public class RexBuilder {
                 return DateTimeUtils.ZERO_CALENDAR;
             case TIME_WITH_LOCAL_TIME_ZONE:
                 return new TimeString(0, 0, 0);
+            case TIME_TZ:
+                return new TimeWithTimeZoneString(0, 0, 0, "GMT+00");
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 return new TimestampString(0, 1, 1, 0, 0, 0);
+            case TIMESTAMP_TZ:
+                // TODO: alter the offset used to reflect the default timezone
+                return new TimestampWithTimeZoneString(0, 1, 1, 0, 0, 0, "GMT+00");
             default:
                 throw Util.unexpected(type.getSqlTypeName());
         }
@@ -1671,6 +1713,8 @@ public class RexBuilder {
                 return makeTimeLiteral((TimeString) value, type.getPrecision());
             case TIME_WITH_LOCAL_TIME_ZONE:
                 return makeTimeWithLocalTimeZoneLiteral((TimeString) value, type.getPrecision());
+            case TIME_TZ:
+                return makeTimeTzLiteral((TimeWithTimeZoneString) value, type.getPrecision());
             case DATE:
                 return makeDateLiteral((DateString) value);
             case TIMESTAMP:
@@ -1678,7 +1722,7 @@ public class RexBuilder {
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 // Bodo Change: Maintain TZAware Type. This is reached
                 // if we need to expand a SArg
-                if (type instanceof TZAwareSqlType) {
+                if (type.getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return makeLiteral(
                             requireNonNull((TimestampString) value, "timestamp"),
                             type,
@@ -1686,6 +1730,9 @@ public class RexBuilder {
                 } else {
                     return makeTimestampWithLocalTimeZoneLiteral((TimestampString) value, type.getPrecision());
                 }
+            case TIMESTAMP_TZ:
+                return makeTimestampTzLiteral(
+                        (TimestampWithTimeZoneString) value, type.getPrecision());
             case INTERVAL_YEAR:
             case INTERVAL_YEAR_MONTH:
             case INTERVAL_MONTH:

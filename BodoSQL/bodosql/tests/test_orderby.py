@@ -572,7 +572,14 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
     col_b_nas = py_output["B"] == small_timestamp
     py_output["A"][col_a_nas] = None
     py_output["B"][col_b_nas] = None
-    check_query(query1, ctx, None, sort_output=False, expected_output=py_output)
+    check_query(
+        query1,
+        ctx,
+        None,
+        sort_output=False,
+        expected_output=py_output,
+        session_tz=representative_tz,
+    )
 
     query2 = f"""
         Select *
@@ -588,4 +595,11 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
     col_b_nas = py_output["B"] == large_timestamp
     py_output["A"][col_a_nas] = None
     py_output["B"][col_b_nas] = None
-    check_query(query2, ctx, None, sort_output=False, expected_output=py_output)
+    check_query(
+        query2,
+        ctx,
+        None,
+        sort_output=False,
+        expected_output=py_output,
+        session_tz=representative_tz,
+    )

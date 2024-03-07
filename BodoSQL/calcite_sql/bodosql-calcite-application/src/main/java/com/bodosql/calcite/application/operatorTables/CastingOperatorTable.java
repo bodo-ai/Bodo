@@ -1,21 +1,15 @@
 package com.bodosql.calcite.application.operatorTables;
 
-import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
 import static org.apache.calcite.sql.type.BodoReturnTypes.toArrayReturnType;
 
-import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.util.Arrays;
 import java.util.List;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
@@ -25,8 +19,7 @@ import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -161,53 +154,6 @@ public class CastingOperatorTable implements SqlOperatorTable {
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
 
-  /**
-   * Generate the return type for TO_TIMESTAMP_TZ, TRY_TO_TIMESTAMP_TZ, TO_TIMESTAMP_LTZ and
-   * TRY_TO_TIMESTAMP_LTZ
-   *
-   * @param binding The Operand inputs
-   * @param runtimeFailureIsNull Can a runtime failure cause a null output? True for
-   *     TRY_TO_TIMESTAMP and false for TO_TIMESTAMP (because it raises an exception instead).
-   * @param keepTimezone If True input has a timezone, keep it in the output. True for _TZ and false
-   *     for _LTZ, since _LTZ always overrides with the local time zone
-   * @return The function's return type.
-   */
-  public static RelDataType toTimestampTZReturnType(
-      SqlOperatorBinding binding, boolean runtimeFailureIsNull, boolean keepTimezone) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    // Determine if the output is nullable.
-    boolean nullable = isOutputNullableCompile(operandTypes);
-    RelDataTypeFactory typeFactory = binding.getTypeFactory();
-
-    // Determine output type based on arg0
-    RelDataType arg0 = operandTypes.get(0);
-    RelDataType returnType;
-    boolean isTzAware = (arg0 instanceof TZAwareSqlType);
-    if (keepTimezone && isTzAware) {
-      // If the input is tzAware the output is as well.
-      returnType = arg0;
-    } else {
-      // Otherwise we output a timezone-aware Timestamp with the local timestamp.
-      returnType =
-          BodoRelDataTypeFactory.createTZAwareSqlType(
-              binding.getTypeFactory(), null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
-      if (runtimeFailureIsNull) {
-        // Note this path includes arguments for 0 that can fail at runtime.
-        // If this runtimeFailureIsNull is set then failed conversions make
-        // the output NULL and therefore the type nullable.
-        // NOTE: Timestamp/Date will never fail to convert so they won't
-        // make the output nullable.
-        SqlTypeName typeName = arg0.getSqlTypeName();
-        boolean conversionCantFail =
-            typeName.equals(SqlTypeName.TIMESTAMP)
-                || typeName.equals(SqlTypeName.DATE)
-                || isTzAware;
-        nullable = nullable || (!conversionCantFail);
-      }
-    }
-    return typeFactory.createTypeWithNullability(returnType, nullable);
-  }
-
   // TO_TIMESTAMP defaults to _NTZ unless the session parameter (which isn't
   // supported yet) says otherwise.
   public static final SqlFunction TO_TIMESTAMP =
@@ -255,7 +201,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TO_TIMESTAMP_TZ =
       SqlBasicFunction.create(
           "TO_TIMESTAMP_TZ",
-          opBinding -> toTimestampTZReturnType(opBinding, false, true),
+          ReturnTypes.TIMESTAMP_TZ.andThen(SqlTypeTransforms.ARG0_NULLABLE),
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
@@ -263,7 +209,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TRY_TO_TIMESTAMP_TZ =
       SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_TZ",
-          opBinding -> toTimestampTZReturnType(opBinding, true, true),
+          ReturnTypes.TIMESTAMP_TZ.andThen(SqlTypeTransforms.FORCE_NULLABLE),
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);

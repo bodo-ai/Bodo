@@ -2229,6 +2229,7 @@ def test_snowflake_quarter_dateadd(time_zone, has_case, memory_leak_check):
         check_names=False,
         check_dtype=False,
         expected_output=answer,
+        session_tz=time_zone,
     )
 
 
@@ -2299,7 +2300,7 @@ def tz_dateadd_data(request, tz_dateadd_args):
             )
         }
     )
-    return ctx, calculation, answer
+    return ctx, calculation, answer, request.param
 
 
 @pytest.mark.parametrize(
@@ -2310,7 +2311,7 @@ def tz_dateadd_data(request, tz_dateadd_args):
     ],
 )
 def test_snowflake_tz_dateadd(tz_dateadd_data, case):
-    ctx, calculation, answer = tz_dateadd_data
+    ctx, calculation, answer, session_tz = tz_dateadd_data
     if case:
         query_fmt = "SELECT CASE WHEN bool_col THEN {:} ELSE NULL END FROM table1"
     else:
@@ -2325,6 +2326,7 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
         check_names=False,
         check_dtype=False,
         only_jit_1DVar=True,
+        session_tz=session_tz,
     )
 
 
@@ -2456,8 +2458,6 @@ def test_timestampadd_time(
 @pytest.mark.parametrize(
     "dateadd_fn, dt_val",
     [
-        pytest.param("DATEADD", "datetime_strings", id="DATEADD-vector_string_dt"),
-        pytest.param("DATE_ADD", "'2020-10-13'", id="DATE_ADD-scalar_string_dt"),
         pytest.param("ADDDATE", "timestamps", id="ADDDATE-vector_timestamp_dtr"),
         pytest.param(
             "DATEADD", "TIMESTAMP '2022-3-5'", id="DATEADD-scalar_timestamp_dtr"
@@ -2586,6 +2586,7 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
         None,
         check_dtype=False,
         expected_output=expected_output,
+        session_tz="US/Pacific",
     )
 
 
@@ -2914,6 +2915,10 @@ def test_subdate_cols_td_arg1(
     memory_leak_check,
 ):
     """tests that date_sub/subdate works on timedelta 2nd arguments, with column inputs"""
+    if timestamp_date_string_cols == "DATETIME_STRINGS":
+        # Invalid case
+        return
+
     query = f"SELECT {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) AS OUTPUT from table1"
 
     # add interval column separately here since PySpark fails on timedelta nulls in
@@ -2954,11 +2959,10 @@ def test_subdate_cols_td_arg1(
 def test_subdate_td_scalars(
     subdate_equiv_fns,
     dt_fn_dataframe,
-    timestamp_date_string_cols,
     memory_leak_check,
 ):
     """tests that subdate works on timedelta 2nd arguments, with scalar inputs"""
-    query = f"SELECT CASE WHEN {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) END as OUTPUT from table1"
+    query = f"SELECT CASE WHEN {subdate_equiv_fns}(TIMESTAMPS, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {subdate_equiv_fns}(TIMESTAMPS, intervals) END as OUTPUT from table1"
 
     # add interval column separately here since PySpark fails on timedelta nulls in
     # other tests
@@ -2978,9 +2982,7 @@ def test_subdate_td_scalars(
 
     expected_output = pd.DataFrame(
         {
-            "OUTPUT": pd.to_datetime(
-                in_dfs["TABLE1"][timestamp_date_string_cols], format="mixed"
-            )
+            "OUTPUT": pd.to_datetime(in_dfs["TABLE1"]["TIMESTAMPS"], format="mixed")
             - in_dfs["TABLE1"]["INTERVALS"]
         }
     )
@@ -3076,6 +3078,7 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
         check_dtype=False,
         expected_output=expected_output,
         only_jit_1DVar=True,
+        session_tz=tz,
     )
 
 
@@ -3955,7 +3958,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     S = df["A"].map(scalar_func)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(query, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
 
 @pytest.mark.tz_aware
@@ -4005,11 +4008,15 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
     S = df.A + pd.DateOffset(years=1)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
     S = df.A - pd.DateOffset(years=2)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.tz_aware
@@ -4031,9 +4038,13 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
     query1 = "SELECT A + Interval 1 Month as output from table1"
     query2 = "SELECT A - Interval 2 Month as output from table1"
     py_output = pd.DataFrame({"OUTPUT": df.A + pd.DateOffset(months=1)})
-    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
     py_output = pd.DataFrame({"OUTPUT": df.A - pd.DateOffset(months=2)})
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.tz_aware
@@ -4059,11 +4070,15 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
     S = df.A + pd.DateOffset(months=1)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
     S = df.A - pd.DateOffset(months=2)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.tz_aware
@@ -4089,9 +4104,13 @@ def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
     # Function used to simulate the result of subtracting 2 days
     scalar_sub_func = interval_day_add_func(-2)
     py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_add_func)})
-    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
     py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.tz_aware
@@ -4120,11 +4139,15 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
     S = df.A.map(scalar_add_func)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.tz_aware
@@ -4150,8 +4173,8 @@ def test_tz_aware_subdate_integer(memory_leak_check):
     # Function used to simulate the result of subtracting 3 days
     scalar_sub_func = interval_day_add_func(-3)
     py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
-    check_query(query1, ctx, None, expected_output=py_output)
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
 
 @pytest.mark.tz_aware
@@ -4179,8 +4202,8 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
 
 @pytest.mark.tz_aware
@@ -4239,8 +4262,8 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
     S = df.A.map(scalar_sub_func)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
 
 @pytest.mark.tz_aware
@@ -4290,8 +4313,8 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
     S = df.A - pd.DateOffset(months=1)
     S[~df.B] = None
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output)
-    check_query(query2, ctx, None, expected_output=py_output)
+    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
 
 @pytest.fixture
@@ -4486,17 +4509,18 @@ def timestamp_from_parts_data(request):
     )
 
 
+# Disabling TO_TIMESTAMP_TZ tests until [BSE-2734]
 @pytest.mark.parametrize(
     "func",
     [
         pytest.param("TIMESTAMP_FROM_PARTS"),
         pytest.param("TIMESTAMP_NTZ_FROM_PARTS"),
         pytest.param("TIMESTAMP_LTZ_FROM_PARTS"),
-        pytest.param("TIMESTAMP_TZ_FROM_PARTS"),
+        # pytest.param("TIMESTAMP_TZ_FROM_PARTS"),
         pytest.param("TIMESTAMPFROMPARTS", marks=pytest.mark.slow),
         pytest.param("TIMESTAMPNTZFROMPARTS", marks=pytest.mark.slow),
         pytest.param("TIMESTAMPLTZFROMPARTS", marks=pytest.mark.slow),
-        pytest.param("TIMESTAMPTZFROMPARTS", marks=pytest.mark.slow),
+        # pytest.param("TIMESTAMPTZFROMPARTS", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(

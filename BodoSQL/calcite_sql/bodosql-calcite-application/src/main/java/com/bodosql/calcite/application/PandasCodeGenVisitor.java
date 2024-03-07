@@ -97,6 +97,7 @@ import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
@@ -318,6 +319,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public Variable genFinishedStreamingFlag() {
     return generatedCode.getSymbolTable().genFinishedStreamingFlag();
+  }
+
+  public Expr genDefaultTzExpr() {
+    return BodoTZInfo.getDefaultTZInfo(typeSystem).getZoneExpr();
   }
 
   public HashMap<String, Variable> globalVarCache = new HashMap<String, Variable>();
@@ -768,7 +773,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitSingleBatchPandasUnion(
       PandasUnion node, RelationalOperatorCache operatorCache) {
     List<Variable> childExprs = new ArrayList<>();
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
     // Visit all the inputs
     for (int i = 0; i < node.getInputs().size(); i++) {
       RelNode input = node.getInput(i);
@@ -820,7 +825,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Intersect should be between exactly two inputs");
     }
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -858,7 +863,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Except should be between exactly two inputs");
     }
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -896,7 +901,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitPandasSort(PandasSort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
     singleBatchTimer(
         node,
         () -> {
@@ -972,7 +977,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       CatalogSchema outputSchemaAsCatalog,
       IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
     singleBatchTimer(
         node,
         () -> {
@@ -1124,7 +1129,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void visitMergeInto(PandasTableModify node) {
     assert node.getOperation() == TableModify.Operation.MERGE;
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
 
     RelNode input = node.getInput();
     this.visit(input, 0, node);
@@ -1258,7 +1263,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     singleBatchTimer(
         node,
         () -> {
-          BuildContext ctx = new BuildContext(node);
+          BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
           Variable inDf = ctx.convertTableToDf(inputTable);
           Expr castedAndRenamedDfExpr = handleRenameBeforeWrite(inDf, colNames, bodoSqlTable);
           Variable castedAndRenamedDfVar = this.genDfVar();
@@ -1509,7 +1514,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node aggregate node being visited
    */
   private void visitSingleBatchedPandasAggregate(PandasAggregate node) {
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1759,7 +1764,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     final BodoEngineTable table;
     if (filteredAggCallList.size() != node.getAggCallList().size()) {
       // Append any Literal data if it exists.
-      final BuildContext ctx = new BuildContext(node);
+      final BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
       table = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
     } else {
       table = intermediateTable;
@@ -2124,7 +2129,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     BodoEngineTable outTable;
-    BuildContext ctx = new BuildContext((PandasRel) node);
+    BuildContext ctx = new BuildContext((PandasRel) node, genDefaultTzExpr());
 
     Expr castExpr = table.generateReadCastCode(readVar);
     if (!castExpr.equals(readVar)) {
@@ -2158,7 +2163,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node join node being visited
    */
   private void visitBatchedPandasJoin(PandasJoin node) {
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
     /* get left/right tables */
 
     List<String> outputColNames = node.getRowType().getFieldNames();
@@ -2371,7 +2376,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitRowSample(PandasRowSample node) {
     // We always assume row sample has exactly one input
     assert node.getInputs().size() == 1;
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
 
     // Visit the input
     RelNode inp = node.getInput(0);
@@ -2397,7 +2402,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitSample(PandasSample node) {
     // We always assume sample has exactly one input
     assert node.getInputs().size() == 1;
-    BuildContext ctx = new BuildContext(node);
+    BuildContext ctx = new BuildContext(node, genDefaultTzExpr());
 
     // Visit the input
     RelNode inp = node.getInput(0);
@@ -2501,7 +2506,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public BodoEngineTable build(
         @NotNull final Function1<? super PandasRel.BuildContext, BodoEngineTable> fn) {
       int operatorID = generatedCode.newOperatorID();
-      return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
+      return singleBatchTimer(
+          node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node, genDefaultTzExpr())));
     }
 
     @NotNull
@@ -2531,7 +2537,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               node.getTimerType());
       int operatorID = generatedCode.newOperatorID();
       PandasCodeGenVisitor.BuildContext buildContext =
-          new PandasCodeGenVisitor.BuildContext(node, operatorID);
+          new PandasCodeGenVisitor.BuildContext(node, operatorID, genDefaultTzExpr());
       timerInfo.initializeTimer();
       // Init the state and time it.
       timerInfo.insertStateStartTimer();
@@ -2558,15 +2564,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private class BuildContext implements PandasRel.BuildContext {
     private final @NotNull PandasRel node;
     private final int operatorID;
+    private final Expr defaultTzExpr;
 
-    public BuildContext(@NotNull PandasRel node) {
+    public BuildContext(@NotNull PandasRel node, Expr defaultTzExpr) {
       this.node = node;
       this.operatorID = -1;
+      this.defaultTzExpr = defaultTzExpr;
     }
 
-    public BuildContext(@NotNull PandasRel node, int operatorID) {
+    public BuildContext(@NotNull PandasRel node, int operatorID, Expr defaultTzExpr) {
       this.node = node;
       this.operatorID = operatorID;
+      this.defaultTzExpr = defaultTzExpr;
+    }
+
+    @Override
+    public Expr getDefaultTzExpr() {
+      return this.defaultTzExpr;
     }
 
     @Override

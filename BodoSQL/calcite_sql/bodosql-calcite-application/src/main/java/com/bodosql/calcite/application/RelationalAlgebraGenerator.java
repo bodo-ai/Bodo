@@ -107,6 +107,9 @@ public class RelationalAlgebraGenerator {
   /** Should we try read Snowflake tables as Iceberg tables? */
   public static boolean enableSnowflakeIcebergTables = false;
 
+  /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
+  public static boolean enableTimestampTz = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
@@ -138,6 +141,9 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  public static final int VOLCANO_PLANNER = 0;
+  public static final int STREAMING_PLANNER = 1;
+
   /**
    * Constructor for the relational algebra generator class. It will take the schema store it in the
    * config and then set up the program for optimizing and the {@link #planner} for parsing.
@@ -152,7 +158,8 @@ public class RelationalAlgebraGenerator {
       int streamingBatchSize,
       boolean hideCredentials,
       boolean tryInlineViews,
-      boolean enableSnowflakeIcebergTables) {
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -169,10 +176,40 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
   }
 
-  public static final int VOLCANO_PLANNER = 0;
-  public static final int STREAMING_PLANNER = 1;
+  /** Constructor for the relational algebra generator class that takes in the default timezone. */
+  public RelationalAlgebraGenerator(
+      BodoSqlSchema localSchema,
+      String namedParamTableName,
+      int plannerType,
+      int verboseLevel,
+      int streamingBatchSize,
+      boolean hideCredentials,
+      boolean tryInlineViews,
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz,
+      String defaultTz) {
+    this.catalog = null;
+    this.plannerType = choosePlannerType(plannerType);
+    this.verboseLevel = verboseLevel;
+    this.streamingBatchSize = streamingBatchSize;
+    System.setProperty("calcite.default.charset", "UTF-8");
+    List<SchemaPlus> defaultSchemas =
+        setupSchema(
+            (root, defaults) -> {
+              defaults.add(root.add(localSchema.getName(), localSchema));
+            });
+    BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo, 0, 0, null);
+    this.typeSystem = typeSystem;
+    setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
+    this.hideCredentials = hideCredentials;
+    this.tryInlineViews = tryInlineViews;
+    this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
+  }
 
   /**
    * Constructor for the relational algebra generator class that accepts a Catalog and Schema
@@ -192,7 +229,8 @@ public class RelationalAlgebraGenerator {
       int streamingBatchSize,
       boolean hideCredentials,
       boolean tryInlineViews,
-      boolean enableSnowflakeIcebergTables) {
+      boolean enableSnowflakeIcebergTables,
+      boolean enableTimestampTz) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -200,6 +238,7 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
+    this.enableTimestampTz = enableTimestampTz;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
     final @Nullable String currentDatabase;

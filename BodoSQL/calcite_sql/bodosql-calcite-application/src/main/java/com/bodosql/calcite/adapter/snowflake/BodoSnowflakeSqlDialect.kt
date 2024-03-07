@@ -336,6 +336,13 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
             val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
             writer.print(String.format(Locale.ROOT, "'%s'", literal.toFormattedString()))
             writer.endList(frame)
+        } else if (literal.typeName == SqlTypeName.TIMESTAMP_TZ) {
+            // Snowflake doesn't recognize TIMESTAMP_WITH_TIME_ZONE as a way to create,
+            // a literal, so we need to remap it to a TO_TIMESTAMP_TZ call.
+            writer.print("TO_TIMESTAMP_TZ")
+            val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
+            writer.print(String.format(Locale.ROOT, "'%s'", literal.toFormattedString()))
+            writer.endList(frame)
         } else {
             super.unparseDateTimeLiteral(writer, literal, leftPrec, rightPrec)
         }

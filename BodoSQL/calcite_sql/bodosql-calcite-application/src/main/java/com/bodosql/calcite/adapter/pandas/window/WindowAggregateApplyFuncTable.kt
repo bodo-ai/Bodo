@@ -474,7 +474,7 @@ internal object WindowAggregateApplyFuncTable {
         ctx.builder.add(
             Op.Assign(
                 outputArray,
-                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type)),
+                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr)),
             ),
         )
 
@@ -598,7 +598,10 @@ internal object WindowAggregateApplyFuncTable {
                                 Expr.Zero,
                             )
 
-                        else -> Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))
+                        else ->
+                            Expr.Raw(
+                                BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr),
+                            )
                     },
                 ),
                 Op.For("j", Expr.Call("range", Expr.Len(outputArray))) { index, body ->
@@ -670,7 +673,9 @@ internal object WindowAggregateApplyFuncTable {
                             Op.Assign(tempVar, Expr.Index(inputArray, targetIndex)),
                             Op.Assign(
                                 outputArray,
-                                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type)),
+                                Expr.Raw(
+                                    BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr),
+                                ),
                             ),
                             Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
                                 body.add(Op.Code("${outputArray.emit()}[${index.emit()}] = ${tempVar.emit()}"))

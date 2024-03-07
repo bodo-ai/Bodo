@@ -264,7 +264,9 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     ctx = {"TABLE1": df}
     expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
     expected_output[~df.B] = None
-    check_query(query, ctx, None, expected_output=expected_output)
+    check_query(
+        query, ctx, None, expected_output=expected_output, session_tz=representative_tz
+    )
 
 
 def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
@@ -470,11 +472,7 @@ def test_null_array_to_timezone_aware(memory_leak_check):
         cross join (select null as t)
         """
     check_query(
-        query,
-        ctx,
-        None,
-        expected_output=df,
-        check_names=False,
+        query, ctx, None, expected_output=df, check_names=False, session_tz="Asia/Dubai"
     )
 
 

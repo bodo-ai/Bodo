@@ -39,7 +39,9 @@ import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.TimeString;
+import org.apache.calcite.util.TimeWithTimeZoneString;
 import org.apache.calcite.util.TimestampString;
+import org.apache.calcite.util.TimestampWithTimeZoneString;
 import org.apache.calcite.util.Util;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -207,9 +209,15 @@ public class SqlLiteral extends SqlNode {
       return value instanceof DateString;
     case TIME:
       return value instanceof TimeString;
+    case TIME_WITH_LOCAL_TIME_ZONE:
+      return value instanceof TimeString;
+    case TIME_TZ:
+      return value instanceof TimeWithTimeZoneString;
     case TIMESTAMP:
     case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
       return value instanceof TimestampString;
+    case TIMESTAMP_TZ:
+      return value instanceof TimestampWithTimeZoneString;
     case INTERVAL_YEAR:
     case INTERVAL_YEAR_MONTH:
     case INTERVAL_MONTH:
@@ -913,6 +921,14 @@ public class SqlLiteral extends SqlNode {
     return new SqlTimestampLiteral(ts, precision, typeName, pos);
   }
 
+  /** Creates a TIMESTAMP WITH TIME ZONE literal. */
+  public static SqlTimestampTzLiteral createTimestamp(
+          TimestampWithTimeZoneString ts,
+          int precision,
+          SqlParserPos pos) {
+    return new SqlTimestampTzLiteral(ts, precision, pos);
+  }
+
   @Deprecated // to be removed before 2.0
   public static SqlTimeLiteral createTime(
       Calendar calendar,
@@ -926,6 +942,13 @@ public class SqlLiteral extends SqlNode {
       int precision,
       SqlParserPos pos) {
     return new SqlTimeLiteral(t, precision, false, pos);
+  }
+
+  public static SqlTimeTzLiteral createTime(
+          TimeWithTimeZoneString t,
+          int precision,
+          SqlParserPos pos) {
+    return new SqlTimeTzLiteral(t, precision, pos);
   }
 
   /**

@@ -92,19 +92,19 @@ public class DatetimeFnCodeGen {
   /**
    * Generate code for computing a timestamp for the current time in the default timezone.
    *
-   * @param tzInfo The Timezone information with which to create the Timestamp.
+   * @param tzInfoExpr The Timezone information with which to create the Timestamp.
    * @param makeConsistent Should a function call be generated that ensures the data is consistent
    *     on all ranks. This is False if used within a case statement.
    * @return The generated code.
    */
-  public static Expr generateCurrTimestampCode(BodoTZInfo tzInfo, boolean makeConsistent) {
+  public static Expr generateCurrTimestampCode(Expr tzInfoExpr, boolean makeConsistent) {
     String fnName;
     if (makeConsistent) {
       fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
     } else {
       fnName = "pd.Timestamp.now";
     }
-    return new Expr.Call(fnName, tzInfo.getZoneExpr());
+    return new Expr.Call(fnName, tzInfoExpr);
   }
 
   /**

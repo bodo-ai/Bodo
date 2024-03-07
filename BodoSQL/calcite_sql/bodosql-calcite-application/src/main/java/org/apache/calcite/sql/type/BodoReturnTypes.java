@@ -65,6 +65,14 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference BOOL_AGG_RET_TYPE = ReturnTypes.BOOLEAN_NULLABLE.andThen(FORCE_NULLABLE_IF_EMPTY_GROUP);
 
+    public static final SqlReturnTypeInference CONVERT_TIMEZONE_RETURN_TYPE = (opBinding) -> {
+        RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+        if (opBinding.getOperandCount() == 2) {
+            return typeFactory.createSqlType(SqlTypeName.TIMESTAMP_TZ, opBinding.getOperandType(1).getPrecision());
+        } else {
+            return typeFactory.createSqlType(SqlTypeName.TIMESTAMP, opBinding.getOperandType(2).getPrecision());
+        }
+    };
 
     /**
      * Defines the return type for FLATTEN
@@ -400,17 +408,6 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference NULLABLE_SUM =
             new SqlReturnTypeInferenceChain(DATE_SUM_NULLABLE, ReturnTypes.NULLABLE_SUM);
 
-    public static final SqlReturnTypeInference TZAWARE_TIMESTAMP =
-            new SqlReturnTypeInference() {
-                @Override
-                public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
-                    return BodoRelDataTypeFactory.createTZAwareSqlType(
-                            opBinding.getTypeFactory(), null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
-                }
-            };
-
-    public static final SqlReturnTypeInference TZAWARE_TIMESTAMP_NULLABLE =
-            TZAWARE_TIMESTAMP.andThen(SqlTypeTransforms.TO_NULLABLE);
 
     public static final SqlReturnTypeInference VARIANT =
             new SqlReturnTypeInference() {
@@ -726,7 +723,7 @@ public class BodoReturnTypes {
             // TODO: Support inferring scale from Decimal inputs
             RelDataType arg0Type = opBinding.getOperandType(0);
             int precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
-            if (arg0Type instanceof TZAwareSqlType || arg0Type.getSqlTypeName() == SqlTypeName.TIMESTAMP) {
+            if (SqlTypeFamily.TIMESTAMP.contains(arg0Type)) {
                 precision = arg0Type.getPrecision();
             } else if (SqlTypeFamily.INTEGER.contains(arg0Type)) {
                 if (opBinding.getOperandCount() == 2) {
@@ -743,7 +740,7 @@ public class BodoReturnTypes {
             }
             // Create the return type.
             if (isTzAware) {
-                return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null, precision);
+                return opBinding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, precision);
             } else {
                 return opBinding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP, precision);
             }
@@ -794,12 +791,7 @@ public class BodoReturnTypes {
         } else {
             // The output always needs to be cast to precision 9, so we cannot just return
             // the same return type.
-            if (datetimeType instanceof TZAwareSqlType) {
-                final BodoTZInfo tzInfo = ((TZAwareSqlType) datetimeType).getTZInfo();
-                returnType = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo, precision);
-            } else {
-                returnType = typeFactory.createSqlType(datetimeType.getSqlTypeName(), precision);
-            }
+            returnType = typeFactory.createSqlType(datetimeType.getSqlTypeName(), precision);
         }
         return returnType;
     }
@@ -821,10 +813,8 @@ public class BodoReturnTypes {
             // when the second argument is integer, it is equivalent to adding day interval
             if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
                 returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-            } else if (datetimeType instanceof TZAwareSqlType) {
-                returnType = datetimeType;
             } else {
-                returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+                returnType = datetimeType;
             }
         } else {
             // if the first argument is date, the return type depends on the interval type
@@ -840,10 +830,8 @@ public class BodoReturnTypes {
                 } else {
                     returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
                 }
-            } else if (datetimeType instanceof TZAwareSqlType) {
-                returnType = datetimeType;
             } else {
-                returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+                returnType = datetimeType;
             }
         }
         return returnType;

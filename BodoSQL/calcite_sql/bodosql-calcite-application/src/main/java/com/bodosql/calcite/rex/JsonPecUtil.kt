@@ -31,7 +31,7 @@ class JsonPecUtil {
          * Returns whether a function call is a casting function besides
          * regular CAST or TRY_CAST.
          */
-        private fun isCastFunc(node: RexCall): Boolean {
+        fun isCastFunc(node: RexCall): Boolean {
             return when (node.operator.name) {
                 CastingOperatorTable.TO_ARRAY.name,
                 CastingOperatorTable.TO_VARIANT.name,
@@ -57,12 +57,19 @@ class JsonPecUtil {
                 CastingOperatorTable.TO_VARCHAR.name,
                 CastingOperatorTable.TO_BINARY.name,
                 CastingOperatorTable.TRY_TO_BINARY.name,
-                /**
-                 * Note: Aliases that are resolved in the convertlet table
-                 * (e.g. CastingOperatorTable.DATE.name) should not be
-                 * included here.
-                 */
-                -> true
+
+                // Note: Aliases that are resolved in the convertlet table
+                // (e.g. CastingOperatorTable.DATE.name) should not be
+                // included here.
+
+                // CastingOperatorTable.DATE.name,
+                // CastingOperatorTable.TO_CHAR.name,
+                // CastingOperatorTable.TIME.name,
+                // CastingOperatorTable.TO_NUMERIC.name,
+                // CastingOperatorTable.TO_DECIMAL.name,
+                // CastingOperatorTable.TRY_TO_NUMERIC.name,
+                // CastingOperatorTable.TRY_TO_DECIMAL.name,
+                -> node.operands.size == 1
                 else -> false
             }
         }

@@ -114,6 +114,9 @@ bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "1") != "0"
 # If BodoSQL encounters a Snowflake Table that is also an Iceberg table should
 # it attempt to read it as an Iceberg table?
 enable_snowflake_iceberg = os.environ.get("BODO_ENABLE_SNOWFLAKE_ICEBERG", "1") != "0"
+# Flag used to enable reading TIMESTAMP_TZ as its own type instead of as an alias
+# for TIMESTAMP_LTZ. (will be removed once TIMESTAMP_TZ support is complete)
+enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "0") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
 
@@ -256,6 +259,7 @@ from bodo.hiframes.time_ext import (
 )
 from bodo.hiframes.timestamptz_ext import (
     TimestampTZ,
+    TimestampTZType,
     timestamptz_type,
     timestamptz_array_type,
 )

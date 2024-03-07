@@ -18,7 +18,6 @@ import java.util.Objects;
 import kotlin.Pair;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.type.VariantSqlType;
 
 /** Class that returns the generated code for Cast calls after all inputs have been visited. */
@@ -55,6 +54,7 @@ public class CastCodeGen {
     List<Expr> args = new ArrayList<>();
     args.add(arg);
     ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
+    Expr tzExpr = visitor.genDefaultTzExpr();
     boolean appendStreamingArgs = false;
     switch (outputTypeName) {
       case CHAR:
@@ -62,8 +62,10 @@ public class CastCodeGen {
         kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(outputScalar)));
         fnName = "bodo.libs.bodosql_array_kernels.to_char";
         break;
+      case TIMESTAMP_TZ:
+        args.add(tzExpr);
+        return new Expr.Call("bodo.libs.bodosql_array_kernels.to_timestamp_tz", args);
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-        Expr tzExpr = ((TZAwareSqlType) outputType).getTZInfo().getZoneExpr();
         args.add(tzExpr);
         // TZ-Aware data needs special handling
         switch (inputTypeName) {
@@ -96,7 +98,10 @@ public class CastCodeGen {
           // NOTE: there are limitations with multiple levels of nesting in the type system and
           // sqlTypeToBodoArrayType
           Expr outBodoType =
-              sqlTypeToBodoArrayType(Objects.requireNonNull(outputType.getComponentType()), false);
+              sqlTypeToBodoArrayType(
+                  Objects.requireNonNull(outputType.getComponentType()),
+                  false,
+                  visitor.genDefaultTzExpr());
           Variable outputArrayTypeGlobal = visitor.lowerAsGlobal(outBodoType);
           args.add(outputArrayTypeGlobal);
           return new Expr.Call(fnName, args);
@@ -146,7 +151,10 @@ public class CastCodeGen {
    * @return The code generated that matches the tryCast call.
    */
   public static Expr generateTryCastCode(
-      Expr arg, RelDataType outputType, List<Pair<String, Expr>> streamingNamedArgs) {
+      Expr arg,
+      RelDataType outputType,
+      List<Pair<String, Expr>> streamingNamedArgs,
+      PandasCodeGenVisitor visitor) {
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
     String fnName;
     List<Expr> args = new ArrayList<>();
@@ -183,7 +191,7 @@ public class CastCodeGen {
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         fnName = "try_to_timestamp";
         args.add(None.INSTANCE);
-        Expr tzExpr = ((TZAwareSqlType) outputType).getTZInfo().getZoneExpr();
+        Expr tzExpr = visitor.genDefaultTzExpr();
         args.add(tzExpr);
         args.add(new Expr.IntegerLiteral(0));
         break;

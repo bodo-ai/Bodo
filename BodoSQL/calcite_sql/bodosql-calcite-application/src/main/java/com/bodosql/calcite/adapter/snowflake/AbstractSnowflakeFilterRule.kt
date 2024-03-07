@@ -22,7 +22,6 @@ import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
 
@@ -226,27 +225,22 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
              * @return true/false based on whether it's a supported cast operation or not.
              */
             private fun isSupportedCast(call: RexCall): Boolean {
-                if (call.kind == SqlKind.CAST) {
+                return if (call.kind == SqlKind.CAST) {
                     // Cast to Variant or Cast input is a variant
-                    if ((call.getType() is VariantSqlType) || (call.operands[0].type is VariantSqlType)) {
-                        return true
-                    }
-                    // Support cast to TIMESTAMP_LTZ. In the future we may want to make this more restrictive
+                    // Support cast to TIMESTAMP_LTZ/TIMESTAMP_TZ. In the future we may want to make this more restrictive
                     // if we ever allow casting a type to TIMESTAMP_LTZ that Snowflake doesn't.
-                    if (call.getType() is TZAwareSqlType) {
-                        return true
-                    }
                     // Cast is to Date. In the future we may want to make this more restrictive
                     // if we ever allow casting a type to DATE that Snowflake doesn't.
-                    if (call.getType().sqlTypeName == SqlTypeName.DATE) {
-                        return true
-                    }
                     // Cast is to a numeric type
-                    if (SqlTypeFamily.NUMERIC.contains(call.getType())) {
-                        return true
-                    }
+                    (call.getType() is VariantSqlType) ||
+                        (call.operands[0].type is VariantSqlType) ||
+                        (call.getType().sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) ||
+                        (call.getType().sqlTypeName == SqlTypeName.TIMESTAMP_TZ) ||
+                        (call.getType().sqlTypeName == SqlTypeName.DATE) ||
+                        (SqlTypeFamily.NUMERIC.contains(call.getType()))
+                } else {
+                    false
                 }
-                return false
             }
 
             /**

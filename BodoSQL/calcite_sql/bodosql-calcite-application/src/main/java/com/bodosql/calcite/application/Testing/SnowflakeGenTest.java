@@ -92,7 +92,8 @@ public class SnowflakeGenTest {
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Always inline views
-            true // Enable Iceberg for testing
+            true, // Enable Iceberg for testing
+            true // Enable TIMESTAMP_TZ for testing
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");

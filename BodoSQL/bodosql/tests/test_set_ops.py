@@ -436,7 +436,9 @@ def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
 
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table1"
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_check):
@@ -456,7 +458,9 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
 
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.slow
@@ -477,7 +481,9 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
 
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 @pytest.mark.slow

@@ -339,6 +339,8 @@
                                         <!-- List of all class files we overwrite from Calcite. -->
                                         <!-- Ideally, this list is empty and classes should only be added here sparingly or removed. -->
                                         <!-- The existence of this list is a maintenance nightmare. -->
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexImpTable.class</exclude>
+                                        <exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptAbstractTable.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$1.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$ProjectFilterTable.class</exclude>
@@ -375,6 +377,9 @@
                                         <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
+                                        <exclude>org/apache/calcite/rel/metadata/RelMdSize.class</exclude>
+                                        <exclude>org/apache/calcite/rel/type/RelDataTypeSystemImpl.class</exclude>
+                                        <exclude>org/apache/calcite/rel2sql/SqlImplementor.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
@@ -395,6 +400,11 @@
                                         <exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlAbstractDateTimeLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlTimeTzLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlTimestampTzLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlUnknownLiteral.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCall.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$DefaultCallHolder.class</exclude>
@@ -519,6 +529,17 @@
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeAssignmentRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeCoercionRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeFamily.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeName.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/TimeWithTimeZoneString.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/TimestampString.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/TimestampWithTimeZoneString.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/Util.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/Util$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/util/Util$FoundOne.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$InitShim.class</exclude>

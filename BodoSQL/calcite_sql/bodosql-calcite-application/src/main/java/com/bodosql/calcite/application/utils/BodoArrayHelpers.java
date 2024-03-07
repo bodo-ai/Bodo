@@ -5,7 +5,6 @@ import com.bodosql.calcite.ir.Expr;
 import java.util.Objects;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 
 public class BodoArrayHelpers {
 
@@ -16,9 +15,10 @@ public class BodoArrayHelpers {
    *
    * @param len String length expression
    * @param typ SqlType
+   * @param defaultTzExpr Expression representing the default timezone
    * @return A string representation of the allocated bodo array with the specified length
    */
-  public static String sqlTypeToNullableBodoArray(String len, RelDataType typ) {
+  public static String sqlTypeToNullableBodoArray(String len, RelDataType typ, Expr defaultTzExpr) {
     // TODO: Use nullable information to optimize on if the output can contain NULLs.
     SqlTypeName typeName = typ.getSqlTypeName();
     switch (typeName) {
@@ -38,8 +38,7 @@ public class BodoArrayHelpers {
       case TIMESTAMP:
         return String.format("np.empty(%s, dtype=\"datetime64[ns]\")", len);
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-        // TZ-Aware timestamps contain tz info in the type.
-        String tzStr = ((TZAwareSqlType) typ).getTZInfo().getZoneExpr().emit();
+        String tzStr = defaultTzExpr.emit();
         return String.format(
             "bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(%s, %s)", len, tzStr);
       case INTERVAL_DAY_HOUR:
@@ -75,10 +74,12 @@ public class BodoArrayHelpers {
    * @param type SQL type for which we are generating the array.
    * @param strAsDict Should string types output a dictionary encoded array as opposed to a regular
    *     string array.
+   * @param defaultTzExpr Expression representing the default timezone
    * @return A string that can be provided to generate code for the corresponding array type. This
    *     will be lowered as a global when we JIT compile the code.
    */
-  public static Expr sqlTypeToBodoArrayType(RelDataType type, boolean strAsDict) {
+  public static Expr sqlTypeToBodoArrayType(
+      RelDataType type, boolean strAsDict, Expr defaultTzExpr) {
     boolean nullable = type.isNullable();
     // TODO: Create type exprs
     final String typeName;
@@ -93,14 +94,19 @@ public class BodoArrayHelpers {
         typeName =
             String.format(
                 "bodo.MapArrayType(%s, %s)",
-                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getKeyType()), false).emit(),
-                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getValueType()), false).emit());
+                sqlTypeToBodoArrayType(
+                        Objects.requireNonNull(type.getKeyType()), false, defaultTzExpr)
+                    .emit(),
+                sqlTypeToBodoArrayType(
+                        Objects.requireNonNull(type.getValueType()), false, defaultTzExpr)
+                    .emit());
         break;
       case ARRAY:
         typeName =
             String.format(
                 "bodo.ArrayItemArrayType(%s)",
-                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getComponentType()), false)
+                sqlTypeToBodoArrayType(
+                        Objects.requireNonNull(type.getComponentType()), false, defaultTzExpr)
                     .emit());
         break;
       case BOOLEAN:
@@ -163,10 +169,10 @@ public class BodoArrayHelpers {
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
-        TZAwareSqlType tzAwareType = (TZAwareSqlType) type;
-        typeName =
-            String.format(
-                "bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getZoneExpr().emit());
+        typeName = String.format("bodo.DatetimeArrayType(%s)", defaultTzExpr.emit());
+        break;
+      case TIMESTAMP_TZ:
+        typeName = "bodo.timestamptz_array_type";
         break;
       case TIME:
         // TODO: Add nullable support

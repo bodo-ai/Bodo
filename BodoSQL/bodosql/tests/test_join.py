@@ -612,7 +612,9 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
     py_output = py_output[py_output.C_y > py_output.B_x]
     py_output = py_output[["A_x", "B_y", "C_x", "D_y"]]
     py_output.columns = ["A", "B", "C", "D"]
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 def test_join_pow(spark_info, join_type, memory_leak_check):
