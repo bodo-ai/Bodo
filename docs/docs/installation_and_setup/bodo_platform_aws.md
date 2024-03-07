@@ -4,8 +4,10 @@
 
 a.  Subscribe through the [AWS Marketplace](https://aws.amazon.com/marketplace/pp/B08NY29SMQ){target="blank"}.
 
-b.  After confirming your subscription, you'll be directed to Bodo
-    Platform's registration page.
+b.  After confirming your subscription, you should click **Set up your Account** at the top right corner of the page. Bodo Platform's registration page will open in a new tab.
+
+![Set up Account](../platform_onboarding_screenshots/set-up-account.png#center)
+
 
 c.  Fill out the fields with your information. If this is your
     individual account, use a unique name such as
@@ -26,8 +28,9 @@ e.  A page confirming that an activation link was sent to your email
 ## Setting AWS Credentials {#setting_aws_credentials}
 
 To use Bodo on AWS, you need to link your AWS account to the Bodo
-platform. This can be done using the *Cloud Configuration* page in the left
-bar as shown in the picture below:
+platform.
+
+This can be done using the *Cloud Configuration* page in the left sidebar and followed by clicking on *Create Cloud Configuration* at the top right corner of the page as shown in the picture below:
 
 ![Dashboard](../platform_onboarding_screenshots/dashboard.gif#center)
 
@@ -101,6 +104,13 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
      
     4. All other fields can remain as it is by default and click on `Create Table`.
 
+    5. Click on the table you have just created. Then click on `Additional info` under `General Information` tab. Note down the `Amazon Resource Name (ARN)`. 
+    
+    *Replace this value whenever you need DynamoDB ARN during setup.*
+
+    ![dynamo-details-page](../create_s3_and_dynamo_screenshots/dynamo-db-details.gif#center)
+
+
 #### Setup IAM role {iam_role_setup}
 - **IAM role**
 
@@ -140,7 +150,7 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
 
     11. In the list of IAM Roles, click on the role you just created.
 
-    12. Click on `Add inline policy`.
+    12. Under Permissions tab, Click on `Add Permissions` and select `Create inline policy` from the dropdown.
 
         ![Create Role Summary Page](../create_role_screenshots/create_role_manual_summary_page.png#center)
 
@@ -178,7 +188,7 @@ Platform.
 4.  Enter the Role ARN in the **Role ARN** field.
 5.  Select a **Region** from the dropdown list. 
     This is the region of your S3 bucket and Dynamo DB table.
-6.  Click on `CREATE`.
+6.  Click on `Validate`, and once you got the validation successful message, then click on `Create`.
 
 
 ![Create Cloud Configuration AWS Manual ](../platform_onboarding_screenshots/cloud_configuration_aws_manual.png#center)
