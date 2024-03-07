@@ -4,6 +4,58 @@ import pytest
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
+from bodo.utils.typing import ColNamesMetaType, MetaType
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        pytest.param([4, 3, 2, 1, 0], id="small-no_null"),
+        pytest.param([1, 11, 4, 11, 2, 11, 0, 11, 3], id="small-some_null"),
+        pytest.param([11, 11, 8, 11, 11] * 3, id="small-most_null"),
+        pytest.param((np.arange(1000) ** 3) % 12, id="large-some_null"),
+        pytest.param(
+            np.round(np.tan(np.arange(1000))).astype(np.int64) % 11,
+            id="large-no_null",
+        ),
+        pytest.param(([11] * 400 + [3]) * 5, id="large-most_null"),
+    ],
+)
+def test_timestamptz_sort(pattern, memory_leak_check):
+    """Test that sorting an array of TIMESTAMP_TZ values returns
+    them in the correct order"""
+
+    def impl(df):
+        return df.sort_values(by=["T"], na_position="last")
+
+    base_values = np.array(
+        [
+            bodo.TimestampTZ.fromLocal("2021-01-02 14:00:00", 300),
+            bodo.TimestampTZ.fromLocal("2021-01-02 12:30:00", 0),
+            bodo.TimestampTZ.fromLocal("2021-01-02 06:45:00", -630),
+            bodo.TimestampTZ.fromLocal("2021-03-14 00:00:00", -1),
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 1),
+            bodo.TimestampTZ.fromLocal("2024-03-14 16:30:00", 600),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 120),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -60),
+            bodo.TimestampTZ.fromLocal("2024-03-14 12:00:00", -120),
+            None,
+        ]
+    )
+    arr = base_values[pattern]
+    expected = base_values[sorted(pattern)]
+    df = pd.DataFrame({"T": arr})
+    refsol = pd.DataFrame({"T": expected})
+    check_func(
+        impl,
+        (df,),
+        py_output=refsol,
+        check_dtype=False,
+        check_names=False,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -224,11 +276,22 @@ def test_table_builder(memory_leak_check):
     check_func(impl, (arr,), py_output=bodo.hiframes.table.Table([arr]))
 
 
-# Test for join data to test the shuffle infrastructure
-def test_join_data(memory_leak_check):
-    def impl(df1, df2):
-        return df1.merge(df2, left_on="A", right_on="C")[["A", "B", "C"]]
+@pytest.fixture
+def timestamptz_join_data():
+    """
+    Returns three DataFrames used for testing joining
+    when there happens to be TIMESTAMP_TZ data columns:
 
+    df1:
+        A: integer keys
+        B: data column with timestamptz values
+
+    df2:
+        C: integer keys
+
+    py_output: what should happen if df1 and df2 are joined
+    on A=C.
+    """
     key1_arr = np.arange(6)
     key2_arr = np.arange(4, 8)
     data_arr = np.array(
@@ -244,8 +307,317 @@ def test_join_data(memory_leak_check):
     df1 = pd.DataFrame({"A": key1_arr, "B": data_arr})
     df2 = pd.DataFrame({"C": key2_arr})
     py_output = pd.DataFrame({"A": key1_arr[4:], "B": data_arr[4:], "C": key2_arr[:2]})
+    return df1, df2, py_output
+
+
+def test_nonstreaming_join_timestamptz_data(timestamptz_join_data, memory_leak_check):
+    """
+    Tests a non-streaming join when one of the data columns is TIMESTAMPTZ.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, left_on="A", right_on="C")[["A", "B", "C"]]
+
+    df1, df2, py_output = timestamptz_join_data
+
     check_func(
         impl, (df1, df2), py_output=py_output, reset_index=True, sort_output=True
+    )
+
+
+def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_check):
+    """
+    Tests a streaming join when one of the data columns is TIMESTAMPTZ.
+    """
+    global_1 = MetaType((0, 1))
+    global_2 = MetaType((0,))
+    global_3 = MetaType((0,))
+    global_4 = ColNamesMetaType(("A", "B"))
+    global_5 = ColNamesMetaType(("C",))
+    global_6 = ColNamesMetaType(("A", "B", "C"))
+    global_7 = MetaType((1, 2, 0))
+    global_build_outer = False
+    global_probe_outer = False
+
+    def impl(df1, df2):
+        # Setup memory budgets and convert dataframes to tables
+        bodo.libs.memory_budget.init_operator_comptroller()
+        bodo.libs.memory_budget.register_operator(
+            0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, 4000
+        )
+        bodo.libs.memory_budget.register_operator(
+            6, bodo.libs.memory_budget.OperatorType.ACCUMULATE_TABLE, 1, 1, 2880
+        )
+        bodo.libs.memory_budget.compute_satisfiable_budgets()
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
+        )
+        T2 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), global_2, 1
+        )
+
+        # Initialize the join state
+        join_state = bodo.libs.stream_join.init_join_state(
+            0,
+            global_2,
+            global_3,
+            global_4,
+            global_5,
+            global_build_outer,
+            global_probe_outer,
+        )
+
+        # Build loop: add all of T1 to the build table
+        is_last_build = False
+        iter_build = 0
+        length_build = bodo.hiframes.table.local_len(T1)
+        done_build = False
+        while not (done_build):
+            T3 = bodo.hiframes.table.table_local_filter(
+                T1, slice((iter_build * 3), ((iter_build + 1) * 3))
+            )
+            is_last_build = (iter_build * 3) >= length_build
+            done_build = bodo.libs.stream_join.join_build_consume_batch(
+                join_state, T3, is_last_build
+            )
+            iter_build = iter_build + 1
+
+        # Probe loop: probe the join state with all of T2 and store the result in a table builder
+        is_last_probe = False
+        iter_probe = 0
+        length_probe = bodo.hiframes.table.local_len(T2)
+        done_probe = False
+        produce_probe = True
+        builder_state = bodo.libs.table_builder.init_table_builder_state(6)
+        while not (done_probe):
+            T4 = bodo.hiframes.table.table_local_filter(
+                T2, slice((iter_probe * 3), ((iter_probe + 1) * 3))
+            )
+            is_last_probe = (iter_probe * 3) >= length_probe
+            (T5, done_probe, _) = bodo.libs.stream_join.join_probe_consume_batch(
+                join_state, T4, is_last_probe, produce_probe
+            )
+            bodo.libs.table_builder.table_builder_append(builder_state, T5)
+            iter_probe = iter_probe + 1
+        bodo.libs.stream_join.delete_join_state(join_state)
+
+        # Extract the final table from the table builder and convert back to a DataFrame
+        T6 = bodo.libs.table_builder.table_builder_finalize(builder_state)
+        T7 = bodo.hiframes.table.table_subset(T6, global_7, False)
+        index = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+        df3 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index, global_6)
+        return df3
+
+    df1, df2, py_output = timestamptz_join_data
+
+    check_func(
+        impl,
+        (df1, df2),
+        py_output=py_output,
+        check_dtype=False,
+        check_names=False,
+        reset_index=True,
+        sort_output=True,
+    )
+
+
+@pytest.fixture
+def timestamptz_join_keys():
+    """
+    Returns three DataFrames used for testing joining on
+    TIMESTAMP_TZ data:
+
+    df1:
+        A: timestamptz keys
+        B: data column with unique values
+
+    df2:
+        C: timestamptz keys
+        D: data column with unique values (different from df1["B"])
+
+    py_output: what should happen if df1 and df2 are joined
+    on A=C (without null matches).
+
+    NOTE: not all rows where A=C are actually the same TIMESTAMPTZ,
+    they may have different local timestamp but the same UTC timestamp.
+    """
+    key_arr_1 = np.array(
+        [
+            bodo.TimestampTZ.fromLocal("2024-02-29 12:00:00", 0),
+            None,
+            bodo.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-02-29 14:30:00", 120),
+            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-04 23:18:01.123456789", 0),
+            None,
+            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 30),
+            None,
+        ]
+    )
+    key_arr_2 = np.array(
+        [
+            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-04 11:15:00", -45),
+            bodo.TimestampTZ.fromLocal("2024-07-04 20:18:01.123456789", -180),
+            bodo.TimestampTZ.fromLocal("2024-02-29 15:30:00", -60),
+            None,
+            bodo.TimestampTZ.fromLocal("2024-07-04 20:03:01.123456789", -195),
+            None,
+            None,
+            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-02-29 16:30:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-02-29 11:30:00", -60),
+            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-07-04 06:00:00", 360),
+            bodo.TimestampTZ.fromLocal("2024-02-29 12:30:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
+            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-07-05 00:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-07-04 12:00:00", 720),
+            None,
+            None,
+            bodo.TimestampTZ.fromLocal("2024-07-04 00:00:00", 0),
+            None,
+            None,
+            None,
+            None,
+        ]
+    )
+    data_arr_1 = np.arange(len(key_arr_1))
+    data_arr_2 = np.arange(len(key_arr_1), len(key_arr_1) + len(key_arr_2))
+    df1 = pd.DataFrame({"A": key_arr_1, "B": data_arr_1})
+    df2 = pd.DataFrame({"C": key_arr_2, "D": data_arr_2})
+    keep_idx_1 = [2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 6, 6]
+    keep_idx_2 = [3, 9, 10, 13, 0, 12, 14, 15, 16, 18, 21, 1, 2, 5]
+    py_output = pd.DataFrame(
+        {
+            "A": key_arr_1[keep_idx_1],
+            "B": data_arr_1[keep_idx_1],
+            "C": key_arr_2[keep_idx_2],
+            "D": data_arr_2[keep_idx_2],
+        }
+    )
+    return df1, df2, py_output
+
+
+def test_nonstreaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_check):
+    """
+    Tests a non-streaming join when the keys are TIMESTAMPTZ.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, left_on="A", right_on="C", _bodo_na_equal=False)[
+            ["A", "B", "C", "D"]
+        ]
+
+    df1, df2, py_output = timestamptz_join_keys
+
+    check_func(
+        impl,
+        (df1, df2),
+        py_output=py_output,
+        check_dtype=False,
+        check_names=False,
+        reset_index=True,
+        sort_output=True,
+    )
+
+
+def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_check):
+    """
+    Tests a streaming join when the keys are TIMESTAMPTZ.
+    """
+    global_1 = MetaType((0, 1))
+    global_2 = MetaType((0,))
+    global_3 = MetaType((0,))
+    global_4 = ColNamesMetaType(("A", "B"))
+    global_5 = ColNamesMetaType(("C", "D"))
+    global_6 = ColNamesMetaType(("A", "B", "C", "D"))
+    global_7 = MetaType((2, 3, 0, 1))
+    global_build_outer = False
+    global_probe_outer = False
+
+    def impl(df1, df2):
+        # Setup memory budgets and convert dataframes to tables
+        bodo.libs.memory_budget.init_operator_comptroller()
+        bodo.libs.memory_budget.register_operator(
+            0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, 4000
+        )
+        bodo.libs.memory_budget.register_operator(
+            6, bodo.libs.memory_budget.OperatorType.ACCUMULATE_TABLE, 1, 1, 2880
+        )
+        bodo.libs.memory_budget.compute_satisfiable_budgets()
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
+        )
+        T2 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), global_1, 1
+        )
+
+        # Initialize the join state
+        join_state = bodo.libs.stream_join.init_join_state(
+            0,
+            global_2,
+            global_3,
+            global_4,
+            global_5,
+            global_build_outer,
+            global_probe_outer,
+        )
+
+        # Build loop: add all of T1 to the build table
+        is_last_build = False
+        iter_build = 0
+        length_build = bodo.hiframes.table.local_len(T1)
+        done_build = False
+        while not (done_build):
+            T3 = bodo.hiframes.table.table_local_filter(
+                T1, slice((iter_build * 3), ((iter_build + 1) * 3))
+            )
+            is_last_build = (iter_build * 3) >= length_build
+            done_build = bodo.libs.stream_join.join_build_consume_batch(
+                join_state, T3, is_last_build
+            )
+            iter_build = iter_build + 1
+
+        # Probe loop: probe the join state with all of T2 and store the result in a table builder
+        is_last_probe = False
+        iter_probe = 0
+        length_probe = bodo.hiframes.table.local_len(T2)
+        done_probe = False
+        produce_probe = True
+        builder_state = bodo.libs.table_builder.init_table_builder_state(6)
+        while not (done_probe):
+            T4 = bodo.hiframes.table.table_local_filter(
+                T2, slice((iter_probe * 3), ((iter_probe + 1) * 3))
+            )
+            is_last_probe = (iter_probe * 3) >= length_probe
+            (T5, done_probe, _) = bodo.libs.stream_join.join_probe_consume_batch(
+                join_state, T4, is_last_probe, produce_probe
+            )
+            bodo.libs.table_builder.table_builder_append(builder_state, T5)
+            iter_probe = iter_probe + 1
+        bodo.libs.stream_join.delete_join_state(join_state)
+
+        # Extract the final table from the table builder and convert back to a DataFrame
+        T6 = bodo.libs.table_builder.table_builder_finalize(builder_state)
+        T7 = bodo.hiframes.table.table_subset(T6, global_7, False)
+        index = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+        df3 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index, global_6)
+        return df3
+
+    df1, df2, py_output = timestamptz_join_keys
+
+    check_func(
+        impl,
+        (df1, df2),
+        py_output=py_output,
+        check_dtype=False,
+        check_names=False,
+        reset_index=True,
+        sort_output=True,
     )
 
 

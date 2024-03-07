@@ -2089,6 +2089,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                               const std::vector<uint64_t> build_kept_cols,
                               const std::vector<uint64_t> probe_kept_cols,
                               bool is_last) {
+    assert(join_state->build_input_finalized);
     if (join_state->probe_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
@@ -2674,7 +2675,6 @@ table_info* join_probe_consume_batch_py_entry(
         // is_last) and there's no more output remaining in the output_buffer:
         *out_is_last =
             is_last && join_state_->output_buffer->total_remaining == 0;
-
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

@@ -1,3 +1,4 @@
+#include <iostream>
 #include <sstream>
 #include "../libs/_array_hash.h"
 #include "../libs/_array_operations.h"
