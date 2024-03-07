@@ -258,6 +258,7 @@ broadcasted_fixed_arg_functions = {
     "to_seconds",
     "to_time",
     "to_timestamp",
+    "to_timestamptz",
     "to_varchar",
     "translate",
     "trim",
