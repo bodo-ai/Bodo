@@ -5704,8 +5704,8 @@ class TypingTransforms:
                     fdef[0],
                     sql_ctx_def.args,
                     sql_ctx_def.kws,
-                    ("dataframes", "catalog"),
-                    {"catalog": None},
+                    ("dataframes", "catalog", "default_tz"),
+                    {"catalog": None, "default_tz": None},
                 )
                 names, df_typs = self._get_bodosql_ctx_name_df_typs(folded_args)
                 for df_typ in df_typs:
@@ -5722,8 +5722,19 @@ class TypingTransforms:
                     catalog_typ = self.typemap[catalog_var.name]
                 else:
                     catalog_typ = types.none
+                default_tz_var = folded_args[2]
+                if isinstance(default_tz_var, ir.Var):
+                    if default_tz_var.name not in self.typemap:
+                        return None
+                    default_tz_typ = self.typemap[default_tz_var.name]
+                else:
+                    default_tz_typ = types.none
                 return BodoSQLContextType(
-                    names, df_typs, estimate_row_counts, catalog_typ
+                    names,
+                    df_typs,
+                    estimate_row_counts,
+                    catalog_typ,
+                    default_tz_typ,
                 )
             elif fdef[0] == "add_or_replace_view":
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -5756,6 +5767,7 @@ class TypingTransforms:
                     tuple(new_df_typs),
                     tuple(new_estimated_row_counts),
                     context_type.catalog_type,
+                    context_type.default_tz,
                 )
             elif fdef[0] == "remove_view":
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -5783,6 +5795,7 @@ class TypingTransforms:
                     tuple(new_df_typs),
                     tuple(new_estimated_row_counts),
                     context_type.catalog_type,
+                    context_type.default_tz,
                 )
             elif fdef[0] in ("add_or_replace_catalog", "remove_catalog"):
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -5799,6 +5812,7 @@ class TypingTransforms:
                     context_type.dataframes,
                     context_type.estimated_row_counts,
                     catalog_typ,
+                    context_type.default_tz,
                 )
             return None
 

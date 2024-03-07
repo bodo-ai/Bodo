@@ -15,11 +15,11 @@ import java.util.Objects;
 import kotlin.Pair;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Sarg;
 import org.apache.calcite.util.TimeString;
 import org.apache.calcite.util.TimestampString;
+import org.apache.calcite.util.TimestampWithTimeZoneString;
 
 /** Class that returns the generated code for Literal Code after all inputs have been visited. */
 public class LiteralCodeGen {
@@ -74,19 +74,6 @@ public class LiteralCodeGen {
       RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
     SqlTypeName typeName = node.getType().getSqlTypeName();
     // TODO: Add more types here
-    if ((node.getType() instanceof TZAwareSqlType && node.getTypeName() != SqlTypeName.NULL)) {
-      // TZ-Aware uses a timestamp string. We can't use the integer version
-      // as the value is in UTC time. We could in the future convert this to
-      // the integer code path + tz_localize if that's faster, but it's probably
-      // better to optimize pd.Timestamp.
-      //
-      // Note: This can have issues with the Python path in case the Timezones differ.
-      TimestampString timestampString = node.getValueAs(TimestampString.class);
-      Expr argString = new Expr.StringLiteral(timestampString.toString());
-      TZAwareSqlType type = (TZAwareSqlType) node.getType();
-      Expr tzInfo = type.getTZInfo().getZoneExpr();
-      return new Expr.Call("pd.Timestamp", List.of(argString), List.of(new Pair<>("tz", tzInfo)));
-    }
     switch (node.getTypeName()) {
       case NULL:
         return Expr.None.INSTANCE;
@@ -173,6 +160,28 @@ public class LiteralCodeGen {
               long nanoseconds = calendar.getTimeInMillis() * 1000 * 1000;
               nanoseconds += getSubMillisecondTimeComponent(TimestampString.class, node);
               return new Expr.Raw(String.format("pd.Timestamp(%d)", nanoseconds));
+            }
+          case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+            {
+              // TZ-Aware uses a timestamp string. We can't use the integer version
+              // as the value is in UTC time. We could in the future convert this to
+              // the integer code path + tz_localize if that's faster, but it's probably
+              // better to optimize pd.Timestamp.
+              TimestampString timestampString = node.getValueAs(TimestampString.class);
+              Expr argString = new Expr.StringLiteral(timestampString.toString());
+              Expr tzInfo = visitor.genDefaultTzExpr();
+              return new Expr.Call(
+                  "pd.Timestamp", List.of(argString), List.of(new Pair<>("tz", tzInfo)));
+            }
+          case TIMESTAMP_TZ:
+            {
+              TimestampWithTimeZoneString timestampString =
+                  node.getValueAs(TimestampWithTimeZoneString.class);
+              TimestampString localString = timestampString.getLocalTimestampString();
+              int minuteOffset = timestampString.getTimeZone().getRawOffset() / 60_000;
+              Expr tsStringExpr = new Expr.StringLiteral(localString.toString());
+              Expr minuteOffsetExpr = new Expr.IntegerLiteral(minuteOffset);
+              return new Expr.Call("bodo.TimestampTZ", List.of(tsStringExpr, minuteOffsetExpr));
             }
           case TIME:
             {

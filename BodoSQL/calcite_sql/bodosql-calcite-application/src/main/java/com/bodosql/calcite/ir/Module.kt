@@ -3,6 +3,7 @@ package com.bodosql.calcite.ir
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import org.apache.calcite.rel.type.RelDataTypeSystem
+import org.apache.calcite.sql.type.BodoTZInfo
 import java.util.Stack
 
 /**
@@ -31,6 +32,8 @@ class Module(private val frame: Frame) {
         constructor(
             typeSystem: RelDataTypeSystem,
         ) : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame(), typeSystem = typeSystem)
+
+        val defaultTz = BodoTZInfo.getDefaultTZInfo(typeSystem)
 
         private val scope: StreamingStateScope = StreamingStateScope()
 

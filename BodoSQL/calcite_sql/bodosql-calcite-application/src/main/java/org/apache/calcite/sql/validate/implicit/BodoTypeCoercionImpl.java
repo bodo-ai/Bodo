@@ -339,10 +339,6 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
 
       CoalesceTypeCastingUtils.SF_TYPE newRhsType = newRhsTypeAndCastingFn.getFirst();
       SqlOperator castingFn = newRhsTypeAndCastingFn.getSecond();
-      if (castingFn.equals(TO_TIMESTAMP_TZ)){
-        //We should never generate TIMESTAMP_TZ, even if that would be the SF behavior
-        castingFn = TO_TIMESTAMP_LTZ;
-      }
 
       if (curRhsType.equals(newRhsType)) {
         //In this case, only need to cast the LHS argument

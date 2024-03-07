@@ -214,5 +214,10 @@ interface PandasRel : RelNode {
          * Returns configuration used for streaming.
          */
         fun streamingOptions(): StreamingOptions
+
+        /**
+         * Returns the expression for the default timezone
+         */
+        fun getDefaultTzExpr(): Expr
     }
 }

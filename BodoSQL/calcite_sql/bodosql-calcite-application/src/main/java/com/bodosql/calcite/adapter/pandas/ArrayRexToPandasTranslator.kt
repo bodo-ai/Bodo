@@ -47,7 +47,7 @@ class ArrayRexToPandasTranslator(
         scalar: Expr,
         dataType: RelDataType,
     ): Expr.Call {
-        val global = visitor.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
+        val global = visitor.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true, visitor.genDefaultTzExpr()))
         return Expr.Call(
             "bodo.utils.conversion.coerce_scalar_to_array",
             scalar,

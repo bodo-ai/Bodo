@@ -18,6 +18,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     typeof_impl,
@@ -54,7 +55,7 @@ class BodoSQLContextType(types.Type):
     Requires table names and DataFrame types.
     """
 
-    def __init__(self, names, dataframes, estimated_row_counts, catalog):
+    def __init__(self, names, dataframes, estimated_row_counts, catalog, default_tz):
         if not (isinstance(names, tuple) and all(isinstance(v, str) for v in names)):
             raise BodoError("BodoSQLContext(): 'table' keys must be constant strings")
         if not (
@@ -82,9 +83,10 @@ class BodoSQLContextType(types.Type):
         self.dataframes = dataframes
         self.estimated_row_counts = estimated_row_counts
         # Map None to types.none to use the type in the data model.
+        self.default_tz = default_tz
         self.catalog_type = types.none if is_overload_none(catalog) else catalog
         super(BodoSQLContextType, self).__init__(
-            name=f"BodoSQLContextType({names}, {dataframes}, {estimated_row_counts}, {catalog})"
+            name=f"BodoSQLContextType({names}, {dataframes}, {estimated_row_counts}, {catalog}, {default_tz})"
         )
 
 
@@ -97,6 +99,7 @@ def typeof_bodo_sql(val, c):
         # TODO(njriasan): Handle distributed code.
         tuple([len(df) if isinstance(df, pd.DataFrame) else None for df in dataframes]),
         numba.typeof(val.catalog),
+        val.default_tz,
     )
 
 
@@ -114,6 +117,16 @@ class BodoSQLContextModel(models.StructModel):
 
 make_attribute_wrapper(BodoSQLContextType, "dataframes", "dataframes")
 make_attribute_wrapper(BodoSQLContextType, "catalog", "catalog")
+
+
+@overload_attribute(BodoSQLContextType, "default_tz", inline="always")
+def overload_default_tz(bc):
+    tz = bc.default_tz
+
+    def impl(bc):  # pragma: no cover
+        return tz
+
+    return impl
 
 
 def lower_init_sql_context(context, builder, signature, args):
@@ -195,7 +208,7 @@ def unbox_bodosql_context(typ, val, c):
 
 
 @intrinsic(prefer_literal=True)
-def init_sql_context(typingctx, names_type, dataframes_type, catalog):
+def init_sql_context(typingctx, names_type, dataframes_type, catalog, default_tz):
     """Create a BodoSQLContext given table names and dataframes."""
     table_names = tuple(get_overload_const(names_type))
     n_tables = len(names_type.types)
@@ -203,9 +216,16 @@ def init_sql_context(typingctx, names_type, dataframes_type, catalog):
     # Cannot estimate row counts in compiled code at this time.
     estimated_row_counts = tuple([None] * len(dataframes_type.types))
     sql_ctx_type = BodoSQLContextType(
-        table_names, tuple(dataframes_type.types), estimated_row_counts, catalog
+        table_names,
+        tuple(dataframes_type.types),
+        estimated_row_counts,
+        catalog,
+        default_tz,
     )
-    return sql_ctx_type(names_type, dataframes_type, catalog), lower_init_sql_context
+    return (
+        sql_ctx_type(names_type, dataframes_type, catalog, default_tz),
+        lower_init_sql_context,
+    )
 
 
 # enable dead call elimination for init_sql_context()
@@ -213,7 +233,7 @@ bodo.utils.transform.no_side_effect_call_tuples.add((init_sql_context,))
 
 
 @overload(BodoSQLContext, inline="always", no_unliteral=True)
-def bodo_sql_context_overload(tables, catalog=None):
+def bodo_sql_context_overload(tables, catalog=None, default_tz=None):
     """constructor for creating BodoSQLContext"""
     # bodo untyped pass transforms const dict to tuple with sentinel in first element
     assert isinstance(tables, types.BaseTuple) and tables.types[
@@ -227,8 +247,7 @@ def bodo_sql_context_overload(tables, catalog=None):
     df_args = "({}{})".format(df_args, "," if len(names) == 1 else "")
     name_args = ", ".join(f"'{c}'" for c in names)
     names_tup = "({}{})".format(name_args, "," if len(names) == 1 else "")
-
-    func_text = f"def impl(tables, catalog=None):\n  return init_sql_context({names_tup}, {df_args}, catalog)\n"
+    func_text = f"def impl(tables, catalog=None, default_tz=None):\n  return init_sql_context({names_tup}, {df_args}, catalog, default_tz)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -258,7 +277,7 @@ def overload_bodosql_context_add_or_replace_view(bc, name, table):
     comma_sep_names = ", ".join(new_names)
     comma_sep_dfs = ", ".join(new_dataframes)
     func_text = "def impl(bc, name, table):\n"
-    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog)\n"
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog, bc.default_tz)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -290,7 +309,7 @@ def overload_bodosql_context_remove_view(bc, name):
     comma_sep_names = ", ".join(new_names)
     comma_sep_dfs = ", ".join(new_dataframes)
     func_text = "def impl(bc, name):\n"
-    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog)\n"
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog, bc.default_tz)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -312,7 +331,7 @@ def overload_add_or_replace_catalog(bc, catalog):
     comma_sep_names = ", ".join(names)
     comma_sep_dfs = ", ".join(dataframes)
     func_text = "def impl(bc, catalog):\n"
-    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), catalog)\n"
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), catalog, bc.default_tz)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -334,9 +353,7 @@ def overload_remove_catalog(bc):
     comma_sep_names = ", ".join(names)
     comma_sep_dfs = ", ".join(dataframes)
     func_text = "def impl(bc):\n"
-    func_text += (
-        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), None)\n"
-    )
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), None, bc.default_tz)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -420,8 +437,15 @@ def _gen_pd_func_text_and_lowered_globals(
                     hide_credentials,
                     bodo.bodosql_try_inline_views,
                     bodo.enable_snowflake_iceberg,
+                    bodo.enable_timestamp_tz,
                 )
             else:
+                extra_args = (
+                    ()
+                    if bodo_sql_context_type.default_tz is None
+                    or isinstance(bodo_sql_context_type.default_tz, types.NoneType)
+                    else (bodo_sql_context_type.default_tz.literal_value,)
+                )
                 generator = RelationalAlgebraGeneratorClass(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
@@ -431,6 +455,8 @@ def _gen_pd_func_text_and_lowered_globals(
                     hide_credentials,
                     bodo.bodosql_try_inline_views,
                     bodo.enable_snowflake_iceberg,
+                    bodo.enable_timestamp_tz,
+                    *extra_args,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace

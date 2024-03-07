@@ -33,7 +33,9 @@ public class LogicalValuesCodeGen {
     // Empty table doesn't support dictionary encoding yet.
     boolean allowDictArrays = argRows.size() != 0;
     for (RelDataTypeField field : sqlTypes) {
-      arrayTypes.add(sqlTypeToBodoArrayType(field.getType(), allowDictArrays));
+      arrayTypes.add(
+          sqlTypeToBodoArrayType(
+              field.getType(), allowDictArrays, pdVisitorClass.genDefaultTzExpr()));
     }
     // Generate the lists to insert
     final int numArrays = rowType.getFieldCount();

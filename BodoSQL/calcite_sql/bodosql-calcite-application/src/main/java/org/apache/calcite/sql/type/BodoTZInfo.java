@@ -46,6 +46,8 @@ public class BodoTZInfo {
     this.pyType = pyType.toLowerCase(Locale.ROOT);
   }
 
+  public String getZone() { return zone; }
+
   /**
    * Get the zone information as it will be passed to Python.
    *

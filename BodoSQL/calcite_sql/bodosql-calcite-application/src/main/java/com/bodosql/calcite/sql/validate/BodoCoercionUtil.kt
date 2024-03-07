@@ -7,7 +7,6 @@ import org.apache.calcite.sql.type.ArraySqlType
 import org.apache.calcite.sql.type.MapSqlType
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
 import java.lang.RuntimeException
 
@@ -92,9 +91,9 @@ class BodoCoercionUtil {
                 // Timestamp_NTZ. Note we must use typename here because LTZ
                 // conversion should require a cast.
                 return input.sqlTypeName == SqlTypeName.TIMESTAMP
-            } else if (target is TZAwareSqlType) {
+            } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                 // Timestamp_LTZ
-                return input is TZAwareSqlType
+                return input.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
             } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                 // Varchar
                 return SqlTypeFamily.CHARACTER.contains(input)
@@ -138,7 +137,7 @@ class BodoCoercionUtil {
                 }
             } else if (SqlTypeFamily.DATE.contains(input)) {
                 // Date
-                if (target is TZAwareSqlType) {
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 1)
                 } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 2)
@@ -182,7 +181,7 @@ class BodoCoercionUtil {
             } else if (input.sqlTypeName == SqlTypeName.TIMESTAMP) {
                 // Timestamp_NTZ. Note we must use typename here because LTZ
                 // conversion should require a cast.
-                if (target is TZAwareSqlType) {
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 1)
                 } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                     return Pair(true, 2)
@@ -193,7 +192,7 @@ class BodoCoercionUtil {
                 } else if (target is VariantSqlType) {
                     return Pair(true, 5)
                 }
-            } else if (input is TZAwareSqlType) {
+            } else if (input.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                 // Timestamp_LTZ
                 if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 1)
@@ -214,7 +213,7 @@ class BodoCoercionUtil {
                     return Pair(true, 2)
                 } else if (SqlTypeFamily.APPROXIMATE_NUMERIC.contains(target)) {
                     return Pair(true, 3)
-                } else if (target is TZAwareSqlType) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 4)
                 } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 5)
@@ -239,7 +238,7 @@ class BodoCoercionUtil {
                     return Pair(true, 5)
                 } else if (SqlTypeFamily.TIME.contains(target)) {
                     return Pair(true, 6)
-                } else if (target is TZAwareSqlType) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 7)
                 } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 8)
@@ -278,7 +277,7 @@ class BodoCoercionUtil {
             } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                 // Timestamp_NTZ
                 return CastingOperatorTable.TO_TIMESTAMP_NTZ
-            } else if (target is TZAwareSqlType) {
+            } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                 // Timestamp_LTZ
                 return CastingOperatorTable.TO_TIMESTAMP_LTZ
             } else if (SqlTypeFamily.CHARACTER.contains(target)) {

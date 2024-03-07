@@ -37,6 +37,7 @@ data: {
       "com.bodosql.calcite.application.operatorTables.ObjectOperatorTable"
       "com.bodosql.calcite.application.operatorTables.SelectOperatorTable",
       "com.bodosql.calcite.application.operatorTables.StringOperatorTable"
+      "com.bodosql.calcite.application.RelationalAlgebraGenerator"
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable"
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat"
@@ -59,7 +60,6 @@ data: {
       "org.apache.calcite.sql.SqlDrop"
       "org.apache.calcite.sql.SqlDdl"
       "org.apache.calcite.sql.SqlTruncate"
-      "org.apache.calcite.sql.SqlTzAwareTypeNameSpec"
       "org.apache.calcite.sql.ddl.SqlDdlNodes"
       "org.apache.calcite.sql.fun.SqlAggOperatorTable"
     ]
@@ -119,6 +119,8 @@ data: {
       "GRANTS",
       "TIMESTAMP_LTZ",
       "TIMESTAMPLTZ",
+      "TIMESTAMP_TZ",
+      "TIMESTAMPTZ",
       "LAST_DAY",
       # Tokens for Date/Time Intervals
       "Y",
@@ -374,10 +376,9 @@ data: {
         "TIMESTAMP_NTZ",
         # Note TIMESTAMPNTZ is a valid alias for TIMESTAMP_NTZ
         "TIMESTAMPNTZ",
-        # TIMESTAMP_TZ is not registered as a token yet
-        # "TIMESTAMP_TZ",
-        # TIMESTAMPTZ is not registered as a token yet
-        # "TIMESTAMPTZ",
+        "TIMESTAMP_TZ",
+        # Note TIMESTAMPTZ is a valid alias for TIMESTAMP_TZ
+        "TIMESTAMPTZ",
         "TINYINT",
         "VARBINARY",
         "VARCHAR",

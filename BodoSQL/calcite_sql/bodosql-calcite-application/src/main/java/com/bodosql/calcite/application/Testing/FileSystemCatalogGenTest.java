@@ -36,7 +36,8 @@ public class FileSystemCatalogGenTest {
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Always inline views
-            true // Enable Iceberg for testing
+            true, // Enable Iceberg for testing
+            false // Do not enable TIMESTAMPTZ for Iceberg testing
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");

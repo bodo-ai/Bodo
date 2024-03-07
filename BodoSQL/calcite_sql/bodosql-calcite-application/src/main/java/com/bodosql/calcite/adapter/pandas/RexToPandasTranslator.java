@@ -16,6 +16,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToDateFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToDoubleFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToTimestampFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToTimestampTzFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
@@ -158,7 +159,6 @@ import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.fun.SqlSubstringFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.Sarg;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
@@ -575,7 +575,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     if (hasVariantType(node.getType())) {
       outputArrayTypeGlobal = visitor.lowerAsGlobal(new Expr.Raw("numba.core.types.unknown"));
     } else {
-      outputArrayTypeGlobal = visitor.lowerAsGlobal(sqlTypeToBodoArrayType(node.getType(), false));
+      outputArrayTypeGlobal =
+          visitor.lowerAsGlobal(
+              sqlTypeToBodoArrayType(node.getType(), false, visitor.genDefaultTzExpr()));
     }
     Expr casePlaceholder =
         new Expr.Call(
@@ -796,7 +798,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     RelDataType outputType = operation.getType();
     assert operation.operands.size() == 1;
     Expr child = operation.operands.get(0).accept(this);
-    return generateTryCastCode(child, outputType, streamingNamedArgs);
+    return generateTryCastCode(child, outputType, streamingNamedArgs, visitor);
   }
 
   private Expr visitExtractScan(RexCall node) {
@@ -1040,19 +1042,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return generateToDateFnCode(operands, fnName, streamingNamedArgs);
       case "TO_TIMESTAMP":
       case "TO_TIMESTAMP_NTZ":
-      case "TO_TIMESTAMP_LTZ":
-      case "TO_TIMESTAMP_TZ":
       case "TRY_TO_TIMESTAMP":
       case "TRY_TO_TIMESTAMP_NTZ":
+        return generateToTimestampFnCode(operands, None.INSTANCE, fnName, streamingNamedArgs);
       case "TRY_TO_TIMESTAMP_LTZ":
+      case "TO_TIMESTAMP_LTZ":
+        return generateToTimestampFnCode(
+            operands, visitor.genDefaultTzExpr(), fnName, streamingNamedArgs);
+      case "TO_TIMESTAMP_TZ":
       case "TRY_TO_TIMESTAMP_TZ":
-        Expr tzInfo;
-        if (fnOperation.getType() instanceof TZAwareSqlType) {
-          tzInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getZoneExpr();
-        } else {
-          tzInfo = None.INSTANCE;
-        }
-        return generateToTimestampFnCode(operands, tzInfo, fnName, streamingNamedArgs);
+        return generateToTimestampTzFnCode(
+            operands, visitor.genDefaultTzExpr(), fnName, streamingNamedArgs);
       case "TRY_TO_BOOLEAN":
       case "TO_BOOLEAN":
         return generateToBooleanFnCode(operands, fnName, streamingNamedArgs);
@@ -1271,9 +1271,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Expr systemCall;
     switch (fnName) {
       case "GETDATE":
-        assert fnOperation.getType() instanceof TZAwareSqlType;
-        BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
-        systemCall = generateCurrTimestampCode(tzTimestampInfo, makeConsistent);
+        systemCall = generateCurrTimestampCode(visitor.genDefaultTzExpr(), makeConsistent);
         break;
       case "CURRENT_TIME":
         BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
@@ -1819,13 +1817,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIME_FROM_PARTS":
           case "TIMESTAMP_FROM_PARTS":
           case "TIMESTAMP_NTZ_FROM_PARTS":
-          case "TIMESTAMP_LTZ_FROM_PARTS":
           case "TIMESTAMP_TZ_FROM_PARTS":
-            Expr tzExpr = None.INSTANCE;
-            if (fnOperation.getType() instanceof TZAwareSqlType) {
-              tzExpr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getZoneExpr();
-            }
-            return generateDateTimeTypeFromPartsCode(fnName, operands, tzExpr);
+            return generateDateTimeTypeFromPartsCode(fnName, operands, None.INSTANCE);
+          case "TIMESTAMP_LTZ_FROM_PARTS":
+            return generateDateTimeTypeFromPartsCode(fnName, operands, visitor.genDefaultTzExpr());
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
