@@ -774,6 +774,23 @@ def overload_week_number(ptt):
     return pd_week_number
 
 
+@overload_method(PandasTimestampType, "utcoffset")
+def overload_utcoffset(ptt):
+    """
+    Overload for PandasTimestampType.utcoffset() method.
+    """
+    if ptt.tz is None:
+        raise BodoError("utcoffset on Timezone-naive timestamp not supported")
+
+    def pd_utcoffset(ptt):
+        """
+        Return the time zone offset from UTC.
+        """
+        return ptt.tz_localize(None) - ptt.tz_convert(None)
+
+    return pd_utcoffset
+
+
 @overload_method(PandasTimestampType, "__hash__", no_unliteral=True)
 def dt64_hash(val):
     return lambda val: hash(val.value)
@@ -2958,7 +2975,6 @@ timestamp_unsupported_methods = [
     "to_period",
     "to_pydatetime",
     "tzname",
-    "utcoffset",
     "utctimetuple",
 ]
 

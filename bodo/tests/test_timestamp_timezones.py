@@ -598,3 +598,22 @@ def test_tz_aware_compare_tz_naive(tz_aware, tz_naive, op, memory_leak_check):
         (tz_naive, tz_aware),
         py_output=expected_output(tz_naive, tz_aware),
     )
+
+
+@pytest.mark.parametrize(
+    "tz_aware",
+    [
+        pd.Timestamp("2019-01-01 12:00:00", tz="Europe/Berlin"),
+        pd.Timestamp("2020-01-01 23:59:59.999", tz="US/Eastern"),
+        pd.Timestamp("2030-01-01 15:23:42.728347", tz="GMT"),
+    ],
+)
+def test_utcoffset(tz_aware, memory_leak_check):
+    """
+    test utcoffset() method works correctly
+    """
+
+    def test_impl(ts):
+        return ts.utcoffset()
+
+    check_func(test_impl, (tz_aware,))

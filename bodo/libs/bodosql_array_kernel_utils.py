@@ -1118,6 +1118,12 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
+def is_valid_timestamptz_arg(arg):
+    return arg == bodo.timestamptz_type or (
+        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.timestamptz_type
+    )
+
+
 def is_valid_date_arg(arg):
     """
     Is the type an acceptable date argument for a BodoSQL array

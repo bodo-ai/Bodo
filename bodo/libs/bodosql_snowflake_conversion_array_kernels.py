@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 
 import numba
 import numpy as np
@@ -405,32 +406,33 @@ def create_timestamp_cast_util(func, error_on_fail):
         # Infer the correct way to adjust the timezones of the Timestamps calculated
         # based on the timezone of the current data (if there is any), and the target timezone.
         current_tz = get_tz_if_exists(conversionVal)
+        time_zone = get_literal_value(time_zone)
+        if is_overload_constant_str(time_zone):
+            time_zone = str(time_zone)
+        elif is_overload_none(time_zone):
+            time_zone = None
+        else:
+            raise_bodo_error("time_zone argument must be a scalar string or None")
+
         if current_tz is None:
-            time_zone = get_literal_value(time_zone)
-            if is_overload_constant_str(time_zone):
-                # NTZ -> TZ
+            if time_zone is not None:
+                # NTZ -> LTZ
                 localize_str = f".tz_localize('{time_zone}')"
-            elif is_overload_none(time_zone):
+            else:
                 # NTZ -> NTZ
                 localize_str = ""
-                time_zone = None
-            else:
-                raise_bodo_error("time_zone argument must be a scalar string or None")
         else:
-            if is_overload_constant_str(time_zone):
-                time_zone = get_literal_value(time_zone)
+            if time_zone is not None:
                 if time_zone == current_tz:
-                    # TZ -> Same TZ
+                    # LTZ -> Same TZ
                     localize_str = ""
                 else:
-                    # TZ -> Different TZ
+                    # LTZ -> Different TZ
                     localize_str = f".tz_localize(None).tz_localize('{time_zone}')"
-            elif is_overload_none(time_zone):
-                # TZ -> NTZ
+            else:
+                # LTZ -> NTZ
                 localize_str = f".tz_localize(None)"
                 time_zone = None
-            else:
-                raise_bodo_error("time_zone argument must be a scalar string or None")
 
         is_out_arr = bodo.utils.utils.is_array_typ(
             conversionVal, True
@@ -487,7 +489,15 @@ def create_timestamp_cast_util(func, error_on_fail):
 
         elif is_valid_datetime_or_date_arg(conversionVal):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){localize_str})\n"
-
+        elif is_valid_timestamptz_arg(conversionVal):
+            # TimestampTZ is slightly different from the other types - if we are
+            # casting to a different timezone, we need to convert the timestamp to
+            # UTC first, then convert it to the target timezone. Otherwise, we
+            # can extract the local timestamp and return it.
+            if time_zone is not None:
+                scalar_text = f"res[i] = {unbox_str}(arg0.utc_timestamp.tz_localize('UTC').tz_convert('{time_zone}'))\n"
+            else:
+                scalar_text = f"res[i] = {unbox_str}(arg0.local_timestamp())\n"
         else:  # pragma: no cover
             raise raise_bodo_error(
                 f"Internal error: unsupported type passed to to_timestamp_util for argument conversionVal: {conversionVal}"
@@ -592,6 +602,140 @@ def _install_timestamp_cast_overloads():
 
 
 _install_timestamp_cast_overloads()
+
+
+def to_timestamptz(
+    conversion_val, time_zone, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
+    return
+
+
+def to_timestamptz_util(
+    conversion_val, time_zone, dict_encoding_state, func_id
+):  # pragma: no cover
+    return
+
+
+@overload(to_timestamptz, no_unliteral=True)
+def overload_to_timestamptz(
+    conversion_val, time_zone, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
+    """Handles cases where TO_TIMESTAMP_TZ receives optional arguments and
+    forwards to the appropriate version of the real implementation"""
+    args = [conversion_val, time_zone]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.to_timestamptz",
+                ["conversion_val", "time_zone", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(conversion_val, time_zone, dict_encoding_state=None, func_id=-1):
+        return to_timestamptz_util(
+            conversion_val, time_zone, dict_encoding_state, func_id
+        )
+
+    return impl
+
+
+@overload(to_timestamptz_util, no_unliteral=True)
+def overload_to_timestamptz_util(
+    conversion_val, time_zone, dict_encoding_state, func_id
+):  # pragma: no cover
+    """A dedicated kernel for the SQL function TO_TIMESTAMP_TZ which converts
+    values to a timestamp with a timezone.
+    """
+    if is_overload_none(conversion_val) or is_valid_timestamptz_arg(conversion_val):
+        return lambda conversion_val, dict_encoding_state, func_id: conversion_val
+
+    time_zone = get_literal_value(time_zone)
+    if is_overload_constant_str(time_zone):
+        time_zone = str(time_zone)
+    elif is_overload_none(time_zone):
+        time_zone = None
+    else:
+        raise_bodo_error("time_zone argument must be a scalar string or None")
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    prefix_code = ""
+    if is_valid_string_arg(conversion_val):
+        scalar_text = "parsed = False\n"
+        scalar_text += "if len(arg0) > 5:\n"
+        scalar_text += "  timestamp_str = arg0[:-5].strip()\n"
+        scalar_text += "  offset_str = arg0[-5:]\n"
+        scalar_text += "  if ':' not in offset_str and (offset_str[0] == ' ' or offset_str[0] == '-' or offset_str[0] == '+'):\n"
+        scalar_text += "    offset_sign = -1 if offset_str[0] == '-' else 1\n"
+        scalar_text += "    offset_int = abs(int(offset_str))\n"
+        # Parse the offset as HHMM or HMM
+        scalar_text += "    offset_hours = offset_int // 100\n"
+        scalar_text += "    offset_minutes = offset_int % 100\n"
+        # We don't pass in a timezone here because it's contained in the offset
+        scalar_text += "    local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(timestamp_str, None, None, 0)\n"
+        scalar_text += (
+            "    offset = offset_sign * (offset_hours * 60 + offset_minutes)\n"
+        )
+        scalar_text += "    parsed = True\n"
+        scalar_text += "if not parsed:\n"
+        scalar_text += "  offset = 0\n"
+        scalar_text += "  local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(arg0, None, None, 0)\n"
+        if time_zone is not None:
+            # If the string isn't a numeric value, then we need to use the default timezone as the offset
+            scalar_text += "  if not arg0.isdigit():\n"
+            scalar_text += f"    offset = int(local_timestamp.tz_localize('{time_zone}').utcoffset().total_seconds() / 60)\n"
+            # If there's a time in the string, then We need to use the default timezone as the offset
+        scalar_text += "if local_timestamp is None:\n"
+        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += (
+            "  utc_timestamp = local_timestamp - pd.Timedelta(minutes=offset)\n"
+        )
+        scalar_text += "  res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
+    elif is_valid_tz_aware_datetime_arg(conversion_val):
+        scalar_text = "offset = int(arg0.utcoffset().total_seconds() / 60)\n"
+        scalar_text += "utc_timestamp = arg0.tz_convert('UTC').tz_localize(None)\n"
+        scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
+    elif is_valid_tz_naive_datetime_arg(conversion_val):
+        scalar_text = "local_timestamp = pd.Timestamp(arg0)\n"
+        if time_zone is not None:
+            scalar_text += f"offset = int(local_timestamp.tz_localize('{time_zone}').utcoffset().total_seconds() / 60)\n"
+            scalar_text += (
+                "utc_timestamp = local_timestamp - pd.Timedelta(minutes=offset)\n"
+            )
+        else:
+            scalar_text += "offset = 0\n"
+            scalar_text += "utc_timestamp = local_timestamp\n"
+        scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
+    elif is_valid_date_arg(conversion_val) or is_valid_numeric_bool(conversion_val):
+        # Call to_timestamp to get the local timestamp, then convert it to a TimestampTZ
+        prefix_code = "local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(conversion_val, None, None, 0, dict_encoding_state=dict_encoding_state, func_id=func_id)\n"
+        if is_array_typ(conversion_val):
+            scalar_text = "arg0_local = pd.Timestamp(local_timestamp[i])\n"
+        else:
+            scalar_text = "arg0_local = pd.Timestamp(local_timestamp)\n"
+        if time_zone is not None:
+            scalar_text += f"offset = int(arg0_local.tz_localize('{time_zone}').utcoffset().total_seconds() / 60)\n"
+            scalar_text += "utc_timestamp = arg0_local - pd.Timedelta(minutes=offset)\n"
+
+        else:
+            scalar_text += "offset = 0\n"
+            scalar_text += "utc_timestamp = arg0_local\n"
+        scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
+    else:  # pragma: no cover
+        raise_bodo_error(
+            f"Internal error: unsupported type passed to to_timestamptz_util for argument conversion_val: {conversion_val}"
+        )
+    return gen_vectorized(
+        ["conversion_val", "time_zone", "dict_encoding_state", "func_id"],
+        [conversion_val, time_zone, dict_encoding_state, func_id],
+        [True, False, False, False],
+        scalar_text,
+        bodo.timestamptz_array_type,
+        prefix_code=prefix_code,
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -745,6 +889,15 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
             scalar_text += "  res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
         scalar_text += "else:\n"
         scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
+    elif is_valid_timestamptz_arg(inner_type):
+        scalar_text = "offset = abs(arg0.offset_minutes)\n"
+        scalar_text += "offset_sign = '+' if arg0.offset_minutes >= 0 else '-'\n"
+        scalar_text += "hours = offset // 60\n"
+        scalar_text += "minutes = offset % 60\n"
+        scalar_text += "offset_str = f'{offset_sign}{hours:02}{minutes:02}'\n"
+        scalar_text += (
+            "res[i] = arg0.local_timestamp().isoformat(' ') + ' ' + offset_str\n"
+        )
     elif is_valid_float_arg(inner_type):
         scalar_text = "if np.isinf(arg0):\n"
         scalar_text += "  res[i] = 'inf' if arg0 > 0 else '-inf'\n"

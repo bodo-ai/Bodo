@@ -74,14 +74,16 @@ class TimestampTZ:
     def __hash__(self) -> int:
         return hash(self.utc_timestamp)
 
-    def __repr__(self):
-        # If this representation changes, make sure to update GetColumn_as_ListString as well
+    def offset_str(self):
         offset_sign = "+" if self.offset_minutes >= 0 else "-"
         offset_hrs = abs(self.offset_minutes) // 60
         offset_min = abs(self.offset_minutes) % 60
-        offset_str = f"{offset_sign}{offset_hrs:02}:{offset_min:02}"
+        return f"{offset_sign}{offset_hrs:02}:{offset_min:02}"
 
-        return f"TimestampTZ({self.local_timestamp()}, {offset_str})"
+    def __repr__(self):
+        # This implementation is for human readability, not for displaying to
+        # the user
+        return f"TimestampTZ({self.local_timestamp()}, {self.offset_str()})"
 
     @property
     def utc_timestamp(self):
@@ -95,7 +97,8 @@ class TimestampTZ:
         return self.utc_timestamp + pd.Timedelta(minutes=self.offset_minutes)
 
     def __str__(self):
-        return self.__repr__()
+        # This differs from __repr__ and matches snowflake
+        return f"{self.local_timestamp()} {self.offset_str()}"
 
     def __eq__(self, other):
         self._check_can_compare(other)
