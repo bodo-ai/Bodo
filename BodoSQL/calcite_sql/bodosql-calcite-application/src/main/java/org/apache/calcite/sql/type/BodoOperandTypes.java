@@ -15,6 +15,8 @@ import org.apache.calcite.util.Pair;
 
 import java.util.List;
 
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+
 public class BodoOperandTypes {
 
 
@@ -96,6 +98,41 @@ public class BodoOperandTypes {
             CompositeOperandTypeChecker.Composition.SEQUENCE,
             ImmutableList.copyOf(rules), allowedSignatures, null, null);
   }
+
+  // The basic signature for a TIMESTAMP_FROM_PARTS function:
+  // FUNC(year, month, day, hour, minute, second[, nanosecond])
+  public static SqlOperandTypeChecker TIMESTAMP_FROM_PARTS_BASE_CHECKER =
+          argumentRange(
+                  6,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC)
+          ;
+
+  // The optional additional signatures for a TIMESTAMP_FROM_PARTS function based
+  // on extracting the date from the first argument with the time from the second argument.
+  public static SqlOperandTypeChecker TIMESTAMP_FROM_PARTS_DATE_TIME_COMPOSITION =
+          OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIME)
+          .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIMESTAMP))
+          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
+          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
+
+  // The extra signature for a TIMESTAMP_FROM_PARTS function including the TIMEZONE string argument
+  public static SqlOperandTypeChecker TIMESTAMP_FROM_PARTS_TZ_CHECKER =
+          OperandTypes.family(
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.NUMERIC,
+                  SqlTypeFamily.STRING
+          );
 
   public static SqlOperandTypeChecker TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TO_NUMBER",
           List.of(Pair.of(OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC).or(OperandTypes.CHARACTER).or(BodoOperandTypes.VARIANT), "BOOLEAN, NUMERIC, CHAR, or VARIANT"),

@@ -132,12 +132,14 @@ def test_tzaware_timestamp_compare(
         WHERE
             @b = C
         """
+    params, tz = tzaware_timestamp_named_params
     check_query(
         query,
         bodosql_datetime_types,
         spark_info,
-        named_params=tzaware_timestamp_named_params,
+        named_params=params,
         check_dtype=False,
+        session_tz=tz,
     )
 
 

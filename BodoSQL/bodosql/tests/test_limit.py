@@ -81,7 +81,11 @@ def test_limit_tz_aware(representative_tz, memory_leak_check):
     ctx = {"TABLE1": df}
     query = "select A, C from table1 limit 10"
     expected_output = df[["A", "C"]].head(10)
-    check_query(query, ctx, None, expected_output=expected_output)
+    check_query(
+        query, ctx, None, expected_output=expected_output, session_tz=representative_tz
+    )
     query = "select A, C from table1 limit 4 offset 1"
     expected_output = df.iloc[1:5, [0, 2]]
-    check_query(query, ctx, None, expected_output=expected_output)
+    check_query(
+        query, ctx, None, expected_output=expected_output, session_tz=representative_tz
+    )

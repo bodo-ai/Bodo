@@ -288,7 +288,7 @@ class PandasProject(
         scalar: Expr,
         input: BodoEngineTable,
     ): Expr {
-        val global = ctx.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
+        val global = ctx.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true, ctx.builder().defaultTz.zoneExpr))
         return Expr.Call(
             "bodo.utils.conversion.coerce_scalar_to_array",
             scalar,

@@ -210,14 +210,15 @@ def test_concat_cols_binary(bodosql_binary_types, spark_info, memory_leak_check)
 def test_concat_ws_scalars_binary(bodosql_binary_types, spark_info, memory_leak_check):
     """Checks that the concat_ws function is working for scalar values"""
     query = "SELECT CASE WHEN A IS NOT NULL THEN CONCAT_WS(TO_BINARY('2c'), C, A) ELSE CONCAT_WS(A, B, C) END AS A0 FROM table1"
-    spark_query = "SELECT CASE WHEN A IS NOT NULL THEN CONCAT(C, TO_BINARY('2c'), A) ELSE CONCAT(B, A, C) END AS A0 FROM table1"
+    df = bodosql_binary_types["TABLE1"]
+    # If "A IS NOT NULL" is false, then CONCAT_WS(A, B, C) will also be null, so we can just use CONCAT_WS(TO_BINARY('2c'), C, A)
+    answer = df["C"] + b"2c" + df["A"]
     check_query(
         query,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query,
-        convert_columns_bytearray=["A0"],
+        expected_output=pd.DataFrame({"A0": answer}),
     )
 
 

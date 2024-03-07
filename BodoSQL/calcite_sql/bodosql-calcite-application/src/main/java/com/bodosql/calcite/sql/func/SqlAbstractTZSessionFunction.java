@@ -19,7 +19,6 @@ package com.bodosql.calcite.sql.func;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
 import static org.apache.calcite.util.Static.RESOURCE;
 
-import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -58,7 +57,6 @@ public class SqlAbstractTZSessionFunction extends SqlFunction {
 
   @Override
   public RelDataType inferReturnType(SqlOperatorBinding opBinding) {
-    // TODO: Support using precision information in TZAwareSqlType
     // We keep the error check here.
     int precision = 0;
     if (opBinding.getOperandCount() == 1) {
@@ -73,7 +71,9 @@ public class SqlAbstractTZSessionFunction extends SqlFunction {
           RESOURCE.argumentMustBeValidPrecision(
               opBinding.getOperator().getName(), 0, SqlTypeName.MAX_DATETIME_PRECISION));
     }
-    return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null, precision);
+    return opBinding
+        .getTypeFactory()
+        .createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, precision);
   }
 
   // All TZ-Aware Timestamp functions are increasing. Not strictly increasing.

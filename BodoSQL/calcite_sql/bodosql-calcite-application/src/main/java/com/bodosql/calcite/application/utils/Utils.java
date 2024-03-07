@@ -185,6 +185,13 @@ public class Utils {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
         break;
+      case TIMESTAMP_TZ:
+        if (outputScalar) {
+          dtype = "bodo.TimestampTZType";
+        } else {
+          dtype = "bodo.timestamptz_array_type";
+        }
+        break;
       case TIME:
         if (outputScalar) {
           dtype = String.format(Locale.ROOT, "bodo.TimeType(%d)", precision);

@@ -7,7 +7,6 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlOperator
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
 import java.util.*
 import kotlin.random.Random
@@ -169,7 +168,7 @@ class CoalesceTypeCastingUtils {
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.TIMESTAMP_NTZ) to Pair(SF_TYPE.TIMESTAMP_TZ, CastingOperatorTable.TO_TIMESTAMP_TZ),
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.DATE) to Pair(SF_TYPE.TIMESTAMP_TZ, CastingOperatorTable.TO_TIMESTAMP_TZ),
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.BOOLEAN) to null,
-            Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.TIME) to Pair(SF_TYPE.TIME, CastingOperatorTable.TO_TIME),
+            Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.TIME) to null,
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.FLOAT) to null,
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.NUMBER) to null,
             Pair(SF_TYPE.TIMESTAMP_TZ, SF_TYPE.TIMESTAMP_LTZ) to Pair(SF_TYPE.TIMESTAMP_TZ, CastingOperatorTable.TO_TIMESTAMP_TZ),
@@ -265,7 +264,9 @@ class CoalesceTypeCastingUtils {
                 SqlTypeFamily.CHARACTER.contains(inputVal) -> SF_TYPE.VARCHAR
                 SqlTypeFamily.DATE.contains(inputVal) -> SF_TYPE.DATE
                 SqlTypeFamily.TIMESTAMP.contains(inputVal) -> {
-                    if (inputVal is TZAwareSqlType) {
+                    if (inputVal.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                        SF_TYPE.TIMESTAMP_LTZ
+                    } else if (inputVal.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                         SF_TYPE.TIMESTAMP_TZ
                     } else {
                         SF_TYPE.TIMESTAMP_NTZ

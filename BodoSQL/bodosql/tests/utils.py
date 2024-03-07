@@ -93,6 +93,8 @@ def check_query(
     atol: float = 1e-08,
     rtol: float = 1e-05,
     convert_columns_to_pandas: bool = False,
+    session_tz: Optional[str] = None,
+    enable_timestamp_tz: bool = False,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -241,6 +243,10 @@ def check_query(
         convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
+        enable_timestamp_tz: True if TIMESTAMP_TZ support should be enabled.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -305,7 +311,7 @@ def check_query(
     if debug_mode:
         print("Query:")
         print(query)
-        bc = bodosql.BodoSQLContext(dataframe_dict)
+        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
         print("Unoptimized Plan:")
         print(bc.generate_unoptimized_plan(query, named_params))
         print("Optimized Plan:")
@@ -416,6 +422,7 @@ def check_query(
             optimize_calcite_plan,
             convert_nullable_bodosql,
             convert_columns_to_pandas,
+            session_tz,
             atol=atol,
             rtol=rtol,
         )
@@ -435,6 +442,8 @@ def check_query(
         convert_nullable_bodosql,
         use_table_format,
         use_dict_encoded_strings,
+        session_tz=session_tz,
+        enable_timestamp_tz=enable_timestamp_tz,
         is_out_distributed=is_out_distributed,
         check_typing_issues=check_typing_issues,
         convert_columns_to_pandas=convert_columns_to_pandas,
@@ -446,7 +455,7 @@ def check_query(
     result = dict()
 
     if return_codegen or return_seq_dataframe:
-        bc = bodosql.BodoSQLContext(dataframe_dict)
+        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
 
     # Return Pandas code if requested
     if return_codegen:
@@ -485,6 +494,8 @@ def check_query_jit(
     check_typing_issues,
     convert_columns_to_pandas,
     use_map_arrays,
+    session_tz,
+    enable_timestamp_tz,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -527,6 +538,8 @@ def check_query_jit(
             format for testing.
             If None, tests both formats if input arguments have string arrays.
 
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -537,11 +550,14 @@ def check_query_jit(
         convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        enable_timestamp_tz: true if TIMESTAMP_TZ support should be enabled
     """
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
+    saved_enable_timestamp_tz = bodo.enable_timestamp_tz
     try:
         # test table format for dataframes (non-table format tested below if flag is
         # None)
@@ -557,6 +573,8 @@ def check_query_jit(
         if use_map_arrays:
             bodo.hiframes.boxing.struct_size_limit = -1
 
+        bodo.enable_timestamp_tz = enable_timestamp_tz
+
         if run_jit_seq:
             check_query_jit_seq(
                 query,
@@ -570,6 +588,7 @@ def check_query_jit(
                 convert_nullable_bodosql,
                 check_typing_issues,
                 convert_columns_to_pandas,
+                session_tz,
                 atol,
                 rtol,
             )
@@ -587,6 +606,7 @@ def check_query_jit(
                 is_out_distributed,
                 check_typing_issues,
                 convert_columns_to_pandas,
+                session_tz,
                 atol,
                 rtol,
             )
@@ -604,6 +624,7 @@ def check_query_jit(
                 is_out_distributed,
                 check_typing_issues,
                 convert_columns_to_pandas,
+                session_tz,
                 atol,
                 rtol,
             )
@@ -611,6 +632,7 @@ def check_query_jit(
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
         bodo.hiframes.boxing.struct_size_limit = saved_struct_size_limit
+        bodo.enable_timestamp_tz = saved_enable_timestamp_tz
 
     # test non-table format case
     if use_table_format is None:
@@ -627,6 +649,8 @@ def check_query_jit(
             expected_output,
             optimize_calcite_plan,
             convert_nullable_bodosql,
+            session_tz=session_tz,
+            enable_timestamp_tz=enable_timestamp_tz,
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
             is_out_distributed=is_out_distributed,
@@ -655,6 +679,8 @@ def check_query_jit(
             expected_output,
             optimize_calcite_plan,
             convert_nullable_bodosql,
+            session_tz=session_tz,
+            enable_timestamp_tz=enable_timestamp_tz,
             # the default case use_table_format=None already tests
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
@@ -679,6 +705,7 @@ def check_query_python(
     optimize_calcite_plan,
     convert_nullable_bodosql,
     convert_columns_to_pandas,
+    session_tz,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -714,13 +741,14 @@ def check_query_python(
         convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
-    bc = bodosql.BodoSQLContext(dataframe_dict)
+    bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
     if optimize_calcite_plan:
         bodosql_output = bc.sql(query, named_params)
     else:
         bodosql_output = bc._test_sql_unoptimized(query, named_params)
-
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -748,6 +776,7 @@ def check_query_jit_seq(
     convert_nullable_bodosql,
     check_typing_issues,
     convert_columns_to_pandas,
+    session_tz,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -784,6 +813,8 @@ def check_query_jit_seq(
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
 
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -795,6 +826,7 @@ def check_query_jit_seq(
         InputDist.REP,
         optimize_calcite_plan,
         False,
+        session_tz,
         check_typing_issues=check_typing_issues,
     )
     _check_query_equal(
@@ -825,6 +857,7 @@ def check_query_jit_1D(
     is_out_distributed,
     check_typing_issues,
     convert_columns_to_pandas,
+    session_tz,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -861,6 +894,8 @@ def check_query_jit_1D(
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
 
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -872,6 +907,7 @@ def check_query_jit_1D(
         InputDist.OneD,
         optimize_calcite_plan,
         is_out_distributed,
+        session_tz,
         check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
@@ -913,6 +949,7 @@ def check_query_jit_1DVar(
     is_out_distributed,
     check_typing_issues,
     convert_columns_to_pandas,
+    session_tz,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -949,6 +986,8 @@ def check_query_jit_1DVar(
         list of strings or in general arrow data type. It typically fails at sorting. In that case
         using convert_columns_to_pandas=True will convert the columns to a string format which may help.
 
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -960,6 +999,7 @@ def check_query_jit_1DVar(
         InputDist.OneDVar,
         optimize_calcite_plan,
         is_out_distributed,
+        session_tz,
         check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
@@ -995,6 +1035,7 @@ def _run_jit_query(
     input_dist,
     optimize_calcite_plan,
     is_out_distributed,
+    session_tz,
     check_typing_issues,
 ):
     """
@@ -1015,6 +1056,8 @@ def _run_jit_query(
         input_dist: How the input data should be distributed. Either REP,
             1D or 1DVar. All input DataFrames are presumed to have the same
             distribution
+
+        session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
 
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
@@ -1056,6 +1099,8 @@ def _run_jit_query(
         func_text += f"            '{key}': e{i},\n"
     args = args + values_list
     func_text += "        }\n"
+    if session_tz is not None:
+        func_text += f"        , default_tz={repr(session_tz)}\n"
     func_text += "    )\n"
     if optimize_calcite_plan:
         func_text += f"    result = bc.sql(query"
@@ -1353,12 +1398,12 @@ def remove_tz_columns_spark(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     return new_df
 
 
-def generate_plan(query, dataframe_dict):
+def generate_plan(query, dataframe_dict, session_tz=None):
     """
     Return a plan for a given query with the dictionary
     for a BodoSQLContext.
     """
-    bc = bodosql.BodoSQLContext(dataframe_dict)
+    bc = bodosql.BodoSQLContext(dataframe_dict, session_tz)
     return bc.generate_plan(query)
 
 

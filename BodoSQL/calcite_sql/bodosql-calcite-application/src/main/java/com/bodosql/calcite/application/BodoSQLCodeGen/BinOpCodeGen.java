@@ -19,7 +19,6 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.type.IntervalSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.TZAwareSqlType;
 
 /**
  * Class that returns the generated code for a BinOp expression after all inputs have been visited.
@@ -55,8 +54,10 @@ public class BinOpCodeGen {
             || binOpKind.equals(SqlKind.TIMES))) {
       // If we are passing a pair of arguments to +/-, check if we are adding a tz-aware
       // value with an interval. If so we have to take a specialized code path.
-      boolean isArg0TZAware = argDataTypes.get(0) instanceof TZAwareSqlType;
-      boolean isArg1TZAware = argDataTypes.get(1) instanceof TZAwareSqlType;
+      boolean isArg0TZAware =
+          argDataTypes.get(0).getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
+      boolean isArg1TZAware =
+          argDataTypes.get(1).getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
       // Check if we have Datetime or Date data
       SqlTypeName arg0TypeName = argDataTypes.get(0).getSqlTypeName();
       SqlTypeName arg1TypeName = argDataTypes.get(1).getSqlTypeName();

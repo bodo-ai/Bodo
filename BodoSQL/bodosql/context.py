@@ -54,19 +54,20 @@ class SqlTypeEnum(Enum):
     Date = 13
     Time = 14
     Datetime = 15
-    TZ_AWARE_TIMESTAMP = 16
-    Timedelta = 17
-    DateOffset = 18
-    String = 19
-    Binary = 20
-    Categorical = 21
+    Timestamp_Ltz = 16
+    Timestamp_Tz = 17
+    Timedelta = 18
+    DateOffset = 19
+    String = 20
+    Binary = 21
+    Categorical = 22
     # Note Array, Object, Struct, and Variant are currently unused
     # on the Python side but this enum is updated to be consistent.
-    Array = 22
-    Json_Object = 23
-    Struct = 24
-    Variant = 25
-    Unsupported = 26
+    Array = 23
+    Json_Object = 24
+    Struct = 25
+    Variant = 26
+    Unsupported = 27
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -109,6 +110,7 @@ _numba_to_sql_param_type_map = {
     # to be scalar Pandas Timestamp/Timedelta
     bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Datetime.value,
     bodo.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
+    bodo.timestamptz_array_type: SqlTypeEnum.Timestamp_Tz.value,
     # date_offset_type represents Timedelta year/month
     # and is support only for scalars
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
@@ -139,16 +141,10 @@ def construct_tz_aware_array_type(typ, nullable):
     """
     # Timestamps only support precision 9 right now.
     precision = 9
-    if typ.tz is None:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Datetime.value)
-        return ColumnDataTypeClass(type_enum, nullable, precision)
-    else:
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
-        # Create the BodoTzInfo Java object.
-        tz_info = BodoTZInfoClass(
-            str(typ.tz), "int" if isinstance(typ.tz, int) else "str"
-        )
-        return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
+    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
+    # Create the BodoTzInfo Java object.
+    tz_info = BodoTZInfoClass(str(typ.tz), "int" if isinstance(typ.tz, int) else "str")
+    return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
 
 
 def construct_time_array_type(
@@ -229,6 +225,9 @@ def get_sql_data_type(arr_type):
     if isinstance(arr_type, bodo.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_array_type(arr_type, nullable)
+    elif arr_type == bodo.timestamptz_array_type:
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Tz.value)
+        return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
@@ -629,7 +628,7 @@ def add_param_table(table_name, schema, param_keys, param_values):
 
 
 class BodoSQLContext:
-    def __init__(self, tables=None, catalog=None):
+    def __init__(self, tables=None, catalog=None, default_tz=None):
         # We only need to initialize the tables values on all ranks, since that is needed for
         # creating the JIT function on all ranks for bc.sql calls. We also initialize df_types on all ranks,
         # for consistency. All the other attributes
@@ -638,6 +637,7 @@ class BodoSQLContext:
             tables = {}
 
         self.tables = tables
+        self.default_tz = default_tz
         # Check types
         if any([not isinstance(key, str) for key in self.tables.keys()]):
             raise BodoError("BodoSQLContext(): 'table' keys must be strings")
@@ -1166,7 +1166,9 @@ class BodoSQLContext:
                 hide_credentials,
                 bodo.bodosql_try_inline_views,
                 bodo.enable_snowflake_iceberg,
+                bodo.enable_timestamp_tz,
             )
+        extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
@@ -1176,6 +1178,8 @@ class BodoSQLContext:
             hide_credentials,
             bodo.bodosql_try_inline_views,
             bodo.enable_snowflake_iceberg,
+            bodo.enable_timestamp_tz,
+            *extra_args,
         )
         return generator
 
@@ -1204,7 +1208,7 @@ class BodoSQLContext:
             )
         new_tables = self.tables.copy()
         new_tables[name] = table
-        return BodoSQLContext(new_tables, self.catalog)
+        return BodoSQLContext(new_tables, self.catalog, self.default_tz)
 
     def remove_view(self, name: str):
         """Create a new BodoSQLContext by removing the table with the
@@ -1228,7 +1232,7 @@ class BodoSQLContext:
                 "BodoSQLContext.remove_view(): 'name' must refer to a registered view"
             )
         del new_tables[name]
-        return BodoSQLContext(new_tables, self.catalog)
+        return BodoSQLContext(new_tables, self.catalog, self.default_tz)
 
     def add_or_replace_catalog(self, catalog: DatabaseCatalog):
         """
@@ -1247,7 +1251,7 @@ class BodoSQLContext:
             raise BodoError(
                 "BodoSQLContext.add_or_replace_catalog(): 'catalog' must be a bodosql.DatabaseCatalog"
             )
-        return BodoSQLContext(self.tables, catalog)
+        return BodoSQLContext(self.tables, catalog, self.default_tz)
 
     def remove_catalog(self):
         """
@@ -1262,7 +1266,7 @@ class BodoSQLContext:
             raise BodoError(
                 "BodoSQLContext.remove_catalog(): BodoSQLContext must have an existing catalog registered."
             )
-        return BodoSQLContext(self.tables)
+        return BodoSQLContext(self.tables, self.default_tz, self.default_tz)
 
     def __eq__(self, bc: object) -> bool:
         if isinstance(bc, BodoSQLContext):

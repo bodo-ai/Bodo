@@ -575,8 +575,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
-      // TODO(njriasan): Remove TIMESTAMP_TZ
-      columnDataType = BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP;
+      columnDataType =
+          (typeName.startsWith("TIMESTAMP_TZ") && RelationalAlgebraGenerator.enableTimestampTz)
+              ? BodoSQLColumnDataType.TIMESTAMP_TZ
+              : BodoSQLColumnDataType.TIMESTAMP_LTZ;
       // Snowflake table types should contain precision, but UDFs may not.
       if (typeName.contains("(")) {
         // Determine the precision by parsing the type.

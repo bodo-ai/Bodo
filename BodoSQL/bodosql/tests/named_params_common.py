@@ -75,19 +75,19 @@ def timestamp_named_params(request):
 
 @pytest.fixture(
     params=[
-        (
-            pd.Timestamp(year=2022, month=1, day=31, second=15, tz="utc"),
-            pd.Timestamp(year=2000, month=1, day=1, hour=3, tz="US/Pacific"),
-        ),
+        "US/Pacific",
     ]
 )
 def tzaware_timestamp_named_params(request):
     """
     Fixture for Timestamp named params. These always contain 2 values:
-    @a, and @b, which refer to elements 0 and 1 of the tuple.
+    @a, and @b, which refer to elements 0 and 1 of the tuple, as well as
+    the string of the timezone used by both (which must be the same).
     """
-    params_tuple = request.param
-    return {"a": params_tuple[0], "b": params_tuple[1]}
+    tz = request.param
+    param_a = pd.Timestamp(year=2022, month=1, day=31, second=15, tz=tz)
+    param_b = pd.Timestamp(year=2000, month=1, day=1, hour=3, tz=tz)
+    return {"a": param_a, "b": param_b}, tz
 
 
 @pytest.fixture(

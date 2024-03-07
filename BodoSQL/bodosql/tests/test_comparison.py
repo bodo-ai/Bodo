@@ -730,7 +730,7 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
         ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
-    return cmp_op, use_case, ctx, answer
+    return cmp_op, use_case, ctx, answer, "US/Pacific"
 
 
 def test_tz_aware_compare_tz_naive(
@@ -740,7 +740,7 @@ def test_tz_aware_compare_tz_naive(
     Checks that comparison operator works correctly between tz_aware
     timestamps and tz_naive timestamps
     """
-    cmp_op, use_case, ctx, answer = tz_aware_tz_naive_comparison_args
+    cmp_op, use_case, ctx, answer, session_tz = tz_aware_tz_naive_comparison_args
     if cmp_op == "<=>":
         # <=> operator requires that both sides must be of the same type
         return
@@ -753,4 +753,5 @@ def test_tz_aware_compare_tz_naive(
         ctx,
         None,
         expected_output=pd.DataFrame({"OUTPUT": answer}),
+        session_tz=session_tz,
     )

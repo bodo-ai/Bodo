@@ -19,7 +19,6 @@ import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.apache.calcite.sql.SqlDataTypeSpec;
 import org.apache.calcite.sql.SqlTypeNameSpec;
-import org.apache.calcite.sql.SqlTzAwareTypeNameSpec;
 import org.apache.calcite.sql.VariantTypeNameSpec;
 
 import java.math.BigDecimal;
@@ -49,11 +48,7 @@ public class BodoSqlTypeUtil {
    * recursive calls.
    */
   public static SqlDataTypeSpec convertTypeToSpec(RelDataType type, @Nullable String charSetName, int maxPrecision, int maxScale) {
-    if (type instanceof TZAwareSqlType) {
-      TZAwareSqlType castType = (TZAwareSqlType) type;
-      SqlTypeNameSpec typeNameSpec = new SqlTzAwareTypeNameSpec(castType.getSqlIdentifier(), castType.getPrecision(), castType.getTZInfo());
-      return new SqlDataTypeSpec(typeNameSpec, SqlParserPos.ZERO);
-    } else if (type instanceof VariantSqlType) {
+    if (type instanceof VariantSqlType) {
       SqlTypeNameSpec typeNameSpec = new VariantTypeNameSpec(Objects.requireNonNull(type.getSqlIdentifier()));
       return new SqlDataTypeSpec(typeNameSpec, SqlParserPos.ZERO);
     } else {

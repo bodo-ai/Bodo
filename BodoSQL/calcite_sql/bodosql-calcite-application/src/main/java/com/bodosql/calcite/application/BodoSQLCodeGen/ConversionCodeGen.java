@@ -94,6 +94,32 @@ public class ConversionCodeGen {
   }
 
   /**
+   * Handles codegen for Snowflake TO_TIMESTAMP_TZ/TRY_TO_TIMESTAMP_TZ function.
+   *
+   * @param operands List of operands
+   * @param tzExpr Expr representing the timezone of the output data
+   * @param fnName The name of the function being called
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_TIMESTAMP/TRY_TO_TIMESTAMP function
+   */
+  public static Expr generateToTimestampTzFnCode(
+      List<Expr> operands,
+      Expr tzExpr,
+      String fnName,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+
+    String kernelName;
+    if (fnName.startsWith("TRY_")) {
+      kernelName = "try_to_timestamp_tz";
+    } else {
+      kernelName = "to_timestamp_tz";
+    }
+    List<Expr> args = List.of(operands.get(0), tzExpr);
+    return bodoSQLKernel(kernelName, args, streamingNamedArgs);
+  }
+
+  /**
    * Handles codegen for Snowflake TO_DOUBLE function.
    *
    * @param operands List of operands

@@ -118,6 +118,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case TIME:
       case TIMESTAMP:
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+      case TIMESTAMP_TZ:
         return MAX_DATETIME_PRECISION;
       default:
         return super.getDefaultPrecision(typeName);
@@ -137,6 +138,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case TIME:
       case TIMESTAMP:
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+      case TIMESTAMP_TZ:
         return MAX_DATETIME_PRECISION;
       case VARBINARY:
       case BINARY:

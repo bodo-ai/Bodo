@@ -323,7 +323,9 @@ def test_greatest_tz_aware_columns(
     else:
         S = df.min(axis=1)
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query, ctx, None, expected_output=py_output)
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+    )
 
 
 def test_least_datetime_strings(memory_leak_check):

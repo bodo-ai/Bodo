@@ -4,8 +4,7 @@ import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
+import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import java.util.*;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
@@ -19,12 +18,14 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlDatePartFunction;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -131,9 +132,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       if (defaultToNaive) {
         returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
       } else {
-        returnType =
-            BodoRelDataTypeFactory.createTZAwareSqlType(
-                typeFactory, null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
+        returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE);
       }
     } else {
       throw new BodoSQLCodegenException(
@@ -219,17 +218,15 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlBasicFunction TIMESTAMP_TZ_FROM_PARTS =
       SqlBasicFunction.create(
           "TIMESTAMP_TZ_FROM_PARTS",
-          opBinding -> timestampConstructionOutputType(opBinding, false),
-          argumentRange(
-              6,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.STRING),
+          // TODO: always use TIMESTAMP_TZ enableTimestampTz is removed
+          (RelationalAlgebraGenerator.enableTimestampTz
+                  ? ReturnTypes.TIMESTAMP_TZ
+                  : ReturnTypes.TIMESTAMP)
+              .andThen(SqlTypeTransforms.TO_NULLABLE),
+          BodoOperandTypes.TIMESTAMP_FROM_PARTS_BASE_CHECKER
+          // TODO: uncomment once we support passing in the TZ string argument
+          // .or(BodoOperandTypes.TIMESTAMP_FROM_PARTS_TZ_CHECKER)
+          ,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -311,7 +308,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       SqlBasicFunction.create(
           "GETDATE",
           // What Value should the return type be
-          BodoReturnTypes.TZAWARE_TIMESTAMP,
+          ReturnTypes.TIMESTAMP_LTZ,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?

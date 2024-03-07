@@ -64,19 +64,20 @@ public interface BodoSQLColumn {
     DATE(13, "DATE"), // /< equivalent to datetime.date value
     TIME(14, "TIME"), // /< equivalent to bodo.Time value
     DATETIME(15, "DATETIME"), // /< equivalent to datetime64[ns] value
-    TZ_AWARE_TIMESTAMP(16, "TZ_AWARE_TIMESTAMP"), // /< equivalent to Timestamp with tz info
-    TIMEDELTA(17, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
-    DATEOFFSET(18, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
-    STRING(19, "STRING"), // /< String elements
-    BINARY(20, "BINARY"), // /< Binary (byte) array
-    CATEGORICAL(21, "CATEGORICAL"),
-    ARRAY(22, "ARRAY"),
-    JSON_OBJECT(23, "JSON_OBJECT"),
-    STRUCT(24, "STRUCT"),
-    VARIANT(25, "VARIANT"),
-    UNSUPPORTED(26, "UNSUPPORTED"), // Unknown type we may be able to prune
+    TIMESTAMP_LTZ(16, "TIMESTAMP_LTZ"), // /< equivalent to a Timestamp with a timezone
+    TIMESTAMP_TZ(17, "TIMESTAMP_TZ"), // /< equivalent to Timestamp with an offset
+    TIMEDELTA(18, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
+    DATEOFFSET(19, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
+    STRING(20, "STRING"), // /< String elements
+    BINARY(21, "BINARY"), // /< Binary (byte) array
+    CATEGORICAL(22, "CATEGORICAL"),
+    ARRAY(23, "ARRAY"),
+    JSON_OBJECT(24, "JSON_OBJECT"),
+    STRUCT(25, "STRUCT"),
+    VARIANT(26, "VARIANT"),
+    UNSUPPORTED(27, "UNSUPPORTED"), // Unknown type we may be able to prune
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(27, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(28, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -134,7 +135,7 @@ public interface BodoSQLColumn {
           // TODO: Define a separate type for containing timezones
           return DATETIME;
         case TIMESTAMP_WITH_TIMEZONE:
-          return TZ_AWARE_TIMESTAMP;
+          return TIMESTAMP_LTZ;
         case TINYINT:
           return INT8;
         default:
@@ -193,9 +194,11 @@ public interface BodoSQLColumn {
         case DATETIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision);
           break;
-        case TZ_AWARE_TIMESTAMP:
-          assert tzInfo != null : "Internal error: TZ_AWARE_TIMESTAMP must have non-null TzInfo";
-          temp = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo, precision);
+        case TIMESTAMP_TZ:
+          temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP_TZ, precision);
+          break;
+        case TIMESTAMP_LTZ:
+          temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, precision);
           break;
         case TIMEDELTA:
           // TODO: Figure out SqlParserPos. Probably not relevant

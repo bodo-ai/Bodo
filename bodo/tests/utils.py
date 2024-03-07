@@ -832,7 +832,7 @@ def _get_dist_arg(
             name: _get_dist_arg(df, copy, var_length, check_typing_issues)
             for name, df in a.tables.items()
         }
-        return BodoSQLContext(new_dict, a.catalog)
+        return BodoSQLContext(new_dict, a.catalog, bodo_typ.default_tz)
 
     # PyArrow doesn't support shape
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]
