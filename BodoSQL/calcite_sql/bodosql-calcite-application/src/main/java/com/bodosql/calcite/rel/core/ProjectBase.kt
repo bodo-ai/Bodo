@@ -22,7 +22,7 @@ open class ProjectBase(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-) : Project(cluster, traitSet, hints, input, RexNormalizer(cluster.rexBuilder).visitList(projects), rowType, setOf()) {
+) : Project(cluster, traitSet, hints, input, projects.map { RexNormalizer.normalize(cluster.rexBuilder, it, true) }, rowType, setOf()) {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,

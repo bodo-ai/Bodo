@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -134,8 +135,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
           assert expList.size() == 1
               : "Internal error, expList not expected size in FilterReduceExpressionsRule";
           ;
-          newConditionExp =
-              expList.get(0).accept(new RexNormalizer(call.builder().getRexBuilder()));
+          newConditionExp = RexNormalizer.normalize(call.builder().getRexBuilder(), expList.get(0));
           // Check if we have changed anything. The reduction may ping pong with normalization
           // that we do when creating filters.
           reduced = !newConditionExp.equals(filter.getCondition());
@@ -282,7 +282,9 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
           // Bodo Change:
           // Ensure every node is normalized to avoid ping-ponging
           List<RexNode> finalExpList =
-              new RexNormalizer(call.builder().getRexBuilder()).visitList(expList);
+              expList.stream()
+                  .map(x -> RexNormalizer.normalize(call.builder().getRexBuilder(), x, true))
+                  .collect(Collectors.toList());
           boolean changed = !project.getProjects().equals(finalExpList);
           if (changed) {
             call.transformTo(

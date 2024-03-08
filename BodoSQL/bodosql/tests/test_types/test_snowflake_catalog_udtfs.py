@@ -324,7 +324,7 @@ def test_unsupported_python_udtf(azure_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=azure_snowflake_catalog)
     with pytest.raises(
         BodoError,
-        match='Function "TEST_DB"\\."PUBLIC"\\."PYTHON_TABLE_FUNCTION" contains an unsupported feature. Error message: "Unsupported source language. Bodo only support SQL UDTFs, but found PYTHON"',
+        match='Function "TEST_DB"\\."PUBLIC"\\."PYTHON_TABLE_FUNCTION" contains an unsupported feature. Error message: "Unsupported source language. Bodo supports SQL UDTFs\\. Source language found was PYTHON\\."',
     ):
         impl(bc, query)
 
