@@ -18,8 +18,8 @@ import org.apache.calcite.sql.validate.SqlMonotonicity
  * that will not be inlined and instead must be processed as a Bodo Kernel.
  */
 class SnowflakeNativeUDF private constructor(
-    val body: String,
-    val language: String,
+    val functionBody: String,
+    val functionLanguage: String,
     argTypes: List<RelDataType>,
     returnType: RelDataType,
 ) : SqlNullPolicyFunction(

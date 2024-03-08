@@ -94,6 +94,7 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.operatorTables.SnowflakeNativeUDF;
 import com.bodosql.calcite.application.utils.BodoCtx;
 import com.bodosql.calcite.application.utils.IsScalar;
 import com.bodosql.calcite.ir.BodoEngineTable;
@@ -1299,6 +1300,76 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   }
 
   /**
+   * Code generation for Snowflake UDFs that are not being inlined. These generate 3 stages: -
+   * Create the UDF for the source language - Execute the UDF for each batch of data - Delete the
+   * UDF This is generic enough to handle all UDFs that are not inlined by providing a different
+   * function for each supported language with the same structure.
+   *
+   * <p>The design can be found here:
+   * https://bodo.atlassian.net/wiki/spaces/B/pages/1615200311/Javascript+UDFs#Code-Generation
+   *
+   * @param udf Operator that holds the code generation information for the UDF.
+   * @param operands The operands to pass to the kernel when executing the UDF.
+   * @param returnType The return type of the UDF.
+   * @return The variable holding the result of executing the UDF.
+   */
+  private Variable visitSnowflakeUDF(
+      SnowflakeNativeUDF udf, List<Expr> operands, RelDataType returnType) {
+    // Verify the language is supported
+    final String createFunctionName;
+    final String executeFunctionName;
+    final String deleteFunctionName;
+    switch (udf.getFunctionLanguage()) {
+      case "JAVASCRIPT":
+        createFunctionName = "create_javascript_udf";
+        executeFunctionName = "execute_javascript_udf";
+        deleteFunctionName = "delete_javascript_udf";
+        break;
+      default:
+        // This should never be reached but is added for safety.
+        throw new BodoSQLCodegenException(
+            String.format(
+                Locale.ROOT,
+                "Unsupported language for Snowflake UDF: %s",
+                udf.getFunctionLanguage()));
+    }
+    // Lower the globals needed to create the UDF
+    String udfBody = udf.getFunctionBody();
+    Variable textVar = visitor.lowerAsGlobal(new Expr.TripleQuotedString(udfBody));
+    Expr returnTypeExpr =
+        sqlTypeToBodoArrayType(returnType, false, visitor.genDefaultTZ().getZoneExpr());
+    Variable returnTypeVar = visitor.lowerAsGlobal(returnTypeExpr);
+    // Construct the create function and place it before the pipeline.
+    Expr createCall =
+        ExprKt.bodoSQLKernel(createFunctionName, List.of(textVar, returnTypeVar), List.of());
+    Variable functionVar = visitor.genGenericTempVar();
+    Assign createAssign = new Assign(functionVar, createCall);
+    // TODO: Determine a cleaner API.
+    if (builder.isStreamingFrame()) {
+      builder.getCurrentStreamingPipeline().addInitialization(createAssign);
+    } else {
+      builder.add(createAssign);
+    }
+    // Construct the execute function and place it in the pipeline body.
+    Expr argsTuple = new Expr.Tuple(operands);
+    Expr executeCall =
+        ExprKt.bodoSQLKernel(executeFunctionName, List.of(functionVar, argsTuple), List.of());
+    Variable executeVar = visitor.genGenericTempVar();
+    Assign executeAssign = new Assign(executeVar, executeCall);
+    builder.add(executeAssign);
+    // Add the delete function to the end of the pipeline.
+    Expr deleteCall = ExprKt.bodoSQLKernel(deleteFunctionName, List.of(functionVar), List.of());
+    Op.Stmt deleteStmt = new Op.Stmt(deleteCall);
+    // TODO: Determine a cleaner API.
+    if (builder.isStreamingFrame()) {
+      builder.getCurrentStreamingPipeline().addTermination(deleteStmt);
+    } else {
+      builder.add(deleteStmt);
+    }
+    return executeVar;
+  }
+
+  /**
    * Constructs the Expression to make a call to the variadic function ARRAY_CONSTRUCT.
    *
    * @param codeExprs the Python expressions to calculate the arguments
@@ -1896,6 +1967,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return visitNestedArrayFunc(fnName, operands, argScalars);
           case "GET_IGNORE_CASE":
             return visitGetIgnoreCaseOp(operands, argScalars);
+          case "SNOWFLAKE_NATIVE_UDF":
+            // Snowflake UDFs have their own operator.
+            assert fnOperation.getOperator() instanceof SnowflakeNativeUDF;
+            return visitSnowflakeUDF(
+                (SnowflakeNativeUDF) fnOperation.getOperator(), operands, fnOperation.getType());
           case "PARSE_JSON":
             throw new BodoSQLCodegenException(
                 "Internal Error: PARSE_JSON currently only supported when it can be rewritten as"
