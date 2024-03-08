@@ -3217,7 +3217,10 @@ class DistributedAnalysis:
                 args[2:], array_dists, "extra argument in groupby.apply()", rhs.loc
             )
             return
-        if fdef == ("fft2", "scipy.fftpack._basic"):
+        if fdef == ("fft2", "scipy.fftpack._basic") or fdef == (
+            "fft2",
+            "scipy.fft._basic",
+        ):
             # If input is REP, output is REP
             # If input is 1D_Var, output is 1D_Var
             # If input is 1D, output is 1D_Var
@@ -3235,7 +3238,10 @@ class DistributedAnalysis:
                     rhs.args[0], array_dists, "Output of FFT is replicated.", rhs.loc
                 )
             return
-        if fdef == ("fftshift", "numpy.fft"):
+        if fdef == ("fftshift", "numpy.fft") or fdef == (
+            "fftshift",
+            "scipy.fft._helper",
+        ):
             # If input is REP, output is REP
             # If input is 1D_Var, output is 1D
             # If input is 1D, output is 1D

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy import arccosh, cos, dot, pi, sqrt
 from numpy.linalg import norm
-from scipy.fftpack import fft2, fftshift
+from scipy.fft import fft2, fftshift
 
 import bodo
 from bodo.tests.utils import check_func, pytest_mark_one_rank
