@@ -220,7 +220,7 @@ class Module(private val frame: Frame) {
         /**
          * Returns if we are in a streaming frame.
          */
-        private fun isStreamingFrame(): Boolean {
+        fun isStreamingFrame(): Boolean {
             return activeFrame is StreamingPipelineFrame
         }
     }
