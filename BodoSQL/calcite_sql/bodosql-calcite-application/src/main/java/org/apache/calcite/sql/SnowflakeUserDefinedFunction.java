@@ -15,6 +15,10 @@ import static com.bodosql.calcite.catalog.SnowflakeCatalog.snowflakeTypeNameToTy
  * need to abide by Snowflake calling conventions and rules.
  */
 public class SnowflakeUserDefinedFunction extends SnowflakeUserDefinedBaseFunction implements ScalarFunction {
+    // Temporary field to enable testing JavaScript UDFs.
+    public static boolean enableJavaScript = false;
+
+
     // -- Fields --
     private final ColumnDataTypeInfo returnTypeInfo;
 
@@ -53,5 +57,18 @@ public class SnowflakeUserDefinedFunction extends SnowflakeUserDefinedBaseFuncti
     // -- static creators
     public static SnowflakeUserDefinedFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
         return new SnowflakeUserDefinedFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
+    }
+
+    /**
+     * Determine if this function implementation can support JavaScript.
+     * We provide a type factory to allow for type checking the parameters
+     * and return type.
+     *
+     * @param typeFactory The type factory to use for type checking.
+     * @return True if the function can support JavaScript, false otherwise.
+     */
+    @Override
+    boolean canSupportJavaScript(RelDataTypeFactory typeFactory) {
+        return enableJavaScript;
     }
 }

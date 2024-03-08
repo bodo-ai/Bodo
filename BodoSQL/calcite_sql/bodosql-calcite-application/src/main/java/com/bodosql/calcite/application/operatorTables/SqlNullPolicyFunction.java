@@ -73,7 +73,7 @@ public class SqlNullPolicyFunction extends SqlFunction {
    * @param monotonicityInference Strategy to infer monotonicity of a call
    * @param nullablePolicy Policy used to simplify IS NULL and IS NOT NULL.
    */
-  private SqlNullPolicyFunction(
+  protected SqlNullPolicyFunction(
       String name,
       SqlKind kind,
       SqlSyntax syntax,

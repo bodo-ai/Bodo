@@ -128,4 +128,17 @@ public class SnowflakeUserDefinedTableFunction extends SnowflakeUserDefinedBaseF
     public static SnowflakeUserDefinedTableFunction create(ImmutableList<String> functionPath, String args, int numOptional, String returns, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
         return new SnowflakeUserDefinedTableFunction(functionPath, args, numOptional, returns, body, isSecure, isExternal, language, isMemoizable, tzInfo, createdOn);
     }
+
+    /**
+     * Determine if this function implementation can support JavaScript.
+     * We provide a type factory to allow for type checking the parameters
+     * and return type.
+     *
+     * @param typeFactory The type factory to use for type checking.
+     * @return True if the function can support JavaScript, false otherwise.
+     */
+    @Override
+    boolean canSupportJavaScript(RelDataTypeFactory typeFactory) {
+        return false;
+    }
 }

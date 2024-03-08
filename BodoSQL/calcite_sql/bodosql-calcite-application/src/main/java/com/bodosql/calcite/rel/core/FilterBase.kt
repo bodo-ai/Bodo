@@ -18,7 +18,7 @@ open class FilterBase(
     traits: RelTraitSet,
     child: RelNode,
     condition: RexNode,
-) : Filter(cluster, traits, child, condition.accept(RexNormalizer(cluster.rexBuilder))) {
+) : Filter(cluster, traits, child, RexNormalizer.normalize(cluster.rexBuilder, condition)) {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,

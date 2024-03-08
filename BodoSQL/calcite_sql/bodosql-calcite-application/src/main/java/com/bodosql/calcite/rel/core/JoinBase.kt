@@ -25,7 +25,7 @@ abstract class JoinBase(
     right: RelNode,
     condition: RexNode,
     joinType: JoinRelType,
-) : Join(cluster, traitSet, hints, left, right, condition.accept(RexNormalizer(cluster.rexBuilder)), ImmutableSet.of(), joinType) {
+) : Join(cluster, traitSet, hints, left, right, RexNormalizer.normalize(cluster.rexBuilder, condition), ImmutableSet.of(), joinType) {
     override fun computeSelfCost(
         planner: RelOptPlanner,
         mq: RelMetadataQuery,
