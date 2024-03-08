@@ -545,6 +545,33 @@ def test_nvl2(args, memory_leak_check):
         ),
         pytest.param(
             (
+                pd.Series(
+                    [
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 60),
+                        None,
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 10),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 02:04:05"), 0),
+                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
+                        None,
+                        None,
+                    ]
+                ),
+            ),
+            False,
+            False,
+            pd.Series([True, False, False, False, True]),
+            id="timestamptz-vector-vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
                 pd.Series([[], [1], [1, 2], [1, 2, 3], [None, 2, 3], None] * 6),
                 pd.Series([[], [1], [1, 2], [1, 2, 3], [None, 2, 3], None]).repeat(6),
             ),
