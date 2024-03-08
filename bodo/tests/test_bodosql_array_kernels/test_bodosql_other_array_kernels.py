@@ -285,6 +285,28 @@ def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
             id="all_scalar_all_null",
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            (
+                pd.Series(
+                    [True, False, None, True, False, None, True, False],
+                    dtype=pd.BooleanDtype(),
+                ),
+                np.array(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-01-01", 60),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
+                        None,
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-01-01", 300),
+                    ]
+                ),
+                bodo.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
+            ),
+            id="timestamp_tz",
+        ),
     ],
 )
 def test_cond(args, memory_leak_check):
@@ -402,6 +424,25 @@ def test_cond(args, memory_leak_check):
             (None, None, None),
             id="all_null",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([1, None, 3, None, 5, None, 7, None], dtype=pd.Int8Dtype()),
+                np.array(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                        bodo.TimestampTZ.fromLocal("2024-01-01", 60),
+                        None,
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", -150),
+                        bodo.TimestampTZ.fromLocal("2024-01-01", 300),
+                        None,
+                        None,
+                    ]
+                ),
+                bodo.TimestampTZ.fromLocal("2024-01-01 06:45:00", 0),
+            ),
+            id="timestamp_tz",
         ),
     ],
 )

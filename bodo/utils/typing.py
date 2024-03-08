@@ -1578,7 +1578,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return bodo.hiframes.time_ext.TimeArrayType(dtype.precision)
 
     if dtype == bodo.timestamptz_type:
-        return bodo.hiframes.timestamptz_ext.timestamp_tz_array_type
+        return bodo.hiframes.timestamptz_ext.timestamptz_array_type
 
     if isinstance(dtype, bodo.Decimal128Type):
         return bodo.DecimalArrayType(dtype.precision, dtype.scale)

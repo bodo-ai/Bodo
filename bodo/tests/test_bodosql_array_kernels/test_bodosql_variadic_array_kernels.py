@@ -143,6 +143,39 @@ def coalesce_expected_output(args):
         pytest.param(
             (pd.array([1, 2, 3, 4, 5]),), id="int_array_1", marks=pytest.mark.slow
         ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            bodo.TimestampTZ.fromLocal("2024-03-06 12:00:00", 0),
+                            None,
+                            bodo.TimestampTZ.fromLocal("2024-03-06 13:00:00", 60),
+                            None,
+                            bodo.TimestampTZ.fromLocal("2024-03-06 14:00:00", -300),
+                            None,
+                            bodo.TimestampTZ.fromLocal("2024-03-06 15:00:00", -45),
+                            None,
+                        ]
+                    )
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            bodo.TimestampTZ.fromLocal("2024-07-04", 30),
+                            bodo.TimestampTZ.fromLocal("2024-07-04", 0),
+                            None,
+                            None,
+                            bodo.TimestampTZ.fromLocal("2024-07-04", -30),
+                            bodo.TimestampTZ.fromLocal("2024-07-04", 90),
+                            None,
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="timestamp_tz_vector_2",
+        ),
     ],
 )
 def test_coalesce(args, memory_leak_check):
@@ -556,6 +589,24 @@ def test_coalesce_str_array_optimized(memory_leak_check):
             ),
             id="all_vector_multiple_types",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(["A", None, "C", None, "E"]),
+                pd.Series(["E", None, None, "C", "E"]),
+                np.array(
+                    [
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
+                        bodo.TimestampTZ.fromLocal("2024-03-07 10:14:00", -360),
+                        bodo.TimestampTZ.fromLocal("2024-03-07 10:15:00", -240),
+                        None,
+                    ]
+                ),
+                "A",
+                bodo.TimestampTZ.fromLocal("2024-03-07 10:13:42", -300),
+            ),
+            id="all_vector_timestamp_tz",
         ),
     ],
 )
@@ -1168,6 +1219,49 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
                 pd.Timestamp("2023-08-17", tz="Poland"),
             ),
             id="tz-aware-timestamp-scalars",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 30),
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 60),
+                    ]
+                ),
+                pd.Series(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 300),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 480),
+                    ]
+                ),
+            ),
+            (
+                pd.Series(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 0),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 300),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 480),
+                    ]
+                ),
+                pd.Series(
+                    [
+                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", -60),
+                        None,
+                        bodo.TimestampTZ.fromLocal("2024-03-14", 60),
+                    ]
+                ),
+            ),
+            id="timestamp_tz",
         ),
     ],
 )
