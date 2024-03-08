@@ -691,6 +691,7 @@ def overload_to_timestamptz_util(
         scalar_text += (
             "  utc_timestamp = local_timestamp - pd.Timedelta(minutes=offset)\n"
         )
+
         scalar_text += "  res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
     elif is_valid_tz_aware_datetime_arg(conversion_val):
         scalar_text = "offset = int(arg0.utcoffset().total_seconds() / 60)\n"

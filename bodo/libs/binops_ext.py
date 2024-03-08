@@ -41,6 +41,7 @@ from bodo.hiframes.pd_offsets_ext import (
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.series_impl import SeriesType
 from bodo.hiframes.time_ext import TimeType
+from bodo.hiframes.timestamptz_ext import TimestampTZArrayType, TimestampTZType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type
@@ -569,6 +570,10 @@ def create_overload_cmp_operator(op):
         # datetime.date and datetime64
         if cmp_date_or_datetime64(lhs, rhs):
             return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
+
+        # TimestampTZ
+        if isinstance(lhs, TimestampTZType) or isinstance(rhs, TimestampTZType):
+            return bodo.hiframes.timestamptz_ext.create_cmp_op_overload(op)(lhs, rhs)
 
         # time to time comparison
         if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
