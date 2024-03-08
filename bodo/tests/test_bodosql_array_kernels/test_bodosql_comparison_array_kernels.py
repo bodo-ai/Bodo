@@ -166,3 +166,110 @@ def test_comparison_funcs_optional_types(comparison_func_name, memory_leak_check
         for flag1 in [True, False]:
             answer = scalar_answer if flag0 and flag1 else None
             check_func(test_impl, (arg0, arg1, flag0, flag1), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "op, expected, test_lhs_scalar, test_rhs_scalar",
+    [
+        pytest.param(
+            "equal",
+            np.array([True, False, None, None, None, False, False]),
+            False,
+            False,
+            id="equal-vector-vector",
+        ),
+        pytest.param(
+            "equal",
+            np.array([True, False, False, None, None, True, False]),
+            True,
+            False,
+            id="equal-scalar-vector",
+        ),
+        pytest.param(
+            "equal",
+            np.array([True, True, None, False, None, False, False]),
+            False,
+            True,
+            id="equal-vector-scalar",
+        ),
+        pytest.param("equal", True, True, True, id="equal-scalar-scalar"),
+        pytest.param(
+            "not_equal",
+            np.array([False, True, None, None, None, True, True]),
+            False,
+            False,
+            id="not_equal",
+        ),
+        pytest.param(
+            "less_than",
+            np.array([False, False, None, None, None, False, True]),
+            False,
+            False,
+            id="less_than",
+        ),
+        pytest.param(
+            "less_than_or_equal",
+            np.array([True, False, None, None, None, False, True]),
+            False,
+            False,
+            id="less_than_or_equal",
+        ),
+        pytest.param(
+            "greater_than",
+            np.array([False, True, None, None, None, True, False]),
+            False,
+            False,
+            id="greater_than",
+        ),
+        pytest.param(
+            "greater_than_or_equal",
+            np.array([True, True, None, None, None, True, False]),
+            False,
+            False,
+            id="greater_than_or_equal",
+        ),
+    ],
+)
+def test_timestamptz_comparison(
+    op, expected, test_lhs_scalar, test_rhs_scalar, memory_leak_check
+):
+    """Verify that TimestampTZ comparisons only compare the UTC timestamp"""
+    lhs = "A"
+    if test_lhs_scalar:
+        lhs = "A[0]"
+    rhs = "B"
+    if test_rhs_scalar:
+        rhs = "B[0]"
+    func_text = f"def impl(A, B):\n  return bodo.libs.bodosql_array_kernels.{op}({lhs}, {rhs})\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+
+    input_a = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.123456"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.123456"), 60),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2020-01-01 00:00:00"), 0),
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.2"), 100),
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.2"), 200),
+        ]
+    )
+    input_b = np.array(
+        [
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.123456"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 02:04:05.123456"), 0),
+            bodo.TimestampTZ(pd.Timestamp("2020-01-01 00:00:00"), 0),
+            None,
+            None,
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 03:04:05.123456"), 200),
+            bodo.TimestampTZ(pd.Timestamp("2020-01-02 11:00:00"), -100),
+        ]
+    )
+
+    check_func(
+        impl,
+        (input_a, input_b),
+        py_output=expected,
+    )

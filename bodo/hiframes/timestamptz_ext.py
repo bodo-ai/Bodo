@@ -36,6 +36,7 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_str,
+    is_overload_none,
 )
 
 
@@ -291,6 +292,36 @@ def overload_timestamptz_local_timestamp(A):
     return lambda A: A.utc_timestamp + pd.Timedelta(
         minutes=A.offset_minutes
     )  # pragma: no cover
+
+
+def create_cmp_op_overload(op):
+    """create overload function for comparison operators with TimestampTZ type."""
+    # TODO(aneesh) support comparing TimestampTZ with other timestamp types,
+    # dates, and times.
+
+    def overload_time_cmp(lhs, rhs):
+        if isinstance(lhs, TimestampTZType) and isinstance(rhs, TimestampTZType):
+
+            def impl(lhs, rhs):  # pragma: no cover
+                x = lhs.utc_timestamp.value
+                y = rhs.utc_timestamp.value
+                return op(0 if x == y else 1 if x > y else -1, 0)
+
+            return impl
+
+        if isinstance(lhs, TimestampTZType) and is_overload_none(rhs):
+            # When we compare TimestampTZ and None in order to sort or take extreme values
+            # in a series/array of TimestampTZ, TimestampTZ() > None, TimestampTZ() < None should all return True
+            return (
+                lambda lhs, rhs: False if op is operator.eq else True
+            )  # pragma: no cover
+
+        if is_overload_none(lhs) and isinstance(rhs, TimestampTZType):
+            # When we compare None and TimestampTZ in order to sort or take extreme values
+            # in a series/array of TimestampTZ, None > TimestampTZ(), None < TimestampTZ() should all return False
+            return lambda lhs, rhs: False  # pragma: no cover
+
+    return overload_time_cmp
 
 
 class TimestampTZArrayType(types.IterableType, types.ArrayCompatible):
