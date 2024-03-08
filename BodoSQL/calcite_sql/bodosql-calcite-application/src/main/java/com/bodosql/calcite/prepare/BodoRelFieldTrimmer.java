@@ -1,5 +1,6 @@
 package com.bodosql.calcite.prepare;
 
+import com.bodosql.calcite.adapter.iceberg.IcebergRel;
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
 import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter;
 import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
@@ -72,12 +73,18 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       TrimResult childResult, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
     int finalFieldCount = fieldsUsed.cardinality();
     // Only completely prune excess columns in the Physical plan step to avoid
-    // interfering with other optimizations like Filter Pushdown.
+    // interfering with other optimizations like Filter push down.
     if (pruneEverything
         && extraFields.size() == 0
         && finalFieldCount < childResult.left.getRowType().getFieldCount()) {
+      // Iceberg doesn't support the dummy column project yet, so always keep at least 1 column.
+      if (finalFieldCount == 0 && childResult.left instanceof IcebergRel) {
+        fieldsUsed = ImmutableBitSet.of(0);
+        finalFieldCount = 1;
+      }
+
       // If we move to 0 columns make sure we maintain a dummy column
-      if (fieldsUsed.cardinality() == 0) {
+      if (finalFieldCount == 0) {
         return dummyProject(childResult.right.getSourceCount(), childResult.left);
       }
       // Push the input to the builder to generate fields.

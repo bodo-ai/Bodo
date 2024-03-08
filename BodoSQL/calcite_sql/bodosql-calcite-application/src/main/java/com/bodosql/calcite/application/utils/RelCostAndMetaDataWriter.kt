@@ -45,9 +45,8 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
     // versions.
     private val normalizedIdMap: Map<Int, Int> = normalizeDuplicates(countRelIds(rel))
 
-    // Used to normalize RexNode values.
-    private val normalizer: com.bodosql.calcite.application.utils.RexNormalizer =
-        com.bodosql.calcite.application.utils.RexNormalizer(rel.cluster.rexBuilder)
+    // Use for normalizing RexNode values.
+    private val rexBuilder = rel.cluster.rexBuilder
 
     private fun newSection(
         s: StringBuilder,
@@ -166,7 +165,7 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
             }
         }
 
-    private fun normalizeRexNode(value: RexNode): RexNode = value.accept(normalizer)
+    private fun normalizeRexNode(value: RexNode): RexNode = RexNormalizer.normalize(rexBuilder, value)
 
     companion object {
         /**

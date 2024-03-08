@@ -3,6 +3,7 @@ package com.bodosql.calcite.sql2rel;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule;
+import com.bodosql.calcite.application.operatorTables.SnowflakeNativeUDF;
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
 import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
@@ -43,6 +44,7 @@ import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
@@ -276,41 +278,55 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             SnowflakeUserDefinedFunction snowflakeScalarUdf =
                 (SnowflakeUserDefinedFunction) function;
             SqlCall extendedCall =
-                validateSnowflakeUDFOperands(call, snowflakeScalarUdf, validator, scope);
-            // Construct parameter type information.
-            List<FunctionParameter> parameters = snowflakeScalarUdf.getParameters();
-            List<SqlNode> operands = extendedCall.getOperandList();
-            List<String> names = new ArrayList<>();
+                validateSnowflakeUDFOperands(
+                    call, snowflakeScalarUdf, validator, scope, typeFactory);
+            // Construct RexNodes for the arguments.
             List<RexNode> arguments = new ArrayList<>();
-            for (int i = 0; i < parameters.size(); i++) {
-              FunctionParameter parameter = parameters.get(i);
-              // Add the name
-              String name = parameter.getName();
-              names.add(name);
-              // Add the RexNode
-              SqlNode operand = operands.get(i);
+            for (int i = 0; i < extendedCall.operandCount(); i++) {
+              SqlNode operand = extendedCall.operand(i);
               RexNode convertedOperand = convertExpression(operand);
               arguments.add(convertedOperand);
             }
-            // Get the expected return type for casting the output
+            // Get the expected return type
             RelDataType returnType = snowflakeScalarUdf.getReturnType(typeFactory);
-            // Generate correlated variables in case we have a query that references
-            // the input row.
-            CorrMapVisitor visitor = new CorrMapVisitor();
-            call.accept(visitor);
-            BodoSQLReduceExpressionsRule.RexReplacer replacer =
-                new BodoSQLReduceExpressionsRule.RexReplacer(
-                    rexBuilder, visitor.getInputRefs(), visitor.getFieldRefs());
-            List<RexNode> correlatedArguments =
-                arguments.stream().map(x -> x.accept(replacer)).collect(Collectors.toList());
-            return functionExpander.expandFunction(
-                snowflakeScalarUdf.getBody(),
-                snowflakeScalarUdf.getFunctionPath(),
-                names,
-                arguments,
-                correlatedArguments,
-                returnType,
-                cluster);
+            // Fetch the parameters
+            List<FunctionParameter> parameters = snowflakeScalarUdf.getParameters();
+            if (snowflakeScalarUdf.canInlineFunction()) {
+              // Inline the function body.
+              // Construct the name information.
+              List<String> names = new ArrayList<>();
+              for (int i = 0; i < parameters.size(); i++) {
+                FunctionParameter parameter = parameters.get(i);
+                // Add the name
+                String name = parameter.getName();
+                names.add(name);
+              }
+              // Generate correlated variables in case we have a query that references
+              // the input row.
+              CorrMapVisitor visitor = new CorrMapVisitor();
+              call.accept(visitor);
+              BodoSQLReduceExpressionsRule.RexReplacer replacer =
+                  new BodoSQLReduceExpressionsRule.RexReplacer(
+                      rexBuilder, visitor.getInputRefs(), visitor.getFieldRefs());
+              List<RexNode> correlatedArguments =
+                  arguments.stream().map(x -> x.accept(replacer)).collect(Collectors.toList());
+              return functionExpander.expandFunction(
+                  snowflakeScalarUdf.getBody(),
+                  snowflakeScalarUdf.getFunctionPath(),
+                  names,
+                  arguments,
+                  correlatedArguments,
+                  returnType,
+                  cluster);
+            } else {
+              // Generate a RexCall for our Native UDF operator.
+              String body = snowflakeScalarUdf.getBody();
+              String language = snowflakeScalarUdf.getLanguage();
+              List<RelDataType> argTypes =
+                  parameters.stream().map(x -> x.getType(typeFactory)).collect(Collectors.toList());
+              SqlFunction op = SnowflakeNativeUDF.create(body, language, argTypes, returnType);
+              return rexBuilder.makeCall(op, arguments);
+            }
           }
         }
       }
@@ -462,7 +478,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
         SnowflakeUserDefinedTableFunction snowflakeTableUdf =
             (SnowflakeUserDefinedTableFunction) function;
         SqlCall extendedCall =
-            validateSnowflakeUDFOperands(call, snowflakeTableUdf, validator, bb.scope);
+            validateSnowflakeUDFOperands(call, snowflakeTableUdf, validator, bb.scope, typeFactory);
         List<String> names =
             snowflakeTableUdf.getParameters().stream()
                 .map(x -> x.getName())
@@ -494,14 +510,16 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
    * @param snowflakeUdf The Snowflake UDF operator.
    * @param validator The validator used to validate the call.
    * @param scope The scope for evaluating the call.
+   * @param typeFactory The type factory used to check we support the UDFs with the available types.
    * @return The expanded SQLOperands that insert any values like defaults.
    */
   private static SqlCall validateSnowflakeUDFOperands(
       SqlCall call,
       SnowflakeUserDefinedBaseFunction snowflakeUdf,
       SqlValidator validator,
-      SqlValidatorScope scope) {
-    Resources.ExInst<SqlValidatorException> exInst = snowflakeUdf.errorOrWarn();
+      SqlValidatorScope scope,
+      RelDataTypeFactory typeFactory) {
+    Resources.ExInst<SqlValidatorException> exInst = snowflakeUdf.errorOrWarn(typeFactory);
     if (exInst != null) {
       throw validator.newValidationError(call, exInst);
     }

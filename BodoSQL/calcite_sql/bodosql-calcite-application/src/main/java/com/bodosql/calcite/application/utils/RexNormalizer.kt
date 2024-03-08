@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.utils
 
+import com.bodosql.calcite.adapter.pandas.RexCostEstimator.visitList
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
@@ -11,7 +12,7 @@ import org.apache.calcite.sql.`fun`.SqlCastFunction
 /**
  * Force each call to be normalized in a RexNode.
  */
-class RexNormalizer(private val rexBuilder: RexBuilder) : RexShuttle() {
+class RexNormalizer private constructor(private val rexBuilder: RexBuilder) : RexShuttle() {
     override fun visitOver(over: RexOver): RexNode {
         return over
     }
@@ -38,6 +39,29 @@ class RexNormalizer(private val rexBuilder: RexBuilder) : RexShuttle() {
             }
         } else {
             call
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        fun normalize(
+            rexBuilder: RexBuilder,
+            node: RexNode,
+        ): RexNode = normalize(rexBuilder, node, false)
+
+        @JvmStatic
+        fun normalize(
+            rexBuilder: RexBuilder,
+            node: RexNode,
+            matchType: Boolean,
+        ): RexNode {
+            val normalizer = RexNormalizer(rexBuilder)
+            val result = node.accept(normalizer)
+            return if (matchType && result.getType() != node.getType()) {
+                rexBuilder.makeCast(node.getType(), result, true, false)
+            } else {
+                result
+            }
         }
     }
 }

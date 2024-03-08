@@ -4,6 +4,7 @@ import com.bodosql.calcite.schema.SnowflakeUDFFunctionParameter;
 import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.google.common.collect.ImmutableList;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
@@ -33,8 +34,11 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
 
     private final List<FunctionParameter> parameters;
 
-    // The function body
+    // The function body.
     private @Nullable String body;
+
+    // What language is the UDF written in?
+    private final String language;
 
     // Hold information to determine functions we cannot support or may produce
     // performance concerns.
@@ -64,7 +68,9 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
         this.parameters = parseParameters(args, numOptional, tzInfo);
         // Assume nullable for now
         this.body = body;
-        this.errorInfo = new SnowflakeUserDefinedBaseFunction.SnowflakeUserDefinedFunctionErrorInfo(isSecure, isExternal, language, isMemoizable);
+        // Normalize to upper case to simplify checks
+        this.language = language.toUpperCase(Locale.ROOT);;
+        this.errorInfo = new SnowflakeUserDefinedBaseFunction.SnowflakeUserDefinedFunctionErrorInfo(isSecure, isExternal, isMemoizable);
         this.createdOn = createdOn;
     }
 
@@ -74,6 +80,38 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
     }
     public String getBody() {
         return body;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    /**
+     * Return if this function type can be inlined.
+     * @return True if the function can be inlined, false otherwise.
+     */
+    public boolean canInlineFunction() {
+        return language.equals("SQL");
+    }
+
+    /**
+     * Determine if this function implementation can support JavaScript.
+     * We provide a type factory to allow for type checking the parameters
+     * and return type.
+     * @param typeFactory The type factory to use for type checking.
+     * @return True if the function can support JavaScript, false otherwise.
+     */
+    abstract boolean canSupportJavaScript(RelDataTypeFactory typeFactory);
+
+    /**
+     * Determine if we can support the language of this function.
+     * We provide a type factory to allow for type checking the parameters
+     * and return type.
+     * @param typeFactory The type factory to use for type checking.
+     * @return True if BodoSQL supports this UDF language, false otherwise.
+     */
+    public boolean canSupportLanguage(RelDataTypeFactory typeFactory) {
+        return this.language.equals("SQL") || (this.language.equals("JAVASCRIPT") && canSupportJavaScript(typeFactory));
     }
 
     public SnowflakeUserDefinedFunctionErrorInfo getErrorInfo() {
@@ -119,11 +157,13 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
      * Returns an error or creates warning if the Snowflake UDF contains features that we
      * are unable to support. A warning should only be raised if the function
      * doesn't error.
+     * @param typeFactory The type factory to use for type checking in case that impacts if
+     *                    we can support the function.
      * @return Resources.ExInst<SqlValidatorException>: This is converted to a proper error
      * by the validator with node context.
      */
-    public Resources.ExInst<SqlValidatorException> errorOrWarn() {
-        Resources.ExInst<SqlValidatorException> retVal = getErrorInfo().error();
+    public Resources.ExInst<SqlValidatorException> errorOrWarn(RelDataTypeFactory typeFactory) {
+        Resources.ExInst<SqlValidatorException> retVal = getErrorInfo().error(typeFactory);
         if (retVal != null) {
             return retVal;
         }
@@ -173,14 +213,11 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
         // -- Fields --
         private final boolean isSecure;
         private final boolean isExternal;
-        private final String language;
         private final boolean isMemoizable;
 
-        protected SnowflakeUserDefinedFunctionErrorInfo(boolean isSecure, boolean isExternal, String language, boolean isMemoizable) {
+        protected SnowflakeUserDefinedFunctionErrorInfo(boolean isSecure, boolean isExternal, boolean isMemoizable) {
             this.isSecure = isSecure;
             this.isExternal = isExternal;
-            // Normalize to upper case to simplify checks
-            this.language = language.toUpperCase(Locale.ROOT);
             this.isMemoizable = isMemoizable;
         }
 
@@ -189,12 +226,20 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
          * @return Resources.ExInst<SqlValidatorException>: This is converted to a proper error
          * by the validator with node context.
          */
-        public Resources.ExInst<SqlValidatorException> error() {
+        public Resources.ExInst<SqlValidatorException> error(RelDataTypeFactory typeFactory) {
             // Note this order is not strictly required, but in general we aim to go from least
             // to most recoverable.
             final String errorMsg;
-            if (!this.language.equals("SQL")) {
-                errorMsg = String.format(Locale.ROOT, "Unsupported source language. Bodo only support SQL %ss, but found %s", functionType, this.language);
+            if (!SnowflakeUserDefinedBaseFunction.this.canSupportLanguage(typeFactory)) {
+                // Add a message about JavaScript UDFs if we are a UDF. UDTFs don't support
+                // JavaScript, so we don't want to confuse the user.
+                final String javascriptMessage;
+                if (functionType.equals("UDF")) {
+                    javascriptMessage = " and has limited support for JavaScript UDFs";
+                } else {
+                    javascriptMessage = "";
+                }
+                errorMsg = String.format(Locale.ROOT, "Unsupported source language. Bodo supports SQL %ss%s. Source language found was %s.", functionType, javascriptMessage, SnowflakeUserDefinedBaseFunction.this.getLanguage());
             } else if (this.isExternal) {
                 errorMsg = String.format(Locale.ROOT, "Bodo does not support external %ss", functionType);
             } else if (this.isSecure) {
