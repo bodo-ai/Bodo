@@ -569,3 +569,14 @@ def test_case_proper_character_escape_regex(memory_leak_check):
         expected_output=expected_out,
         check_names=False,
     )
+
+
+def test_case_in(memory_leak_check):
+    """
+    Test that IN works properly inside of a case statement.
+    """
+    query = "select case when A IN (2, 3, 4) THEN 1 ELSE 0 END as OUTPUT from TABLE1"
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    ctx = {"TABLE1": df}
+    expected_output = pd.DataFrame({"OUTPUT": [0, 1, 1, 1, 0]})
+    check_query(query, ctx, None, expected_output=expected_output, check_dtype=False)

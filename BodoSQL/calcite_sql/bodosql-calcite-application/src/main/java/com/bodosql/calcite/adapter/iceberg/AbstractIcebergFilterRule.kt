@@ -13,7 +13,6 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.util.Sarg
 import org.immutables.value.Value
 
 /**
@@ -155,21 +154,12 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
 
                         override fun visitInputRef(inputRef: RexInputRef): Boolean = true
 
-                        // Sarg with multiple ranges would generate OR clauses, which we currently
-                        // don't support in Iceberg
-                        // Note: This is not full-proof. It seems like in some tests, additional
-                        // clauses are added in later stages
+                        // We only support Search Args with a column input, no complex expressions.
+                        // All other Search Arg checks are enforced by the SearchArgExpandProgram.
                         fun visitSearch(call: RexCall): Boolean {
                             val op0 = call.operands[0]
                             val op1 = call.operands[1]
-                            val sarg =
-                                if (op0 is RexLiteral) {
-                                    op0.value as Sarg<*>
-                                } else {
-                                    (op1 as RexLiteral).value as Sarg<*>
-                                }
-
-                            return sarg.rangeSet.asRanges().size > 1
+                            return op0 is RexInputRef && op1 is RexLiteral
                         }
 
                         override fun visitCall(call: RexCall): Boolean {

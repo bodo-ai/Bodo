@@ -2,8 +2,10 @@ package org.apache.calcite.sql.validate.implicit;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
-import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable;
 import com.bodosql.calcite.sql.validate.BodoCoercionUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import kotlin.Pair;
 import kotlin.jvm.functions.Function4;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
@@ -36,15 +38,8 @@ import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.sql.validate.SqlUserDefinedTableFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
-
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_LTZ;
-import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_TZ;
 import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;

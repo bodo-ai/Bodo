@@ -54,7 +54,7 @@ public class CastCodeGen {
     List<Expr> args = new ArrayList<>();
     args.add(arg);
     ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
-    Expr tzExpr = visitor.genDefaultTzExpr();
+    Expr tzExpr = visitor.genDefaultTZ().getZoneExpr();
     boolean appendStreamingArgs = false;
     switch (outputTypeName) {
       case CHAR:
@@ -101,7 +101,7 @@ public class CastCodeGen {
               sqlTypeToBodoArrayType(
                   Objects.requireNonNull(outputType.getComponentType()),
                   false,
-                  visitor.genDefaultTzExpr());
+                  visitor.genDefaultTZ().getZoneExpr());
           Variable outputArrayTypeGlobal = visitor.lowerAsGlobal(outBodoType);
           args.add(outputArrayTypeGlobal);
           return new Expr.Call(fnName, args);
@@ -191,7 +191,7 @@ public class CastCodeGen {
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         fnName = "try_to_timestamp";
         args.add(None.INSTANCE);
-        Expr tzExpr = visitor.genDefaultTzExpr();
+        Expr tzExpr = visitor.genDefaultTZ().getZoneExpr();
         args.add(tzExpr);
         args.add(new Expr.IntegerLiteral(0));
         break;
