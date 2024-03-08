@@ -35,7 +35,7 @@ public class LogicalValuesCodeGen {
     for (RelDataTypeField field : sqlTypes) {
       arrayTypes.add(
           sqlTypeToBodoArrayType(
-              field.getType(), allowDictArrays, pdVisitorClass.genDefaultTzExpr()));
+              field.getType(), allowDictArrays, pdVisitorClass.genDefaultTZ().getZoneExpr()));
     }
     // Generate the lists to insert
     final int numArrays = rowType.getFieldCount();

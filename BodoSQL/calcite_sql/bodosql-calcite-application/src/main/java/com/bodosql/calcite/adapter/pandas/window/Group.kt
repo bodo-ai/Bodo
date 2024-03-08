@@ -298,6 +298,7 @@ internal class Group(
                 // Fake default bounds. We retrieve the bounds per-aggregate
                 // and fill it in, but we'd also like to keep this as non-null.
                 bounds = Bounds(lower = null, upper = null),
+                defaultTZInfo = ctx.getDefaultTZ(),
             )
         val arrs = emitWindowApplyFuncAggregates(windowContext, aggregates, rexTranslator)
         val outputFields =

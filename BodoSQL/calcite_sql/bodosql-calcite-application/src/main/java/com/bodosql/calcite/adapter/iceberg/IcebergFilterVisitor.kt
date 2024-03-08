@@ -4,9 +4,6 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.Range
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl
-import org.apache.calcite.rel.type.RelDataTypeSystem
-import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexCorrelVariable
 import org.apache.calcite.rex.RexDynamicParam
@@ -19,7 +16,6 @@ import org.apache.calcite.rex.RexPatternFieldRef
 import org.apache.calcite.rex.RexRangeRef
 import org.apache.calcite.rex.RexSubQuery
 import org.apache.calcite.rex.RexTableInputRef
-import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.rex.RexVisitor
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.Sarg
@@ -52,7 +48,7 @@ private val GENERIC_CALL_TO_OPSTR =
         StringOperatorTable.STARTSWITH.name to "startswith",
     )
 
-class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val typeSystem: RelDataTypeSystem) : RexVisitor<Filter> {
+class IcebergFilterVisitor(private val topNode: IcebergTableScan) : RexVisitor<Filter> {
     // / Convert a RexInputRef in a filter, representing a boolean column
     // / into a Bodo compiler DNF expression [[(colName, "==", true)]]
     override fun visitInputRef(var1: RexInputRef): Filter {
@@ -68,39 +64,25 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ty
     // / Convert a Search RexCall inside a RelFilter into a
     // / Bodo compiler DNF expression
     fun visitSearchCall(search: RexCall): Filter {
+        // By construction op0 must be the column and op1 the search argument
         val op0 = search.operands[0]
         val op1 = search.operands[1]
+        // Add a defensive check against a complex expression for arg0
         val (colOp, sargOp) =
             when {
                 op0 is RexInputRef && op1 is RexLiteral -> op0 to op1
-                op1 is RexInputRef && op0 is RexLiteral -> op1 to op0
                 else -> throw IllegalStateException()
             }
         val colName = topNode.deriveRowType().fieldNames[colOp.index]
 
         val sarg = sargOp.value as Sarg<*>
-        val iter: Iterator<Range<*>> = sarg.rangeSet.asRanges().iterator()
-        assert(iter.hasNext()) { "Internal error: We expect sargVal to contain at least one range" }
-
-        return if (sarg.isPoints && sarg.pointCount > 1) {
-            val literalList: MutableList<Expr> = mutableListOf()
-            while (iter.hasNext()) {
-                val curRange: Range<*> = iter.next()
-                assert(
-                    (
-                        curRange.hasLowerBound() &&
-                            curRange.hasUpperBound()
-                    ) && curRange.upperEndpoint() === curRange.lowerEndpoint(),
-                ) { "Internal error: Attempted to convert a non-discrete sarg into a filter literal" }
-                val expr = LiteralCodeGen.sargValToPyLiteral(curRange.lowerEndpoint())
-                literalList.add(expr)
-            }
-            listOf(Triple(colName, "in", Expr.List(literalList)))
-        } else {
-            val rexBuilder = RexBuilder(JavaTypeFactoryImpl(typeSystem))
-            val searchNode = RexUtil.expandSearch(rexBuilder, null, search)
-            searchNode.accept(this)
+        val rangeSet = sarg.rangeSet
+        val literalList: MutableList<Expr> = ArrayList()
+        // Note: Only encountering discrete values is enforced by SearchArgExpandProgram
+        for (range in rangeSet.asRanges()) {
+            literalList.add(LiteralCodeGen.sargValToPyLiteral((range as Range<*>).lowerEndpoint()))
         }
+        return listOf(Triple(colName, "in", Expr.List(literalList)))
     }
 
     // / Convert a RexCall in a filter, representing most filters
@@ -131,7 +113,7 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ty
                 }
 
             val colName = topNode.deriveRowType().fieldNames[colOp.index]
-            val constExpr = LiteralCodeGen.generateLiteralCode(constOp, true, null)
+            val constExpr = LiteralCodeGen.generateLiteralCode(constOp, null)
             val opStr =
                 if (var1.kind in BASIC_BIN_CALL_TO_OPSTR) {
                     BASIC_BIN_CALL_TO_OPSTR[var1.kind]!!

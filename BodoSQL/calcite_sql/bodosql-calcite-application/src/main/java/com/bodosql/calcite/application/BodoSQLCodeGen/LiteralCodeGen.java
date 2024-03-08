@@ -62,16 +62,12 @@ public class LiteralCodeGen {
    * Function that return the necessary generated code for Literals.
    *
    * @param node The RexLiteral node.
-   * @param isSingleRow flag for if table references refer to a single row or the whole table. This
-   *     is used for determining if an expr returns a scalar or a column. Only CASE statements set
-   *     this to True currently.
    * @param visitor The PandasCodeGenVisitor class. This is used to lower certain values as globals
    *     (only in the case that isSingleRow is false, we cannot lower globals within case
    *     statements)
    * @return The code generated that matches the Literal.
    */
-  public static Expr generateLiteralCode(
-      RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
+  public static Expr generateLiteralCode(RexLiteral node, PandasCodeGenVisitor visitor) {
     SqlTypeName typeName = node.getType().getSqlTypeName();
     // TODO: Add more types here
     switch (node.getTypeName()) {
@@ -102,19 +98,7 @@ public class LiteralCodeGen {
         // Note, currently, setting the dtype of this array directly can cause
         // issues in typing. So, we just let Bodo infer the type of the lowered array.
         Expr arrayExpr = new Expr.Call("pd.array", List.of(new Expr.List(literalList)));
-
-        if (isSingleRow) {
-          // note that we can't lower this as a global, if we are inside a case statement,
-          // because bodosql_case_placeholder doesn't have the same global state as
-          // the rest of the main generated code, and calling pd.array directly in bodo jit code
-          // causes issues.
-          // We should never reach this case since we disallow it in visitInternalOp,
-          // but we throw an error here just in case.
-          throw new BodoSQLCodegenException(
-              "Internal Error: Attempted to generate a Sarg literal within a case statement.");
-        } else {
-          return visitor.lowerAsGlobal(arrayExpr);
-        }
+        return visitor.lowerAsGlobal(arrayExpr);
 
       default:
         // TODO: investigate if this is the correct default value
@@ -169,7 +153,7 @@ public class LiteralCodeGen {
               // better to optimize pd.Timestamp.
               TimestampString timestampString = node.getValueAs(TimestampString.class);
               Expr argString = new Expr.StringLiteral(timestampString.toString());
-              Expr tzInfo = visitor.genDefaultTzExpr();
+              Expr tzInfo = visitor.genDefaultTZ().getZoneExpr();
               return new Expr.Call(
                   "pd.Timestamp", List.of(argString), List.of(new Pair<>("tz", tzInfo)));
             }

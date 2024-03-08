@@ -474,7 +474,7 @@ internal object WindowAggregateApplyFuncTable {
         ctx.builder.add(
             Op.Assign(
                 outputArray,
-                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr)),
+                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.defaultTZInfo.zoneExpr)),
             ),
         )
 
@@ -600,7 +600,7 @@ internal object WindowAggregateApplyFuncTable {
 
                         else ->
                             Expr.Raw(
-                                BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr),
+                                BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.defaultTZInfo.zoneExpr),
                             )
                     },
                 ),
@@ -674,7 +674,7 @@ internal object WindowAggregateApplyFuncTable {
                             Op.Assign(
                                 outputArray,
                                 Expr.Raw(
-                                    BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.builder.defaultTz.zoneExpr),
+                                    BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type, ctx.defaultTZInfo.zoneExpr),
                                 ),
                             ),
                             Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
