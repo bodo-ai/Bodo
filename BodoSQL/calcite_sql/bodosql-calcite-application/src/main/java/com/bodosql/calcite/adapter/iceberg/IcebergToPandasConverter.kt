@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
@@ -119,10 +118,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         val tableScanNode = flattenedInfo.scan
         val limit = flattenedInfo.limit
         val columnsArg = Expr.List(cols.map { v -> StringLiteral(v) })
-        val typeSystem =
-            ctx.builder().typeSystem
-                ?: throw BodoSQLCodegenException("Iceberg Codegen requires a typeSystem in Module.Builder")
-        val filterVisitor = IcebergFilterVisitor(tableScanNode, typeSystem)
+        val filterVisitor = IcebergFilterVisitor(tableScanNode)
         val filtersArg =
             if (filters.isEmpty()) {
                 Expr.None

@@ -13,6 +13,7 @@ import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.sql.type.BodoTZInfo
 import java.util.Arrays
 
 interface PandasRel : RelNode {
@@ -216,8 +217,8 @@ interface PandasRel : RelNode {
         fun streamingOptions(): StreamingOptions
 
         /**
-         * Returns the expression for the default timezone
+         * Returns the default timezone
          */
-        fun getDefaultTzExpr(): Expr
+        fun getDefaultTZ(): BodoTZInfo
     }
 }

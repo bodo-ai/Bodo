@@ -111,19 +111,15 @@ import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rex.RexNamedParam;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import kotlin.Pair;
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -139,7 +135,6 @@ import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexSlot;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexTableInputRef;
-import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlFunction;
@@ -159,7 +154,6 @@ import org.apache.calcite.sql.fun.SqlLikeOperator;
 import org.apache.calcite.sql.fun.SqlSubstringFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.Sarg;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
 
@@ -232,7 +226,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitLiteral(RexLiteral literal) {
-    return LiteralCodeGen.generateLiteralCode(literal, false, visitor);
+    return LiteralCodeGen.generateLiteralCode(literal, visitor);
   }
 
   @Override
@@ -383,63 +377,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   protected Expr visitInternalOp(RexCall node, boolean isSingleRow) {
     SqlKind sqlOp = node.getOperator().getKind();
     switch (sqlOp) {
-        /* TODO(Ritwika): investigate more possible internal operations as result of optimization rules*/
       case SEARCH:
-
-        // Determine if we can use the optimized is_in codepath. We can take this codepath if
-        // the second argument (the elements to search for) consists of exclusively discrete values,
-        // and
-        // we are not inside a case statement.
-        // We can't use the optimized implementation within a case statement due to the Sarg array
-        // being
-        // lowered as a global, and we can't lower globals within a case statement, as
-        // bodosql_case_placeholder
-        // doesn't have the doesn't have the same global state as
-        // the rest of the main generated code
-        SqlTypeName search_val_type = node.getOperands().get(1).getType().getSqlTypeName();
-        // TODO: add testing/support for sql types other than string/int:
-        // https://bodo.atlassian.net/browse/BE-4046
-        // TODO: allow lowering globals within case statements in BodoSQL:
-        //
-        boolean can_use_isin_codegen =
-            !isSingleRow
-                && (SqlTypeName.STRING_TYPES.contains(search_val_type)
-                    || SqlTypeName.INT_TYPES.contains(search_val_type));
-
-        RexLiteral sargNode = (RexLiteral) node.getOperands().get(1);
-        Sarg sargVal = (Sarg) sargNode.getValue();
-        Iterator<Range> iter = sargVal.rangeSet.asRanges().iterator();
-        // We expect the range to have at least one value,
-        // otherwise, this search should have been optimized out
-        assert iter.hasNext() : "Internal Error: search Sarg literal had no elements";
-        while (iter.hasNext() && can_use_isin_codegen) {
-          Range curRange = iter.next();
-          // Assert that each element of the range is scalar.
-          if (!(curRange.hasLowerBound()
-              && curRange.hasUpperBound()
-              && curRange.upperEndpoint() == curRange.lowerEndpoint())) {
-            can_use_isin_codegen = false;
-          }
-        }
-
-        if (can_use_isin_codegen) {
-          // use the isin array kernel in the case
-          // that the second argument does consists of
-          // exclusively discrete values
-          List<Expr> args = visitList(node.operands);
-          return ExprKt.bodoSQLKernel("is_in", args, List.of());
-        } else {
-          // Fallback to generating individual checks
-          // in the case that the second argument does not consist of
-          // exclusively discrete values
-
-          // TODO(jsternberg): This really should have been done before code generation
-          // even started. This shouldn't be here so we're
-          // hacking around the improper placement by recreating the type factory.
-          RexBuilder rexBuilder = new RexBuilder(new JavaTypeFactoryImpl(typeSystem));
-          RexNode searchNode = RexUtil.expandSearch(rexBuilder, null, node);
-          return searchNode.accept(this);
-        }
+        // Note the valid use of Search args are enforced by the
+        // SearchArgExpandProgram.
+        List<Expr> args = visitList(node.operands);
+        return ExprKt.bodoSQLKernel("is_in", args, List.of());
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Internal Operator");
@@ -577,7 +519,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     } else {
       outputArrayTypeGlobal =
           visitor.lowerAsGlobal(
-              sqlTypeToBodoArrayType(node.getType(), false, visitor.genDefaultTzExpr()));
+              sqlTypeToBodoArrayType(node.getType(), false, visitor.genDefaultTZ().getZoneExpr()));
     }
     Expr casePlaceholder =
         new Expr.Call(
@@ -1048,11 +990,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TRY_TO_TIMESTAMP_LTZ":
       case "TO_TIMESTAMP_LTZ":
         return generateToTimestampFnCode(
-            operands, visitor.genDefaultTzExpr(), fnName, streamingNamedArgs);
+            operands, visitor.genDefaultTZ().getZoneExpr(), fnName, streamingNamedArgs);
       case "TO_TIMESTAMP_TZ":
       case "TRY_TO_TIMESTAMP_TZ":
         return generateToTimestampTzFnCode(
-            operands, visitor.genDefaultTzExpr(), fnName, streamingNamedArgs);
+            operands, visitor.genDefaultTZ().getZoneExpr(), fnName, streamingNamedArgs);
       case "TRY_TO_BOOLEAN":
       case "TO_BOOLEAN":
         return generateToBooleanFnCode(operands, fnName, streamingNamedArgs);
@@ -1271,7 +1213,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Expr systemCall;
     switch (fnName) {
       case "GETDATE":
-        systemCall = generateCurrTimestampCode(visitor.genDefaultTzExpr(), makeConsistent);
+        systemCall =
+            generateCurrTimestampCode(visitor.genDefaultTZ().getZoneExpr(), makeConsistent);
         break;
       case "CURRENT_TIME":
         BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
@@ -1820,7 +1763,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIMESTAMP_TZ_FROM_PARTS":
             return generateDateTimeTypeFromPartsCode(fnName, operands, None.INSTANCE);
           case "TIMESTAMP_LTZ_FROM_PARTS":
-            return generateDateTimeTypeFromPartsCode(fnName, operands, visitor.genDefaultTzExpr());
+            return generateDateTimeTypeFromPartsCode(
+                fnName, operands, visitor.genDefaultTZ().getZoneExpr());
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
@@ -2038,11 +1982,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         @NotNull List<? extends Variable> closurevars) {
       super(visitor, builder, typeSystem, nodeId, input, localRefs);
       this.closurevars = closurevars;
-    }
-
-    @Override
-    public Expr visitLiteral(RexLiteral literal) {
-      return LiteralCodeGen.generateLiteralCode(literal, true, visitor);
     }
 
     @Override
