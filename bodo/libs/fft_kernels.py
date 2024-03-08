@@ -6,11 +6,12 @@ if the user has scipy installed.
 
 import numba
 import numpy as np
+import scipy.fft
+import scipy.fftpack
 from llvmlite import binding as ll
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic, overload
-from scipy.fftpack import fft2, fftshift
 
 import bodo
 from bodo.ext import fft_cpp
@@ -54,7 +55,8 @@ def _fftshift(typing_context, A, shape, parallel):
     return sig, codegen
 
 
-@overload(fftshift)
+@overload(scipy.fftpack.fftshift)
+@overload(scipy.fft.fftshift)
 def overload_fftshift(A, parallel=False):
     """
     Performs the fft shift operation on the input data. This rolls each
@@ -120,7 +122,8 @@ def _fft2(typing_context, A, shape, parallel):
     return sig, codegen
 
 
-@overload(fft2)
+@overload(scipy.fftpack.fft2)
+@overload(scipy.fft.fft2)
 def overload_fft2(A, parallel=False):
     """
     Calculates the 2D Fast Fourier Transform. Currently only

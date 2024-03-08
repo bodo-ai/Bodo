@@ -2383,14 +2383,20 @@ class DistributedPass:
                 ).blocks.popitem()[1]
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
-        if fdef == ("fft2", "scipy.fftpack._basic") and self._is_1D_or_1D_Var_arr(
+        if (
+            fdef == ("fft2", "scipy.fftpack._basic")
+            or fdef == ("fft2", "scipy.fft._basic")
+        ) and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
-        ):
+        ):  # pragma: no cover
             set_last_arg_to_true(self, assign.value)
             return [assign]
-        if fdef == ("fftshift", "numpy.fft") and self._is_1D_or_1D_Var_arr(
+        if (
+            fdef == ("fftshift", "numpy.fft")
+            or fdef == ("fftshift", "scipy.fft._helper")
+        ) and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
-        ):
+        ):  # pragma: no cover
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
