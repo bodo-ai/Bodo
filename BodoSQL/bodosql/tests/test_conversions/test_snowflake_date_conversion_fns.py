@@ -622,17 +622,14 @@ def to_timestamp_non_numeric_data(request):
     return request.param
 
 
-# Disabling TO_TIMESTAMP_TZ tests until [BSE-2734]
 @pytest.fixture(
     params=[
         pytest.param("TO_TIMESTAMP"),
         pytest.param("TO_TIMESTAMP_NTZ"),
         pytest.param("TO_TIMESTAMP_LTZ"),
-        # pytest.param("TO_TIMESTAMP_TZ"),
         pytest.param("TRY_TO_TIMESTAMP", marks=pytest.mark.slow),
         pytest.param("TRY_TO_TIMESTAMP_NTZ", marks=pytest.mark.slow),
         pytest.param("TRY_TO_TIMESTAMP_LTZ", marks=pytest.mark.slow),
-        # pytest.param("TRY_TO_TIMESTAMP_TZ", marks=pytest.mark.slow),
     ]
 )
 def to_timestamp_fn(request):
