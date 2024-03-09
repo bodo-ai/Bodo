@@ -1448,7 +1448,6 @@ def convert_val_to_timestamp(ts_input, tz=None, is_convert=True):
         raise_bodo_error(
             "convert_val_to_timestamp(): tz value must be a constant string or None"
         )
-
     is_convert = get_overload_const_bool(is_convert)
     if is_convert:
         dt_val = "tz_ts_input"

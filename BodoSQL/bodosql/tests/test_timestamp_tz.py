@@ -204,16 +204,15 @@ def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
                 [
                     "2024-04-01 12:00:00 +0000",
                     None,
-                    "2024-07-04 20:30:14.250 -00:30",
-                    "1999-12-31 23:59:59.999526500 +01:00",
-                    "2024-01-01 00:00:00 -04:00",
-                    "2024-02-29 06:45:00 +05:30",
+                    "2024-07-04 20:30:14.250000 -0030",
+                    "1999-12-31 23:59:59.999526500 +0100",
+                    "2024-01-01 00:00:00 -0400",
+                    "2024-02-29 06:45:00 +0530",
                     None,
-                    "2024-04-01 12:00:00 -08:00",
+                    "2024-04-01 12:00:00 -0800",
                 ]
             ),
             id="tz_to_varchar",
-            marks=pytest.mark.skip("[BSE-2754]"),
         ),
         pytest.param(
             "TO_DATE(T)",
@@ -262,7 +261,6 @@ def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
                 ]
             ),
             id="tz_to_ntz",
-            marks=pytest.mark.skip("[BSE-2754]"),
         ),
         pytest.param(
             "TO_TIMESTAMP_LTZ(T)",
@@ -277,11 +275,10 @@ def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
                     pd.Timestamp("2023-12-31 20:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-02-28 17:15:00", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2024-04-01 11:00:00.000", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-04-01 13:00:00.000", tz="America/Los_Angeles"),
                 ]
             ),
             id="tz_to_ltz",
-            marks=pytest.mark.skip("[BSE-2754]"),
         ),
     ],
 )
@@ -289,7 +286,7 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
     """
     Tests that casting works correctly to transform timestamp_tz data into other types.
     """
-    query = f"SELECT I, {cast_term} FROM TABLE1"
+    query = f"SELECT I, {cast_term} as A FROM TABLE1"
     ctx = {"TABLE1": timestamp_tz_data}
     expected_output = pd.DataFrame(
         {
@@ -315,14 +312,15 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
         pytest.param(
             pd.array(
                 [
-                    "2024-04-01 12:00:00 +00:00",
+                    # TODO: test with other formats
+                    "2024-04-01 12:00:00 +0000",
                     None,
                     "2024-07-04 20:30:14.250",
-                    "1999-12-31 23:59:59.999526500 +01:00",
+                    "1999-12-31 23:59:59.999526500 +0100",
                     "2024-01-01 00:00:00",
-                    "2024-02-29 06:45:00 +05:30",
+                    "2024-02-29 06:45:00 +0530",
                     None,
-                    "2024-04-01 12:00:00 -08:00",
+                    "2024-04-01 12:00:00 -0800",
                 ]
             ),
             "America/Los_Angeles",
@@ -339,7 +337,6 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
                 ]
             ),
             id="varchar_to_tz",
-            marks=pytest.mark.skip("[BSE-2756]"),
         ),
         pytest.param(
             pd.array(
@@ -364,25 +361,24 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
             "Europe/Berlin",
             pd.array(
                 [
-                    bodo.TimestampTZ.fromLocal("2024-01-01", 120),
-                    bodo.TimestampTZ.fromLocal("2024-01-22", 120),
-                    bodo.TimestampTZ.fromLocal("2024-02-12", 120),
+                    bodo.TimestampTZ.fromLocal("2024-01-01", 60),
+                    bodo.TimestampTZ.fromLocal("2024-01-22", 60),
+                    bodo.TimestampTZ.fromLocal("2024-02-12", 60),
                     None,
-                    bodo.TimestampTZ.fromLocal("2024-03-13", 120),
-                    bodo.TimestampTZ.fromLocal("2024-04-28", 180),
-                    bodo.TimestampTZ.fromLocal("2024-05-16", 180),
-                    bodo.TimestampTZ.fromLocal("2024-05-27", 180),
-                    bodo.TimestampTZ.fromLocal("2024-06-29", 180),
+                    bodo.TimestampTZ.fromLocal("2024-03-13", 60),
+                    bodo.TimestampTZ.fromLocal("2024-04-28", 120),
+                    bodo.TimestampTZ.fromLocal("2024-05-16", 120),
+                    bodo.TimestampTZ.fromLocal("2024-05-27", 120),
+                    bodo.TimestampTZ.fromLocal("2024-06-29", 120),
                     None,
-                    bodo.TimestampTZ.fromLocal("2024-07-04", 180),
-                    bodo.TimestampTZ.fromLocal("2024-08-20", 180),
-                    bodo.TimestampTZ.fromLocal("2024-09-09", 180),
-                    bodo.TimestampTZ.fromLocal("2024-09-30", 180),
+                    bodo.TimestampTZ.fromLocal("2024-07-04", 120),
+                    bodo.TimestampTZ.fromLocal("2024-08-20", 120),
+                    bodo.TimestampTZ.fromLocal("2024-09-09", 120),
+                    bodo.TimestampTZ.fromLocal("2024-09-30", 120),
                     None,
                 ]
             ),
             id="date_to_tz",
-            marks=pytest.mark.skip("[BSE-2756]"),
         ),
         pytest.param(
             pd.array(
@@ -391,8 +387,8 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
                     pd.Timestamp("2024-02-04", tz="Africa/Casablanca"),
                     pd.Timestamp("2024-03-09 20:30:00", tz="Africa/Casablanca"),
                     None,
-                    pd.Timestamp("2024-04-16 16:45:13.249500", tz="Africa/Casablanca"),
-                    pd.Timestamp("2024-05-25 01:00:00", tz="Africa/Casablanca"),
+                    pd.Timestamp("2026-02-16 16:45:13.249500", tz="Africa/Casablanca"),
+                    pd.Timestamp("2026-05-25 01:00:00", tz="Africa/Casablanca"),
                 ]
             ),
             "Africa/Casablanca",
@@ -402,20 +398,21 @@ def test_casting_tz_to_type(timestamp_tz_data, cast_term, answer, memory_leak_ch
                     bodo.TimestampTZ.fromLocal("2024-02-04", 60),
                     bodo.TimestampTZ.fromLocal("2024-03-09 20:30:00", 60),
                     None,
-                    bodo.TimestampTZ.fromLocal("2024-04-16 16:45:13.249500", 0),
-                    bodo.TimestampTZ.fromLocal("2024-05-25 01:00:00", 0),
+                    bodo.TimestampTZ.fromLocal("2026-02-16 16:45:13.249500", 0),
+                    bodo.TimestampTZ.fromLocal("2026-05-25 01:00:00", 60),
                 ]
             ),
             id="ltz_to_tz",
-            marks=pytest.mark.skip("[BSE-2756]"),
         ),
     ],
 )
 def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
     """
     Tests that casting works correctly to transform other types into timestamp_tz data.
+
+    TODO: support TRY_TO_TIMESTAMP_TZ
     """
-    query = f"SELECT I, TO_TIMESTAMP_TZ(T) FROM TABLE1"
+    query = f"SELECT I, TO_TIMESTAMP_TZ(T) as A FROM TABLE1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {

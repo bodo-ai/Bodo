@@ -111,9 +111,9 @@ public class ConversionCodeGen {
 
     String kernelName;
     if (fnName.startsWith("TRY_")) {
-      kernelName = "try_to_timestamp_tz";
+      throw new BodoSQLCodegenException("TRY_TO_TIMESTAMP_TZ not currently supported");
     } else {
-      kernelName = "to_timestamp_tz";
+      kernelName = "to_timestamptz";
     }
     List<Expr> args = List.of(operands.get(0), tzExpr);
     return bodoSQLKernel(kernelName, args, streamingNamedArgs);
