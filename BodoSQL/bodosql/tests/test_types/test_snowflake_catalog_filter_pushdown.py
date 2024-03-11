@@ -1716,7 +1716,7 @@ def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" NOT IN (1, 3)',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" <> 1 AND "B" <> 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -2690,7 +2690,7 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
             # Note this is optimized in the planner because the second value is always True.
             check_logger_msg(
                 stream,
-                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "L_COMMITDATE" IS NULL OR "L_COMMITDATE" >= TIMESTAMP '2023-01-20 00:00:00.000'""",
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "L_COMMITDATE" IS NULL OR "L_COMMITDATE" >= TIMESTAMP '2023-01-20 00:00:00.000000000'""",
             )
 
 

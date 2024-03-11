@@ -443,6 +443,8 @@ def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
         WHERE D::INTEGER IN (SELECT Z::INTEGER FROM table2)
     );
     """
+    # Note: Bodo cast from float -> int always uses ROUND HALF UP,
+    # so we match this in Spark explicitly.
     spark_query = """
     (
         SELECT D, 'ALL'
@@ -455,7 +457,7 @@ def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
     ) UNION ALL (
         SELECT D, 'IN'
         FROM table1
-        WHERE CAST(D AS INTEGER) IN (SELECT CAST(Z AS INTEGER) FROM table2)
+        WHERE CAST(ROUND(D) AS INTEGER) IN (SELECT CAST(ROUND(Z) AS INTEGER) FROM table2)
     )
     """
     check_query(

@@ -13,6 +13,7 @@ import java.util.List;
 import kotlin.Pair;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
@@ -378,10 +379,10 @@ public class DatetimeFnCodeGen {
    * @return The expression is a timestamp, time or date object
    */
   public static DateTimeType getDateTimeDataType(RexNode rexNode) {
-    if (rexNode.getType().getSqlTypeName().toString().equals("TIME")) {
+    if (rexNode.getType().getSqlTypeName() == SqlTypeName.TIME) {
       return DateTimeType.TIME;
     }
-    if (rexNode.getType().getSqlTypeName().toString().equals("DATE")) {
+    if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
       return DateTimeType.DATE;
     }
     return DateTimeType.TIMESTAMP;

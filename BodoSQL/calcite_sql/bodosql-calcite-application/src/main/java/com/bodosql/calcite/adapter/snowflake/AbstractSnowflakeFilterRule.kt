@@ -21,7 +21,6 @@ import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
-import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
 
@@ -234,10 +233,9 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     // Cast is to a numeric type
                     (call.getType() is VariantSqlType) ||
                         (call.operands[0].type is VariantSqlType) ||
-                        (call.getType().sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) ||
-                        (call.getType().sqlTypeName == SqlTypeName.TIMESTAMP_TZ) ||
-                        (call.getType().sqlTypeName == SqlTypeName.DATE) ||
-                        (SqlTypeFamily.NUMERIC.contains(call.getType()))
+                        (SqlTypeFamily.DATETIME.contains(call.getType())) ||
+                        (SqlTypeFamily.NUMERIC.contains(call.getType())) ||
+                        (SqlTypeFamily.STRING.contains(call.getType()))
                 } else {
                     false
                 }

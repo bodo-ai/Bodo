@@ -48,12 +48,11 @@ class StreamingRexToPandasTranslator(
         return visitLikeOp(node, genDictEncodingArgs())
     }
 
-    override fun visitCastScan(operation: RexCall): Expr {
-        return visitCastScan(operation, IsScalar.isScalar(operation), genDictEncodingArgs())
-    }
-
-    override fun visitTryCastScan(operation: RexCall): Expr {
-        return visitTryCastScan(operation, genDictEncodingArgs())
+    override fun visitCastScan(
+        operation: RexCall,
+        isSafe: Boolean,
+    ): Expr {
+        return visitCastScan(operation, isSafe, IsScalar.isScalar(operation), genDictEncodingArgs())
     }
 
     override fun visitSubstringScan(node: RexCall): Expr {

@@ -230,7 +230,8 @@ public class CastingOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_VARIANT =
-      SqlBasicFunction.create(SqlKind.OTHER_FUNCTION, BodoReturnTypes.VARIANT, OperandTypes.ANY)
+      SqlBasicFunction.create(
+              SqlKind.OTHER_FUNCTION, BodoReturnTypes.VARIANT_NULLABLE, OperandTypes.ANY)
           .withName("TO_VARIANT");
 
   public static final SqlFunction TO_OBJECT =
