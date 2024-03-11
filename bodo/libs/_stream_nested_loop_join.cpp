@@ -34,8 +34,7 @@ void NestedLoopJoinState::FinalizeBuild() {
             // build_table_buffer of this JoinState.
             std::unique_ptr<ChunkedTableBuilder> new_build_table_buffer =
                 std::make_unique<ChunkedTableBuilder>(
-                    this->build_arr_c_types, this->build_arr_array_types,
-                    this->build_table_dict_builders,
+                    this->build_table_schema, this->build_table_dict_builders,
                     this->build_table_buffer->active_chunk_capacity,
                     this->build_table_buffer
                         ->max_resize_count_for_variable_size_dtypes);
