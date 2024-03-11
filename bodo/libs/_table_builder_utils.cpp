@@ -50,17 +50,6 @@ std::shared_ptr<table_info> alloc_table(
     return std::make_shared<table_info>(arrays);
 }
 
-std::shared_ptr<table_info> alloc_table(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    const std::span<const int8_t> arr_types_span{arr_array_types};
-    const std::span<const int8_t> c_types_span{arr_c_types};
-
-    auto schema = bodo::Schema::Deserialize(arr_types_span, c_types_span);
-    return alloc_table(std::move(schema), pool, mm);
-}
-
 std::shared_ptr<table_info> alloc_table_like(
     const std::shared_ptr<table_info>& table, const bool reuse_dictionaries) {
     std::vector<std::shared_ptr<array_info>> arrays;

@@ -1236,26 +1236,6 @@ struct ChunkedTableBuilder {
     // whether to re-partition or not.
 
     /**
-     * @brief Construct a new Chunked Table with the given schema.
-     *
-     * @param arr_c_types Data types of the columns.
-     * @param arr_array_types Array types of the columns.
-     * @param dict_builders Dictionary builders to use for DICT arrays.
-     * @param chunk_size Max number of rows allowed in each chunk.
-     * @param max_resize_count_for_variable_size_dtypes How many times are
-     * we allowed to resize (grow by 2x) buffers for variable size
-     * data types like strings. 0 means resizing is not allowed. 2 means
-     * that the final size could be 4x of the original.
-     */
-    ChunkedTableBuilder(
-        const std::vector<int8_t>& arr_c_types,
-        const std::vector<int8_t>& arr_array_types,
-        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-        size_t chunk_size,
-        size_t max_resize_count_for_variable_size_dtypes =
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
-
-    /**
      * @brief Construct a new Chunked Table with the given bodo::Schema.
      *
      * @param schema Data types of the columns as a bodo::Schema

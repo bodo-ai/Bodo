@@ -1330,13 +1330,6 @@ size_t get_row_bytes(const std::shared_ptr<bodo::Schema>& schema) {
     return (row_bits + 7) >> 3;
 }
 
-size_t get_row_bytes(const std::vector<int8_t>& arr_array_types,
-                     const std::vector<int8_t>& arr_c_types) {
-    assert(arr_array_types.size() == arr_c_types.size());
-    return get_row_bytes(
-        bodo::Schema::Deserialize(arr_array_types, arr_c_types));
-}
-
 /**
  * Free underlying array of array_info pointer and delete the pointer.
  * Called from Python.
