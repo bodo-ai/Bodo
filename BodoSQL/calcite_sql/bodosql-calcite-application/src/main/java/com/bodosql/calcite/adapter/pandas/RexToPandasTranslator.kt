@@ -1440,11 +1440,12 @@ open class RexToPandasTranslator(
         // Lower the globals needed to create the UDF
         val udfBody = udf.functionBody
         val textVar = visitor.lowerAsGlobal(TripleQuotedString(udfBody))
+        val paramNamesExpr = udf.parameterNames.map { Expr.StringLiteral(it) }
+        val paramNamesVar = visitor.lowerAsGlobal(Expr.Tuple(paramNamesExpr))
         val returnTypeExpr = BodoArrayHelpers.sqlTypeToBodoArrayType(returnType, false, visitor.genDefaultTZ().zoneExpr)
         val returnTypeVar = visitor.lowerAsGlobal(returnTypeExpr)
         // Construct the create function and place it before the pipeline.
-        val createCall =
-            bodoSQLKernel(createFunctionName, java.util.List.of(textVar, returnTypeVar), java.util.List.of())
+        val createCall = bodoSQLKernel(createFunctionName, listOf(textVar, paramNamesVar, returnTypeVar))
         val functionVar = visitor.genGenericTempVar()
         val createAssign = Assign(functionVar, createCall)
         // TODO: Determine a cleaner API.
@@ -1455,13 +1456,12 @@ open class RexToPandasTranslator(
         }
         // Construct the execute function and place it in the pipeline body.
         val argsTuple: Expr = Expr.Tuple(operands)
-        val executeCall =
-            bodoSQLKernel(executeFunctionName, java.util.List.of(functionVar, argsTuple), java.util.List.of())
+        val executeCall = bodoSQLKernel(executeFunctionName, listOf(functionVar, argsTuple))
         val executeVar = visitor.genGenericTempVar()
         val executeAssign = Assign(executeVar, executeCall)
         builder.add(executeAssign)
         // Add the delete function to the end of the pipeline.
-        val deleteCall = bodoSQLKernel(deleteFunctionName, java.util.List.of(functionVar), java.util.List.of())
+        val deleteCall = bodoSQLKernel(deleteFunctionName, listOf(functionVar))
         val deleteStmt = Stmt(deleteCall)
         // TODO: Determine a cleaner API.
         if (builder.isStreamingFrame()) {

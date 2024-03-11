@@ -280,27 +280,23 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
             SqlCall extendedCall =
                 validateSnowflakeUDFOperands(
                     call, snowflakeScalarUdf, validator, scope, typeFactory);
-            // Construct RexNodes for the arguments.
+            List<FunctionParameter> parameters = snowflakeScalarUdf.getParameters();
+            // Construct RexNodes for the arguments and fetch parameter names.
             List<RexNode> arguments = new ArrayList<>();
+            List<String> parameterNames = new ArrayList<>();
             for (int i = 0; i < extendedCall.operandCount(); i++) {
               SqlNode operand = extendedCall.operand(i);
               RexNode convertedOperand = convertExpression(operand);
               arguments.add(convertedOperand);
+              FunctionParameter parameter = parameters.get(i);
+              // Add the name
+              String name = parameter.getName();
+              parameterNames.add(name);
             }
             // Get the expected return type
             RelDataType returnType = snowflakeScalarUdf.getReturnType(typeFactory);
-            // Fetch the parameters
-            List<FunctionParameter> parameters = snowflakeScalarUdf.getParameters();
             if (snowflakeScalarUdf.canInlineFunction()) {
               // Inline the function body.
-              // Construct the name information.
-              List<String> names = new ArrayList<>();
-              for (int i = 0; i < parameters.size(); i++) {
-                FunctionParameter parameter = parameters.get(i);
-                // Add the name
-                String name = parameter.getName();
-                names.add(name);
-              }
               // Generate correlated variables in case we have a query that references
               // the input row.
               CorrMapVisitor visitor = new CorrMapVisitor();
@@ -313,7 +309,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
               return functionExpander.expandFunction(
                   snowflakeScalarUdf.getBody(),
                   snowflakeScalarUdf.getFunctionPath(),
-                  names,
+                  parameterNames,
                   arguments,
                   correlatedArguments,
                   returnType,
@@ -324,7 +320,8 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
               String language = snowflakeScalarUdf.getLanguage();
               List<RelDataType> argTypes =
                   parameters.stream().map(x -> x.getType(typeFactory)).collect(Collectors.toList());
-              SqlFunction op = SnowflakeNativeUDF.create(body, language, argTypes, returnType);
+              SqlFunction op =
+                  SnowflakeNativeUDF.create(body, language, parameterNames, argTypes, returnType);
               return rexBuilder.makeCall(op, arguments);
             }
           }

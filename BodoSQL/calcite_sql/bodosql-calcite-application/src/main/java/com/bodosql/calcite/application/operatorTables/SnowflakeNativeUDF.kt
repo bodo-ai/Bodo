@@ -20,6 +20,7 @@ import org.apache.calcite.sql.validate.SqlMonotonicity
 class SnowflakeNativeUDF private constructor(
     val functionBody: String,
     val functionLanguage: String,
+    val parameterNames: List<String>,
     argTypes: List<RelDataType>,
     returnType: RelDataType,
 ) : SqlNullPolicyFunction(
@@ -41,10 +42,11 @@ class SnowflakeNativeUDF private constructor(
         fun create(
             body: String,
             language: String,
+            parameterNames: List<String>,
             argTypes: List<RelDataType>,
             returnType: RelDataType,
         ): SnowflakeNativeUDF {
-            return SnowflakeNativeUDF(body, language, argTypes, returnType)
+            return SnowflakeNativeUDF(body, language, parameterNames, argTypes, returnType)
         }
 
         /**
