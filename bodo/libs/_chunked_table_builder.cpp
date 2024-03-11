@@ -590,16 +590,6 @@ void ChunkedTableArrayBuilder::Reset() {
 /* ------------------------- ChunkedTableBuilder -------------------------- */
 
 ChunkedTableBuilder::ChunkedTableBuilder(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)
-    : ChunkedTableBuilder(
-          bodo::Schema::Deserialize(arr_array_types, arr_c_types),
-          dict_builders, chunk_size,
-          max_resize_count_for_variable_size_dtypes_) {}
-
-ChunkedTableBuilder::ChunkedTableBuilder(
     const std::shared_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)

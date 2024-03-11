@@ -1,4 +1,5 @@
 #include "_table_builder.h"
+#include <memory>
 
 #include "_array_hash.h"
 #include "_stream_join.h"
@@ -783,14 +784,6 @@ TableBuildBuffer::TableBuildBuffer(
     }
 }
 
-TableBuildBuffer::TableBuildBuffer(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
-    : TableBuildBuffer(bodo::Schema::Deserialize(arr_array_types, arr_c_types),
-                       dict_builders, pool, mm) {}
-
 size_t TableBuildBuffer::EstimatedSize() const {
     size_t size = 0;
     for (const auto& arr : array_buffers) {
@@ -1250,8 +1243,7 @@ void TableBuildBuffer::unpin() {
 /* ------------------------------------------------------------------------ */
 
 struct TableBuilderState {
-    std::vector<int8_t> arr_c_types;
-    std::vector<int8_t> arr_array_types;
+    const std::shared_ptr<bodo::Schema> table_schema;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     TableBuildBuffer builder;
     // true if dictionaries of input batches are already unified and no
@@ -1260,18 +1252,14 @@ struct TableBuilderState {
     // appended elements to it (which changes data pointers).
     bool input_dics_unified;
 
-    TableBuilderState(std::vector<int8_t> _arr_c_types,
-                      std::vector<int8_t> _arr_array_types,
+    TableBuilderState(const std::shared_ptr<bodo::Schema> table_schema_,
                       bool _input_dicts_unified)
-        : arr_c_types(std::move(_arr_c_types)),
-          arr_array_types(std::move(_arr_array_types)),
+        : table_schema(std::move(table_schema_)),
           input_dics_unified(_input_dicts_unified) {
-        // Create column to index map
-        const std::vector<size_t> col_to_idx_map(
-            get_col_idx_map(arr_array_types));
         // Create dictionary builders for all columns
-        for (size_t i : col_to_idx_map) {
-            if (arr_array_types[i] == bodo_array_type::DICT) {
+        for (const std::unique_ptr<bodo::DataType>& t :
+             table_schema->column_types) {
+            if (t->array_type == bodo_array_type::DICT) {
                 std::shared_ptr<array_info> dict = alloc_array_top_level(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
                 dict_builders.emplace_back(
@@ -1280,7 +1268,7 @@ struct TableBuilderState {
                 dict_builders.emplace_back(nullptr);
             }
         }
-        builder = TableBuildBuffer(arr_c_types, arr_array_types, dict_builders);
+        builder = TableBuildBuffer(table_schema, dict_builders);
     }
 };
 
@@ -1314,19 +1302,11 @@ TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
                                                      bool input_dics_unified) {
     n_arrs = get_type_arr_size(arr_array_types, n_arrs);
 
-    std::vector<int8_t> ctype_vec, ctype_arr_vec;
+    std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
+        std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
+        std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
 
-    ctype_vec.reserve(n_arrs);
-    ctype_arr_vec.reserve(n_arrs);
-
-    for (int i = 0; i < n_arrs; ++i) {
-        ctype_vec.push_back(arr_c_types[i]);
-        ctype_arr_vec.push_back(arr_array_types[i]);
-    }
-
-    auto* state =
-        new TableBuilderState(ctype_vec, ctype_arr_vec, input_dics_unified);
-    return state;
+    return new TableBuilderState(schema, input_dics_unified);
 }
 
 void table_builder_append_py_entry(TableBuilderState* state,
@@ -1395,22 +1375,17 @@ void table_builder_reset(TableBuilderState* state) { state->builder.Reset(); }
 void delete_table_builder_state(TableBuilderState* state) { delete state; }
 
 struct ChunkedTableBuilderState {
-    std::vector<int8_t> arr_c_types;
-    std::vector<int8_t> arr_array_types;
+    const std::shared_ptr<bodo::Schema> table_schema;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::unique_ptr<ChunkedTableBuilder> builder;
 
-    ChunkedTableBuilderState(std::vector<int8_t> _arr_c_types,
-                             std::vector<int8_t> _arr_array_types,
+    ChunkedTableBuilderState(const std::shared_ptr<bodo::Schema> table_schema_,
                              size_t chunk_size)
-        : arr_c_types(std::move(_arr_c_types)),
-          arr_array_types(std::move(_arr_array_types)) {
-        // Create column to index map
-        const std::vector<size_t> col_to_idx_map(
-            get_col_idx_map(arr_array_types));
+        : table_schema(std::move(table_schema_)) {
         // Create dictionary builders for all columns
-        for (size_t i : col_to_idx_map) {
-            if (arr_array_types[i] == bodo_array_type::DICT) {
+        for (const std::unique_ptr<bodo::DataType>& t :
+             table_schema->column_types) {
+            if (t->array_type == bodo_array_type::DICT) {
                 std::shared_ptr<array_info> dict = alloc_array_top_level(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
                 dict_builders.emplace_back(
@@ -1420,7 +1395,7 @@ struct ChunkedTableBuilderState {
             }
         }
         builder = std::make_unique<ChunkedTableBuilder>(ChunkedTableBuilder(
-            arr_c_types, arr_array_types, dict_builders, chunk_size,
+            table_schema, dict_builders, chunk_size,
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES));
     }
 };
@@ -1430,18 +1405,11 @@ ChunkedTableBuilderState* chunked_table_builder_state_init_py_entry(
     int64_t chunk_size) {
     n_arrs = get_type_arr_size(arr_array_types, n_arrs);
 
-    std::vector<int8_t> ctype_vec, ctype_arr_vec;
+    std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
+        std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
+        std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
 
-    ctype_vec.reserve(n_arrs);
-    ctype_arr_vec.reserve(n_arrs);
-
-    for (int i = 0; i < n_arrs; i++) {
-        ctype_vec.push_back(arr_c_types[i]);
-        ctype_arr_vec.push_back(arr_array_types[i]);
-    }
-
-    return new ChunkedTableBuilderState(ctype_vec, ctype_arr_vec,
-                                        (size_t)chunk_size);
+    return new ChunkedTableBuilderState(schema, (size_t)chunk_size);
 }
 
 void chunked_table_builder_append_py_entry(ChunkedTableBuilderState* state,
