@@ -51,7 +51,7 @@ class ArrayRexToPandasTranslator(
         return Expr.Call(
             "bodo.utils.conversion.coerce_scalar_to_array",
             scalar,
-            Expr.Call("len", input),
+            Expr.Call("len", getInput()),
             global,
         )
     }
