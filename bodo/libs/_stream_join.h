@@ -86,10 +86,8 @@ class JoinPartition {
                                   KeyEqualHashJoinTable>;
     explicit JoinPartition(
         size_t num_top_bits_, uint32_t top_bitmask_,
-        const std::vector<int8_t>& build_arr_c_types_,
-        const std::vector<int8_t>& build_arr_array_types_,
-        const std::vector<int8_t>& probe_arr_c_types_,
-        const std::vector<int8_t>& probe_arr_array_types_,
+        const std::shared_ptr<bodo::Schema> build_table_schema_,
+        const std::shared_ptr<bodo::Schema> probe_table_schema_,
         const uint64_t n_keys_, bool build_table_outer_,
         bool probe_table_outer_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
@@ -102,10 +100,8 @@ class JoinPartition {
         const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
 
     // The types of the columns in the build table and probe tables.
-    const std::vector<int8_t> build_arr_c_types;
-    const std::vector<int8_t> build_arr_array_types;
-    const std::vector<int8_t> probe_arr_c_types;
-    const std::vector<int8_t> probe_arr_array_types;
+    const std::shared_ptr<bodo::Schema> build_table_schema;
+    const std::shared_ptr<bodo::Schema> probe_table_schema;
     // Dictionary builders for build and probe tables
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders;
@@ -491,13 +487,8 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
 class JoinState {
    public:
     // The types of the columns in the build table and probe tables.
-    const std::vector<int8_t> build_arr_c_types;
-    const std::vector<int8_t> build_arr_array_types;
-    const std::vector<int8_t> probe_arr_c_types;
-    const std::vector<int8_t> probe_arr_array_types;
-    // The map from column index to start index in the type array
-    const std::vector<size_t> build_col_to_idx_map;
-    const std::vector<size_t> probe_col_to_idx_map;
+    const std::shared_ptr<bodo::Schema> build_table_schema;
+    const std::shared_ptr<bodo::Schema> probe_table_schema;
     // Join properties
     const uint64_t n_keys;
     cond_expr_fn_t cond_func;
@@ -543,10 +534,8 @@ class JoinState {
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
 
-    JoinState(const std::vector<int8_t>& build_arr_c_types_,
-              const std::vector<int8_t>& build_arr_array_types_,
-              const std::vector<int8_t>& probe_arr_c_types_,
-              const std::vector<int8_t>& probe_arr_array_types_,
+    JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
+              const std::shared_ptr<bodo::Schema> probe_table_schema_,
               uint64_t n_keys_, bool build_table_outer_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
@@ -647,10 +636,8 @@ class HashJoinState : public JoinState {
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
 
-    HashJoinState(const std::vector<int8_t>& build_arr_c_types,
-                  const std::vector<int8_t>& build_arr_array_types,
-                  const std::vector<int8_t>& probe_arr_c_types,
-                  const std::vector<int8_t>& probe_arr_array_types,
+    HashJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
+                  const std::shared_ptr<bodo::Schema> probe_table_schema_,
                   uint64_t n_keys_, bool build_table_outer_,
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
@@ -881,18 +868,15 @@ class NestedLoopJoinState : public JoinState {
         build_table_matched;  // state for building output
                               // table (for outer joins)
 
-    NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
-                        const std::vector<int8_t>& build_arr_array_types,
-                        const std::vector<int8_t>& probe_arr_c_types,
-                        const std::vector<int8_t>& probe_arr_array_types,
+    NestedLoopJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
+                        const std::shared_ptr<bodo::Schema> probe_table_schema_,
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
                         bool probe_parallel_, int64_t output_batch_size_,
                         int64_t sync_iter_)
-        : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
-                    probe_arr_array_types, 0, build_table_outer_,
-                    probe_table_outer_, cond_func_, build_parallel_,
-                    probe_parallel_, output_batch_size_,
+        : JoinState(build_table_schema_, probe_table_schema_, 0,
+                    build_table_outer_, probe_table_outer_, cond_func_,
+                    build_parallel_, probe_parallel_, output_batch_size_,
                     sync_iter_),  // NestedLoopJoin is only used when
                                   // n_keys is 0
           join_event("NestedLoopJoin") {
@@ -914,15 +898,14 @@ class NestedLoopJoinState : public JoinState {
             throw std::runtime_error(
                 "NestedLoopJoinState: block_size_bytes <= 0");
         }
-        size_t chunk_size = std::ceil(
-            ((float)(block_size_bytes)) /
-            ((float)get_row_bytes(this->build_arr_array_types,
-                                  this->build_arr_c_types)));  // each chunk has
-                                                               // a single block
+        size_t chunk_size =
+            std::ceil(((float)(block_size_bytes)) /
+                      ((float)get_row_bytes(
+                          this->build_table_schema)));  // each chunk has
+                                                        // a single block
         this->build_table_buffer = std::make_unique<ChunkedTableBuilder>(
-            this->build_arr_c_types, this->build_arr_array_types,
-            this->build_table_dict_builders, chunk_size,
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+            this->build_table_schema, this->build_table_dict_builders,
+            chunk_size, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 
     tracing::ResumableEvent join_event;

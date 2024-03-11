@@ -1,7 +1,9 @@
 #include "_stream_join.h"
 
 #include <bitset>
+#include <memory>
 
+#include "_bodo_common.h"
 #include "_distributed.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
@@ -61,11 +63,9 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
 
 JoinPartition::JoinPartition(
     size_t num_top_bits_, uint32_t top_bitmask_,
-    const std::vector<int8_t>& build_arr_c_types_,
-    const std::vector<int8_t>& build_arr_array_types_,
-    const std::vector<int8_t>& probe_arr_c_types_,
-    const std::vector<int8_t>& probe_arr_array_types_, const uint64_t n_keys_,
-    bool build_table_outer_, bool probe_table_outer_,
+    const std::shared_ptr<bodo::Schema> build_table_schema_,
+    const std::shared_ptr<bodo::Schema> probe_table_schema_,
+    const uint64_t n_keys_, bool build_table_outer_, bool probe_table_outer_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>&
         build_table_dict_builders_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>&
@@ -74,15 +74,12 @@ JoinPartition::JoinPartition(
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
-    : build_arr_c_types(build_arr_c_types_),
-      build_arr_array_types(build_arr_array_types_),
-      probe_arr_c_types(probe_arr_c_types_),
-      probe_arr_array_types(probe_arr_array_types_),
+    : build_table_schema(build_table_schema_),
+      probe_table_schema(probe_table_schema_),
       build_table_dict_builders(build_table_dict_builders_),
       probe_table_dict_builders(probe_table_dict_builders_),
       build_table_buffer(std::make_unique<TableBuildBuffer>(
-          build_arr_c_types, build_arr_array_types, build_table_dict_builders,
-          op_pool_, op_mm_)),
+          build_table_schema_, build_table_dict_builders, op_pool_, op_mm_)),
       build_table_join_hashes(op_pool_),
       build_hash_table(std::make_unique<bodo::pinnable<hash_table_t>>(
           0, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
@@ -95,7 +92,7 @@ JoinPartition::JoinPartition(
       groups(op_scratch_pool_),
       groups_offsets(op_scratch_pool_),
       build_table_matched(op_scratch_pool_),
-      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)),
+      dummy_probe_table(alloc_table(probe_table_schema_)),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
       build_table_outer(build_table_outer_),
@@ -127,8 +124,7 @@ JoinPartition::JoinPartition(
     } else {
         this->build_table_buffer_chunked =
             std::make_unique<ChunkedTableBuilder>(
-                this->build_arr_c_types, this->build_arr_array_types,
-                this->build_table_dict_builders,
+                this->build_table_schema, this->build_table_dict_builders,
                 INACTIVE_PARTITION_TABLE_CHUNK_SIZE,
                 DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
@@ -202,16 +198,14 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     // on bodo::pinnable attributes safely for the rest of the function.
     std::shared_ptr<JoinPartition> new_part1 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1),
-        this->build_arr_c_types, this->build_arr_array_types,
-        this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
+        this->build_table_schema, this->probe_table_schema, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         is_active, this->op_pool, this->op_mm, this->op_scratch_pool,
         this->op_scratch_mm);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
-        this->build_arr_c_types, this->build_arr_array_types,
-        this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
+        this->build_table_schema, this->probe_table_schema, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders, false,
         this->op_pool, this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
@@ -542,8 +536,8 @@ void JoinPartition::InitProbeInputBuffer() {
         return;
     }
     this->probe_table_buffer_chunked = std::make_unique<ChunkedTableBuilder>(
-        this->probe_arr_c_types, this->probe_arr_array_types,
-        this->probe_table_dict_builders, INACTIVE_PARTITION_TABLE_CHUNK_SIZE,
+        this->probe_table_schema, this->probe_table_dict_builders,
+        INACTIVE_PARTITION_TABLE_CHUNK_SIZE,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 }
 
@@ -870,20 +864,14 @@ void JoinPartition::unpin() {
 /* --------------------------- JoinState ---------------------------------- */
 #pragma region  // JoinState
 
-JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
-                     const std::vector<int8_t>& build_arr_array_types_,
-                     const std::vector<int8_t>& probe_arr_c_types_,
-                     const std::vector<int8_t>& probe_arr_array_types_,
+JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
+                     const std::shared_ptr<bodo::Schema> probe_table_schema_,
                      uint64_t n_keys_, bool build_table_outer_,
                      bool probe_table_outer_, cond_expr_fn_t cond_func_,
                      bool build_parallel_, bool probe_parallel_,
                      int64_t output_batch_size_, int64_t sync_iter_)
-    : build_arr_c_types(build_arr_c_types_),
-      build_arr_array_types(build_arr_array_types_),
-      probe_arr_c_types(probe_arr_c_types_),
-      probe_arr_array_types(probe_arr_array_types_),
-      build_col_to_idx_map(get_col_idx_map(build_arr_array_types_)),
-      probe_col_to_idx_map(get_col_idx_map(probe_arr_array_types_)),
+    : build_table_schema(build_table_schema_),
+      probe_table_schema(probe_table_schema_),
       n_keys(n_keys_),
       cond_func(cond_func_),
       build_table_outer(build_table_outer_),
@@ -892,14 +880,14 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
       sync_iter(sync_iter_),
-      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
+      dummy_probe_table(alloc_table(probe_table_schema_)) {
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        if (this->build_arr_array_types[this->build_col_to_idx_map[i]] ==
+        if (this->build_table_schema->column_types[i]->array_type ==
             bodo_array_type::DICT) {
-            if (this->probe_arr_array_types[this->probe_col_to_idx_map[i]] !=
+            if (this->probe_table_schema->column_types[i]->array_type !=
                 bodo_array_type::DICT) {
                 throw std::runtime_error(
                     "HashJoinState: Key column array types don't match "
@@ -921,8 +909,8 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     std::vector<std::shared_ptr<DictionaryBuilder>>
         build_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in build table:
-    for (size_t i = this->n_keys; i < this->build_col_to_idx_map.size(); i++) {
-        if (this->build_arr_array_types[this->build_col_to_idx_map[i]] ==
+    for (size_t i = this->n_keys; i < this->build_table_schema->ncols(); i++) {
+        if (this->build_table_schema->column_types[i]->array_type ==
             bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
@@ -936,8 +924,8 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     std::vector<std::shared_ptr<DictionaryBuilder>>
         probe_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in probe table:
-    for (size_t i = this->n_keys; i < this->probe_col_to_idx_map.size(); i++) {
-        if (this->probe_arr_array_types[this->probe_col_to_idx_map[i]] ==
+    for (size_t i = this->n_keys; i < this->probe_table_schema->ncols(); i++) {
+        if (this->probe_table_schema->column_types[i]->array_type ==
             bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
@@ -976,66 +964,38 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
         // iteration.
         return;
     }
-    std::vector<int8_t> arr_c_types, arr_array_types;
+    std::shared_ptr<bodo::Schema> out_schema = std::make_shared<bodo::Schema>();
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-
-    // Note: with the support of nested array type, these reserve is not
-    // accurate anymore but still a valid lowerbound
-    arr_c_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
-    arr_array_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
     dict_builders.reserve(probe_kept_cols.size() + build_kept_cols.size());
 
     for (uint64_t i_col : probe_kept_cols) {
-        size_t end_idx = i_col == probe_col_to_idx_map.size() - 1
-                             ? this->probe_arr_array_types.size()
-                             : this->probe_col_to_idx_map[i_col + 1];
-        for (size_t i = this->probe_col_to_idx_map[i_col]; i < end_idx; ++i) {
-            bodo_array_type::arr_type_enum arr_type =
-                (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i];
-            Bodo_CTypes::CTypeEnum dtype =
-                (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i];
-            // In the build outer case, we need to make NUMPY arrays
-            // into NULLABLE arrays. Matches the `use_nullable_arrs`
-            // behavior of RetrieveTable.
-            if (this->build_table_outer &&
-                ((arr_type == bodo_array_type::NUMPY) &&
-                 (is_integer(dtype) || is_float(dtype) ||
-                  dtype == Bodo_CTypes::_BOOL))) {
-                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-            }
-            arr_c_types.push_back(dtype);
-            arr_array_types.push_back(arr_type);
+        std::unique_ptr<bodo::DataType> col_type =
+            this->probe_table_schema->column_types[i_col]->copy();
+        // In the build outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        if (this->build_table_outer) {
+            col_type = col_type->to_nullable_type();
         }
+        out_schema->append_column(std::move(col_type));
         dict_builders.push_back(this->probe_table_dict_builders[i_col]);
     }
 
     for (uint64_t i_col : build_kept_cols) {
-        size_t end_idx = i_col == build_col_to_idx_map.size() - 1
-                             ? this->build_arr_array_types.size()
-                             : this->build_col_to_idx_map[i_col + 1];
-        for (size_t i = this->build_col_to_idx_map[i_col]; i < end_idx; ++i) {
-            bodo_array_type::arr_type_enum arr_type =
-                (bodo_array_type::arr_type_enum)this->build_arr_array_types[i];
-            Bodo_CTypes::CTypeEnum dtype =
-                (Bodo_CTypes::CTypeEnum)this->build_arr_c_types[i];
-            // In the probe outer case, we need to make NUMPY arrays
-            // into NULLABLE arrays. Matches the `use_nullable_arrs`
-            // behavior of RetrieveTable.
-            // TODO: Move to a helper function.
-            if (this->probe_table_outer &&
-                ((arr_type == bodo_array_type::NUMPY) &&
-                 (is_integer(dtype) || is_float(dtype) ||
-                  dtype == Bodo_CTypes::_BOOL))) {
-                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-            }
-            arr_c_types.push_back(dtype);
-            arr_array_types.push_back(arr_type);
+        std::unique_ptr<bodo::DataType> col_type =
+            this->build_table_schema->column_types[i_col]->copy();
+        // In the probe outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        if (this->probe_table_outer) {
+            col_type = col_type->to_nullable_type();
         }
+        out_schema->append_column(std::move(col_type));
         dict_builders.push_back(this->build_table_dict_builders[i_col]);
     }
 
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        arr_c_types, arr_array_types, dict_builders,
+        out_schema, dict_builders,
         /*chunk_size*/ this->output_batch_size,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 }
@@ -1078,20 +1038,17 @@ std::shared_ptr<table_info> JoinState::UnifyProbeTableDictionaryArrays(
 /* ---------------------------- HashJoinState ----------------------------- */
 #pragma region  // HashJoinState
 
-HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
-                             const std::vector<int8_t>& build_arr_array_types,
-                             const std::vector<int8_t>& probe_arr_c_types,
-                             const std::vector<int8_t>& probe_arr_array_types,
-                             uint64_t n_keys_, bool build_table_outer_,
-                             bool probe_table_outer_, cond_expr_fn_t cond_func_,
-                             bool build_parallel_, bool probe_parallel_,
-                             int64_t output_batch_size_, int64_t sync_iter_,
-                             int64_t op_id_, int64_t op_pool_size_bytes,
-                             size_t max_partition_depth_)
-    : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
-                probe_arr_array_types, n_keys_, build_table_outer_,
-                probe_table_outer_, cond_func_, build_parallel_,
-                probe_parallel_, output_batch_size_, sync_iter_),
+HashJoinState::HashJoinState(
+    const std::shared_ptr<bodo::Schema> build_table_schema_,
+    const std::shared_ptr<bodo::Schema> probe_table_schema_, uint64_t n_keys_,
+    bool build_table_outer_, bool probe_table_outer_, cond_expr_fn_t cond_func_,
+    bool build_parallel_, bool probe_parallel_, int64_t output_batch_size_,
+    int64_t sync_iter_, int64_t op_id_, int64_t op_pool_size_bytes,
+    size_t max_partition_depth_)
+    : JoinState(build_table_schema_, probe_table_schema_, n_keys_,
+                build_table_outer_, probe_table_outer_, cond_func_,
+                build_parallel_, probe_parallel_, output_batch_size_,
+                sync_iter_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -1107,15 +1064,15 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
           std::make_unique<bodo::OperatorScratchPool>(this->op_pool.get())),
       op_scratch_mm(bodo::buffer_memory_manager(this->op_scratch_pool.get())),
       max_partition_depth(max_partition_depth_),
-      build_shuffle_state(build_arr_c_types, build_arr_array_types,
-                          this->build_table_dict_builders, this->n_keys,
-                          this->build_iter, this->sync_iter, op_id_),
-      probe_shuffle_state(probe_arr_c_types, probe_arr_array_types,
-                          this->probe_table_dict_builders, this->n_keys,
-                          this->probe_iter, this->sync_iter, op_id_),
+      build_shuffle_state(build_table_schema_, this->build_table_dict_builders,
+                          this->n_keys, this->build_iter, this->sync_iter,
+                          op_id_),
+      probe_shuffle_state(probe_table_schema_, this->probe_table_dict_builders,
+                          this->n_keys, this->probe_iter, this->sync_iter,
+                          op_id_),
       // Create a build buffer for NA values to skip the hash table.
-      build_na_key_buffer(build_arr_c_types, build_arr_array_types,
-                          this->build_table_dict_builders, output_batch_size_,
+      build_na_key_buffer(build_table_schema_, this->build_table_dict_builders,
+                          output_batch_size_,
                           DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
       build_event("HashJoinBuild"),
       probe_event("HashJoinProbe") {
@@ -1166,9 +1123,9 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
 
     // Create the initial partition
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
-        0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
-        probe_arr_array_types, n_keys_, build_table_outer_, probe_table_outer_,
-        this->build_table_dict_builders, this->probe_table_dict_builders,
+        0, 0, build_table_schema_, probe_table_schema_, n_keys_,
+        build_table_outer_, probe_table_outer_, this->build_table_dict_builders,
+        this->probe_table_dict_builders,
         /*is_active*/ true, this->op_pool.get(), this->op_mm,
         this->op_scratch_pool.get(), this->op_scratch_mm));
 
@@ -1230,8 +1187,7 @@ void HashJoinState::SplitPartition(size_t idx) {
 void HashJoinState::ResetPartitions() {
     this->partitions.clear();
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
-        0, 0, this->build_arr_c_types, this->build_arr_array_types,
-        this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
+        0, 0, this->build_table_schema, this->probe_table_schema, this->n_keys,
         this->build_table_outer, this->probe_table_outer,
         this->build_table_dict_builders, this->probe_table_dict_builders,
         /*is_active*/ true, this->op_pool.get(), this->op_mm,
@@ -2461,27 +2417,31 @@ JoinState* join_state_init_py_entry(
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(
-            std::vector<int8_t>(build_arr_c_types,
-                                build_arr_c_types + n_build_arrs),
-            std::vector<int8_t>(build_arr_array_types,
-                                build_arr_array_types + n_build_arrs),
-            std::vector<int8_t>(probe_arr_c_types,
-                                probe_arr_c_types + n_probe_arrs),
-            std::vector<int8_t>(probe_arr_array_types,
-                                probe_arr_array_types + n_probe_arrs),
+            bodo::Schema::Deserialize(
+                std::vector<int8_t>(build_arr_array_types,
+                                    build_arr_array_types + n_build_arrs),
+                std::vector<int8_t>(build_arr_c_types,
+                                    build_arr_c_types + n_build_arrs)),
+            bodo::Schema::Deserialize(
+                std::vector<int8_t>(probe_arr_array_types,
+                                    probe_arr_array_types + n_probe_arrs),
+                std::vector<int8_t>(probe_arr_c_types,
+                                    probe_arr_c_types + n_probe_arrs)),
             build_table_outer, probe_table_outer, cond_func, build_parallel,
             probe_parallel, output_batch_size, sync_iter);
     }
 
     return new HashJoinState(
-        std::vector<int8_t>(build_arr_c_types,
-                            build_arr_c_types + n_build_arrs),
-        std::vector<int8_t>(build_arr_array_types,
-                            build_arr_array_types + n_build_arrs),
-        std::vector<int8_t>(probe_arr_c_types,
-                            probe_arr_c_types + n_probe_arrs),
-        std::vector<int8_t>(probe_arr_array_types,
-                            probe_arr_array_types + n_probe_arrs),
+        bodo::Schema::Deserialize(
+            std::vector<int8_t>(build_arr_array_types,
+                                build_arr_array_types + n_build_arrs),
+            std::vector<int8_t>(build_arr_c_types,
+                                build_arr_c_types + n_build_arrs)),
+        bodo::Schema::Deserialize(
+            std::vector<int8_t>(probe_arr_array_types,
+                                probe_arr_array_types + n_probe_arrs),
+            std::vector<int8_t>(probe_arr_c_types,
+                                probe_arr_c_types + n_probe_arrs)),
         n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
         probe_parallel, output_batch_size, sync_iter, operator_id,
         op_pool_size_bytes);

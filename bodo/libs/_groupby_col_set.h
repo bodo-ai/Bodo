@@ -206,8 +206,8 @@ class BasicColSet {
      *
      * @param in_arr_types input array types
      * @param in_dtypes input array dtypes
-     * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-     * std::vector<Bodo_CTypes::CTypeEnum>> update column array types and dtypes
+     * @return std::unique_ptr<bodo::Schema> update column array types and
+     * dtypes
      */
     virtual std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const {
