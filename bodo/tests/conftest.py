@@ -21,6 +21,7 @@ from numba.core.runtime import rtsys
 
 import bodo
 import bodo.utils.allocation_tracking
+from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
 
 # Disable broadcast join as the default
@@ -574,9 +575,8 @@ def iceberg_database() -> (
     if bodo.get_rank() == 0:
         import shutil
 
-        for schema in database_schema:
-            dir_to_rm = os.path.join(warehouse_loc, schema)
-            shutil.rmtree(dir_to_rm, ignore_errors=True)
+        dir_to_rm = os.path.join(warehouse_loc, DATABASE_NAME)
+        shutil.rmtree(dir_to_rm, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
