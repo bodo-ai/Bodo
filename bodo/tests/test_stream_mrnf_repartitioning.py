@@ -402,6 +402,7 @@ def test_split_during_acc_finalize_build(capfd, memory_leak_check):
 
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
+@pytest.mark.slow
 def test_split_during_shuffle_append_table_and_diff_part_state(
     capfd, memory_leak_check
 ):
@@ -419,7 +420,7 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     df = pd.DataFrame(
         {
             "A": pd.array([1] * 32000, dtype="Int64"),
-            "B": pd.array(list(range(1000)) * 32, dtype="Int64"),
+            "B": pd.array(list(range(8000)) * 4, dtype="Int64"),
             "C": pd.Series(
                 np.random.choice(
                     [
@@ -483,18 +484,33 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     expected_output_size = expected_out.shape[0]
 
     # This will cause partition split during the "AppendBuildBatch[2]"
-    op_pool_size_bytes = 2 * 1024 * 1024
-    expected_partition_state = [(0, 0)] if (bodo.get_rank() == 0) else [(1, 0), (1, 1)]
+    op_pool_size_bytes = 1 * 1024 * 1024
+    expected_partition_state = (
+        [(2, 0), (2, 1), (1, 1)]
+        if (bodo.get_rank() == 0)
+        else [(3, 0), (3, 1), (2, 1), (1, 1)]
+    )
     # Verify that we split a partition during AppendBuildBatch.
     expected_log_messages = (
         [
             "[DEBUG] GroupbyState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0.",
             "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 0.",
             "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 1.",
-            "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
+            "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 2.",
+            "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 3.",
+            "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 4.",
         ]
         if bodo.get_rank() == 1
-        else ([None] * 4)
+        else (
+            [
+                "[DEBUG] GroupbyState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0.",
+                "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 0.",
+                "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 1.",
+                "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 2.",
+                "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 3.",
+                None,
+            ]
+        )
     )
 
     _test_helper(
