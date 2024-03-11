@@ -188,7 +188,7 @@ Each batch job that is not `SUCCEEDED` also has a status reason associated with 
 ### Running a SQL Query as a Batch Job {#sql-batch-job}
 
 Bodo supports running SQL queries as batch jobs without explicitly writing a batch job definition. 
-See [Bodo Platform SDK][job-resource] for usage details.
+See [Bodo Platform SDK][jobs] for usage details.
 
 
 ### Queuing Batch Job Runs
