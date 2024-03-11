@@ -257,6 +257,38 @@ std::unique_ptr<DataType> DataType::copy() const {
     }
 }
 
+std::unique_ptr<DataType> DataType::to_nullable_type() const {
+    if (this->is_array()) {
+        const ArrayType* this_as_array = static_cast<const ArrayType*>(this);
+        return std::make_unique<ArrayType>(
+            this_as_array->value_type->to_nullable_type());
+
+    } else if (this->is_map()) {
+        const MapType* this_as_map = static_cast<const MapType*>(this);
+        return std::make_unique<MapType>(
+            this_as_map->key_type->to_nullable_type(),
+            this_as_map->value_type->to_nullable_type());
+    } else if (this->is_struct()) {
+        const StructType* this_as_struct = static_cast<const StructType*>(this);
+        std::vector<std::unique_ptr<DataType>> new_child_types;
+        new_child_types.reserve(this_as_struct->child_types.size());
+        for (const auto& t : this_as_struct->child_types) {
+            new_child_types.push_back(t->to_nullable_type());
+        }
+        return std::make_unique<StructType>(std::move(new_child_types));
+
+    } else {
+        bodo_array_type::arr_type_enum arr_type = this->array_type;
+        Bodo_CTypes::CTypeEnum dtype = this->c_type;
+        if ((arr_type == bodo_array_type::NUMPY) &&
+            (is_integer(dtype) || is_float(dtype) ||
+             dtype == Bodo_CTypes::_BOOL)) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        return std::make_unique<DataType>(arr_type, dtype);
+    }
+}
+
 void DataType::to_string_inner(std::string& out) {
     out += arr_type_to_str(this->array_type);
     out += "[";

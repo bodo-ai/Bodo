@@ -534,6 +534,10 @@ struct DataType {
     ///@brief Deep copy the Datatype, returns the proper child type if
     /// appropriate
     std::unique_ptr<DataType> copy() const;
+
+    /// @brief Convert type to a nullable type (Numpy int/float/bool to
+    /// nullable)
+    std::unique_ptr<DataType> to_nullable_type() const;
 };
 
 /// @brief Wrapper class for Representing the Type of ArrayItem Arrays
