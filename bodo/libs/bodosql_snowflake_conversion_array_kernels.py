@@ -109,7 +109,7 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
     elif is_float:
         # TODO: fix this for float case (see above)
         # np.isnan should error here, but it will not reach because
-        # NaNs will be caught since propogate_null[0] is True
+        # NaNs will be caught since propagate_null[0] is True
         scalar_text = "if np.isinf(arg0) or np.isnan(arg0):\n"
         scalar_text += f"  {on_fail}\n"
         scalar_text += "else:\n"

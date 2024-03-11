@@ -1924,17 +1924,9 @@ class BodoRexSimplify(
      */
     private fun isDateConversion(e: RexNode): Boolean {
         return e is RexCall && (
-            e.operator.name == CastingOperatorTable.TO_DATE.name ||
-                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
-            ) && e.operands.size == 1
-    }
-
-    /**
-     * Deprecated: Determine if the function call is a date conversion function
-     * equivalent to a safe cast
-     */
-    private fun isSafeDateConversion(e: RexCall): Boolean {
-        return e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
+                e.operator.name == CastingOperatorTable.TO_DATE.name ||
+                        e.operator.name == CastingOperatorTable.TRY_TO_DATE.name
+                ) && e.operands.size == 1
     }
 
     /**

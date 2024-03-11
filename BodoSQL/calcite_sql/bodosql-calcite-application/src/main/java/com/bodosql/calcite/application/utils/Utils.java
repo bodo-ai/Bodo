@@ -5,10 +5,13 @@ import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator;
 import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.ir.BodoEngineTable;
+import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import java.util.ArrayList;
@@ -463,14 +466,100 @@ public class Utils {
     // Concatenate the arrays to the table.
     Variable outVar = builder.getSymbolTable().genTableVar();
     Variable buildIndices = ctx.lowerAsMetaType(new Expr.Tuple(indices));
-    Expr tablExpr =
+    Expr tableExpr =
         new Expr.Call(
             "bodo.hiframes.table.logical_table_to_table",
             inputTable,
             new Expr.Tuple(literalArrays),
             buildIndices,
             new Expr.IntegerLiteral(numAggCols));
-    builder.add(new Op.Assign(outVar, tablExpr));
+    builder.add(new Op.Assign(outVar, tableExpr));
     return new BodoEngineTable(outVar.emit(), node);
+  }
+
+  /**
+   * Determine the conversion function name for a cast to a given type.
+   *
+   * @param outputType The output data type.
+   * @param isSafe Is this a TRY_CAST instead of a regular cast?
+   * @return String function name (in all uppercase)
+   */
+  public static String getConversionName(RelDataType outputType, boolean isSafe) {
+    if (outputType instanceof VariantSqlType) {
+      return "TO_VARIANT";
+    } else {
+      switch (outputType.getSqlTypeName()) {
+        case CHAR:
+        case VARCHAR:
+          return "TO_VARCHAR";
+        case BINARY:
+        case VARBINARY:
+          if (isSafe) {
+            return "TRY_TO_BINARY";
+          } else {
+            return "TO_BINARY";
+          }
+        case BOOLEAN:
+          if (isSafe) {
+            return "TRY_TO_BOOLEAN";
+          } else {
+            return "TO_BOOLEAN";
+          }
+        case TINYINT:
+        case SMALLINT:
+        case INTEGER:
+        case BIGINT:
+        case DECIMAL:
+          if (isSafe) {
+            return "TRY_TO_NUMBER";
+          } else {
+            return "TO_NUMBER";
+          }
+        case FLOAT:
+        case DOUBLE:
+          if (isSafe) {
+            return "TRY_TO_DOUBLE";
+          } else {
+            return "TO_DOUBLE";
+          }
+        case TIMESTAMP:
+          if (isSafe) {
+            return "TRY_TO_TIMESTAMP_NTZ";
+          } else {
+            return "TO_TIMESTAMP_NTZ";
+          }
+        case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+          if (isSafe) {
+            return "TRY_TO_TIMESTAMP_LTZ";
+          } else {
+            return "TO_TIMESTAMP_LTZ";
+          }
+        case TIMESTAMP_TZ:
+          if (isSafe) {
+            throw new BodoSQLCodegenException("TRY_TO_TIMESTAMP_TZ not currently supported");
+          } else {
+            return "TO_TIMESTAMPTZ";
+          }
+        case DATE:
+          if (isSafe) {
+            return "TRY_TO_DATE";
+          } else {
+            return "TO_DATE";
+          }
+        case TIME:
+          if (isSafe) {
+            return "TRY_TO_TIME";
+          } else {
+            return "TO_TIME";
+          }
+        case ARRAY:
+          return "TO_ARRAY";
+        case MAP:
+          return "TO_OBJECT";
+        default:
+          throw new RuntimeException(
+              String.format(Locale.ROOT, "Unsupported cast to type %s", outputType));
+      }
+    }
   }
 }
