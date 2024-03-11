@@ -385,9 +385,7 @@ internal class Group(
         operands: List<RexNode>,
         rexTranslator: RexToPandasTranslator,
     ): List<Expr> {
-        return operands.map {
-            it.accept(rexTranslator)
-        }
+        return rexTranslator.visitList(operands)
     }
 
     /**
