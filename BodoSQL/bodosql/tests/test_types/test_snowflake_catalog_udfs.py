@@ -1477,6 +1477,6 @@ def test_nested_javascript_inline_error(test_db_snowflake_catalog, memory_leak_c
 
     with pytest.raises(
         BodoError,
-        match=".*Unsupported source language. Bodo only support SQL UDFs, but found JAVASCRIPT.*",
+        match=".*Unsupported source language\\. Bodo supports SQL UDFs and has limited support for JavaScript UDFs\\. Source language found was JAVASCRIPT\\..*",
     ):
         impl(bc, query)

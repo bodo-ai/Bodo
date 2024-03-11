@@ -2,7 +2,6 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.ir.ExprKt.bodoSQLKernel;
 
-import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
@@ -12,8 +11,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import kotlin.Pair;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.type.RelDataType;
 
 // List defining all numeric functions which will be mapped to their corresponding array kernel in
 // Python.
@@ -119,40 +117,40 @@ public class NumericCodeGen {
    * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL functions, or the
    * TRY_ versions.
    *
-   * @param args The arguments to this call.
+   * @param arg The input argument.
+   * @param precision The target precision
+   * @param scale The target scale
    * @param is_try Is the call a TRY_TO_XXX function.
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
-   * @param translator the RexToPandasTranslator class currently in use. Needed to handle passing
-   *     constant arguments
    * @return The Expr for the function call.
    */
   public static Expr generateToNumberCode(
-      List<RexNode> args,
+      Expr arg,
+      int precision,
+      int scale,
       Boolean is_try,
-      List<Pair<String, Expr>> streamingNamedArgs,
-      RexToPandasTranslator translator) {
+      List<Pair<String, Expr>> streamingNamedArgs) {
     List<Expr> exprs = new ArrayList<>();
-    assert args.size() >= 1 && args.size() <= 3;
-    exprs.add(args.get(0).accept(translator));
+    exprs.add(arg);
     // BodoSQL generally wraps all integer literals in calls to np.intx.
     // This breaks constant propagation in Bodo, so we need to do some
     // hacky stuff to get the literal values, so that Bodo can recognize
     // the prec/scale values as constants
-    int prec;
-    int scale;
-    if (args.size() < 2) {
-      prec = 38;
+    final int finalPrec;
+    final int finalScale;
+    if (precision == RelDataType.PRECISION_NOT_SPECIFIED) {
+      finalPrec = 38;
     } else {
-      prec = ((RexLiteral) (args.get(1))).getValueAs(Integer.class);
+      finalPrec = precision;
     }
-    if (args.size() < 3) {
-      scale = 0;
+    if (scale == RelDataType.SCALE_NOT_SPECIFIED) {
+      finalScale = 0;
     } else {
-      scale = ((RexLiteral) (args.get(2))).getValueAs(Integer.class);
+      finalScale = scale;
     }
-    exprs.add(new Expr.IntegerLiteral(prec));
-    exprs.add(new Expr.IntegerLiteral(scale));
+    exprs.add(new Expr.IntegerLiteral(finalPrec));
+    exprs.add(new Expr.IntegerLiteral(finalScale));
     String name = is_try ? "try_to_number" : "to_number";
     return bodoSQLKernel(name, exprs, streamingNamedArgs);
   }

@@ -36,11 +36,10 @@ def bodosql_negative_numeric_types(request):
     """
     int_dtype = request.param[0]
     float_dtype = request.param[1]
-
     numeric_data = {
         "POSITIVE_INTS": pd.Series([1, 2, 3, 4, 5, 6] * 2, dtype=int_dtype),
         "UNSIGNED_INT32S": pd.Series([1, 3, 7, 14, 0, 11] * 2, dtype=np.uint32),
-        "UNSIGNED_INT64S": pd.Series([12, 2**50, 0, 78, 390] * 2, dtype=np.uint64),
+        "UNSIGNED_INT64S": pd.Series([12, 2**50, 0, 78, 390] * 2, dtype="UInt64"),
         "MIXED_INTS": pd.Series([-7, 8, -9, 10, -11, 12] * 2, dtype=int_dtype),
         "NEGATIVE_INTS": pd.Series([-13, -14, -15] * 4, dtype=int_dtype),
         "POSITIVE_FLOATS": pd.Series(

@@ -239,10 +239,14 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                 }
 
             SqlKind.OTHER_FUNCTION -> {
-                when (call.operator.name) {
-                    "TRUNC" -> DateTruncConverter
-                    "NULLIFZERO" -> NullIfZeroConverter
-                    else -> super.get(call)
+                if (CONVERSION_FUNCTIONS.contains(call.operator.name) || TRY_CONVERSION_FUNCTIONS.contains(call.operator.name)) {
+                    ConversionFunctionConverter
+                } else {
+                    when (call.operator.name) {
+                        "TRUNC" -> DateTruncConverter
+                        "NULLIFZERO" -> NullIfZeroConverter
+                        else -> super.get(call)
+                    }
                 }
             }
             else -> super.get(call)
@@ -350,5 +354,68 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                 else -> throw IllegalStateException()
             }
         }
+    }
+
+    /**
+     * Convert conversion functions to use cast operators when possible. In the future we should
+     * prioritize the reverse as the function tend to be more general than a cast, but currently
+     * more optimizations exist for casts.
+     */
+    private object ConversionFunctionConverter : SqlRexConvertlet {
+        override fun convertCall(
+            cx: SqlRexContext,
+            call: SqlCall,
+        ): RexNode {
+            // First convert the argument.
+            val args = call.operandList.map { x -> cx.convertExpression(x) }
+            return if (args.size > 1) {
+                // Most casts only match 1 argument inputs. There may be some exceptions with precisions.
+                cx.rexBuilder.makeCall(call.operator, args)
+            } else {
+                val safe = TRY_CONVERSION_FUNCTIONS.contains(call.operator.name)
+                val outputType = cx.validator.getValidatedNodeType(call)
+                cx.rexBuilder.makeCast(outputType, args[0], safe, safe)
+            }
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        val CONVERSION_FUNCTIONS: Set<String> =
+            setOf(
+                // Note: We remove calls that are aliases since they
+                // will be converted to a singular call.
+                CastingOperatorTable.TO_VARCHAR.name,
+                CastingOperatorTable.TO_BINARY.name,
+                CastingOperatorTable.TO_NUMBER.name,
+                CastingOperatorTable.TO_DOUBLE.name,
+                CastingOperatorTable.TO_BOOLEAN.name,
+                CastingOperatorTable.TO_DATE.name,
+                CastingOperatorTable.TO_TIME.name,
+                CastingOperatorTable.TO_TIMESTAMP.name,
+                CastingOperatorTable.TO_TIMESTAMP_NTZ.name,
+                CastingOperatorTable.TO_TIMESTAMP_LTZ.name,
+                CastingOperatorTable.TO_TIMESTAMP_TZ.name,
+                CastingOperatorTable.TO_VARIANT.name,
+                // Note: We don't include TO_ARRAY and TO_OBJECT yet
+                // because they may not be equivalent to casts.
+            )
+
+        @JvmStatic
+        val TRY_CONVERSION_FUNCTIONS: Set<String> =
+            setOf(
+                // Note: We remove calls that are aliases since they
+                // will be converted to a singular call.
+                CastingOperatorTable.TRY_TO_BINARY.name,
+                CastingOperatorTable.TRY_TO_NUMBER.name,
+                CastingOperatorTable.TRY_TO_DOUBLE.name,
+                CastingOperatorTable.TRY_TO_BOOLEAN.name,
+                CastingOperatorTable.TRY_TO_DATE.name,
+                CastingOperatorTable.TRY_TO_TIME.name,
+                CastingOperatorTable.TRY_TO_TIMESTAMP.name,
+                CastingOperatorTable.TRY_TO_TIMESTAMP_NTZ.name,
+                CastingOperatorTable.TRY_TO_TIMESTAMP_LTZ.name,
+                CastingOperatorTable.TRY_TO_TIMESTAMP_TZ.name,
+            )
     }
 }

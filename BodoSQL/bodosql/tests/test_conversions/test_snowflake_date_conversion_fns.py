@@ -648,6 +648,10 @@ def test_to_timestamp_non_numeric(
     data, answer, old_tz = to_timestamp_non_numeric_data
     if to_timestamp_fn.endswith("_LTZ"):
         tz = local_tz
+        # Any cast to TIMESTAMP_LTZ will be optimized out, so we convert the input here.
+        # TIMESTAMP_LTZ is only defined to work with the local timezone.
+        if old_tz is not None:
+            data = data.dt.tz_localize(None).dt.tz_localize(local_tz)
     elif to_timestamp_fn.endswith("_TZ"):
         if old_tz is None:
             tz = local_tz

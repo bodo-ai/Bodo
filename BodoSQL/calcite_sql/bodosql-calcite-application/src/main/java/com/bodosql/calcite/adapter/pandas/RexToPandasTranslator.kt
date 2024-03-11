@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen
-import com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen
 import com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen
 import com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen
 import com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen
@@ -25,6 +24,7 @@ import com.bodosql.calcite.application.utils.BodoArrayHelpers
 import com.bodosql.calcite.application.utils.BodoCtx
 import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.application.utils.Utils
+import com.bodosql.calcite.application.utils.Utils.getConversionName
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString
@@ -76,7 +76,9 @@ import org.apache.calcite.sql.`fun`.SqlExtractFunction
 import org.apache.calcite.sql.`fun`.SqlLikeOperator
 import org.apache.calcite.sql.`fun`.SqlSubstringFunction
 import org.apache.calcite.sql.type.BodoTZInfo
+import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import java.math.BigDecimal
 import java.util.Locale
 
 /**
@@ -163,12 +165,7 @@ open class RexToPandasTranslator(
         } else if (call.operator is SqlCaseOperator) {
             return visitCaseOp(call)
         } else if (call.operator is SqlCastFunction) {
-            if (call.kind == SqlKind.CAST) {
-                return visitCastScan(call)
-            } else {
-                assert(call.kind == SqlKind.SAFE_CAST)
-                return visitTryCastScan(call)
-            }
+            return visitCastScan(call, call.kind == SqlKind.SAFE_CAST)
         } else if (call.operator is SqlExtractFunction) {
             return visitExtractScan(call)
         } else if (call.operator is SqlSubstringFunction) {
@@ -635,8 +632,11 @@ open class RexToPandasTranslator(
         }
     }
 
-    protected open fun visitCastScan(operation: RexCall): Expr {
-        return visitCastScan(operation, IsScalar.isScalar(operation), listOf())
+    protected open fun visitCastScan(
+        operation: RexCall,
+        isSafe: Boolean,
+    ): Expr {
+        return visitCastScan(operation, isSafe, IsScalar.isScalar(operation), listOf())
     }
 
     /**
@@ -650,53 +650,36 @@ open class RexToPandasTranslator(
      */
     protected fun visitCastScan(
         operation: RexCall,
+        isSafe: Boolean,
         outputScalar: Boolean,
         streamingNamedArgs: List<Pair<String, Expr>>,
     ): Expr {
         val inputType = operation.operands[0].type
         val outputType = operation.getType()
-        assert(operation.operands.size == 1)
-        val child = operation.getOperands()[0].accept(this)
-        return CastCodeGen.generateCastCode(
-            child,
+        val operands = this.visitList(operation.getOperands())
+        val fnName = getConversionName(outputType, isSafe)
+        val (precision, scale) =
+            if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
+                Pair(outputType.precision, outputType.scale)
+            } else {
+                Pair(RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED)
+            }
+        return visitCastFunc(
+            fnName,
+            precision,
+            scale,
             inputType,
             outputType,
-            outputScalar,
+            operands,
+            listOf(outputScalar),
             streamingNamedArgs,
-            visitor,
         )
-    }
-
-    protected open fun visitTryCastScan(operation: RexCall): Expr {
-        return visitTryCastScan(operation, listOf())
-    }
-
-    /**
-     * Generate the code for a tryCast operation.
-     *
-     * @param operation The operation from which to generate the expression.
-     * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
-     * we aren't in a streaming context.
-     * @return The generated expression.
-     */
-    protected fun visitTryCastScan(
-        operation: RexCall,
-        streamingNamedArgs: List<Pair<String, Expr>>,
-    ): Expr {
-        val inputType = operation.operands[0].type
-        if (!SqlTypeName.CHAR_TYPES.contains(inputType.sqlTypeName)) {
-            throw BodoSQLCodegenException("TRY_CAST only supports casting from strings.")
-        }
-        val outputType = operation.getType()
-        assert(operation.operands.size == 1)
-        val child = operation.operands[0].accept(this)
-        return CastCodeGen.generateTryCastCode(child, outputType, streamingNamedArgs, visitor)
     }
 
     private fun visitExtractScan(node: RexCall): Expr {
         val args = visitList(node.operands)
-        val isTime = (node.operands[1].type.sqlTypeName.toString() == "TIME")
-        val isDate = (node.operands[1].type.sqlTypeName.toString() == "DATE")
+        val isTime = (node.operands[1].type.sqlTypeName == SqlTypeName.TIME)
+        val isDate = (node.operands[1].type.sqlTypeName == SqlTypeName.DATE)
         val dateVal = args[0]
         val column = args[1]
         return ExtractCodeGen.generateExtractCode(
@@ -844,7 +827,23 @@ open class RexToPandasTranslator(
         isScalar: Boolean,
         streamingNamedArgs: List<Pair<String, Expr>>,
     ): Expr {
-        return CastCodeGen.generateCastCode(arg, inputType, outputType, isScalar, streamingNamedArgs, visitor)
+        val fnName = getConversionName(outputType, false)
+        val (precision, scale) =
+            if (SqlTypeFamily.EXACT_NUMERIC.contains(outputType)) {
+                Pair(outputType.precision, outputType.scale)
+            } else {
+                Pair(RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED)
+            }
+        return visitCastFunc(
+            fnName,
+            precision,
+            scale,
+            inputType,
+            outputType,
+            listOf(arg),
+            listOf(isScalar),
+            streamingNamedArgs,
+        )
     }
 
     protected open fun visitTrimFunc(
@@ -936,22 +935,92 @@ open class RexToPandasTranslator(
         return StringFnCodeGen.generatePosition(operands, listOf())
     }
 
-    /**
-     * Generate the code for Cast function calls.
-     *
-     * @param fnOperation The RexNode for the function call.
-     * @param operands The arguments to the function.
-     * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
-     * we aren't in a streaming context.
-     * @return The generated expression.
-     */
-    protected fun visitCastFunc(
+    /** Wrapper to unpack the RexCall so the implementation can be reused for cast/try_cast.  */
+    protected open fun visitCastFunc(
         fnOperation: RexCall,
         operands: List<Expr>,
         argScalars: List<Boolean>,
         streamingNamedArgs: List<Pair<String, Expr>>,
     ): Expr {
-        when (val fnName = fnOperation.operator.name) {
+        var precision = RelDataType.PRECISION_NOT_SPECIFIED
+        var scale = RelDataType.SCALE_NOT_SPECIFIED
+        val fnName = fnOperation.operator.name
+        // TODO: Update when we add format string support.
+        if (fnName == "TO_NUMBER" || fnName == "TRY_TO_NUMBER") {
+            val rexOperands = fnOperation.getOperands()
+            if (rexOperands.size > 1) {
+                precision = (rexOperands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.intValueExact()
+            }
+            if (rexOperands.size > 2) {
+                scale = (rexOperands[2] as RexLiteral).getValueAs(BigDecimal::class.java)!!.intValueExact()
+            }
+        }
+        val inputType = fnOperation.operands[0].type
+        val outputType = fnOperation.getType()
+        return visitCastFunc(
+            fnOperation.operator.name,
+            precision,
+            scale,
+            inputType,
+            outputType,
+            operands,
+            argScalars,
+            streamingNamedArgs,
+        )
+    }
+
+    /**
+     * Determine if a cast function can omit any cast operations.
+     * @param inputType The input type.
+     * @param outputType The output type.
+     * @param scale The scale of the output type.
+     */
+    private fun canOmitCast(
+        inputType: RelDataType,
+        outputType: RelDataType,
+        precision: Int,
+        scale: Int,
+    ): Boolean {
+        return if (inputType.sqlTypeName == outputType.sqlTypeName) {
+            // Can omit cast if the input and output types are the same.
+            true
+        } else if (SqlTypeFamily.CHARACTER.contains(inputType) && SqlTypeFamily.CHARACTER.contains(outputType)) {
+            // Can omit cast if the input and output types are both character types.
+            true
+        } else {
+            // Can omit cast if it's an integer upcast or integer -> decimal without a scale (no float conversion).
+            SqlTypeFamily.INTEGER.contains(inputType) &&
+                SqlTypeFamily.EXACT_NUMERIC.contains(outputType) &&
+                inputType.precision <= precision && scale == 0
+        }
+    }
+
+    /**
+     * Generate the code for Cast function calls.
+     *
+     * @param fnName The name of the output function code.
+     * @param precision The output precision. This is needed because TO_NUMBER doesn't output a
+     *     decimal yet.
+     * @param scale The output scale. This is needed because TO_NUMBER doesn't output a decimal yet.
+     * @param operands The arguments to the function.
+     * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+     *     we aren't in a streaming context.
+     * @return The generated expression.
+     */
+    protected fun visitCastFunc(
+        fnName: String,
+        precision: Int,
+        scale: Int,
+        inputType: RelDataType,
+        outputType: RelDataType,
+        operands: List<Expr>,
+        argScalars: List<Boolean>,
+        streamingNamedArgs: List<Pair<String, Expr>>,
+    ): Expr {
+        if (canOmitCast(inputType, outputType, precision, scale)) {
+            return operands[0]
+        }
+        when (fnName) {
             "TIMESTAMP" -> return ConversionCodeGen.generateTimestampFnCode(operands, streamingNamedArgs)
             "TO_DATE", "TRY_TO_DATE" -> return ConversionCodeGen.generateToDateFnCode(
                 operands,
@@ -975,7 +1044,7 @@ open class RexToPandasTranslator(
                 streamingNamedArgs,
             )
 
-            "TO_TIMESTAMP_TZ", "TRY_TO_TIMESTAMP_TZ" -> return ConversionCodeGen.generateToTimestampTzFnCode(
+            "TO_TIMESTAMPTZ", "TRY_TO_TIMESTAMPTZ" -> return ConversionCodeGen.generateToTimestampTzFnCode(
                 operands,
                 visitor.genDefaultTZ().zoneExpr,
                 fnName,
@@ -995,19 +1064,9 @@ open class RexToPandasTranslator(
             )
 
             "TO_VARCHAR" -> return ConversionCodeGen.generateToCharFnCode(operands, argScalars)
-            "TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(
-                fnOperation.operands,
-                false,
-                streamingNamedArgs,
-                this,
-            )
+            "TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(operands[0], precision, scale, false, streamingNamedArgs)
 
-            "TRY_TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(
-                fnOperation.operands,
-                true,
-                streamingNamedArgs,
-                this,
-            )
+            "TRY_TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(operands[0], precision, scale, true, streamingNamedArgs)
 
             "TO_DOUBLE", "TRY_TO_DOUBLE" -> return ConversionCodeGen.generateToDoubleFnCode(
                 operands,
@@ -2014,22 +2073,8 @@ open class RexToPandasTranslator(
                     "YEAR", "WEEK", "WEEKOFYEAR", "WEEKISO", "EPOCH_SECOND", "EPOCH_MILLISECOND",
                     "EPOCH_MICROSECOND", "EPOCH_NANOSECOND", "TIMEZONE_HOUR", "TIMEZONE_MINUTE",
                     -> {
-                        isTime = (
-                            fnOperation
-                                .getOperands()[0]
-                                .type
-                                .sqlTypeName
-                                .toString()
-                                == "TIME"
-                        )
-                        isDate = (
-                            fnOperation
-                                .getOperands()[0]
-                                .type
-                                .sqlTypeName
-                                .toString()
-                                == "DATE"
-                        )
+                        isTime = fnOperation.getOperands()[0].type.sqlTypeName == SqlTypeName.TIME
+                        isDate = fnOperation.getOperands()[0].type.sqlTypeName == SqlTypeName.DATE
                         return ExtractCodeGen.generateExtractCode(
                             fnName,
                             operands[0],
@@ -2148,8 +2193,11 @@ open class RexToPandasTranslator(
          */
         private val closures: MutableList<Op.Function> = java.util.ArrayList()
 
-        override fun visitCastScan(operation: RexCall): Expr {
-            return visitCastScan(operation, true, listOf())
+        override fun visitCastScan(
+            operation: RexCall,
+            isSafe: Boolean,
+        ): Expr {
+            return visitCastScan(operation, isSafe, true, listOf())
         }
 
         override fun isOperandScalar(operand: RexNode): Boolean {

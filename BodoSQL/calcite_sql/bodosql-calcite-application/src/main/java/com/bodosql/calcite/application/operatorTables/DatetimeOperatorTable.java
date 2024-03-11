@@ -97,6 +97,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
+
   public static final SqlBasicFunction TIMEFROMPARTS =
       SqlBasicFunction.create(
           "TIMEFROMPARTS",
