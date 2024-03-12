@@ -607,7 +607,9 @@ def add_interval_util(start_dt, interval):
     Returns:
         datetime series/scalar: start_dt + interval
     """
-    verify_time_or_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
+    verify_time_or_datetime_arg_allow_tz(
+        start_dt, "add_interval", "start_dt", allow_timestamp_tz=True
+    )
     verify_sql_interval(interval, "add_interval", "interval")
     time_zone = get_tz_if_exists(start_dt)
 
@@ -675,7 +677,20 @@ def add_interval_util(start_dt, interval):
             scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
+    elif is_valid_timestamptz_arg(start_dt):
+        # For TIMESTAMP_TZ, add the timedelta to the local timestamp, then create
+        # a new TIMESTAMP_TZ from that local timestamp and the original offset.
+        # We do this because the datetime arithmetic semantics are different
+        # versus if we add the timedelta/offset directly to the UTC timestamp.
+        scalar_text = (
+            "local_ts = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)\n"
+        )
+        scalar_text += "new_local_ts = local_ts + arg1\n"
+        scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(new_local_ts, arg0.offset_minutes)\n"
+        out_dtype = bodo.timestamptz_array_type
     else:
+        # For regular timestamps, perform the standard arithmetic on the datetime and
+        # interval after unwrapping them, then re-wrap the result
         scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
@@ -841,10 +856,12 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             "nanoseconds",
         ):
             verify_time_or_datetime_arg_allow_tz(
-                start_dt, "add_interval_" + unit, "start_dt"
+                start_dt, "add_interval_" + unit, "start_dt", allow_timestamp_tz=True
             )
         else:
-            verify_datetime_arg_allow_tz(start_dt, "add_interval_" + unit, "start_dt")
+            verify_datetime_arg_allow_tz(
+                start_dt, "add_interval_" + unit, "start_dt", allow_timestamp_tz=True
+            )
         time_zone = get_tz_if_exists(start_dt)
 
         arg_names = ["amount", "start_dt"]
@@ -988,25 +1005,42 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
         # Code path generated for timezone-native data by directly adding to
         # a DateOffset or TimeDelta with the corresponding units
         else:
-            # Scalars will return Timestamp values while vectors will remain
-            # in datetime64 format
-            unbox_str = (
-                "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+            is_timestamp_tz = is_valid_timestamptz_arg(start_dt)
+            # Setup the logic required to unwrap the argument and re-wrap it as
+            # the correct type for the answer. For TIMESTAMP_TZ, the unwrapping
+            # is getting the local timestamp and the re-wrapping is converting it
+            # back to a TIMESTAMP_TZ using the original offset. For NTZ, scalars will
+            # return Timestamp values while vectors will remain in datetime64 format.
+            wrap_str = (
+                "bodo.hiframes.timestamptz_ext.init_timestamptz_from_local"
+                if is_timestamp_tz
+                else (
+                    "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+                    if is_vector
+                    else ""
+                )
             )
-            box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
+            wrap_suffix = ", arg1.offset_minutes" if is_timestamp_tz else ""
+            unwrap_str = (
+                "bodo.hiframes.timestamptz_ext.get_local_timestamp"
+                if is_timestamp_tz
+                else ("bodo.utils.conversion.box_if_dt64" if is_vector else "")
+            )
 
             if unit in ("months", "years"):
-                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.DateOffset({unit}=arg0))\n"
+                scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.DateOffset({unit}=arg0){wrap_suffix})\n"
             elif unit == "quarters":
-                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.DateOffset(months=3*arg0))\n"
+                scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.DateOffset(months=3*arg0){wrap_suffix})\n"
             elif unit == "nanoseconds":
-                scalar_text = (
-                    f"res[i] = {unbox_str}({box_str}(arg1) + pd.Timedelta(arg0))\n"
-                )
+                scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.Timedelta(arg0){wrap_suffix})\n"
             else:
-                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.Timedelta({unit}=arg0))\n"
+                scalar_text = f"res[i] = {wrap_str}({unwrap_str}(arg1) + pd.Timedelta({unit}=arg0){wrap_suffix})\n"
 
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+            out_dtype = (
+                bodo.timestamptz_array_type
+                if is_timestamp_tz
+                else types.Array(bodo.datetime64ns, 1, "C")
+            )
 
         return gen_vectorized(
             arg_names,

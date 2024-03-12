@@ -327,6 +327,7 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
     final RelDataType outputType;
     switch (operandType2.getSqlTypeName()) {
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+      case TIMESTAMP_TZ:
       case TIMESTAMP:
         outputType = operandType2;
         break;

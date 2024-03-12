@@ -45,6 +45,220 @@ def timestamp_tz_data():
 
 
 @pytest.mark.parametrize(
+    "dateadd_calc, local_answer",
+    [
+        pytest.param(
+            "DATEADD(year, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2026-07-04 20:30:14.250"),
+                    pd.Timestamp("1996-12-31 23:59:59.999526500"),
+                    pd.Timestamp("2028-01-01"),
+                    pd.Timestamp("2019-02-28 6:45:00"),
+                    None,
+                    pd.Timestamp("2017-04-01 12:00:00"),
+                ]
+            ),
+            id="year",
+        ),
+        pytest.param(
+            "TIMEADD(quarter, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2025-01-04 20:30:14.250"),
+                    pd.Timestamp("1999-3-31 23:59:59.999526500"),
+                    pd.Timestamp("2025-01-01"),
+                    pd.Timestamp("2022-11-29 6:45:00"),
+                    None,
+                    pd.Timestamp("2022-07-01 12:00:00"),
+                ]
+            ),
+            id="quarter",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TIMEADD(month, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-09-04 20:30:14.250"),
+                    pd.Timestamp("1999-09-30 23:59:59.999526500"),
+                    pd.Timestamp("2024-05-01"),
+                    pd.Timestamp("2023-09-29 6:45:00"),
+                    None,
+                    pd.Timestamp("2023-09-01 12:00:00"),
+                ]
+            ),
+            id="month",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "DATEADD(day, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-07-06 20:30:14.250"),
+                    pd.Timestamp("1999-12-28 23:59:59.999526500"),
+                    pd.Timestamp("2024-01-05"),
+                    pd.Timestamp("2024-02-24 6:45:00"),
+                    None,
+                    pd.Timestamp("2024-03-25 12:00:00"),
+                ]
+            ),
+            id="day",
+        ),
+        pytest.param(
+            "TIMEADD(hour, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-07-04 22:30:14.250"),
+                    pd.Timestamp("1999-12-31 20:59:59.999526500"),
+                    pd.Timestamp("2024-01-01 04:00:00"),
+                    pd.Timestamp("2024-02-29 01:45:00"),
+                    None,
+                    pd.Timestamp("2024-04-01 05:00:00"),
+                ]
+            ),
+            id="hour",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TIMESTAMPADD(second, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-07-04 20:30:16.250"),
+                    pd.Timestamp("1999-12-31 23:59:56.999526500"),
+                    pd.Timestamp("2024-01-01 00:00:04"),
+                    pd.Timestamp("2024-02-29 6:44:55"),
+                    None,
+                    pd.Timestamp("2024-04-01 11:59:53"),
+                ]
+            ),
+            id="second",
+        ),
+        pytest.param(
+            "DATEADD(microsecond, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-07-04 20:30:14.250002"),
+                    pd.Timestamp("1999-12-31 23:59:59.999523500"),
+                    pd.Timestamp("2024-01-01 00:00:00.000004"),
+                    pd.Timestamp("2024-02-29 06:44:59.999995"),
+                    None,
+                    pd.Timestamp("2024-04-01 11:59:59.999993"),
+                ]
+            ),
+            id="microsecond",
+        ),
+        pytest.param(
+            "TIMEADD(nanosecond, I * POW(-1, I), T)",
+            pd.array(
+                [
+                    pd.Timestamp("2024-04-01 12:00:00"),
+                    None,
+                    pd.Timestamp("2024-07-04 20:30:14.250000002"),
+                    pd.Timestamp("1999-12-31 23:59:59.999526497"),
+                    pd.Timestamp("2024-01-01 00:00:00.000000004"),
+                    pd.Timestamp("2024-02-29 06:44:59.999999995"),
+                    None,
+                    pd.Timestamp("2024-04-01 11:59:59.999999993"),
+                ]
+            ),
+            id="nanosecond",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "T - INTERVAL 1 MONTH",
+            [
+                pd.Timestamp("2024-03-01 12:00:00"),
+                None,
+                pd.Timestamp("2024-06-04 20:30:14.250"),
+                pd.Timestamp("1999-11-30 23:59:59.999526500"),
+                pd.Timestamp("2023-12-01"),
+                pd.Timestamp("2024-01-29 6:45:00"),
+                None,
+                pd.Timestamp("2024-03-01 12:00:00"),
+            ],
+            id="interval_month",
+        ),
+        pytest.param(
+            "T + INTERVAL 10 days",
+            [
+                pd.Timestamp("2024-04-11 12:00:00"),
+                None,
+                pd.Timestamp("2024-07-14 20:30:14.250"),
+                pd.Timestamp("2000-01-10 23:59:59.999526500"),
+                pd.Timestamp("2024-01-11"),
+                pd.Timestamp("2024-03-10 6:45:00"),
+                None,
+                pd.Timestamp("2024-04-11 12:00:00"),
+            ],
+            id="interval_day",
+        ),
+        pytest.param(
+            "T + INTERVAL 8 hours",
+            [
+                pd.Timestamp("2024-04-01 20:00:00"),
+                None,
+                pd.Timestamp("2024-07-05 04:30:14.250"),
+                pd.Timestamp("2000-01-01 07:59:59.999526500"),
+                pd.Timestamp("2024-01-01 08:00:00"),
+                pd.Timestamp("2024-02-29 14:45:00"),
+                None,
+                pd.Timestamp("2024-04-01 20:00:00"),
+            ],
+            id="interval_hour",
+        ),
+    ],
+)
+def test_timestamp_tz_dateadd(
+    timestamp_tz_data, dateadd_calc, local_answer, memory_leak_check
+):
+    """
+    Tests the datetime arithmetic operations on TIMESTMAP_TZ data.
+
+    timestamp_tz_data: the fixture containing the input data.
+    dateadd_calc: the expression used to calculate a dateadd call with the columns from timestamp_tz_data.
+    local_answer: the expected local timestamp (in NTZ) produced from dateadd_calc.
+    """
+    query = f"SELECT I, {dateadd_calc} as N, DATE_PART(tzh, {dateadd_calc}) as H, DATE_PART(tzm, {dateadd_calc}) as M FROM TABLE1"
+    ctx = {"TABLE1": timestamp_tz_data}
+    offsets = [0, None, -30, 60, -240, 330, None, -480]
+    expected_output = pd.DataFrame(
+        {
+            "I": np.arange(8),
+            "A": [
+                None if off is None else bodo.TimestampTZ.fromLocal(ans, off)
+                for ans, off in zip(local_answer, offsets)
+            ],
+            "H": pd.array([0, None, 0, 1, -4, 5, None, -8], dtype=pd.Int16Dtype()),
+            "M": pd.array([0, None, -30, 0, 0, 30, None, 0], dtype=pd.Int16Dtype()),
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        enable_timestamp_tz=True,
+    )
+
+
+@pytest.mark.parametrize(
     "extract_term, answer",
     [
         pytest.param(
