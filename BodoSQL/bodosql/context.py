@@ -141,10 +141,17 @@ def construct_tz_aware_array_type(typ, nullable):
     """
     # Timestamps only support precision 9 right now.
     precision = 9
-    type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
-    # Create the BodoTzInfo Java object.
-    tz_info = BodoTZInfoClass(str(typ.tz), "int" if isinstance(typ.tz, int) else "str")
-    return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
+    if typ.tz is None:
+        # TZ = None is a timezone naive timestamp
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Datetime.value)
+        return ColumnDataTypeClass(type_enum, nullable, precision)
+    else:
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
+        # Create the BodoTzInfo Java object.
+        tz_info = BodoTZInfoClass(
+            str(typ.tz), "int" if isinstance(typ.tz, int) else "str"
+        )
+        return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
 
 
 def construct_time_array_type(
