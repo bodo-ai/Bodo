@@ -279,6 +279,25 @@ def init_timestamptz(typingctx, utc_timestamp, offset_minutes):
     )
 
 
+def init_timestamptz_from_local(local_timestamp, offset_minutes):  # pragma: no cover
+    # Dummy used for overload
+    pass
+
+
+@overload(init_timestamptz_from_local)
+def overload_init_timestamptz_from_local(local_timestamp, offset_minutes):
+    """
+    Constructor for TIMESTAMP_TZ using the local timestamp.
+    """
+
+    def impl(local_timestamp, offset_minutes):  # pragma: no cover
+        return init_timestamptz(
+            local_timestamp - pd.Timedelta(minutes=offset_minutes), offset_minutes
+        )
+
+    return impl
+
+
 @overload(TimestampTZ, no_unliteral=True)
 def overload_timestamptz(utc_timestamp, offset_minutes):
     def impl(utc_timestamp, offset_minutes):  # pragma: no cover
