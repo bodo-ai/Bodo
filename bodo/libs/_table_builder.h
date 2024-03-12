@@ -916,7 +916,7 @@ struct ArrayBuildBuffer {
                     data_array->data2<bodo_array_type::TIMESTAMPTZ>() +
                     offset_size_type * size;
                 const char* offset_in_ptr =
-                    in_arr->data2<bodo_array_type::NULLABLE_INT_BOOL>() +
+                    in_arr->data2<bodo_array_type::TIMESTAMPTZ>() +
                     offset_size_type * row_ind;
                 memcpy(utc_out_ptr, utc_in_ptr, utc_size_type);
                 memcpy(offset_out_ptr, offset_in_ptr, offset_size_type);
