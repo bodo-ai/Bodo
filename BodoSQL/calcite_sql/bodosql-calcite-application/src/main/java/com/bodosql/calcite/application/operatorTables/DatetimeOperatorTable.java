@@ -239,9 +239,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           "DATE_SUB",
           BodoReturnTypes.dateAddReturnType("DATE_SUB"),
           OperandTypes.DATETIME_INTERVAL
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
-              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction SUBDATE = DATE_SUB.withName("SUBDATE");

@@ -809,7 +809,7 @@ public class BodoReturnTypes {
         RelDataType datetimeType = operandTypes.get(0);
         final RelDataType returnType;
 
-        if (operandTypes.get(1).getSqlTypeName().equals(SqlTypeName.INTEGER)) {
+        if (SqlTypeFamily.INTEGER.contains(operandTypes.get(1))) {
             // when the second argument is integer, it is equivalent to adding day interval
             if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
                 returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
