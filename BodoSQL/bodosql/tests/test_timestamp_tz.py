@@ -44,6 +44,36 @@ def timestamp_tz_data():
     )
 
 
+@pytest.fixture
+def expanded_timestamp_tz_data():
+    """
+    Same as timestamp_tz_data but with some rows that have the same UTC
+    timestamp even though they have different offsets.
+
+    Specifically, the following rows are equivalent:
+
+    - Row 0 = Row 1 = Row 2
+    - Row 3 = Row 5 = Row 7
+    """
+    return pd.DataFrame(
+        {
+            "I": np.arange(10),
+            "T": [
+                bodo.TimestampTZ(pd.Timestamp("2024-03-09 22:55:34"), 0),
+                bodo.TimestampTZ(pd.Timestamp("2024-03-09 22:55:34"), 60),
+                bodo.TimestampTZ(pd.Timestamp("2024-03-09 22:55:34"), -480),
+                bodo.TimestampTZ(pd.Timestamp("1999-12-31 23:59:59.999999999"), 0),
+                bodo.TimestampTZ(pd.Timestamp("2024-07-04"), 30),
+                bodo.TimestampTZ(pd.Timestamp("1999-12-31 23:59:59.999999999"), -30),
+                bodo.TimestampTZ(pd.Timestamp("2024-04-01 06:45:00"), 0),
+                bodo.TimestampTZ(pd.Timestamp("1999-12-31 23:59:59.999999999"), 450),
+                bodo.TimestampTZ(pd.Timestamp("2024-04-01 08:00:00"), 75),
+                None,
+            ],
+        }
+    )
+
+
 @pytest.mark.parametrize(
     "dateadd_calc, local_answer",
     [
@@ -406,6 +436,66 @@ def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
         expected_output=expected_output,
         enable_timestamp_tz=True,
         sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "union_all",
+    [
+        pytest.param(True, id="all"),
+        pytest.param(False, id="distinct"),
+    ],
+)
+def test_timestamp_tz_union(expanded_timestamp_tz_data, union_all, memory_leak_check):
+    """
+    Tests that UNION ALL/DISTINCT works correctly on timestamp_tz data.
+    """
+    df = pd.DataFrame({"T": expanded_timestamp_tz_data["T"]})
+    operator = "ALL" if union_all else "DISTINCT"
+    query = f"(SELECT * FROM TABLE1) UNION {operator} (SELECT * FROM TABLE2)"
+    pattern_1 = [0, 2, 4, 6, 2, 4, 2, 8, 9] * 100
+    pattern_2 = [0, 1, 2, 3, 5, 9, 9, 7, 0, 2, 5, 2, 7, 9] * 300
+    if union_all:
+        pattern_3 = pattern_1 + pattern_2
+    else:
+        # rows 0/1/2 and 3/5/7 are equivalent so they are not all included
+        pattern_3 = [0, 3, 4, 6, 8, 9]
+    ctx = {
+        "TABLE1": df.iloc[pattern_1, :],
+        "TABLE2": df.iloc[pattern_2, :],
+    }
+    expected_output = df.iloc[pattern_3, :]
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        enable_timestamp_tz=True,
+    )
+
+
+def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
+    """
+    Tests grouping by TIMESTAMP_TZ keys.
+    """
+    query = f"SELECT T, SUM(I) as S FROM TABLE1 GROUP BY T"
+    ctx = {"TABLE1": pd.concat([expanded_timestamp_tz_data] * 5)}
+    expected_output = pd.DataFrame(
+        {
+            "T": expanded_timestamp_tz_data["T"].iloc[[0, 3, 4, 6, 8, 9]],
+            "S": [15, 75, 20, 30, 40, 45],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        enable_timestamp_tz=True,
     )
 
 
