@@ -64,10 +64,12 @@ public class BinOpCodeGen {
 
       boolean isArg0Datetime =
           arg0TypeName.equals(SqlTypeName.TIMESTAMP)
+              || arg0TypeName.equals(SqlTypeName.TIMESTAMP_TZ)
               || arg0TypeName.equals(SqlTypeName.DATE)
               || arg0TypeName.equals(SqlTypeName.TIME);
       boolean isArg1Datetime =
           arg1TypeName.equals(SqlTypeName.TIMESTAMP)
+              || arg1TypeName.equals(SqlTypeName.TIMESTAMP_TZ)
               || arg1TypeName.equals(SqlTypeName.DATE)
               || arg1TypeName.equals(SqlTypeName.TIME);
       Set<SqlTypeName> DATE_INTERVAL_TYPES =
