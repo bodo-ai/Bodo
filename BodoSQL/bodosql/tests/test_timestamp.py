@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bodo.tests.timezone_common import (  # noqa
+    representative_tz,
+)
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -692,9 +695,8 @@ def test_date_part_timezone_unit_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
 
-@pytest.mark.skip("TODO FIXME: May fail the memory leak check on CI")
 @pytest.mark.flaky(max_runs=3)
-def test_current_date_timestamp_tz_to_char_fmt(memory_leak_check):
+def test_current_date_timestamp_tz_to_char_fmt(representative_tz, memory_leak_check):
     """
     Tests the following sequence of events:
         - Call CURRENT_DATE
@@ -707,7 +709,15 @@ def test_current_date_timestamp_tz_to_char_fmt(memory_leak_check):
     table = pd.DataFrame({"I": list(range(5))})
     query = "SELECT I, TO_CHAR(CURRENT_DATE::TIMESTAMP WITH TIME ZONE, 'YYYYMMDD'::text) as S from table1"
     ctx = {"TABLE1": table}
-    ts = pd.Timestamp.now()
+    ts = pd.Timestamp.now(tz=representative_tz)
     as_str = "{:04}{:02}{:02}".format(ts.year, ts.month, ts.day)
     answer = pd.DataFrame({"I": list(range(5)), "S": [as_str] * 5})
-    check_query(query, ctx, None, expected_output=answer, check_dtype=False)
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_dtype=False,
+        enable_timestamp_tz=True,
+        session_tz=representative_tz,
+    )
