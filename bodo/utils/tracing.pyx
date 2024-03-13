@@ -376,7 +376,7 @@ cdef class ResumableEvent(EventBase):
 
     cdef long long current_iter_start
     cdef int resumable_dur
-    cdef int iteration_count
+    cdef long long iteration_count
     cdef dict _child_events
 
     def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=0): # Resumable
