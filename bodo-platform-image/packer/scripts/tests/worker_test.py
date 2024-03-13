@@ -12,7 +12,6 @@ import pytest
         "snowflake-connector-python",
         "bodo-platform-utils",
         "bodo-platform-extensions",
-        "httpie",
     ],
 )
 def test_packages(package, pip_packages, conda_packages, remote_dir, host):
@@ -29,13 +28,6 @@ def test_packages(package, pip_packages, conda_packages, remote_dir, host):
             assert r.succeeded
 
         test_bodo_platform_utils(host)
-    if package == "httpie":
-
-        def test_httpie(host):
-            r = host.run("http --help")
-            assert r.succeeded
-
-        test_httpie(host)
 
 
 @pytest.mark.parametrize(
