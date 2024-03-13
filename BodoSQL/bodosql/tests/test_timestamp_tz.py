@@ -33,8 +33,8 @@ def timestamp_tz_data():
             "T": [
                 bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", 0),
                 None,
-                bodo.TimestampTZ.fromLocal("2024-07-04 20:30:14.250", -30),
-                bodo.TimestampTZ.fromLocal("1999-12-31 23:59:59.999526500", 60),
+                bodo.TimestampTZ.fromLocal("2024-07-04 20:30:14.250", 30),
+                bodo.TimestampTZ.fromLocal("1999-12-31 23:59:59.999526500", -60),
                 bodo.TimestampTZ.fromLocal("2024-01-01", -240),
                 bodo.TimestampTZ.fromLocal("2024-02-29 6:45:00", 330),
                 None,
@@ -265,7 +265,7 @@ def test_timestamp_tz_dateadd(
     """
     query = f"SELECT I, {dateadd_calc} as N, DATE_PART(tzh, {dateadd_calc}) as H, DATE_PART(tzm, {dateadd_calc}) as M FROM TABLE1"
     ctx = {"TABLE1": timestamp_tz_data}
-    offsets = [0, None, -30, 60, -240, 330, None, -480]
+    offsets = [0, None, 30, -60, -240, 330, None, -480]
     expected_output = pd.DataFrame(
         {
             "I": np.arange(8),
@@ -273,8 +273,129 @@ def test_timestamp_tz_dateadd(
                 None if off is None else bodo.TimestampTZ.fromLocal(ans, off)
                 for ans, off in zip(local_answer, offsets)
             ],
-            "H": pd.array([0, None, 0, 1, -4, 5, None, -8], dtype=pd.Int16Dtype()),
-            "M": pd.array([0, None, -30, 0, 0, 30, None, 0], dtype=pd.Int16Dtype()),
+            "H": pd.array([0, None, 0, -1, -4, 5, None, -8], dtype=pd.Int16Dtype()),
+            "M": pd.array([0, None, 30, 0, 0, 30, None, 0], dtype=pd.Int16Dtype()),
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        enable_timestamp_tz=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "datediff_calc, diff_answer",
+    [
+        pytest.param(
+            "DATEDIFF(year, TO_TIMESTAMP_TZ('1970-07-01 00:00:00 +0000'), T)",
+            pd.array(
+                [
+                    54,
+                    None,
+                    54,
+                    30,
+                    54,
+                    54,
+                    None,
+                    54,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="year",
+        ),
+        pytest.param(
+            "TIMEDIFF(month, TO_TIMESTAMP_TZ('2000-03-01 00:00:00 +0000'), T)",
+            pd.array(
+                [
+                    289,
+                    None,
+                    292,
+                    -2,
+                    286,
+                    287,
+                    None,
+                    289,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="month",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TIMESTAMPDIFF(day, T, current_date :: TIMESTAMP_TZ)",
+            pd.array(
+                [
+                    (pd.Timestamp.now().date() - datetime.date(2024, 4, 1)).days,
+                    None,
+                    (pd.Timestamp.now().date() - datetime.date(2024, 7, 4)).days,
+                    (pd.Timestamp.now().date() - datetime.date(2000, 1, 1)).days,
+                    (pd.Timestamp.now().date() - datetime.date(2024, 1, 1)).days,
+                    (pd.Timestamp.now().date() - datetime.date(2024, 2, 29)).days,
+                    None,
+                    (pd.Timestamp.now().date() - datetime.date(2024, 4, 1)).days,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="day",
+        ),
+        pytest.param(
+            "DATEDIFF(hour, TO_TIMESTAMP_TZ(DATE_TRUNC(day, TO_TIMESTAMP_NTZ(T))), T)",
+            pd.array(
+                [
+                    12,
+                    None,
+                    20,
+                    24,
+                    4,
+                    1,
+                    None,
+                    20,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="hour",
+        ),
+        pytest.param(
+            "DATEDIFF(minute, TO_TIMESTAMP_TZ(DATE_TRUNC(day, TO_TIMESTAMP_NTZ(T))), T)",
+            pd.array(
+                [
+                    720,
+                    None,
+                    1200,
+                    1499,
+                    240,
+                    75,
+                    None,
+                    1200,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="minute",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_timestamp_tz_datediff(
+    timestamp_tz_data, datediff_calc, diff_answer, memory_leak_check
+):
+    """
+    Tests the datetime subtraction arithmetic operations on TIMESTMAP_TZ data.
+
+    timestamp_tz_data: the fixture containing the input data.
+    datediff_calc: the expression used to calculate a dateadd call with the columns from timestamp_tz_data.
+    diff_answer: the expected difference between the two dates in the desired interval.
+    """
+    query = f"SELECT I, {datediff_calc} as D FROM TABLE1"
+    ctx = {"TABLE1": timestamp_tz_data}
+    expected_output = pd.DataFrame(
+        {
+            "I": np.arange(8),
+            "D": diff_answer,
         }
     )
     check_query(
@@ -366,7 +487,7 @@ def test_timestamp_tz_dateadd(
                     0,
                     None,
                     0,
-                    1,
+                    -1,
                     -4,
                     5,
                     None,
@@ -382,7 +503,7 @@ def test_timestamp_tz_dateadd(
                 [
                     0,
                     None,
-                    -30,
+                    30,
                     0,
                     0,
                     30,
@@ -508,8 +629,8 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
                 [
                     "2024-04-01 12:00:00 +0000",
                     None,
-                    "2024-07-04 20:30:14.250000 -0030",
-                    "1999-12-31 23:59:59.999526500 +0100",
+                    "2024-07-04 20:30:14.250000 +0030",
+                    "1999-12-31 23:59:59.999526500 -0100",
                     "2024-01-01 00:00:00 -0400",
                     "2024-02-29 06:45:00 +0530",
                     None,
@@ -572,9 +693,9 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
                 [
                     pd.Timestamp("2024-04-01 05:00:00", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2024-07-04 14:00:14.250", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-07-04 13:00:14.250", tz="America/Los_Angeles"),
                     pd.Timestamp(
-                        "1999-12-31 14:59:59.999526500", tz="America/Los_Angeles"
+                        "1999-12-31 16:59:59.999526500", tz="America/Los_Angeles"
                     ),
                     pd.Timestamp("2023-12-31 20:00:00", tz="America/Los_Angeles"),
                     pd.Timestamp("2024-02-28 17:15:00", tz="America/Los_Angeles"),
@@ -739,5 +860,87 @@ def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
         check_dtype=False,
         expected_output=expected_output,
         session_tz=session_tz,
+        enable_timestamp_tz=True,
+    )
+
+
+# def timestamp_tz_data():
+#     """
+#     Creates a DataFrame with an index column
+#     and a column of TimestampTZ data.
+#     """
+#     return pd.DataFrame(
+#         {
+#             "I": np.arange(8),
+#             "T": [
+#                 bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", 0),
+#                 None,
+#                 bodo.TimestampTZ.fromLocal("2024-07-04 20:30:14.250", 30),
+#                 bodo.TimestampTZ.fromLocal("1999-12-31 23:59:59.999526500", -60),
+#                 bodo.TimestampTZ.fromLocal("2024-01-01", -240),
+#                 bodo.TimestampTZ.fromLocal("2024-02-29 6:45:00", 330),
+#                 None,
+#                 bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", -480),
+#             ],
+#         }
+#     )
+
+
+@pytest.mark.parametrize(
+    "calculation, answer",
+    [
+        pytest.param(
+            "T = '2024-07-04 20:30:14.250 +0030' :: TIMESTAMP_TZ OR "
+            + "T = '2024-02-29 1:15:00 -0000' :: TIMESTAMP_TZ",
+            pd.array(
+                [False, None, True, False, False, True, None, False],
+                dtype=pd.BooleanDtype(),
+            ),
+            id="equals_literals",
+        ),
+        pytest.param(
+            "DATE_PART(hour, '2024-07-04 20:30:14.250' :: TIMESTAMP_TZ)",
+            pd.array([20] * 8, dtype=pd.Int16Dtype()),
+            id="literal_hour",
+        ),
+        pytest.param(
+            "DATE_PART(minute, '2024-07-04 20:30:14.250 -1045' :: TIMESTAMP_TZ)",
+            pd.array([30] * 8, dtype=pd.Int16Dtype()),
+            id="literal_minute",
+        ),
+        pytest.param(
+            "DATE_PART(tzh, '2024-07-04 20:30:14.250' :: TIMESTAMP_TZ)",
+            pd.array([-7] * 8, dtype=pd.Int16Dtype()),
+            id="literal_hour_offset",
+        ),
+        pytest.param(
+            "DATE_PART(tzm, '2024-07-04 20:30:14.250 -1045' :: TIMESTAMP_TZ)",
+            pd.array([-45] * 8, dtype=pd.Int16Dtype()),
+            id="literal_minute_offset",
+        ),
+    ],
+)
+def test_timestamp_tz_literal(
+    timestamp_tz_data, calculation, answer, memory_leak_check
+):
+    """
+    Tests queries that involve TIMESTAMP_TZ literals.
+    """
+    query = f"SELECT I, {calculation} as A FROM TABLE1"
+    ctx = {"TABLE1": timestamp_tz_data}
+    expected_output = pd.DataFrame(
+        {
+            "I": np.arange(len(answer)),
+            "A": answer,
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        session_tz="America/Los_Angeles",
         enable_timestamp_tz=True,
     )
