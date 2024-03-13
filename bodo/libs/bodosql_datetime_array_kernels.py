@@ -1525,9 +1525,15 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
                 raise BodoError(
                     "DateDiff(): If a time type is provided both arguments must be time types."
                 )
+            first_arg = "arg0"
+            second_arg = "arg1"
         else:
-            verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
-            verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
+            verify_datetime_arg_allow_tz(
+                arr0, "diff_" + unit, "arr0", allow_timestamp_tz=True
+            )
+            verify_datetime_arg_allow_tz(
+                arr1, "diff_" + unit, "arr1", allow_timestamp_tz=True
+            )
             # Determine all the information for casting
             is_date_arr0 = is_valid_date_arg(arr0)
             is_date_arr1 = is_valid_date_arg(arr1)
@@ -1552,10 +1558,19 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             if is_date_arr1 or (arr1_tz != cast_tz):
                 scalar_text += "arg1 = bodo.libs.bodosql_array_kernels.to_timestamp(arg1, None, _cast_tz, 0)\n"
 
-            # If we are working with tz_naive data we need to keep the result in a timestamp.
-            if cast_tz is None:
-                scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
-                scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+            if is_valid_timestamptz_arg(arr0) and is_valid_timestamptz_arg(arr1):
+                # If we are working with timestamp_tz, we need to extract
+                # the UTC timestamp
+                first_arg = "bodo.hiframes.timestamptz_ext.get_utc_timestamp(arg0)"
+                second_arg = "bodo.hiframes.timestamptz_ext.get_utc_timestamp(arg1)"
+            elif cast_tz is None:
+                # If we are working with tz_naive data we need to keep the result in a timestamp.
+                first_arg = "bodo.utils.conversion.box_if_dt64(arg0)"
+                second_arg = "bodo.utils.conversion.box_if_dt64(arg1)"
+            else:
+                # Otherwise, the arguments can be used directly
+                first_arg = "arg0"
+                second_arg = "arg1"
 
         arg_names = ["arr0", "arr1"]
         arg_types = [arr0, arr1]
@@ -1563,15 +1578,15 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
 
         # A dictionary of variable definitions shared between the kernels
         diff_defns = {
-            "yr_diff": "arg1.year - arg0.year",
-            "qu_diff": "arg1.quarter - arg0.quarter",
-            "mo_diff": "arg1.month - arg0.month",
-            "y0, w0, _": "arg0.isocalendar()",
-            "y1, w1, _": "arg1.isocalendar()",
-            "iso_yr_diff": "bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(y0, y1)",
-            "wk_diff": "w1 - w0",
-            "da_diff": "(pd.Timestamp(arg1.year, arg1.month, arg1.day) - pd.Timestamp(arg0.year, arg0.month, arg0.day)).days",
-            "ns_diff": "arg1.value - arg0.value",
+            "yr_diff": f"{second_arg}.year - {first_arg}.year",
+            "qu_diff": f"{second_arg}.quarter - {first_arg}.quarter",
+            "mo_diff": f"{second_arg}.month - {first_arg}.month",
+            "y0, w0, _": f"{first_arg}.isocalendar()",
+            "y1, w1, _": f"{second_arg}.isocalendar()",
+            "iso_yr_diff": f"bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(y0, y1)",
+            "wk_diff": f"w1 - w0",
+            "da_diff": f"(pd.Timestamp({second_arg}.year, {second_arg}.month, {second_arg}.day) - pd.Timestamp({first_arg}.year, {first_arg}.month, {first_arg}.day)).days",
+            "ns_diff": f"{second_arg}.value - {first_arg}.value",
         }
         # A dictionary mapping each kernel to the list of definitions needed'
         req_defns = {
@@ -1588,7 +1603,6 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             scalar_text += f"{req_defn} = {diff_defns[req_defn]}\n"
 
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
-
         if unit == "year":
             scalar_text += "res[i] = yr_diff"
         elif unit == "quarter":
@@ -1612,7 +1626,7 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
                 divisor = 1000000
             if unit == "microsecond":
                 divisor = 1000
-            scalar_text += f"res[i] = np.floor_divide((arg1.value), ({divisor})) - np.floor_divide((arg0.value), ({divisor}))\n"
+            scalar_text += f"res[i] = np.floor_divide(({second_arg}.value), ({divisor})) - np.floor_divide(({first_arg}.value), ({divisor}))\n"
 
         return gen_vectorized(
             arg_names,
