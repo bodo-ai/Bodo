@@ -891,13 +891,28 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
         scalar_text += "else:\n"
         scalar_text += f"  res[i] = arg0.strftime({convert_func_str}(arg1))"
     elif is_valid_timestamptz_arg(inner_type):
-        scalar_text = "offset = abs(arg0.offset_minutes)\n"
-        scalar_text += "offset_sign = '+' if arg0.offset_minutes >= 0 else '-'\n"
-        scalar_text += "hours = offset // 60\n"
-        scalar_text += "minutes = offset % 60\n"
-        scalar_text += "offset_str = f'{offset_sign}{hours:02}{minutes:02}'\n"
+        # If the current row has a format string, use it on the local timestamp.
+        # This won't work for every type of format string since the offset is
+        # not passed along.
+        scalar_text = (
+            "if not bodo.libs.array_kernels.isna(format_str, i):\n"
+            if are_arrays[1]
+            else f"if not {is_overload_none(format_str)}:\n"
+        )
         scalar_text += (
-            "res[i] = arg0.local_timestamp().isoformat(' ') + ' ' + offset_str\n"
+            "  local_ts = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)\n"
+        )
+        scalar_text += (
+            "  return bodo.libs.bodosql_array_kernels.to_char(local_ts, arg1, True)\n"
+        )
+        scalar_text += "else:\n"
+        scalar_text += "  offset = abs(arg0.offset_minutes)\n"
+        scalar_text += "  offset_sign = '+' if arg0.offset_minutes >= 0 else '-'\n"
+        scalar_text += "  hours = offset // 60\n"
+        scalar_text += "  minutes = offset % 60\n"
+        scalar_text += "  offset_str = f'{offset_sign}{hours:02}{minutes:02}'\n"
+        scalar_text += (
+            "  res[i] = arg0.local_timestamp().isoformat(' ') + ' ' + offset_str\n"
         )
     elif is_valid_float_arg(inner_type):
         scalar_text = "if np.isinf(arg0):\n"
