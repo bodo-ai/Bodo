@@ -35,12 +35,22 @@ public class LiteralCodeGen {
    * @return int
    */
   private static <T> int getSubMillisecondTimeComponent(Class<T> valueType, RexLiteral node) {
-    assert valueType == TimeString.class || valueType == TimestampString.class;
+    assert valueType == TimeString.class
+        || valueType == TimestampString.class
+        || valueType == TimestampWithTimeZoneString.class;
     // Neither TimeString nor TimestampString provide a way to access the sub-milliseconds
     // components of their value, so we need to parse the underlying string.
 
     int total_nanoseconds = 0;
-    String rawTimeString = Objects.requireNonNull(node.getValueAs(valueType)).toString();
+    String rawTimeString;
+    if (valueType == TimestampWithTimeZoneString.class) {
+      rawTimeString =
+          Objects.requireNonNull(
+                  node.getValueAs(TimestampWithTimeZoneString.class).getLocalTimestampString())
+              .toString();
+    } else {
+      rawTimeString = Objects.requireNonNull(node.getValueAs(valueType)).toString();
+    }
     // Extract the sub-second component
     String[] parts = rawTimeString.split("\\.");
     if (parts.length == 2) {
@@ -163,9 +173,13 @@ public class LiteralCodeGen {
                   node.getValueAs(TimestampWithTimeZoneString.class);
               TimestampString localString = timestampString.getLocalTimestampString();
               int minuteOffset = timestampString.getTimeZone().getRawOffset() / 60_000;
-              Expr tsStringExpr = new Expr.StringLiteral(localString.toString());
               Expr minuteOffsetExpr = new Expr.IntegerLiteral(minuteOffset);
-              return new Expr.Call("bodo.TimestampTZ", List.of(tsStringExpr, minuteOffsetExpr));
+              long nsEpoch = localString.getMillisSinceEpoch() * 1000 * 1000;
+              nsEpoch += getSubMillisecondTimeComponent(TimestampWithTimeZoneString.class, node);
+              Expr tsExpr = new Expr.Raw(String.format("pd.Timestamp(%d)", nsEpoch));
+              return new Expr.Call(
+                  "bodo.hiframes.timestamptz_ext.init_timestamptz_from_local",
+                  List.of(tsExpr, minuteOffsetExpr));
             }
           case TIME:
             {
