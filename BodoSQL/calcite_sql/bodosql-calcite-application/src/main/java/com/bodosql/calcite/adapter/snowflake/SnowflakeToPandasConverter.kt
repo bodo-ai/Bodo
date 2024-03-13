@@ -23,6 +23,7 @@ import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.sql.type.SqlTypeName
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
@@ -48,7 +49,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
     override fun nodeDetails() =
         (
-            if (isWholeTableRead()) {
+            if (isSimpleWholeTableRead()) {
                 getTableName(input as SnowflakeRel)
             } else {
                 getSnowflakeSQL()
@@ -116,7 +117,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val readExpr =
             when {
-                (isWholeTableRead()) -> sqlReadTable(input as SnowflakeTableScan, ctx)
+                (isSimpleWholeTableRead()) -> sqlReadTable(input as SnowflakeTableScan, ctx)
                 else -> readSql(ctx)
             }
         return readExpr
@@ -365,10 +366,14 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     }
 
     /**
-     * Is the Snowflake read for a whole table without any column pruning,
+     * Is the Snowflake read for a whole table without any TimestampTZ columns, column pruning,
      * filtering, or other snowflake nodes.
      */
-    private fun isWholeTableRead(): Boolean {
-        return input is SnowflakeTableScan && !(input as SnowflakeTableScan).prunesColumns()
+    private fun isSimpleWholeTableRead(): Boolean {
+        val doesNotContainTimestampTz =
+            input.rowType.fieldList.all {
+                it.type.sqlTypeName != SqlTypeName.TIMESTAMP_TZ
+            }
+        return input is SnowflakeTableScan && !(input as SnowflakeTableScan).prunesColumns() && doesNotContainTimestampTz
     }
 }

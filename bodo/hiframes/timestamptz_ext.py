@@ -4,6 +4,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
@@ -769,3 +770,33 @@ def overload_timestamptz_arr_shape(A):
     ts array
     """
     return lambda A: (len(A.data_ts),)  # pragma: no cover
+
+
+class ArrowTimestampTZType(pa.ExtensionType):
+    def __init__(self):
+        type_ = pa.struct(
+            [
+                pa.field("utc_timestamp", pa.timestamp("ns")),
+                pa.field("offset_minutes", pa.int16()),
+            ]
+        )
+        # The name passed in to the constructor is used to identify the type in C++
+        pa.ExtensionType.__init__(self, type_, "arrow_timestamp_tz")
+
+    def __arrow_ext_serialize__(self):
+        # since we don't have a parameterized type, we don't need extra
+        # metadata to be deserialized
+        return b""
+
+    @classmethod
+    def __arrow_ext_deserialize__(self, storage_type, serialized):
+        # return an instance of this subclass given the serialized
+        # metadata.
+        return ArrowTimestampTZType()
+
+    # Hash the underlying data
+    def __hash__(self):
+        return hash(self.storage_type) | hash(self.extension_name)
+
+
+pa.register_extension_type(ArrowTimestampTZType())
