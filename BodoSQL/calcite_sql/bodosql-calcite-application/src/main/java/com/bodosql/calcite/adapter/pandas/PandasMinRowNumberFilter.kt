@@ -31,7 +31,7 @@ class PandasMinRowNumberFilter(
                 inputsToKeep.map {
                     RexInputRef(it, input.rowType.fieldList[it].type)
                 }
-            val parentProject = PandasProject(cluster, traitSet, asPandasFilter, projExprs, rowType)
+            val parentProject = PandasProject(cluster, traitSet, asPandasFilter, projExprs, getRowType())
             parentProject
         }
     }

@@ -14,6 +14,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
+import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
 import com.bodosql.calcite.application.logicalRules.BodoProjectToWindowRule
@@ -65,7 +66,6 @@ import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.core.Join
-import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
@@ -615,21 +615,10 @@ object BodoRules {
     /**
      * Rule that derives IS NOT NULL predicates from a inner {@link Join} and creates
      * {@link Filter}s with those predicates as new inputs of the {@link Join}.
-     *
-     * TODO(njriasan) why can't I access JoinDeriveIsNotNullFilterRule.Config.DEFAULT
      */
     @JvmField
     val JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE: RelOptRule =
-        CoreRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE.config
-            .withOperandSupplier {
-                    b: OperandBuilder ->
-                b.operand(BodoLogicalJoin::class.java).predicate { join: BodoLogicalJoin ->
-                    (
-                        join.joinType == JoinRelType.INNER &&
-                            !join.condition.isAlwaysTrue
-                    )
-                }.anyInputs()
-            }
+        BodoJoinDeriveIsNotNullFilterRule.Config.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
