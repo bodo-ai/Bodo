@@ -809,7 +809,7 @@ def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
     if isinstance(err, Exception):
         raise err
 
-    # _BODO_ROW_ID is always loaded in MERGE INTO COW Mode, see sql_ext.py
+    # _BODO_ROW_ID is always loaded in MERGE INTO COW Mode, see iceberg_ext.py
     # Since Iceberg output is unordered, not guarantee that the row id values
     # are assigned to the same row. Thus, need to check them separately
     check_func(

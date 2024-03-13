@@ -725,9 +725,15 @@ class LowerBodoIRExtSeq(FunctionPass):
             for inst in block.body:
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
+                    if isinstance(
+                        inst,
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
+                    ) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
-                        and inst.db_type in ("iceberg", "snowflake")
+                        and inst.db_type == "snowflake"
                     ):
                         out_nodes = f(
                             inst,
