@@ -35,6 +35,7 @@ from bodo.hiframes.pd_categorical_ext import (
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
+from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
@@ -267,6 +268,8 @@ def _get_numba_typ_from_pa_typ(
 
     if isinstance(pa_typ.type, pa.lib.TimestampType):
         return get_arrow_timestamp_type(pa_typ.type)
+    elif isinstance(pa_typ.type, ArrowTimestampTZType):
+        return bodo.timestamptz_array_type, True
     elif pa_typ.type in _pyarrow_numba_type_map:
         dtype = _pyarrow_numba_type_map[pa_typ.type]
         supported = True

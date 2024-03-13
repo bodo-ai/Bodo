@@ -30,7 +30,9 @@ from bodo.tests.utils import (
     SeriesOptTestPipeline,
     check_func,
     create_snowflake_table,
+    create_snowflake_table_from_select_query,
     drop_snowflake_table,
+    enable_timestamptz,
     gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_mark_one_rank,
@@ -3240,3 +3242,57 @@ def test_order_by_inline_view(test_db_snowflake_catalog, memory_leak_check):
         # Verify that NICK_BASE_TABLE is found in the logger message so the
         # view was inlined.
         check_logger_msg(stream, "NICK_BASE_TABLE")
+
+
+def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
+    """Test reading timestamptz from Snowflake"""
+    with enable_timestamptz():
+        db = test_db_snowflake_catalog.database
+        schema = test_db_snowflake_catalog.connection_params["schema"]
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+        def impl(bc, query):
+            return bc.sql(query)
+
+        rows = [
+            "2020-01-02 03:04:05 +0000",
+            "2020-01-02 03:04:05 +0607",
+            "2020-01-02 03:04:05 -0607",
+            None,
+            "2020-01-01 00:00:00.123456789 -0800",
+            "2020-01-01 00:00:00.123456789 +0000",
+            "1900-01-01 01:01:01 +0000",
+        ]
+        # In order to test nulls we need to convert None to "0" and then use an
+        # IFF statement to convert it back to null. Otherwise flatten will drop
+        # the null.
+        input_arr = (
+            "[" + ", ".join([f"'{r}'::timestamptz" if r else "0" for r in rows]) + "]"
+        )
+        # The TO_TIMESTAMP_TZ is needed to convert the column type to
+        # TIMESTAMP_TZ instead of VARIANT
+        table_query = f"SELECT TO_TIMESTAMP_TZ(IFF(TYPEOF(VALUE) = 'TIMESTAMP_TZ', VALUE, NULL)) as A from table(flatten(input => {input_arr}))"
+        with create_snowflake_table_from_select_query(
+            table_query, "timestamptz_test", db, schema
+        ) as table_name:
+            query = f"SELECT * FROM {table_name}"
+            expected_output = pd.DataFrame(
+                {
+                    "A": np.array(
+                        [
+                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
+                            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", -367),
+                            None,
+                            bodo.TimestampTZ.fromLocal(
+                                "2020-01-01 00:00:00.123456789", -480
+                            ),
+                            bodo.TimestampTZ.fromLocal(
+                                "2020-01-01 00:00:00.123456789", 0
+                            ),
+                            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+                        ]
+                    )
+                }
+            )
+            check_func(impl, (bc, query), py_output=expected_output)

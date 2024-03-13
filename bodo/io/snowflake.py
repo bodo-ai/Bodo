@@ -18,6 +18,7 @@ from numba.core import types
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.io.helpers import (
     ExceptionPropagatingThread,
     _get_numba_typ_from_pa_typ,
@@ -149,10 +150,13 @@ def type_code_to_arrow_type(
     elif code == 5:
         return UnknownSnowflakeType.VARIANT
     # Timestamp stored in UTC - TIMESTAMP_LTZ
-    # Timestamp with a timezone offset per item - TIMESTAMP_TZ
-    elif code in (6, 7):
+    elif code == 6:
         assert m.scale is not None
         return pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz)
+    # Timestamp with a timezone offset per item - TIMESTAMP_TZ
+    elif code == 7:
+        assert m.scale is not None
+        return ArrowTimestampTZType()
     # Timestamp without a timezone - TIMESTAMP_NTZ
     elif code == 8:
         assert m.scale is not None
@@ -880,9 +884,6 @@ def snowflake_type_str_to_pyarrow_datatype(
     # So we upcast to Float / Decimal, even across Integer -> Float
     if types == {"INTEGER", "DECIMAL"}:
         types = {"DECIMAL"}
-    # Use TIMESTAMP_LTZ, even with TIMESTAMP_TZ
-    elif types == {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
-        types = {"TIMESTAMP_LTZ"}
 
     if len(types) > 1:
         return None
@@ -905,9 +906,11 @@ def snowflake_type_str_to_pyarrow_datatype(
     elif value_type == "TIMESTAMP_NTZ":
         # TODO: Properly derive timestamp precision if necessary
         return pa.timestamp("ns")
-    elif value_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ"):
+    elif value_type in "TIMESTAMP_LTZ":
         # TODO: Properly derive timestamp precision if necessary
         return pa.timestamp("ns", tz=tz)
+    elif value_type in "TIMESTAMP_TZ":
+        return ArrowTimestampTZType()
     elif value_type == "ARRAY":
         return get_list_type_from_metadata(
             cursor,
@@ -1095,7 +1098,12 @@ def get_variant_type_from_metadata(
     narrowed_query = f"(SELECT {cur_colname} as V FROM {sql_query} {sample_clauses}) SAMPLE (10000 ROWS)"
 
     # Gather all of the distinct types of the reduced rows to infer the correct row type.
-    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({narrowed_query})"
+    # We need to wrap `V` in TO_VARIANT because `V` might not be a true variant
+    # if it is actually a TimestampTZ that we casted to force a string
+    # representation.
+    probe_query = (
+        f"SELECT DISTINCT TYPEOF(TO_VARIANT(V)) as VALUES_TYPE from ({narrowed_query})"
+    )
     # Send the probe query until we breach the timeout (or at most 5 times),
     # in case we are unlucky with sampling.
     start_time = time.time()
@@ -1901,6 +1909,45 @@ class FakeArrowJSONResultBatch:
         return table
 
 
+def set_timestamptz_format_connection_parameter_if_required(
+    conn: "SnowflakeConnection", schema: pa.Schema
+):
+    """
+    Sets the connection parameter for timestamptz formatting if required.
+
+    Args:
+        conn: Snowflake connection
+        schema: Arrow schema
+    """
+
+    param_required = False
+    for type_ in schema.types:
+        if isinstance(type_, bodo.hiframes.timestamptz_ext.ArrowTimestampTZType):
+            param_required = True
+            break
+
+    desired_format = "YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM"
+
+    # Read the TIMESTAMP_TZ_OUTPUT_FORMAT parameter if present
+    original_param = (
+        conn.cursor()
+        .execute("show parameters like 'TIMESTAMP_TZ_OUTPUT_FORMAT'")
+        .fetchone()[1]
+    )
+    if original_param and original_param != desired_format:
+        warnings.warn(
+            BodoWarning(
+                f"TIMESTAMP_TZ_OUTPUT_FORMAT is set to {original_param}. "
+                f"Overriding it to {desired_format}."
+            )
+        )
+
+    if param_required:
+        conn.cursor().execute(
+            f"alter session set TIMESTAMP_TZ_OUTPUT_FORMAT = '{desired_format}'"
+        )
+
+
 def get_dataset(
     query: str,
     conn_str: str,
@@ -1966,6 +2013,8 @@ def get_dataset(
     # We only trace on rank 0 (is_parallel=False) because we want 0 to start
     # executing the queries as soon as possible (don't sync event)
     conn = snowflake_connect(conn_str)
+    # Set the TIMESTAMP_TZ_OUTPUT_FORMAT parameter if required
+    set_timestamptz_format_connection_parameter_if_required(conn, schema)
     # Number of rows loaded. This is only used if we are loading
     # 0 columns
     num_rows = -1
