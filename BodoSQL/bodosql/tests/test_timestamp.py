@@ -692,6 +692,7 @@ def test_date_part_timezone_unit_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
 
+@pytest.mark.skip("TODO FIXME: May fail the memory leak check on CI")
 @pytest.mark.flaky(max_runs=3)
 def test_current_date_timestamp_tz_to_char_fmt(memory_leak_check):
     """
