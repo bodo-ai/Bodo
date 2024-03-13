@@ -3039,3 +3039,18 @@ def cast_dt64_to_ns(df):
     if isinstance(df.index, pd.DatetimeIndex):
         df.index = df.index.astype("datetime64[ns]")
     return df
+
+
+@contextmanager
+def enable_timestamptz():
+    """
+    Context manager to enable timestamptz in Bodo. This is useful for testing
+    timestamptz functionality.
+    """
+
+    old_value = bodo.enable_timestamp_tz
+    try:
+        bodo.enable_timestamp_tz = True
+        yield
+    finally:
+        bodo.enable_timestamp_tz = old_value

@@ -731,6 +731,35 @@ std::shared_ptr<array_info> arrow_null_array_to_bodo(
 }
 
 /**
+ * @brief Helper function to construct a Bodo array from an Arrow ExtensionArray
+ * @param arrow_ext_arr Input Arrow ExtensionArray
+ * @return out_array Output Bodo array
+ */
+std::shared_ptr<array_info> arrow_timestamptz_array_to_bodo(
+    std::shared_ptr<arrow::ExtensionArray> arrow_ext_arr) {
+    auto arr = arrow_ext_arr->storage();
+    auto arrow_struct_arr = std::static_pointer_cast<arrow::StructArray>(arr);
+    int64_t n = arrow_struct_arr->length();
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_struct_arr->null_bitmap(), arrow_struct_arr->null_bitmap_data(),
+        arrow_struct_arr->offset(), arrow_struct_arr->null_count(), n);
+
+    std::shared_ptr<array_info> inner_arr_0 =
+        arrow_array_to_bodo(arrow_struct_arr->field(0), -1, nullptr);
+    std::shared_ptr<array_info> inner_arr_1 =
+        arrow_array_to_bodo(arrow_struct_arr->field(1), -1, nullptr);
+    // get the buffer from arr0 and arr1
+    std::shared_ptr<BodoBuffer> arr0_buf = inner_arr_0->buffers[0];
+    std::shared_ptr<BodoBuffer> arr1_buf = inner_arr_1->buffers[0];
+
+    return std::make_shared<array_info>(
+        bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ, n,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {arr0_buf, arr1_buf, null_bitmap_buffer}),
+        std::vector<std::shared_ptr<array_info>>({}));
+}
+
+/**
  * @brief Convert Arrow struct array to Bodo array_info (STRUCT
  * type) with zero-copy. The output Bodo array holds references to the Arrow
  * array's buffers and releases them when deleted.
@@ -1209,6 +1238,17 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         case arrow::Type::NA:
             return arrow_null_array_to_bodo(
                 std::static_pointer_cast<arrow::NullArray>(arrow_arr));
+        case arrow::Type::EXTENSION: {
+            // Cast the type to an ExtensionArray to access the extension name
+            auto ext_type = std::static_pointer_cast<arrow::ExtensionType>(
+                arrow_arr->type());
+            auto name = ext_type->extension_name();
+            if (name == "arrow_timestamp_tz") {
+                return arrow_timestamptz_array_to_bodo(
+                    std::static_pointer_cast<arrow::ExtensionArray>(arrow_arr));
+            }
+            // fallthrough
+        }
         default:
             throw std::runtime_error("arrow_array_to_bodo(): Array type " +
                                      arrow_arr->type()->ToString() +

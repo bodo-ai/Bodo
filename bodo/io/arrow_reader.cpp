@@ -15,6 +15,7 @@
 #include "../libs/_stl.h"
 
 #include "json_col_parser.h"
+#include "timestamptz_parser.h"
 
 using arrow::Type;
 
@@ -1344,6 +1345,36 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
                         exp_type);
                 });
             new_cols.push_back(std::make_shared<arrow::ChunkedArray>(chunks));
+        }
+
+        else if (exp_type->id() == Type::EXTENSION) {
+            if (act_type->id() != Type::STRING &&
+                act_type->id() != Type::LARGE_STRING) {
+                throw std::runtime_error(
+                    "Reading ExtensionTypes is only supported for strings");
+            }
+
+            auto ext_name =
+                std::static_pointer_cast<arrow::ExtensionType>(exp_type)
+                    ->extension_name();
+            // Parse Array of TimestampTZ Strings into TimestampTZ Array
+            if (ext_name == "arrow_timestamp_tz") {
+                std::vector<std::shared_ptr<arrow::Array>> chunks;
+                std::transform(
+                    col->chunks().begin(), col->chunks().end(),
+                    std::back_inserter(chunks),
+                    [exp_type](std::shared_ptr<arrow::Array> chunk) {
+                        return string_to_timestamptz_arr(
+                            std::dynamic_pointer_cast<arrow::StringArray>(
+                                chunk),
+                            exp_type);
+                    });
+                new_cols.push_back(
+                    std::make_shared<arrow::ChunkedArray>(chunks));
+            } else {
+                throw std::runtime_error("ExtensionType " + ext_name +
+                                         " not supported");
+            }
         }
 
         // Float -> Double

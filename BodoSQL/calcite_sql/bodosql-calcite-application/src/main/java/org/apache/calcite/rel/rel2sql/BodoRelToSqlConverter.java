@@ -2,6 +2,7 @@ package org.apache.calcite.rel.rel2sql;
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
+import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.adapter.jdbc.JdbcTable;
 import org.apache.calcite.plan.RelOptTable;
@@ -9,6 +10,8 @@ import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlHint;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -18,6 +21,8 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlTableRef;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 
 import java.util.ArrayList;
@@ -44,10 +49,37 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
         return dispatch(e.getBestOrOriginal());
     }
 
+    private SqlNode castTimestampTZColumnsToVariant(RelDataType rowType, SqlNode sqlTable) {
+        // All TIMESTAMP_TZ columns need to be cast to VARIANT in order for us to be able to read them losslessly (we need to read them as strings to get the offset)
+        final List<RelDataTypeField> fields = rowType.getFieldList();
+        boolean hasTimestampTZ = false;
+        final List<SqlNode> castedList = new ArrayList<>();
+        for (RelDataTypeField field : fields) {
+            final SqlNode ident = new SqlIdentifier(field.getName(), SqlParserPos.ZERO);
+            if (field.getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_TZ) {
+                // We found a TIMESTAMP_TZ column, insert a cast to variant
+                hasTimestampTZ = true;
+                final SqlCall call = CastingOperatorTable.TO_VARIANT.createCall(SqlParserPos.ZERO, List.of(ident));
+                addSelect(castedList, call, rowType);
+            } else {
+                // All other columns remain as-is
+                addSelect(castedList, ident, rowType);
+            }
+        }
+        // If we inserted any casts, we need to introduce a new select statement with the new casts. If not, we can use the original node.
+        if (hasTimestampTZ) {
+            final SqlNodeList selectNodeList = new SqlNodeList(castedList, POS);
+            sqlTable = new SqlSelect(SqlParserPos.ZERO, null, selectNodeList, sqlTable,
+                    null, null, null, null, null, null, null, null);
+        }
+
+        return sqlTable;
+    }
+
     /** Visits a SnowflakeTableScan; called by {@link #dispatch} via reflection. */
     public Result visit(SnowflakeTableScan e) {
         final SqlIdentifier identifier = getSqlTargetTable(e);
-        final SqlNode sqlTable;
+        SqlNode sqlTable;
         final ImmutableList<RelHint> hints = e.getHints();
         if (!hints.isEmpty()) {
             SqlParserPos pos = identifier.getParserPosition();
@@ -60,6 +92,11 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
         } else {
             sqlTable = identifier;
         }
+
+        final RelDataType rowType = e.getRowType();
+        sqlTable = castTimestampTZColumnsToVariant(rowType, sqlTable);
+        // TODO(aneesh) [BSE-2867] check if any filters cast a TimestampTZ to a string, and warn if so
+
         // Next apply column pruning
         final SqlNode node;
         if (!e.prunesColumns()) {
