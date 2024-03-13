@@ -1329,6 +1329,108 @@ class BodoRexSimplify(
     }
 
     /**
+     * Simplify Calls to the LIKE operator that can be simplified
+     * based on a constant pattern. This looks for cases with:
+     * 1. No special characters, just Equals.
+     * 2. ONLY % at the start, which is StartsWith
+     * 3. ONLY % at the end, which is EndsWith
+     * 4. % at the start and end, but not the middle, which is Contains
+     * 5. % only in the middle, which is AND(startswith, endswith, LENGTH(A) >= (startPattern + endPattern))
+     *
+     * We do not have any support for _ in simplification at this time.
+     * @param call The original call to LIKE
+     * @return Either the original call or a simplified call based on
+     * the provided pattern.
+     */
+    private fun simplifyBodoLike(call: RexCall): RexNode {
+        if (call.operator.name != SqlStdOperatorTable.LIKE.name || call.operands.size == 3) {
+            return call
+        }
+        val operands = call.operands
+        val pattern = call.operands[1]
+        return if (pattern is RexLiteral) {
+            val patternString = pattern.getValueAs(String::class.java)!!
+            // We cannot rewrite if we see an _
+            val unsafeSpecialCharacter = '_'
+            if (patternString.contains(unsafeSpecialCharacter)) {
+                call
+            } else {
+                val safeSpecialCharacter = '%'
+                if (!patternString.contains(safeSpecialCharacter)) {
+                    // If there is no special character this is just EQUALS
+                    rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, operands)
+                } else {
+                    // Determine the start index.
+                    var startIndex = 0
+                    var endIndex = patternString.length
+                    while (startIndex < patternString.length && patternString[startIndex] == safeSpecialCharacter) {
+                        startIndex++
+                    }
+                    while (endIndex > 0 && patternString[endIndex - 1] == safeSpecialCharacter) {
+                        endIndex--
+                    }
+                    if (endIndex < startIndex) {
+                        // If endIndex < startIndex then the string is entirely %, which always matches.
+                        rexBuilder.makeLiteral(true)
+                    } else {
+                    val matchSection = patternString.substring(startIndex, endIndex)
+                    if (matchSection.contains(safeSpecialCharacter)) {
+                        // If we have a % in the middle, we can simplify if there is exactly "1" location.
+                        // We search through the string to find the first and last %.
+                        val canSimplify = if (startIndex == 0 && endIndex == patternString.length) {
+                            while (startIndex < patternString.length && patternString[startIndex] != safeSpecialCharacter) {
+                                startIndex++
+                            }
+                            while (endIndex > 0 && patternString[endIndex - 1] != safeSpecialCharacter) {
+                                endIndex--
+                            }
+                            // We can simplify if all the %s are in the middle
+                            patternString.substring(startIndex, endIndex).all { it == safeSpecialCharacter }
+                        } else {
+                            false
+                        }
+                        if (canSimplify) {
+                            // Generate an AND between startswith and endswith
+                            val startString = patternString.substring(0, startIndex)
+                            val startLiteral = rexBuilder.makeLiteral(startString)
+                            val startsWith = rexBuilder.makeCall(StringOperatorTable.STARTSWITH, operands[0], startLiteral)
+                            val endString = patternString.substring(endIndex, patternString.length)
+                            val endLiteral = rexBuilder.makeLiteral(endString)
+                            val endsWith = rexBuilder.makeCall(StringOperatorTable.ENDSWITH, operands[0], endLiteral)
+                            // Ensure that something like a%a doesn't match on 'a'. Do this by checking the length of the string.
+                            val length = startString.length + endString.length
+                            val lengthLiteral = rexBuilder.makeBigintLiteral(length.toBigDecimal())
+                            val lengthCall = rexBuilder.makeCall(StringOperatorTable.LENGTH, operands[0])
+                            val comparisonCall = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, lengthCall, lengthLiteral)
+                            rexBuilder.makeCall(SqlStdOperatorTable.AND, startsWith, endsWith, comparisonCall)
+                        } else {
+                            call
+                        }
+                    } else {
+                        val matchLiteral = rexBuilder.makeLiteral(matchSection)
+                        if (startIndex > 0 && endIndex < patternString.length) {
+                            // Both sides have a %, this is a contains
+                            rexBuilder.makeCall(StringOperatorTable.CONTAINS, operands[0], matchLiteral)
+                        } else if (startIndex > 0) {
+                            // Only the start has a %, this is endswith
+                            rexBuilder.makeCall(StringOperatorTable.ENDSWITH, operands[0], matchLiteral)
+                        } else if (endIndex < patternString.length) {
+                            // Only the end has a %, this is startswith
+                            rexBuilder.makeCall(StringOperatorTable.STARTSWITH, operands[0], matchLiteral)
+                        } else {
+                            // This should never be reached
+                            call
+                        }
+                    }
+                    }
+                }
+            }
+        } else {
+            call
+        }
+    }
+
+    /**
      * Simplify a Bodo Row operation if it directly matches in the input.
      * Assume we have plan that looks like this:
      *
@@ -1999,6 +2101,7 @@ class BodoRexSimplify(
             SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
             SqlKind.MINUS_PREFIX -> simplifyBodoMinusPrefix(e as RexCall)
+            SqlKind.LIKE -> simplifyBodoLike(e as RexCall)
             SqlKind.ROW -> simplifyBodoRow(e as RexCall)
             else -> when {
                 isCast(e) -> simplifyBodoCast(e as RexCall, e.operands[0], e.type, e.kind == SqlKind.SAFE_CAST, unknownAs)
