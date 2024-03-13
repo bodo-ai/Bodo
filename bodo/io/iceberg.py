@@ -285,7 +285,7 @@ def generate_expr_filter(
     'output_expr_filters_as_f_string' parameter.
     'filter_scalars' is generated using 'get_filter_scalars_pyobject'.
     See '_gen_sql_reader_py' and '_gen_iceberg_reader_chunked_py'
-    in 'sql_ext.py' for more details on how these
+    in 'iceberg_ext.py' for more details on how these
     are generated.
     Note that we don't cache this computation, so it's best
     to call it once per IcebergSchemaGroup.

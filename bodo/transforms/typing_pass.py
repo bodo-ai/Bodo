@@ -34,6 +34,7 @@ from numba.core.ir_utils import (
 from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
 
 import bodo
+import bodo.ir.iceberg_ext
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
@@ -201,7 +202,7 @@ class BodoTypeInference(PartialTypeInference):
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
             # We're adding one additional iteration, in order to handle a possible
-            # edgecase where a run of typing transforms does not change the IR, but
+            # edge case where a run of typing transforms does not change the IR, but
             # updates types
             if (
                 num_iterations_without_change
@@ -274,7 +275,6 @@ class BodoTypeInference(PartialTypeInference):
         dprint_func_ir(state.func_ir, "after typing pass")
 
         self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
-
         return True
 
     def _check_for_errors(self, state, curr_typing_pass_required):
@@ -796,7 +796,7 @@ class TypingTransforms:
         A DataFrame that can be used in filter pushdown is required
         to be an ir.Expr that is a call to "init_dataframe". A Table is not
         subject to these constraints so long as the table can be traced back to
-        a SqlReader or ParquetReader node.
+        a SqlReader, IcebergReader, or ParquetReader node.
 
         However, in some code patterns BodoSQL may generate additional code beyond the init_dataframe that
         is otherwise unused. For example, BodoSQL handles unsupported types that can be cast to supported
@@ -964,13 +964,17 @@ class TypingTransforms:
         require(
             isinstance(
                 read_node,
-                (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
+                (
+                    bodo.ir.parquet_ext.ParquetReader,
+                    bodo.ir.iceberg_ext.IcebergReader,
+                    bodo.ir.sql_ext.SqlReader,
+                ),
             )
         )
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
             # Filter pushdown is only supported for snowflake and iceberg
             # right now.
-            require(read_node.db_type in ("snowflake", "iceberg"))
+            require(read_node.db_type == "snowflake")
         # If the reader is streaming, and thus implied from BodoSQL
         # and the filters are already present in the reader, then we
         # can assume BodoSQL has already done the filter pushdown.
@@ -1122,7 +1126,8 @@ class TypingTransforms:
         read_node.filters = filters
         # Merge into only filters by file not within rows, so we cannot remove the filter.
         keep_filter = (
-            isinstance(read_node, bodo.ir.sql_ext.SqlReader) and read_node.is_merge_into
+            isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
+            and read_node.is_merge_into
         )
         if not keep_filter:
             # remove filtering code since not necessary anymore
@@ -1349,7 +1354,6 @@ class TypingTransforms:
                 non_filter_vars.update(stmt_vars - filter_vars)
 
         require(not (filter_vars & non_filter_vars))
-
         return len(block_body) - i
 
     @staticmethod
@@ -1748,10 +1752,10 @@ class TypingTransforms:
     def _get_call_filter(
         self,
         call_def,
-        func_ir,
+        func_ir: ir.FunctionIR,
         df_var,
         df_col_names,
-        is_sql_op,
+        is_sql_op: bool,
         read_node,
         new_ir_assigns,
     ):
@@ -2166,13 +2170,13 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-        # Iceberg uses arrow operators instead of SQL operators.
-        is_sql_op = is_sql and read_node.db_type != "iceberg"
         # NOTE: I/O nodes update out_table_col_names in DCE but typing pass is before
         # optimizations
-        # SqlReader doesn't have original_df_colnames so needs special casing
+        # Only ParquetReader has original_df_colnames so needs special casing
         df_col_names = (
-            read_node.out_table_col_names if is_sql else read_node.original_df_colnames
+            read_node.original_df_colnames
+            if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader)
+            else read_node.out_table_col_names
         )
 
         # similar to DNF normalization in Sympy:
@@ -2206,7 +2210,7 @@ class TypingTransforms:
                             func_ir,
                             df_var,
                             df_col_names,
-                            is_sql_op,
+                            is_sql,
                             read_node,
                             new_ir_assigns,
                         )
@@ -2220,7 +2224,7 @@ class TypingTransforms:
                             func_ir,
                             df_var,
                             df_col_names,
-                            is_sql_op,
+                            is_sql,
                             read_node,
                             new_ir_assigns,
                         )
@@ -2377,7 +2381,7 @@ class TypingTransforms:
             op = get_cmp_operator(
                 index_def,
                 self.typemap[scalar.name],
-                is_sql_op,
+                is_sql,
                 right_colname is not None,
                 self.func_ir,
             )
@@ -2388,7 +2392,7 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
-                is_sql_op,
+                is_sql,
                 read_node,
                 new_ir_assigns,
             )
@@ -2399,7 +2403,7 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
-                is_sql_op,
+                is_sql,
                 read_node,
                 new_ir_assigns,
             )
@@ -2407,7 +2411,9 @@ class TypingTransforms:
         # If this is parquet we need to verify this is a filter we can process.
         # We don't do this check if there is a call expression because isnull
         # is always supported.
-        if not is_sql and not is_call(index_def):
+        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader) and not is_call(
+            index_def
+        ):
             lhs_arr_typ = self._get_filter_col_type(
                 cond[0],
                 read_node.original_table_col_types,
@@ -2533,8 +2539,11 @@ class TypingTransforms:
                 # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
                 if fdef[0] == "concat_ws":  # pragma: no cover
                     require(
-                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-                        and read_node.db_type in ("snowflake", "iceberg")
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
                     )
                 else:
                     require((len(var_def.args) == 1) and are_supported_kws(var_def.kws))
@@ -2570,8 +2579,11 @@ class TypingTransforms:
 
                 if bodosql_kernel_name not in supported_arrow_funcs_map:
                     require(
-                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-                        and read_node.db_type in ("snowflake", "iceberg")
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
                     )
 
                 args = var_def.args
@@ -2603,8 +2615,11 @@ class TypingTransforms:
 
                 if bodosql_kernel_name not in supported_arrow_funcs_map:
                     require(
-                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-                        and read_node.db_type in ("snowflake", "iceberg")
+                        (
+                            isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                            and read_node.db_type == "snowflake"
+                        )
+                        or isinstance(read_node, bodo.ir.iceberg_ext.IcebergReader)
                     )
 
                 args = var_def.args
@@ -4343,20 +4358,16 @@ class TypingTransforms:
             self.typemap[data_arrs[0].name] = ArrowReaderType(col_names, df_type.data)
 
         nodes = [
-            bodo.ir.sql_ext.SqlReader(
+            bodo.ir.iceberg_ext.IcebergReader(
                 table_name,
                 con,
                 lhs.name,
                 list(df_type.columns),
                 list(df_type.data),
                 data_arrs,
-                set(),
-                "iceberg",
                 lhs.loc,
                 [],  # unsupported_columns
                 [],  # unsupported_arrow_types
-                True,  # is_select_query
-                False,  # has_side_effects
                 None,  # index_column_name
                 types.none,  # index_column_type
                 database_schema,  # database_schema
@@ -4364,7 +4375,6 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
-                False,  # downcast_decimal_to_double
                 chunksize=chunksize,
                 used_cols=columns_obj,
                 initial_filter=filter_obj,

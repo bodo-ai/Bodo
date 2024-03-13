@@ -299,9 +299,15 @@ class DistributedPass:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
+                    if isinstance(
+                        inst,
+                        (
+                            bodo.ir.parquet_ext.ParquetReader,
+                            bodo.ir.iceberg_ext.IcebergReader,
+                        ),
+                    ) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
-                        and inst.db_type in ("iceberg", "snowflake")
+                        and inst.db_type == "snowflake"
                         # If streaming SQL has pushed down another limit its not necessarily
                         # safe to push down another limit as there may be a filter in the query.
                         and (inst.chunksize is None or inst.limit is None)

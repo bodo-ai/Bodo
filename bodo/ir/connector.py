@@ -7,6 +7,7 @@ import typing as pt
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 
+import llvmlite.binding as ll
 import numba
 import pandas as pd
 from numba.core import ir, types
@@ -14,6 +15,7 @@ from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
 from bodo.hiframes.table import TableType
+from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.ir.filter import Filter, supported_arrow_funcs_map
 from bodo.transforms.distributed_analysis import Distribution
@@ -28,6 +30,8 @@ from bodo.utils.utils import (
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from numba.core.typeinfer import TypeInferer
+
+ll.add_symbol("arrow_reader_read_py_entry", arrow_cpp.arrow_reader_read_py_entry)
 
 
 class Connector(ir.Stmt, metaclass=ABCMeta):
@@ -84,7 +88,7 @@ def connector_array_analysis(node: Connector, equiv_set, typemap, array_analysis
 
     # If we have a csv chunksize the variables don't refer to the data,
     # so we skip this step.
-    if node.connector_typ in ("csv", "parquet", "sql") and node.is_streaming:
+    if node.connector_typ in ("csv", "parquet", "sql", "iceberg") and node.is_streaming:
         return [], []
 
     # create correlations for output arrays
@@ -102,11 +106,11 @@ def connector_array_analysis(node: Connector, equiv_set, typemap, array_analysis
         # If the table variable is dead don't generate the shape call.
         is_dead_table = (
             i == 0
-            and node.connector_typ in ("parquet", "sql")
+            and node.connector_typ in ("parquet", "sql", "iceberg")
             and not node.is_live_table
         )
         # If its the file_list or snapshot ID don't generate the shape
-        is_non_array = node.connector_typ == "sql" and i > 1
+        is_non_array = node.connector_typ in ("sql", "iceberg") and i > 1
         if not (is_dead_table or is_non_array):
             shape = array_analysis._gen_shape_call(
                 equiv_set, col_var, typ.ndim, None, post
@@ -193,7 +197,7 @@ def visit_vars_connector(node: Connector, callback, cbdata):
         node.nrows = visit_vars_inner(node.nrows, callback, cbdata)
         node.skiprows = visit_vars_inner(node.skiprows, callback, cbdata)
 
-    if node.connector_typ in ("parquet", "sql") and node.filters:
+    if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
                 val = list(predicate[i])
@@ -269,7 +273,7 @@ def connector_usedefs(node: Connector, use_set=None, def_set=None):
         if isinstance(node.skiprows, numba.core.ir.Var):
             use_set.add(node.skiprows.name)
 
-    if node.connector_typ in ("parquet", "sql") and node.filters:
+    if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
         vars = get_filter_vars(node.filters)
         use_set.update({v.name for v in vars})
 
@@ -323,7 +327,7 @@ def apply_copies_connector(
     node.out_vars = new_out_vars
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = replace_vars_inner(node.file_name, var_dict)
-    if node.connector_typ in ("parquet", "sql") and node.filters:
+    if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
                 val = list(predicate[i])
