@@ -27,9 +27,11 @@ def set_logging_stream(logger, verbose_level):
         n_passed = reduce_sum(passed)
         if n_passed != bodo.get_size():
             if err is not None:
-                raise AssertionError(f"Error while testing logging stream") from err
+                raise err
             else:
-                raise AssertionError(f"Error while testing logging stream")
+                raise AssertionError(
+                    f"Error while testing logging stream. See other rank"
+                )
 
 
 def create_string_io_logger(stream):

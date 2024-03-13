@@ -1126,9 +1126,6 @@ class UntypedPass:
                 index_arr_typ,
                 None,  # database_schema
                 pyarrow_table_schema,
-                False,  # is_merge_into
-                types.none,  # file_list_type
-                types.none,  # snapshot_id_type
                 _bodo_downcast_decimal_to_double,
                 chunksize,
             )

@@ -680,7 +680,8 @@ def get_bodo_pq_dataset_from_fpath(
         dataset = pq.ParquetDataset(
             fpath_noprefix,
             filesystem=fs,
-            use_legacy_dataset=False,  # Use ParquetDatasetV2
+            # use_legacy_dataset=False is default by Arrow 15
+            # Including arg causes a lot of warnings
             partitioning=partitioning,
             filters=dnf_filters,
         )

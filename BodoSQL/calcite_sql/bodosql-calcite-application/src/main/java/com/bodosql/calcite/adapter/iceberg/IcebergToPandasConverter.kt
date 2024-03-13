@@ -121,7 +121,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         val filterVisitor = IcebergFilterVisitor(tableScanNode)
         val filtersArg =
             if (filters.isEmpty()) {
-                Expr.None
+                Expr.List()
             } else {
                 Expr.List(
                     listOf(
