@@ -115,9 +115,13 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
 //            SqlKind.IS_NOT_DISTINCT_FROM,
                     // Logical identity operators.
                     SqlKind.IS_FALSE,
-                    SqlKind.IS_NOT_FALSE,
+                    // Equivalent to A IS NULL OR A == TRUE.
+                    // This is not the same as A != FALSE.
+                    // SqlKind.IS_NOT_FALSE,
                     SqlKind.IS_TRUE,
-                    SqlKind.IS_NOT_TRUE,
+                    // Equivalent to A IS NULL OR A == FALSE.
+                    // This is not the same as A != TRUE.
+                    // SqlKind.IS_NOT_TRUE,
                     SqlKind.IS_NULL,
                     SqlKind.IS_NOT_NULL,
                     // Other functions
@@ -150,6 +154,11 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                 // and whitelist specific things rather than blacklist.
                 return condition.accept(
                     object : RexVisitorImpl<Boolean?>(true) {
+                        // We can't handle filters that are just scalars yet,
+                        // so we track a state variable to see when we can push
+                        // scalars.
+                        var canPushScalar = false
+
                         override fun visitLiteral(literal: RexLiteral): Boolean = true
 
                         override fun visitInputRef(inputRef: RexInputRef): Boolean = true
@@ -163,22 +172,31 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                         }
 
                         override fun visitCall(call: RexCall): Boolean {
-                            return if (IsScalar.isScalar(call)) {
-                                // No scalars can be computed right now
-                                false
+                            return if (canPushScalar && IsScalar.isScalar(call)) {
+                                true
                             } else if (SUPPORTED_BUILTIN_CALLS.contains(call.kind) || isSupportedGenericCall(call)) {
                                 // Search Calls in Some Formats Not Supported Yet
                                 if (call.kind == SqlKind.SEARCH && !visitSearch(call)) {
                                     return false
                                 }
 
-                                // Call Operands on Multiple Columns Not Supported Yet
-                                if (call.operands.size > 1 && call.operands.all { op -> op is RexInputRef }) {
-                                    return false
+                                val oldCanPushScalar = canPushScalar
+                                if (call.kind != SqlKind.AND && call.kind != SqlKind.OR) {
+                                    // Call Operands on Multiple Columns Not Supported Yet
+                                    val numCols = call.operands.map { !IsScalar.isScalar(it) }.count { it }
+                                    if (numCols != 1) {
+                                        return false
+                                    }
+                                    if (call.kind != SqlKind.NOT) {
+                                        // Update the state variable to allow pushing scalars when checking the operands.
+                                        canPushScalar = true
+                                    }
                                 }
-
                                 // Arguments also need to be pushable.
-                                call.operands.all { op -> op.accept(this) ?: false }
+                                val operandResults = call.operands.all { op -> op.accept(this) ?: false }
+                                // Restore the state
+                                canPushScalar = oldCanPushScalar
+                                operandResults
                             } else {
                                 false
                             }

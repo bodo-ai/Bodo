@@ -96,11 +96,11 @@ class StreamingPipelineFrame(
     }
 
     /**
-     * Adds a new assignment to be initialized before the loop.
-     * @param assign Assignment to add.
+     * Adds a new Op to be initialized before the loop.
+     * @param op Op to add.
      */
-    fun addInitialization(assign: Op) {
-        initializations.add(assign)
+    fun addInitialization(op: Op) {
+        initializations.add(op)
     }
 
     fun initializeStreamingState(

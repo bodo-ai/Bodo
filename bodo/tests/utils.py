@@ -2413,7 +2413,10 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
 def get_snowflake_connection_string(
-    db: str, schema: str, conn_params: Optional[dict[str, str]] = None, user: int = 1
+    db: str,
+    schema: str,
+    conn_params: Optional[dict[str, str]] = None,
+    user: int = 1,
 ) -> str:
     """
     Generates a common snowflake connection string. Some details (how to determine
@@ -2499,12 +2502,52 @@ def create_snowflake_table(
         drop_snowflake_table(table_name, db, schema)
 
 
+@contextmanager
+def create_snowflake_iceberg_table(
+    df: pd.DataFrame, base_table_name: str, db: str, schema: str, iceberg_volume: str
+) -> Generator[str, None, None]:
+    """Creates a new Iceberg table in Snowflake derived from the base table name
+    and using the DataFrame. This first creates a native table and then creates an
+    Iceberg table from it
+
+    Returns the name of the table added to Snowflake.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        db (str): Name of the snowflake db.
+        schema (str): Name of the snowflake schema
+        iceberg_volume (str): Name of the external volume to use for the Iceberg table.
+
+
+    Returns:
+        str: The final table name.
+    """
+    comm = MPI.COMM_WORLD
+    iceberg_table_name = None
+    with create_snowflake_table(df, base_table_name, db, schema) as native_table_name:
+        try:
+            if bodo.get_rank() == 0:
+                iceberg_table_name = gen_unique_table_id(base_table_name)
+                query = f"CREATE ICEBERG TABLE {iceberg_table_name} CATALOG='SNOWFLAKE', EXTERNAL_VOLUME='{iceberg_volume}', BASE_LOCATION='{iceberg_table_name}' AS SELECT * FROM {native_table_name}"
+                conn_str = get_snowflake_connection_string(db, schema)
+                pd.read_sql(query, conn_str)
+            iceberg_table_name = comm.bcast(iceberg_table_name)
+            yield iceberg_table_name
+        finally:
+            drop_snowflake_table(
+                iceberg_table_name, db, schema, iceberg_volume=iceberg_volume
+            )
+
+
 def gen_unique_table_id(base_table_name):
     unique_name = str(uuid4()).replace("-", "_")
     return f"{base_table_name}_{unique_name}".lower()
 
 
-def drop_snowflake_table(table_name: str, db: str, schema: str) -> None:
+def drop_snowflake_table(
+    table_name: str, db: str, schema: str, iceberg_volume: Optional[str] = None
+) -> None:
     """Drops a table from snowflake with the given table_name.
     The db and schema are also provided to connect to Snowflake.
 
@@ -2517,8 +2560,9 @@ def drop_snowflake_table(table_name: str, db: str, schema: str) -> None:
     drop_err = None
     if bodo.get_rank() == 0:
         try:
+            iceberg_prefix = "iceberg" if iceberg_volume else ""
             conn_str = get_snowflake_connection_string(db, schema)
-            pd.read_sql(f"drop table {table_name}", conn_str)
+            pd.read_sql(f"drop {iceberg_prefix} table {table_name}", conn_str)
         except Exception as e:
             drop_err = e
     drop_err = comm.bcast(drop_err)
