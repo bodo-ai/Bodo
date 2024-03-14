@@ -588,18 +588,18 @@ def test_nvl2(args, memory_leak_check):
             (
                 pd.Series(
                     [
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 60),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 60),
                         None,
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
                         None,
                     ]
                 ),
                 pd.Series(
                     [
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 10),
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 02:04:05"), 0),
-                        bodo.TimestampTZ(pd.Timestamp("2024-01-02 03:04:05"), 0),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 10),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 02:04:05", 0),
+                        bodo.TimestampTZ.fromUTC("2024-01-02 03:04:05", 0),
                         None,
                         None,
                     ]

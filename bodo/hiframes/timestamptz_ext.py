@@ -56,6 +56,18 @@ class TimestampTZ:
         self._offset_minutes = offset_minutes
 
     @staticmethod
+    def fromUTC(utc_timestamp_string, offset_minutes):
+        """
+        Alternative constructor for TimestampTZ taking in the timestamp string
+        in local time and the offset in hours/minutes from UTC time.
+
+        For example, fromLocal("2018-12-15 20:45:00", -330) represents the
+        UTC timestamp "2018-12-16 02:15:00" with an offset of "-05:30"
+        """
+        utc_timestamp = pd.Timestamp(utc_timestamp_string)
+        return TimestampTZ(utc_timestamp, offset_minutes)
+
+    @staticmethod
     def fromLocal(local_timestamp_string, offset_minutes):
         """
         Alternative constructor for TimestampTZ taking in the timestamp string
