@@ -7,6 +7,7 @@ hide:
 
 # Release Notes {#releases}
 
+-   [Bodo.ai 2024.3 Release][March_2024]
 -   [Bodo.ai 2024.2 Release][February_2024]
 -   [Bodo.ai 2024.1 Release][January_2024]
 -   [Bodo.ai 2023.12 Release][December_2023]
