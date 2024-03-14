@@ -33,18 +33,6 @@ from bodosql.utils import levenshteinDistance
 pytestmark = pytest_snowflake
 
 
-@pytest.fixture(
-    params=[
-        pytest.param(
-            "select L_SUPPKEY from TPCH_SF1.LINEITEM WHERE L_ORDERKEY > 10 AND L_SHIPMODE LIKE 'AIR%%' ORDER BY L_SUPPKEY LIMIT 70",
-            marks=pytest.mark.slow,
-        ),
-    ]
-)
-def simple_queries(request):
-    return request.param
-
-
 def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
@@ -73,7 +61,7 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
             # Check for filter pushdown
             check_logger_msg(
                 stream,
-                f'WHERE "L_ORDERKEY" > 10 AND "L_SHIPMODE" LIKE $$AIR%%',
+                f'WHERE "L_ORDERKEY" > 10 AND STARTSWITH("L_SHIPMODE", $$AIR$$)',
             )
 
     bc = bodosql.BodoSQLContext(
