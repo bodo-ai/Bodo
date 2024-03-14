@@ -166,6 +166,22 @@ interface Op {
         }
     }
 
+    /**
+     * Implementation of a wrapper around a frame that enables
+     * inserting it as a statement in another frame. This allows
+     * dumping a frame without indentation.
+     */
+    class InsertFrame(private val frame: Frame) : Op {
+        /**
+         * Emits the code for this by dumping the whole
+         * frame without indentation.
+         * @param doc The document to write the code into.
+         */
+        override fun emit(doc: Doc) {
+            frame.emit(doc)
+        }
+    }
+
     object Continue : Op {
         override fun emit(doc: Doc) {
             doc.write("continue")

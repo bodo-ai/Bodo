@@ -15,6 +15,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     check_func,
+    create_snowflake_iceberg_table,
     drop_snowflake_table,
     gen_unique_table_id,
     get_snowflake_connection_string,
@@ -495,3 +496,48 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         # Verify no limit pushdown as its after the limit
         check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_dynamic_scalar_filter_pushdown(memory_leak_check):
+    """
+    Test that a dynamically generated filter can be pushed down to Iceberg.
+    """
+    database = "TEST_DB"
+    schema = "PUBLIC"
+    iceberg_volume = "exvol"
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        database,
+        connection_params={"schema": schema},
+        iceberg_volume=iceberg_volume,
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    current_date = pd.Timestamp.now().date()
+    offsets = [-3, -2, -1, 0, 1, 2, 3]
+    column = [current_date + pd.Timedelta(days=offset) for offset in offsets]
+    input_df = pd.DataFrame({"A": column})
+    py_output = pd.DataFrame({"A": [x for x in column if x <= current_date]})
+    with create_snowflake_iceberg_table(
+        input_df, "current_date_table", database, schema, iceberg_volume
+    ) as table_name:
+        query = f"SELECT * FROM {table_name} WHERE A <= CURRENT_DATE"
+        stream = StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify filter pushdown
+            check_logger_msg(stream, "Arrow filters pushed down:\n[[('A', '<=', f0)]]")

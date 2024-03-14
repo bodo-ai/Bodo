@@ -138,12 +138,12 @@ interface PandasRel : RelNode {
         fun lowerAsMetaType(expression: Expr): Variable
 
         /**
-         * Returns a PandasToRexTranslator that works in this build context.
+         * Returns a RexToPandasTranslator that works in this build context.
          */
         fun rexTranslator(input: BodoEngineTable): RexToPandasTranslator
 
         /**
-         * Returns a PandasToRexTranslator that works in this build context
+         * Returns a RexToPandasTranslator that works in this build context
          * and is initialized with the given local refs.
          */
         fun rexTranslator(
@@ -152,13 +152,19 @@ interface PandasRel : RelNode {
         ): RexToPandasTranslator
 
         /**
-         * Returns a PandasToRexTranslator that works in this build context and
+         * Returns a RexToPandasTranslator that works in this build context and
          * will wrap the final result of any scalars in arrays the same size as the input.
          */
         fun arrayRexTranslator(input: BodoEngineTable): ArrayRexToPandasTranslator
 
         /**
-         * Returns a PandasToRexTranslator that works in this a streaming context.
+         * Returns a RexToPandasTranslator that works in this build context when
+         * only operating on scalars.
+         */
+        fun scalarRexTranslator(): ScalarRexToPandasTranslator
+
+        /**
+         * Returns a RexToPandasTranslator that works in this a streaming context.
          */
         fun streamingRexTranslator(
             input: BodoEngineTable,
