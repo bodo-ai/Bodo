@@ -14,19 +14,21 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
 void arrow_reader_del_py_entry(ArrowReader* reader);
 
 // --------- functions defined in parquet_reader.cpp ---------
-table_info* pq_read_py_entry(
-    PyObject* path, bool parallel, PyObject* dnf_filters,
-    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
-    int64_t tot_rows_to_read, int32_t* _selected_cols,
-    int32_t num_selected_cols, int32_t* _is_nullable,
-    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
-    int32_t num_partition_cols, int32_t* str_as_dict_cols,
-    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
-    bool input_file_name_col, bool use_hive);
+table_info* pq_read_py_entry(PyObject* path, bool parallel,
+                             PyObject* expr_filters, PyObject* storage_options,
+                             PyObject* pyarrow_schema, int64_t tot_rows_to_read,
+                             int32_t* _selected_cols, int32_t num_selected_cols,
+                             int32_t* _is_nullable, int32_t* selected_part_cols,
+                             int32_t* part_cols_cat_dtype,
+                             int32_t num_partition_cols,
+                             int32_t* str_as_dict_cols,
+                             int32_t num_str_as_dict_cols,
+                             int64_t* total_rows_out, bool input_file_name_col,
+                             bool use_hive);
 
 ArrowReader* pq_reader_init_py_entry(
-    PyObject* path, bool parallel, PyObject* dnf_filters,
-    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    PyObject* path, bool parallel, PyObject* expr_filters,
+    PyObject* storage_options, PyObject* pyarrow_schema,
     int64_t tot_rows_to_read, int32_t* _selected_fields,
     int32_t num_selected_fields, int32_t* _is_nullable,
     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,

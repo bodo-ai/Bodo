@@ -614,7 +614,6 @@ def _get_filter_column_arrow_expr(col_val, filter_map, output_f_string: bool = F
 def generate_arrow_filters(
     filters,
     filter_map,
-    filter_vars,
     col_names,
     partition_names,
     original_out_types,
@@ -631,7 +630,6 @@ def generate_arrow_filters(
     filters -- DNF expression from the IR node for filters. None
                if there are no filters.
     filter_map -- Mapping from filter value to var name.
-    filter_vars -- List of filter vars
     col_names -- original column names in the IR node, including dead columns.
     partition_names -- Column names that can be used as partitions.
     original_out_types -- original column types in the IR node, including dead columns.
