@@ -808,7 +808,6 @@ def _gen_iceberg_reader_chunked_py(
     ) = bodo.ir.connector.generate_arrow_filters(
         filters,
         filter_map,
-        filter_vars,
         orig_col_names,
         orig_col_names,
         orig_col_types,
