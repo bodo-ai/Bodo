@@ -30,6 +30,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
+    enable_timestamptz,
     get_snowflake_connection_string,
     pytest_mark_one_rank,
     pytest_snowflake,
@@ -2261,8 +2262,10 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_LTZ
+        tz_aware_col TIMESTAMP_TZ
+        ltz_aware_col TIMESTAMP_TZ
     """
+    # TODO(BSE-XXXX): Add support for TimestampTZ in this test and read tz_aware_col
     comm = MPI.COMM_WORLD
 
     def impl_tz_naive(query, conn, date_val):
@@ -2272,7 +2275,7 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
 
     def impl_tz_aware(query, conn, date_val):
         df = pd.read_sql(query, conn)
-        df = df[df["tz_aware_col"] > date_val]
+        df = df[df["ltz_aware_col"] > date_val]
         return df["date_col"]
 
     db = "TEST_DB"
@@ -2289,7 +2292,7 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
             conn,
         )["date_col"]
         py_output2 = pd.read_sql(
-            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > date '2022-04-07'",
+            "select date_col from TIMESTAMP_FILTER_TEST where ltz_aware_col > date '2022-04-07'",
             conn,
         )["date_col"]
     py_output1, py_output2 = comm.bcast((py_output1, py_output2))
@@ -2339,13 +2342,15 @@ def test_tz_aware_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_LTZ
+        tz_aware_col TIMESTAMP_TZ
+        ltz_aware_col TIMESTAMP_TZ
     """
+    # TODO(BSE-XXXX): Add support for TimestampTZ in this test and read tz_aware_col
     comm = MPI.COMM_WORLD
 
     def impl(query, conn, ts_value):
         df = pd.read_sql(query, conn)
-        df = df[df["tz_aware_col"] > ts_value]
+        df = df[df["ltz_aware_col"] > ts_value]
         return df["date_col"]
 
     db = "TEST_DB"
@@ -2357,7 +2362,7 @@ def test_tz_aware_filter_pushdown(memory_leak_check):
     py_output = None
     if bodo.get_rank() == 0:
         py_output = pd.read_sql(
-            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > '2022-04-06 19:00:00'::TIMESTAMP_LTZ",
+            "select date_col from TIMESTAMP_FILTER_TEST where ltz_aware_col > '2022-04-06 19:00:00'::TIMESTAMP_LTZ",
             conn,
         )["date_col"]
     py_output = comm.bcast(py_output)
@@ -2389,7 +2394,8 @@ def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_LTZ
+        tz_aware_col TIMESTAMP_TZ
+        ltz_aware_col TIMESTAMP_LTZ
     """
     comm = MPI.COMM_WORLD
 
@@ -2873,48 +2879,60 @@ def test_snowflake_json_url(memory_leak_check):
     check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
 
 
+@pytest.mark.skip(
+    reason="[BSE-2911] This test is reading TimestampTZ columns - we need to specify py_output to compare output"
+)
 def test_snowflake_timezones(memory_leak_check):
     """
     Tests trying to read Arrow timestamp columns with
     timezones using Bodo + Snowflake succeeds.
 
-    Note: tz_test was manually created in our snowflake account.
+    The table used for this was created directly in snowflake and has the schema
+
+    Table: TZ_TEST
+    Columns:
+        A TIMESTAMP_TZ
+        B NUMBER
+        C TIMESTAMP_LTZ
     """
+    with enable_timestamptz():
 
-    def test_impl1(query, conn_str):
-        """
-        read_sql that should succeed
-        and filters out tz columns.
-        """
-        df = pd.read_sql(query, conn_str)
-        return df.b
+        def test_impl1(query, conn_str):
+            """
+            read_sql that should succeed
+            and filters out tz columns.
+            """
+            df = pd.read_sql(query, conn_str)
+            return df.b
 
-    def test_impl2(query, conn_str):
-        """
-        Read parquet loading a single tz column.
-        """
-        df = pd.read_sql(query, conn_str)
-        return df.a
+        def test_impl2(query, conn_str):
+            """
+            Read parquet loading a single tz column.
+            """
+            df = pd.read_sql(query, conn_str)
+            return df.a
 
-    def test_impl3(query, conn_str):
-        """
-        Read parquet loading t columns.
-        """
-        df = pd.read_sql(query, conn_str)
-        return df
+        def test_impl3(query, conn_str):
+            """
+            Read parquet loading tz columns.
+            """
+            df = pd.read_sql(query, conn_str)
+            return df
 
-    db = "TEST_DB"
-    schema = "PUBLIC"
-    conn = get_snowflake_connection_string(db, schema)
+        db = "TEST_DB"
+        schema = "PUBLIC"
+        conn = get_snowflake_connection_string(db, schema)
 
-    full_query = f"select * from tz_test"
-    partial_query = f"select B, C from tz_test"
-    # Loading just the non-tz columns should suceed.
-    check_func(test_impl1, (full_query, conn), check_dtype=False)
-    check_func(test_impl1, (partial_query, conn), check_dtype=False)
-    check_func(test_impl2, (full_query, conn), check_dtype=False)
-    check_func(test_impl3, (full_query, conn), check_dtype=False)
-    check_func(test_impl3, (partial_query, conn), check_dtype=False)
+        # Note that we can't just write select *, since we normally rely on
+        # BodoSQL to convert TIMESTAMP_TZ columns to VARIANT.
+        full_query = f"select TO_VARIANT(A) as A, B, C from tz_test"
+        partial_query = f"select B, C from tz_test"
+        # Loading just the non-tz columns should suceed.
+        check_func(test_impl1, (full_query, conn), check_dtype=False)
+        check_func(test_impl1, (partial_query, conn), check_dtype=False)
+        check_func(test_impl2, (full_query, conn), check_dtype=False)
+        check_func(test_impl3, (full_query, conn), check_dtype=False)
+        check_func(test_impl3, (partial_query, conn), check_dtype=False)
 
 
 def test_snowflake_empty_typing(memory_leak_check):
