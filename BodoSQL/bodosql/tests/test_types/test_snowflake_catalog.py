@@ -38,6 +38,7 @@ from bodo.tests.utils import (
     pytest_mark_one_rank,
     pytest_snowflake,
 )
+from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
 from bodosql.tests.test_datetime_fns import compute_valid_times
@@ -3296,3 +3297,128 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
                 }
             )
             check_func(impl, (bc, query), py_output=expected_output)
+
+
+def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
+    """Test writing timestamptz from Snowflake"""
+    with enable_timestamptz():
+        comm = MPI.COMM_WORLD
+        db = test_db_snowflake_catalog.database
+        schema = test_db_snowflake_catalog.connection_params["schema"]
+
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+        ttz_values = [
+            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 0),
+            bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05", 367),
+            bodo.TimestampTZ.fromLocal("2020-01-01 00:00:00.123456789", -480),
+            bodo.TimestampTZ.fromLocal("1900-01-01 01:01:01", 0),
+            None,
+            None,
+            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", -480),
+            bodo.TimestampTZ.fromUTC("2024-03-10 12:30:00", 0),
+            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 0),
+            bodo.TimestampTZ.fromUTC("1970-01-01 00:00:00", 60),
+        ] * 2
+        ttz_df = pd.DataFrame({"A": pd.Series(ttz_values)})
+
+        def map_or_none(f, arr):
+            return [f(x) if x is not None else x for x in arr]
+
+        def sign(x):
+            return 1 if x >= 0 else -1
+
+        expected_output = pd.DataFrame(
+            {
+                # We get the time in microseconds here because snowflake doesn't
+                # correctly handle nanoseconds
+                "LOCAL_TS": pd.Series(
+                    map_or_none(lambda x: x.local_timestamp().value // 1000, ttz_values)
+                ),
+                "OFFSET_HR": pd.Series(
+                    map_or_none(
+                        lambda x: sign(x.offset_minutes) * abs(x.offset_minutes) // 60,
+                        ttz_values,
+                    )
+                ),
+                "OFFSET_MIN": pd.Series(
+                    map_or_none(
+                        lambda x: sign(x.offset_minutes) * abs(x.offset_minutes) % 60,
+                        ttz_values,
+                    )
+                ),
+            }
+        )
+        bc = bc.add_or_replace_view("TABLE1", ttz_df)
+
+        def impl(bc, query):
+            return bc.sql(query)
+
+        # Create an empty table with a timestamptz column
+        table_query = f"SELECT TO_TIMESTAMP_TZ(VALUE) as A from table(flatten([]))"
+        with create_snowflake_table_from_select_query(
+            table_query, "timestamptz_test", db, schema
+        ) as table_name:
+            # Write to Snowflake
+            insert_table = (
+                table_name if use_default_schema else f"{schema}.{table_name}"
+            )
+            write_query = (
+                f"INSERT INTO {insert_table}(A) Select A from __bodolocal__.table1"
+            )
+            # Only test with only_1D=True so we only insert into the table once.
+            check_func(impl, (bc, write_query), only_1D=True, py_output=None)
+
+            output_df = None
+            # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+            # to reduce the demand on Snowflake.
+            if bodo.get_rank() == 0:
+                conn_str = get_snowflake_connection_string(db, schema)
+                # If we do A::timestampntz, then we completely lose subseconds,
+                # if we do epoch_nanoseconds, the submicrosecond component seems
+                # to be inaccurate. So we use epoch_microseconds.
+                output_df = pd.read_sql(
+                    f"select date_part(epoch_microsecond, A::timestampntz) as LOCAL_TS, date_part(tzh, A) as offset_hr, date_part(timezone_minute, A) as offset_min from {table_name}",
+                    conn_str,
+                )
+                # Reset the columns to the original names for simpler testing.
+                output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df = comm.bcast(output_df)
+            assert_tables_equal(output_df, expected_output)
+
+
+def test_write_timestamptz_ctas(test_db_snowflake_catalog, memory_leak_check):
+    """Test writing timestamptz from Snowflake using a CTAS query
+
+    This test relies on the table TZ_TEST which has the following schema:
+    Columns:
+        A: TIMESTAMP_TZ
+        B: NUMBER
+        C: TIMESTAMP_LTZ
+    """
+    with enable_timestamptz():
+        if bodo.get_size() != 1:
+            pytest.skip("This test is only designed for 1 rank")
+
+        snowflake_user = 1
+        db = "TEST_DB"
+        schema = "PUBLIC"
+        conn = bodo.tests.utils.get_snowflake_connection_string(
+            db, schema, user=snowflake_user
+        )
+        bodo_write_tablename = "BODO_TEST_SNOWFLAKE_CTAS_TIMESTAMPTZ"
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+        # Write the table to Snowflake using a table name that is created by the context
+        # manager and will be deleted at the end
+        with ensure_clean_snowflake_table(
+            conn, bodo_write_tablename
+        ) as write_table_name:
+
+            def impl(bc, query):
+                return bc.sql(query)
+
+            query = f"CREATE OR REPLACE TABLE {bodo_write_tablename} AS (SELECT A FROM TZ_TEST)"
+            check_func(impl, (bc, query), only_1D=True, py_output=None)
+
+            output = bodo.jit()(impl)(bc, f"SELECT * FROM {bodo_write_tablename}")
+            expected = bodo.jit()(impl)(bc, f"SELECT A FROM TZ_TEST")
+            assert_tables_equal(output, expected)

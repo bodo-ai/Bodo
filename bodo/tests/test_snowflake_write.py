@@ -2319,7 +2319,7 @@ def test_create_table_with_comments(memory_leak_check):
         # Request information about all of the columns of the table, then confirm
         # that the desired ones have the specified comments.
         column_info = pd.read_sql(f"DESCRIBE TABLE {write_table_name}", conn)
-        assert len(column_info == 3), "Wrong number of columns"
+        assert len(column_info == 3), "Wrong number of column attributes"
         assert column_info["type"].to_list() == [
             "NUMBER(38,0)",
             "VARCHAR(1)",
