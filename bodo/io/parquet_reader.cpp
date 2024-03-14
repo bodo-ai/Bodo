@@ -123,15 +123,13 @@ PyObject* ParquetReader::get_dataset() {
     // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
     // storage_options)
     PyObject* ds = PyObject_CallMethod(
-        pq_mod, "get_parquet_dataset", "OOOOOOOLOO", path, Py_True, dnf_filters,
-        expr_filters, storage_options, Py_False, PyBool_FromLong(parallel),
-        tot_rows_to_read, this->pyarrow_schema,
+        pq_mod, "get_parquet_dataset", "OOOOOLOO", path, Py_True, expr_filters,
+        storage_options, Py_False, tot_rows_to_read, this->pyarrow_schema,
         PyBool_FromLong(this->use_hive));
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
     Py_DECREF(path);
-    Py_DECREF(dnf_filters);
     Py_DECREF(pq_mod);
     if (PyErr_Occurred())
         throw std::runtime_error("python");
@@ -517,8 +515,8 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  * function).
  */
 table_info* pq_read_py_entry(
-    PyObject* path, bool parallel, PyObject* dnf_filters,
-    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    PyObject* path, bool parallel, PyObject* expr_filters,
+    PyObject* storage_options, PyObject* pyarrow_schema,
     int64_t tot_rows_to_read, int32_t* _selected_fields,
     int32_t num_selected_fields, int32_t* _is_nullable,
     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
@@ -533,10 +531,9 @@ table_info* pq_read_py_entry(
         std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
                                             num_str_as_dict_cols);
 
-        ParquetReader reader(path, parallel, dnf_filters, expr_filters,
-                             storage_options, pyarrow_schema, tot_rows_to_read,
-                             selected_fields, is_nullable, input_file_name_col,
-                             -1, use_hive);
+        ParquetReader reader(path, parallel, expr_filters, storage_options,
+                             pyarrow_schema, tot_rows_to_read, selected_fields,
+                             is_nullable, input_file_name_col, -1, use_hive);
 
         // Initialize reader
         reader.init_pq_reader(str_as_dict_cols, part_cols_cat_dtype,
@@ -590,8 +587,8 @@ table_info* pq_read_py_entry(
  * function).
  */
 ArrowReader* pq_reader_init_py_entry(
-    PyObject* path, bool parallel, PyObject* dnf_filters,
-    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    PyObject* path, bool parallel, PyObject* expr_filters,
+    PyObject* storage_options, PyObject* pyarrow_schema,
     int64_t tot_rows_to_read, int32_t* _selected_fields,
     int32_t num_selected_fields, int32_t* _is_nullable,
     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
@@ -607,9 +604,9 @@ ArrowReader* pq_reader_init_py_entry(
                                             num_str_as_dict_cols);
 
         ParquetReader* reader = new ParquetReader(
-            path, parallel, dnf_filters, expr_filters, storage_options,
-            pyarrow_schema, tot_rows_to_read, selected_fields, is_nullable,
-            input_file_name_col, batch_size, use_hive);
+            path, parallel, expr_filters, storage_options, pyarrow_schema,
+            tot_rows_to_read, selected_fields, is_nullable, input_file_name_col,
+            batch_size, use_hive);
 
         // Initialize reader
         reader->init_pq_reader(str_as_dict_cols, part_cols_cat_dtype,

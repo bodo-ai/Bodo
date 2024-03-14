@@ -11,16 +11,14 @@ class ParquetReader : public ArrowReader {
      * Initialize ParquetReader.
      * See pq_read_py_entry function below for description of arguments.
      */
-    ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
-                  PyObject* _expr_filters, PyObject* _storage_options,
-                  PyObject* _pyarrow_schema, int64_t _tot_rows_to_read,
-                  std::vector<int> _selected_fields,
+    ParquetReader(PyObject* _path, bool _parallel, PyObject* _expr_filters,
+                  PyObject* _storage_options, PyObject* _pyarrow_schema,
+                  int64_t _tot_rows_to_read, std::vector<int> _selected_fields,
                   std::vector<bool> is_nullable, bool _input_file_name_col,
                   int64_t batch_size, bool _use_hive = true)
         : ArrowReader(_parallel, _pyarrow_schema, _tot_rows_to_read,
                       _selected_fields, is_nullable, batch_size),
           empty_out_table(nullptr),
-          dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
           storage_options(_storage_options),
@@ -99,7 +97,6 @@ class ParquetReader : public ArrowReader {
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
 
-    PyObject* dnf_filters = nullptr;
     PyObject* expr_filters = nullptr;
     PyObject* filesystem = nullptr;
     // dataset partitioning info (regardless of whether we select partition

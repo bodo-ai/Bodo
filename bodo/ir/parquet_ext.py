@@ -30,7 +30,7 @@ import bodo.ir.connector
 import bodo.user_logging
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
-from bodo.io import arrow_cpp
+from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
@@ -460,15 +460,13 @@ def pq_distributed_run(
     data read.
     """
     n_cols = len(pq_node.out_vars)
-    dnf_filter_str = "None"
-    expr_filter_str = "None"
+    filter_str = "None"
 
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
     extra_args = ", ".join(filter_map.values())
-    dnf_filter_str, expr_filter_str = bodo.ir.connector.generate_arrow_filters(
+    _, filter_str = bodo.ir.connector.generate_arrow_filters(
         pq_node.filters,
         filter_map,
-        filter_vars,
         pq_node.original_df_colnames,
         pq_node.partition_names,
         pq_node.original_table_col_types,
@@ -563,8 +561,7 @@ def pq_distributed_run(
         pq_node.out_table_col_types,
         pq_node.storage_options,
         pq_node.partition_names,
-        dnf_filter_str,
-        expr_filter_str,
+        filter_str,
         extra_args,
         parallel,
         meta_head_only_info,
@@ -773,7 +770,6 @@ def _gen_pq_reader_py(
     out_types: list[types.ArrayCompatible],
     storage_options,
     partition_names,
-    dnf_filter_str: str,
     expr_filter_str: str,
     extra_args,
     is_parallel,
@@ -793,7 +789,7 @@ def _gen_pq_reader_py(
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
     func_text += f"    ev.add_attribute('g_fname', fname)\n"
-    func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
+    func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
     # convert the filename, which could be a string or a list of strings, to a
     # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
     func_text += "    fname_py = get_fname_pyobject(fname)\n"
@@ -804,9 +800,9 @@ def _gen_pq_reader_py(
 
     (
         tot_rows_to_read,
-        col_indices_map,
-        sanitized_col_names_map,
-        input_file_name_col_out,
+        _,
+        _,
+        _,
         selected_cols,
         selected_cols_map,
         selected_partition_cols,
@@ -836,8 +832,7 @@ def _gen_pq_reader_py(
         f"    out_table = pq_read_py_entry(\n"
         f"        fname_py,\n"
         f"        {is_parallel},\n"
-        f"        dnf_filters,\n"
-        f"        expr_filters,\n"
+        f"        filters,\n"
         f"        storage_options_py,\n"
         f"        pyarrow_schema_{call_id},\n"
         f"        {tot_rows_to_read},\n"
@@ -974,7 +969,6 @@ def _gen_pq_reader_chunked_py(
     out_table_col_types: list[types.ArrayCompatible],
     storage_options,
     partition_names,
-    dnf_filter_str: str,
     expr_filter_str: str,
     extra_args,
     is_parallel,
@@ -1005,7 +999,7 @@ def _gen_pq_reader_chunked_py(
         f"def pq_reader_chunked_py(fname, {extra_args}):\n"
         f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
         f"    ev.add_attribute('g_fname', fname)\n"
-        f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
+        f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
         f"    fname_py = get_fname_pyobject(fname)\n"
         # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
         f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
@@ -1045,8 +1039,7 @@ def _gen_pq_reader_chunked_py(
             f"    pq_reader = pq_reader_init_py_entry(",
             f"        fname_py,",
             f"        {is_parallel},",
-            f"        dnf_filters,",
-            f"        expr_filters,",
+            f"        filters,",
             f"        storage_options_py,",
             f"        pyarrow_schema_{call_id},",
             f"        {tot_rows_to_read},",
@@ -1142,8 +1135,7 @@ pq_read_py_entry = types.ExternalFunction(
     table_type(
         read_parquet_fpath_type,  # path
         types.boolean,  # parallel
-        parquet_predicate_type,  # dnf_filters
-        parquet_predicate_type,  # expr_filters
+        parquet_predicate_type,  # filters
         storage_options_dict_type,  # storage_options
         pyarrow_schema_type,  # pyarrow_schema
         types.int64,  # tot_rows_to_read
@@ -1167,8 +1159,7 @@ def pq_reader_init_py_entry(
     typingctx,
     path_t,
     parallel_t,
-    dnf_filters_t,
-    expr_filters_t,
+    filters_t,
     storage_options_t,
     pyarrow_schema_t,
     tot_rows_to_read_t,
@@ -1198,8 +1189,7 @@ def pq_reader_init_py_entry(
             [
                 lir.IntType(8).as_pointer(),  # path void*
                 lir.IntType(1),  # parallel bool
-                lir.IntType(8).as_pointer(),  # dnf_filters PyObject*
-                lir.IntType(8).as_pointer(),  # expr_filters PyObject*
+                lir.IntType(8).as_pointer(),  # filters PyObject*
                 lir.IntType(8).as_pointer(),  # storage_options PyObject*
                 lir.IntType(8).as_pointer(),  # pyarrow_schema PyObject*
                 lir.IntType(64),  # tot_rows_to_read int64*
@@ -1228,8 +1218,7 @@ def pq_reader_init_py_entry(
     sig = arrow_reader_t.instance_type(
         read_parquet_fpath_type,  # path
         types.boolean,  # parallel
-        parquet_predicate_type,  # dnf_filters
-        parquet_predicate_type,  # expr_filters
+        parquet_predicate_type,  # filters
         storage_options_dict_type,  # storage_options
         pyarrow_schema_type,  # pyarrow_schema
         types.int64,  # tot_rows_to_read

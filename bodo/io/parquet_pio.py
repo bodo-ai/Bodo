@@ -447,7 +447,7 @@ def glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
 def getfs(
     fpath: str | list[str],
     protocol: str,
-    storage_options: Optional[dict] = None,
+    storage_options: dict | None = None,
     parallel: bool = False,
 ) -> PyFileSystem | pa.fs.FileSystem:
     """
@@ -607,12 +607,12 @@ def get_bodo_pq_dataset_from_fpath(
     parsed_url: ParseResult,
     fs: Any,
     partitioning: str | None,
-    dnf_filters=None,
-    typing_pa_schema: Optional[pa.Schema] = None,
+    filters: pc.Expression | None = None,
+    typing_pa_schema: pa.Schema | None = None,
 ) -> ParquetDataset | Exception:
     """
     Get a ParquetDataset object for a filepath (or a list of filepaths).
-    If provided, the dnf_filters will be applied to prune the list
+    If provided, the filters will be applied to prune the list
     of parquet files. Otherwise, all files are included in the dataset.
     This is used at both compile time and runtime.
 
@@ -627,7 +627,7 @@ def get_bodo_pq_dataset_from_fpath(
         fs (Any): Filesystem to use for reading data/metadata.
         partitioning (str | None): Partitioning scheme to use. Only 'hive'
             and None are supported.
-        dnf_filters (str, optional): Filters to apply to prune the set of
+        filters (pc.Expression, optional): Filters to apply to prune the set of
             files. Defaults to None.
         typing_pa_schema (Optional[pa.Schema], optional): Provide a schema
             to use. This is used at runtime to enforce the scheme
@@ -649,9 +649,9 @@ def get_bodo_pq_dataset_from_fpath(
     try:
         ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
         if tracing.is_tracing():
-            # only do the work of converting dnf_filters to string
+            # only do the work of converting filters to string
             # if tracing is enabled
-            ev_pq_ds.add_attribute("g_dnf_filter", str(dnf_filters))
+            ev_pq_ds.add_attribute("g_filters", str(filters))
         pa.set_io_thread_count(nthreads)
 
         fpath_noprefix, prefix = get_fpath_without_protocol_prefix(
@@ -681,13 +681,13 @@ def get_bodo_pq_dataset_from_fpath(
             fpath_noprefix,
             filesystem=fs,
             # use_legacy_dataset=False is default by Arrow 15
-            # Including arg causes a lot of warnings
+            # Including arg introduces multiple warnings
             partitioning=partitioning,
-            filters=dnf_filters,
+            filters=filters,
         )
 
         num_files_before_filter = len(dataset.files)
-        # If there are dnf_filters files are filtered in ParquetDataset constructor
+        # If there are filters, files are filtered in ParquetDataset constructor
         dataset = ParquetDataset(dataset, prefix)
 
         # If typing schema is available, then use that as the baseline
@@ -705,7 +705,7 @@ def get_bodo_pq_dataset_from_fpath(
             # NOTE: typing_pa_schema must include partitions
             dataset.schema = typing_pa_schema
 
-        if dnf_filters is not None:
+        if filters is not None:
             ev_pq_ds.add_attribute("num_pieces_before_filter", num_files_before_filter)
             ev_pq_ds.add_attribute("num_pieces_after_filter", len(dataset.pieces))
         ev_pq_ds.finalize()
@@ -719,7 +719,7 @@ def get_bodo_pq_dataset_from_fpath(
         # See [BE-1188] for an example
         # Raising a BodoError lets messages come back and be seen by the user.
         if isinstance(e, IsADirectoryError):
-            # We supress Arrow's error message since it doesn't apply to Bodo
+            # We suppress Arrow's error message since it doesn't apply to Bodo
             # (the bit about doing a union of datasets)
             e = BodoError(LIST_OF_FILES_ERROR_MSG)
         elif isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
@@ -772,7 +772,7 @@ def populate_row_counts_in_pq_dataset_pieces(
     fpath: str | list[str],
     protocol: str,
     validate_schema: bool,
-    expr_filters: Optional[pc.Expression] = None,
+    filters: pc.Expression | None = None,
 ):
     """
     Populate the row counts for each piece in a ParquetDataset
@@ -800,7 +800,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             the original schema and the schemas of the files. Note that
             this will only validate schema for the set of files its
             processing.
-        expr_filters (pc.Expression, optional): Arrow expression filters
+        filters (pc.Expression, optional): Arrow expression filters
             to apply. Defaults to None.
     """
     ev_row_counts = tracing.Event("get_row_counts")
@@ -809,7 +809,7 @@ def populate_row_counts_in_pq_dataset_pieces(
     # for datasets consisting of many files, so we do this in parallel
     if tracing.is_tracing():
         ev_row_counts.add_attribute("g_num_pieces", len(dataset.pieces))
-        ev_row_counts.add_attribute("g_expr_filters", str(expr_filters))
+        ev_row_counts.add_attribute("g_filters", str(filters))
     ds_scan_time = 0.0
     num_pieces = len(dataset.pieces)
     start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
@@ -818,7 +818,7 @@ def populate_row_counts_in_pq_dataset_pieces(
     total_row_groups_chunk = 0
     total_row_groups_size_chunk = 0
 
-    if expr_filters is not None:
+    if filters is not None:
         my_random = random.Random(37)
         pieces = my_random.sample(dataset.pieces, k=len(dataset.pieces))
     else:
@@ -882,7 +882,7 @@ def populate_row_counts_in_pq_dataset_pieces(
             # unification step above), so it should be valid.
             row_count = frag.scanner(
                 schema=dataset.schema,
-                filter=expr_filters,
+                filter=filters,
                 use_threads=True,
             ).count_rows()
             ds_scan_time += time.time() - t0
@@ -978,11 +978,9 @@ def populate_row_counts_in_pq_dataset_pieces(
 def get_parquet_dataset(
     fpath,
     get_row_counts: bool = True,
-    dnf_filters=None,
-    expr_filters=None,
+    filters: Optional[pc.Expression] = None,
     storage_options: Optional[dict] = None,
     read_categories: bool = False,
-    is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read: Optional[int] = None,
     typing_pa_schema: Optional[pa.Schema] = None,
     use_hive: bool = True,
@@ -999,7 +997,6 @@ def get_parquet_dataset(
             object, used during typing.
         get_row_counts: This is only true at runtime, and indicates that we need
             to get the number of rows of each piece in the parquet dataset.
-        is_parallel: True if reading in parallel
         tot_rows_to_read: total number of rows to read from dataset. Used at runtime
             for example if doing df.head(tot_rows_to_read) where df is the output of
             read_parquet()
@@ -1076,7 +1073,7 @@ def get_parquet_dataset(
                 parsed_url,
                 get_fs_cached(),
                 partitioning,
-                dnf_filters,
+                filters,
                 typing_pa_schema,
             )
     if get_row_counts:
@@ -1104,7 +1101,7 @@ def get_parquet_dataset(
             fpath,
             protocol,
             validate_schema,
-            expr_filters,
+            filters,
         )
 
     if read_categories:
@@ -1253,10 +1250,10 @@ def schema_with_dict_cols(schema: pa.Schema, str_as_dict_cols: list[str]) -> pa.
 
 def get_scanner_batches(
     fpaths,
-    expr_filters,
+    filters: pc.Expression | None,
     selected_fields: list[int],
-    avg_num_pieces,
-    is_parallel,
+    avg_num_pieces: float,
+    is_parallel: bool,
     filesystem,
     str_as_dict_cols,
     start_offset: int,  # starting row offset in the pieces this process is going to read
@@ -1266,7 +1263,7 @@ def get_scanner_batches(
     batch_size: Optional[int] = None,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
-    that match expr_filters (or all rows if expr_filters is None). Only project the
+    that match filters (or all rows if filters is None). Only project the
     fields in selected_fields"""
     import pyarrow as pa
 
@@ -1305,7 +1302,7 @@ def get_scanner_batches(
     selected_names = [col_names[field_num] for field_num in selected_fields]
 
     if filter_row_groups_from_start_of_dataset_heuristic(
-        len(fpaths), start_offset, expr_filters
+        len(fpaths), start_offset, filters
     ):
         # The starting offset the Parquet reader knows about is from the first
         # file, not the first row group, so we need to communicate this back to C++
@@ -1319,7 +1316,7 @@ def get_scanner_batches(
         # want to replace our custom filename handling with
         # this at some point.
         columns=selected_names,
-        filter=expr_filters,
+        filter=filters,
         batch_size=batch_size or 128 * 1024,
         use_threads=True,
         # XXX Specify batch_readahead (default: 16)?
