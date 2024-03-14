@@ -20,7 +20,6 @@ public class IcebergFilterRule extends AbstractIcebergFilterRule {
             .withOperandSupplier(
                 b0 ->
                     b0.operand(Filter.class)
-                        .predicate(AbstractIcebergFilterRule::isPartiallyPushableFilter)
                         .oneInput(
                             b1 ->
                                 b1.operand(IcebergToPandasConverter.class)
