@@ -20,7 +20,6 @@ public class IcebergFilterLockRule extends AbstractIcebergFilterRule {
             .withOperandSupplier(
                 b0 ->
                     b0.operand(BodoLogicalFilter.class)
-                        .predicate(AbstractIcebergFilterRule::isPartiallyPushableFilter)
                         .oneInput(
                             b1 ->
                                 b1.operand(IcebergRel.class)

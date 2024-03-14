@@ -23,14 +23,21 @@ import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
+import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.RelVisitor
+import org.apache.calcite.rex.BodoRexSimplify
+import org.apache.calcite.rex.RexBuilder
+import org.apache.calcite.rex.RexExecutor
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexSimplify
+import org.apache.calcite.rex.RexUtil
+import org.apache.calcite.tools.Program
 import org.apache.calcite.util.Util
 
-object IcebergConvertProgram : ShuttleProgram(Visitor) {
+object IcebergConvertProgram : Program {
     override fun run(
         planner: RelOptPlanner,
         rel: RelNode,
@@ -39,13 +46,17 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
         lattices: MutableList<RelOptLattice>,
     ): RelNode {
         return if (RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
-            super.run(planner, rel, requiredOutputTraits, materializations, lattices)
+            val rexBuilder = rel.cluster.rexBuilder
+            val executor: RexExecutor = Util.first(planner.executor, RexUtil.EXECUTOR)
+            val simplify = BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor)
+            val shuttle = Visitor(rexBuilder, simplify)
+            rel.accept(shuttle)
         } else {
             rel
         }
     }
 
-    private object Visitor : RelShuttleImpl() {
+    private class Visitor(private val rexBuilder: RexBuilder, private val simplify: RexSimplify) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is design for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -90,7 +101,8 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
         // Physical node implementations
         private fun visit(node: SnowflakeTableScan): RelNode {
             return if (node.getCatalogTable().isIcebergTable()) {
-                IcebergTableScan.create(node.cluster, node.table!!, node.getCatalogTable()).cloneWithProject(node.keptColumns)
+                IcebergTableScan.create(node.cluster, node.table!!, node.getCatalogTable())
+                    .cloneWithProject(node.keptColumns)
             } else {
                 node
             }
@@ -102,10 +114,12 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     // A node aborted the conversion process. Just return.
                     node
                 }
+
                 is PandasRel -> {
                     // Only partial conversion was possible.
                     newInput
                 }
+
                 else -> {
                     // Full conversion succeeded.
                     IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
@@ -119,10 +133,12 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     // A node aborted the code generation. Just return.
                     node
                 }
+
                 is PandasRel -> {
                     // Only partial conversion was possible.
                     PandasProject.create(newInput, node.projects, node.getRowType())
                 }
+
                 else -> {
                     // Try and push this node.
                     if (node.projects.all { x -> x is RexInputRef }) {
@@ -149,21 +165,29 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     // A node aborted the code generation. Just return.
                     node
                 }
+
                 is PandasRel -> {
                     // Only partial conversion was possible.
                     PandasFilter.create(node.cluster, newInput, node.condition)
                 }
+
                 else -> {
                     val canPush = !(newInput as IcebergRel).containsIcebergSort()
                     // Try and push this node.
-                    val (icebergCondition, pandasCondition) = splitFilterConditions(node)
+                    val (icebergCondition, pandasCondition) = splitFilterConditions(node, rexBuilder, simplify)
                     if (!canPush || icebergCondition == null) {
                         // Nothing can be pushed to Iceberg
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
                         PandasFilter.create(node.cluster, converter, node.condition)
                     } else if (pandasCondition == null) {
                         // Everything can be pushed to Iceberg
-                        IcebergFilter.create(node.cluster, node.traitSet, newInput, icebergCondition!!, node.getCatalogTable())
+                        IcebergFilter.create(
+                            node.cluster,
+                            node.traitSet,
+                            newInput,
+                            icebergCondition,
+                            node.getCatalogTable(),
+                        )
                     } else {
                         // Part of the condition is pushable to Iceberg. Here we do the part that can
                         // be pushed in Iceberg and the other part in Pandas
@@ -172,11 +196,11 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                                 node.cluster,
                                 node.traitSet,
                                 newInput,
-                                icebergCondition!!,
+                                icebergCondition,
                                 node.getCatalogTable(),
                             )
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
-                        PandasFilter.create(node.cluster, converter, pandasCondition!!)
+                        PandasFilter.create(node.cluster, converter, pandasCondition)
                     }
                 }
             }
@@ -188,10 +212,12 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     // A node aborted the code generation. Just return.
                     node
                 }
+
                 is PandasRel -> {
                     // Only partial conversion was possible.
                     PandasSort.create(newInput, node.collation, node.offset, node.fetch)
                 }
+
                 else -> {
                     val canPush = !(newInput as IcebergRel).containsIcebergSort()
                     if (canPush) {
@@ -218,6 +244,7 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
                     // A node aborted the code generation. Just return.
                     node
                 }
+
                 else -> {
                     if (!allowAggToIceberg(node, newInput)) {
                         // Abort conversion. Here we have found an Aggregation
@@ -238,47 +265,50 @@ object IcebergConvertProgram : ShuttleProgram(Visitor) {
             }
         }
 
-        /**
-         * Determine if the converted inputs for a Snowflake aggregate can avoid
-         * a likely significant performance impact if we no longer push down
-         * the aggregate. This should be removed once we have IcebergAggregate support.
-         * https://bodo.atlassian.net/browse/BSE-2688
-         */
-        @JvmStatic
-        private fun allowAggToIceberg(
-            agg: SnowflakeAggregate,
-            newInput: RelNode,
-        ): Boolean {
-            // This says we can compute in Iceberg despite the presence of an aggregate
-            // if we are just computing a distinct or scalar computation depends on a filter
-            // or limit, which can likely prevent metadata usage.
-            return !agg.groupSet.isEmpty || containsIcebergFilterOrLimit(newInput)
-        }
+        companion object {
+            /**
+             * Determine if the converted inputs for a Snowflake aggregate can avoid
+             * a likely significant performance impact if we no longer push down
+             * the aggregate. This should be removed once we have IcebergAggregate support.
+             * https://bodo.atlassian.net/browse/BSE-2688
+             */
+            @JvmStatic
+            private fun allowAggToIceberg(
+                agg: SnowflakeAggregate,
+                newInput: RelNode,
+            ): Boolean {
+                // This says we can compute in Iceberg despite the presence of an aggregate
+                // if we are just computing a distinct or scalar computation depends on a filter
+                // or limit, which can likely prevent metadata usage.
+                return !agg.groupSet.isEmpty || containsIcebergFilterOrLimit(newInput)
+            }
 
-        /**
-         * Determine if a given plan contains an IcebergFilter
-         * or an IcebergSort.
-         */
-        private fun containsIcebergFilterOrLimit(node: RelNode): Boolean {
-            val visitor =
-                object : RelVisitor() {
-                    // ~ Methods ----------------------------------------------------------------
-                    override fun visit(
-                        node: RelNode,
-                        ordinal: Int,
-                        parent: RelNode?,
-                    ) {
-                        if (node is IcebergFilter || node is IcebergSort) {
-                            throw Util.FoundOne.NULL
+            /**
+             * Determine if a given plan contains an IcebergFilter
+             * or an IcebergSort.
+             */
+            @JvmStatic
+            private fun containsIcebergFilterOrLimit(node: RelNode): Boolean {
+                val visitor =
+                    object : RelVisitor() {
+                        // ~ Methods ----------------------------------------------------------------
+                        override fun visit(
+                            node: RelNode,
+                            ordinal: Int,
+                            parent: RelNode?,
+                        ) {
+                            if (node is IcebergFilter || node is IcebergSort) {
+                                throw Util.FoundOne.NULL
+                            }
+                            node.childrenAccept(this)
                         }
-                        node.childrenAccept(this)
                     }
+                return try {
+                    visitor.go(node)
+                    false
+                } catch (e: Util.FoundOne) {
+                    true
                 }
-            return try {
-                visitor.go(node)
-                false
-            } catch (e: Util.FoundOne) {
-                true
             }
         }
     }
