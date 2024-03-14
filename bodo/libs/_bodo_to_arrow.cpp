@@ -58,8 +58,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::MAP ||
-        array->arr_type == bodo_array_type::STRUCT) {
-        if (array->arr_type == bodo_array_type::STRING) {
+        array->arr_type == bodo_array_type::STRUCT ||
+        array->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        if (array->arr_type == bodo_array_type::STRING ||
+            array->arr_type == bodo_array_type::TIMESTAMPTZ) {
             null_bitmap = array->buffers[2];
         } else if (array->arr_type == bodo_array_type::STRUCT) {
             null_bitmap = array->buffers[0];
@@ -578,6 +580,62 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                                dict_array)
         ret_type = dict_array->type();
         *out = dict_array;
+    } else if (array->arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // Convert Bodo TimestampTZ array to Arrow String array
+        std::shared_ptr<arrow::DataType> arrow_type = arrow::utf8();
+        auto builder = arrow::StringBuilder();
+        auto ts_buffer = (int64_t *)array->data1();
+        auto tz_buffer = (int16_t *)array->data2();
+
+        // Allocate buffer for timestamp string - we know that the timestamp
+        // string can only ever be 38 characters, but the compiler we use in CI
+        // throws an error because it doesn't correctly parse that the format
+        // string restricts the number of characters for each field, so we use a
+        // larger buffer.
+        char ts_str[128];
+
+        // convert Bodo TimestampTZ to Arrow String
+        for (size_t i = 0; i < array->length; i++) {
+            if (!GetBit(null_bitmap->mutable_data(), i)) {
+                auto res = builder.AppendNull();
+                if (!res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "bodo_array_to_arrow(): failed to append null to "
+                        "StringBuilder");
+                }
+            } else {
+                auto ts = ts_buffer[i];
+                auto offset = tz_buffer[i];
+
+                auto offset_sign = offset < 0 ? '-' : '+';
+                auto abs_offset = std::abs(offset);
+                auto offset_hrs = abs_offset / 60;
+                auto offset_mins = abs_offset % 60;
+
+                // We need to add the offset here to convert UTC to the local
+                // timestamp
+                time_t seconds = ts / 1000000000 + offset * 60;
+                size_t ns = ts % 1000000000;
+                struct tm *ptm;
+                ptm = gmtime(&seconds);
+
+                snprintf(ts_str, 128,
+                         "%04d-%02d-%02d %02d:%02d:%02d.%09zu %c%02d:%02d",
+                         ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday,
+                         ptm->tm_hour, ptm->tm_min, ptm->tm_sec, ns,
+                         offset_sign, offset_hrs, offset_mins);
+
+                auto res = builder.Append(ts_str);
+                if (!res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "bodo_array_to_arrow(): failed to append string to "
+                        "StringBuilder");
+                }
+            }
+        }
+
+        *out = builder.Finish().ValueOrDie();
+        ret_type = arrow_type;
     }
 
     if (!ret_type) {

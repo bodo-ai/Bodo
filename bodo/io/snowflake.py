@@ -227,27 +227,34 @@ def gen_snowflake_schema(
         sf_schema (dict): {col_name : snowflake_datatype}
     Raises BodoError for unsupported datatypes when writing to snowflake.
     """
+
+    def get_precision(col_idx: int) -> int:
+        """Helper to get the precision for the current column - note that this
+        helper only covers the common case - some types have more specific
+        rules"""
+        if column_precisions is None:
+            precision = 9
+        else:
+            precision = column_precisions[col_idx]
+            precision = 9 if precision == -1 else precision
+        return precision
+
     sf_schema = {}
     for col_idx, (col_name, col_type) in enumerate(zip(column_names, column_datatypes)):
         if col_name == "":
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # [BE-3587] need specific tz for each column type.
         if isinstance(col_type, bodo.DatetimeArrayType):
-            if column_precisions is None:
-                precision = 9
-            else:
-                precision = column_precisions[col_idx]
-                precision = 9 if precision == -1 else precision
+            precision = get_precision(col_idx)
             if col_type.tz is not None:
                 sf_schema[col_name] = f"TIMESTAMP_LTZ({precision})"
             else:
                 sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
+        elif col_type == bodo.timestamptz_array_type:
+            precision = get_precision(col_idx)
+            sf_schema[col_name] = f"TIMESTAMP_TZ({precision})"
         elif col_type == bodo.datetime_datetime_type:
-            if column_precisions is None:
-                precision = 9
-            else:
-                precision = column_precisions[col_idx]
-                precision = 9 if precision == -1 else precision
+            precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
         elif col_type == bodo.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
@@ -272,17 +279,12 @@ def gen_snowflake_schema(
                 else:
                     raise ValueError("Unsupported Precision Found in Bodo Time Array")
             else:
-                precision = column_precisions[col_idx]
-                precision = 9 if precision == -1 else precision
+                precision = get_precision(col_idx)
             sf_schema[col_name] = f"TIME({precision})"
         elif isinstance(col_type, types.Array):
             numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
-                if column_precisions is None:
-                    precision = 9
-                else:
-                    precision = column_precisions[col_idx]
-                    precision = 9 if precision == -1 else precision
+                precision = get_precision(col_idx)
                 sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
             # NOTE: Bodo matches Pandas behavior
             # and prints same warning and save it as a number.
