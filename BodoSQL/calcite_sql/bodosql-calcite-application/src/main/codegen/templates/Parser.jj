@@ -1435,6 +1435,8 @@ SqlNode SqlSelect() :
     }
     AddSelectItem(selectList)
     ( <COMMA> AddSelectItem(selectList) )*
+    // Enable a final optional comma to match Snowflake.
+    [ <COMMA> ]
     (
         <FROM> fromClause = FromClause()
         ( where = Where() | { where = null; } )
