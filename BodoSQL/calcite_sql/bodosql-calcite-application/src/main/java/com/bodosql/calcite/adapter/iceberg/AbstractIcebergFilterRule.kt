@@ -4,15 +4,23 @@ import com.bodosql.calcite.adapter.common.FilterUtils
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import com.bodosql.calcite.application.utils.IsScalar
+import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rex.BodoRexSimplify
+import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
+import org.apache.calcite.rex.RexExecutor
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexSimplify
+import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.util.Util
 import org.immutables.value.Value
 
 /**
@@ -31,13 +39,34 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
             val (filter, rel) = FilterUtils.extractFilterNodes<IcebergRel>(call)
             val catalogTable = rel.getCatalogTable()
 
-            // Calculate the subset of the conjunction that is pushable versus the
-            // subset that is not.
+            // TODO: Fix the config to enable partial function generation.
+            // Right now we include false to avoid duplicating the code, but we
+            // can't take the if path in general Iceberg because it can lead to
+            // an infinite loop.
+            val partialFunction =
+                if (false) {
+                    // Calculate the subset of the conjunction that is pushable versus the
+                    // subset that is not.
+                    val rexBuilder: RexBuilder = builder.rexBuilder
+                    val executor: RexExecutor = Util.first(call.planner.executor, RexUtil.EXECUTOR)
+                    val simplify: RexSimplify = BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor)
+                    generatePartialDerivationFunction(rexBuilder, simplify)
+                } else {
+                    { x -> x }
+                }
+
+            // We have to check directly in the filter if it is pushable, because
+            // we need a simplifier and rexBuilder.
+            if (!isPartiallyPushableFilter(filter, partialFunction)) {
+                return
+            }
+
             val (icebergConditions, pandasConditions) =
                 FilterUtils.extractPushableConditions(
                     filter.condition,
                     filter.cluster.rexBuilder,
                     ::isPushableCondition,
+                    partialFunction,
                 )
             assert(icebergConditions != null)
 
@@ -209,16 +238,31 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
              * Determine if any part of a filter is pushable.
              */
             @JvmStatic
-            fun isPartiallyPushableFilter(filter: Filter): Boolean {
-                return FilterUtils.isPartiallyPushableFilter(filter, ::isPushableCondition)
+            fun isPartiallyPushableFilter(
+                filter: Filter,
+                partialFilterDerivationFunction: (RexNode) -> RexNode,
+            ): Boolean {
+                return FilterUtils.isPartiallyPushableFilter(
+                    filter,
+                    ::isPushableCondition,
+                    partialFilterDerivationFunction,
+                )
             }
 
             /**
              * Determine if all of a filter is pushable.
              */
             @JvmStatic
-            fun isFullyPushableFilter(filter: Filter): Boolean {
-                return FilterUtils.isFullyPushableFilter(filter, ::isPushableCondition)
+            fun isFullyPushableFilter(
+                filter: Filter,
+                rexBuilder: RexBuilder,
+                rexSimplify: RexSimplify,
+            ): Boolean {
+                return FilterUtils.isFullyPushableFilter(
+                    filter,
+                    ::isPushableCondition,
+                    generatePartialDerivationFunction(rexBuilder, rexSimplify),
+                )
             }
 
             /**
@@ -228,12 +272,32 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
              * is the section that cannot be pushed.
              */
             @JvmStatic
-            fun splitFilterConditions(filter: Filter): Pair<RexNode?, RexNode?> {
+            fun splitFilterConditions(
+                filter: Filter,
+                rexBuilder: RexBuilder,
+                rexSimplify: RexSimplify,
+            ): Pair<RexNode?, RexNode?> {
                 return FilterUtils.extractPushableConditions(
                     filter.condition,
                     filter.cluster.rexBuilder,
                     ::isPushableCondition,
+                    generatePartialDerivationFunction(rexBuilder, rexSimplify),
                 )
+            }
+
+            @JvmStatic
+            fun generatePartialDerivationFunction(
+                rexBuilder: RexBuilder,
+                rexSimplify: RexSimplify,
+            ): (RexNode) -> RexNode {
+                return { condition: RexNode ->
+                    if (condition.type.isNullable) {
+                        val updatedCondition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, condition)
+                        rexSimplify.simplifyUnknownAsFalse(updatedCondition)
+                    } else {
+                        condition
+                    }
+                }
             }
         }
     }

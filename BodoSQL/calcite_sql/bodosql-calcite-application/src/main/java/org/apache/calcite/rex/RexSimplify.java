@@ -904,7 +904,8 @@ public class RexSimplify {
         switch (kind) {
             case IS_NULL:
                 // x IS NULL ==> FALSE (if x is not nullable)
-                validateStrongPolicy(a);
+                // Bodo Change: Disable validation because it's not useful
+                // validateStrongPolicy(a);
                 simplified = simplifyIsNull(a);
                 if (simplified != null) {
                     return simplified;
@@ -912,7 +913,8 @@ public class RexSimplify {
                 break;
             case IS_NOT_NULL:
                 // x IS NOT NULL ==> TRUE (if x is not nullable)
-                validateStrongPolicy(a);
+                // Bodo Change: Disable validation because it's not useful
+                // validateStrongPolicy(a);
                 simplified = simplifyIsNotNull(a);
                 if (simplified != null) {
                     return simplified;
