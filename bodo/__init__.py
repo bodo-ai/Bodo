@@ -116,7 +116,7 @@ bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "1") != "0"
 enable_snowflake_iceberg = os.environ.get("BODO_ENABLE_SNOWFLAKE_ICEBERG", "1") != "0"
 # Flag used to enable reading TIMESTAMP_TZ as its own type instead of as an alias
 # for TIMESTAMP_LTZ. (will be removed once TIMESTAMP_TZ support is complete)
-enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "0") != "0"
+enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "1") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
 
