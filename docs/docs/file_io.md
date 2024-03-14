@@ -633,8 +633,6 @@ def example_read_iceberg():
 
 !!! warning
     - Tables with [delete files](https://iceberg.apache.org/spec/#delete-formats){target="blank"}
-      or those that have gone through
-      [schema evolution](https://iceberg.apache.org/docs/latest/evolution/){target="blank"}
       are not supported yet.
 
 
