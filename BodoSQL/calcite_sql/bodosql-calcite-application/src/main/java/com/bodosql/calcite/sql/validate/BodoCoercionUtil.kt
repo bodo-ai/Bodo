@@ -94,6 +94,9 @@ class BodoCoercionUtil {
             } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                 // Timestamp_LTZ
                 return input.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+            } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
+                // Timestamp_TZ
+                return input.sqlTypeName == SqlTypeName.TIMESTAMP_TZ
             } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                 // Varchar
                 return SqlTypeFamily.CHARACTER.contains(input)
@@ -137,14 +140,16 @@ class BodoCoercionUtil {
                 }
             } else if (SqlTypeFamily.DATE.contains(input)) {
                 // Date
-                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                     return Pair(true, 1)
-                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 2)
-                } else if (SqlTypeFamily.CHARACTER.contains(target)) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 3)
-                } else if (target is VariantSqlType) {
+                } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                     return Pair(true, 4)
+                } else if (target is VariantSqlType) {
+                    return Pair(true, 5)
                 }
             } else if (SqlTypeFamily.APPROXIMATE_NUMERIC.contains(input)) {
                 // Float/Double
@@ -181,29 +186,48 @@ class BodoCoercionUtil {
             } else if (input.sqlTypeName == SqlTypeName.TIMESTAMP) {
                 // Timestamp_NTZ. Note we must use typename here because LTZ
                 // conversion should require a cast.
-                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                     return Pair(true, 1)
-                } else if (SqlTypeFamily.CHARACTER.contains(target)) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 2)
-                } else if (SqlTypeFamily.DATE.contains(target)) {
+                } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                     return Pair(true, 3)
-                } else if (SqlTypeFamily.TIME.contains(target)) {
+                } else if (SqlTypeFamily.DATE.contains(target)) {
                     return Pair(true, 4)
-                } else if (target is VariantSqlType) {
+                } else if (SqlTypeFamily.TIME.contains(target)) {
                     return Pair(true, 5)
+                } else if (target is VariantSqlType) {
+                    return Pair(true, 6)
                 }
             } else if (input.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                 // Timestamp_LTZ
-                if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                     return Pair(true, 1)
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                    return Pair(true, 2)
                 } else if (SqlTypeFamily.CHARACTER.contains(target)) {
+                    return Pair(true, 3)
+                } else if (SqlTypeFamily.DATE.contains(target)) {
+                    return Pair(true, 4)
+                } else if (SqlTypeFamily.TIME.contains(target)) {
+                    return Pair(true, 5)
+                } else if (target is VariantSqlType) {
+                    return Pair(true, 6)
+                }
+            } else if (input.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
+                // Timestamp_TZ
+                if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                    return Pair(true, 1)
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 2)
                 } else if (SqlTypeFamily.DATE.contains(target)) {
                     return Pair(true, 3)
                 } else if (SqlTypeFamily.TIME.contains(target)) {
                     return Pair(true, 4)
-                } else if (target is VariantSqlType) {
+                } else if (SqlTypeFamily.CHARACTER.contains(target)) {
                     return Pair(true, 5)
+                } else if (target is VariantSqlType) {
+                    return Pair(true, 6)
                 }
             } else if (SqlTypeFamily.CHARACTER.contains(input)) {
                 // Varchar
@@ -213,16 +237,18 @@ class BodoCoercionUtil {
                     return Pair(true, 2)
                 } else if (SqlTypeFamily.APPROXIMATE_NUMERIC.contains(target)) {
                     return Pair(true, 3)
-                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                     return Pair(true, 4)
-                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 5)
-                } else if (SqlTypeFamily.EXACT_NUMERIC.contains(target)) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 6)
-                } else if (SqlTypeFamily.TIME.contains(target)) {
+                } else if (SqlTypeFamily.EXACT_NUMERIC.contains(target)) {
                     return Pair(true, 7)
-                } else if (target is VariantSqlType) {
+                } else if (SqlTypeFamily.TIME.contains(target)) {
                     return Pair(true, 8)
+                } else if (target is VariantSqlType) {
+                    return Pair(true, 9)
                 }
             } else if (input is VariantSqlType) {
                 // Variant
@@ -238,14 +264,16 @@ class BodoCoercionUtil {
                     return Pair(true, 5)
                 } else if (SqlTypeFamily.TIME.contains(target)) {
                     return Pair(true, 6)
-                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
                     return Pair(true, 7)
-                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                     return Pair(true, 8)
-                } else if (SqlTypeFamily.APPROXIMATE_NUMERIC.contains(target)) {
+                } else if (target.sqlTypeName == SqlTypeName.TIMESTAMP) {
                     return Pair(true, 9)
-                } else if (SqlTypeFamily.EXACT_NUMERIC.contains(target)) {
+                } else if (SqlTypeFamily.APPROXIMATE_NUMERIC.contains(target)) {
                     return Pair(true, 10)
+                } else if (SqlTypeFamily.EXACT_NUMERIC.contains(target)) {
+                    return Pair(true, 11)
                 }
             }
             // Fall through to all cases without a match.
