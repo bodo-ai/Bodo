@@ -105,13 +105,21 @@ public class BodoIcebergHandler {
     return parquetPaths;
   }
 
+  /**
+   * Updates a Snapshot update operation with the app-id field. This is used to easily identify
+   * tables created by Bodo.
+   */
+  private static void appendAppID(SnapshotUpdate<?> op) {
+    op.set("app-id", "bodo");
+  }
+
   /** Create a new table in the DB. */
   public void createOrReplaceTable(String fileInfoJson, Schema schema, boolean replace) {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
 
     // TODO: Support passing in new partition spec and sort order as well
-    Transaction txn;
+    final Transaction txn;
     if (replace) {
       txn =
           catalog.newReplaceTableTransaction(
@@ -160,6 +168,8 @@ public class BodoIcebergHandler {
   /** Insert data files into the table */
   public void addData(
       AppendFiles action, PartitionSpec spec, SortOrder order, List<DataFileInfo> fileInfos) {
+    // Make sure to set the app-id field to "bodo" for easy identification
+    appendAppID(action);
     boolean isPartitionedPaths = spec.isPartitioned();
 
     for (DataFileInfo info : fileInfos) {
@@ -182,12 +192,19 @@ public class BodoIcebergHandler {
     // Data Files should be uniquely identified by path only. Other values should
     // not matter
     DeleteFiles delAction = transaction.newDelete();
-    for (String oldFileName : oldFileNames) delAction.deleteFile(oldFileName);
+    // Make sure to set the app-id field to "bodo" for easy identification
+    appendAppID(delAction);
+    for (String oldFileName : oldFileNames) {
+      delAction.deleteFile(oldFileName);
+    }
     delAction.commit();
 
     AppendFiles action = transaction.newAppend();
-    for (DataFileInfo newFile : newFiles)
+    // Make sure to set the app-id field to "bodo" for easy identification
+    appendAppID(action);
+    for (DataFileInfo newFile : newFiles) {
       action.appendFile(newFile.toDataFile(spec, order, isPartitionedPaths));
+    }
     action.commit();
 
     transaction.commitTransaction();
@@ -199,7 +216,9 @@ public class BodoIcebergHandler {
   public long getSnapshotId() {
     var snapshot = catalog.loadTable(id).currentSnapshot();
     // When the table has just been created
-    if (snapshot == null) return -1;
+    if (snapshot == null) {
+      return -1;
+    }
     return snapshot.snapshotId();
   }
 }

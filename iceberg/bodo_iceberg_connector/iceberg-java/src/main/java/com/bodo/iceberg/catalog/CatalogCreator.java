@@ -26,15 +26,16 @@ public class CatalogCreator {
     // Since the conf is reused by multiple objects, like Hive and Hadoop ones
     // TODO: Spark does something similar, but I believe they do some filtering. What is it?
     Configuration conf = new Configuration();
-    for (Map.Entry<String, String> entry : params.entrySet())
+    for (Map.Entry<String, String> entry : params.entrySet()) {
       conf.set(entry.getKey(), entry.getValue());
+    }
 
     // Catalog URI (without parameters)
     String uriStr = uriBuilder.removeQuery().build().toString();
     params.put(CatalogProperties.URI, uriStr);
 
     // Create Catalog
-    Catalog catalog;
+    final Catalog catalog;
 
     switch (catalogType) {
       case "nessie":
