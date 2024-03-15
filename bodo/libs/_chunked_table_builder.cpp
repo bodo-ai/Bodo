@@ -2,6 +2,7 @@
 
 #include <numeric>
 
+#include "_dict_builder.h"
 #include "_table_builder.h"
 #include "arrow/util/bit_util.h"
 
@@ -173,7 +174,8 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
         } break;
         case bodo_array_type::ARRAY_ITEM: {
             this->child_array_builders.emplace_back(
-                this->data_array->child_arrays[0]);
+                this->data_array->child_arrays[0],
+                this->dict_builder->child_dict_builders[0]);
             int64_t offset_buffer_alloc_size = std::max(
                 static_cast<int64_t>((this->capacity + 1) * sizeof(offset_t)),
                 min_buffer_allocation_size);
@@ -191,12 +193,15 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
         } break;
         case bodo_array_type::MAP: {
             this->child_array_builders.emplace_back(
-                this->data_array->child_arrays[0]);
+                this->data_array->child_arrays[0],
+                this->dict_builder->child_dict_builders[0]);
         } break;
         case bodo_array_type::STRUCT: {
-            for (const std::shared_ptr<array_info>& child_array :
-                 this->data_array->child_arrays) {
-                this->child_array_builders.emplace_back(child_array);
+            for (size_t i = 0; i < this->data_array->child_arrays.size(); i++) {
+                const std::shared_ptr<array_info>& child_array =
+                    this->data_array->child_arrays[i];
+                this->child_array_builders.emplace_back(
+                    child_array, this->dict_builder->child_dict_builders[i]);
             }
             int64_t null_bitmap_buffer_alloc_size =
                 std::max(::arrow::bit_util::BytesForBits(this->capacity),
@@ -528,6 +533,9 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
 
 void ChunkedTableArrayBuilder::Reset() {
     this->resize_count = this->data_array->length = 0;
+    // Reset the dictionary to point to the one
+    // in the dict builder:
+    set_array_dict_from_builder(this->data_array, this->dict_builder);
     switch (this->data_array->arr_type) {
         // TODO XXX Use SetSize here instead of Resize?
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -558,10 +566,6 @@ void ChunkedTableArrayBuilder::Reset() {
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->Reset();
-            // Reset the dictionary to point to the one
-            // in the dict builder:
-            this->data_array->child_arrays[0] =
-                this->dict_builder->dict_buff->data_array;
         } break;
         case bodo_array_type::ARRAY_ITEM: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
@@ -599,11 +603,8 @@ ChunkedTableBuilder::ChunkedTableBuilder(
           max_resize_count_for_variable_size_dtypes_) {
     this->active_chunk_array_builders.reserve(active_chunk->ncols());
     for (size_t i = 0; i < active_chunk->ncols(); i++) {
-        if (active_chunk->columns[i]->arr_type == bodo_array_type::DICT) {
-            // Set the dictionary to the one from the dict builder:
-            this->active_chunk->columns[i]->child_arrays[0] =
-                dict_builders[i]->dict_buff->data_array;
-        }
+        // Set the dictionary to the one from the dict builder
+        set_array_dict_from_builder(active_chunk->columns[i], dict_builders[i]);
         this->active_chunk_array_builders.emplace_back(
             this->active_chunk->columns[i], dict_builders[i],
             this->active_chunk_capacity,
@@ -1709,7 +1710,7 @@ void ChunkedTableBuilder::UnifyDictionariesAndAppend(
     out_arrs.reserve(in_table->ncols());
     for (uint64_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info> col = this->dummy_output_chunk->columns[i];
-        if (col->arr_type == bodo_array_type::DICT) {
+        if (dict_builders[i] != nullptr) {
             out_arrs.emplace_back(
                 dict_builders[i]->UnifyDictionaryArray(in_table->columns[i]));
         } else {

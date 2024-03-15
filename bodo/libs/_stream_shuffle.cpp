@@ -337,7 +337,7 @@ std::shared_ptr<table_info> IncrementalShuffleState::unify_table_dicts(
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         std::shared_ptr<array_info> out_arr;
-        if (in_arr->arr_type != bodo_array_type::DICT) {
+        if (this->dict_builders[i] == nullptr) {
             out_arr = in_arr;
         } else {
             out_arr = this->dict_builders[i]->UnifyDictionaryArray(in_arr);

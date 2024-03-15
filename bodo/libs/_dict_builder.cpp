@@ -1,4 +1,7 @@
 #include "_dict_builder.h"
+#include <cassert>
+#include <cstddef>
+#include <memory>
 
 #include "_array_hash.h"
 #include "_bodo_common.h"
@@ -38,9 +41,12 @@ inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
     return ind;
 }
 
-DictionaryBuilder::DictionaryBuilder(std::shared_ptr<array_info> dict,
-                                     bool is_key_, size_t transpose_cache_size)
+DictionaryBuilder::DictionaryBuilder(
+    std::shared_ptr<array_info> dict, bool is_key_,
+    std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders_,
+    size_t transpose_cache_size)
     : is_key(is_key_),
+      child_dict_builders(child_dict_builders_),
       // Note: We cannot guarantee all DictionaryBuilders are created
       // the same number of times on each rank. Right now we do, but
       // in the future this could change.
@@ -48,6 +54,11 @@ DictionaryBuilder::DictionaryBuilder(std::shared_ptr<array_info> dict,
       cached_array_transposes(
           transpose_cache_size,
           std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())) {
+    // Nested arrays don't need other internal state
+    if (child_dict_builders_.size() > 0) {
+        assert(dict == nullptr);
+        return;
+    }
     // Dictionary build dictionaries are always unique.
     dict->is_locally_unique = true;
     this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
@@ -59,6 +70,50 @@ DictionaryBuilder::DictionaryBuilder(std::shared_ptr<array_info> dict,
 // TODO: Template this based on the type of the array
 std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     const std::shared_ptr<array_info>& in_arr) {
+    // Unify child arrays for nested arrays
+    if (this->child_dict_builders.size() > 0) {
+        assert(in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+               in_arr->arr_type == bodo_array_type::STRUCT ||
+               in_arr->arr_type == bodo_array_type::MAP);
+        assert(this->child_dict_builders.size() == in_arr->child_arrays.size());
+
+        std::vector<std::shared_ptr<array_info>> unified_children;
+        for (size_t i = 0; i < this->child_dict_builders.size(); i++) {
+            std::shared_ptr<DictionaryBuilder> child_builder =
+                this->child_dict_builders[i];
+            const std::shared_ptr<array_info>& child_arr =
+                in_arr->child_arrays[i];
+            if (child_builder == nullptr) {
+                unified_children.emplace_back(child_arr);
+            } else {
+                unified_children.emplace_back(
+                    child_builder->UnifyDictionaryArray(child_arr));
+            }
+        }
+
+        // Recreate array with unified children
+        // NOTE: assuming that input array buffers can be reused in output
+        // (aren't modified)
+        std::shared_ptr<array_info> out_arr;
+        if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, in_arr->length,
+                in_arr->buffers, unified_children);
+        }
+        if (in_arr->arr_type == bodo_array_type::STRUCT) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, in_arr->length,
+                in_arr->buffers, unified_children, 0, 0, 0, -1, false, false,
+                false, 0, in_arr->field_names);
+        }
+        if (in_arr->arr_type == bodo_array_type::MAP) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::MAP, Bodo_CTypes::MAP, in_arr->length,
+                std::vector<std::shared_ptr<BodoBuffer>>({}), unified_children);
+        }
+        return out_arr;
+    }
+
     if (in_arr->arr_type != bodo_array_type::DICT &&
         in_arr->arr_type != bodo_array_type::STRING) {
         throw std::runtime_error(
@@ -231,5 +286,93 @@ const std::vector<int>& DictionaryBuilder::_MoveToFrontOfCache(
     return this->cached_array_transposes.front().second;
 }
 
-/* ------------------------------------------------------------------------
- */
+/* ------------------------------------------------------------------------ */
+
+std::shared_ptr<DictionaryBuilder> create_dict_builder_for_array(
+    const std::shared_ptr<bodo::DataType>& t, bool is_key) {
+    if (t->is_array()) {
+        const bodo::ArrayType* t_as_array =
+            static_cast<bodo::ArrayType*>(t.get());
+        std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders = {
+            create_dict_builder_for_array(t_as_array->value_type->copy(),
+                                          is_key)};
+        return std::make_shared<DictionaryBuilder>(
+            nullptr, is_key, std::move(child_dict_builders));
+    }
+    if (t->is_struct()) {
+        const bodo::StructType* t_as_struct =
+            static_cast<bodo::StructType*>(t.get());
+        std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders;
+        for (const std::unique_ptr<bodo::DataType>& t :
+             t_as_struct->child_types) {
+            child_dict_builders.push_back(
+                create_dict_builder_for_array(t->copy(), is_key));
+        }
+        return std::make_shared<DictionaryBuilder>(
+            nullptr, is_key, std::move(child_dict_builders));
+    }
+    if (t->is_map()) {
+        const bodo::MapType* t_as_map = static_cast<bodo::MapType*>(t.get());
+
+        // Create array(struct(key, value)) type for proper nested dict builder
+        // structure
+        std::vector<std::unique_ptr<bodo::DataType>> struct_child_types;
+        struct_child_types.push_back(t_as_map->key_type->copy());
+        struct_child_types.push_back(t_as_map->value_type->copy());
+        std::unique_ptr<bodo::StructType> t_struct =
+            std::make_unique<bodo::StructType>(std::move(struct_child_types));
+        std::shared_ptr<bodo::ArrayType> t_array =
+            std::make_shared<bodo::ArrayType>(std::move(t_struct));
+        std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders = {
+            create_dict_builder_for_array(t_array, is_key)};
+        return std::make_shared<DictionaryBuilder>(
+            nullptr, is_key, std::move(child_dict_builders));
+    }
+    if (t->array_type == bodo_array_type::DICT) {
+        std::shared_ptr<array_info> dict = alloc_array_top_level(
+            0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        return std::make_shared<DictionaryBuilder>(dict, is_key);
+    }
+    return nullptr;
+}
+
+std::shared_ptr<DictionaryBuilder> create_dict_builder_for_array(
+    const std::shared_ptr<array_info>& arr, bool is_key) {
+    return create_dict_builder_for_array(arr->data_type()->copy(), is_key);
+}
+
+void set_array_dict_from_builder(
+    std::shared_ptr<array_info>& arr,
+    const std::shared_ptr<DictionaryBuilder>& builder) {
+    // Handle nested arrays
+    if (arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr->arr_type == bodo_array_type::STRUCT ||
+        arr->arr_type == bodo_array_type::MAP) {
+        for (size_t i = 0; i < arr->child_arrays.size(); i++) {
+            std::shared_ptr<array_info>& child_arr = arr->child_arrays[i];
+            const std::shared_ptr<DictionaryBuilder>& child_builder =
+                builder->child_dict_builders[i];
+            set_array_dict_from_builder(child_arr, child_builder);
+        }
+    }
+    if (arr->arr_type == bodo_array_type::DICT) {
+        arr->child_arrays[0] = builder->dict_buff->data_array;
+    }
+}
+
+void set_array_dict_from_array(std::shared_ptr<array_info>& out_arr,
+                               const std::shared_ptr<array_info>& in_arr) {
+    // Handle nested arrays
+    if (out_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+        out_arr->arr_type == bodo_array_type::STRUCT ||
+        out_arr->arr_type == bodo_array_type::MAP) {
+        assert(out_arr->arr_type == in_arr->arr_type);
+        for (size_t i = 0; i < out_arr->child_arrays.size(); i++) {
+            set_array_dict_from_array(out_arr->child_arrays[i],
+                                      in_arr->child_arrays[i]);
+        }
+    }
+    if (out_arr->arr_type == bodo_array_type::DICT) {
+        out_arr->child_arrays[0] = in_arr->child_arrays[0];
+    }
+}

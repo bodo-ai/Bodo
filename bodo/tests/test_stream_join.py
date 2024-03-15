@@ -2823,7 +2823,12 @@ def test_hash_join_nested_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
             "A": np.array([1, 2, 3, 4] * 5),
-            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5, object),
+            "B": pd.Series(
+                [[["1", "2"], ["3"]], [[None], ["4"]], [["5"], ["6"]], None] * 5,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.large_list(pa.dictionary(pa.int32(), pa.string())))
+                ),
+            ),
             "C": pd.array([1, 2, 3, 4] * 5),
             "D": np.array(["1", "2", "3", "4"] * 5),
         }
@@ -2832,7 +2837,12 @@ def test_hash_join_nested_array(memory_leak_check):
         {
             "E": np.array([1, 2, 3, 4] * 5),
             "F": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5, object),
-            "G": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 5, object),
+            "G": pd.Series(
+                [[["9", "8"], ["7"]], [[None], ["6"]], [["5"], ["4"]], None] * 5,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.large_list(pa.dictionary(pa.int32(), pa.string())))
+                ),
+            ),
             "H": pd.array([5, 6, 7, 8] * 5),
         }
     )
@@ -2925,7 +2935,8 @@ def test_hash_join_nested_array(memory_leak_check):
         {
             "A": np.array([1, 2, 3, 4] * 25),
             "B": pd.array(
-                [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 25, object
+                [[["1", "2"], ["3"]], [[None], ["4"]], [["5"], ["6"]], None] * 25,
+                object,
             ),
             "C": pd.array([1, 2, 3, 4] * 25),
             "D": np.array(["1", "2", "3", "4"] * 25),
@@ -2934,7 +2945,8 @@ def test_hash_join_nested_array(memory_leak_check):
                 [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 25, object
             ),
             "G": pd.array(
-                [[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 25, object
+                [[["9", "8"], ["7"]], [[None], ["6"]], [["5"], ["4"]], None] * 25,
+                object,
             ),
             "H": pd.array([5, 6, 7, 8] * 25),
         }
