@@ -615,6 +615,21 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                         ],
                         dtype=pd.ArrowDtype(pa.large_list(pa.string())),
                     ),
+                    "G": pd.array(
+                        [
+                            [],
+                            None,
+                            ["A"],
+                            ["A", None, "B"],
+                            ["A"],
+                            ["X", None, "Y"],
+                            None,
+                            [],
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.dictionary(pa.int32(), pa.string()))
+                        ),
+                    ),
                 }
             ),
             id="array",
@@ -631,6 +646,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[1], None, [3, None]],
                                 "W": {"A": 1, "B": "A"},
                                 "Q": ["A"],
+                                "R": ["A"],
                             },
                             {
                                 "X": "C",
@@ -638,6 +654,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[11], None],
                                 "W": {"A": 1, "B": "ABC"},
                                 "Q": None,
+                                "R": None,
                             },
                             None,
                             {
@@ -646,6 +663,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[1], None],
                                 "W": {"A": 1, "B": ""},
                                 "Q": ["AE", "IOU", None],
+                                "R": ["A", "CDE", None],
                             },
                             {
                                 "X": "VFD",
@@ -653,6 +671,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[], [3, 1]],
                                 "W": {"A": 1, "B": "AA"},
                                 "Q": ["Y"],
+                                "R": ["CDE"],
                             },
                             {
                                 "X": "LMMM",
@@ -660,6 +679,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[10, 11], [11, 0, -3, -5]],
                                 "W": {"A": 1, "B": "DFG"},
                                 "Q": [],
+                                "R": [],
                             },
                             {
                                 "X": "LMMM",
@@ -667,6 +687,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                 "Z": [[10, 11], [11, 0, -3, -5]],
                                 "W": {"A": 1, "B": "DFG"},
                                 "Q": ["X", None, "Z"],
+                                "R": ["CDE", None, "BC"],
                             },
                             None,
                         ],
@@ -688,6 +709,12 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                                         ),
                                     ),
                                     pa.field("Q", pa.large_list(pa.string())),
+                                    pa.field(
+                                        "R",
+                                        pa.large_list(
+                                            pa.dictionary(pa.int32(), pa.string())
+                                        ),
+                                    ),
                                 ]
                             )
                         ),
@@ -714,6 +741,21 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                         * 2,
                         dtype=pd.ArrowDtype(
                             pa.map_(pa.int64(), pa.large_list(pa.string()))
+                        ),
+                    ),
+                    "D": pd.Series(
+                        [
+                            {1: [], 2: None},
+                            None,
+                            {},
+                            {11: ["A"], 21: ["B", None], 9: ["C"]},
+                        ]
+                        * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.map_(
+                                pa.int64(),
+                                pa.large_list(pa.dictionary(pa.int32(), pa.string())),
+                            )
                         ),
                     ),
                 }

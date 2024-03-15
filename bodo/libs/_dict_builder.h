@@ -1,5 +1,7 @@
 #pragma once
 #include <deque>
+#include <memory>
+#include <vector>
 
 #include "_bodo_common.h"
 #include "_stl.h"
@@ -37,6 +39,10 @@ struct DictionaryBuilder {
     // whether or not we maintain 'dict_hashes'.
     const bool is_key;
 
+    // Dictionary builders for children of nested arrays in case there are
+    // dictionary-encoded string arrays
+    std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders;
+
     /// @brief Tracing event for this dictionary builder.
     tracing::ResumableEvent dict_builder_event;
 
@@ -57,10 +63,14 @@ struct DictionaryBuilder {
      * @param is_key_ Whether this is a key column. This essentially
      * decided whether we will compute and maintain the hashes for
      * the values in this dictionary.
+     * @param child_dict_builders_ Dictionary builders for children of nested
+     * arrays in case there are dictionary-encoded string arrays
      * @param transpose_cache_size The number of array ids to cache transpose
      * information for.
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_,
+                      std::vector<std::shared_ptr<DictionaryBuilder>>
+                          child_dict_builders_ = {},
                       size_t transpose_cache_size = 2);
 
     ~DictionaryBuilder() {
@@ -73,7 +83,7 @@ struct DictionaryBuilder {
     /**
      * @brief Unify dictionary of input array with buffer by appending its new
      * dictionary values to buffer's dictionary and transposing input's indices.
-     * Is is guaranteed that the output array will be locally unique.
+     * It is guaranteed that the output array will be locally unique.
      *
      * @param in_arr input array
      * @return std::shared_ptr<array_info> input array with its dictionary
@@ -131,3 +141,41 @@ struct DictionaryBuilder {
     const std::vector<int>& _MoveToFrontOfCache(
         DictionaryCache::iterator cache_entry);
 };
+
+/**
+ * @brief Creates a dictionary builder for dict-encoded array types or nested
+ * arrays but returns nullptr for other types.
+ *
+ * @param t array type
+ * @param is_key flag for key arrays (e.g. in join), which enables storing
+ * hashes in DictionaryBuilder
+ * @return std::shared_ptr<DictionaryBuilder> dictionary builder or nullptr
+ */
+std::shared_ptr<DictionaryBuilder> create_dict_builder_for_array(
+    const std::shared_ptr<bodo::DataType>& t, bool is_key);
+
+/// @brief same as above but takes array_info as input
+std::shared_ptr<DictionaryBuilder> create_dict_builder_for_array(
+    const std::shared_ptr<array_info>& arr, bool is_key);
+
+/**
+ * @brief Set dictionary of dictionary-encoded array to internal dictionary of
+ * DictionaryBuilder. Handles nested arrays as well. This is used in streaming
+ * join for dummy probe table.
+ *
+ * @param arr input array
+ * @param builder input dictionary builder
+ */
+void set_array_dict_from_builder(
+    std::shared_ptr<array_info>& arr,
+    const std::shared_ptr<DictionaryBuilder>& builder);
+
+/**
+ * @brief Set dictionary of dictionary-encoded array to dictionary of another
+ * array. Handles nested arrays as well.
+ *
+ * @param out_arr output array to set dictionary
+ * @param in_arr input array to copy dictionary
+ */
+void set_array_dict_from_array(std::shared_ptr<array_info>& out_arr,
+                               const std::shared_ptr<array_info>& in_arr);
