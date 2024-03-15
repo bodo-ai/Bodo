@@ -36,7 +36,7 @@ on:
         default: "bodo.ai"
 
       icebergConnectorVersion:
-        description: Iceberg Connector Version (e.g. 2022.8alpha). Iceberg connector will not be installed if not provided.
+        description: Iceberg Connector Version (e.g. 2022.8). Iceberg connector will not be installed if not provided.
         required: false
 
       bodoIcebergCondaChannel:
@@ -95,7 +95,7 @@ jobs:
 
             BODO_VERSION=$(echo $FULL_OUTPUT | jq .version --raw-output)
             SQL_VERSION=$BODO_VERSION
-            # ICEBERG_VERSION=${BODO_VERSION}alpha
+            # ICEBERG_VERSION=${BODO_VERSION}
             echo "bodoVersion=$BODO_VERSION" >> $GITHUB_OUTPUT  
             echo "bodoSQLVersion=$SQL_VERSION" >> $GITHUB_OUTPUT 
             echo "icebergConnectorVersion=" >> $GITHUB_OUTPUT
