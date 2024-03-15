@@ -1633,16 +1633,28 @@ class BodoRexSimplify(
     /**
      * @param e The call to a string capitalization operation.
      * @return A simplified version of the operation where string literals are
-     * folded.
+     * folded. Also combines composed calls to lower/upper to remove redundant
+     * changes, and pushes lower/upper calls inside of CONCAT.
      */
     private fun simplifyStringCapitalizationOp(e: RexCall): RexNode {
         val operand = simplify(e.operands[0])
-        if (operand is RexLiteral) {
+        return if (operand is RexLiteral) {
+            // e.g. LOWER('Alphabet Soup') -> 'alphabet soup'
             val asStr = operand.getValueAs(String::class.java)!!
             val capitalizedStr = if (e.operator.name == SqlStdOperatorTable.UPPER.name) { asStr.uppercase(Locale.ROOT) } else { asStr.lowercase(Locale.ROOT) }
-            return rexBuilder.makeLiteral(capitalizedStr)
-        }
-        return e
+            rexBuilder.makeLiteral(capitalizedStr)
+        } else if (operand is RexCall) {
+            if (isConcat(operand) || operand.operator.name == StringOperatorTable.CONCAT_WS.name) {
+                // e.g. LOWER(a || b || c) -> LOWER(a) || LOWER(b) || LOWER(C)
+                val newOperands = operand.operands.map {
+                    rexBuilder.makeCall(e.operator, it)
+                }
+                return operand.clone(operand.type, newOperands)
+            } else if (isStringCapitalizationOp(operand)) {
+                // e.g. LOWER(UPPER(X)) -> LOWER(X)
+                return rexBuilder.makeCall(e.operator, operand.operands[0])
+            } else { e }
+        } else { e }
     }
 
     /**
