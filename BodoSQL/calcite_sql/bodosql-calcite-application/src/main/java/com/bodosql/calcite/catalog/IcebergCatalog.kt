@@ -7,6 +7,7 @@ import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.iceberg.BaseMetastoreCatalog
+import org.apache.iceberg.ManifestFiles
 import org.apache.iceberg.Table
 import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.TableIdentifier
@@ -17,7 +18,6 @@ import org.apache.iceberg.types.Types.ListType
 import org.apache.iceberg.types.Types.MapType
 import org.apache.iceberg.types.Types.StructType
 import org.apache.iceberg.types.Types.TimestampType
-import java.lang.RuntimeException
 
 /**
  * Base abstract class for an Iceberg catalog. This is any catalog that
@@ -68,13 +68,6 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     ): Table {
         val tableIdentifier = tablePathToTableIdentifier(schemaPath, tableName)
         return icebergConnection.loadTable(tableIdentifier)
-    }
-
-    /**
-     * Load a table's metadata map if it exists for the current snapshot.
-     */
-    private fun loadTableMetadataMap(table: Table): Map<String, String> {
-        return table.currentSnapshot()?.summary() ?: mapOf()
     }
 
     private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType {
@@ -181,9 +174,32 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     fun estimateIcebergTableRowCount(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): Double? {
+    ): Double {
         val table = loadIcebergTable(schemaPath, tableName)
-        val metadata = loadTableMetadataMap(table)
-        return metadata["total-records"]?.toDouble()
+        // If we can't find a snapshot then the table must be brand new and empty.
+        val currentSnapshot = table.currentSnapshot() ?: return 0.0
+        val summary = currentSnapshot.summary() ?: mapOf()
+        val summaryRowCount = summary["total-records"]?.toDouble()
+        return if (summaryRowCount == null) {
+            val io = table.io()
+            val manifests = currentSnapshot.allManifests(io)
+            manifests.sumOf {
+                // Summary values from the manifest list to avoid checking each manifest file.
+                val addedRows = it.addedRowsCount()
+                val existingRows = it.existingRowsCount()
+                val deletedRows = it.deletedRowsCount()
+                if (addedRows == null || existingRows == null || deletedRows == null) {
+                    // We don't have 1 or more of the optional values, we need to actually
+                    // read the avro file and check the data_file field
+                    val manifestContents = ManifestFiles.read(it, io)
+                    val sign = if (manifestContents.isDeleteManifestReader) -1 else 1
+                    manifestContents.sumOf { f -> sign * f.recordCount() }
+                } else {
+                    (addedRows + existingRows) - deletedRows
+                }
+            }.toDouble()
+        } else {
+            summaryRowCount
+        }
     }
 }
