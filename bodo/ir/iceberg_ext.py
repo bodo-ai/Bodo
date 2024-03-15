@@ -1003,7 +1003,6 @@ def _gen_iceberg_reader_py(
     ) = bodo.ir.connector.generate_arrow_filters(
         filters,
         filter_map,
-        filter_vars,
         col_names,
         col_names,
         col_typs,
