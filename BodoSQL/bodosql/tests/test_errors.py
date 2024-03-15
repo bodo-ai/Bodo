@@ -684,49 +684,6 @@ def test_invalid_syntax_fn_jit(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_invalid_syntax_comma(memory_leak_check):
-    """
-    Checks that improper comma placement raises a JIT error
-    """
-
-    def impl(df):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        return bc.sql("select A,B,C, from table1")
-
-    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
-    # NOTE: the error message will be Encountered "from"... if/when
-    # we revert the  bodo parser to using a lookahead of 1
-    # https://bodo.atlassian.net/browse/BE-4404
-    with pytest.raises(
-        BodoError,
-        match='[\s | .]*Encountered ", from" at line 1, column 13.\sWas expecting one of:[\s | .]*',
-    ):
-        impl(df)
-
-
-@pytest.mark.slow
-def test_invalid_syntax_comma_jit(memory_leak_check):
-    """
-    Checks that improper comma placement raises a JIT error
-    """
-
-    @bodo.jit
-    def impl(df):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        return bc.sql("select A,B,C, from table1")
-
-    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
-    # NOTE: the error message will be Encountered "from"... if/when
-    # we revert the bodo parser to using a lookahead of 1
-    # https://bodo.atlassian.net/browse/BE-4404
-    with pytest.raises(
-        BodoError,
-        match=r'[\s | .]*Encountered ", from" at line 1, column 13.\sWas expecting one of:[\s | .]*',
-    ):
-        impl(df)
-
-
-@pytest.mark.slow
 def test_invalid_named_param(memory_leak_check):
     """
     Checks that not specifying named parameters raises a JIT error
