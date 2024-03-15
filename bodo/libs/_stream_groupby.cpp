@@ -1669,15 +1669,8 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
 
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        if (build_table_schema->column_types[i]->array_type ==
-            bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            this->key_dict_builders[i] =
-                std::make_shared<DictionaryBuilder>(dict, true);
-        } else {
-            this->key_dict_builders[i] = nullptr;
-        }
+        this->key_dict_builders[i] = create_dict_builder_for_array(
+            build_table_schema->column_types[i]->copy(), true);
     }
 
     std::vector<std::shared_ptr<DictionaryBuilder>>
@@ -1685,15 +1678,9 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
     // Create dictionary builders for non-key columns in build table:
     for (size_t i = this->n_keys; i < build_table_schema->column_types.size();
          i++) {
-        if (build_table_schema->column_types[i]->array_type ==
-            bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            build_table_non_key_dict_builders.emplace_back(
-                std::make_shared<DictionaryBuilder>(dict, false));
-        } else {
-            build_table_non_key_dict_builders.emplace_back(nullptr);
-        }
+        build_table_non_key_dict_builders.emplace_back(
+            create_dict_builder_for_array(
+                build_table_schema->column_types[i]->copy(), false));
     }
 
     this->build_table_dict_builders.insert(
@@ -2257,12 +2244,8 @@ void GroupbyState::InitOutputBuffer(
     // Non-key columns may have different type and/or dictionaries from
     // input arrays
     for (size_t i = this->n_keys; i < dummy_table->ncols(); i++) {
-        if (dummy_table->columns[i]->arr_type == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            this->out_dict_builders[i] =
-                std::make_shared<DictionaryBuilder>(dict, false);
-        }
+        this->out_dict_builders[i] =
+            create_dict_builder_for_array(dummy_table->columns[i], false);
     }
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
         std::move(schema), this->out_dict_builders,
@@ -2277,7 +2260,7 @@ std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         std::shared_ptr<array_info> out_arr;
-        if (in_arr->arr_type != bodo_array_type::DICT ||
+        if (this->build_table_dict_builders[i] == nullptr ||
             (only_keys && (i >= this->n_keys))) {
             out_arr = in_arr;
         } else {
@@ -2299,7 +2282,7 @@ std::shared_ptr<table_info> GroupbyState::UnifyOutputDictionaryArrays(
         std::shared_ptr<array_info> out_arr;
         // Output key columns have the same dictionary as inputs and don't
         // need unification
-        if (in_arr->arr_type != bodo_array_type::DICT || (i < this->n_keys)) {
+        if (this->out_dict_builders[i] == nullptr || (i < this->n_keys)) {
             out_arr = in_arr;
         } else {
             out_arr = this->out_dict_builders[i]->UnifyDictionaryArray(in_arr);

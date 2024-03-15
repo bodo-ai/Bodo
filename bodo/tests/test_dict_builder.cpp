@@ -22,7 +22,7 @@ bodo::tests::suite dict_builder_tests([] {
         // intermediate.
         std::shared_ptr<array_info> dict = alloc_array_top_level(
             0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
+        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, {}, 2);
 
         std::shared_ptr<array_info> arr = alloc_dict_string_array(0, 0, 0);
         std::shared_ptr<array_info> arr_dict = arr->child_arrays[0];
@@ -46,7 +46,7 @@ bodo::tests::suite dict_builder_tests([] {
         // entry.
         std::shared_ptr<array_info> dict = alloc_array_top_level(
             0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
+        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, {}, 2);
 
         std::shared_ptr<array_info> arr = alloc_dict_string_array(0, 0, 0);
         std::shared_ptr<array_info> arr_dict = arr->child_arrays[0];
@@ -77,7 +77,7 @@ bodo::tests::suite dict_builder_tests([] {
     bodo::tests::test("test_dict_builder_id_replacement", [] {
         std::shared_ptr<array_info> dict = alloc_array_top_level(
             0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
+        DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, {}, 2);
         // Assert that we start with the empty dictionary id
         bodo::tests::check(dict_builder.dict_buff->data_array->array_id == 0);
 
@@ -123,12 +123,12 @@ bodo::tests::suite dict_builder_tests([] {
         DictionaryBuilder dict_builder_dst = DictionaryBuilder(
             alloc_array_top_level(0, 0, 0, bodo_array_type::STRING,
                                   Bodo_CTypes::STRING),
-            false, 2);
+            false, {}, 2);
 
         std::shared_ptr<array_info> src_data = alloc_array_top_level(
             0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
         DictionaryBuilder dict_builder_src =
-            DictionaryBuilder(src_data, false, 2);
+            DictionaryBuilder(src_data, false, {}, 2);
 
         // In order to unify the dictionaries, we need to create a dict encoded
         // array that uses the dictionary being built by dict_builder_src

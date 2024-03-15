@@ -34,14 +34,18 @@ ArrayBuildBuffer::ArrayBuildBuffer(
             this->data_array->child_arrays[1]);
     } else if (_data_array->arr_type == bodo_array_type::ARRAY_ITEM) {
         this->child_array_builders.emplace_back(
-            this->data_array->child_arrays[0]);
+            this->data_array->child_arrays[0],
+            this->dict_builder->child_dict_builders[0]);
     } else if (_data_array->arr_type == bodo_array_type::MAP) {
         this->child_array_builders.emplace_back(
-            this->data_array->child_arrays[0]);
+            this->data_array->child_arrays[0],
+            this->dict_builder->child_dict_builders[0]);
     } else if (_data_array->arr_type == bodo_array_type::STRUCT) {
-        for (const std::shared_ptr<array_info>& child_array :
-             this->data_array->child_arrays) {
-            this->child_array_builders.emplace_back(child_array);
+        for (size_t i = 0; i < this->data_array->child_arrays.size(); i++) {
+            const std::shared_ptr<array_info>& child_array =
+                this->data_array->child_arrays[i];
+            this->child_array_builders.emplace_back(
+                child_array, this->dict_builder->child_dict_builders[i]);
         }
     }
 }
@@ -699,6 +703,9 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
 }
 
 void ArrayBuildBuffer::Reset() {
+    // Reset the dictionary to point to the one
+    // in the dict builder:
+    set_array_dict_from_builder(this->data_array, this->dict_builder);
     switch (data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
@@ -721,10 +728,6 @@ void ArrayBuildBuffer::Reset() {
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->Reset();
-            // Reset the dictionary to point to the one
-            // in the dict builder:
-            this->data_array->child_arrays[0] =
-                this->dict_builder->dict_buff->data_array;
         } break;
         case bodo_array_type::ARRAY_ITEM: {
             this->child_array_builders.front().Reset();
@@ -774,11 +777,8 @@ TableBuildBuffer::TableBuildBuffer(
 
     // initialize array buffer wrappers
     for (size_t i = 0; i < this->data_table->ncols(); i++) {
-        if (this->data_table->columns[i]->arr_type == bodo_array_type::DICT) {
-            // Set the dictionary to the one from the dict builder:
-            this->data_table->columns[i]->child_arrays[0] =
-                dict_builders[i]->dict_buff->data_array;
-        }
+        set_array_dict_from_builder(this->data_table->columns[i],
+                                    dict_builders[i]);
         this->array_buffers.emplace_back(this->data_table->columns[i],
                                          dict_builders[i]);
     }
@@ -1259,14 +1259,8 @@ struct TableBuilderState {
         // Create dictionary builders for all columns
         for (const std::unique_ptr<bodo::DataType>& t :
              table_schema->column_types) {
-            if (t->array_type == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array_top_level(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                dict_builders.emplace_back(
-                    std::make_shared<DictionaryBuilder>(dict, false));
-            } else {
-                dict_builders.emplace_back(nullptr);
-            }
+            dict_builders.emplace_back(
+                create_dict_builder_for_array(t->copy(), false));
         }
         builder = TableBuildBuffer(table_schema, dict_builders);
     }
@@ -1320,11 +1314,8 @@ void table_builder_append_py_entry(TableBuilderState* state,
             // latest batch since the upstream operator may have appended
             // elements to them (which changes data pointers).
             for (size_t i = 0; i < tmp_table->ncols(); i++) {
-                const std::shared_ptr<array_info>& arr = tmp_table->columns[i];
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    state->builder.data_table->columns[i]->child_arrays[0] =
-                        arr->child_arrays[0];
-                }
+                set_array_dict_from_array(state->builder.data_table->columns[i],
+                                          tmp_table->columns[i]);
             }
 
             state->builder.ReserveTable(tmp_table);
@@ -1385,14 +1376,8 @@ struct ChunkedTableBuilderState {
         // Create dictionary builders for all columns
         for (const std::unique_ptr<bodo::DataType>& t :
              table_schema->column_types) {
-            if (t->array_type == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array_top_level(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                dict_builders.emplace_back(
-                    std::make_shared<DictionaryBuilder>(dict, false));
-            } else {
-                dict_builders.emplace_back(nullptr);
-            }
+            dict_builders.emplace_back(
+                create_dict_builder_for_array(t->copy(), false));
         }
         builder = std::make_unique<ChunkedTableBuilder>(ChunkedTableBuilder(
             table_schema, dict_builders, chunk_size,

@@ -885,6 +885,14 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
 
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
+        this->key_dict_builders[i] = create_dict_builder_for_array(
+            this->build_table_schema->column_types[i]->copy(), true);
+        // Also set this as the dictionary of the dummy probe table
+        // for consistency, else there will be issues during output
+        // generation.
+        set_array_dict_from_builder(this->dummy_probe_table->columns[i],
+                                    this->key_dict_builders[i]);
+
         if (this->build_table_schema->column_types[i]->array_type ==
             bodo_array_type::DICT) {
             if (this->probe_table_schema->column_types[i]->array_type !=
@@ -893,16 +901,6 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                     "HashJoinState: Key column array types don't match "
                     "between build and probe tables!");
             }
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            this->key_dict_builders[i] =
-                std::make_shared<DictionaryBuilder>(dict, true);
-            // Also set this as the dictionary of the dummy probe table
-            // for consistency, else there will be issues during output
-            // generation.
-            this->dummy_probe_table->columns[i]->child_arrays[0] = dict;
-        } else {
-            this->key_dict_builders[i] = nullptr;
         }
     }
 
@@ -910,34 +908,24 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
         build_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in build table:
     for (size_t i = this->n_keys; i < this->build_table_schema->ncols(); i++) {
-        if (this->build_table_schema->column_types[i]->array_type ==
-            bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            build_table_non_key_dict_builders.emplace_back(
-                std::make_shared<DictionaryBuilder>(dict, false));
-        } else {
-            build_table_non_key_dict_builders.emplace_back(nullptr);
-        }
+        build_table_non_key_dict_builders.emplace_back(
+            create_dict_builder_for_array(
+                this->build_table_schema->column_types[i]->copy(), false));
     }
 
     std::vector<std::shared_ptr<DictionaryBuilder>>
         probe_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in probe table:
     for (size_t i = this->n_keys; i < this->probe_table_schema->ncols(); i++) {
-        if (this->probe_table_schema->column_types[i]->array_type ==
-            bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-            probe_table_non_key_dict_builders.emplace_back(
-                std::make_shared<DictionaryBuilder>(dict, false));
-            // Also set this as the dictionary of the dummy probe table
-            // for consistency, else there will be issues during output
-            // generation.
-            this->dummy_probe_table->columns[i]->child_arrays[0] = dict;
-        } else {
-            probe_table_non_key_dict_builders.emplace_back(nullptr);
-        }
+        std::shared_ptr<DictionaryBuilder> builder =
+            create_dict_builder_for_array(
+                this->probe_table_schema->column_types[i]->copy(), false);
+        probe_table_non_key_dict_builders.emplace_back(builder);
+        // Also set this as the dictionary of the dummy probe table
+        // for consistency, else there will be issues during output
+        // generation.
+        set_array_dict_from_builder(this->dummy_probe_table->columns[i],
+                                    builder);
     }
 
     this->build_table_dict_builders.insert(
@@ -1009,8 +997,7 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         std::shared_ptr<array_info> out_arr;
-        if (in_arr->arr_type != bodo_array_type::DICT ||
-            (only_keys && (i >= n_keys))) {
+        if (dict_builders[i] == nullptr || (only_keys && (i >= n_keys))) {
             out_arr = in_arr;
         } else {
             out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
