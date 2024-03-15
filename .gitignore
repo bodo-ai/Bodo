@@ -38,6 +38,7 @@ iceberg/**/.idea
 typings
 compile_commands.json
 .envrc
+.clangd
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/
