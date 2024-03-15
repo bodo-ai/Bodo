@@ -1,9 +1,6 @@
 Bodo 2024.3 Release (Date: 03/12/2024) {#March_2024}
 ========================================
 
-## New Features and Improvements
-
-
 ### New Features:
 
 - Added parquet row count collection with TablePath API in BodoSQL to improve generated plans
@@ -31,3 +28,14 @@ Bodo 2024.3 Release (Date: 03/12/2024) {#March_2024}
 - Upgraded to Pandas 2.1
 
 
+## Bodo 2024.3.1 Release
+
+### New Features:
+
+- Support the newer `scipy.fft` API over `scipy.fftpack`
+- Full support for reading Iceberg tables that have gone through schema evolution.
+
+### Performance Improvements:
+
+- Enabled better filter optimizations for Left and Right joins.
+- Improved planner optimization on most `to_<type>` conversion functions to become equivalent to casts.
