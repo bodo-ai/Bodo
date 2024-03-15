@@ -4,6 +4,41 @@ project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 # Debug Helpers
 include(CMakePrintHelpers)
 
+# ------------------------- Enable Compilation Caches -------------------------
+# Enable CCache or SCCache if Found
+# CCache is very useful when developing C++ code, because on
+# rebuild it will only recompile the cpp files that have been modified.
+# SCCache is similar, but supports remote S3 caches
+# We use CCache for local development and SCCache for CI
+# With newer compiler versions on Linux, we have to set both CC
+# and CXX variables for (s)ccache to work, and have to set CC to
+# the C++ compiler to avoid compile-time and dynamic linking errors
+# Note that SCCache doesn't handle linking, so we skip for both
+
+find_program(CCACHE_EXECUTABLE "ccache")
+find_program(SCCACHE_EXECUTABLE "sccache")
+if (CCACHE_EXECUTABLE)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+elseif (SCCACHE_EXECUTABLE)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
+endif()
+
+
+# ----------------------------- Declare Dependencies -------------------------
+# We need to do this before setting CMake Options so they aren't propagated
+if (DEFINED ENV{BUILD_WITH_V8})
+    # Needed for Prix64 to be defined in g++/Centos
+    add_compile_definitions("__STDC_FORMAT_MACROS")
+    include(FetchContent)
+
+    FetchContent_Declare(
+      v8
+      GIT_REPOSITORY https://github.com/bnoordhuis/v8-cmake.git
+      GIT_TAG "tags/11.6.189.4"
+    )
+    FetchContent_MakeAvailable(v8)
+endif()
+
 
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
@@ -38,24 +73,6 @@ set(CMAKE_C_FLAGS "")
 set(CMAKE_CXX_FLAGS "")
 
 
-# ------------------------- Enable Compilation Caches -------------------------
-# Enable CCache or SCCache if Found
-# CCache is very useful when developing C++ code, because on
-# rebuild it will only recompile the cpp files that have been modified.
-# SCCache is similar, but supports remote S3 caches
-# We use CCache for local development and SCCache for CI
-# With newer compiler versions on Linux, we have to set both CC
-# and CXX variables for (s)ccache to work, and have to set CC to
-# the C++ compiler to avoid compile-time and dynamic linking errors
-# Note that SCCache doesn't handle linking, so we skip for both
-
-find_program(CCACHE_EXECUTABLE "ccache")
-find_program(SCCACHE_EXECUTABLE "sccache")
-if (CCACHE_EXECUTABLE)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-elseif (SCCACHE_EXECUTABLE)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
-endif()
 
 
 # ----------------------- Set Compiler Args for Targets -----------------------
@@ -336,6 +353,11 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_stream_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
   )
+  if (DEFINED ENV{BUILD_WITH_V8})
+      set(sources_list "${sources_list}"
+      "bodo/tests/test_javascript.cpp"
+      )
+  endif()
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
@@ -410,7 +432,24 @@ if (IS_PLATFORM)
   target_include_directories(ext PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/gason")
 endif()
 
+if (DEFINED ENV{BUILD_WITH_V8})
+  target_link_libraries(ext PRIVATE 
+    v8_libbase
+    v8_libplatform
+    v8_base_without_compiler
+    v8_compiler
+    v8_initializers
+    v8-bytecodes-builtin-list
+    v8_torque_generated
+    v8_snapshot
+    v8_libsampler
+    dl)
+  target_include_directories(ext PRIVATE "${v8_SOURCE_DIR}/v8")
+  target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
+endif()
 add_dependencies(ext pyfs _hdfs tracing)
+
+
 install(TARGETS ext DESTINATION "bodo/")
 
 
