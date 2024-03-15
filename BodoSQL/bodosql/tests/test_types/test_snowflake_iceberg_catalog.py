@@ -147,7 +147,10 @@ def test_filter_pushdown(memory_leak_check):
             reset_index=True,
         )
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
-        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+        check_logger_msg(
+            stream,
+            "Arrow filters pushed down:\n[[('B', '>', f0), ('A', 'is not', 'NULL')]]",
+        )
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})
@@ -191,7 +194,10 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
             reset_index=True,
         )
         check_logger_msg(stream, "Columns loaded ['A']")
-        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+        check_logger_msg(
+            stream,
+            "Arrow filters pushed down:\n[[('B', '>', f0), ('A', 'is not', 'NULL')]]",
+        )
 
 
 def test_snowflake_catalog_iceberg_write(memory_leak_check):
@@ -521,7 +527,8 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
         return bc.sql(query)
 
     current_date = pd.Timestamp.now().date()
-    offsets = [-3, -2, -1, 0, 1, 2, 3]
+    # Use a large delta so we don't have to worry about the current date changing
+    offsets = [-30, -20, -10, 10, 20, 30]
     column = [current_date + pd.Timedelta(days=offset) for offset in offsets]
     input_df = pd.DataFrame({"A": column})
     py_output = pd.DataFrame({"A": [x for x in column if x <= current_date]})
