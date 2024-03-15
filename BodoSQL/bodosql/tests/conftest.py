@@ -6,7 +6,9 @@ import sys
 
 import numpy as np
 import pandas as pd
+import py4j
 import pyarrow as pa
+import pyspark
 import pytest
 from pyspark.sql.types import (
     DoubleType,
@@ -20,6 +22,17 @@ import bodo
 import bodo.utils.allocation_tracking
 from bodo.tests.conftest import memory_leak_check  # noqa
 from bodo.tests.utils import gen_nonascii_list
+
+# Patch to avoid PySpark's Py4j exception handler in testing.
+# See:
+# https://github.com/apache/spark/blob/add49b3c115f34ab8e693f7e67579292afface4c/python/pyspark/sql/session.py#L67
+# https://github.com/apache/spark/blob/add49b3c115f34ab8e693f7e67579292afface4c/python/pyspark/sql/context.py#L45
+# https://github.com/apache/spark/blob/add49b3c115f34ab8e693f7e67579292afface4c/python/pyspark/errors/exceptions/captured.py#L244
+# Revert the change
+py4j.java_gateway.get_return_value = py4j.protocol.get_return_value
+# Remove the exception handler
+pyspark.errors.exceptions.install_exception_handler = lambda: None
+
 
 # Fix Issue on Azure CI where the driver defaults to a different Python version
 # See: https://stackoverflow.com/a/65010346/14810655
