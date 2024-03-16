@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
+import static org.apache.calcite.sql.type.BodoReturnTypes.CONVERT_TIMEZONE_RETURN_TYPE;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
@@ -554,7 +555,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction CONVERT_TIMEZONE =
       SqlBasicFunction.create(
           "CONVERT_TIMEZONE",
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          CONVERT_TIMEZONE_RETURN_TYPE.andThen(SqlTypeTransforms.TO_NULLABLE),
           OperandTypes.CHARACTER_CHARACTER_DATETIME.or(
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
           SqlFunctionCategory.TIMEDATE);

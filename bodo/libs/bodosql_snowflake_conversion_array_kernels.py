@@ -1923,53 +1923,59 @@ def to_number_util_overload(
     )
 
 
-@numba.generated_jit(nopython=True)
-def convert_timezone(source_tz, target_tz, data, return_tz):
-    """Handles cases where adding intervals receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    args = [source_tz, target_tz, data, return_tz]
+def convert_timezone_ntz(source_tz, target_tz, data):  # pragma: no cover
+    pass
+
+
+@overload(convert_timezone_ntz, no_unliteral=True)
+def overload_convert_timezone_ntz(source_tz, target_tz, data):
+    """Handles cases where convert_timezone (ntz version) receives optional
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [source_tz, target_tz, data]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.convert_timezone",
-                ["source_tz", "target_tz", "data", "return_tz"],
+                "bodo.libs.bodosql_array_kernels.convert_timezone_ntz",
+                ["source_tz", "target_tz", "data"],
                 i,
             )
 
-    def impl(source_tz, target_tz, data, return_tz):  # pragma: no cover
-        return convert_timezone_util(source_tz, target_tz, data, return_tz)
+    def impl(source_tz, target_tz, data):  # pragma: no cover
+        return convert_timezone_ntz_util(source_tz, target_tz, data)
 
     return impl
 
 
-@numba.generated_jit(nopython=True, no_unliteral=True)
-def convert_timezone_util(source_tz, target_tz, data, return_tz):
-    """
-    Converts <data> to <target_tz> timezone.
+def convert_timezone_ntz_util(source_tz, target_tz, data):  # pragma: no cover
+    pass
 
-    <data>'s tz info takes precedence over <source_tz>,
-    meaning that if <data> is tz-aware, the kernel will convert
-    from <data>.tz -> <target_tz> instead of <source_tz> -> <target_tz>.
+
+@overload(convert_timezone_ntz_util, no_unliteral=True)
+def overload_convert_timezone_ntz_util(source_tz, target_tz, data):
+    """
+    Converts <data> from <source_tz> to <target_tz> timezone, as if
+    translating the wallclock time from a person in one part of the world
+    to another part of the world in the same epoch moment.
 
     Args:
         source_tz (Literal[str]): string of timezone to convert from
         target_tz (Literal[str]): string of timezone to convert to
         data (datetime/timestamp scalar/array): input data
-        return_tz (bool): whether output data should be tz-aware
 
     Returns:
-        bodo.DatetimeArrayType if output is tz-aware
-        types.Array(bodo.datetime64ns, 1, "C") otherwise
+        data with its timezone adjusted
     """
+    if not (
+        is_overload_constant_str(source_tz) and is_overload_constant_str(target_tz)
+    ):
+        raise_bodo_error(
+            "CONVERT_TIMEZONE currently only supported with constant strings passed in for time zones."
+        )
+    verify_time_or_datetime_arg_allow_tz(data, "convert_timezone_ntz", "data")
 
-    verify_scalar_string_arg(source_tz, "convert_timezone", "source_tz")
-    verify_scalar_string_arg(target_tz, "convert_timezone", "target_tz")
-    verify_time_or_datetime_arg_allow_tz(data, "convert_timezone", "data")
-    verify_boolean_arg(return_tz, "convert_timezone", "return_tz")
-
-    arg_names = ["source_tz", "target_tz", "data", "return_tz"]
-    arg_types = [source_tz, target_tz, data, return_tz]
-    propagate_null = [False, True, True, True]
+    arg_names = ["source_tz", "target_tz", "data"]
+    arg_types = [source_tz, target_tz, data]
+    propagate_null = [True, True, True]
 
     box_str = (
         "bodo.utils.conversion.box_if_dt64"
@@ -1978,22 +1984,13 @@ def convert_timezone_util(source_tz, target_tz, data, return_tz):
     )
 
     unbox_str = (
-        "unbox_if_tz_naive_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(data, True)
         else ""
     )
 
-    scalar_text = f"arg2 = {box_str}(arg2)\n"
-
-    if get_overload_const_bool(return_tz):
-        out_dtype = bodo.DatetimeArrayType(get_overload_const_str(target_tz))
-        if is_valid_tz_aware_datetime_arg(data):
-            scalar_text += "res[i] = arg2.tz_convert(arg1)\n"
-        else:
-            scalar_text += "res[i] = arg2.tz_localize(arg0).tz_convert(arg1)\n"
-    else:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
-        scalar_text += f"res[i] = {unbox_str}(arg2.tz_localize(None).tz_localize(arg0).tz_convert(arg1).tz_localize(None))\n"
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    scalar_text = f"res[i] = {unbox_str}({box_str}(arg2).tz_localize(None).tz_localize(arg0).tz_convert(arg1).tz_localize(None))\n"
 
     return gen_vectorized(
         arg_names,
@@ -2001,7 +1998,67 @@ def convert_timezone_util(source_tz, target_tz, data, return_tz):
         propagate_null,
         scalar_text,
         out_dtype,
-        extra_globals={
-            "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
-        },
+    )
+
+
+def convert_timezone_tz(target_tz, data):  # pragma: no cover
+    pass
+
+
+@overload(convert_timezone_tz, no_unliteral=True)
+def overload_convert_timezone_tz(target_tz, data):
+    """Handles cases where convert_timezone (tz version) receives optional
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [target_tz, data]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.convert_timezone_tz",
+                ["target_tz", "data"],
+                i,
+            )
+
+    def impl(target_tz, data):  # pragma: no cover
+        return convert_timezone_tz_util(target_tz, data)
+
+    return impl
+
+
+def convert_timezone_tz_util(target_tz, data):  # pragma: no cover
+    pass
+
+
+@overload(convert_timezone_tz_util, no_unliteral=True)
+def overload_convert_timezone_tz_util(target_tz, data):
+    """
+    Converts <data> to <target_tz> timezone, as if translating the wallclock time
+    from a person in one part of the world to another part of the world in the
+    same epoch moment.
+
+    Args:
+        target_tz (Literal[str]): string of timezone to convert to
+        data (datetime/timestamp scalar/array): input data
+
+    Returns:
+        data with its timezone adjusted
+    """
+    if not is_overload_constant_str(target_tz):
+        raise_bodo_error(
+            "CONVERT_TIMEZONE currently only supported with constant strings passed in for time zones."
+        )
+    verify_timestamp_tz_arg(data, "convert_timezone_tz", "data")
+
+    arg_names = ["target_tz", "data"]
+    arg_types = [target_tz, data]
+    propagate_null = [True, True]
+    out_dtype = bodo.timestamptz_array_type
+    scalar_text = "current_target_offset = arg1.utc_timestamp.tz_localize(arg0).utcoffset().value // 60_000_000_000\n"
+    scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(arg1.utc_timestamp, current_target_offset)\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
     )
