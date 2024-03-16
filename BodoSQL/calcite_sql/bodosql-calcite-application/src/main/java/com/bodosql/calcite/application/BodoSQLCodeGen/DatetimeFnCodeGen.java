@@ -198,22 +198,51 @@ public class DatetimeFnCodeGen {
   }
 
   /**
-   * Helper function that handles codegen for CONVERT_TIMEZONE
+   * Helper function that handles codegen for CONVERT_TIMEZONE.
    *
+   * @param operands The list of expressions for the arguments.
+   * @param argsInfo The list of the original rex nodes for the args.
+   * @param defaultTz The default timezone to use for the session.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateConvertTimezoneCode(List<Expr> operands, BodoTZInfo tzTimeInfo) {
-    Expr defaultTz = tzTimeInfo.getZoneExpr();
+  public static Expr generateConvertTimezoneCode(
+      List<Expr> operands, List<RexNode> argsInfo, BodoTZInfo defaultTz) {
     List<Expr> args = new ArrayList<>();
+    String kernel;
     if (operands.size() == 2) {
-      args.add(defaultTz);
-      args.addAll(operands);
-      args.add(new Expr.BooleanLiteral(true));
-    } else if (operands.size() == 3) {
-      args.addAll(operands);
-      args.add(new Expr.BooleanLiteral(false));
+      // 2 arguments = switching a timestamp to use the offset of
+      // another timezone but in the same epoch moment.
+      args.add(operands.get(0));
+      Expr timestampArg = operands.get(1);
+      if (argsInfo.get(1).getType().getSqlTypeName() != SqlTypeName.TIMESTAMP_TZ) {
+        // If the conversion data argument is not already a timestamp_TZ,
+        // cast it to one.
+        List<Expr> castArgs = List.of(timestampArg, defaultTz.getZoneExpr());
+
+        timestampArg = ExprKt.bodoSQLKernel("to_timestamptz", castArgs, List.of());
+      }
+      args.add(timestampArg);
+      kernel = "convert_timezone_tz";
+    } else {
+      // 3 arguments = converting a timestamp_ntz from its wallclock time
+      // in one time zone to the wallclock time at the same epoch moment
+      // in another time zone.
+      args.add(operands.get(0));
+      args.add(operands.get(1));
+      Expr timestampArg = operands.get(2);
+      if (argsInfo.get(2).getType().getSqlTypeName() != SqlTypeName.TIMESTAMP) {
+        // If the conversion data argument is not already a timestamp_ntz,
+        // cast it to one.
+        List<Expr> castArgs =
+            List.of(
+                timestampArg, Expr.None.INSTANCE, Expr.None.INSTANCE, new Expr.IntegerLiteral(9));
+
+        timestampArg = ExprKt.bodoSQLKernel("to_timestamp", castArgs, List.of());
+      }
+      args.add(timestampArg);
+      kernel = "convert_timezone_ntz";
     }
-    return ExprKt.bodoSQLKernel("convert_timezone", args, List.of());
+    return ExprKt.bodoSQLKernel(kernel, args, List.of());
   }
 
   /**

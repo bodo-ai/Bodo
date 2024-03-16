@@ -5,9 +5,11 @@ Test correctness of Snowflake TO_X functions for date-related casting in BodoSQL
 
 import datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 import bodosql
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
@@ -887,45 +889,118 @@ def test_to_timestamp_format_str(
 
 
 @pytest.mark.parametrize(
-    "tz_naive_df",
+    "convert_calc, data, session_tz, answer",
     [
         pytest.param(
-            pd.DataFrame(
-                {"A": pd.date_range(start="1/1/2018", periods=5, freq="3M").to_series()}
-            )
-        )
+            "CONVERT_TIMEZONE('America/Los_Angeles', 'America/New_York', T)",
+            pd.Series(
+                [
+                    pd.Timestamp("2024-01-01 12:00:00"),
+                    pd.Timestamp("2024-02-04 11:15:10"),
+                    None,
+                    pd.Timestamp("2024-07-09 14:30:00"),
+                    pd.Timestamp("2024-08-16 13:45:20"),
+                ]
+            ),
+            None,
+            pd.Series(
+                [
+                    pd.Timestamp("2024-01-01 15:00:00"),
+                    pd.Timestamp("2024-02-04 14:15:10"),
+                    None,
+                    pd.Timestamp("2024-07-09 17:30:00"),
+                    pd.Timestamp("2024-08-16 16:45:20"),
+                ]
+            ),
+            id="3_arg-ntz-west_to_east",
+        ),
+        pytest.param(
+            "CONVERT_TIMEZONE('UTC', 'America/New_York', T)",
+            pd.Series(
+                [
+                    pd.Timestamp("2024-01-01 12:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-02-04 11:15:10", tz="America/Los_Angeles"),
+                    None,
+                    pd.Timestamp("2024-07-09 14:30:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-08-16 16:45:20", tz="America/Los_Angeles"),
+                ]
+            ),
+            "America/Los_Angeles",
+            pd.Series(
+                [
+                    pd.Timestamp("2024-01-01 07:00:00"),
+                    pd.Timestamp("2024-02-04 06:15:10"),
+                    None,
+                    pd.Timestamp("2024-07-09 10:30:00"),
+                    pd.Timestamp("2024-08-16 12:45:20"),
+                ]
+            ),
+            id="3_arg-ltz_west-utc_to_east",
+        ),
+        pytest.param(
+            "TO_CHAR(CONVERT_TIMEZONE('Europe/Berlin', T))",
+            np.array(
+                [
+                    bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+                    bodo.TimestampTZ.fromLocal("2024-02-04 11:15:10", 60),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2024-07-09 14:30:00", 195),
+                    bodo.TimestampTZ.fromLocal("2024-08-16 13:45:20", -330),
+                ]
+            ),
+            None,
+            pd.Series(
+                [
+                    "2024-01-01 13:00:00 +0100",
+                    "2024-02-04 11:15:10 +0100",
+                    None,
+                    "2024-07-09 13:15:00 +0200",
+                    "2024-08-16 21:15:20 +0200",
+                ]
+            ),
+            id="2_arg-tz-berlin",
+        ),
+        pytest.param(
+            "TO_CHAR(CONVERT_TIMEZONE('America/Los_Angeles', T))",
+            np.array(
+                [
+                    datetime.date(2024, 1, 2),
+                    datetime.date(2024, 2, 15),
+                    None,
+                    datetime.date(2024, 4, 10),
+                    datetime.date(2024, 6, 25),
+                ]
+            ),
+            "America/New_York",
+            pd.Series(
+                [
+                    "2024-01-01 21:00:00 -0800",
+                    "2024-02-14 21:00:00 -0800",
+                    None,
+                    "2024-04-09 21:00:00 -0700",
+                    "2024-06-24 21:00:00 -0700",
+                ]
+            ),
+            id="2_arg-date-east_to_west",
+        ),
     ],
 )
-def test_convert_timezone(tz_aware_df, tz_naive_df, memory_leak_check):
-    query1 = "SELECT CONVERT_TIMEZONE('Poland', A) from table1"
-    expected_output1 = tz_aware_df["TABLE1"]["A"].dt.tz_convert("Poland").to_frame()
+def test_convert_timezone(convert_calc, data, session_tz, answer, memory_leak_check):
+    """
+    Tests the Snowflake function CONVERT_TIMEZONE. See documentation for description
+    since it has several convoluted rules: https://docs.snowflake.com/en/sql-reference/functions/convert_timezone
 
+    Answers verified on Snowflake
+    """
+    query = f"SELECT {convert_calc} as A from table1"
+    ctx = {"TABLE1": pd.DataFrame({"T": data})}
     check_query(
-        query1,
-        tz_aware_df,
+        query,
+        ctx,
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=expected_output1,
-    )
-
-    query2 = "SELECT CONVERT_TIMEZONE('America/New_York', 'Poland', A) from table1"
-
-    converted_series = (
-        tz_naive_df["A"]
-        .index.tz_localize(None)
-        .tz_localize("America/New_York")
-        .tz_convert("Poland")
-        .tz_localize(None)
-        .to_series()
-    )
-    expected_output2 = converted_series.to_frame()
-
-    check_query(
-        query2,
-        {"TABLE1": tz_naive_df},
-        None,
-        check_names=False,
-        check_dtype=False,
-        expected_output=expected_output2,
+        expected_output=pd.DataFrame({"A": answer}),
+        session_tz=session_tz,
+        enable_timestamp_tz=True,
     )
