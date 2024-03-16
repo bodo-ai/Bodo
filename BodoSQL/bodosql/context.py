@@ -1171,7 +1171,6 @@ class BodoSQLContext:
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
                 hide_credentials,
-                bodo.bodosql_try_inline_views,
                 bodo.enable_snowflake_iceberg,
                 bodo.enable_timestamp_tz,
             )
@@ -1183,7 +1182,6 @@ class BodoSQLContext:
             verbose_level,
             bodo.bodosql_streaming_batch_size,
             hide_credentials,
-            bodo.bodosql_try_inline_views,
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
             *extra_args,

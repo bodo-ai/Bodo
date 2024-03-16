@@ -435,7 +435,6 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
-                    bodo.bodosql_try_inline_views,
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                 )
@@ -453,7 +452,6 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
-                    bodo.bodosql_try_inline_views,
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                     *extra_args,

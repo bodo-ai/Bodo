@@ -110,7 +110,6 @@ public class PandasGenTest {
             0,
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
-            true, // Always inline views
             true, // Enable Iceberg for testing
             true // Enable TIMESTMAP_TZ for testing
             );
