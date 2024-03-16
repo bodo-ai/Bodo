@@ -91,7 +91,6 @@ public class SnowflakeGenTest {
             0,
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
-            true, // Always inline views
             true, // Enable Iceberg for testing
             true // Enable TIMESTAMP_TZ for testing
             );

@@ -101,9 +101,6 @@ public class RelationalAlgebraGenerator {
    */
   public static boolean hideCredentials = false;
 
-  /** Should we try inline views? */
-  public static boolean tryInlineViews = true;
-
   /** Should we try read Snowflake tables as Iceberg tables? */
   public static boolean enableSnowflakeIcebergTables = false;
 
@@ -157,7 +154,6 @@ public class RelationalAlgebraGenerator {
       int verboseLevel,
       int streamingBatchSize,
       boolean hideCredentials,
-      boolean tryInlineViews,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz) {
     this.catalog = null;
@@ -174,7 +170,6 @@ public class RelationalAlgebraGenerator {
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
     this.hideCredentials = hideCredentials;
-    this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
   }
@@ -187,7 +182,6 @@ public class RelationalAlgebraGenerator {
       int verboseLevel,
       int streamingBatchSize,
       boolean hideCredentials,
-      boolean tryInlineViews,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
       String defaultTz) {
@@ -206,7 +200,6 @@ public class RelationalAlgebraGenerator {
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
     this.hideCredentials = hideCredentials;
-    this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
   }
@@ -228,7 +221,6 @@ public class RelationalAlgebraGenerator {
       int verboseLevel,
       int streamingBatchSize,
       boolean hideCredentials,
-      boolean tryInlineViews,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz) {
     this.catalog = catalog;
@@ -236,7 +228,6 @@ public class RelationalAlgebraGenerator {
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     this.hideCredentials = hideCredentials;
-    this.tryInlineViews = tryInlineViews;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
     System.setProperty("calcite.default.charset", "UTF-8");
