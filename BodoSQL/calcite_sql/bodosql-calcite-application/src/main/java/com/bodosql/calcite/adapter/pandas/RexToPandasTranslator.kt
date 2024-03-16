@@ -2022,15 +2022,18 @@ open class RexToPandasTranslator(
                         )
                     }
 
-                    "TIME_FROM_PARTS", "TIMESTAMP_FROM_PARTS", "TIMESTAMP_NTZ_FROM_PARTS",
-                    "TIMESTAMP_TZ_FROM_PARTS",
+                    "TIME_FROM_PARTS",
+                    "TIMESTAMP_FROM_PARTS",
+                    "TIMESTAMP_NTZ_FROM_PARTS",
                     -> return DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode(
                         fnName,
                         operands,
                         Expr.None,
                     )
 
-                    "TIMESTAMP_LTZ_FROM_PARTS" -> return DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode(
+                    "TIMESTAMP_TZ_FROM_PARTS",
+                    "TIMESTAMP_LTZ_FROM_PARTS",
+                    -> return DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode(
                         fnName,
                         operands,
                         visitor.genDefaultTZ().zoneExpr,

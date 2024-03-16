@@ -4509,18 +4509,15 @@ def timestamp_from_parts_data(request):
     )
 
 
-# Disabling TO_TIMESTAMP_TZ tests until [BSE-2734]
 @pytest.mark.parametrize(
     "func",
     [
         pytest.param("TIMESTAMP_FROM_PARTS"),
         pytest.param("TIMESTAMP_NTZ_FROM_PARTS"),
         pytest.param("TIMESTAMP_LTZ_FROM_PARTS"),
-        # pytest.param("TIMESTAMP_TZ_FROM_PARTS"),
         pytest.param("TIMESTAMPFROMPARTS", marks=pytest.mark.slow),
         pytest.param("TIMESTAMPNTZFROMPARTS", marks=pytest.mark.slow),
         pytest.param("TIMESTAMPLTZFROMPARTS", marks=pytest.mark.slow),
-        # pytest.param("TIMESTAMPTZFROMPARTS", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
@@ -4553,7 +4550,6 @@ def test_timestamp_from_parts(
         "TIMESTAMPFROMPARTS",
         "TIMESTAMP_NTZ_FROM_PARTS",
         "TIMESTAMPLTZFROMPARTS",
-        "TIMESTAMP_TZ_FROM_PARTS",
     }
     if use_case:
         query = f"SELECT CASE WHEN YR < 0 THEN NULL ELSE {func}(YR, MO, DA, HO, MI, SE{ns_str}) END FROM table1"
@@ -4566,8 +4562,6 @@ def test_timestamp_from_parts(
         in {
             "TIMESTAMP_LTZ_FROM_PARTS",
             "TIMESTAMPLTZFROMPARTS",
-            "TIMESTAMP_TZ_FROM_PARTS",
-            "TIMESTAMPTZFROMPARTS",
         }
         else None
     )
