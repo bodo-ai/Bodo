@@ -280,7 +280,7 @@ open class SnowflakeCatalogTable(
     ): RelNode? {
         val baseRelNode: RelNode = create(toRelContext.cluster, relOptTable, this)
         // Check if this table is a view and if so attempt to inline it.
-        if (RelationalAlgebraGenerator.tryInlineViews && canSafelyInlineView()) {
+        if (canSafelyInlineView()) {
             val viewDefinition = getViewDefinitionString()
             if (viewDefinition != null) {
                 return tryInlineView(toRelContext, viewDefinition, baseRelNode)
