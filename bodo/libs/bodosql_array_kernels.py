@@ -246,6 +246,7 @@ broadcasted_fixed_arg_functions = {
     "time_from_parts",
     "time_slice",
     "timestamp_from_date_and_time",
+    "timestamp_tz_from_parts",
     "to_array",
     "to_binary",
     "to_boolean",

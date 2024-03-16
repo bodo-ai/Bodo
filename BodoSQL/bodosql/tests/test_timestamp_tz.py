@@ -864,26 +864,86 @@ def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
     )
 
 
-# def timestamp_tz_data():
-#     """
-#     Creates a DataFrame with an index column
-#     and a column of TimestampTZ data.
-#     """
-#     return pd.DataFrame(
-#         {
-#             "I": np.arange(8),
-#             "T": [
-#                 bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", 0),
-#                 None,
-#                 bodo.TimestampTZ.fromLocal("2024-07-04 20:30:14.250", 30),
-#                 bodo.TimestampTZ.fromLocal("1999-12-31 23:59:59.999526500", -60),
-#                 bodo.TimestampTZ.fromLocal("2024-01-01", -240),
-#                 bodo.TimestampTZ.fromLocal("2024-02-29 6:45:00", 330),
-#                 None,
-#                 bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", -480),
-#             ],
-#         }
-#     )
+@pytest.mark.parametrize(
+    "calc, answer",
+    [
+        pytest.param(
+            "TIMESTAMP_TZ_FROM_PARTS(2020+I, I, I*I, 12, 0, 0)",
+            [
+                bodo.TimestampTZ.fromLocal("2021-01-01 12:00:00", -480),
+                bodo.TimestampTZ.fromLocal("2022-02-04 12:00:00", -480),
+                None,
+                bodo.TimestampTZ.fromLocal("2024-04-16 12:00:00", -420),
+                bodo.TimestampTZ.fromLocal("2025-05-25 12:00:00", -420),
+            ],
+            id="no_case-no_ns-no_tz",
+        ),
+        pytest.param(
+            "CASE WHEN I <= 1 THEN NULL ELSE TIMESTAMP_TZ_FROM_PARTS(2024, 12, 31, 06, 45, 15, POW(16, I)) END",
+            [
+                None,
+                bodo.TimestampTZ.fromLocal("2024-12-31 06:45:15.000000256", -480),
+                None,
+                bodo.TimestampTZ.fromLocal("2024-12-31 06:45:15.000065536", -480),
+                bodo.TimestampTZ.fromLocal("2024-12-31 06:45:15.001048576", -480),
+            ],
+            id="with_case-with_ns-no_tz",
+        ),
+        pytest.param(
+            "TIMESTAMPTZFROMPARTS(2020+I, I, I*I, 12, 0, 0, 926000000, 'Europe/Berlin')",
+            [
+                bodo.TimestampTZ.fromLocal("2021-01-01 12:00:00.926", 60),
+                bodo.TimestampTZ.fromLocal("2022-02-04 12:00:00.926", 60),
+                None,
+                bodo.TimestampTZ.fromLocal("2024-04-16 12:00:00.926", 120),
+                bodo.TimestampTZ.fromLocal("2025-05-25 12:00:00.926", 120),
+            ],
+            id="no_case-with_ns-with_tz",
+        ),
+    ],
+)
+def test_timestamp_tz_from_parts(calc, answer, memory_leak_check):
+    """
+    Tests calling the TIMESTAMP_TZ_FROM_PARTS function.
+    """
+    query = f"SELECT I, TO_TIMESTAMP_NTZ({calc}) as N, DATE_PART(tzh, {calc}) as H, DATE_PART(tzm, {calc}) as M FROM TABLE1"
+    df = pd.DataFrame({"I": pd.array([1, 2, None, 4, 5])})
+    ctx = {"TABLE1": df}
+    ntz_answer = pd.array([None if t is None else t.local_timestamp() for t in answer])
+    hour_answer = pd.array(
+        [
+            None
+            if t is None
+            else (abs(t._offset_minutes) // 60) * (1 if t._offset_minutes >= 0 else -1)
+            for t in answer
+        ]
+    )
+    minute_answer = pd.array(
+        [
+            None
+            if t is None
+            else (abs(t._offset_minutes) % 60) * (1 if t._offset_minutes >= 0 else -1)
+            for t in answer
+        ]
+    )
+    expected_output = pd.DataFrame(
+        {
+            "I": df["I"],
+            "N": ntz_answer,
+            "H": hour_answer,
+            "M": minute_answer,
+        }
+    )
+    check_query(
+        query,
+        {"TABLE1": df},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        session_tz="America/Los_Angeles",
+        enable_timestamp_tz=True,
+    )
 
 
 @pytest.mark.parametrize(

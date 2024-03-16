@@ -5,7 +5,6 @@ import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.
 import static org.apache.calcite.sql.type.BodoReturnTypes.CONVERT_TIMEZONE_RETURN_TYPE;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import java.util.*;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
@@ -220,15 +219,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlBasicFunction TIMESTAMP_TZ_FROM_PARTS =
       SqlBasicFunction.create(
           "TIMESTAMP_TZ_FROM_PARTS",
-          // TODO: always use TIMESTAMP_TZ enableTimestampTz is removed
-          (RelationalAlgebraGenerator.enableTimestampTz
-                  ? ReturnTypes.TIMESTAMP_TZ
-                  : ReturnTypes.TIMESTAMP)
-              .andThen(SqlTypeTransforms.TO_NULLABLE),
-          BodoOperandTypes.TIMESTAMP_FROM_PARTS_BASE_CHECKER
-          // TODO: uncomment once we support passing in the TZ string argument
-          // .or(BodoOperandTypes.TIMESTAMP_FROM_PARTS_TZ_CHECKER)
-          ,
+          ReturnTypes.TIMESTAMP_TZ.andThen(SqlTypeTransforms.TO_NULLABLE),
+          BodoOperandTypes.TIMESTAMP_FROM_PARTS_BASE_CHECKER.or(
+              BodoOperandTypes.TIMESTAMP_FROM_PARTS_TZ_CHECKER),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 

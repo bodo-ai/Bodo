@@ -341,6 +341,7 @@ public class DatetimeFnCodeGen {
     boolean time_mode = false;
     boolean date_mode = false;
     boolean timestamp_mode = false;
+    boolean tz_mode = false;
     boolean timestamp_from_date_time_mode = false;
 
     int numArgs = operandsInfo.size();
@@ -352,8 +353,12 @@ public class DatetimeFnCodeGen {
       case "DATE_FROM_PARTS":
         date_mode = true;
         break;
+      case "TIMESTAMP_TZ_FROM_PARTS":
+        timestamp_mode = true;
+        tz_mode = true;
+        break;
       case "TIMESTAMP_LTZ_FROM_PARTS":
-        // the LTZ versions cannot use the two argument constructor which always
+        // the TZ/LTZ versions cannot use the two argument constructor which always
         // produces NTZ values.
         timestamp_mode = true;
         break;
@@ -368,6 +373,8 @@ public class DatetimeFnCodeGen {
       generateFnName = "date_from_parts";
     } else if (timestamp_from_date_time_mode) {
       generateFnName = "timestamp_from_date_and_time";
+    } else if (tz_mode) { // timestamp_mode
+      generateFnName = "timestamp_tz_from_parts";
     } else { // timestamp_mode
       generateFnName = "construct_timestamp";
     }
