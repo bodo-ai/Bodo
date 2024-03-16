@@ -297,6 +297,77 @@ def construct_timestamp_unopt_util(
     return impl
 
 
+def timestamp_tz_from_parts(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    pass
+
+
+@overload(timestamp_tz_from_parts, no_unliteral=True)
+def overload_timestamp_tz_from_parts(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    """Handles cases where TIMESTAMP_TZ_FROM_PARTS receives numeric
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
+
+    return convert_numeric_to_int(
+        "bodo.libs.bodosql_datetime_array_kernels.timestamp_tz_from_parts_unopt_util",
+        arg_names,
+        args,
+        ["year", "month", "day", "hour", "minute", "second", "nanosecond"],
+    )
+
+
+def timestamp_tz_from_parts_unopt_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    pass
+
+
+@overload(timestamp_tz_from_parts_unopt_util, no_unliteral=True)
+def overload_timestamp_tz_from_parts_unopt_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    """Handles cases where TIMESTAMP_TZ_FROM_PARTS receives optional
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_datetime_array_kernels.timestamp_tz_from_parts_unopt_util",
+                arg_names,
+                i,
+            )
+
+    def impl(year, month, day, hour, minute, second, nanosecond, time_zone):
+        return bodo.libs.bodosql_array_kernels.timestamp_tz_from_parts_util(
+            year, month, day, hour, minute, second, nanosecond, time_zone
+        )
+
+    return impl
+
+
 @numba.generated_jit(nopython=True)
 def date_from_parts(year, month, day):  # pragma: no cover
     """Handles cases where DATE_FROM_PARTS receives numeric
@@ -1882,6 +1953,20 @@ def overload_date_trunc_util(
     )
 
 
+def generate_ts_construction_string():
+    """
+    Returns the scalar text used to generate a timestamp using the year, month, day,
+    hour, minute, second, and nanoseconds provided. Handle the overflow from months
+    into years directly, then handle all remaining unit arguments by constructing a
+    timedelta (which will take care of the overflow of the remaining units) and adding
+    it to the year/month value.
+    """
+    text = "months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12\n"
+    text += "ts = pd.Timestamp(year=arg0+month_overflow, month=months, day=1)\n"
+    text += "ts = ts + pd.Timedelta(days=arg2-1, hours=arg3, minutes=arg4, seconds=arg5) + pd.Timedelta(arg6)\n"
+    return text
+
+
 @numba.generated_jit(nopython=True, no_unliteral=True)
 def construct_timestamp_util(
     year, month, day, hour, minute, second, nanosecond, time_zone
@@ -1965,18 +2050,80 @@ def construct_timestamp_util(
         else ""
     )
 
-    # Handle the overflow from months into years directly, then handle all remaining
-    # unit arguments by constructing a timedelta (which will take care of the
-    # overflow of the remaining units) and adding it to the year/month value
-    scalar_text = "months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12\n"
-    scalar_text += "ts = pd.Timestamp(year=arg0+month_overflow, month=months, day=1)\n"
-    scalar_text += "ts = ts + pd.Timedelta(days=arg2-1, hours=arg3, minutes=arg4, seconds=arg5) + pd.Timedelta(arg6)\n"
+    scalar_text = generate_ts_construction_string()
     scalar_text += f"res[i] = {unbox_str}(ts{localize_str})"
 
     if tz is None:
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
     else:
         out_dtype = bodo.DatetimeArrayType(tz)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+def timestamp_tz_from_parts_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    pass
+
+
+@overload(timestamp_tz_from_parts_util, no_unliteral=True)
+def overload_timestamp_tz_from_parts_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):
+    """A dedicated kernel for building a timestamp_tz from the components
+
+    Args:
+        year (int array/series/scalar): the year of the new timestamp
+        month (int array/series/scalar): the month of the new timestamp
+        day (int array/series/scalar): the day of the new timestamp
+        hour (int array/series/scalar): the hour of the new timestamp
+        minute (int array/series/scalar): the minute of the new timestamp
+        second (int array/series/scalar): the second of the new timestamp
+        nanosecond (int array/series/scalar): the nanosecond of the new timestamp
+        time_zone (string literal): the time zone used to create the offset of the new timestamp
+
+    Returns:
+        timestamp_tz array/scalar: the timestamp_tz with the components specified above,
+        with the offset based on the timezone as specified.
+    """
+
+    verify_int_arg(year, "construct_timestamp", "year")
+    verify_int_arg(month, "construct_timestamp", "month")
+    verify_int_arg(day, "construct_timestamp", "day")
+    verify_int_arg(hour, "construct_timestamp", "hour")
+    verify_int_arg(minute, "construct_timestamp", "minute")
+    verify_int_arg(second, "construct_timestamp", "second")
+    verify_int_arg(nanosecond, "construct_timestamp", "nanosecond")
+
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
+    arg_types = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    propagate_null = [True] * 7 + [False]
+
+    if not is_overload_constant_str(time_zone):
+        raise_bodo_error(
+            "TIMESTAMP_TZ_FROM_PARTS: time_zone argument must be a constant string literal"
+        )
+    tz = get_overload_const_str(time_zone)
+
+    scalar_text = generate_ts_construction_string()
+    # Get the UTC offset of the timestamp in the timezone, then convert from
+    # nanoseconds to minutes.
+    scalar_text += (
+        f"offset = ts.tz_localize('{tz}').utcoffset().value // 60_000_000_000\n"
+    )
+    scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(ts, offset)"
+
+    out_dtype = bodo.timestamptz_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
