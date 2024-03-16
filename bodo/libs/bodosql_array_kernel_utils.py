@@ -1248,6 +1248,25 @@ def verify_datetime_arg_allow_tz(
         )
 
 
+def verify_timestamp_tz_arg(
+    arg, f_name, a_name, allow_timestamp_tz=False
+):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a timestamp_tz
+       (scalar or vector).
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not is_valid_timestamptz_arg(arg):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a timestamp_tz scalar/column or null, but was {arg}"
+        )
+
+
 def verify_timestamp_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a timestamp
        (scalar or vector) that allows timezones. This is different from

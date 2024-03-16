@@ -1247,46 +1247,46 @@ def test_to_date_timestamptz(_try, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "source_tz, target_tz, dt, return_tz, answer",
+    "source_tz, target_tz, data, answer",
     [
         pytest.param(
             "America/New_York",
             "America/Los_Angeles",
-            pd.Timestamp("2022-08-17T12"),
-            False,
-            pd.Timestamp("2022-08-17T09"),
-            id="three-arg",
+            pd.Timestamp("2022-08-17 12:00:00"),
+            pd.Timestamp("2022-08-17 09:00:00"),
+            id="nyc-la",
         ),
         pytest.param(
-            "Poland",
-            "America/Chicago",
-            pd.Timestamp("2022-08-17T12", tz="America/New_York"),
-            True,
-            pd.Timestamp("2022-08-17T11", tz="America/Chicago"),
-            id="two-arg-data-tz",
+            "America/New_York",
+            "UTC",
+            pd.Timestamp("2022-08-17 12:00:00"),
+            pd.Timestamp("2022-08-17 16:00:00"),
+            id="nyc-utc",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
-            "Poland",
-            "America/Chicago",
-            pd.Timestamp("2022-08-17T12"),
-            True,
-            pd.Timestamp("2022-08-17T05", tz="America/Chicago"),
-            id="two-arg-source-tz",
+            "UTC",
+            "America/Los_Angeles",
+            pd.Timestamp("2022-02-03 12:00:00"),
+            pd.Timestamp("2022-02-03 04:00:00"),
+            id="utc-la",
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_convert_timezone_scalars(source_tz, target_tz, dt, return_tz, answer):
+def test_convert_timezone_ntz_scalar(
+    source_tz, target_tz, data, answer, memory_leak_check
+):
     def impl(data):
-        return bodo.libs.bodosql_array_kernels.convert_timezone(
+        return bodo.libs.bodosql_array_kernels.convert_timezone_ntz(
             source_tz,
             target_tz,
             data,
-            return_tz,
         )
 
     check_func(
         impl,
-        (dt,),
+        (data,),
         py_output=answer,
         check_dtype=False,
         reset_index=True,
@@ -1295,63 +1295,57 @@ def test_convert_timezone_scalars(source_tz, target_tz, dt, return_tz, answer):
 
 
 @pytest.mark.parametrize(
-    "source_tz, target_tz, data, return_tz, answer",
+    "source_tz, target_tz, answer",
     [
         pytest.param(
-            "America/New_York",
-            "America/Los_Angeles",
+            "Africa/Casablanca",
+            "Africa/Casablanca",
             pd.Series(
                 [
-                    pd.Timestamp("2023-01-01T12"),
-                    pd.Timestamp("2022-09-01T23"),
-                    pd.Timestamp("2021-08-01T14"),
-                    pd.Timestamp("2020-03-01T10"),
+                    pd.Timestamp("2023-01-01 12:00:00"),
+                    pd.Timestamp("2023-02-04 12:00:00"),
+                    None,
+                    pd.Timestamp("2023-05-09 12:00:00"),
+                    pd.Timestamp("2023-07-16 12:00:00"),
+                    pd.Timestamp("2023-11-25 12:00:00"),
                 ]
-                * 3
             ),
-            True,
-            pd.Series(
-                [
-                    pd.Timestamp("2023-01-01T09", tz="America/Los_Angeles"),
-                    pd.Timestamp("2022-09-01T20", tz="America/Los_Angeles"),
-                    pd.Timestamp("2021-08-01T11", tz="America/Los_Angeles"),
-                    pd.Timestamp("2020-03-01T07", tz="America/Los_Angeles"),
-                ]
-                * 3
-            ),
-            id="two-arg",
+            id="same_tz",
         ),
         pytest.param(
-            "America/New_York",
-            "America/Chicago",
+            "Europe/Berlin",
+            "Africa/Casablanca",
             pd.Series(
                 [
-                    pd.Timestamp("2023-01-01T12", tz="Europe/Berlin"),
-                    pd.Timestamp("2022-09-01T23", tz="Europe/Berlin"),
-                    pd.Timestamp("2021-08-01T14", tz="Europe/Berlin"),
-                    pd.Timestamp("2020-03-01T10", tz="Europe/Berlin"),
+                    pd.Timestamp("2023-01-01 12:00:00"),
+                    pd.Timestamp("2023-02-04 12:00:00"),
+                    None,
+                    pd.Timestamp("2023-05-09 11:00:00"),
+                    pd.Timestamp("2023-07-16 11:00:00"),
+                    pd.Timestamp("2023-11-25 12:00:00"),
                 ]
-                * 3
             ),
-            True,
-            pd.Series(
-                [
-                    pd.Timestamp("2023-01-01T05", tz="America/Chicago"),
-                    pd.Timestamp("2022-09-01T16", tz="America/Chicago"),
-                    pd.Timestamp("2021-08-01T07", tz="America/Chicago"),
-                    pd.Timestamp("2020-03-01T03", tz="America/Chicago"),
-                ]
-                * 3
-            ),
-            id="three-arg-data-tz",
+            id="berlin-casablanca",
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_convert_timezone(source_tz, target_tz, data, return_tz, answer):
+def test_convert_timezone_ntz_vector(source_tz, target_tz, answer, memory_leak_check):
+    data = pd.array(
+        [
+            pd.Timestamp("2023-01-01 12:00:00"),
+            pd.Timestamp("2023-02-04 12:00:00"),
+            None,
+            pd.Timestamp("2023-05-09 12:00:00"),
+            pd.Timestamp("2023-07-16 12:00:00"),
+            pd.Timestamp("2023-11-25 12:00:00"),
+        ]
+    )
+
     def impl(data):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.convert_timezone(
-                source_tz, target_tz, data, return_tz
+            bodo.libs.bodosql_array_kernels.convert_timezone_ntz(
+                source_tz, target_tz, data
             )
         )
 
@@ -1359,6 +1353,69 @@ def test_convert_timezone(source_tz, target_tz, data, return_tz, answer):
         impl,
         (data,),
         py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "target_tz, raw_answer",
+    [
+        pytest.param(
+            "America/Los_Angeles",
+            pd.Series(
+                [
+                    "2024-01-01 04:00:00 -0800",
+                    "2024-02-06 04:15:10 -0800",
+                    None,
+                    "2024-02-07 10:30:00 -0800",
+                    "2024-07-04 06:45:30 -0700",
+                    "2024-08-01 15:00:00 -0700",
+                ]
+            ),
+            id="Los_Angeles",
+        ),
+        pytest.param(
+            "Europe/Berlin",
+            pd.Series(
+                [
+                    "2024-01-01 13:00:00 +0100",
+                    "2024-02-06 13:15:10 +0100",
+                    None,
+                    "2024-02-07 19:30:00 +0100",
+                    "2024-07-04 15:45:30 +0200",
+                    "2024-08-02 00:00:00 +0200",
+                ]
+            ),
+            id="Berlin",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_convert_timezone_tz(target_tz, raw_answer, memory_leak_check):
+    data = pd.Series(
+        [
+            bodo.TimestampTZ.fromLocal("2024-01-01 12:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-02-06 13:15:10", 60),
+            None,
+            bodo.TimestampTZ.fromLocal("2024-02-07 14:30:00", -240),
+            bodo.TimestampTZ.fromLocal("2024-07-04 15:45:30", 120),
+            bodo.TimestampTZ.fromLocal("2024-08-01 17:00:00", -300),
+        ]
+    )
+
+    def impl(data):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.to_char(
+                bodo.libs.bodosql_array_kernels.convert_timezone_tz(target_tz, data)
+            )
+        )
+
+    check_func(
+        impl,
+        (data,),
+        py_output=raw_answer,
         check_dtype=False,
         reset_index=True,
         check_names=False,

@@ -1936,7 +1936,8 @@ open class RexToPandasTranslator(
                         assert(operands.size == 2 || operands.size == 3)
                         return DatetimeFnCodeGen.generateConvertTimezoneCode(
                             operands,
-                            BodoTZInfo.getDefaultTZInfo(typeSystem),
+                            fnOperation.getOperands(),
+                            visitor.genDefaultTZ(),
                         )
                     }
 
