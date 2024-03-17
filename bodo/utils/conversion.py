@@ -317,7 +317,7 @@ def overload_coerce_to_ndarray(
                 scalar_to_arr_len=None,
             ):  # pragma: no cover
                 n = scalar_to_arr_len
-                A = bodo.hiframes.pd_timestamp_ext.alloc_timestamptz_array(n)
+                A = bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
                     A[i] = data
                 return A
