@@ -12,7 +12,11 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import pytest_mark_one_rank, pytest_slow_unless_codegen
+from bodo.tests.utils import (
+    enable_timestamptz,
+    pytest_mark_one_rank,
+    pytest_slow_unless_codegen,
+)
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
@@ -133,6 +137,49 @@ def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
         check_names=False,
         equivalent_spark_query=spark_query,
     )
+
+
+def test_timestamptz_literal(basic_df, spark_info, memory_leak_check):
+    """
+    tests that timestamptz literals are correctly parsed by BodoSQL
+    """
+    # TZ1 specifies a timezone, TZ2 does not (should use session TZ), and TZ3 specifies UTC
+    query = """
+    SELECT
+        '2020-01-02 03:04:05.123456789 -0800'::timestamptz as tz1,
+        '2020-01-02 03:04:05.123456789'::timestamptz as tz2,
+        '2020-01-02 03:04:05.123456789 Z'::timestamptz as tz3
+    FROM
+        table1
+    """
+
+    with enable_timestamptz():
+        length = basic_df["TABLE1"].shape[0]
+
+        expected_output = pd.DataFrame(
+            {
+                "TZ1": [
+                    bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05.123456789", -480)
+                ]
+                * length,
+                # The session tz is +545
+                "TZ2": [
+                    bodo.TimestampTZ.fromLocal("2020-01-02 03:04:05.123456789", 345)
+                ]
+                * length,
+                "TZ3": [bodo.TimestampTZ.fromUTC("2020-01-02 03:04:05.123456789", 0)]
+                * length,
+            }
+        )
+        check_query(
+            query,
+            basic_df,
+            None,
+            session_tz="Asia/Kathmandu",
+            check_dtype=False,
+            expected_output=expected_output,
+            enable_timestamp_tz=True,
+        )
 
 
 @pytest.mark.slow

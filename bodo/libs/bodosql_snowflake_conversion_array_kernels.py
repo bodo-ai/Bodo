@@ -677,6 +677,11 @@ def overload_to_timestamptz_util(
             "    offset = offset_sign * (offset_hours * 60 + offset_minutes)\n"
         )
         scalar_text += "    parsed = True\n"
+        scalar_text += "if not parsed and arg0.endswith(' Z'):\n"
+        scalar_text += "  timestamp_str = arg0[:-2]\n"
+        scalar_text += "  offset = 0\n"
+        scalar_text += "  local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(timestamp_str, None, None, 0)\n"
+        scalar_text += "  parsed = True\n"
         scalar_text += "if not parsed:\n"
         scalar_text += "  offset = 0\n"
         scalar_text += "  local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(arg0, None, None, 0)\n"
