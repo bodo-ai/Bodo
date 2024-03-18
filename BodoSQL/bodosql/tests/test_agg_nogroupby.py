@@ -702,6 +702,91 @@ def test_tz_aware_having(memory_leak_check):
     )
 
 
+@pytest.fixture
+def timestamptz_data():
+    """TimestampTZ values for testing aggregation"""
+    return np.array(
+        [
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
+            None,
+        ]
+    )
+
+
+def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
+    """
+    Test max and min on a TIMESTAMPTZ column
+    """
+    df = pd.DataFrame({"A": timestamptz_data})
+    ctx = {"TABLE1": df}
+    py_output = pd.DataFrame(
+        {
+            "OUT1": bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            "OUT2": bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+        },
+        index=pd.RangeIndex(0, 1, 1),
+    )
+    query = "Select max(A) as OUT1, min(A) as OUT2 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
+def test_count_timestamptz(timestamptz_data, memory_leak_check):
+    """
+    Test count and count(*) on a TIMESTAMPTZ column
+    """
+    df = pd.DataFrame({"A": timestamptz_data})
+    ctx = {"TABLE1": df}
+    py_output = pd.DataFrame(
+        {"OUTPUT1": 6, "OUTPUT2": 10},
+        index=pd.RangeIndex(0, 1, 1),
+    )
+    query = "Select count(A) as output1, Count(*) as output2 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.skip(reason="[BSE-2934] NULLs in ANY_VALUE column returns the wrong value")
+def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
+    """
+    Test ANY_VALUE on a TIMESTAMPTZ column
+    """
+    # note that this is using the UTC timestamp constructor to make it easier to
+    # see what the values being compared are
+    df = pd.DataFrame({"A": timestamptz_data})
+    ctx = {"TABLE1": df}
+    py_output = pd.DataFrame(
+        {"OUTPUT": bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0)},
+        index=pd.RangeIndex(0, 1),
+    )
+    query = "Select ANY_VALUE(A) as output from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
 def test_single_value(spark_info, memory_leak_check):
     """Test Calcite's SINGLE_VALUE Agg function"""
     query = "select B from t1 where t1.A = (select C from t2)"

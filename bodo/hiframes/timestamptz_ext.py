@@ -784,6 +784,28 @@ def overload_timestamptz_arr_shape(A):
     return lambda A: (len(A.data_ts),)  # pragma: no cover
 
 
+# Note that max only considers the timestamp and not the offset
+@overload(max, no_unliteral=True)
+def timestamptz_max(lhs, rhs):
+    if isinstance(lhs, TimestampTZType) and isinstance(rhs, TimestampTZType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs.utc_timestamp > rhs.utc_timestamp else rhs
+
+        return impl
+
+
+# Note that min only considers the timestamp and not the offset
+@overload(min, no_unliteral=True)
+def timestamptz_min(lhs, rhs):
+    if isinstance(lhs, TimestampTZType) and isinstance(rhs, TimestampTZType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs.utc_timestamp < rhs.utc_timestamp else rhs
+
+        return impl
+
+
 class ArrowTimestampTZType(pa.ExtensionType):
     def __init__(self):
         type_ = pa.struct(
