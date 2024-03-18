@@ -437,6 +437,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     hide_credentials,
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
+                    bodo.enable_runtime_join_filters,
                 )
             else:
                 extra_args = (
@@ -454,6 +455,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     hide_credentials,
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
+                    bodo.enable_runtime_join_filters,
                     *extra_args,
                 )
         except Exception as e:

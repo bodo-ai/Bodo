@@ -115,6 +115,10 @@ enable_snowflake_iceberg = os.environ.get("BODO_ENABLE_SNOWFLAKE_ICEBERG", "1") 
 # Flag used to enable reading TIMESTAMP_TZ as its own type instead of as an alias
 # for TIMESTAMP_LTZ. (will be removed once TIMESTAMP_TZ support is complete)
 enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "1") != "0"
+# Flag used to enable Runtime join filters inside BodoSQL plans
+enable_runtime_join_filters = (
+    os.environ.get("BODO_ENABLE_RUNTIME_JOIN_FILTERS", "0") != "0"
+)
 
 # --------------------------- End Streaming Config ---------------------------
 
