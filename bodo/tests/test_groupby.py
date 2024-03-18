@@ -7962,3 +7962,69 @@ def test_timestamptz_gb_agg(fstr, expected, memory_leak_check):
         }
     )
     check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+
+
+def test_timestamptz_gb_mode(memory_leak_check):
+    """Tests groupby + mode with timestamptz column"""
+
+    # This isn't tested with the other functions above to control the values
+    # per group better - if we have more tests like this, we should combine the
+    # tests and make it more generic
+    def impl(df):
+        return df.groupby("A", as_index=False, dropna=False).agg("mode")
+
+    gb_key = ["A"] * 4 + ["B"] * 4 + ["C"] * 4 + ["D"] * 4 + ["E"] * 4 + ["F"] * 4
+
+    # groups A and C always have values, B has some nulls, D has all nulls
+    tz_arr = np.array(
+        [
+            # A - all the same UTC time, but different offsets
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 125),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 333),
+            # B - all the same local time, but different UTC times
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 125),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 333),
+            # C - value is the mode
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 120),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 240),
+            bodo.TimestampTZ.fromUTC("2024-01-01 01:01:01", 0),
+            # D - all null
+            None,
+            None,
+            None,
+            None,
+            # E - some nulls
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            # F - majority null
+            None,
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+            None,
+        ]
+    )
+    df = pd.DataFrame({"A": gb_key, "B": tz_arr})
+
+    expected = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D", "E", "F"],
+            "B": np.array(
+                [
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 0),
+                    bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    None,
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                    bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", 60),
+                ]
+            ),
+        }
+    )
+    check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
