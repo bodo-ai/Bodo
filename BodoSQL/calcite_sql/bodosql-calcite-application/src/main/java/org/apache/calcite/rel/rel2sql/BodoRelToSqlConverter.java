@@ -21,9 +21,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlTableRef;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.ImmutableBitSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,7 +93,6 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
 
         final RelDataType rowType = e.getRowType();
         sqlTable = castTimestampTZColumnsToVariant(rowType, sqlTable);
-        // TODO(aneesh) [BSE-2867] check if any filters cast a TimestampTZ to a string, and warn if so
 
         // Next apply column pruning
         final SqlNode node;

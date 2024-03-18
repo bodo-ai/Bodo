@@ -1,6 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.application.PythonLoggers
+import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
@@ -19,11 +21,18 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
+import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
+import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexVisitorImpl
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.util.Util
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
@@ -149,7 +158,67 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
 
+    private class TTZStringRelVisitor : RelVisitor() {
+        // Visitor that scans for TimestampTZ -> String casts/conversions
+        private inner class TTZStringDetector() : RexVisitorImpl<Void?>(true) {
+            override fun visitCall(call: RexCall): Void? {
+                val op = call.operator
+                if (op === CastingOperatorTable.TO_CHAR || op === CastingOperatorTable.TO_VARCHAR) {
+                    val type = call.getOperands()[0].type
+                    // if type is TimestampTZ then return true
+                    if (type.sqlTypeName == SqlTypeName.TIMESTAMP_TZ) {
+                        throw Util.FoundOne.NULL
+                    }
+                } else if (op.kind === SqlKind.CAST) {
+                    // If this is a cast from TimestampTZ to char, return true
+                    val fromType = call.getOperands()[0].type
+                    val toType = call.getType()
+                    if (fromType.sqlTypeName == SqlTypeName.TIMESTAMP_TZ && SqlTypeFamily.STRING.contains(toType)) {
+                        throw Util.FoundOne.NULL
+                    }
+                }
+
+                return super.visitCall(call)
+            }
+        }
+
+        override fun visit(
+            node: RelNode,
+            ordinal: Int,
+            parent: RelNode?,
+        ) {
+            when (node) {
+                is Filter -> {
+                    node.condition.accept<Void>((::TTZStringDetector)())
+                }
+
+                is Project -> {
+                    for (project in node.projects) {
+                        project.accept<Void>((::TTZStringDetector)())
+                    }
+                }
+            }
+            node.childrenAccept(this)
+        }
+    }
+
+    // In order to read TimestampTZ columns, we set the session parameter that controls the default string format of TimestampTZ.
+    // If the current set of pushed filters include a TimestampTZ->String cast, then emit a warning.
+    private fun warnIfPushedFilterContainsTimestampTZCast() {
+        try {
+            val visitor = TTZStringRelVisitor()
+            visitor.visit(input, 0, null)
+        } catch (e: Util.FoundOne) {
+            PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(
+                "Detected pushed TimestampTZ filter that casts to string. " +
+                    "This can cause issues if the filter relies on a custom session value",
+            )
+        }
+    }
+
     private fun getSnowflakeSQL(): String {
+        warnIfPushedFilterContainsTimestampTZCast()
+
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = BodoRelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
         return rel2sql.visitRoot(input)
