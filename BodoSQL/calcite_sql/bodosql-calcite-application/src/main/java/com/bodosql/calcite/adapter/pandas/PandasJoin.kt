@@ -24,17 +24,9 @@ class PandasJoin(
     right: RelNode,
     condition: RexNode,
     joinType: JoinRelType,
-    val rebalanceOutput: Boolean,
+    val rebalanceOutput: Boolean = false,
+    val joinFilterKey: Int = -1,
 ) : JoinBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), left, right, condition, joinType), PandasRel {
-    constructor(
-        cluster: RelOptCluster,
-        traitSet: RelTraitSet,
-        left: RelNode,
-        right: RelNode,
-        condition: RexNode,
-        joinType: JoinRelType,
-    ) : this(cluster, traitSet, left, right, condition, joinType, false)
-
     override fun copy(
         traitSet: RelTraitSet,
         conditionExpr: RexNode,
@@ -44,7 +36,7 @@ class PandasJoin(
         semiJoinDone: Boolean,
     ): Join {
         assert(BodoJoinConditionUtil.isValidNode(conditionExpr))
-        return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)
+        return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput, joinFilterKey)
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
@@ -65,6 +57,7 @@ class PandasJoin(
     override fun explainTerms(pw: RelWriter?): RelWriter {
         return super.explainTerms(pw)
             .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
+            .itemIf("joinFilterKey", joinFilterKey, joinFilterKey != -1)
     }
 
     fun withRebalanceOutput(rebalanceOutput: Boolean): PandasJoin {
@@ -92,9 +85,10 @@ class PandasJoin(
             right: RelNode,
             condition: RexNode,
             joinType: JoinRelType,
+            joinFilterKey: Int = -1,
         ): PandasJoin {
             val cluster = left.cluster
-            return PandasJoin(cluster, cluster.traitSet(), left, right, condition, joinType)
+            return PandasJoin(cluster, cluster.traitSet(), left, right, condition, joinType, joinFilterKey = joinFilterKey)
         }
     }
 }
