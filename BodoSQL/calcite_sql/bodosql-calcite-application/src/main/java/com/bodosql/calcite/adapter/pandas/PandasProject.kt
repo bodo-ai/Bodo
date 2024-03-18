@@ -176,43 +176,6 @@ class PandasProject(
     }
 
     /**
-     * Generate rename code if aliases are involved.
-     *
-     * This method can only operate when using the [generateLocCode] path and assumes
-     * the inputs are [RexInputRef] values.
-     *
-     * If a rename is not necessary, this method returns its input.
-     */
-    private fun generateRenameIfNeeded(
-        input: Expr,
-        rowType: RelDataType,
-    ): Expr {
-        val renameMap =
-            namedProjects.asSequence()
-                .map { (r, alias) -> rowType.fieldNames[(r as RexInputRef).index] to alias }
-                .filter { (name, alias) -> name != alias }
-                .toList()
-        if (renameMap.isEmpty()) {
-            return input
-        }
-
-        return Expr.Method(
-            input,
-            "rename",
-            namedArgs =
-                listOf(
-                    "columns" to
-                        Expr.Dict(
-                            renameMap.map { (name, alias) ->
-                                Expr.StringLiteral(name) to Expr.StringLiteral(alias)
-                            },
-                        ),
-                    "copy" to Expr.BooleanLiteral(false),
-                ),
-        )
-    }
-
-    /**
      * Generate the standard projection code. This is in contrast [generateLocCode]
      * which acts as just an index/rename operation.
      *

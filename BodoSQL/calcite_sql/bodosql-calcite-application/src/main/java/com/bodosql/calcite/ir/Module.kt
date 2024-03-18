@@ -1,6 +1,7 @@
 package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.utils.JoinStateCache
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import java.util.Stack
 
@@ -41,6 +42,8 @@ class Module(private val frame: Frame) {
         private val relationalOperatorCache: RelationalOperatorCache =
             RelationalOperatorCache(this)
 
+        private val joinStateCache = JoinStateCache()
+
         /**
          * Helper function called by add/addall. Checks that no variable is assigned too twice.
          * This is needed due to a bug when inlining BodoSQL code into python. Throws
@@ -68,6 +71,13 @@ class Module(private val frame: Frame) {
          */
         fun getRelationalOperatorCache(): RelationalOperatorCache {
             return relationalOperatorCache
+        }
+
+        /**
+         * getter for the JoinStateCache
+         */
+        fun getJoinStateCache(): JoinStateCache {
+            return joinStateCache
         }
 
         /**

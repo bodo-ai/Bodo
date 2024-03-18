@@ -2306,6 +2306,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
         operatorID, joinInit, OperatorType.JOIN, node.estimateBuildMemory(mq));
 
     timerInfo.insertStateEndTimer();
+    // Update the join state cache for runtime filters.
+    generatedCode
+        .getJoinStateCache()
+        .setStreamingJoinStateVariable(node.getJoinFilterKey(), joinStateVar);
     return joinStateVar;
   }
 
@@ -2518,7 +2522,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable buildStreaming(
-        @NotNull Function1<? super PandasRel.BuildContext, StateVariable> initFn,
+        @NotNull Function1<? super PandasRel.BuildContext, ? extends StateVariable> initFn,
         @NotNull
             Function2<? super PandasRel.BuildContext, ? super StateVariable, BodoEngineTable>
                 bodyFn,

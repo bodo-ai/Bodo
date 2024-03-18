@@ -1173,6 +1173,7 @@ class BodoSQLContext:
                 hide_credentials,
                 bodo.enable_snowflake_iceberg,
                 bodo.enable_timestamp_tz,
+                bodo.enable_runtime_join_filters,
             )
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
@@ -1184,6 +1185,7 @@ class BodoSQLContext:
             hide_credentials,
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
+            bodo.enable_runtime_join_filters,
             *extra_args,
         )
         return generator

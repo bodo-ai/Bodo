@@ -107,6 +107,9 @@ public class RelationalAlgebraGenerator {
   /** Should we read TIMESTAMP_TZ as its own type instead of TIMESTAMP_LTZ */
   public static boolean enableTimestampTz = false;
 
+  /** Should we enabled planner nodes to insert runtime filters for Joins */
+  public static boolean enableRuntimeJoinFilters = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
@@ -155,7 +158,8 @@ public class RelationalAlgebraGenerator {
       int streamingBatchSize,
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz) {
+      boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -172,6 +176,7 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
   }
 
   /** Constructor for the relational algebra generator class that takes in the default timezone. */
@@ -184,6 +189,7 @@ public class RelationalAlgebraGenerator {
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters,
       String defaultTz) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
@@ -202,6 +208,7 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
   }
 
   /**
@@ -222,7 +229,8 @@ public class RelationalAlgebraGenerator {
       int streamingBatchSize,
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
-      boolean enableTimestampTz) {
+      boolean enableTimestampTz,
+      boolean enableRuntimeJoinFilters) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -230,6 +238,7 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
+    this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
     final @Nullable String currentDatabase;
