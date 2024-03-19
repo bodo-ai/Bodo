@@ -26,24 +26,6 @@ on:
         description: Bodo Version (e.g. 2022.8)
         required: true
 
-      bodoSQLVersion:
-        description: BodoSQL Version (e.g. 2022.8)
-        required: true
-
-      bodoSQLCondaChannel:
-        description: Conda Channel to install bodosql from, for major releases specify bodo.ai and for minor release and RCs specify bodo.ai/label/dev
-        required: true
-        default: "bodo.ai"
-
-      icebergConnectorVersion:
-        description: Iceberg Connector Version (e.g. 2022.8). Iceberg connector will not be installed if not provided.
-        required: false
-
-      bodoIcebergCondaChannel:
-        description: Conda Channel to install bodo-iceberg-connector from, for major releases specify bodo.ai and for minor release and RCs specify bodo.ai/label/dev
-        required: false
-        default: "bodo.ai"
-
       publishDev:
         description: Share with the Dev/Testing platform.
         type: boolean
@@ -67,8 +49,8 @@ jobs:
       publishStaging: ${{ steps.setup_variables.outputs.publishStaging }}
       publishProduction: ${{ steps.setup_variables.outputs.publishProduction }}
       bodoVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
-      bodoSQLVersion: ${{ steps.setup_variables.outputs.bodoSQLVersion }}
-      icebergConnectorVersion: ${{ steps.setup_variables.outputs.icebergConnectorVersion }}
+      bodoSQLVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
+      icebergConnectorVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
       bodoSQLCondaChannel: ${{ steps.setup_variables.outputs.bodoSQLCondaChannel }}
       bodoIcebergCondaChannel: ${{ steps.setup_variables.outputs.bodoIcebergCondaChannel }}
       pythonVersion: ${{ steps.setup_variables.outputs.pythonVersion }}
@@ -89,19 +71,19 @@ jobs:
             ./miniconda.sh -b
             export PATH=$HOME/miniconda3/bin:$PATH
             sudo apt install -y jq
+            # TODO: Remove label/dev and FULL_CHANNEL once everything is confirmed to work
             FULL_OUTPUT=$(conda search -f bodo -c bodo.ai -c bodo.ai/label/dev --json | jq .[][-1])
             FULL_CHANNEL=$(echo $FULL_OUTPUT | jq .channel --raw-output)
-            OUT_CHANNEL=$(if [[ $FULL_CHANNEL == *"dev"* ]]; then echo "bodo.ai/label/dev"; else echo "bodo.ai"; fi)
+            OUT_CHANNEL="bodo.ai"
 
             BODO_VERSION=$(echo $FULL_OUTPUT | jq .version --raw-output)
-            SQL_VERSION=$BODO_VERSION
             # ICEBERG_VERSION=${BODO_VERSION}
             echo "bodoVersion=$BODO_VERSION" >> $GITHUB_OUTPUT  
-            echo "bodoSQLVersion=$SQL_VERSION" >> $GITHUB_OUTPUT 
-            echo "icebergConnectorVersion=" >> $GITHUB_OUTPUT
+            echo "bodoSQLVersion=$BODO_VERSION" >> $GITHUB_OUTPUT 
+            echo "icebergConnectorVersion=$BODO_VERSION" >> $GITHUB_OUTPUT
 
             echo "bodoSQLCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT 
-            echo "bodoIcebergCondaChannel=" >> $GITHUB_OUTPUT
+            echo "bodoIcebergCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT
 
             echo "buildName=dev${BODO_VERSION}.b${{ github.run_number }}" >> $GITHUB_OUTPUT
           else
@@ -110,11 +92,12 @@ jobs:
             echo "publishProduction=${{ github.event.inputs.publishProduction }}" >> $GITHUB_OUTPUT
 
             echo "bodoVersion=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
-            echo "bodoSQLVersion=${{ github.event.inputs.bodoSQLVersion }}" >> $GITHUB_OUTPUT
-            echo "icebergConnectorVersion=${{ github.event.inputs.icebergConnectorVersion }}" >> $GITHUB_OUTPUT
+            echo "bodoSQLVersion=${{ github.event.inputs.bodoVersion}}" >> $GITHUB_OUTPUT
+            echo "icebergConnectorVersion=${{ github.event.inputs.bodoVersion}}" >> $GITHUB_OUTPUT
 
-            echo "bodoSQLCondaChannel=${{ github.event.inputs.bodoSQLCondaChannel }}" >> $GITHUB_OUTPUT 
-            echo "bodoIcebergCondaChannel=${{ github.event.inputs.bodoIcebergCondaChannel }}" >> $GITHUB_OUTPUT
+            OUT_CHANNEL="bodo.ai"
+            echo "bodoSQLCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT 
+            echo "bodoIcebergCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT
             
             echo "buildName=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
           fi
@@ -213,11 +196,8 @@ jobs:
           GIT_SHA: ${{ env.SHA }}
           SKIP_CREATE_IMAGES: ${{ needs.setup.outputs.skipCreateImages }}
           PYTHON_VERSION: ${{ github.event.inputs.pythonVersion  }}
-          BODOSQL_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
-          BODOSQL_CHANNEL: ${{ needs.setup.outputs.bodoSQLCondaChannel }}
+          BODO_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
           BUILD_NAME: ${{ needs.setup.outputs.buildName }}
-          ICEBERG_CONNECTOR_VERSION: ${{ needs.setup.outputs.icebergConnectorVersion }}
-          ICEBERG_CONNECTOR_CHANNEL: ${{ needs.setup.outputs.bodoIcebergCondaChannel }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |

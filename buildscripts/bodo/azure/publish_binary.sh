@@ -16,19 +16,11 @@ set +x
 source activate bodo_build
 set -x
 
-IS_MAJOR_RELEASE=0
-if [[ -n "$IS_RELEASE" ]]; then
-    IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"IS_RELEASE\"].split(\".\")) < 3))"`
-fi
 label=""
-if [[ "$OBFUSCATE" == 1 ]] && [[ "$IS_MAJOR_RELEASE" == 1 ]]\
+if [[ "$OBFUSCATE" == 1 ]] && [[ -n "$IS_RELEASE" ]]\
     && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
     # If we have a major release upload with our main anaconda label
     label="main"
-elif [[ "$OBFUSCATE" == 1 ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]\
-    && [[ -n "$IS_RELEASE" ]]; then
-    # If we have a minor release upload with our dev anaconda label
-    label="dev"
 fi
 
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
