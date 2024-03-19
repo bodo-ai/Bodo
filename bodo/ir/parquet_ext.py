@@ -464,7 +464,7 @@ def pq_distributed_run(
 
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
     extra_args = ", ".join(filter_map.values())
-    _, filter_str = bodo.ir.connector.generate_arrow_filters(
+    filter_str = bodo.ir.connector.generate_arrow_filters(
         pq_node.filters,
         filter_map,
         pq_node.original_df_colnames,
@@ -472,7 +472,6 @@ def pq_distributed_run(
         pq_node.original_table_col_types,
         typemap,
         "parquet",
-        output_dnf=False,
     )
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"

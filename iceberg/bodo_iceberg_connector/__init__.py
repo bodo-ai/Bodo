@@ -2,6 +2,11 @@ from importlib.metadata import PackageNotFoundError, version
 
 import bodo_iceberg_connector.java_helpers as java_helpers
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
+from bodo_iceberg_connector.filter_to_java import (
+    ColumnRef,
+    FilterExpr,
+    Scalar,
+)
 from bodo_iceberg_connector.parquet_info import (
     bodo_connector_get_parquet_file_list,
     bodo_connector_get_parquet_info,

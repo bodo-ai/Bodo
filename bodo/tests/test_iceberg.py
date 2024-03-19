@@ -3713,7 +3713,6 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
         check_logger_msg(stream, "Columns loaded []")
 
 
-@pytest.mark.slow
 def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Test reading an Iceberg with the _bodo_filter flag
@@ -3748,4 +3747,54 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
             sort_output=True,
             reset_index=True,
         )
-        check_logger_msg(stream, "Arrow filters pushed down:\n[[('A', '>', f0)]]")
+        check_logger_msg(
+            stream,
+            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('A'), Scalar(f0)])",
+        )
+
+
+def test_filter_pushdown_complex(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test that complex filters are correctly pushed down
+    and processed by the Iceberg connector. Filters tested are:
+    - OR, AND, NOT
+    - Starts with
+    - In
+    """
+    table_name = "FILTER_PUSHDOWN_TEST_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = df[
+            ((df["A"] > date(2015, 1, 1)) & ~(df["TY"].str.startswith("A")))
+            | (df["B"].isin([0, 6]))
+        ]
+        return df
+
+    spark = get_spark()
+    py_out = spark.sql(
+        f"""
+    select * from hadoop_prod.{db_schema}.{table_name}
+    where A > '2015-01-01' and not TY like 'A%' or B in (0, 6);
+    """
+    )
+    py_out = py_out.toPandas()
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (table_name, conn, db_schema),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            "Iceberg Filter Pushed Down:\nFilterExpr('OR', [FilterExpr('AND', [FilterExpr('>', [ColumnRef('A'), Scalar(f0)]), FilterExpr('NOT', [FilterExpr('STARTS_WITH', [ColumnRef('TY'), Scalar(f1)])])]), FilterExpr('IN', [ColumnRef('B'), Scalar(f3)])])",
+        )

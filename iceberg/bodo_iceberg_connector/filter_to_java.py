@@ -7,101 +7,92 @@ to construct expressions. However, Java code is responsible
 for constructing the proper filter pushdown expression,
 including considering any Iceberg transformations.
 """
+import abc
 import datetime
+import typing as pt
 
 import numpy as np
 import pandas as pd
 
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
-    get_linkedlist_class,
+    get_array_const_class,
+    get_column_ref_class,
+    get_filter_expr_class,
     get_literal_converter_class,
-    get_op_enum_class,
 )
 
 
-def op_to_enum(op, op_enum_class):
+class Filter(metaclass=abc.ABCMeta):
     """
-    Convert an op string to an enum value.
+    Base Filter Class for Composing Filters for the Iceberg
+    Java library.
     """
-    if op == "==":
-        return op_enum_class.EQ
-    elif op == "!=":
-        return op_enum_class.NE
-    elif op == "<":
-        return op_enum_class.LT
-    elif op == ">":
-        return op_enum_class.GT
-    elif op == "<=":
-        return op_enum_class.LE
-    elif op == ">=":
-        return op_enum_class.GE
-    elif op == "in":
-        return op_enum_class.IN
-    elif op == "not in":
-        return op_enum_class.NOT_IN
-    elif op == "starts with":
-        return op_enum_class.STARTS_WITH
-    elif op == "not starts with":
-        return op_enum_class.NOT_STARTS_WITH
-    else:
-        raise TypeError(f"Unsupported op {op} to enum")
+
+    @abc.abstractmethod
+    def to_java(self) -> pt.Any:
+        """
+        Converts the filter to equivalent Java objects
+        """
+        pass
 
 
-def convert_expr_to_java_parsable(expr):
+class ColumnRef(Filter):
     """
-    Takes a filter expression written in Arrow DNS format
-    and converts it into an expression that can be parsed by
-    Java.
-
-    To simplify parsing we opt to represent the Java info as a single
-    list of values and represent operations using an enum. For example,
-    imagine we have the following operation in arrow format.
-
-    [[('A', '=', 'dog'), ('B', '>' 2)], [('B', '=', 0)]]
-
-    The left most value in the tuple is column name, the middle
-    value is the operator, and the last value is the scalar being
-    used for comparison.
-
-    We would convert this into the following representation
-
-    [ANDSTART 'A', EQ, 'dog', 'B', GT, 2, ANDEND, ANDSTART, 'B', EQ, 0, ANDEND]
-
-    We don't need an or start and or end becuase ANDs are always combined by or.
+    Represents a column reference in a filter.
     """
-    linkedlist_class = get_linkedlist_class()
-    op_enum_class = get_op_enum_class()
-    expr_list = linkedlist_class()
-    if expr is not None:
-        for or_expr in expr:
-            # Group all expressions that would be "and" together.
-            expr_list.add(op_enum_class.AND_START)
-            for and_expr in or_expr:
-                # Append the column name, which should be a string.
-                col_name = str(and_expr[0])
-                # Create the op
-                if and_expr[1:] == ("is not", "NULL"):
-                    op_enum = op_enum_class.NOT_NULL
-                elif and_expr[1:] == ("is", "NULL"):
-                    op_enum = op_enum_class.IS_NULL
-                else:
-                    op_enum = op_to_enum(and_expr[1], op_enum_class)
-                # Create the scalar
-                iceberg_scalar = convert_scalar(and_expr[2])
-                # Determine if we have an unsupported
-                # scalar. If so we don't append anything to the list
-                # (Java will treat this as always True).
-                if iceberg_scalar is not None:
-                    # Append the col_name
-                    expr_list.add(col_name)
-                    # Append the op
-                    expr_list.add(op_enum)
-                    # Append the scalar
-                    expr_list.add(iceberg_scalar)
-            # End and expressions
-            expr_list.add(op_enum_class.AND_END)
-    return expr_list
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def __repr__(self):
+        return f"ref({self.name})"
+
+    def to_java(self):
+        column_ref_class = get_column_ref_class()
+        return column_ref_class(self.name)
+
+
+class Scalar(Filter):
+    """
+    Represents an Iceberg constant in a filter.
+    """
+
+    def __init__(self, value: pt.Any):
+        self.value = value
+
+    def __repr__(self):
+        return f"scalar({str(self.value)})"
+
+    def to_java(self):
+        return convert_scalar(self.value)
+
+
+class FilterExpr(Filter):
+    """
+    Represents a filter expression in a format compatible
+    by the Iceberg Java library.
+    """
+
+    op: str
+    args: pt.List[Filter]
+
+    def __init__(self, op: str, args: pt.List[Filter]):
+        self.op = op
+        self.args = args
+
+    def __repr__(self):
+        return f"{self.op}({', '.join(map(str, self.args))})"
+
+    @classmethod
+    def default(cls):
+        return cls("ALWAYS_TRUE", [])
+
+    def to_java(self):
+        filter_expr_class = get_filter_expr_class()
+        return filter_expr_class(
+            self.op, convert_list_to_java([arg.to_java() for arg in self.args])
+        )
 
 
 def convert_scalar(val):
@@ -131,11 +122,12 @@ def convert_scalar(val):
     elif isinstance(val, np.datetime64):
         return convert_dt64(val)
     elif isinstance(val, list):
+        array_const_class = get_array_const_class()
         # NOTE: Iceberg takes regular Java lists in this case, not Literal lists.
         # see predicate(Expression.Operation op, java.lang.String name,
         #               java.lang.Iterable<T> values)
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
-        return convert_list_to_java(val)
+        return array_const_class(convert_list_to_java(val))
     else:
         # If we don't support a scalar return None and
         # we will generate a NOOP

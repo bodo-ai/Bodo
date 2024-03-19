@@ -146,7 +146,7 @@ class DistributedPass:
 
     def __init__(
         self,
-        func_ir,
+        func_ir: ir.FunctionIR,
         typingctx,
         targetctx,
         typemap,
