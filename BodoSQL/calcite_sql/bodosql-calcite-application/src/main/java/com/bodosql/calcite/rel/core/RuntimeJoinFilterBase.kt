@@ -20,7 +20,7 @@ open class RuntimeJoinFilterBase(
     cluster: RelOptCluster,
     traits: RelTraitSet,
     input: RelNode,
-    val joinFilterKey: Int,
+    val joinFilterID: Int,
     val columns: List<Int>,
     val isFirstLocation: List<Boolean>,
 ) : SingleRel(cluster, traits, input) {
@@ -32,15 +32,16 @@ open class RuntimeJoinFilterBase(
         input: RelNode,
         newColumns: List<Int>,
     ): RuntimeJoinFilterBase {
-        return RuntimeJoinFilterBase(cluster, traitSet, input, joinFilterKey, newColumns, isFirstLocation)
+        return RuntimeJoinFilterBase(cluster, traitSet, input, joinFilterID, newColumns, isFirstLocation)
     }
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         // Only display the new columns to avoid confusion in the plans.
         val displayedColumns = columns.withIndex().filter { isFirstLocation[it.index] }.map { it.value }
         return pw.item("input", getInput())
-            .item("joinFilterKey", joinFilterKey)
+            .item("joinID", joinFilterID)
             .item("columns", displayedColumns)
+            .itemIf("allKeysReady", true, columns.all { it != -1 })
     }
 
     override fun computeSelfCost(

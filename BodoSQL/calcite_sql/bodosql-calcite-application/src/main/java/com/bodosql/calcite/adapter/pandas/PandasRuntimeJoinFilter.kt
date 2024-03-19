@@ -18,10 +18,10 @@ class PandasRuntimeJoinFilter private constructor(
     cluster: RelOptCluster,
     traits: RelTraitSet,
     input: RelNode,
-    joinFilterKey: Int,
+    joinFilterID: Int,
     columns: List<Int>,
     isFirstLocation: List<Boolean>,
-) : RuntimeJoinFilterBase(cluster, traits.replace(PandasRel.CONVENTION), input, joinFilterKey, columns, isFirstLocation), PandasRel {
+) : RuntimeJoinFilterBase(cluster, traits.replace(PandasRel.CONVENTION), input, joinFilterID, columns, isFirstLocation), PandasRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>,
@@ -37,7 +37,7 @@ class PandasRuntimeJoinFilter private constructor(
         input: RelNode,
         newColumns: List<Int>,
     ): PandasRuntimeJoinFilter {
-        return PandasRuntimeJoinFilter(cluster, traitSet, input, joinFilterKey, newColumns, isFirstLocation)
+        return PandasRuntimeJoinFilter(cluster, traitSet, input, joinFilterID, newColumns, isFirstLocation)
     }
 
     /**
@@ -66,7 +66,7 @@ class PandasRuntimeJoinFilter private constructor(
             {
                     ctx, _ ->
                 val joinStateCache = ctx.builder().getJoinStateCache()
-                val stateVar = joinStateCache.getStreamingJoinStateVariable(joinFilterKey)
+                val stateVar = joinStateCache.getStreamingJoinStateVariable(joinFilterID)
                 if (stateVar == null) {
                     // If we don't have the state stored assume we have disabled
                     // streaming entirely and this is a no-op.
@@ -116,13 +116,13 @@ class PandasRuntimeJoinFilter private constructor(
     companion object {
         fun create(
             input: RelNode,
-            joinFilterKey: Int,
+            joinFilterID: Int,
             columns: List<Int>,
             isFirstLocation: List<Boolean>,
         ): PandasRuntimeJoinFilter {
             val cluster = input.cluster
             val traitSet = cluster.traitSet()
-            return PandasRuntimeJoinFilter(cluster, traitSet, input, joinFilterKey, columns, isFirstLocation)
+            return PandasRuntimeJoinFilter(cluster, traitSet, input, joinFilterID, columns, isFirstLocation)
         }
     }
 }
