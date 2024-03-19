@@ -526,6 +526,18 @@ struct DataType {
         to_string_inner(out);
         return out;
     }
+    /**
+     * @brief Construct a bodo::DataType from a serialized DataType from Python.
+     * The serialized DataType consists of a vector of bodo_array_types and
+     * a vector of CTypes.
+     *
+     * @param arr_array_types First half of serialization, array types
+     * @param arr_c_types Second half of serialization, content types
+     * @return std::unique_ptr<DataType> Output DataType
+     */
+    static std::unique_ptr<DataType> Deserialize(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types);
 
     ///@brief Serialize a bodo::Schema to a Python <-> C++ communication format
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
