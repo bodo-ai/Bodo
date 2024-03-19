@@ -1,21 +1,15 @@
+#include "../libs/_bodo_common.h"
 #include "./test.hpp"
-#ifdef BUILD_WITH_V8
-#include "include/libplatform/libplatform.h"
+#include "../libs/_javascript_udf.h"
 #include "include/v8-context.h"
-#include "include/v8-initialization.h"
 #include "include/v8-isolate.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
 #include "include/v8-script.h"
-#endif
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_basic", [] {
-        #ifdef BUILD_WITH_V8
-        std::unique_ptr<v8::Platform> platform =
-            v8::platform::NewDefaultPlatform();
-        v8::V8::InitializePlatform(platform.get());
-        v8::V8::Initialize();
+        init_v8();
 
         // Create a new Isolate and make it the current one.
         v8::Isolate::CreateParams create_params;
@@ -46,6 +40,15 @@ static bodo::tests::suite tests([] {
                 bodo::tests::check(std::string(*utf8) == "Hello, World!");
             }
         }
-        #endif
+        isolate->Dispose();
+        delete create_params.array_buffer_allocator;
+    });
+    bodo::tests::test("test_basic_JavaScriptFunction", [] {
+        auto f = JavaScriptFunction::create(
+            "return 2", {},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT64));
+        auto out_arr = execute_javascript_udf(f.get(), {});
+        bodo::tests::check(out_arr->data1()[0] == 2);
     });
 });

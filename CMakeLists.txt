@@ -334,6 +334,12 @@ set(sources_list
   "bodo/libs/gason/gason.cpp"
 )
 
+if (DEFINED ENV{BUILD_WITH_V8})
+  set(sources_list "${sources_list}"
+    "bodo/libs/_javascript_udf.cpp"
+      )
+endif()
+
 # TODO: Replace with ctest when integrating Catch2
 if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
   set(sources_list "${sources_list}"
