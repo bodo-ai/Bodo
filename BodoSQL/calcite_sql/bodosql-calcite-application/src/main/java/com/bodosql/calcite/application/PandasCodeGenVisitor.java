@@ -2309,7 +2309,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Update the join state cache for runtime filters.
     generatedCode
         .getJoinStateCache()
-        .setStreamingJoinStateVariable(node.getJoinFilterKey(), joinStateVar);
+        .setStreamingJoinStateVariable(node.getJoinFilterID(), joinStateVar);
     return joinStateVar;
   }
 

@@ -11,18 +11,23 @@ class JoinStateCache {
     /**
      * Get the state variable for a given streaming join. This does not
      * work with non-streaming, so RuntimeJoinFilters are expected to be disabled.
-     * @param joinFilterKey The key mapping between join and its filter.
+     * @param joinFilterID The key mapping between join and its filter.
      * @return the state variable for the join or null if we are not streaming.
      */
-    fun getStreamingJoinStateVariable(joinFilterKey: Int): StateVariable {
-        return joinMap[joinFilterKey]
-            ?: throw IllegalStateException("Join state variable not found for key $joinFilterKey")
+    fun getStreamingJoinStateVariable(joinFilterID: Int): StateVariable {
+        return joinMap[joinFilterID]
+            ?: throw IllegalStateException("Join state variable not found for key $joinFilterID")
     }
 
+    /**
+     * Set the streaming join state for a join to a state variable.
+     * @param joinFilterID The key mapping between join and its filter.
+     * @param stateVariable The state variable for the join.
+     */
     fun setStreamingJoinStateVariable(
-        joinFilterKey: Int,
+        joinFilterID: Int,
         stateVariable: StateVariable,
     ) {
-        joinMap[joinFilterKey] = stateVariable
+        joinMap[joinFilterID] = stateVariable
     }
 }
