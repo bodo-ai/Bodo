@@ -1,7 +1,13 @@
 from bodo.tests.iceberg_database_helpers import (
+    file_subset_deleted_rows_table,
+    file_subset_empty_files_table,
+    file_subset_partial_file_table,
     filter_pushdown_test_table,
+    large_delete_table,
     part_sort_table,
+    partitions_dropped_dt_table,
     partitions_dt_table,
+    partitions_general_table,
     schema_evolution_eg_table,
 )
 from bodo.tests.iceberg_database_helpers.partition_schema_evolution_tables import (
@@ -35,12 +41,12 @@ table_mods = [
     schema_evolution_eg_table,
     # These are not used in any of the tests at this time.
     # These should be added back when they are.
-    #     file_subset_deleted_rows_table,
-    #     file_subset_empty_files_table,
-    #     file_subset_partial_file_table,
-    #     large_delete_table,
-    #     partitions_dropped_dt_table,
-    #     partitions_general_table,
+    file_subset_deleted_rows_table,
+    file_subset_empty_files_table,
+    file_subset_partial_file_table,
+    large_delete_table,
+    partitions_dropped_dt_table,
+    partitions_general_table,
 ]
 
 

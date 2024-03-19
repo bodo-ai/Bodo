@@ -12,8 +12,10 @@ Test a large delete the should use delete files instead of
 rewriting data
 """
 
+TABLE_NAME = "large_delete_table"
 
-def create_table(table_name="large_delete_table", spark=None):
+
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
