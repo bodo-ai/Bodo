@@ -7,8 +7,10 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
+TABLE_NAME = "file_subset_empty_files_table"
 
-def create_table(table_name="file_subset_empty_files_table", spark=None):
+
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
@@ -29,7 +31,7 @@ def create_table(table_name="file_subset_empty_files_table", spark=None):
     # Add more columns
     print("Adding columns...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD COLUMN E varchar(60000),
         C varchar(255),

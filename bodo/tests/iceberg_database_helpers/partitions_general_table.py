@@ -7,8 +7,10 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
+TABLE_NAME = "partitions_general_table"
 
-def create_table(table_name="partitions_general_table", spark=None):
+
+def create_table(table_name=TABLE_NAME, spark=None):
     if spark is None:
         spark = get_spark()
 
@@ -31,7 +33,7 @@ def create_table(table_name="partitions_general_table", spark=None):
     # Add partition field
     print("Adding partition field (year)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD A
     """
@@ -51,7 +53,7 @@ def create_table(table_name="partitions_general_table", spark=None):
     # Add partition field
     print("Adding partition field (B)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD B
     """
@@ -71,7 +73,7 @@ def create_table(table_name="partitions_general_table", spark=None):
     # Add partition field (day)
     print("Adding partition field (day)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         ADD PARTITION FIELD C
     """
@@ -91,7 +93,7 @@ def create_table(table_name="partitions_general_table", spark=None):
     # Remove partition field (month)
     print("Removing partition field (month)...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         DROP PARTITION FIELD B
     """
@@ -111,7 +113,7 @@ def create_table(table_name="partitions_general_table", spark=None):
     # Remove a partition column (B)
     print("Removing partition field B...")
     spark.sql(
-        f""" 
+        f"""
         ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table_name}
         DROP PARTITION FIELD A
     """

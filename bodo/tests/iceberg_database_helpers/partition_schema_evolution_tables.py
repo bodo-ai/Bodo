@@ -234,7 +234,10 @@ def create_column_rename_table(table: str, spark=None, postfix=""):
     df = df.copy()
     sql_schema = list(sql_schema)
     rename_col = part_cols[1][0].col_name
-    if base_name in create_partition_tables([base_name], spark, postfix):
+    if (
+        base_name in create_partition_tables([base_name], spark, postfix)
+        and "." not in rename_col
+    ):
         spark.sql(
             f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{base_name}{postfix} RENAME COLUMN {rename_col} TO {rename_col}_NEW"
         )
