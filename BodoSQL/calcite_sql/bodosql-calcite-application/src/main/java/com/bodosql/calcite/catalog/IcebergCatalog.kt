@@ -144,7 +144,7 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
             } else {
                 listOf()
             }
-        return ColumnDataTypeInfo(dataType, isNullable, precision, scale, defaultTimezone, children, fieldNames)
+        return ColumnDataTypeInfo(dataType, isNullable, precision, scale, children, fieldNames)
     }
 
     /**

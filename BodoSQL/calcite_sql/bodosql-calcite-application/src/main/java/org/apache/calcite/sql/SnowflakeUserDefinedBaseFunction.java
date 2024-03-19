@@ -8,7 +8,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
-import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.validate.SqlValidatorException;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -59,13 +58,12 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
      * @param isExternal           Is the function an external function?
      * @param language             What is the UDF's source language?
      * @param isMemoizable         Is the UDF memoizable?
-     * @param tzInfo               What is the Timezone for type generation.
      * @param createdOn            When was the UDF created?
      */
-    SnowflakeUserDefinedBaseFunction(String functionType, ImmutableList<String> functionPath, String args, int numOptional, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, BodoTZInfo tzInfo, java.sql.Timestamp createdOn) {
+    SnowflakeUserDefinedBaseFunction(String functionType, ImmutableList<String> functionPath, String args, int numOptional, @Nullable String body, boolean isSecure, boolean isExternal, String language, boolean isMemoizable, java.sql.Timestamp createdOn) {
         this.functionType = functionType;
         this.functionPath = functionPath;
-        this.parameters = parseParameters(args, numOptional, tzInfo);
+        this.parameters = parseParameters(args, numOptional);
         // Assume nullable for now
         this.body = body;
         // Normalize to upper case to simplify checks
@@ -133,7 +131,7 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
      * @param args The arguments that are of the form:
      *             (name1 arg1, name2, arg2, ... nameN argN)
      */
-    protected List<FunctionParameter> parseParameters(String args, int numOptional, BodoTZInfo tzInfo) {
+    protected List<FunctionParameter> parseParameters(String args, int numOptional) {
         List<FunctionParameter> parameters = new ArrayList<>();
         // Remove the starting ( and trailing )
         String trimmedArgs = args.substring(1, args.length() - 1).trim();
@@ -146,7 +144,7 @@ public abstract class SnowflakeUserDefinedBaseFunction implements Function {
                 String argName = typeParts[0];
                 String type = typeParts[1];
                 // Assume nullable for now
-                ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(type, true, tzInfo);
+                ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(type, true);
                 parameters.add(new SnowflakeUDFFunctionParameter(argName, i, typeInfo, i >= startOptionalIdx));
             }
         }

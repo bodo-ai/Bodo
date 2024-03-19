@@ -20,7 +20,6 @@ from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.imported_java_classes import (
     ArrayListClass,
-    BodoTZInfoClass,
     ColumnClass,
     ColumnDataEnum,
     ColumnDataTypeClass,
@@ -147,11 +146,7 @@ def construct_tz_aware_array_type(typ, nullable):
         return ColumnDataTypeClass(type_enum, nullable, precision)
     else:
         type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
-        # Create the BodoTzInfo Java object.
-        tz_info = BodoTZInfoClass(
-            str(typ.tz), "int" if isinstance(typ.tz, int) else "str"
-        )
-        return ColumnDataTypeClass(type_enum, nullable, precision, tz_info)
+        return ColumnDataTypeClass(type_enum, nullable, precision)
 
 
 def construct_time_array_type(

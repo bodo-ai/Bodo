@@ -436,7 +436,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       VERBOSE_LEVEL_THREE_LOGGER.info(
           String.format(Locale.ROOT, "Validating table: %s", dotSeparatedTableName));
       // Fetch the timezone info.
-      BodoTZInfo tzInfo = getSnowflakeTimezone(shouldRetry);
       // Table metadata needs to be derived from describe table because some types
       // aren't available via the JDBC connector. In particular Snowflake doesn't
       // communicate
@@ -458,7 +457,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // The column is nullable unless we are certain it has no nulls.
         boolean isNullable = snowflakeYesNoToBoolean(tableInfo.getString(4));
         // Parse the given type for the column type and precision information.
-        ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType, isNullable, tzInfo);
+        ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType, isNullable);
         columns.add(new BodoSQLColumnImpl(readName, writeName, typeInfo));
       }
       return new SnowflakeCatalogTable(
@@ -489,7 +488,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    *     data.
    */
   public static ColumnDataTypeInfo snowflakeTypeNameToTypeInfo(
-      String typeName, boolean isNullable, BodoTZInfo tzInfo) {
+      String typeName, boolean isNullable) {
     // Convert the type to all caps to simplify checking.
     typeName = typeName.toUpperCase(Locale.ROOT);
     final BodoSQLColumnDataType columnDataType;
@@ -587,7 +586,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
-      return new ColumnDataTypeInfo(columnDataType, isNullable, precision, tzInfo);
+      return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("TIME")) {
       columnDataType = BodoSQLColumnDataType.TIME;
       // Snowflake table types should contain precision, but UDFs may not.
@@ -948,7 +947,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               databaseName,
               schemaName);
       ResultSet results = executeSnowflakeQuery(query, 5);
-      BodoTZInfo tzInfo = getDefaultTimezone();
       while (results.next()) {
         // See the return values here:
         // https://docs.snowflake.com/en/sql-reference/sql/show-functions
@@ -989,7 +987,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   isExternal,
                   language,
                   isMemoizable,
-                  tzInfo,
                   createdOn);
         } else {
           function =
@@ -1003,7 +1000,6 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                   isExternal,
                   language,
                   isMemoizable,
-                  tzInfo,
                   createdOn);
         }
         functions.add(function);
