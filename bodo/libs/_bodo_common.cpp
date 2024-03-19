@@ -395,6 +395,14 @@ static std::unique_ptr<DataType> from_byte_helper(
     }
 }
 
+std::unique_ptr<DataType> DataType::Deserialize(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types) {
+    size_t i = 0;
+    return from_byte_helper(arr_array_types, arr_c_types, i);
+}
+
+
 Schema::Schema() : column_types() {}
 Schema::Schema(const Schema& other) {
     this->column_types.reserve(other.column_types.size());
