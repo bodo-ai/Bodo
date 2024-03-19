@@ -29,17 +29,10 @@ export IS_RELEASE=`git tag --points-at HEAD`
 # we will create a minor release ending in .0 and append rc#
 # i.e. 2021.9.0betarc1 or 2021.11.0rc2
 # For more information, please see our confluence doc: https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist
-IS_MAJOR_RELEASE=0
-if [[ -n "$IS_RELEASE" ]]; then
-    IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"CONNECTOR_VERSION\"].split(\".\")) < 3))"`
-fi
 label=""
-if [[ "$IS_MAJOR_RELEASE" == 1 ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
+if [[ -n "$IS_RELEASE" ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
     # If we have a major release upload with our main anaconda label
     label="main"
-elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
-    # If we have a minor release upload with our dev anaconda label
-    label="dev"
 fi
 
 cd buildscripts/iceberg/conda-recipe/
