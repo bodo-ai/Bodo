@@ -4,22 +4,23 @@ Contains information used to access the Java package via py4j.
 
 import os
 import sys
+import typing as pt
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, cast
+from typing import Any, List
 
 from mpi4py import MPI
 from py4j.java_collections import ListConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
-if TYPE_CHECKING:
+if pt.TYPE_CHECKING:
     from py4j.java_gateway import JavaClass
 
 
 # The gateway object used to communicate with the JVM.
-gateway: Optional[JavaGateway] = None
+gateway: pt.Optional[JavaGateway] = None
 
 # Java Classes used by the Python Portion
-CLASSES: Dict[str, "JavaClass"] = {}
+CLASSES: pt.Dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
@@ -90,7 +91,7 @@ def launch_jvm() -> JavaGateway:
         # We don't need to specify a classpath here, as the executable JAR has a baked in default
         # classpath, which will point to the folder that contains all the needed dependencies.
         java_path = get_java_path()
-        gateway_port = cast(
+        gateway_port = pt.cast(
             int,
             launch_gateway(
                 jarpath=full_path,
@@ -116,7 +117,7 @@ def launch_jvm() -> JavaGateway:
 
 
 def get_class_wrapper(
-    class_name: str, class_inst: Callable[[JavaGateway], "JavaClass"]
+    class_name: str, class_inst: pt.Callable[[JavaGateway], "JavaClass"]
 ):
     """
     Wrapper around getting the constructor for a specified Java class
@@ -155,10 +156,6 @@ def get_literal_converter_class():
 
 # TODO: Better way than this?
 # Built-in Classes
-get_linkedlist_class = get_class_wrapper(
-    "LinkedListClass",
-    lambda gateway: gateway.jvm.java.util.LinkedList,  # type: ignore
-)
 get_system_class = get_class_wrapper(
     "SystemClass",
     lambda gateway: gateway.jvm.System,  # type: ignore
@@ -183,17 +180,27 @@ get_bodo_iceberg_handler_class = get_class_wrapper(
     "BodoIcebergHandlerClass",
     lambda gateway: gateway.jvm.com.bodo.iceberg.BodoIcebergHandler,  # type: ignore
 )
-get_op_enum_class = get_class_wrapper(
-    "OpEnumClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.OpEnum,  # type: ignore
-)
 get_data_file_class = get_class_wrapper(
     "DataFileClass",
     lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,  # type: ignore
 )
 get_bodo_arrow_schema_utils_class = get_class_wrapper(
     "BodoArrowSchemaUtil",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,  # type: ignore
+)
+
+# Bodo Filter Pushdown Classes
+get_column_ref_class = get_class_wrapper(
+    "ColumnRefClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.ColumnRef,  # type: ignore
+)
+get_array_const_class = get_class_wrapper(
+    "ArrayConstClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.ArrayConst,  # type: ignore
+)
+get_filter_expr_class = get_class_wrapper(
+    "FilterExprClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.filters.FilterExpr,  # type: ignore
 )
 
 

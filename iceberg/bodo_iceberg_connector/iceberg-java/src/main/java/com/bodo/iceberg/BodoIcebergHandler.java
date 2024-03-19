@@ -1,8 +1,7 @@
 package com.bodo.iceberg;
 
-import static com.bodo.iceberg.FilterExpr.filtersToExpr;
-
 import com.bodo.iceberg.catalog.CatalogCreator;
+import com.bodo.iceberg.filters.FilterExpr;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.*;
@@ -78,8 +77,8 @@ public class BodoIcebergHandler {
   }
 
   /** Returns a list of parquet files that construct the given Iceberg table. */
-  public List<BodoParquetInfo> getParquetInfo(LinkedList<Object> filters) throws IOException {
-    Expression filter = filtersToExpr(filters);
+  public List<BodoParquetInfo> getParquetInfo(FilterExpr filters) throws IOException {
+    Expression filter = filters.toExpr();
     TableScan scan = catalog.loadTable(id).newScan().filter(filter);
     List<BodoParquetInfo> parquetPaths = new ArrayList<>();
 
@@ -214,7 +213,7 @@ public class BodoIcebergHandler {
    * Fetch the snapshot id for a table. Returns -1 for a newly created table without any snapshots
    */
   public long getSnapshotId() {
-    var snapshot = catalog.loadTable(id).currentSnapshot();
+    Snapshot snapshot = catalog.loadTable(id).currentSnapshot();
     // When the table has just been created
     if (snapshot == null) {
       return -1;

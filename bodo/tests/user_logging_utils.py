@@ -30,7 +30,7 @@ def set_logging_stream(logger, verbose_level):
                 raise err
             else:
                 raise AssertionError(
-                    f"Error while testing logging stream. See other rank"
+                    "Error while testing logging stream. See other rank."
                 )
 
 

@@ -619,9 +619,8 @@ def generate_arrow_filters(
     original_out_types,
     typemap,
     source: pt.Literal["parquet", "iceberg"],
-    output_dnf=True,
     output_expr_filters_as_f_string=False,
-) -> tuple[str, str]:
+) -> str:
     """
     Generate Arrow DNF filters and expression filters with the
     given filter_map and filter_vars.
@@ -635,60 +634,20 @@ def generate_arrow_filters(
     original_out_types -- original column types in the IR node, including dead columns.
     typemap -- Maps variables name -> types.
     source -- What is generating this filter. Either "parquet" or "iceberg".
-    output_dnf -- Should we output the first expression in DNF format or regular
-                  arrow compute expression format.
     output_expr_filters_as_f_string -- Whether to output the expression filter
         as an f-string, where the column names are templated. This is used in Iceberg
         for schema evolution purposes to allow substituting the column names
         used in the filter based on the file/schema-group. See description
         of bodo.io.iceberg.generate_expr_filter for more details.
     """
-    dnf_filter_str = "None"
     expr_filter_str = "None"
     # If no filters use variables (i.e. all isna, then we still need to take this path)
     if filters:
-        # Create two formats for parquet/arrow. One using the old DNF format
-        # which contains just the partition columns (partition pushdown)
-        # and one using the more verbose expression format and all expressions
-        # (predicate pushdown).
-        # https://arrow.apache.org/docs/python/dataset.html#filtering-data
-        #
-        # partition pushdown requires the expressions to just contain Hive partitions
-        # If any expressions are not hive partitions then the DNF filters should treat
-        # them as true
-        #
-        # For example if A, C are partition column names and B is not
-        #
-        # Then for partition expressions:
-        # ((A > 4) & (B < 2)) | ((A < 2) & (C == 1))
-        # => ((A > 4) & True) | ((A < 2) & (C == 1))
-        # => (A > 4) | ((A < 2) & (C == 1))
-        #
-        # Similarly if any OR expression consist of all True we do not have
-        # any partition filters.
-        #
-        # For example f A, C are partition column names and B is not
-        # (B < 2) | ((A < 2) & (C == 1))
-        # => True | ((A < 2) & (C == 1))
-        # => True
-        #
-        # So we set dnf_filter_str = "None"
-        #
-        # expr_filter_str always contains all of the filters, regardless of if
-        # the column is a partition column.
-        #
-        dnf_or_conds = []
         expr_or_conds = []
-        # If any filters aren't on a partition column or are unsupported
-        # in partitions, then this expression must effectively be replaced with TRUE.
-        # If any of the AND sections contain only TRUE expressions, then we must won't
-        # be able to filter anything based on partitioning. To represent this we will set
-        # skip_partitions = True, which will set  dnf_filter_str = "None".
-        skip_partitions = False
+
         # Create a mapping for faster column indexing
         orig_colname_map = {c: i for i, c in enumerate(col_names)}
         for predicate in filters:
-            dnf_and_conds = []
             expr_and_conds = []
             for p in predicate:
                 # First update expr since these include all expressions.
@@ -706,106 +665,23 @@ def generate_arrow_filters(
                     output_expr_filters_as_f_string,
                 )
                 expr_and_conds.append(expr_val)
-                # Now handle the dnf section. We can only append a value if its not a constant
-                # expression and is a partition column. If we already know skip_partitions = False,
-                # then we skip partitions as they will be unused.
 
-                if not skip_partitions:
-                    # operators supported in DNF expressions. is/is not is only supported by iceberg
-                    dnf_ops = {
-                        "==",
-                        "!=",
-                        "<",
-                        ">",
-                        "<=",
-                        ">=",
-                        "in",
-                        "is",
-                        "is not",
-                    }
-                    if (
-                        p[0] in partition_names
-                        and isinstance(p[2], ir.Var)
-                        and p[1] in dnf_ops
-                    ):
-                        if output_dnf:
-                            dnf_str = f"('{p[0]}', '{p[1]}', {filter_map[p[2].name]})"
-                        else:
-                            dnf_str = (
-                                expr_val
-                                if not output_expr_filters_as_f_string
-                                # If the expr_val is an f-string, add the
-                                # column names to it for the dnf_str.
-                                else expr_val.format(**{x: x for x in col_names})
-                            )
-                        dnf_and_conds.append(dnf_str)
-                    # handle isna/notna (e.g. [[('C', 'is', 'NULL')]]) cases only for
-                    # Iceberg, since supporting nulls in Parquet/Arrow/Hive partitioning is
-                    # complicated (e.g. Spark allows users to specify custom null directory)
-                    elif (
-                        p[0] in partition_names
-                        and not isinstance(p[2], ir.Var)
-                        and source == "iceberg"
-                        and p[1] in dnf_ops
-                    ):
-                        if output_dnf:
-                            dnf_str = f"('{p[0]}', '{p[1]}', '{p[2]}')"
-                        else:
-                            dnf_str = (
-                                expr_val
-                                if not output_expr_filters_as_f_string
-                                # If the expr_val is an f-string, add the
-                                # column names to it for the dnf_str.
-                                else expr_val.format(**{x: x for x in col_names})
-                            )
-                        dnf_and_conds.append(dnf_str)
-                    # If we don't append to the list, we are effectively
-                    # replacing this expression with TRUE as
-                    # (expr AND TRUE => expr)
-
-            dnf_and_str = ""
-            if dnf_and_conds:
-                if output_dnf:
-                    dnf_and_str = ", ".join(dnf_and_conds)
-                else:
-                    dnf_and_str = " & ".join(dnf_and_conds)
-            else:
-                # If dnf_and_conds is empty, this expression = TRUE
-                # Since (expr OR TRUE => TRUE), we should omit all partitions.
-                skip_partitions = True
             expr_and_str = " & ".join(expr_and_conds)
             # If all the filters are truncated we may have an empty string.
-            if dnf_and_str:
-                if output_dnf:
-                    dnf_or_conds.append(f"[{dnf_and_str}]")
-                else:
-                    dnf_or_conds.append(f"({dnf_and_str})")
             expr_or_conds.append(f"({expr_and_str})")
 
-        if output_dnf:
-            dnf_or_str = ", ".join(dnf_or_conds)
-        else:
-            dnf_or_str = " | ".join(dnf_or_conds)
         expr_or_str = " | ".join(expr_or_conds)
-        if dnf_or_str and not skip_partitions:
-            # If the expression exists use and we don't need
-            # to skip partitions we need  update dnf_filter_str
-            if output_dnf:
-                dnf_filter_str = f"[{dnf_or_str}]"
-            else:
-                dnf_filter_str = f"({dnf_or_str})"
         expr_filter_str = f"({expr_or_str})"
 
     if bodo.user_logging.get_verbose_level() >= 1:
-        msg = "Arrow filters pushed down:\n%s\n%s\n"
+        msg = "Arrow filters pushed down:\n%s\n"
         bodo.user_logging.log_message(
             "Filter Pushdown",
             msg,
-            dnf_filter_str,
             expr_filter_str,
         )
 
-    return dnf_filter_str, expr_filter_str
+    return expr_filter_str
 
 
 def _get_filter_column_type(
