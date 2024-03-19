@@ -9,7 +9,7 @@ import re
 import sys
 import warnings
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, TypeGuard
 
 import numba
 import numpy as np
@@ -510,7 +510,9 @@ def get_slice_step(typemap, func_ir, var):
     return call_expr.args[2]
 
 
-def is_array_typ(var_typ, include_index_series=True):
+def is_array_typ(
+    var_typ, include_index_series=True
+) -> TypeGuard[types.ArrayCompatible]:
     """return True if var_typ is an array type.
     include_index_series=True also includes Index and Series types (as "array-like").
     """

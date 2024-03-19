@@ -329,7 +329,7 @@ def generate_expr_filter(
     return expr_filter
 
 
-def sanitize_col_name(col_name: str) -> str:
+def sanitize_col_name(col_name: str) -> str:  # pragma: no cover
     """
     Sanitize a column name to remove
     any spaces, quotes, etc.
@@ -345,7 +345,7 @@ def sanitize_col_name(col_name: str) -> str:
     Returns:
         str: Sanitized string
     """
-    return re.sub("\W|^(?=\d)", "_", col_name)
+    return re.sub(r"\W|^(?=\d)", "_", col_name)
 
 
 class IcebergSchemaGroup:
@@ -373,8 +373,8 @@ class IcebergSchemaGroup:
 
     def __init__(
         self,
-        iceberg_field_ids: tuple[int],
-        parquet_field_names: tuple[str],
+        iceberg_field_ids: tuple[int, ...],
+        parquet_field_names: tuple[str, ...],
         final_schema: pa.Schema,
         expr_filter_f_str: pt.Optional[str] = None,
         filter_scalars: pt.Optional[list[tuple[str, pt.Any]]] = None,
@@ -401,8 +401,8 @@ class IcebergSchemaGroup:
                 'generate_expr_filter'for more details. Defaults to None.
         """
         assert len(iceberg_field_ids) == len(parquet_field_names)
-        self.iceberg_field_ids: tuple[int] = iceberg_field_ids
-        self.parquet_field_names: tuple[str] = parquet_field_names
+        self.iceberg_field_ids: tuple[int, ...] = iceberg_field_ids
+        self.parquet_field_names: tuple[str, ...] = parquet_field_names
         self.final_schema: pa.Schema = final_schema
         self.read_schema: pa.Schema = self.gen_read_schema(
             self.iceberg_field_ids, self.parquet_field_names, self.final_schema
@@ -419,7 +419,7 @@ class IcebergSchemaGroup:
             )
 
     @property
-    def group_identifier(self) -> tuple[tuple[int], tuple[str]]:
+    def group_identifier(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """
         The tuple that uniquely identifies a Schema Group.
 
@@ -639,8 +639,8 @@ class IcebergSchemaGroup:
 
     @staticmethod
     def gen_read_schema(
-        iceberg_field_ids: tuple[int | tuple],
-        parquet_field_names: tuple[str | tuple],
+        iceberg_field_ids: tuple[int | tuple, ...],
+        parquet_field_names: tuple[str | tuple, ...],
         final_schema: pa.Schema,
     ) -> pa.Schema:
         """
@@ -1269,7 +1269,7 @@ def get_schema_group_identifier_from_pa_field(
 
 def get_schema_group_identifier_from_pa_schema(
     schema: pa.Schema,
-) -> tuple[tuple[int | tuple], tuple[str | tuple]]:
+) -> tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]]:
     """
     Generate the schema group identifier from
     the schema of a parquet file. The schema group
@@ -1297,7 +1297,7 @@ def get_schema_group_identifier_from_pa_schema(
 
 def group_files_by_schema_group_identifier(
     fpaths: list[str], fs: "PyFileSystem" | pa.fs.FileSystem
-) -> dict[tuple[tuple[int | tuple], tuple[str | tuple]], list[str]]:
+) -> dict[tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]], list[str]]:
     """
     Group a list of files by their Schema Group identifier,
     i.e. based on the Iceberg Field IDs and corresponding
@@ -1352,7 +1352,9 @@ def group_files_by_schema_group_identifier(
     # Sort/Groupby the field-ids and field-names tuples.
     keyfunc = lambda item: (item[1], item[2])
 
-    schema_group_id_to_fpaths: dict[tuple[tuple[int], tuple[str]], list[str]] = {
+    schema_group_id_to_fpaths: dict[
+        tuple[tuple[int, ...], tuple[str, ...]], list[str]
+    ] = {
         k: [x[0] for x in list(v)]
         for k, v in itertools.groupby(
             sorted(fpaths_schema_group_ids, key=keyfunc), keyfunc
@@ -1368,8 +1370,8 @@ def get_row_counts_for_schema_group(
     fs: "PyFileSystem" | pa.fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    expr_filter_f_str: str = None,
-    filter_scalars: list[tuple[str, pt.Any]] = None,
+    expr_filter_f_str: str | None = None,
+    filter_scalars: list[tuple[str, pt.Any]] | None = None,
 ) -> tuple[list[int], int, int, float, float]:
     """
     Get the row counts for files belonging to the same
@@ -1584,8 +1586,8 @@ def get_iceberg_pq_dataset(
     typing_pa_table_schema: pa.Schema,
     str_as_dict_cols: list[str],
     dnf_filters=None,
-    expr_filter_f_str: str = None,
-    filter_scalars: list[tuple[str, pt.Any]] = None,
+    expr_filter_f_str: str | None = None,
+    filter_scalars: list[tuple[str, pt.Any]] | None = None,
 ) -> IcebergParquetDataset:
     """
     Get IcebergParquetDataset object for the specified table.
@@ -1663,7 +1665,7 @@ def get_iceberg_pq_dataset(
         pq_abs_path_file_list, protocol, parse_result
     )
 
-    if len(expr_filter_f_str) == 0:
+    if expr_filter_f_str is not None and len(expr_filter_f_str) == 0:
         expr_filter_f_str = None
     if filter_scalars is None:
         filter_scalars = []

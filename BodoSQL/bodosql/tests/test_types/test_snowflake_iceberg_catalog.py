@@ -149,7 +149,7 @@ def test_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Arrow filters pushed down:\n[[('B', '>', f0), ('A', 'is not', 'NULL')]]",
+            "Iceberg Filter Pushed Down:\nFilterExpr('AND', [FilterExpr('>', [ColumnRef('B'), Scalar(f0)]), FilterExpr('IS_NOT_NULL', [ColumnRef('A')])])",
         )
 
 
@@ -196,7 +196,7 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Arrow filters pushed down:\n[[('B', '>', f0), ('A', 'is not', 'NULL')]]",
+            "Iceberg Filter Pushed Down:\nFilterExpr('AND', [FilterExpr('>', [ColumnRef('B'), Scalar(f0)]), FilterExpr('IS_NOT_NULL', [ColumnRef('A')])])",
         )
 
 
@@ -364,7 +364,10 @@ def test_limit_filter_pushdown(memory_leak_check):
             is_out_distributed=False,
         )
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
-        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+        check_logger_msg(
+            stream,
+            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('B'), Scalar(f0)])",
+        )
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})
@@ -501,7 +504,10 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
         )
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         # Verify no limit pushdown as its after the limit
-        check_logger_msg(stream, "Arrow filters pushed down:\n[[('B', '>', f0)]]")
+        check_logger_msg(
+            stream,
+            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('B'), Scalar(f0)])",
+        )
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})
@@ -547,4 +553,7 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
                 reset_index=True,
             )
             # Verify filter pushdown
-            check_logger_msg(stream, "Arrow filters pushed down:\n[[('A', '<=', f0)]]")
+            check_logger_msg(
+                stream,
+                "Iceberg Filter Pushed Down:\nFilterExpr('<=', [ColumnRef('A'), Scalar(f0)])",
+            )

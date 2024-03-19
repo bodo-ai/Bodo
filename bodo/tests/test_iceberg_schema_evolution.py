@@ -923,7 +923,6 @@ def test_filter_pushdown_filter_on_pruned_column(
         bodo.jit(bodo_impl)(table_name, conn, db_schema)
         check_logger_msg(stream, "Columns loaded ['A', 'B', 'TY', 'G']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
-        check_logger_msg(stream, "[[('C', 'in', f0)]]")
         check_logger_msg(
             stream, "(((ds.field('{C}').isin(f0)) & ~((ds.field('{TY}').is_null()))))"
         )

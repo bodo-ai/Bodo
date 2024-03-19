@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import typing as pt
+from dataclasses import dataclass
 
 import llvmlite.binding as ll
 import numba
@@ -8,6 +10,7 @@ import numpy as np
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
+from numba.core.extending import overload
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     next_label,
@@ -41,11 +44,13 @@ from bodo.transforms.table_column_del_pass import (
 )
 from bodo.utils.typing import (
     BodoError,
+    get_overload_const_str,
     is_nullable_ignore_sentinals,
 )
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     inlined_check_and_propagate_cpp_exception,
+    is_array_typ,
 )
 
 if pt.TYPE_CHECKING:  # pragma: no cover
@@ -748,6 +753,134 @@ def iceberg_distributed_run(
     return nodes
 
 
+def get_filters_pyobject(filter_str, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(filters_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    import bodo_iceberg_connector as bic
+
+    filter_str_val = get_overload_const_str(filters_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(filters_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += (
+        "  with objmode(filters_py='parquet_predicate_type'):\n"
+        f"    filters_py = {filter_str_val}\n"
+        "  return filters_py\n"
+    )
+
+    loc_vars = {}
+    glbs = globals()
+    glbs["objmode"] = numba.objmode
+    glbs["FilterExpr"] = bic.FilterExpr
+    glbs["Scalar"] = bic.Scalar
+    glbs["ColumnRef"] = bic.ColumnRef
+    exec(func_text, glbs, loc_vars)
+    return loc_vars["impl"]
+
+
+def filter_term_to_iceberg_expr(term: Filter, filter_map) -> str:
+    """
+    Convert a compiler Filter term to a string representation
+    of the bodo_iceberg_connector's FilterExpr class.
+    See filters_to_iceberg_expr for more details.
+
+    Args:
+        term: A Filter object representing a single filter term.
+            A term is a tuple of the form (col_name, op, value).
+            It can be a comparison or boolean operation, or a
+            column conversion.
+        filter_map: A dictionary mapping variable names to the
+            corresponding filter scalar variables.
+
+    Returns:
+        A string representation of the FilterExpr object.
+    """
+
+    if term[1] == "not":
+        assert isinstance(term[0], tuple)
+        inner_term = pt.cast(Filter, term[0])
+        gen_inner = filter_term_to_iceberg_expr(inner_term, filter_map)
+        return f"FilterExpr('NOT', [{gen_inner}])"
+
+    assert isinstance(term[0], str)
+    col_name = term[0]
+
+    if term[1] == "is":
+        assert term[2] == "NULL"
+        return f"FilterExpr('IS_NULL', [ColumnRef('{col_name}')])"
+    elif term[1] == "is not":
+        assert term[2] == "NULL"
+        return f"FilterExpr('IS_NOT_NULL', [ColumnRef('{col_name}')])"
+    else:
+        assert isinstance(term[2], ir.Var)
+        match term[1]:
+            case "startswith":
+                op_str = "STARTS_WITH"
+            case "in":
+                op_str = "IN"
+            case x:
+                op_str = x.upper()
+
+        return f"FilterExpr('{op_str}', [ColumnRef('{col_name}'), Scalar({filter_map[term[2].name]})])"
+
+
+def filters_to_iceberg_expr(
+    filters: pt.Optional[list[list[Filter]]], filter_map
+) -> str:
+    """
+    Convert a compiler Filter object to a string representation
+    of the bodo_iceberg_connector's FilterExpr class.
+    The FilterExpr class is used to represent an Iceberg filter expression
+    as a tree of FilterExpr objects. It can be easily converted to a
+    Java format for Iceberg.
+
+    Args:
+        filters: A list of lists of Filter objects. Each inner list
+            represents a disjunction of conjunctions of Filter objects.
+        filter_map: A dictionary mapping variable names to the
+            corresponding filter scalar variables.
+
+    Returns:
+        A string representation of the FilterExpr object.
+    """
+
+    if filters is None or len(filters) == 0:
+        return "FilterExpr.default()"
+
+    or_preds = []
+    for pred in filters:
+        and_preds = []
+        for term in pred:
+            and_preds.append(filter_term_to_iceberg_expr(term, filter_map))
+
+        if len(and_preds) == 1:
+            or_preds.append(and_preds[0])
+        else:
+            or_preds.append(
+                "FilterExpr('AND', [{}])".format(", ".join(x for x in and_preds))
+            )
+
+    if len(or_preds) == 1:
+        dict_expr = or_preds[0]
+    else:
+        dict_expr = "FilterExpr('OR', [{}])".format(", ".join(x for x in or_preds))
+
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Iceberg Filter Pushed Down:\n%s\n"
+        bodo.user_logging.log_message(
+            "Filter Pushdown",
+            msg,
+            dict_expr,
+        )
+
+    return dict_expr
+
+
 def _gen_iceberg_reader_chunked_py(
     col_names: list[str],
     col_typs: list[pt.Any],
@@ -792,20 +925,16 @@ def _gen_iceberg_reader_chunked_py(
     # Handle filter information because we may need to update the function header
     filter_args = ""
     filter_map = {}
-    filter_vars = []
     if filters:
-        filter_map, filter_vars = bodo.ir.connector.generate_filter_map(filters)
+        filter_map, _ = bodo.ir.connector.generate_filter_map(filters)
         filter_args = ", ".join(filter_map.values())
 
-    # Generate the partition filters and predicate filters. Note we pass
+    # Generate the predicate filters. Note we pass
     # all col names as possible partitions via partition names.
     # The expression filters are returned as f-strings so that we can
     # pass them to the runtime to generate the filters dynamically
     # for the various schemas (to account for schema evolution).
-    (
-        dnf_filter_str,
-        iceberg_expr_filter_f_str,
-    ) = bodo.ir.connector.generate_arrow_filters(
+    iceberg_expr_filter_f_str = bodo.ir.connector.generate_arrow_filters(
         filters,
         filter_map,
         orig_col_names,
@@ -815,6 +944,7 @@ def _gen_iceberg_reader_chunked_py(
         "iceberg",
         output_expr_filters_as_f_string=True,
     )
+    filter_str = filters_to_iceberg_expr(filters, filter_map)
 
     # Determine selected C++ columns (and thus nullable) from original Iceberg
     # table / schema, assuming that Iceberg and Parquet field ordering is the same
@@ -841,13 +971,11 @@ def _gen_iceberg_reader_chunked_py(
         else "0, 0"
     )
 
-    # Create a dummy one for the get_filters_pyobject call.
-    expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in orig_col_names})
     comma = "," if filter_args else ""
     func_text = (
         f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
-        f'  dnf_filters, _ = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+        f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
         # Iceberg C++ Parquet Reader
         f"  iceberg_reader = iceberg_pq_reader_init_py_entry(\n"
@@ -856,7 +984,7 @@ def _gen_iceberg_reader_chunked_py(
         f"    unicode_to_utf8(sql_request),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
-        f"    dnf_filters,\n"
+        f"    iceberg_filters,\n"
         f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
         f"    filter_scalars_pyobject,\n"
         f"    selected_cols_arr_{call_id}.ctypes,\n"
@@ -876,7 +1004,7 @@ def _gen_iceberg_reader_chunked_py(
             "objmode": numba.objmode,
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
-            "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
+            "get_filters_pyobject": get_filters_pyobject,
             "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "out_type": ArrowReaderType(col_names, col_typs),
@@ -992,15 +1120,12 @@ def _gen_iceberg_reader_py(
         pyarrow_schema is not None
     ), "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
 
-    # Generate the partition filters and predicate filters. Note we pass
+    # Generate the predicate filters. Note we pass
     # all col names as possible partitions via partition names.
     # The expression filters are returned as f-strings so that we can
     # pass them to the runtime to generate the filters dynamically
     # for the various schemas (to account for schema evolution).
-    (
-        dnf_filter_str,
-        iceberg_expr_filter_f_str,
-    ) = bodo.ir.connector.generate_arrow_filters(
+    iceberg_expr_filter_f_str = bodo.ir.connector.generate_arrow_filters(
         filters,
         filter_map,
         col_names,
@@ -1010,6 +1135,7 @@ def _gen_iceberg_reader_py(
         "iceberg",
         output_expr_filters_as_f_string=True,
     )
+    filter_str: str = filters_to_iceberg_expr(filters, filter_map)
 
     merge_into_row_id_col_idx = -1
     if is_merge_into and col_names.index("_BODO_ROW_ID") in out_used_cols:
@@ -1041,11 +1167,10 @@ def _gen_iceberg_reader_py(
     )
 
     # Generate a temporary one for codegen:
-    expr_filter_str = iceberg_expr_filter_f_str.format(**{x: x for x in col_names})
     comma = "," if filter_args else ""
     func_text += (
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
-        f'  dnf_filters, _ = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+        f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
         # Iceberg C++ Parquet Reader
         f"  out_table, total_rows, file_list, snapshot_id = iceberg_pq_read_py_entry(\n"
@@ -1054,7 +1179,7 @@ def _gen_iceberg_reader_py(
         f"    unicode_to_utf8(sql_request),\n"
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
-        f"    dnf_filters,\n"
+        f"    iceberg_filters,\n"
         f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
         f"    filter_scalars_pyobject,\n"
         #     TODO Confirm that we're computing selected_cols correctly
@@ -1136,6 +1261,7 @@ def _gen_iceberg_reader_py(
     glbls.update(
         {
             "bodo": bodo,
+            "objmode": numba.objmode,
             f"py_table_type_{call_id}": py_table_type,
             "index_col_typ": index_column_type,
             f"table_idx_{call_id}": table_idx,
@@ -1150,7 +1276,7 @@ def _gen_iceberg_reader_py(
             f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),  # type: ignore
             f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),  # type: ignore
             f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
-            "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
+            "get_filters_pyobject": get_filters_pyobject,
             f"iceberg_expr_filter_f_str_{call_id}": iceberg_expr_filter_f_str,
             "get_filter_scalars_pyobject": bodo.io.parquet_pio.get_filter_scalars_pyobject,
             "iceberg_pq_read_py_entry": iceberg_pq_read_py_entry,

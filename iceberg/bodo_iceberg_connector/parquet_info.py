@@ -4,14 +4,14 @@ Python Objects usable inside Bodo.
 """
 import os
 from collections import namedtuple
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
-from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
+from bodo_iceberg_connector.filter_to_java import FilterExpr
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
 
 # Named Tuple for Parquet info
@@ -19,7 +19,7 @@ BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start le
 
 
 def bodo_connector_get_parquet_file_list(
-    conn_str: str, db_name: str, table: str, filters
+    conn_str: str, db_name: str, table: str, filters: Optional[FilterExpr]
 ) -> Tuple[List[str], List[str]]:
     """
     Gets the list of files for use by Bodo. The port value here
@@ -61,7 +61,9 @@ def bodo_connector_get_parquet_file_list(
     return sanitized_paths, file_paths
 
 
-def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
+def bodo_connector_get_parquet_info(
+    warehouse, schema, table, filters: Optional[FilterExpr]
+):
     """
     Gets the BodoIcebergParquetInfo for use by Bodo. The port value here
     is set and controlled by a default value for the bodo_iceberg_connector
@@ -71,7 +73,9 @@ def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
     return out
 
 
-def get_bodo_parquet_info(conn_str: str, db_name: str, table: str, filters):
+def get_bodo_parquet_info(
+    conn_str: str, db_name: str, table: str, filters: Optional[FilterExpr]
+):
     """
     Returns the BodoIcebergParquetInfo for a table.
     Port is unused and kept in case we opt to switch back to py4j
@@ -87,7 +91,8 @@ def get_bodo_parquet_info(conn_str: str, db_name: str, table: str, filters):
             table,
         )
 
-        filter_expr = convert_expr_to_java_parsable(filters)
+        filters = FilterExpr.default() if filters is None else filters
+        filter_expr = filters.to_java()
         java_parquet_infos = get_java_parquet_info(
             bodo_iceberg_table_reader, filter_expr
         )
