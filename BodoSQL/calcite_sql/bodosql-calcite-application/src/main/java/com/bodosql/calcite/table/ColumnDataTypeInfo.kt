@@ -4,7 +4,6 @@ import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
-import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.sql.type.VariantSqlType
 
@@ -16,7 +15,6 @@ data class ColumnDataTypeInfo(
     val isNullable: Boolean,
     val precision: Int,
     val scale: Int,
-    val tzInfo: BodoTZInfo?,
     val children: List<ColumnDataTypeInfo>,
     val fieldNames: List<String>,
 ) {
@@ -24,22 +22,14 @@ data class ColumnDataTypeInfo(
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(), listOf())
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, listOf(), listOf())
 
     // Constructor for String/Binary data types
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
         precision: Int,
-    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(), listOf())
-
-    // Constructor for timestamp
-    constructor(
-        dataType: BodoSQLColumnDataType,
-        isNullable: Boolean,
-        precision: Int,
-        tzInfo: BodoTZInfo?,
-    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, tzInfo, listOf(), listOf())
+    ) : this(dataType, isNullable, precision, RelDataType.SCALE_NOT_SPECIFIED, listOf(), listOf())
 
     // Constructor for decimal
     constructor(
@@ -47,14 +37,14 @@ data class ColumnDataTypeInfo(
         isNullable: Boolean,
         precision: Int,
         scale: Int,
-    ) : this(dataType, isNullable, precision, scale, null, listOf(), listOf())
+    ) : this(dataType, isNullable, precision, scale, listOf(), listOf())
 
     // Constructor for Array and Categorical
     constructor(
         dataType: BodoSQLColumnDataType,
         isNullable: Boolean,
         child: ColumnDataTypeInfo,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, listOf(child), listOf())
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, listOf(child), listOf())
 
     // Constructor for Struct
     constructor(
@@ -62,7 +52,7 @@ data class ColumnDataTypeInfo(
         isNullable: Boolean,
         fields: List<ColumnDataTypeInfo>,
         fieldNames: List<String>,
-    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, null, fields, fieldNames)
+    ) : this(dataType, isNullable, RelDataType.PRECISION_NOT_SPECIFIED, RelDataType.SCALE_NOT_SPECIFIED, fields, fieldNames)
 
     // Constructor for Map
     constructor(
@@ -75,7 +65,6 @@ data class ColumnDataTypeInfo(
         isNullable,
         RelDataType.PRECISION_NOT_SPECIFIED,
         RelDataType.SCALE_NOT_SPECIFIED,
-        null,
         listOf(keyType, valueType),
         listOf(),
     )
@@ -107,7 +96,7 @@ data class ColumnDataTypeInfo(
         }
         // Recurse on the children if they exist.
         val mappedChildren = children.map { c -> c.convertToSqlType(typeFactory) }
-        return dataType.convertToSqlType(typeFactory, isNullable, tzInfo, precision, scale, mappedChildren, fieldNames)
+        return dataType.convertToSqlType(typeFactory, isNullable, precision, scale, mappedChildren, fieldNames)
     }
 
     companion object {

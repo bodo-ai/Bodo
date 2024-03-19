@@ -10,7 +10,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.StructKind;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,7 +149,6 @@ public interface BodoSQLColumn {
     public RelDataType convertToSqlType(
         RelDataTypeFactory typeFactory,
         boolean nullable,
-        BodoTZInfo tzInfo,
         int precision,
         int scale,
         List<RelDataType> children,
