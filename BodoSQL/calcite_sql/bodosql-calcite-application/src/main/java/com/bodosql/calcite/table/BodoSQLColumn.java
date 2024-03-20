@@ -74,9 +74,11 @@ public interface BodoSQLColumn {
     JSON_OBJECT(24, "JSON_OBJECT"),
     STRUCT(25, "STRUCT"),
     VARIANT(26, "VARIANT"),
-    UNSUPPORTED(27, "UNSUPPORTED"), // Unknown type we may be able to prune
+    FIXED_SIZE_STRING(27, "FIXED_SIZE_STRING"),
+    FIXED_SIZE_BINARY(28, "FIXED_SIZE_BINARY"),
+    UNSUPPORTED(29, "UNSUPPORTED"), // Unknown type we may be able to prune
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(28, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(30, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -229,8 +231,14 @@ public interface BodoSQLColumn {
         case STRING:
           temp = typeFactory.createSqlType(SqlTypeName.VARCHAR, precision);
           break;
+        case FIXED_SIZE_STRING:
+          temp = typeFactory.createSqlType(SqlTypeName.CHAR, precision);
+          break;
         case BINARY:
           temp = typeFactory.createSqlType(SqlTypeName.VARBINARY, precision);
+          break;
+        case FIXED_SIZE_BINARY:
+          temp = typeFactory.createSqlType(SqlTypeName.BINARY, precision);
           break;
         default:
           // If a type is not supported default to unknown
@@ -277,6 +285,16 @@ public interface BodoSQLColumn {
           return "boolean";
         case STRING:
           return "str";
+        case FIXED_SIZE_STRING:
+          return "FIXED_STRING(n)";
+        case BINARY:
+          return "Binary";
+        case FIXED_SIZE_BINARY:
+          return "FIXED_BINARY(n)";
+        case DATE:
+          return "Date";
+        case TIME:
+          return "Time";
         case DATETIME:
           return "datetime64[ns]";
         case TIMEDELTA:
