@@ -36,10 +36,7 @@ or second pass.
   change are indicated with their new name being computed.
   * In the second pass the changes to the program are made.
 
-The reading of the data is done by the AST module. But the writing is more
-problematic. There are 3 modules available: codegen, astunparse and astor.
-codegen is old and out. astunparse could not be made to work and astor
-happens to work as required.
+The reading reading and writing of the data is done by the AST module.
 
 A major limitation of the code is that the notion of scope is not considered.
 This means that if a variable is renamed in one scope, it is renamed to the same
@@ -68,8 +65,6 @@ For each type of the AST, we need to have a corresponding entry in the function.
 import ast
 import random
 import sys
-
-import astor
 
 reserved_keywords = {
     "async",
@@ -308,6 +303,9 @@ class Obfuscator(ast.NodeTransformer):
                 return newname
 
     def mapping_var(self, insert_as_replaceable, name):
+        if name == None:
+            return None
+
         if self.processing_pass == 0:
             if insert_as_replaceable and not name in reserved_keywords:
                 if not name in self.replace_vars:
@@ -377,8 +375,16 @@ class Obfuscator(ast.NodeTransformer):
         return node
 
     def visit_ExceptHandler(self, node):
-        # Miss the node.type = self.visit(node.type). Is it needed
-        node.name = self.mapping_var(True, node.name)
+        # node.type is not a variable, it is the type of exception, IE: ValueError
+        # Therefore, we should not obfuscate it...
+        # unless possibly it's of an exception class that we've created, which has been obfuscated?
+        # can this occur?
+
+        newName = self.mapping_var(True, node.name)
+        if (node.name != None and newName == None) or (node.name == None and newName != None):
+            raise Exception("Error in obfuscation: self.mapping_var should not map None to a variable name, or visa versa")
+
+        node.name = newName
         node.body = [self.visit(x) for x in node.body]
         return node
 
@@ -531,10 +537,10 @@ def process_file(efile, stdoutput):
             "After preprocessing, the Abstract Syntax Tree : " + ast.dump(root) + "\n"
         )
         sys.stderr.write("------------------------------------------------\n")
-        sys.stdout.write(astor.to_source(root))
+        sys.stdout.write(ast.unparse(root))
     else:
         f = open(efile, "w")
-        f.write(astor.to_source(root))
+        f.write(ast.unparse(root))
 
 
 def process_input(argv):
