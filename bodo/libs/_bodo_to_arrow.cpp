@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <memory>
 
 #include <arrow/array.h>
 #include <arrow/builder.h>
@@ -1311,6 +1312,98 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             throw std::runtime_error("arrow_array_to_bodo(): Array type " +
                                      arrow_arr->type()->ToString() +
                                      " not supported");
+    }
+}
+
+std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
+    const std::shared_ptr<arrow::DataType> arrow_type) {
+    switch (arrow_type->id()) {
+        // String array
+        case arrow::Type::LARGE_STRING:
+        case arrow::Type::STRING: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::STRING);
+        }
+        // Binary array
+        case arrow::Type::LARGE_BINARY:
+        case arrow::Type::BINARY: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::BINARY);
+        }
+        // array(item) array
+        case arrow::Type::LARGE_LIST:
+        case arrow::Type::LIST: {
+            assert(arrow_type->num_fields() == 1);
+            std::unique_ptr<bodo::DataType> inner =
+                arrow_type_to_bodo_data_type(arrow_type->field(0)->type());
+            return std::make_unique<bodo::ArrayType>(std::move(inner));
+        }
+        // map array
+        case arrow::Type::MAP: {
+            std::shared_ptr<arrow::MapType> map_type =
+                std::static_pointer_cast<arrow::MapType>(arrow_type);
+            std::unique_ptr<bodo::DataType> key_type =
+                arrow_type_to_bodo_data_type(map_type->key_type());
+            std::unique_ptr<bodo::DataType> value_type =
+                arrow_type_to_bodo_data_type(map_type->item_type());
+            return std::make_unique<bodo::MapType>(std::move(key_type),
+                                                   std::move(value_type));
+        }
+        // struct array
+        case arrow::Type::STRUCT: {
+            std::vector<std::unique_ptr<bodo::DataType>> field_types;
+            for (int i = 0; i < arrow_type->num_fields(); i++) {
+                field_types.push_back(
+                    arrow_type_to_bodo_data_type(arrow_type->field(i)->type()));
+            }
+            return std::make_unique<bodo::StructType>(std::move(field_types));
+        }
+        // all fixed-size nullable types
+        case arrow::Type::DECIMAL128:
+        case arrow::Type::DOUBLE:
+        case arrow::Type::FLOAT:
+        case arrow::Type::BOOL:
+        case arrow::Type::UINT64:
+        case arrow::Type::INT64:
+        case arrow::Type::UINT32:
+        case arrow::Type::DATE32:
+        case arrow::Type::TIMESTAMP:
+        case arrow::Type::INT32:
+        case arrow::Type::UINT16:
+        case arrow::Type::INT16:
+        case arrow::Type::UINT8:
+        case arrow::Type::INT8:
+        case arrow::Type::TIME64: {
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()));
+        }
+        // dictionary-encoded array
+        case arrow::Type::DICTIONARY: {
+            return std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                    Bodo_CTypes::STRING);
+        }
+        // null array
+        case arrow::Type::NA: {
+            // null array is currently stored as string array in C++
+            return std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                    Bodo_CTypes::STRING);
+        }
+        case arrow::Type::EXTENSION: {
+            // Cast the type to an ExtensionArray to access the extension name
+            auto ext_type =
+                std::static_pointer_cast<arrow::ExtensionType>(arrow_type);
+            auto name = ext_type->extension_name();
+            if (name == "arrow_timestamp_tz") {
+                return std::make_unique<bodo::DataType>(
+                    bodo_array_type::TIMESTAMPTZ, Bodo_CTypes::TIMESTAMPTZ);
+            }
+            // fallthrough
+        }
+        default:
+            throw std::runtime_error(
+                "arrow_type_to_bodo_data_type(): Arrow type " +
+                arrow_type->ToString() + " not supported");
     }
 }
 
