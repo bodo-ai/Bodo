@@ -87,8 +87,8 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
                 }
             }
             Type.TypeID.STRING -> BodoSQLColumnDataType.STRING
-            Type.TypeID.UUID -> BodoSQLColumnDataType.STRING
-            Type.TypeID.FIXED -> BodoSQLColumnDataType.BINARY
+            Type.TypeID.UUID -> BodoSQLColumnDataType.FIXED_SIZE_STRING
+            Type.TypeID.FIXED -> BodoSQLColumnDataType.FIXED_SIZE_BINARY
             Type.TypeID.BINARY -> BodoSQLColumnDataType.BINARY
             Type.TypeID.DECIMAL -> BodoSQLColumnDataType.DECIMAL
             Type.TypeID.LIST -> BodoSQLColumnDataType.ARRAY
