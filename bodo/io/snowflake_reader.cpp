@@ -41,11 +41,18 @@ class SnowflakeReader : public ArrowReader {
         // Construct ChunkedTableBuilder for output
         this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
             schema->num_fields());
+        for (int i = 0; i < schema->num_fields(); i++) {
+            const std::shared_ptr<arrow::Field>& field = schema->field(i);
+            this->dict_builders[i] = create_dict_builder_for_array(
+                arrow_type_to_bodo_data_type(field->type()), false);
+        }
+
         for (int str_as_dict_col : str_as_dict_cols) {
-            std::shared_ptr<array_info> dict = alloc_array_top_level(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->dict_builders[str_as_dict_col] =
-                std::make_shared<DictionaryBuilder>(dict, false);
+                create_dict_builder_for_array(
+                    std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                     Bodo_CTypes::STRING),
+                    false);
         }
 
         auto empty_table = get_empty_out_table();
