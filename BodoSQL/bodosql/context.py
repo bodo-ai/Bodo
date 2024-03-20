@@ -66,7 +66,12 @@ class SqlTypeEnum(Enum):
     Json_Object = 24
     Struct = 25
     Variant = 26
-    Unsupported = 27
+    # Fixed Size columns are for columns with a compile time known size.
+    # These are only used for special Iceberg types but are added here for
+    # consistency.
+    Fixed_Size_String = 27
+    Fixed_Size_Binary = 28
+    Unsupported = 29
 
 
 # Scalar dtypes for supported Bodo Arrays
