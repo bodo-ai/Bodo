@@ -14,22 +14,30 @@ from numba.core import ir, types
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
+import bodo.ir.filter as bif
 from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.ir.filter import Filter, supported_arrow_funcs_map
+from bodo.ir.filter import (
+    Filter,
+    FilterVisitor,
+    Scalar,
+    get_filter_predicate_compute_func,
+    supported_arrow_funcs_map,
+)
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import (
     debug_prints,
-    get_filter_predicate_compute_func,
     is_array_typ,
 )
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from numba.core.typeinfer import TypeInferer
+
+    from bodo.ir.filter import Op, Ref
 
 ll.add_symbol("arrow_reader_read_py_entry", arrow_cpp.arrow_reader_read_py_entry)
 
@@ -151,31 +159,31 @@ def connector_typeinfer(node: Connector, typeinferer: "TypeInferer") -> None:
     node.typeinfer_out_vars(typeinferer)
 
 
-def _visit_predicate_tuple_vars(tup, callback, cbdata):
-    """visit variables in a tuple representing a filter pushdown predicate
-    e.g. ('l_commitdate', 'coalesce', v1)
+class VarVisitor(FilterVisitor[bif.Filter]):
+    """
+    Traverse the Filter expression tree. For every Scalar node, apply
+    a transformation function to the internal ir.Var.
 
     Args:
-        tup (tuple): tuple representing predicate
-        callback (function): variable visit callback function
-        cbdata (any): callback function's input
+        func (Callable): The function to apply to each variable.
 
     Returns:
-        tuple: updated tuple values
+        The transformed Bodo IR filter expression.
     """
-    assert isinstance(tup, tuple), "_visit_predicate_tuple_vars: tuple input expected"
 
-    out_data = []
-    for v in tup:
-        out_val = v
-        if isinstance(v, tuple):
-            out_val = _visit_predicate_tuple_vars(v, callback, cbdata)
-        elif isinstance(v, ir.Var):
-            out_val = visit_vars_inner(v, callback, cbdata)
+    func: pt.Callable[[ir.Var], ir.Var]
 
-        out_data.append(out_val)
+    def __init__(self, func: pt.Callable[[ir.Var], ir.Var]):
+        self.func = func
 
-    return tuple(out_data)
+    def visit_scalar(self, scalar: "Scalar") -> "Filter":
+        return bif.Scalar(self.func(scalar.val))
+
+    def visit_ref(self, ref: "Ref") -> "Filter":
+        return ref
+
+    def visit_op(self, filter: "Op") -> "Filter":
+        return bif.Op(filter.op, *[self.visit(arg) for arg in filter.args])
 
 
 def visit_vars_connector(node: Connector, callback, cbdata):
@@ -198,60 +206,28 @@ def visit_vars_connector(node: Connector, callback, cbdata):
         node.skiprows = visit_vars_inner(node.skiprows, callback, cbdata)
 
     if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
-        for predicate in node.filters:
-            for i in range(len(predicate)):
-                val = list(predicate[i])
-                # e.g. handle ("A", "==", v),
-                # [(('l_commitdate', 'coalesce', v1), '>=', v2)]
-                val[0] = (
-                    _visit_predicate_tuple_vars(val[0], callback, cbdata)
-                    if isinstance(val[0], tuple)
-                    else val[0]
-                )
-                predicate[i] = (
-                    val[0],
-                    val[1],
-                    visit_vars_inner(val[2], callback, cbdata),
-                )
+        visitor = VarVisitor(lambda v: visit_vars_inner(v, callback, cbdata))
+        node.filters = visitor.visit(node.filters)
 
 
-def _get_predicate_tuple_vars(tup):
-    """get variables in a tuple representing a filter pushdown predicate
-    (could be nested)
-    e.g. ('l_commitdate', 'coalesce', v1) -> [v1]
-
-    Args:
-        tup (tuple): tuple of predicate
-
-    Returns:
-        list(ir.Var): variables in predicate
+def get_filter_vars(filters: Filter) -> list[ir.Var]:
     """
-    assert isinstance(tup, tuple), "_get_predicate_tuple_vars: tuple input expected"
-    vars = []
-    for v in tup:
-        if isinstance(v, ir.Var):
-            vars.append(v)
-        if isinstance(v, tuple):
-            vars += _get_predicate_tuple_vars(v)
-
-    return vars
-
-
-def get_filter_vars(filters):
-    """get all variables in filters of a read node (that will be pushed down)
-    e.g. [[(('l_commitdate', 'coalesce', v1), '>=', v2)]] -> [v1, v2]
+    get all variables in filters of a read node (that will be pushed down)
 
     Args:
-        filters (list(list)): filters (list of predicates)
+        filters (Filter): filters (list of predicates)
 
     Returns:
         list(ir.Var): all variables in filters
     """
-    filter_vars = []
-    for predicate_list in filters:
-        for v in predicate_list:
-            filter_vars += _get_predicate_tuple_vars(v)
+    filter_vars: list[ir.Var] = []
 
+    def _append_var(v):
+        filter_vars.append(v)
+        return v
+
+    var_visitor = VarVisitor(_append_var)
+    var_visitor.visit(filters)
     return filter_vars
 
 
@@ -287,32 +263,6 @@ def get_copies_connector(node: Connector, typemap):
     return set(), kill_set
 
 
-def _replace_predicate_tuple_vars(tup, var_dict):
-    """replace variables in a tuple representing a filter pushdown predicate
-    e.g. ('l_commitdate', 'coalesce', v1)
-
-    Args:
-        tup (tuple): tuple representing predicate
-        var_dict (dict(str, ir.Var)): map for variable replacement
-
-    Returns:
-        tuple: updated tuple values
-    """
-    assert isinstance(tup, tuple), "_replace_predicate_tuple_vars: tuple input expected"
-
-    out_data = []
-    for v in tup:
-        out_val = v
-        if isinstance(v, tuple):
-            out_val = _replace_predicate_tuple_vars(v, var_dict)
-        elif isinstance(v, ir.Var):
-            out_val = replace_vars_inner(v, var_dict)
-
-        out_data.append(out_val)
-
-    return tuple(out_data)
-
-
 def apply_copies_connector(
     node: Connector, var_dict, name_var_table, typemap, calltypes, save_copies
 ):
@@ -328,17 +278,8 @@ def apply_copies_connector(
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = replace_vars_inner(node.file_name, var_dict)
     if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
-        for predicate in node.filters:
-            for i in range(len(predicate)):
-                val = list(predicate[i])
-                # e.g. handle ("A", "==", v),
-                # [(('l_commitdate', 'coalesce', v1), '>=', v2)]
-                val[0] = (
-                    _replace_predicate_tuple_vars(val[0], var_dict)
-                    if isinstance(val[0], tuple)
-                    else val[0]
-                )
-                predicate[i] = (val[0], val[1], replace_vars_inner(val[2], var_dict))
+        visitor = VarVisitor(lambda v: replace_vars_inner(v, var_dict))
+        node.filters = visitor.visit(node.filters)
     if node.connector_typ == "csv":
         node.nrows = replace_vars_inner(node.nrows, var_dict)
         node.skiprows = replace_vars_inner(node.skiprows, var_dict)
@@ -574,45 +515,191 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     return parallel
 
 
-def _get_filter_column_arrow_expr(col_val, filter_map, output_f_string: bool = False):
-    """returns Arrow expr code for filter column,
-    e.g. ("A", "coalesce", v1) - > pa.compute.coalesce(ds.field('A'), ds.scalar(f1))
+VisitorOut = pt.Tuple[str, types.Type]
+
+
+class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
+    """
+    Convert Bodo IR filter expressions to string representation of Arrow Compute Expression.
+    Also, determine if any casts are needed for the filter expression.
 
     Args:
-        col_val (tuple|str): column representation in filter
-        filter_map (dict(str, int)): map of IR variable names to read function variable
-            names. E.g. {'_v14call_method_6_224': 'f0'}
-        output_f_string (bool): Whether we should return an f-string where the
-            column names are templated variables instead of being inlined.
+        filter_map (dict[str, str]): Mapping of the IR variable name to the runtime variable name.
+        original_out_types (tuple): A tuple of column data types for the input DataFrame, including dead
+            columns.
+        typemap (dict[str, types.Type]): Mapping of ir Variable names to their type.
+        orig_colname_map (dict[str, int]): Mapping of column name to its column index.
+        partition_names (list[str]): List of column names that represent parquet partitions.
+        source (Literal["parquet", "iceberg"]): The input source that needs the filters.
+            Either parquet or iceberg.
+        output_f_string (bool): Whether the expression filter should be returned as an f-string
+            where the column names are templated instead of being inlined. This is used for
+            Iceberg to allow us to generate the expression dynamically for different file
+            schemas to account for schema evolution.
 
     Returns:
-        str: Arrow expression for filter column
+        str: String representation of the Arrow Compute Expression.
+        types.Type: The type of the Arrow Compute Expression. Expected to be bool by end
     """
-    if isinstance(col_val, str):
-        return (
-            f"ds.field('{{{col_val}}}')"
-            if output_f_string
-            else f"ds.field('{col_val}')"
+
+    def __init__(
+        self,
+        filter_map: dict[str, str],
+        original_out_types: tuple[types.Type, ...],
+        typemap,
+        orig_colname_map: dict[str, int],
+        partition_names,
+        source: pt.Literal["parquet", "iceberg"],
+        output_f_string: bool = False,
+    ):
+        self.filter_map = filter_map
+        self.original_out_types = original_out_types
+        self.typemap = typemap
+        self.orig_colname_map = orig_colname_map
+        self.partition_names = partition_names
+        self.source = source
+        self.output_f_string = output_f_string
+
+    def unwrap_scalar(self, scalar: Filter) -> VisitorOut:
+        if not isinstance(scalar, Scalar):
+            raise ValueError("ArrowFilterVisitor::unwrap_scalar: bif.Scalar expected.")
+        return self.filter_map[scalar.val.name], self.typemap[scalar.val.name]
+
+    def determine_filter_cast(self, lhs_array_type, rhs_typ) -> tuple[str, str]:
+        return determine_filter_cast(
+            lhs_array_type,
+            rhs_typ,  # self.partition_names, self.source
         )
 
-    filter = _get_filter_column_arrow_expr(col_val[0], filter_map, output_f_string)
-    column_compute_func = get_filter_predicate_compute_func(col_val)
+    def visit_scalar(self, scalar: "Scalar") -> VisitorOut:
+        """Convert Scalar Values to Arrow Compute Expression String"""
+        fname, ftype = self.unwrap_scalar(scalar)
+        return f"ds.scalar({fname})", ftype
 
-    if column_compute_func == "coalesce":
-        scalar_val = (
-            filter_map[col_val[2].name]
-            if isinstance(col_val[2], ir.Var)
-            else col_val[2]
-        )
-        return f"pa.compute.coalesce({filter}, ds.scalar({scalar_val}))"
+    def visit_ref(self, ref: "Ref") -> VisitorOut:
+        col_type = self.original_out_types[self.orig_colname_map[ref.val]]
 
-    elif column_compute_func in supported_arrow_funcs_map:  # pragma: no cover
-        arrow_func_name = supported_arrow_funcs_map[column_compute_func]
-        return f"pa.compute.{arrow_func_name}({filter})"
+        if self.source == "parquet" and ref.val in self.partition_names:
+            # Always cast partitions to protect again multiple types
+            # with parquet (see test_read_partitions_string_int).
+            # We skip this with Iceberg because partitions are hidden.
+            if col_type == types.unicode_type:
+                col_cast = ".cast(pyarrow.string(), safe=False)"
+            elif isinstance(col_type, types.Integer):
+                # all arrow types integer type names are the same as numba
+                # type names.
+                col_cast = f".cast(pyarrow.{col_type.name}(), safe=False)"
+            else:
+                # Currently arrow support int and string partitions, so we only capture those casts
+                # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
+                col_cast = ""
+        else:
+            col_cast = ""
+
+        ref_str = f"{{{ref.val}}}" if self.output_f_string else ref.val
+        return f"ds.field('{ref_str}'){col_cast}", col_type
+
+    def visit_op(self, filter: "Op") -> VisitorOut:
+        match filter.op:
+            case "ALWAYS_TRUE":
+                return "ds.scalar(True)", types.bool_
+            case "ALWAYS_FALSE":
+                return "ds.scalar(False)", types.bool_
+            case "ALWAYS_NULL":
+                return "ds.scalar(None)", types.bool_
+
+            # Logical Operators
+            case "NOT":
+                return f"~({self.visit(filter.args[0])[0]})", types.bool_
+            case "AND":
+                return (
+                    "(" + " & ".join(self.visit(arg)[0] for arg in filter.args) + ")",
+                    types.bool_,
+                )
+            case "OR":
+                return (
+                    "(" + " | ".join(self.visit(arg)[0] for arg in filter.args) + ")",
+                    types.bool_,
+                )
+
+            # Unary Operators Specially Handled
+            case "IS_NULL":
+                return f"({self.visit(filter.args[0])[0]}.is_null())", types.bool_
+            case "IS_NOT_NULL":
+                return f"(~{self.visit(filter.args[0])[0]}.is_null())", types.bool_
+
+            # Binary Operators with Special Handling
+            case "IN":
+                col_code, col_type = self.visit(filter.args[0])
+                scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
+                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+                # col_cast, scalar_cast = self.determine_filter_cast(
+                # Expected output for this format should look like
+                # ds.field('A').isin(filter_var)
+                return (
+                    f"({col_code}{col_cast}.isin({scalar_code}{scalar_cast}))",
+                    types.bool_,
+                )
+            case "case_insensitive_equality":
+                col_code, col_type = self.visit(filter.args[0])
+                scalar_code, scalar_type = self.unwrap_scalar(filter.args[1])
+                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+                # case_insensitive_equality is just
+                # == with both inputs converted to lower case. This is used
+                # by ilike
+                return (
+                    f"(pa.compute.ascii_lower({col_code}{col_cast}) == pa.compute.ascii_lower(ds.scalar({scalar_code}{scalar_cast}))",
+                    types.bool_,
+                )
+
+            case "COALESCE":
+                col_code, col_type = self.visit(filter.args[0])
+                scalars = [self.visit(f) for f in filter.args[1:]]
+                col_cast, scalar_cast = determine_filter_cast(col_type, scalars[0][1])
+
+                scalar_codes = (f"{s[0]}{scalar_cast}" for s in scalars)
+                return (
+                    f"pa.compute.coalesce({col_code}{col_cast}, {', '.join(scalar_codes)})",
+                    col_type,
+                )
+
+            # Comparison Operators Syntax
+            case "==" | "!=" | "<" | "<=" | ">" | ">=":
+                col_code, col_type = self.visit(filter.args[0])
+                scalar_code, scalar_type = self.visit(filter.args[1])
+                col_cast, scalar_cast = determine_filter_cast(col_type, scalar_type)
+
+                # Expected output for this format should like
+                # (ds.field('A') > ds.scalar(py_var))
+                return (
+                    f"({col_code}{col_cast} {filter.op} {scalar_code}{scalar_cast})",
+                    types.bool_,
+                )
+
+            # All Other Arrow Functions
+            case op:
+                func_name = supported_arrow_funcs_map[op.lower()]
+                col_expr, col_type = self.visit(filter.args[0])
+                scalar_args = [self.unwrap_scalar(f)[0] for f in filter.args[1:]]
+
+                # Handle if its case insensitive
+                all_args = [col_expr] + scalar_args
+                if op.startswith("case_insensitive_"):
+                    return (
+                        f"(pa.compute.{func_name}({', '.join(all_args)}, ignore_case=True))",
+                        col_type,
+                    )
+                else:
+                    return (
+                        f"(pa.compute.{func_name}({', '.join(all_args)}))",
+                        col_type,
+                    )
 
 
 def generate_arrow_filters(
-    filters,
+    filters: pt.Optional[Filter],
     filter_map,
     col_names,
     partition_names,
@@ -622,8 +709,8 @@ def generate_arrow_filters(
     output_expr_filters_as_f_string=False,
 ) -> str:
     """
-    Generate Arrow DNF filters and expression filters with the
-    given filter_map and filter_vars.
+    Generate Arrow expression filters with the given filter_map.
+    Construct an ArrowFilterVisitor to do so
 
     Keyword arguments:
     filters -- DNF expression from the IR node for filters. None
@@ -643,35 +730,19 @@ def generate_arrow_filters(
     expr_filter_str = "None"
     # If no filters use variables (i.e. all isna, then we still need to take this path)
     if filters:
-        expr_or_conds = []
-
         # Create a mapping for faster column indexing
         orig_colname_map = {c: i for i, c in enumerate(col_names)}
-        for predicate in filters:
-            expr_and_conds = []
-            for p in predicate:
-                # First update expr since these include all expressions.
-                # If p[2] is a var we pass the variable at runtime,
-                # otherwise we pass a constant (i.e. NULL) which
-                # requires special handling
-                expr_val = _generate_column_expr_filter(
-                    p,
-                    filter_map,
-                    original_out_types,
-                    typemap,
-                    orig_colname_map,
-                    partition_names,
-                    source,
-                    output_expr_filters_as_f_string,
-                )
-                expr_and_conds.append(expr_val)
 
-            expr_and_str = " & ".join(expr_and_conds)
-            # If all the filters are truncated we may have an empty string.
-            expr_or_conds.append(f"({expr_and_str})")
-
-        expr_or_str = " | ".join(expr_or_conds)
-        expr_filter_str = f"({expr_or_str})"
+        arrow_filter_visitor = ArrowFilterVisitor(
+            filter_map,
+            original_out_types,
+            typemap,
+            orig_colname_map,
+            partition_names,
+            source,
+            output_expr_filters_as_f_string,
+        )
+        expr_filter_str, _ = arrow_filter_visitor.visit(filters)
 
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Arrow filters pushed down:\n%s\n"
@@ -684,38 +755,9 @@ def generate_arrow_filters(
     return expr_filter_str
 
 
-def _get_filter_column_type(
-    col_val: pt.Union[str, Filter],
-    col_types: pt.Sequence[types.Type],
-    orig_colname_map: dict[str, int],
-):
-    """get column type for column representation in filter predicate
-
-    Args:
-        col_val: column name or compute representation
-        col_types: output data types of read node
-        orig_colname_map: map of column name to its index in output
-
-    Returns:
-        types.Type: data type of column
-    """
-    if isinstance(col_val, str):
-        return col_types[orig_colname_map[col_val]]
-
-    func_name = get_filter_predicate_compute_func(col_val)
-    if func_name == "length":
-        # Length converts the column type to integer.
-        return bodo.IntegerArrayType(types.int64)
-    return _get_filter_column_type(col_val[0], col_types, orig_colname_map)
-
-
 def determine_filter_cast(
-    col_types: pt.Sequence[types.Type],
-    typemap,
-    filter_val: list[pt.Union[str, Filter]],
-    orig_colname_map: dict[str, int],
-    partition_names,
-    source: str,
+    lhs_array_type: types.ArrayCompatible,
+    rhs_typ,
 ) -> tuple[str, str]:
     """
     Function that generates text for casts that need to be included
@@ -725,48 +767,21 @@ def determine_filter_cast(
     should be cast. However, if we have a partition column, we always cast the
     partition column either to its original type or the new type.
 
-    This is because of an issue in arrow where if a partition has a mix of integer
-    and string names it won't look at the global types when Bodo processes per
-    file (see test_read_partitions_string_int for an example).
-
     We opt to cast in the direction that keep maximum information, for
     example date -> timestamp rather than timestamp -> date.
 
-    Right now we assume filter_val[0] is a column name and filter_val[2]
-    is a scalar Var that is found in the typemap.
+    Args:
+        lhs_array_type -- Type of the original column.
+        rhs_typ -- Type of the filter scalar.
 
-    Keyword arguments:
-    col_types -- Types of the original columns, including dead columns.
-    typemap -- Maps variables name -> types.
-    filter_val -- Filter value DNF expression
-    orig_colname_map -- Map column name -> index
-    partition_names -- List of column names that can be used as partitions.
-    source -- What is generating this filter. Either "parquet" or "iceberg".
+    Returns:
+        - A string that contains the cast for the column.
+        - A string that contains the cast for the filter scalar.
     """
-    import bodo
 
-    colname = filter_val[0]
-    lhs_arr_typ = _get_filter_column_type(filter_val[0], col_types, orig_colname_map)
-    lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
-    if source == "parquet" and colname in partition_names:
-        # Always cast partitions to protect again multiple types
-        # with parquet (see test_read_partitions_string_int).
-        # We skip this with Iceberg because partitions are hidden.
+    lhs_scalar_typ = bodo.utils.typing.element_type(lhs_array_type)
+    col_cast = ""
 
-        if lhs_scalar_typ == types.unicode_type:
-            col_cast = ".cast(pyarrow.string(), safe=False)"
-        elif isinstance(lhs_scalar_typ, types.Integer):
-            # all arrow types integer type names are the same as numba
-            # type names.
-            col_cast = f".cast(pyarrow.{lhs_scalar_typ.name}(), safe=False)"
-        else:
-            # Currently arrow support int and string partitions, so we only capture those casts
-            # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
-            col_cast = ""
-    else:
-        col_cast = ""
-
-    rhs_typ = typemap[filter_val[2].name]
     # If we do series isin, then rhs_typ will be a list or set
     if isinstance(rhs_typ, (types.List, types.Set)):
         rhs_scalar_typ = rhs_typ.dtype
@@ -825,110 +840,6 @@ def determine_filter_cast(
         ):  # pragma: no cover
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
     return col_cast, ""
-
-
-def _generate_column_expr_filter(
-    filter: Filter,
-    filter_map: dict[str, str],
-    original_out_types: tuple,
-    typemap: dict[str, types.Type],
-    orig_colname_map: dict[str, int],
-    partition_names: list[str],
-    source: pt.Literal["parquet", "iceberg"],
-    output_f_string: bool = False,
-) -> str:
-    """Generates an Arrow format expression filter representing the comparison for a single column.
-
-    Args:
-        filter (tuple[Union[str, tuple], str, Union[ir.Var, str]]): The column filter to parse.
-        filter_map (dict[str, str]): Mapping of the IR variable name to the runtime variable name.
-        original_out_types (tuple): A tuple of column data types for the input DataFrame, including dead
-            columns.
-        typemap (dict[str, types.Type]): Mapping of ir Variable names to their type.
-        orig_colname_map (dict[int, str]): Mapping of column index to its column name.
-        partition_names (list[str]): List of column names that represent parquet partitions.
-        source (Literal["parquet", "iceberg"]): The input source that needs the filters.
-            Either parquet or iceberg.
-        output_f_string (bool): Whether the expression filter should be returned as an f-string
-            where the column names are templated instead of being inlined. This is used for
-            Iceberg to allow us to generate the expression dynamically for different file
-            schemas to account for schema evolution.
-
-    Returns:
-        str: A string representation of an arrow expression equivalent to the filter.
-    """
-    p0, p1, p2 = filter
-    if p1 == "ALWAYS_TRUE":
-        # Special operator for True.
-        expr_val = "ds.scalar(True)"
-    elif p1 == "ALWAYS_FALSE":
-        # Special operator for False
-        expr_val = "ds.scalar(False)"
-    elif p1 == "ALWAYS_NULL":
-        # Special operator for NULL
-        expr_val = "ds.scalar(None)"
-    elif p1 == "not":
-        inner_filter = _generate_column_expr_filter(
-            p0,
-            filter_map,
-            original_out_types,
-            typemap,
-            orig_colname_map,
-            partition_names,
-            source,
-            output_f_string,
-        )
-        expr_val = f"~({inner_filter})"
-    else:
-        col_expr = _get_filter_column_arrow_expr(p0, filter_map, output_f_string)
-        if isinstance(p2, ir.Var):
-            # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
-            # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
-            # column_cast and scalar_cast.
-            column_cast, scalar_cast = determine_filter_cast(
-                original_out_types,
-                typemap,
-                filter,
-                orig_colname_map,
-                partition_names,
-                source,
-            )
-            filter_var = filter_map[p2.name]
-            if p1 == "in":
-                # Expected output for this format should look like
-                # ds.field('A').isin(filter_var)
-                expr_val = f"({col_expr}.isin({filter_var}))"
-            elif p1 == "case_insensitive_equality":
-                # case_insensitive_equality is just
-                # == with both inputs converted to lower case. This is used
-                # by ilike
-                expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
-
-            elif p1 in supported_arrow_funcs_map:  # pragma: no cover
-                op = p1
-                func_name = supported_arrow_funcs_map[p1]
-                scalar_arg = filter_var
-
-                # Handle if its case insensitive
-                if op.startswith("case_insensitive_"):
-                    expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case=True))"
-                else:
-                    expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}))"
-            else:
-                # Expected output for this format should like
-                # (ds.field('A') > ds.scalar(py_var))
-                expr_val = f"({col_expr}{column_cast} {p1} ds.scalar({filter_var}){scalar_cast})"
-        else:
-            # Currently the only constant expressions we support are IS [NOT] NULL
-            assert p2 == "NULL", "unsupported constant used in filter pushdown"
-            if p1 == "is not":
-                prefix = "~"
-            else:
-                prefix = ""
-            # Expected output for this format should like
-            # (~ds.field('A').is_null())
-            expr_val = f"({prefix}{col_expr}.is_null())"
-    return expr_val
 
 
 def log_limit_pushdown(io_node: Connector, read_size: int):

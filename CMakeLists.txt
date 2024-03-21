@@ -116,7 +116,6 @@ endif()
 
 # Release Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-
   add_compile_options(
     "-g0"  # Not necessary, but for safety
     "-O3"

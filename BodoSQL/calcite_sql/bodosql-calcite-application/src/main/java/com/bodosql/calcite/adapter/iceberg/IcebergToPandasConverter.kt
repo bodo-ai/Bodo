@@ -118,21 +118,17 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         val tableScanNode = flattenedInfo.scan
         val limit = flattenedInfo.limit
         val columnsArg = Expr.List(cols.map { v -> StringLiteral(v) })
-        val filterVisitor = IcebergFilterVisitor(tableScanNode, ctx)
         val filtersArg =
             if (filters.isEmpty()) {
-                Expr.List()
+                IcebergFilterVisitor.default()
             } else {
-                Expr.List(
-                    listOf(
-                        Expr.List(
-                            filters.map {
-                                    f ->
-                                f.accept(filterVisitor)
-                            }.flatten().map { (a, b, c) -> Expr.Tuple(StringLiteral(a), StringLiteral(b), c) },
-                        ),
-                    ),
-                )
+                val filterVisitor = IcebergFilterVisitor(tableScanNode, ctx)
+                val pieces = filters.map { f -> f.accept(filterVisitor) }
+                if (pieces.size == 1) {
+                    pieces[0]
+                } else {
+                    IcebergFilterVisitor.op("AND", pieces)
+                }
             }
 
         val schemaPath = getSchemaPath(relInput)

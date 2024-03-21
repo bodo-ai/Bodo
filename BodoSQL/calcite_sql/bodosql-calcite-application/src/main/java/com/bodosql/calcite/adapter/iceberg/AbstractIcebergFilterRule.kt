@@ -126,22 +126,22 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                 setOf(
                     // Logical operators.
                     SqlKind.AND,
-//            SqlKind.OR,
-//            SqlKind.NOT,
+                    SqlKind.OR,
+                    SqlKind.NOT,
                     // Comparison operators.
                     SqlKind.EQUALS,
                     SqlKind.NOT_EQUALS,
                     // Equivalent to A == B OR A IS NULL AND B IS NULL
-//            SqlKind.NULL_EQUALS,
+//                    SqlKind.NULL_EQUALS,
                     SqlKind.LESS_THAN,
                     SqlKind.LESS_THAN_OR_EQUAL,
                     SqlKind.GREATER_THAN,
                     SqlKind.GREATER_THAN_OR_EQUAL,
                     SqlKind.SEARCH,
                     // Equivalent to A == B OR A IS NULL AND B IS NULL
-//            SqlKind.IS_DISTINCT_FROM,
+//                    SqlKind.IS_DISTINCT_FROM,
                     // Equivalent to A != B AND A IS NOT NULL OR A != B AND B IS NULL
-//            SqlKind.IS_NOT_DISTINCT_FROM,
+//                    SqlKind.IS_NOT_DISTINCT_FROM,
                     // Logical identity operators.
                     SqlKind.IS_FALSE,
                     // Equivalent to A IS NULL OR A == TRUE.
@@ -166,6 +166,7 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
             private val SUPPORTED_GENERIC_CALL_NAME =
                 setOf(
                     StringOperatorTable.STARTSWITH.name,
+                    // TODO: What to do with this
 //                CondOperatorTable.EQUAL_NULL.name,
                 )
 

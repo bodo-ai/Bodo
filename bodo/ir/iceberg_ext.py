@@ -20,6 +20,7 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
+import bodo.ir.filter as bif
 import bodo.user_logging
 from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
@@ -27,7 +28,7 @@ from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
-from bodo.ir.filter import Filter
+from bodo.ir.filter import Filter, FilterVisitor
 from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
@@ -783,9 +784,9 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     return loc_vars["impl"]
 
 
-def filter_term_to_iceberg_expr(term: Filter, filter_map) -> str:
+class IcebergFilterVisitor(FilterVisitor[str]):
     """
-    Convert a compiler Filter term to a string representation
+    Convert a Bodo IR Filter term to a string representation
     of the bodo_iceberg_connector's FilterExpr class.
     See filters_to_iceberg_expr for more details.
 
@@ -801,37 +802,26 @@ def filter_term_to_iceberg_expr(term: Filter, filter_map) -> str:
         A string representation of the FilterExpr object.
     """
 
-    if term[1] == "not":
-        assert isinstance(term[0], tuple)
-        inner_term = pt.cast(Filter, term[0])
-        gen_inner = filter_term_to_iceberg_expr(inner_term, filter_map)
-        return f"FilterExpr('NOT', [{gen_inner}])"
+    def __init__(self, filter_map):
+        self.filter_map = filter_map
 
-    assert isinstance(term[0], str)
-    col_name = term[0]
+    def visit_scalar(self, scalar: bif.Scalar) -> str:
+        return f"Scalar({self.filter_map[scalar.val.name]})"
 
-    if term[1] == "is":
-        assert term[2] == "NULL"
-        return f"FilterExpr('IS_NULL', [ColumnRef('{col_name}')])"
-    elif term[1] == "is not":
-        assert term[2] == "NULL"
-        return f"FilterExpr('IS_NOT_NULL', [ColumnRef('{col_name}')])"
-    else:
-        assert isinstance(term[2], ir.Var)
-        match term[1]:
-            case "startswith":
-                op_str = "STARTS_WITH"
-            case "in":
-                op_str = "IN"
-            case x:
-                op_str = x.upper()
+    def visit_ref(self, ref: bif.Ref) -> str:
+        return f"ColumnRef('{ref.val}')"
 
-        return f"FilterExpr('{op_str}', [ColumnRef('{col_name}'), Scalar({filter_map[term[2].name]})])"
+    def visit_op(self, op: bif.Op) -> str:
+        op_name = op.op.upper()
+        match op_name:
+            case "STARTSWITH":
+                op_name = "STARTS_WITH"
+            case "ENDSWITH":
+                op_name = "ENDS_WITH"
+        return f"FilterExpr('{op_name}', [{', '.join(self.visit(x) for x in op.args)}])"
 
 
-def filters_to_iceberg_expr(
-    filters: pt.Optional[list[list[Filter]]], filter_map
-) -> str:
+def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
     """
     Convert a compiler Filter object to a string representation
     of the bodo_iceberg_connector's FilterExpr class.
@@ -849,26 +839,11 @@ def filters_to_iceberg_expr(
         A string representation of the FilterExpr object.
     """
 
-    if filters is None or len(filters) == 0:
+    if filters is None:
         return "FilterExpr.default()"
 
-    or_preds = []
-    for pred in filters:
-        and_preds = []
-        for term in pred:
-            and_preds.append(filter_term_to_iceberg_expr(term, filter_map))
-
-        if len(and_preds) == 1:
-            or_preds.append(and_preds[0])
-        else:
-            or_preds.append(
-                "FilterExpr('AND', [{}])".format(", ".join(x for x in and_preds))
-            )
-
-    if len(or_preds) == 1:
-        dict_expr = or_preds[0]
-    else:
-        dict_expr = "FilterExpr('OR', [{}])".format(", ".join(x for x in or_preds))
+    visitor = IcebergFilterVisitor(filter_map)
+    dict_expr = visitor.visit(filters)
 
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Iceberg Filter Pushed Down:\n%s\n"

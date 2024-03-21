@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from py4j.protocol import Py4JError
 
-from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
+from bodo_iceberg_connector.catalog_conn import parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import FilterExpr
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
@@ -39,9 +39,7 @@ def bodo_connector_get_parquet_file_list(
     pq_infos, warehouse_loc = get_bodo_parquet_info(conn_str, db_name, table, filters)
 
     if warehouse_loc is not None:
-        warehouse_loc = _remove_prefix(
-            warehouse_loc.replace("s3a://", "s3://"), "file:"
-        )
+        warehouse_loc = warehouse_loc.replace("s3a://", "s3://").removeprefix("file:")
 
     # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
     # a full path
@@ -51,7 +49,7 @@ def bodo_connector_get_parquet_file_list(
     sanitized_paths = []
     for path in file_paths:
         if _has_uri_scheme(path):
-            res = _remove_prefix(path.replace("s3a://", "s3://"), "file:")
+            res = path.replace("s3a://", "s3://").removeprefix("file:")
         elif warehouse_loc is not None:
             res = os.path.join(warehouse_loc, path)
         else:

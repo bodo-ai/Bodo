@@ -52,9 +52,9 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.tracing_utils import TracingContextManager
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -964,28 +964,21 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         reset_index=True,
         check_dtype=False,
     )
+
     # Check filter pushdown
-    tracing_info = TracingContextManager()
-    with tracing_info:
-        stream = io.StringIO()
-        logger = create_string_io_logger(stream)
-        with set_logging_stream(logger, 1):
-            bodo.jit(impl1)(table_name, conn, db_schema)
-            check_logger_msg(
-                stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_BODO_ROW_ID']"
-            )
-            check_logger_msg(stream, "Filter pushdown successfully performed")
-    # Load the tracing results
-    dnf_filters = tracing_info.get_event_attribute(
-        "get_iceberg_file_list", "g_dnf_filter", 0
-    )
-    expr_filters = tracing_info.get_event_attribute(
-        "get_iceberg_pq_dataset", "g_expr_filter_f_str", 0
-    )
-    # Verify we have dnf filters.
-    assert dnf_filters != "None", "No DNF filters were pushed"
-    # Verify we don't have expr filters
-    assert expr_filters == "None", "Expr filters were pushed unexpectedly"
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl1)(table_name, conn, db_schema)
+        check_logger_msg(
+            stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_BODO_ROW_ID']"
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(
+            stream,
+            "Iceberg Filter Pushed Down:\nFilterExpr('==', [ColumnRef('B'), Scalar(f0)])",
+        )
+        check_logger_no_msg(stream, "Arrow filters pushed down:\nNone")
 
     files_set = None
     spark_snapshot_id = None
@@ -3717,6 +3710,7 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
     """
     Test reading an Iceberg with the _bodo_filter flag
     """
+    import bodo.ir.filter as bif
 
     table_name = "FILTER_PUSHDOWN_TEST_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -3724,7 +3718,12 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(
-            table_name, conn, db_schema, _bodo_filter=[[("A", ">", date(2015, 1, 1))]]
+            table_name,
+            conn,
+            db_schema,
+            _bodo_filter=bif.make_op(
+                ">", bif.make_ref("A"), bif.make_scalar(date(2015, 1, 1))
+            ),
         )  # type: ignore
         return df
 
@@ -3796,5 +3795,5 @@ def test_filter_pushdown_complex(
         )
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('OR', [FilterExpr('AND', [FilterExpr('>', [ColumnRef('A'), Scalar(f0)]), FilterExpr('NOT', [FilterExpr('STARTS_WITH', [ColumnRef('TY'), Scalar(f1)])])]), FilterExpr('IN', [ColumnRef('B'), Scalar(f3)])])",
+            "Iceberg Filter Pushed Down:\nFilterExpr('OR', [FilterExpr('AND', [FilterExpr('>', [ColumnRef('A'), Scalar(f0)]), FilterExpr('NOT', [FilterExpr('STARTS_WITH', [ColumnRef('TY'), Scalar(f1)])])]), FilterExpr('IN', [ColumnRef('B'), Scalar(f2)])])",
         )
