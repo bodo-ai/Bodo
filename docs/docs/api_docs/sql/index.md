@@ -342,11 +342,10 @@ def f(bc):
     - `catalog`: A `DatabaseCatalog` used to load tables from a remote database (e.g. Snowflake).
 
 
-- `bodosql.BodoSQLContext.sql(self, query: str, params_dict: Optional[Dict[str, Any] = None)`
+- `bodosql.BodoSQLContext.sql(self, query: str, params_dict: Optional[Dict[str, Any] = None, distributed: list|set|bool = set(), replicated: list|set|bool = set(), **jit_options)`
 <br><br>
 
-    Executes a SQL query using the tables registered in this `BodoSQLContext`. This function should
-    be used inside a `@bodo.jit` function.
+    Executes a SQL query using the tables registered in this `BodoSQLContext`.
 
     ***Arguments***
 
@@ -355,6 +354,15 @@ def f(bc):
 
    -  `params_dict`: A dictionary that maps a SQL usable name to Python variables. For more information please
     refer to [the BodoSQL named parameters section][bodosql_named_params].
+
+   - `distributed`, `replicated`, and other JIT options are passed to Bodo JIT. See [Bodo distributed flags documentation](#dist-flags) for more details.
+     Example code:
+
+    ```py
+    df = pd.DataFrame({"A": np.arange(10), "B": np.ones(10)})
+    bc = bodosql.BodoSQLContext({"T1": df})
+    out_df = bc.sql("select sum(B) from T1 group by A", distributed=["T1"])
+    ```
 
     ***Returns***
 
