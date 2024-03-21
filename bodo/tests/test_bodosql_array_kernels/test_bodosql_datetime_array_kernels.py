@@ -1597,6 +1597,34 @@ def test_int_to_days(days, memory_leak_check):
                 ]
             ),
             "year",
+            id="timestamp-tzaware-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    bodo.TimestampTZ.fromLocal("2015-01-31", 0),
+                    bodo.TimestampTZ.fromLocal("2016-02-29 01:36:01.737418240", 800),
+                    bodo.TimestampTZ.fromLocal("2017-03-27 08:43:00", -800),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2018-04-25 00:00:21", -600),
+                    bodo.TimestampTZ.fromLocal("2019-05-23 16:00:00", 600),
+                    bodo.TimestampTZ.fromLocal("2020-06-21 05:40:01", 1200),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2021-07-19", 60),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2022-08-17 07:48:01.254654976", 480),
+                    bodo.TimestampTZ.fromLocal("2023-09-15 08:00:00", -480),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2024-10-13 00:00:45.511627776", 420),
+                    bodo.TimestampTZ.fromLocal("2025-11-11 16:15:00", -420),
+                    bodo.TimestampTZ.fromLocal("2026-12-09 11:16:01.467226624", 5),
+                    None,
+                    bodo.TimestampTZ.fromLocal("2017-02-1", 1),
+                    bodo.TimestampTZ.fromLocal("2020-03-1", 2),
+                    bodo.TimestampTZ.fromLocal("2024-11-1", 3),
+                ]
+            ),
+            "year",
             id="timestamp-tz-vector",
         ),
         pytest.param(
@@ -1629,6 +1657,9 @@ def last_day_scalar_fn(elem, unit):
     """
     Simulates LAST_DAY on a single row
     """
+    if isinstance(elem, bodo.TimestampTZ):
+        # Convert TimestampTZ to local Timestamp
+        elem = elem.local_timestamp()
     if pd.isna(elem) or pd.isna(unit):
         return None
     else:
@@ -1989,6 +2020,97 @@ def test_next_previous_day(dt, dow_str, memory_leak_check):
         ),
         py_output=previous_day_answer,
         reset_index=True,
+    )
+
+
+def test_next_previous_day_timestamptz(memory_leak_check):
+    dt = np.array(
+        [
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", 100),
+            bodo.TimestampTZ.fromUTC("2022-01-01 00:00:00", -100),
+            None,
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 100),
+            bodo.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", -100),
+            None,
+            bodo.TimestampTZ.fromUTC("2024-01-01 00:00:00", -100),
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 100),
+        ]
+    )
+
+    dow_str = pd.Series(
+        [
+            "su",
+            "su",
+            "mo",
+            "mo",
+            "tu",
+            "we",
+            "we",
+            "th",
+            "fr",
+            "fr",
+            "mo",
+            "mo",
+        ],
+        dtype="string",
+    )
+
+    def next_impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.next_day(arr0, arr1))
+
+    def prev_impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.previous_day(arr0, arr1))
+
+    next_expected_output = pd.Series(
+        [
+            None,
+            datetime.date(2022, 1, 2),
+            None,
+            datetime.date(2022, 1, 3),
+            datetime.date(2022, 1, 4),
+            None,
+            datetime.date(2022, 1, 5),
+            datetime.date(2022, 1, 6),
+            datetime.date(2022, 1, 7),
+            None,
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 8),
+        ]
+    )
+    prev_expected_output = pd.Series(
+        [
+            None,
+            datetime.date(2021, 12, 26),
+            None,
+            datetime.date(2021, 12, 27),
+            datetime.date(2021, 12, 28),
+            None,
+            datetime.date(2021, 12, 29),
+            datetime.date(2021, 12, 30),
+            datetime.date(2021, 12, 31),
+            None,
+            datetime.date(2023, 12, 25),
+            datetime.date(2024, 1, 1),
+        ]
+    )
+
+    inputs_ = (dt, dow_str)
+
+    check_func(
+        next_impl,
+        inputs_,
+        reset_index=True,
+        py_output=next_expected_output,
+    )
+    check_func(
+        prev_impl,
+        inputs_,
+        reset_index=True,
+        py_output=prev_expected_output,
     )
 
 
