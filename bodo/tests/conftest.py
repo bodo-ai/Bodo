@@ -414,7 +414,6 @@ def s3_bucket_us_west_2(minio_server, datapath):
     return s3_bucket_helper(minio_server, datapath, "bodo-test-2", "us-west-2")
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hadoop_server():
     """
@@ -427,7 +426,6 @@ def hadoop_server():
     return host, port
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hdfs_dir(hadoop_server, datapath):
     """
@@ -485,7 +483,6 @@ def hdfs_dir(hadoop_server, datapath):
     return dir_name
 
 
-@pytest.mark.hdfs
 @pytest.fixture(scope="session")
 def hdfs_datapath(hadoop_server, hdfs_dir):
     """

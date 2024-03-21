@@ -118,17 +118,5 @@ def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) 
 
 
 def normalize_loc(loc: str):
-    loc = _remove_prefix(loc.replace("s3a://", "s3://"), "file:")
+    loc = loc.replace("s3a://", "s3://").removeprefix("file:")
     return os.path.join(loc, "data")
-
-
-def _remove_prefix(input: str, prefix: str) -> str:
-    """
-    Remove Prefix from String if Available
-    This is part of Python's Standard Library starting from 3.9
-    TODO: Remove once Python 3.8 is deprecated
-    """
-    if sys.version_info.minor < 9:
-        return input[len(prefix) :] if input.startswith(prefix) else input
-    else:
-        return input.removeprefix(prefix)

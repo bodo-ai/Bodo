@@ -67,7 +67,7 @@ from bodo.utils.typing import (
     is_str_arr_type,
     to_nullable_type,
 )
-from bodo.utils.utils import _remove_prefix, alloc_arr_tup, is_null_pointer
+from bodo.utils.utils import alloc_arr_tup, is_null_pointer
 
 if TYPE_CHECKING:  # pragma: no cover
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -3009,8 +3009,8 @@ def _check_point_cases(
             and cond1.lhs.name != cond2.rhs.name
         )
         return (
-            (_remove_prefix(cond1.lhs.name, other_side_prefix), cond1.op == "<"),
-            (_remove_prefix(cond2.rhs.name, other_side_prefix), cond2.op == "<"),
+            (cond1.lhs.name.removeprefix(other_side_prefix), cond1.op == "<"),
+            (cond2.rhs.name.removeprefix(other_side_prefix), cond2.op == "<"),
         )
     else:
         # Similar logic, but for the (P < B and A < P) case.
@@ -3020,8 +3020,8 @@ def _check_point_cases(
             and cond1.rhs.name != cond2.lhs.name
         )
         return (
-            (_remove_prefix(cond2.lhs.name, other_side_prefix), cond2.op == "<"),
-            (_remove_prefix(cond1.rhs.name, other_side_prefix), cond1.op == "<"),
+            (cond2.lhs.name.removeprefix(other_side_prefix), cond2.op == "<"),
+            (cond1.rhs.name.removeprefix(other_side_prefix), cond1.op == "<"),
         )
 
 

@@ -32,6 +32,7 @@ from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
+import bodo.ir.filter as bif
 import bodo.user_logging
 from bodo import objmode
 from bodo.hiframes.table import Table, TableType
@@ -337,68 +338,92 @@ def remove_dead_sql(
     return sql_node
 
 
-def _get_sql_column_str(
-    p0: Union[str, Filter],
-    scalars_to_unpack,
-    converted_colnames: Iterable[str],
-    filter_map: dict[str, str],
-    typemap,
-) -> str:  # pragma: no cover
-    """get SQL code for representing a column in filter pushdown.
-    E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
+    """
+    Bodo IR Filter Visitor to construct a SQL WHERE clause from a filter.
+    Used for DB & Snowflake filter pushdown.
 
     Args:
-        p0: column name or tuple representing the computation for the column
-        converted_colnames: column names that need converted to upper case
-        filter_map: map of IR variable names to read function variable
-            names. E.g. {'_v14call_method_6_224': 'f0'}
+        filter_map: A mapping of IR names to the compiler filler names
+        converted_colnames: A list of column names that have been converted
+        typemap: A mapping of variable names to their types
 
     Returns:
-        str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
+        A string representing the SQL WHERE clause
     """
 
-    if isinstance(p0, str):
-        assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
-        col_name = convert_col_name(p0, converted_colnames)
+    def __init__(self, filter_map, converted_colnames, typemap) -> None:
+        self.filter_map = filter_map
+        self.converted_colnames = converted_colnames
+        self.typemap = typemap
+
+    def visit_scalar(self, scalar: bif.Scalar) -> str:
+        scalar_name = scalar.val.name
+        return f"{{{self.filter_map[scalar_name]}}}"
+
+    def visit_ref(self, ref: bif.Ref) -> str:
+        col_name = convert_col_name(ref.val, self.converted_colnames)
         return '\\"' + col_name + '\\"'
 
-    assert isinstance(p0, tuple), "_get_sql_column_str: expected filter tuple"
-    col_name = _get_sql_column_str(
-        p0[0], scalars_to_unpack, converted_colnames, filter_map, typemap
-    )
-    kernel_func, func_args = p0[1], p0[2]
-    args_name = func_args.name
+    def visit_op(self, op: bif.Op) -> str:
+        match op.op:
+            case "ALWAYS_TRUE":
+                # Special operator for True
+                return "(TRUE)"
+            case "ALWAYS_FALSE":
+                # Special operators for False.
+                return "(FALSE)"
+            case "ALWAYS_NULL":
+                # Special operators for NULL.
+                return "(NULL)"
 
-    if kernel_func not in supported_funcs_map:
-        raise NotImplementedError(
-            f"Filter pushdown not implemented for {kernel_func} function"
-        )
+            case "AND":
+                return " AND ".join(self.visit(c) for c in op.args)
+            case "OR":
+                return " OR ".join(self.visit(c) for c in op.args)
+            case "NOT":
+                return f"(NOT {self.visit(op.args[0])})"
 
-    sql_func = supported_funcs_map[kernel_func]
-    read_func_var = filter_map[args_name]
-    args_type_var = typemap[args_name]
+            case "IS_NULL":
+                return f"({self.visit(op.args[0])} IS NULL)"
+            case "IS_NOT_NULL":
+                return f"({self.visit(op.args[0])} IS NOT NULL)"
 
-    args_str = ""
+            case "case_insensitive_equality":
+                # Equality is just =, not a function
+                return f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
+            case "case_insensitive_startswith" | "case_insensitive_endswith" | "case_insensitive_contains":
+                op_name = op.op[len("case_insensitive_") :]
+                return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
+            case "like" | "ilike":
+                # You can't pass the empty string to escape. As a result we
+                # must confirm its not the empty string
+                escape_arg = op.args[2]
+                assert isinstance(escape_arg, bif.Scalar)
+                has_escape = True
+                escape_typ = self.typemap[escape_arg.val.name]
+                if is_overload_constant_str(escape_typ):
+                    escape_val = get_overload_const_str(escape_typ)
+                    has_escape = escape_val != ""
+                escape_section = (
+                    f"escape {self.visit(escape_arg)}" if has_escape else ""
+                )
 
-    if isinstance(func_args, ir.Var):
-        if isinstance(args_type_var, types.BaseTuple):
-            scalars_to_unpack.append(args_name)
+                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])} {escape_section})"
 
-            # If it's a tuple object, we need to iterate through
-            # the tuple to generate a filter of the form:
-            # "coalesce(\"L_COMMITDATE\", {f0[0]}, {f0[1]}) >= {f1}"
-            for i in range(len(args_type_var)):
-                args_str += f", {{{read_func_var}[{i}]}}"
+            # Infix Operators
+            case "=" | "==" | "!=" | "<>" | "<" | "<=" | ">" | ">=" | "IN":
+                return f"({self.visit(op.args[0])} {op.op} {self.visit(op.args[1])})"
 
-        # We need to distinguish whether or not this function
-        # takes in additional args, via the name of the IR variable
-        elif "dummy" not in func_args.name:
-            args_str = f", {{{read_func_var}}}"
-    else:
-        args_str = f", {func_args}"
-
-    return f"{sql_func}({col_name}{args_str})"
+            # Handles all functions in general, including previous special cases like
+            # REGEXP_LIKE
+            case func:
+                if func not in supported_funcs_map:
+                    raise NotImplementedError(
+                        f"Snowflake Filter pushdown not implemented for {func} function"
+                    )
+                sql_func = supported_funcs_map[func]
+                return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
 
 
 def sql_distributed_run(
@@ -517,36 +542,10 @@ def sql_distributed_run(
     # If we are doing regular SQL, filters are embedded into the query.
     if sql_node.is_select_query:
         if sql_node.filters:  # pragma: no cover
-            # This path is only taken on Azure because snowflake
-            # is not tested on AWS.
-
-            # If a predicate should be and together, they will be multiple tuples within the same list.
-            # If predicates should be or together, they will be within separate lists.
-            # i.e.
-            # [[('l_linestatus', '<>', var1), ('l_shipmode', '=', var2))]]
-            # -> -> (l_linestatus <> var1) AND (l_shipmode = var2)
-            # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
-            # -> (l_linestatus <> var1) OR (l_shipmode = var2)
-            # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
-            or_conds = []
-            # Certain scalar values (e.g. like, ilike) are tuples of multiple variables
-            # used in the same operation. If they are in this list, rather than convert
-            # the tuple to a Snowflake usable literal we convert the individual elements
-            # in the tuple to Snowflake usable literals.
-            scalars_to_unpack = []
-            for and_list in sql_node.filters:
-                and_conds = []
-                for p in and_list:
-                    single_filter = _generate_column_filter(
-                        p,
-                        scalars_to_unpack,
-                        sql_node.converted_colnames,
-                        filter_map,
-                        typemap,
-                    )
-                    and_conds.append(" ".join(single_filter))
-                or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
-            where_cond = " WHERE " + " OR ".join(or_conds)
+            visitor = SnowflakeFilterVisitor(
+                filter_map, sql_node.converted_colnames, typemap
+            )
+            where_cond = " WHERE " + visitor.visit(sql_node.filters)
             if bodo.user_logging.get_verbose_level() >= 1:
                 msg = "SQL filter pushed down:\n%s\n%s\n"
                 filter_source = sql_node.loc.strformat()
@@ -557,14 +556,7 @@ def sql_distributed_run(
                     where_cond,
                 )
             for ir_varname, arg in filter_map.items():
-                if ir_varname in scalars_to_unpack:
-                    num_elements = typemap[ir_varname].count
-                    elems = ", ".join(
-                        [f"get_sql_literal({arg}[{i}])" for i in range(num_elements)]
-                    )
-                    func_text += f"    {arg} = ({elems},)\n"
-                else:
-                    func_text += f"    {arg} = get_sql_literal({arg})\n"
+                func_text += f"    {arg} = get_sql_literal({arg})\n"
             # Append filters via a format string. This format string is created and populated
             # at runtime because filter variables aren't necessarily constants (but they are scalars).
             func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
@@ -756,128 +748,6 @@ def escape_column_names(col_names, db_type, converted_colnames):
         col_str = ", ".join([f'"{x}"' for x in col_names])
 
     return col_str
-
-
-def _generate_column_filter(
-    filter: Filter,
-    scalars_to_unpack,
-    converted_colnames: list[str],
-    filter_map: dict[str, str],
-    typemap: dict[str, types.Type],
-) -> list[str]:  # pragma: no cover
-    """Generate a filter string
-
-    Args:
-        filter (tuple[Union[str, tuple], str, Union[ir.Var, str]]): filter in Bodo format to convert
-        scalars_to_unpack (list[str]): A list that will be appended to with any scalars that should be
-            unpacked before converting to a Snowflake literal. This is to ensure we have a tuple of literals
-            as opposed to a Tuple literal.
-        converted_colnames: list of column names that must have their case converted.
-        filter_map: Mapping of IR variable name to runtime variable name.
-        typemap: Dictionary used to determine scalar types for each variable name.
-
-    Returns:
-        The string components to be joined to generate a single filter without AND/OR.
-    """
-    p0, p1, p2 = filter
-    if p1 == "ALWAYS_TRUE":
-        # Special operator for True
-        return ["(TRUE)"]
-    elif p1 == "ALWAYS_FALSE":
-        # Special operators for False.
-        return ["(FALSE)"]
-    elif p1 == "ALWAYS_NULL":
-        # Special operators for NULL.
-        return ["(NULL)"]
-    elif p1 == "not":
-        assert not isinstance(p0, str)
-        # Not recurses on another function operation.
-        inner_filter = _generate_column_filter(
-            p0, scalars_to_unpack, converted_colnames, filter_map, typemap
-        )
-        return ["(", "NOT"] + inner_filter + [")"]
-    else:
-        # These operators must operate on a column that we will load.
-        p0 = _get_sql_column_str(
-            p0, scalars_to_unpack, converted_colnames, filter_map, typemap
-        )
-        # If p2 is a constant that isn't in the IR (i.e. NULL)
-        # just load the value directly, otherwise load the variable
-        # at runtime.
-        scalar_filter = (
-            "{" + filter_map[p2.name] + "}" if isinstance(p2, ir.Var) else p2
-        )
-        if p1 in (
-            "startswith",
-            "endswith",
-            "contains",
-        ):
-            return ["(", p1, "(", p0, ",", scalar_filter, "))"]
-        elif p1 in (
-            "case_insensitive_startswith",
-            "case_insensitive_endswith",
-            "case_insensitive_contains",
-            "case_insensitive_equality",
-        ):
-            op = p1[len("case_insensitive_") :]
-            if op == "equality":
-                comparison = "="
-                # Equality is just =, not a function
-                return [
-                    "(LOWER(",
-                    p0,
-                    ")",
-                    comparison,
-                    "LOWER(",
-                    scalar_filter,
-                    "))",
-                ]
-            else:
-                return [
-                    "(",
-                    op,
-                    "(LOWER(",
-                    p0,
-                    "), LOWER(",
-                    scalar_filter,
-                    ")))",
-                ]
-        elif p1 in ("like", "ilike"):
-            assert isinstance(p2, ir.Var)
-            # You can't pass the empty string to escape. As a result we
-            # must confirm its not the empty string
-            has_escape = True
-            escape_typ = typemap[p2.name][1]
-            if is_overload_constant_str(escape_typ):
-                escape_val = get_overload_const_str(escape_typ)
-                has_escape = escape_val != ""
-            escape_section = (
-                f"escape {{{filter_map[p2.name]}[1]}}" if has_escape else ""
-            )
-            single_filter = [
-                "(",
-                p0,
-                p1,
-                f"{{{filter_map[p2.name]}[0]}} {escape_section}",
-                ")",
-            ]
-            # Indicate the tuple variable is not directly passed to Snowflake, instead its
-            # components are.
-            scalars_to_unpack.append(p2.name)
-            return single_filter
-        elif p1 == "REGEXP_LIKE":
-            assert isinstance(p2, ir.Var)
-
-            pattern_arg = f"{{{filter_map[p2.name]}[0]}}"
-            flags_arg = f"{{{filter_map[p2.name]}[1]}}"
-
-            single_filter = ["(", p1, "(", p0, ",", pattern_arg, ",", flags_arg, "))"]
-            # Indicate the tuple variable is not directly passed to Snowflake, instead its
-            # components are.
-            scalars_to_unpack.append(p2.name)
-            return single_filter
-        else:
-            return ["(", p0, p1, scalar_filter, ")"]
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

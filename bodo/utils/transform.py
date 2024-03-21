@@ -371,6 +371,10 @@ no_side_effect_call_tuples = {
     ("now_date_wrapper_consistent", "datetime_date_ext", "hiframes", bodo),
     ("today_rank_consistent", "datetime_date_ext", "hiframes", bodo),
     ("now_impl_consistent", "pd_timestamp_ext", "hiframes", bodo),
+    # Filter Expression
+    ("make_scalar", "filter", "ir", bodo),
+    ("make_ref", "filter", "ir", bodo),
+    ("make_op", "filter", "ir", bodo),
 }
 
 

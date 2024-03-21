@@ -740,6 +740,7 @@ class BodoSQLContext:
             "time": time,
             "datetime": datetime,
             "pd": pd,
+            "bif": bodo.ir.filter,
         }
 
         glbls.update(lowered_globals)
@@ -808,6 +809,7 @@ class BodoSQLContext:
             "import bodosql",
             "from bodo.utils.typing import ColNamesMetaType",
             "from bodo.utils.typing import MetaType",
+            "import bodo.ir.filter as bif",
         ]
         added_globals = []
         # Add a decorator so someone can directly run the code.
@@ -942,6 +944,7 @@ class BodoSQLContext:
                     "time": time,
                     "pd": pd,
                     "datetime": datetime,
+                    "bif": bodo.ir.filter,
                 },
                 locs,
             )
@@ -979,6 +982,7 @@ class BodoSQLContext:
             "time": time,
             "datetime": datetime,
             "pd": pd,
+            "bif": bodo.ir.filter,
         }
 
         glbls.update(lowered_globals)

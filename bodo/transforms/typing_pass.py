@@ -34,6 +34,7 @@ from numba.core.ir_utils import (
 from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
 
 import bodo
+import bodo.ir.filter as bif
 import bodo.ir.iceberg_ext
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -46,7 +47,12 @@ from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import get_table_iterator
-from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
+from bodo.ir.filter import (
+    build_filter_from_ir,
+    get_filter_predicate_compute_func,
+    supported_arrow_funcs_map,
+    supported_funcs_map,
+)
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -89,7 +95,6 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     find_build_tuple,
-    get_filter_predicate_compute_func,
     get_getsetitem_index_var,
     is_array_typ,
     is_assign,
@@ -1059,55 +1064,18 @@ class TypingTransforms:
             func_ir,
             label,
         )
+
         old_filters = read_node.filters
-        # If there are existing filters then we need to merge them together because this is
-        # an implicit AND. We merge by distributed the AND over ORs
-        # (A or B) AND (C or D) -> AC or AD or BC or BD
-        # See test_read_partitions_implicit_and_detailed for an example usage.
-        # We also simplify the filters here to avoid duplicate code in the filter pushdown
-        # stage and avoid edge cases where if a filter can't be deleted with hit an infinite
-        # loop (see test_merge_into_filter_compilation_errors.py::test_requires_transform).
-        # This has two components:
-        #
-        #   1. Simplify AND. We delete any filter repeated in the same AND
-        #   2. Simplify OR. We delete any or statement that is repeated multiple times.
-        #
-        # Other simplification may be possible
+
+        # Combine old and new filters to avoid duplicates somehow
+        # Also checks if filter is contained in the old filters
+        # likely indicating we reached a static state
         if old_filters is None:
-            # Initialize the old_filters to AND with nothing
-            old_filters = [[]]
-        filters_changed = False
-        # Use boolean algebra laws to combine old and new filters
-        # and remove duplicates. The old and new filters are essentially
-        # OR expressions that are ANDed together (to apply all filters).
-        # e.g. (A | B) & (C | D) -> (A & C) | (A & D) | (B & C) | (B & D)
-        # Keeping track of duplicates ensures that for (A | B) & (A | B)
-        # then the output is A | AB | B. If we don't delete redundant OR
-        # statements then we can have an infinite loop if we tried to
-        # merge with the same filter repeatedly as we will believe the
-        # filters have changed.
-        new_filter_set = set()
-        for old_or_cond in old_filters:
-            for new_or_cond in filters:
-                # Create a set for fast lookup
-                old_or_set = set(old_or_cond)
-                expr_changed = False
-                for new_and_cond in new_or_cond:
-                    # Add the new filter condition if it doesn't already exist
-                    if new_and_cond not in old_or_set:
-                        # Append to avoid adding the same AND condition multiple times
-                        old_or_set.add(new_and_cond)
-                        expr_changed = True
-                # Sort for the set comparison
-                combined_filters = tuple(sorted(old_or_set, key=lambda x: str(x)))
-                if combined_filters not in new_filter_set:
-                    # Append to avoid adding the same OR condition multiple times
-                    new_filter_set.add(combined_filters)
-                    filters_changed = expr_changed
-        # Convert the output back to list(list(tuple)). Here we
-        # sort to keep everything consistent on all ranks as iterating
-        # through a set depends on a randomized hash seed.
-        filters = sorted([list(x) for x in new_filter_set], key=lambda x: str(x))
+            filters_changed = True
+        else:
+            combined_filters = bif.Op("AND", old_filters, filters)
+            filters = bif.SimplifyFilterVisitor().visit(combined_filters)
+            filters_changed = filters != old_filters
 
         # Update the logs with the successful filter pushdown.
         # (no exception was raise until this end point so filters are valid)
@@ -1121,7 +1089,7 @@ class TypingTransforms:
                 filter_source,
                 read_source,
             )
-        # set ParquetReader/SQLReader node filters (no exception was raise until this end point
+        # Set node filters (no exception was raise until this end point
         # so filters are valid)
         read_node.filters = filters
         # Merge into only filters by file not within rows, so we cannot remove the filter.
@@ -1588,93 +1556,41 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _negate_column_filter(
-        self,
-        old_filter: pt.Tuple[str, str, ir.Var],
-        new_ir_assigns: pt.List[ir.Stmt],
-        loc: ir.Loc,
-        func_ir: ir.FunctionIR,
-    ) -> pt.Tuple[str, str, ir.Var]:
+    def _negate_column_filter(self, old_filter: bif.Op) -> bif.Filter:
         """Negate an individual filter by wrapping it in the NOT operator.
         If we
 
         Args:
             old_filter (Tuple[str, str, ir.Var]): The filter to be negated
-            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
-                must be created. This is update with a dummy variable for NOT.
-            loc (ir.Loc): Location for any dummy variables generated.
-            func_ir (ir.FunctionIR): Function IR used for updating definitions.
 
         Returns:
-            Tuple[str, str, ir.Var]: The new filter with the operator negated.
+            bif.Filter: The new filter with the operator negated.
         """
-        require(isinstance(old_filter, tuple) and len(old_filter) == 3)
-        if old_filter[1] == "not":
+        require(isinstance(old_filter, bif.Op))
+        if old_filter.op.lower() == "not":
             # NOT(NOT X) = X, so we just remove the previous NOT.
-            return old_filter[0]
+            return old_filter.args[0]
 
-        # Generate a dummy variable.
-        # Create a new IR Expr for the constant pattern.
-        expr_value = ir.Const(None, loc)
-        # Generate a variable from the Expr
-        new_name = mk_unique_var("dummy_var")
-        new_var = ir.Var(self.scope, new_name, loc)
-        new_assign = ir.Assign(target=new_var, value=expr_value, loc=loc)
-        # Append the assign so we update the IR.
-        new_ir_assigns.append(new_assign)
-        # Update the definitions. This is safe since the name is unique.
-        func_ir._definitions[new_name] = [expr_value]
-        return (old_filter, "not", new_var)
+        return bif.Op("NOT", old_filter)
 
-    def _get_negate_filters(
+    def _check_comparison_typing(
         self,
-        filters: pt.List[pt.List[pt.Tuple[pt.Union[str, pt.Tuple], str, ir.Var]]],
-        new_ir_assigns: pt.List[ir.Stmt],
-        loc: ir.Loc,
-        func_ir: ir.FunctionIR,
-    ) -> pt.List[pt.List[pt.Tuple[pt.Union[str, pt.Tuple], str, ir.Var]]]:
-        """Negate the a series of filters in ARROW format.
-        We convert the expression by leveraging DE MORGAN'S LAWS:
-
-        NOT(A OR B)  == (NOT A) AND (NOT B)
-        NOT(A AND B) == (NOT A) OR (NOT B)
-
-        Doing this we convert the expression, wrapping each column expression in a NOT,
-        and then swapping the ANDs and ORs.
-
-        Args:
-            filters (List[List[Tuple[Union[str, Tuple], str, ir.Var]]]): The original
-            filters that need to be negated.
-            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
-                must be created. This is update with a dummy variable for NOT.
-            loc (ir.Loc): Location for any dummy variables generated.
-            func_ir (ir.FunctionIR): Function IR used for updating definitions.
-
-        Returns:
-            List[List[Tuple[Union[str, Tuple], str, ir.Var]]]: The new filters that have been
-            negated.
-        """
-        # First just negate each expression. We have not handled
-        # AND/OR yet.
-        negated_filters = []
-        for and_filter in filters:
-            negated_inner = []
-            for column_filter in and_filter:
-                negated_inner.append(
-                    self._negate_column_filter(
-                        column_filter, new_ir_assigns, loc, func_ir
-                    )
+        col_arr_type: types.ArrayCompatible,
+        scalar_var,
+        read_node: "Connector",
+    ) -> None:
+        # If this is parquet we need to verify this is a filter we can process.
+        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
+            lhs_scalar_typ = bodo.utils.typing.element_type(col_arr_type)
+            require(scalar_var.name in self.typemap)
+            rhs_scalar_typ = self.typemap[scalar_var.name]
+            # Only apply filter pushdown if its safe to use inside arrow
+            require(
+                bodo.utils.typing.is_common_scalar_dtype(
+                    [lhs_scalar_typ, rhs_scalar_typ]
                 )
-            negated_filters.append(negated_inner)
-
-        # HANDLE THE AND/OR by the distributive property.
-        # A AND (B OR C) -> AB OR AC. We use this with
-        # DE MORGAN'S LAWS to generate new AND filters,
-        # This produces a cartesian product of filters.
-        # For example:
-        # ~((A & B) | (C & D & E)) == ((~A | ~B) & (~C | ~D | ~E)
-        # == (~A & ~C) | (~A & ~D) | (~A & ~E) | (~B & ~C) | (~B & ~D) | (~B & ~E)
-        return [list(x) for x in itertools.product(*negated_filters)]
+                or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ)
+            )
 
     def _get_column_filter(
         self,
@@ -1682,11 +1598,13 @@ class TypingTransforms:
         func_ir: ir.FunctionIR,
         df_var: ir.Var,
         df_col_names,
+        df_col_types,
         is_sql_op: bool,
-        read_node,
+        read_node: "Connector",
         new_ir_assigns: pt.List[ir.Stmt],
-    ) -> pt.Tuple[str, str, ir.Var]:
-        """Function used by _get_partition_filters to extract filters
+    ) -> bif.Filter:
+        """
+        Function used by _get_partition_filters to extract filters
         related to columns with boolean data. Returns a single filter
         comparing the boolean column to True.
 
@@ -1703,16 +1621,16 @@ class TypingTransforms:
                 must be created. This is update with the True variable.
 
         Returns:
-            Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
+             bif.Filter: The filter for a column with a boolean output type.
         """
 
-        colname = self._get_col_name(
+        colname, col_typ = self._get_col_name(
             col_def,
             df_var,
             df_col_names,
+            df_col_types,
             func_ir,
             read_node,
-            new_ir_assigns,
         )
 
         # This is a defensive check, and isn't expected to be hit
@@ -1721,13 +1639,6 @@ class TypingTransforms:
             self.needs_transform = True
             raise GuardException
         # Verify that the column has a boolean type.
-        df_typ = self.typemap[df_var.name]
-        if isinstance(df_typ, bodo.hiframes.table.TableType):
-            col_num = df_col_names.index(colname)
-            col_typ = df_typ.arr_types[col_num]
-        else:
-            col_num = df_typ.column_index[colname]
-            col_typ = df_typ.data[col_num]
         require(
             bodo.utils.utils.is_array_typ(col_typ, False)
             and col_typ.dtype == types.boolean
@@ -1746,19 +1657,20 @@ class TypingTransforms:
         new_ir_assigns.append(new_assign)
         # Update the definitions. This is safe since the name is unique.
         func_ir._definitions[new_name] = [expr_value]
-        cond = (colname, "=" if is_sql_op else "==", new_var)
-        return cond
+        # TODO: Just have a IS_TRUE function instead to avoid scalar creation?
+        return bif.Op("=" if is_sql_op else "==", colname, bif.Scalar(new_var))
 
     def _get_call_filter(
         self,
-        call_def,
+        call_def: ir.Expr,
         func_ir: ir.FunctionIR,
         df_var,
         df_col_names,
+        df_col_types,
         is_sql_op: bool,
         read_node,
         new_ir_assigns,
-    ):
+    ) -> bif.Filter:
         """
         Function used by _get_partition_filters to extract filters
         related to series or array method calls.
@@ -1784,8 +1696,8 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 read_node,
-                new_ir_assigns,
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
@@ -1794,15 +1706,20 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 read_node,
-                new_ir_assigns,
             )
         elif call_list == (
             "is_in",
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
-                call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                df_col_types,
+                read_node,
             )
         elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
@@ -1811,8 +1728,8 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 read_node,
-                new_ir_assigns,
             )
         elif call_list == (
             "like_kernel",
@@ -1823,6 +1740,7 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 is_sql_op,
                 read_node,
                 new_ir_assigns,
@@ -1836,9 +1754,8 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
-                is_sql_op,
+                df_col_types,
                 read_node,
-                new_ir_assigns,
             )
 
         else:
@@ -1850,11 +1767,11 @@ class TypingTransforms:
         self,
         call_def,
         call_list,
-        func_ir,
+        func_ir: ir.FunctionIR,
         df_var,
         df_col_names,
-        read_node,
-        new_ir_assigns,
+        df_col_types,
+        read_node: "Connector",
     ):
         """
         Function used by _get_partition_filters to extract null related
@@ -1862,25 +1779,25 @@ class TypingTransforms:
         """
         # support both Series.isna() and pd.isna() forms
         arr_var = call_list[1] if isinstance(call_list[1], ir.Var) else call_def.args[0]
-        colname = self._get_col_name(
-            arr_var, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        col_name, _ = self._get_col_name(
+            arr_var, df_var, df_col_names, df_col_types, func_ir, read_node
         )
         if call_list[0] in ("notna", "notnull"):
-            op = "is not"
+            op = "IS_NOT_NULL"
         else:
-            op = "is"
-        return (colname, op, "NULL")
+            op = "IS_NULL"
+        return bif.Op(op, col_name)
 
     def _get_isin_filter(
         self,
         call_list,
         call_def,
-        func_ir,
+        func_ir: ir.FunctionIR,
         df_var,
         df_col_names,
-        read_node,
-        new_ir_assigns,
-    ):
+        df_col_types,
+        read_node: "Connector",
+    ) -> bif.Filter:
         """
         Function used by _get_partition_filters to extract isin related
         filters from series method calls.
@@ -1896,14 +1813,20 @@ class TypingTransforms:
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
         )
-        colname = self._get_col_name(
-            call_list[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        colname, _ = self._get_col_name(
+            call_list[1], df_var, df_col_names, df_col_types, func_ir, read_node
         )
-        op = "in"
-        return (colname, op, list_set_arg)
+        # TODO: Add do _check_comparison_typing check. Requires list / set handling
+        return bif.Op("IN", colname, bif.Scalar(list_set_arg))
 
     def _get_bodosql_array_kernel_is_in_filter(
-        self, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+        self,
+        call_def,
+        func_ir: ir.FunctionIR,
+        df_var,
+        df_col_names,
+        df_col_types,
+        read_node: "Connector",
     ):  # pragma: no cover
         """
         Function used by _get_partition_filters to extract isin related
@@ -1932,29 +1855,27 @@ class TypingTransforms:
             )
         )
 
-        colname = self._get_col_name(
-            call_def.args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        colname, _ = self._get_col_name(
+            call_def.args[0], df_var, df_col_names, df_col_types, func_ir, read_node
         )
-        op = "in"
-        return (colname, op, call_def.args[1])
+        # TODO: Add do _check_comparison_typing check. Requires list / set handling
+        return bif.Op("IN", colname, bif.Scalar(call_def.args[1]))
 
     def _get_starts_ends_with_filter(
         self,
         call_list,
         call_def,
-        func_ir,
+        func_ir: ir.FunctionIR,
         df_var,
         df_col_names,
-        read_node,
-        new_ir_assigns,
+        df_col_types,
+        read_node: "Connector",
     ):  # pragma: no cover
-        # This path is only taken on Azure because snowflake
-        # is not tested on AWS.
-        colname = self._get_col_name(
-            call_list[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        colname, coltype = self._get_col_name(
+            call_list[1], df_var, df_col_names, df_col_types, func_ir, read_node
         )
-        op = call_list[0]
-        return (colname, op, call_def.args[0])
+        self._check_comparison_typing(coltype, call_def.args[0], read_node)
+        return bif.Op(call_list[0], colname, bif.Scalar(call_def.args[0]))
 
     def _get_regexp_like_filter(
         self,
@@ -1962,14 +1883,13 @@ class TypingTransforms:
         func_ir: ir.FunctionIR,
         df_var: ir.Var,
         df_col_names,
-        is_sql_op: bool,
-        read_node,
-        new_ir_assigns: List[ir.Var],
-    ) -> pt.Tuple[str, str, ir.Var]:  # pragma: no cover
+        df_col_types,
+        read_node: "Connector",
+    ) -> bif.Filter:  # pragma: no cover
         args = call_def.args
         # Get the column names
-        col_name = self._get_col_name(
-            args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        col_name, col_type = self._get_col_name(
+            args[0], df_var, df_col_names, df_col_types, func_ir, read_node
         )
 
         # Get the other args. We can only do filter pushdown if all of them are literals
@@ -1997,16 +1917,8 @@ class TypingTransforms:
             and regex_param_type in (types.unicode_type, types.none)
         )
 
-        expr_value = ir.Expr.build_tuple(args[1:], call_def.loc)
-        # Generate a variable from the Expr
-        new_name = mk_unique_var("bodosql_kernel_var")
-        new_var = ir.Var(self.scope, new_name, call_def.loc)
-        new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
-        # Append the assign so we update the IR.
-        new_ir_assigns.append(new_assign)
-        # Update the definitions. This is safe since the name is unique.
-        func_ir._definitions[new_name] = [expr_value]
-        return (col_name, "REGEXP_LIKE", new_var)
+        self._check_comparison_typing(col_type, pattern_arg, read_node)
+        return bif.Op("REGEXP_LIKE", col_name, *(bif.Scalar(x) for x in args[1:]))
 
     def _get_like_filter(
         self,
@@ -2014,10 +1926,11 @@ class TypingTransforms:
         func_ir: ir.FunctionIR,
         df_var: ir.Var,
         df_col_names,
+        df_col_types,
         is_sql_op: bool,
         read_node,
         new_ir_assigns: pt.List[ir.Var],
-    ) -> pt.Tuple[str, str, ir.Var]:  # pragma: no cover
+    ) -> bif.Filter:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
         then this generates the correct operations
 
@@ -2044,8 +1957,8 @@ class TypingTransforms:
         """
         args = call_def.args
         # Get the column names
-        colname = self._get_col_name(
-            args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        colname, _ = self._get_col_name(
+            args[0], df_var, df_col_names, df_col_types, func_ir, read_node
         )
         # Get the other args. We can only do filter pushdown if all of them are literals
         pattern_arg = args[1]
@@ -2103,6 +2016,9 @@ class TypingTransforms:
             ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
                 pattern_const, escape_const, is_case_insensitive
             )
+
+        filter_args = []
+
         # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
         if requires_regex:
             # Regex can only be handled with a SQL interface
@@ -2111,15 +2027,14 @@ class TypingTransforms:
                 op = "ilike"
             else:
                 op = "like"
-            # Generate an ir.Expr. This is a tuple that will be unpacked
-            # later in filter pushdown.
-            expr_value = ir.Expr.build_tuple([pattern_arg, escape_arg], call_def.loc)
+
+            filter_args = [pattern_arg, escape_arg]
         else:
             if match_nothing:
-                op = "ALWAYS_NULL"
+                return bif.Op("ALWAYS_NULL")
             elif match_anything:
-                # We don't have a way to represent a True filter yet.
-                op = "ALWAYS_TRUE"
+                return bif.Op("ALWAYS_TRUE")
+
             elif must_match_start and must_match_end:
                 # This is equality
                 if is_case_insensitive:
@@ -2144,15 +2059,20 @@ class TypingTransforms:
 
             # Create a new IR Expr for the constant pattern.
             expr_value = ir.Const(final_pattern, call_def.loc)
-        # Generate a variable from the Expr
-        new_name = mk_unique_var("like_python_var")
-        new_var = ir.Var(self.scope, new_name, call_def.loc)
-        new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
-        # Append the assign so we update the IR.
-        new_ir_assigns.append(new_assign)
-        # Update the definitions. This is safe since the name is unique.
-        func_ir._definitions[new_name] = [expr_value]
-        return (colname, op, new_var)
+
+            # Generate a variable from the Expr
+            new_name = mk_unique_var("like_python_var")
+            new_var = ir.Var(self.scope, new_name, call_def.loc)
+            new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
+            # Append the assign so we update the IR.
+            new_ir_assigns.append(new_assign)
+            # Update the definitions. This is safe since the name is unique.
+            func_ir._definitions[new_name] = [expr_value]
+
+            # Add new argument to filter args
+            filter_args = [new_var]
+
+        return bif.Op(op.upper(), colname, *(bif.Scalar(arg) for arg in filter_args))
 
     def _get_partition_filters(
         self,
@@ -2160,13 +2080,13 @@ class TypingTransforms:
         df_var,
         lhs_def,
         rhs_def,
-        func_ir,
+        func_ir: ir.FunctionIR,
         read_node: "Connector",
         new_ir_assigns,
-    ):
-        """get filters for predicate pushdown if possible.
-        Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
-        https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
+    ) -> bif.Filter:
+        """
+        Get filters for predicate pushdown if possible.
+        Returns filters as Bodo IR Filter objects:
         Throws GuardException if not possible.
         """
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
@@ -2179,11 +2099,14 @@ class TypingTransforms:
             else read_node.out_table_col_names
         )
 
-        # similar to DNF normalization in Sympy:
-        # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
-        # Or case: call recursively on arguments and concatenate
-        # e.g. A or B
-        def get_child_filter(child_def):
+        df_col_types = (
+            read_node.original_table_col_types
+            if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader)
+            else read_node.out_table_col_types
+        )
+
+        # Call recursively on arguments and concatenate
+        def get_child_filter(child_def) -> bif.Filter:
             """
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
@@ -2191,9 +2114,8 @@ class TypingTransforms:
             if self._is_logical_not_filter_pushdown(child_def, func_ir):
                 arg_var = get_unary_arg(child_def)
                 arg_def = get_definition(func_ir, arg_var)
-                child_or = self._get_negate_filters(
-                    get_child_filter(arg_def), new_ir_assigns, index_def.loc, func_ir
-                )
+                child_or = self._negate_column_filter(get_child_filter(arg_def))
+
             elif self._is_logical_op_filter_pushdown(child_def, func_ir):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
@@ -2203,147 +2125,46 @@ class TypingTransforms:
                     child_def, df_var, l_def, r_def, func_ir, read_node, new_ir_assigns
                 )
             elif self._is_call_op_filter_pushdown(child_def, func_ir):
-                child_or = [
-                    [
-                        self._get_call_filter(
-                            child_def,
-                            func_ir,
-                            df_var,
-                            df_col_names,
-                            is_sql,
-                            read_node,
-                            new_ir_assigns,
-                        )
-                    ]
-                ]
+                child_or = self._get_call_filter(
+                    child_def,
+                    func_ir,
+                    df_var,
+                    df_col_names,
+                    df_col_types,
+                    is_sql,
+                    read_node,
+                    new_ir_assigns,
+                )
             else:
-                child_or = [
-                    [
-                        self._get_column_filter(
-                            child_def,
-                            func_ir,
-                            df_var,
-                            df_col_names,
-                            is_sql,
-                            read_node,
-                            new_ir_assigns,
-                        )
-                    ]
-                ]
+                child_or = self._get_column_filter(
+                    child_def,
+                    func_ir,
+                    df_var,
+                    df_col_names,
+                    df_col_types,
+                    is_sql,
+                    read_node,
+                    new_ir_assigns,
+                )
             return child_or
 
         if self._is_logical_not_filter_pushdown(index_def, func_ir):
             arg_var = get_unary_arg(index_def)
             arg_def = get_definition(func_ir, arg_var)
             filters = get_child_filter(arg_def)
-            return self._get_negate_filters(
-                filters, new_ir_assigns, index_def.loc, func_ir
-            )
+            return self._negate_column_filter(filters)
 
         if self._is_logical_op_filter_pushdown(index_def, func_ir):
             if self._is_or_filter_pushdown(index_def, func_ir):
                 left_or = get_child_filter(lhs_def)
                 right_or = get_child_filter(rhs_def)
-                return left_or + right_or
+                return bif.Op("OR", left_or, right_or)
 
-            # And case: distribute Or over And to normalize if needed
             if self._is_and_filter_pushdown(index_def, func_ir):
-                # rhs is Or
-                # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-                if self._is_or_filter_pushdown(rhs_def, func_ir):
-                    # lhs And rhs.lhs (A And B)
-                    new_lhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(index_def, 0),
-                        get_binop_arg(rhs_def, 0),
-                        index_def.loc,
-                    )
-                    new_lhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 0))
-                    new_lhs_rdef = self._remove_series_wrappers_from_def(new_lhs_rdef)
-                    left_or = self._get_partition_filters(
-                        new_lhs,
-                        df_var,
-                        lhs_def,
-                        new_lhs_rdef,
-                        func_ir,
-                        read_node,
-                        new_ir_assigns,
-                    )
-                    # lhs And rhs.rhs (A And C)
-                    new_rhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(index_def, 0),
-                        get_binop_arg(rhs_def, 1),
-                        index_def.loc,
-                    )
-                    new_rhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 1))
-                    new_rhs_rdef = self._remove_series_wrappers_from_def(new_rhs_rdef)
-                    right_or = self._get_partition_filters(
-                        new_rhs,
-                        df_var,
-                        lhs_def,
-                        new_rhs_rdef,
-                        func_ir,
-                        read_node,
-                        new_ir_assigns,
-                    )
-                    return left_or + right_or
-
-                # lhs is Or
-                # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-                if self._is_or_filter_pushdown(lhs_def, func_ir):
-                    # lhs.lhs And rhs (B And A)
-                    new_lhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(lhs_def, 0),
-                        get_binop_arg(index_def, 1),
-                        index_def.loc,
-                    )
-                    new_lhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 0))
-                    new_lhs_ldef = self._remove_series_wrappers_from_def(new_lhs_ldef)
-                    left_or = self._get_partition_filters(
-                        new_lhs,
-                        df_var,
-                        new_lhs_ldef,
-                        rhs_def,
-                        func_ir,
-                        read_node,
-                        new_ir_assigns,
-                    )
-                    # lhs.rhs And rhs (C And A)
-                    new_rhs = ir.Expr.binop(
-                        operator.and_,
-                        get_binop_arg(lhs_def, 1),
-                        get_binop_arg(index_def, 1),
-                        index_def.loc,
-                    )
-                    new_rhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 1))
-                    new_rhs_ldef = self._remove_series_wrappers_from_def(new_rhs_ldef)
-                    right_or = self._get_partition_filters(
-                        new_rhs,
-                        df_var,
-                        new_rhs_ldef,
-                        rhs_def,
-                        func_ir,
-                        read_node,
-                        new_ir_assigns,
-                    )
-                    return left_or + right_or
-
                 # both lhs and rhs are And/literal expressions.
-                left_or = get_child_filter(lhs_def)
-                right_or = get_child_filter(rhs_def)
-
-                # If either expression is an AND, we may still have ORs inside
-                # the AND. As a result, distributed ANDs across all ORs.
-                # For example
-                # ((A | B) & C) & D -> (AC | BC) & D (via the recursion)
-                # Now we need to produce (AC | BC) & D -> (ACD | BCD)
-                filters = []
-                for left_or_cond in left_or:
-                    for right_or_cond in right_or:
-                        filters.append(left_or_cond + right_or_cond)
-                return filters
+                left_and = get_child_filter(lhs_def)
+                right_and = get_child_filter(rhs_def)
+                return bif.Op("AND", left_and, right_and)
 
         if self._is_cmp_op_filter_pushdown(index_def, func_ir):
             lhs = get_binop_arg(index_def, 0)
@@ -2353,25 +2174,26 @@ class TypingTransforms:
                 lhs,
                 df_var,
                 df_col_names,
+                df_col_types,
                 func_ir,
                 read_node,
-                new_ir_assigns,
             )
             right_colname = guard(
                 self._get_col_name,
                 rhs,
                 df_var,
                 df_col_names,
+                df_col_types,
                 func_ir,
                 read_node,
-                new_ir_assigns,
             )
 
             require(
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            colname = left_colname if left_colname else right_colname
+            col: pt.Tuple[bif.Filter, types.ArrayCompatible] = left_colname if left_colname else right_colname  # type: ignore
+            colname, coltype = col
             scalar = rhs if left_colname else lhs
             # This is a defensive check, and isn't expected to be hit
             # so we need the pragma to let coverage pass
@@ -2385,13 +2207,16 @@ class TypingTransforms:
                 right_colname is not None,
                 self.func_ir,
             )
-            cond = (colname, op, scalar)
+            self._check_comparison_typing(coltype, scalar, read_node)
+            return bif.Op(op.upper(), colname, bif.Scalar(scalar))
+
         elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
                 index_def,
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 is_sql,
                 read_node,
                 new_ir_assigns,
@@ -2403,57 +2228,25 @@ class TypingTransforms:
                 func_ir,
                 df_var,
                 df_col_names,
+                df_col_types,
                 is_sql,
                 read_node,
                 new_ir_assigns,
             )
 
-        # If this is parquet we need to verify this is a filter we can process.
-        # We don't do this check if there is a call expression because isnull
-        # is always supported.
-        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader) and not is_call(
-            index_def
-        ):
-            lhs_arr_typ = self._get_filter_col_type(
-                cond[0],
-                read_node.original_table_col_types,
-                read_node.original_df_colnames,
-            )
-            lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
-            require(cond[2].name in self.typemap)
-            rhs_scalar_typ = self.typemap[cond[2].name]
-            # Only apply filter pushdown if its safe to use inside arrow
-            require(
-                bodo.utils.typing.is_common_scalar_dtype(
-                    [lhs_scalar_typ, rhs_scalar_typ]
-                )
-                or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ)
-            )
-
-        # Pyarrow format, e.g.: [[("a", "==", 2)]]
-        return [[cond]]
-
-    def _get_filter_col_type(self, col_val, out_types, col_names):
-        """Return column type for column representation in filter predicate
-
-        Args:
-            col_val (str | tuple): column name or tuple representing its computation
-            out_types (list(types.Type)): output types of read node
-            col_names (list(str)): output column names of read node
-
-        Returns:
-            types.Type: array type of predicate column
-        """
-        if isinstance(col_val, str):
-            return out_types[col_names.index(col_val)]
-
-        get_filter_predicate_compute_func(col_val)
-        return self._get_filter_col_type(col_val[0], out_types, col_names)
+        return cond
 
     def _get_col_name(
-        self, var, df_var, df_col_names, func_ir, read_node: "Connector", new_ir_assigns
-    ):
-        """get column name for dataframe column access like df["A"] if possible.
+        self,
+        var,
+        df_var,
+        df_col_names,
+        df_col_types,
+        func_ir: ir.FunctionIR,
+        read_node: "Connector",
+    ) -> pt.Tuple[bif.Filter, types.ArrayCompatible]:
+        """
+        Get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
 
@@ -2477,14 +2270,27 @@ class TypingTransforms:
                     and "func_id" in kws_dict
                 )
 
+        def get_col_type(col_val: str) -> types.ArrayCompatible:
+            """Return column type for column representation in filter predicate
+
+            Args:
+                col_val (str): column name
+
+            Returns:
+                types.Type: array type of predicate column
+            """
+            return df_col_types[df_col_names.index(col_val)]
+
         var_def = get_definition(func_ir, var)
         var_def = self._remove_series_wrappers_from_def(var_def)
 
+        # In form of df.A
         if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
-            return var_def.attr
+            return bif.Ref(var_def.attr), get_col_type(var_def.attr)
 
+        # In form of df["A"]
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
-            return var_def.index
+            return bif.Ref(var_def.index), get_col_type(var_def.index)
 
         if (
             is_expr(var_def, "call")
@@ -2492,7 +2298,8 @@ class TypingTransforms:
             == ("get_table_data", "bodo.hiframes.table")
             and var_def.args[0].name == df_var.name
         ):
-            return df_col_names[find_const(func_ir, var_def.args[1])]
+            col_val = df_col_names[find_const(func_ir, var_def.args[1])]
+            return bif.Ref(col_val), get_col_type(col_val)
 
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
@@ -2511,9 +2318,9 @@ class TypingTransforms:
                     var_def.args[0],
                     df_var,
                     df_col_names,
+                    df_col_types,
                     func_ir,
                     read_node,
-                    new_ir_assigns,
                 )
             # BodoSQL generates get_dataframe_data() calls for projections
             if (
@@ -2523,7 +2330,8 @@ class TypingTransforms:
                 col_ind = get_const_value_inner(
                     func_ir, var_def.args[1], arg_types=self.arg_types
                 )
-                return df_col_names[col_ind]
+                col_val = df_col_names[col_ind]
+                return bif.Ref(col_val), get_col_type(col_val)
 
             is_bodosql_array_kernel = fdef[1] == "bodo.libs.bodosql_array_kernels"
 
@@ -2563,10 +2371,10 @@ class TypingTransforms:
                     and not isinstance(arg_type, types.Optional)
                 )
 
-                col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
                 )
-                return (col_name, fdef[0], args[1])
+                return bif.Op(fdef[0].upper(), col_name, bif.Scalar(args[1])), col_type
 
             if is_bodosql_array_kernel and fdef[0] in (
                 "dayofweek",
@@ -2588,23 +2396,11 @@ class TypingTransforms:
 
                 args = var_def.args
 
-                col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
                 )
 
-                expr_value = ir.Const(None, var_def.loc)
-                new_name = mk_unique_var("dummy_var")
-
-                new_var = ir.Var(self.scope, new_name, var_def.loc)
-                new_assign = ir.Assign(
-                    target=new_var, value=expr_value, loc=var_def.loc
-                )
-                # Append the assign so we update the IR.
-                new_ir_assigns.append(new_assign)
-                # Update the definitions. This is safe since the name is unique.
-                func_ir._definitions[new_name] = [expr_value]
-
-                return (col_name, bodosql_kernel_name, new_var)
+                return bif.Op(bodosql_kernel_name.upper(), col_name), col_type
 
             # All other BodoSQL functions
             if is_bodosql_array_kernel and are_supported_kws(
@@ -2641,28 +2437,15 @@ class TypingTransforms:
                     else:
                         require(is_scalar_type(arg_type))
 
-                col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                col_name, col_type = self._get_col_name(
+                    args[0], df_var, df_col_names, df_col_types, func_ir, read_node
                 )
-                if len(args) == 2:
-                    return (col_name, fdef[0], args[1])
-                else:
-                    if len(args) == 1:
-                        expr_value = ir.Const(None, var_def.loc)
-                        new_name = mk_unique_var("dummy_var")
-                    else:
-                        expr_value = ir.Expr.build_tuple(args[1:], var_def.loc)
-                        new_name = mk_unique_var("tuple_var")
-
-                    new_var = ir.Var(self.scope, new_name, var_def.loc)
-                    new_assign = ir.Assign(
-                        target=new_var, value=expr_value, loc=var_def.loc
-                    )
-                    # Append the assign so we update the IR.
-                    new_ir_assigns.append(new_assign)
-                    # Update the definitions. This is safe since the name is unique.
-                    func_ir._definitions[new_name] = [expr_value]
-                    return (col_name, fdef[0], new_var)
+                return (
+                    bif.Op(
+                        fdef[0].upper(), col_name, *(bif.Scalar(x) for x in args[1:])
+                    ),
+                    col_type,
+                )
 
             if fdef[0] in ("str.lower", "str.upper"):
                 # make sure fdef[1] is a Series
@@ -2671,23 +2454,11 @@ class TypingTransforms:
                     self.needs_transform = True
                     raise GuardException
                 require(isinstance(arg_type, SeriesType))
-                col_name = self._get_col_name(
-                    fdef[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                col_name, col_type = self._get_col_name(
+                    fdef[1], df_var, df_col_names, df_col_types, func_ir, read_node
                 )
 
-                # Create a new IR Expr for the constant pattern.
-                expr_value = ir.Const(None, var_def.loc)
-                # Generate a variable from the Expr
-                new_name = mk_unique_var("dummy_var")
-                new_var = ir.Var(self.scope, new_name, var_def.loc)
-                new_assign = ir.Assign(
-                    target=new_var, value=expr_value, loc=var_def.loc
-                )
-                # Append the assign so we update the IR.
-                new_ir_assigns.append(new_assign)
-                # Update the definitions. This is safe since the name is unique.
-                func_ir._definitions[new_name] = [expr_value]
-                return (col_name, fdef[0].split(".")[1], new_var)
+                return bif.Op(fdef[0].split(".")[1].upper(), col_name), col_type
 
             # We only support astype at this point
             require(
@@ -2697,14 +2468,17 @@ class TypingTransforms:
                 and fdef[0] == "astype"
             )
             return self._get_col_name(
-                fdef[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                fdef[1], df_var, df_col_names, df_col_types, func_ir, read_node
             )
 
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)
-        return get_const_value_inner(func_ir, var_def.index, arg_types=self.arg_types)
+        col_val = get_const_value_inner(
+            func_ir, var_def.index, arg_types=self.arg_types
+        )
+        return bif.Ref(col_val), get_col_type(col_val)
 
-    def _remove_series_wrappers_from_def(self, var_def):
+    def _remove_series_wrappers_from_def(self, var_def: ir.Expr) -> ir.Expr:
         """Returns the definition node of the Series variable in
         pd.Series()/Series.values/Series.str/bodo.pd_hiframes.series_ext.get_series_data nodes.
         This effectively removes the Series wrappers that BodoSQL currently generates to
@@ -3986,64 +3760,6 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _extract_filter_arg(
-        self, var: ir.Var, label
-    ) -> pt.Optional[List[List[Tuple[str, str, Union[ir.Var, str]]]]]:
-        """
-        Convert an IR expression that represents a Bodo compiler filter
-        in DNF form such that it can be used by Connector nodes.
-
-        Filters are either null or a list of list of tuples of 3 values, where:
-        - The outer list are clauses that are ORed together
-        - The inner lists are terms that are ANDed together
-        - The tuple consists of:
-            - A string representing the column name (TODO: Support complex expressions)
-            - A string representing the operator (e.g. '==', '>', 'in', 'is', etc.)
-            - Either a
-                - ir.Var pointing to a IR expression representing a value
-                  the value can be a constant or runtime computation
-                - The string 'NULL' in the case the operator is 'is' or 'is not'
-        """
-
-        top_out = []
-        top_def = get_definition(self.func_ir, var)
-
-        if is_expr(top_def, "build_list"):
-            for clause in top_def.items:
-                clause_out = []
-                clause_def = get_definition(self.func_ir, clause)
-                assert clause_def.op == "build_list"
-                for term in clause_def.items:
-                    term_def = get_definition(self.func_ir, term)
-                    assert term_def.op == "build_tuple" and len(term_def.items) == 3
-                    col_name = self._get_const_value(
-                        term_def.items[0], label, term_def.loc
-                    )
-                    op_str = self._get_const_value(
-                        term_def.items[1], label, term_def.loc
-                    )
-                    value = term_def.items[2]
-
-                    # Special case for NULL checking operations
-                    if op_str == "is" or op_str == "is not":
-                        value = self._get_const_value(value, label, term_def.loc)
-                        if value != "NULL":
-                            raise BodoError(
-                                "_extract_filter_arg(): Filter value for 'is'/'is not' must be 'NULL",
-                                term_def.loc,
-                            )
-
-                    clause_out.append((col_name, op_str, value))
-                top_out.append(clause_out)
-            return top_out
-
-        if isinstance(top_def, ir.Const) and is_overload_none(top_def):
-            return None
-
-        raise BodoError(
-            "Filter argument must be a list of list of tuples or None", label
-        )
-
     def _run_call_read_sql_table(
         self, assign: ir.Assign, rhs: ir.Expr, func_name, label
     ):
@@ -4231,11 +3947,16 @@ class TypingTransforms:
             default=None,
             use_default=True,
         )
-        filter_obj = (
-            self._extract_filter_arg(_bodo_filter_var, label)
-            if _bodo_filter_var
-            else None
-        )
+        if _bodo_filter_var is None:
+            filter_obj = None
+        else:
+            top_def = get_definition(self.func_ir, _bodo_filter_var)
+            if isinstance(top_def, ir.Const) and is_overload_none(top_def):
+                filter_obj = None
+            else:
+                filter_obj = build_filter_from_ir(
+                    _bodo_filter_var, self.func_ir, self.typemap
+                )
 
         _bodo_limit_var = get_call_expr_arg(
             func_str,
