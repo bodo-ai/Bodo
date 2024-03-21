@@ -1373,6 +1373,7 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         case arrow::Type::INT16:
         case arrow::Type::UINT8:
         case arrow::Type::INT8:
+        case arrow::Type::TIME32:
         case arrow::Type::TIME64: {
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
