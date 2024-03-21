@@ -526,6 +526,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 "time": time,
                 "pd": pd,
                 "datetime": datetime,
+                "bif": bodo.ir.filter,
             },
             locs,
         )
@@ -557,6 +558,7 @@ def _gen_pd_func_and_glbls_for_query(
         "bodosql": bodosql,
         "time": time,
         "datetime": datetime,
+        "bif": bodo.ir.filter,
     }
 
     glbls.update(glblsToLower)
@@ -652,7 +654,15 @@ def _gen_pd_func_and_globals_for_unoptimized_query(
     loc_vars = {}
     exec(
         func_text,
-        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql, "time": time},
+        {
+            "pd": pd,
+            "np": np,
+            "bodo": bodo,
+            "re": re,
+            "bodosql": bodosql,
+            "time": time,
+            "bif": bodo.ir.filter,
+        },
         loc_vars,
     )
     impl = loc_vars["impl"]

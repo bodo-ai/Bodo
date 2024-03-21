@@ -2703,7 +2703,7 @@ def test_filter_pushdown_string(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "(((ds.field('two') == ds.scalar(f0))))")
+        check_logger_msg(stream, "(ds.field('two') == ds.scalar(f0))")
 
 
 def test_filter_pushdown_timestamp(datapath, memory_leak_check):
@@ -2721,7 +2721,7 @@ def test_filter_pushdown_timestamp(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "(((ds.field('DT64') < ds.scalar(f0))))")
+        check_logger_msg(stream, "(ds.field('DT64') < ds.scalar(f0))")
 
 
 def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
@@ -2741,7 +2741,7 @@ def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "(((ds.field('A').isin(f0))))")
+        check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
 def test_filter_pushdown_tuple(datapath, memory_leak_check):
@@ -2763,7 +2763,7 @@ def test_filter_pushdown_tuple(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "(((ds.field('A').isin(f0))))")
+        check_logger_msg(stream, "(ds.field('A').isin(f0))")
 
 
 def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
@@ -2785,7 +2785,7 @@ def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "((~((ds.field('A') == ds.scalar(f0)))))")
+        check_logger_msg(stream, "~((ds.field('A') == ds.scalar(f0)))")
 
 
 def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
@@ -2812,7 +2812,7 @@ def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
-        check_logger_msg(stream, "(((ds.field('A') == ds.scalar(f0))))")
+        check_logger_msg(stream, "(ds.field('A') == ds.scalar(f0))")
 
 
 @pytest.mark.skip("[BE-4498] Dictionaries are not passed-by-reference")

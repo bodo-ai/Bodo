@@ -349,7 +349,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
         check_logger_msg(
             stream,
-            "(((pa.compute.coalesce(ds.field('A'), ds.scalar(f0)) > ds.scalar(f1))))",
+            "(pa.compute.coalesce(ds.field('A'), ds.scalar(f0)) > ds.scalar(f1))",
         )
 
 
@@ -397,7 +397,7 @@ def test_case_conversion_filter_pushdown(func_args, datapath, memory_leak_check)
         )
         check_logger_msg(
             stream,
-            f"(((pa.compute.{arrow_func_name}(ds.field('A')) == ds.scalar(f1))))",
+            f"((pa.compute.{arrow_func_name}(ds.field('A'))) == ds.scalar(f0))",
         )
 
 
@@ -432,7 +432,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         # lower(A) = val OR A IS NULL
         check_logger_msg(
             stream,
-            "(((ds.field('A').is_null())) | ((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))))",
+            "(((pa.compute.utf8_lower(ds.field('A'))) == ds.scalar(f0)) | (ds.field('A').is_null()))",
         )
 
 
@@ -465,7 +465,7 @@ def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
         check_logger_msg(
             stream,
-            "(((pa.compute.utf8_upper(pa.compute.coalesce(ds.field('A'), ds.scalar(f0))) == ds.scalar(f2))))",
+            "((pa.compute.utf8_upper(pa.compute.coalesce(ds.field('A'), ds.scalar(f0)))) == ds.scalar(f1))",
         )
 
 

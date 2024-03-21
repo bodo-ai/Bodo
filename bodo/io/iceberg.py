@@ -205,7 +205,7 @@ def get_iceberg_type_info(
 
 
 def get_iceberg_file_list(
-    table_name: str, conn: str, database_schema: str, filters
+    table_name: str, conn: str, database_schema: str, filters: str | None
 ) -> tuple[list[str], list[str]]:
     """
     Gets the list of parquet data files that need to be read from an Iceberg table.
@@ -222,17 +222,17 @@ def get_iceberg_file_list(
             - Convert relative paths to absolute paths
         - List of original file paths directly from Iceberg
     """
-    import bodo_iceberg_connector
+    import bodo_iceberg_connector as bic
 
     assert (
         bodo.get_rank() == 0
     ), "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
 
     try:
-        res = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+        res = bic.bodo_connector_get_parquet_file_list(
             conn, database_schema, table_name, filters
         )
-    except bodo_iceberg_connector.IcebergError as e:
+    except bic.IcebergError as e:
         raise BodoError(
             f"Failed to Get List of Parquet Data Files from Iceberg Table: {e.message}"
         )
@@ -1087,7 +1087,7 @@ def get_iceberg_file_list_parallel(
     conn: str,
     database_schema: str,
     table_name: str,
-    dnf_filters=None,
+    filters: str | None = None,
 ) -> tuple[list[str], int, list[str]]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
@@ -1101,7 +1101,7 @@ def get_iceberg_file_list_parallel(
         conn (str): Iceberg connection string
         database_schema (str): Iceberg database.
         table_name (str): Iceberg table's name
-        dnf_filters (optional): Filters for file
+        filters (optional): Filters for file
             pruning. Defaults to None.
 
     Returns:
@@ -1126,7 +1126,7 @@ def get_iceberg_file_list_parallel(
     if bodo.get_rank() == 0:  # pragma: no cover
         ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
         if tracing.is_tracing():  # pragma: no cover
-            ev_iceberg_fl.add_attribute("g_dnf_filter", str(dnf_filters))
+            ev_iceberg_fl.add_attribute("g_filters", filters)
         try:
             # We return two list of Iceberg files. pq_abs_path_file_list_or_e contains the full
             # paths that can be used to read individual files. iceberg_relative_path_file_list contains
@@ -1139,7 +1139,7 @@ def get_iceberg_file_list_parallel(
             (
                 pq_abs_path_file_list_or_e,
                 iceberg_relative_path_file_list,
-            ) = get_iceberg_file_list(table_name, conn, database_schema, dnf_filters)
+            ) = get_iceberg_file_list(table_name, conn, database_schema, filters)
             if tracing.is_tracing():  # pragma: no cover
                 ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
                     os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
@@ -1585,7 +1585,7 @@ def get_iceberg_pq_dataset(
     table_name: str,
     typing_pa_table_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    dnf_filters=None,
+    iceberg_filter: str | None = None,
     expr_filter_f_str: str | None = None,
     filter_scalars: list[tuple[str, pt.Any]] | None = None,
 ) -> IcebergParquetDataset:
@@ -1604,7 +1604,7 @@ def get_iceberg_pq_dataset(
             have Iceberg Field IDs in the metadata of the fields.
         str_as_dict_cols (list[str]): List of column names
             that will be read with dictionary encoding.
-        dnf_filters (optional): Filters passed to the Iceberg Java library
+        filter_json (optional): Filters passed to the Iceberg Java library
             for file-pruning. Defaults to None.
         expr_filter_f_str (str, optional): f-string to use to generate
             the Arrow filters. See description of 'generate_expr_filter'
@@ -1627,7 +1627,7 @@ def get_iceberg_pq_dataset(
     comm = MPI.COMM_WORLD
 
     # Get list of files. This is the list after
-    # applying the dnf_filters (metadata-level).
+    # applying the iceberg_filter (metadata-level).
     (
         pq_abs_path_file_list,
         snapshot_id,
@@ -1636,7 +1636,7 @@ def get_iceberg_pq_dataset(
         conn,
         database_schema,
         table_name,
-        dnf_filters,
+        iceberg_filter,
     )
 
     # If no files exist/match, return an empty dataset.
@@ -1763,7 +1763,7 @@ def get_iceberg_pq_dataset(
     #    This is a deterministic process and therefore we can be sure that all
     #    ranks will end up with the same result.
     schema_groups: list[IcebergSchemaGroup] = []
-    curr_schema_group_id: tuple[tuple[int], tuple[str]] = None
+    curr_schema_group_id: tuple[tuple[int], tuple[str]] | None = None
     iceberg_pieces: list[IcebergPiece] = []
     for piece in pieces:
         if (curr_schema_group_id is None) or (curr_schema_group_id != piece[2]):
@@ -2091,7 +2091,7 @@ def determine_str_as_dict_columns(
     # Iceberg Java Library to avoid retrieving millions of files
     # for no reason.
     pq_abs_path_file_list, _, _ = get_iceberg_file_list_parallel(
-        conn, database_schema, table_name, dnf_filters=None
+        conn, database_schema, table_name, filters=None
     )
     # Take a sample of N files where N is the number of ranks. Each rank looks at
     # the metadata of a different random file
@@ -2290,7 +2290,7 @@ def with_iceberg_field_id_md(
     new_md.update({b_ICEBERG_FIELD_ID_MD_KEY: str(next_field_id)})
     next_field_id += 1
 
-    new_field: pa.Field = None
+    new_field: pa.Field | None = None
     # Recurse in the nested data type case:
     if pa.types.is_list(field.type):
         new_element_field, next_field_id = with_iceberg_field_id_md(

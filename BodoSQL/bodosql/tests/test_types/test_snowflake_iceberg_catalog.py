@@ -456,7 +456,9 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
         )
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         # Verify no limit pushdown as its after the limit
-        check_logger_msg(stream, "Arrow filters pushed down:\nNone")
+        check_logger_msg(
+            stream, "Iceberg Filter Pushed Down:\nFilterExpr('ALWAYS_TRUE', [])"
+        )
         # Verify we don't push down the second limit
         check_logger_no_msg(stream, "Constant limit detected, reading at most 2 rows")
 

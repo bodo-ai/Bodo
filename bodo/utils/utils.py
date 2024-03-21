@@ -36,7 +36,6 @@ import bodo
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
-from bodo.ir.filter import supported_funcs_map
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -1297,7 +1296,7 @@ import copy
 ir.Const.__deepcopy__ = lambda self, memo: ir.Const(self.value, copy.deepcopy(self.loc))
 
 
-def is_call_assign(stmt):
+def is_call_assign(stmt) -> TypeGuard[ir.Assign]:
     return (
         isinstance(stmt, ir.Assign)
         and isinstance(stmt.value, ir.Expr)
@@ -1305,19 +1304,19 @@ def is_call_assign(stmt):
     )
 
 
-def is_call(expr) -> bool:
+def is_call(expr) -> TypeGuard[ir.Expr]:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
-def is_var_assign(inst):
+def is_var_assign(inst) -> TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst) -> bool:
+def is_assign(inst) -> TypeGuard[ir.Assign]:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op) -> bool:
+def is_expr(val, op) -> TypeGuard[ir.Expr]:
     return isinstance(val, ir.Expr) and val.op == op
 
 
@@ -1687,37 +1686,6 @@ def synchronize_error_njit(exception_str, error_message):
     """
     with numba.objmode():
         synchronize_error(exception_str, error_message)
-
-
-def _remove_prefix(input: str, prefix: str) -> str:
-    """
-    Remove Prefix from String if Available
-    This is part of Python's Standard Library starting from 3.9
-    TODO: Remove once Python 3.8 is deprecated
-    """
-    if sys.version_info.minor < 9:
-        return input[len(prefix) :] if input.startswith(prefix) else input
-    else:
-        return input.removeprefix(prefix)
-
-
-def get_filter_predicate_compute_func(col_val):
-    """
-    Verifies that the input filter (col_val) is valid and
-    maintains the required Tuple[str, str, Var] structure
-    internal to the Bodo compiler.
-
-    Returns the compute function name as a string literal.
-    """
-    assert (
-        isinstance(col_val, tuple) and len(col_val) == 3
-    ), f"Filter must maintain the structure Tuple[str, str, Var]. Invalid filter: {col_val}"
-
-    compute_func = col_val[1]
-    assert (
-        compute_func in supported_funcs_map
-    ), f"Unsupported compute function for column in filter predicate: {compute_func}"
-    return compute_func
 
 
 # Helper function that extracts the constant value from a tuple of constants or a constant

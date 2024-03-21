@@ -39,7 +39,7 @@ ArrowReader* pq_reader_init_py_entry(
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read_py_entry(
     const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
+    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
     const char* expr_filter_f_str_, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
@@ -49,7 +49,7 @@ table_info* iceberg_pq_read_py_entry(
 
 ArrowReader* iceberg_pq_reader_init_py_entry(
     const char* conn, const char* database_schema, const char* table_name,
-    bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
+    bool parallel, int64_t tot_rows_to_read, PyObject* iceberg_filter_str,
     const char* expr_filter_f_str, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
