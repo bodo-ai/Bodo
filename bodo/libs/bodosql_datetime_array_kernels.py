@@ -1193,13 +1193,18 @@ def create_last_day_func_overload(unit):  # pragma: no cover
 def create_last_day_util_overload(unit):
     def overload_last_day_util(date_or_time_expr):
         verify_datetime_arg_allow_tz(
-            date_or_time_expr, "last_day_" + unit, "date_or_time_expr"
+            date_or_time_expr,
+            "last_day_" + unit,
+            "date_or_time_expr",
+            allow_timestamp_tz=True,
         )
-        box_str = (
-            "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
-            else ""
-        )
+
+        if is_valid_timestamptz_arg(date_or_time_expr):
+            box_str = "bodo.hiframes.timestamptz_ext.get_local_timestamp"
+        elif bodo.utils.utils.is_array_typ(date_or_time_expr, True):
+            box_str = "bodo.utils.conversion.box_if_dt64"
+        else:
+            box_str = ""
 
         arg_names = ["date_or_time_expr"]
         arg_types = [date_or_time_expr]
@@ -2441,8 +2446,9 @@ def next_day_util(arr0, arr1):
         datetime series/scalar: the previous day of the week from the input timestamp(s)
     """
 
-    verify_datetime_arg_allow_tz(arr0, "NEXT_DAY", "arr0")
+    verify_datetime_arg_allow_tz(arr0, "NEXT_DAY", "arr0", allow_timestamp_tz=True)
     verify_string_arg(arr1, "NEXT_DAY", "arr1")
+    is_timestamp_tz = is_valid_timestamptz_arg(arr0)
     is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
     is_date = is_valid_date_arg(arr0)
 
@@ -2456,7 +2462,9 @@ def next_day_util(arr0, arr1):
     # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
     # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/next_day.html#arguments
     scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
-    if is_input_tz_aware:
+    if is_timestamp_tz:
+        arg0_timestamp = "bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)"
+    elif is_input_tz_aware:
         arg0_timestamp = "arg0"
     elif is_date:
         arg0_timestamp = "pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)"
@@ -2492,8 +2500,9 @@ def previous_day_util(arr0, arr1):
         datetime series/scalar: the previous day of the week from the input timestamp(s)
     """
 
-    verify_datetime_arg_allow_tz(arr0, "PREVIOUS_DAY", "arr0")
+    verify_datetime_arg_allow_tz(arr0, "PREVIOUS_DAY", "arr0", allow_timestamp_tz=True)
     verify_string_arg(arr1, "PREVIOUS_DAY", "arr1")
+    is_timestamp_tz = is_valid_timestamptz_arg(arr0)
     is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
     is_date = is_valid_date_arg(arr0)
 
@@ -2507,7 +2516,9 @@ def previous_day_util(arr0, arr1):
     # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
     # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/previous_day.html#arguments
     scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
-    if is_input_tz_aware:
+    if is_timestamp_tz:
+        arg0_timestamp = "bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)"
+    elif is_input_tz_aware:
         arg0_timestamp = "arg0"
     elif is_date:
         arg0_timestamp = "pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)"
