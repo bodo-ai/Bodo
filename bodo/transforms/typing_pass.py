@@ -5567,6 +5567,12 @@ class TypingTransforms:
             "param_dict",
             default=types.none,
         )
+        # Make sure JIT options are not used inside JIT functions
+        for k in kws.keys():
+            if k not in ("sql", "param_dict"):
+                raise BodoError(
+                    f"Argument '{k}' is not supported for BodoSQLContextType.{func_name}() inside JIT functions."
+                )
 
         needs_transform = False
         try:
