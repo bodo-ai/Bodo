@@ -696,20 +696,37 @@ def test_fails_compile(query_text):
     raise Exception("Should have failed to compile")
 
 
-fn_1 = """
-def impl(bc, n):
-    out = 3
-    if n > 3:
-        out = out + n
-    return out
-"""
-fn_1_expected = 13
+def test_sql_jit_options():
+    """Test passing JIT options to bc.sql() when called outside JIT"""
 
-fn_2 = """
-def impl(bc, n):
-    df = bc.dataframes[0]
-    for i in range(n):
-        df["A"] = df["A"] + df["B"]
-    return df["A"].sum()
-"""
-fn_2_expected = 154450
+    n = 100
+    df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+    df_dist = bodo.scatterv(df)
+
+    # Test args_maybe_distributed=True and returns_maybe_distributed=True defaults
+    bc = bodosql.BodoSQLContext({"T1": df_dist})
+    bc.sql("select sum(B) from T1 group by A")
+    assert count_array_REPs() == 0
+
+    # Test distributed flag
+    bc = bodosql.BodoSQLContext({"T1": df})
+    bc.sql("select sum(B) from T1 group by A", distributed=["T1"])
+    assert count_array_REPs() == 0
+
+    # Test replicated data
+    bc = bodosql.BodoSQLContext({"T1": df})
+    bc.sql("select sum(B) from T1 group by A")
+    assert count_array_REPs() > 0
+
+    # Using JIT options inside JIT should raise error
+    @bodo.jit
+    def f(bc):
+        bc.sql("select 1", distributed=False)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            r"Argument 'distributed' is not supported for BodoSQLContextType.sql() inside JIT functions"
+        ),
+    ):
+        f(bodosql.BodoSQLContext())

@@ -32,6 +32,11 @@ from bodosql.utils import BodoSQLWarning, error_to_string
 # Name for parameter table
 NAMED_PARAM_TABLE_NAME = "__$BODO_NAMED_PARAM_TABLE__"
 
+# Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
+TABLE_ARG_PREFIX = "_ARG_"
+# Prefix to add to parameter argument names when passed to JIT to avoid variable name conflicts
+PARAM_ARG_PREFIX = "_PARAM_"
+
 
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
 class SqlTypeEnum(Enum):
@@ -588,7 +593,7 @@ def _generate_table_read(
     elif from_jit:
         read_line = f"bodo_sql_context.dataframes[{table_num}]"
     else:
-        read_line = "_ARG_" + table_name
+        read_line = TABLE_ARG_PREFIX + table_name
     return read_line
 
 
@@ -769,12 +774,7 @@ class BodoSQLContext:
         )
         impl = loc_vars["impl"]
 
-        dispatcher = bodo.jit(
-            sig,
-            args_maybe_distributed=False,
-            returns_maybe_distributed=False,
-        )(impl)
-
+        dispatcher = bodo.jit(sig)(impl)
         return dispatcher
 
     def validate_query(self, sql):
@@ -915,8 +915,8 @@ class BodoSQLContext:
 
                 # Remove the named Params table
                 self._remove_named_params()
-                table_names = ["_ARG_" + x for x in self.tables.keys()]
-                params_names = ["_PARAM_" + x for x in params_dict.keys()]
+                table_names = [TABLE_ARG_PREFIX + x for x in self.tables.keys()]
+                params_names = [PARAM_ARG_PREFIX + x for x in params_dict.keys()]
                 args = ", ".join(table_names + params_names)
                 func_text_or_err_msg += f"def impl({args}):\n"
                 func_text_or_err_msg += f"{pd_code}\n"
@@ -951,13 +951,13 @@ class BodoSQLContext:
             globalsDict[varname] = locs["value"]
         return func_text_or_err_msg, globalsDict
 
-    def sql(self, sql, params_dict=None):
-        return self._sql(sql, True, params_dict)
+    def sql(self, sql, params_dict=None, **jit_options):
+        return self._sql(sql, True, params_dict, **jit_options)
 
-    def _test_sql_unoptimized(self, sql, params_dict=None):
-        return self._sql(sql, False, params_dict)
+    def _test_sql_unoptimized(self, sql, params_dict=None, **jit_options):
+        return self._sql(sql, False, params_dict, **jit_options)
 
-    def _sql(self, sql, optimizePlan, params_dict):
+    def _sql(self, sql, optimizePlan, params_dict, **jit_options):
         import bodosql
 
         if params_dict is None:
@@ -993,10 +993,25 @@ class BodoSQLContext:
             loc_vars,
         )
         impl = loc_vars["impl"]
-        # TODO [BS-514]: Determine how to support parallel flags from Python
-        return bodo.jit(
-            impl, args_maybe_distributed=False, returns_maybe_distributed=False
-        )(*(list(self.tables.values()) + list(params_dict.values())))
+
+        # Add table argument name prefix to user provided distributed flags to match
+        # stored names
+        if "distributed" in jit_options and isinstance(
+            jit_options["distributed"], (list, set)
+        ):
+            jit_options["distributed"] = [
+                TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
+            ]
+        if "replicated" in jit_options and isinstance(
+            jit_options["replicated"], (list, set)
+        ):
+            jit_options["replicated"] = [
+                TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
+            ]
+
+        return bodo.jit(impl, **jit_options)(
+            *(list(self.tables.values()) + list(params_dict.values()))
+        )
 
     def generate_plan(self, sql, params_dict=None, show_cost=False):
         """
