@@ -496,6 +496,12 @@ class Obfuscator(ast.NodeTransformer):
         self.visit(node.value)
         return node
 
+    def visit_MatchAs(self, node):
+        if node.pattern != None:
+            node.pattern = self.visit(node.pattern)
+        node.name = self.mapping_var(True, node.name)
+        return node
+
     def _remove_docstring(self, node):
         if len(node.body) == 0:
             return node
