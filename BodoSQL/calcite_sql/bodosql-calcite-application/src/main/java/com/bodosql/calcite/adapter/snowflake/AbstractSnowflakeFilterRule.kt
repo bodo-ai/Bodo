@@ -91,7 +91,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     // Comparison operators.
                     SqlKind.EQUALS,
                     SqlKind.NOT_EQUALS,
-                    SqlKind.NULL_EQUALS,
                     SqlKind.LESS_THAN,
                     SqlKind.LESS_THAN_OR_EQUAL,
                     SqlKind.GREATER_THAN,
