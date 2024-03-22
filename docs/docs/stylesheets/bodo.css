@@ -274,5 +274,8 @@ img[src*='#center'] {
 }
 
 
-
-
+.md-nav--primary .md-nav__title[for=__drawer] {
+    background-color: var(--md-default-fg-color--lightest);
+    color: var(--md-default-fg-color--light);
+    font-weight: 700;
+}
