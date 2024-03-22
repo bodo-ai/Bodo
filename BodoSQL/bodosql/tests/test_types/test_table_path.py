@@ -118,6 +118,9 @@ def test_table_path_pq_bodosqlContext_python(
     filename = parquet_filepaths
     py_output = pd.read_parquet(filename)
     bodosql_output = impl(filename)
+    if bodo.get_size() != 1:
+        bodosql_output = bodo.allgatherv(bodosql_output)
+
     _check_query_equal(
         bodosql_output,
         py_output,
@@ -178,6 +181,8 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
         conn_str,
     )
     bodosql_output = impl(table_name, conn_str)
+    if bodo.get_size() != 1:
+        bodosql_output = bodo.allgatherv(bodosql_output)
     _check_query_equal(
         bodosql_output,
         py_output,

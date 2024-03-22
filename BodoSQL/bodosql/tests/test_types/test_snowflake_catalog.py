@@ -2067,6 +2067,7 @@ def test_read_with_array(test_db_snowflake_catalog, memory_leak_check):
     """
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     out: pd.DataFrame = bc.sql("SELECT * FROM BODOSQL_ARRAY_READ_TEST")
+    out = bodo.allgatherv(out)
     assert len(out) == 100
     assert len(out.columns) == 3
     assert all(isinstance(i, list) for i in out["A"])
