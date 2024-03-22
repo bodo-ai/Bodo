@@ -1,7 +1,7 @@
 locals {
   prefix     = "bodo-gh-ci"
   aws_region = "us-east-2"
-  version    = "5.6.2"
+  version    = "5.9.0"
 }
 
 
@@ -21,7 +21,7 @@ resource "aws_resourcegroups_group" "resourcegroups_group" {
 module "runners" {
   source = "philips-labs/github-runner/aws//modules/multi-runner"
   # Same as local.version
-  version = "5.6.2"
+  version = "5.9.0"
 
   # Multi-Size Runners to Use
   # Assume all Runners are Using Amazon Linux 2023
@@ -38,11 +38,49 @@ module "runners" {
 
       runner_config = merge(local.base_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["m6i.large", "m6id.large"]
+        instance_types = ["c7i.large", "c6i.large", "t3.large", "m6i.large", "m6id.large", "c5.large"]
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_small_"
         # Max # of Runners of this Size
         runners_maximum_count = 60
+      })
+    }
+
+    "medium" = {
+      matcherConfig : {
+        labelMatchers = [["self-hosted", "medium"]]
+        exactMatch    = true
+      }
+
+      # Recommended disabled for ephemeral runners
+      fifo = false
+
+      runner_config = merge(local.base_runner_config, {
+        # Instance Type(s) (Multiple Options to Choose for Spot)
+        instance_types = ["c7i.xlarge", "c6i.xlarge", "t3.xlarge", "m6i.xlarge", "m6id.xlarge", "c5.xlarge"]
+        # Prefix runners with the environment name
+        runner_name_prefix = "${local.prefix}_medium_"
+        # Max # of Runners of this Size
+        runners_maximum_count = 10
+      })
+    }
+
+    "large" = {
+      matcherConfig : {
+        labelMatchers = [["self-hosted", "large"]]
+        exactMatch    = true
+      }
+
+      # Recommended disabled for ephemeral runners
+      fifo = false
+
+      runner_config = merge(local.base_runner_config, {
+        # Instance Type(s) (Multiple Options to Choose for Spot)
+        instance_types = ["c7i.2xlarge", "c6i.2xlarge", "t3.2xlarge", "m6i.2xlarge", "m6id.2xlarge", "c5.2xlarge"]
+        # Prefix runners with the environment name
+        runner_name_prefix = "${local.prefix}_large_"
+        # Max # of Runners of this Size
+        runners_maximum_count = 10
       })
     }
 
@@ -94,7 +132,7 @@ module "runners" {
 
 module "webhook_github_app" {
   source     = "philips-labs/github-runner/aws//modules/webhook-github-app"
-  version    = "5.6.2"
+  version    = "5.9.0"
   depends_on = [module.runners]
 
   github_app = {

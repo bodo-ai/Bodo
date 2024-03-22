@@ -15,7 +15,8 @@ locals {
     # Use Spot Instances
     instance_target_capacity_type = "spot"
     # How to Choose Between Spot Sizes
-    instance_allocation_strategy = "price-capacity-optimized"
+    # For now, choose the option most likely to not be interrupted
+    instance_allocation_strategy = "capacity-optimized"
     # Use On-Demand Instances if Spot Instances are Unavailable
     enable_on_demand_failover_for_errors = ["InsufficientInstanceCapacity"]
 
