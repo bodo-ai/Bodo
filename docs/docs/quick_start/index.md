@@ -12,7 +12,7 @@ This is a quick and easy way to see how Bodo integrates with your existing data 
 
 ## [Platform Quick Start][bodoplatformquickstart]
 
-If you/your team have been onboarded to the Bodo Platform, this guide will help you get started with the Bodo Platform.
+This guide provides a quick overview of the Bodo SaaS Platform and a walkthrough of the subscription process. AWS users can follow this guide to get started with the Bodo Platform in a few simple steps.
 
 ## Local Bodo Engine Quick Start (Community Edition)
 
