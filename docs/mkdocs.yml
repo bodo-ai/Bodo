@@ -124,6 +124,7 @@ nav:
     - Quick Start (Cloud): quick_start/quick_start_platform.md
     - Local SQL Engine Quick Start (Community Edition): quick_start/quickstart_local_sql.md
     - Local Python Engine Quick Start (Community Edition): quick_start/quickstart_local_python.md
+    - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
   - Guides:
       - integrating_bodo/index.md
       - Developer's Quick Start Guide: quick_start/dev_guide.md

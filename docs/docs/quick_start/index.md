@@ -23,3 +23,6 @@ This guide will walk you through the process of running a simple SQL query using
 
 - ### [Python Quickstart][quickstart-local-python]
 This guide will walk you through the process of running a simple Python code using Bodo engine on your local machine.
+
+- ### [Iceberg Quickstart][quickstart-local-iceberg]
+This guide will walk you through the process of running a simple Python code using Bodo engine on your local machine to write a local Iceberg table and read from it.
