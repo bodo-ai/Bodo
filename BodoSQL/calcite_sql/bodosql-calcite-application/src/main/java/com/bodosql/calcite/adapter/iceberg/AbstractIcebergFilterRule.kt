@@ -113,7 +113,6 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
              * Supported builtin calls for columns are based on:
              * https://iceberg.apache.org/javadoc/1.4.3/?org/apache/iceberg/expressions/Expressions.html.
              * Note some functions are not 1:1 but can be remapped in code generation. In particular:
-             *  - NULL_EQUALS
              *  - SEARCH
              *  - IS_FALSE
              *  - IS_NOT_FALSE
@@ -131,17 +130,15 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                     // Comparison operators.
                     SqlKind.EQUALS,
                     SqlKind.NOT_EQUALS,
-                    // Equivalent to A == B OR A IS NULL AND B IS NULL
-//                    SqlKind.NULL_EQUALS,
                     SqlKind.LESS_THAN,
                     SqlKind.LESS_THAN_OR_EQUAL,
                     SqlKind.GREATER_THAN,
                     SqlKind.GREATER_THAN_OR_EQUAL,
                     SqlKind.SEARCH,
-                    // Equivalent to A == B OR A IS NULL AND B IS NULL
-//                    SqlKind.IS_DISTINCT_FROM,
-                    // Equivalent to A != B AND A IS NOT NULL OR A != B AND B IS NULL
-//                    SqlKind.IS_NOT_DISTINCT_FROM,
+                    // Equivalent to A != B AND (A IS NOT NULL OR B IS NOT NULL)
+                    SqlKind.IS_DISTINCT_FROM,
+                    // Equivalent to A == B OR (A IS NULL AND B IS NULL)
+                    SqlKind.IS_NOT_DISTINCT_FROM,
                     // Logical identity operators.
                     SqlKind.IS_FALSE,
                     // Equivalent to A IS NULL OR A == TRUE.
@@ -160,14 +157,10 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
             /**
              * Supported function calls without a builtin kind for columns are based on:
              * https://iceberg.apache.org/javadoc/1.4.3/?org/apache/iceberg/expressions/Expressions.html.
-             * Note some functions are not 1:1 but can be remapped in code generation. In particular:
-             *  - EQUAL_NULL
              */
             private val SUPPORTED_GENERIC_CALL_NAME =
                 setOf(
                     StringOperatorTable.STARTSWITH.name,
-                    // TODO: What to do with this
-//                CondOperatorTable.EQUAL_NULL.name,
                 )
 
             @JvmStatic

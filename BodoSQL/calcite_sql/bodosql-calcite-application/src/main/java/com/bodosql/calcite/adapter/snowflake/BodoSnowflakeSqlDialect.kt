@@ -84,20 +84,19 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         unicode_str: String,
     ) {
         buf.append("'")
-        for (i in 0 until unicode_str.length) {
-            val c = unicode_str[i]
-            if (c.code < 32 || c.code >= 128) {
+        for (element in unicode_str) {
+            if (element.code < 32 || element.code >= 128) {
                 buf.append('\\')
                 buf.append('u')
-                buf.append(hexits[c.code shr 12 and 0xf])
-                buf.append(hexits[c.code shr 8 and 0xf])
-                buf.append(hexits[c.code shr 4 and 0xf])
-                buf.append(hexits[c.code and 0xf])
-            } else if (c == '\'' || c == '\\') {
-                buf.append(c)
-                buf.append(c)
+                buf.append(hexits[element.code shr 12 and 0xf])
+                buf.append(hexits[element.code shr 8 and 0xf])
+                buf.append(hexits[element.code shr 4 and 0xf])
+                buf.append(hexits[element.code and 0xf])
+            } else if (element == '\'' || element == '\\') {
+                buf.append(element)
+                buf.append(element)
             } else {
-                buf.append(c)
+                buf.append(element)
             }
         }
         buf.append("'")

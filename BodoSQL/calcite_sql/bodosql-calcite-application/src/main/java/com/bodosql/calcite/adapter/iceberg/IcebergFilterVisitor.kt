@@ -46,6 +46,10 @@ private val GENERIC_CALL_TO_OPSTR =
         StringOperatorTable.STARTSWITH.name to "STARTS_WITH",
     )
 
+// Operators that require a rewrite in code generation.
+private val REWRITE_UNARY_KINDS = setOf(SqlKind.IS_NOT_TRUE, SqlKind.IS_NOT_FALSE)
+private val REWRITE_BINOP_KINDS = setOf(SqlKind.IS_DISTINCT_FROM, SqlKind.IS_NOT_DISTINCT_FROM)
+
 class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ctx: PandasRel.BuildContext) : RexVisitor<Expr> {
     private val scalarTranslator = ctx.scalarRexTranslator()
 
@@ -100,6 +104,94 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
     }
 
     /**
+     * Generate the expr for any Unary expression that needs to be rewritten
+     * into multiple expressions.
+     * For example IS_NOT_TRUE(A) is equivalent to (A == False OR A IS NULL).
+     * The exact generated code depends on details like nullability.
+     * @param var1 The RexCall that requires multiple expressions
+     * to write.
+     * @return The rewritten expression.
+     */
+    private fun visitUnaryRewriteCall(var1: RexCall): Expr {
+        val colOp =
+            when (val op0 = var1.operands[0]) {
+                is RexInputRef -> op0
+                else -> throw IllegalStateException("Codegen with comparison between 2 columns is not supported")
+            }
+        val colName = topNode.deriveRowType().fieldNames[colOp.index]
+        val columnRef = ref(colName)
+        // We can omit certain checks we know an input is not nullable,
+        // which is common for scalars.
+        val colIsNullable = colOp.type.isNullable
+        // Return the opposite scalar so we can use equality.
+        val scalar =
+            if (var1.kind == SqlKind.IS_NOT_TRUE) {
+                Expr.BooleanLiteral(false)
+            } else {
+                Expr.BooleanLiteral(true)
+            }
+        // This is rewritten as (A == Scalar) OR A IS NULL
+        val equalsCall = op("==", columnRef, scalar)
+        return if (colIsNullable) {
+            val nullable = op("IS_NULL", columnRef)
+            op("OR", equalsCall, nullable)
+        } else {
+            equalsCall
+        }
+    }
+
+    /**
+     * Generate the expr for any Binops that needs to be rewritten
+     * into multiple expressions.
+     * For example IS_NOT_DISTINCT_FROM(A, B) is equivalent to
+     * (A == B OR (A IS NULL AND B IS NULL)).
+     * The exact generated code depends on details like nullability
+     * @param var1 The RexCall that requires multiple expressions
+     * to write.
+     * @return The rewritten expression.
+     */
+    private fun visitBinopRewriteCall(var1: RexCall): Expr {
+        val op0 = var1.operands[0]
+        val op1 = var1.operands[1]
+        val (colOp, constOp) =
+            when {
+                op0 is RexInputRef && op1 is RexLiteral -> (op0 to op1)
+                op1 is RexInputRef && op0 is RexLiteral -> (op1 to op0)
+                else -> throw IllegalStateException("Codegen with comparison between 2 columns is not supported")
+            }
+        val colName = topNode.deriveRowType().fieldNames[colOp.index]
+        val columnRef = ref(colName)
+        val constVar = createScalarAssignment(constOp)
+        val scalarRef = scalar(constVar)
+        // We can omit certain checks we know an input is not nullable,
+        // which is common for scalars.
+        val colIsNullable = colOp.type.isNullable
+        val scalarIsNullable = constOp.type.isNullable
+        return if (var1.kind == SqlKind.IS_DISTINCT_FROM) {
+            // Equivalent to A != B AND (A IS NOT NULL OR B IS NOT NULL)
+            val notEqualOp = op("!=", columnRef, scalarRef)
+            if (colIsNullable && scalarIsNullable) {
+                op("AND", notEqualOp, op("OR", op("IS_NOT_NULL", columnRef), op("IS_NOT_NULL", scalarRef)))
+            } else if (colIsNullable) {
+                op("AND", notEqualOp, op("IS_NOT_NULL", columnRef))
+            } else if (scalarIsNullable) {
+                op("AND", notEqualOp, op("IS_NOT_NULL", scalarRef))
+            } else {
+                notEqualOp
+            }
+        } else {
+            // IS NOT DISTINCT FROM is equivalent to A == B OR (A IS NULL AND B IS NULL)
+            val equalOp = op("==", columnRef, scalarRef)
+            if (colIsNullable && scalarIsNullable) {
+                op("OR", equalOp, op("AND", op("IS_NULL", columnRef), op("IS_NULL", scalarRef)))
+            } else {
+                // If either is non-nullable they must be equal.
+                equalOp
+            }
+        }
+    }
+
+    /**
      * Convert a RexInputRef in a filter, representing a boolean column
      * into a Bodo compiler filter expression Op("==", ref(colName), scalar(True)).
      * This assumes the reference to a column is a boolean column.
@@ -137,9 +229,12 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
         // Complex Operators with Special Handling
         return if (var1.kind == SqlKind.SEARCH) {
             visitSearchCall(var1)
-
-            // Basic Operators with Normal Handling
+        } else if (var1.kind in REWRITE_UNARY_KINDS) {
+            visitUnaryRewriteCall(var1)
+        } else if (var1.kind in REWRITE_BINOP_KINDS) {
+            visitBinopRewriteCall(var1)
         } else if (var1.kind in BASIC_UNARY_CALL_TO_OPSTR) {
+            // Basic Operators with Normal Handling
             val colOp = var1.operands[0]
             if (colOp !is RexInputRef) {
                 throw IllegalStateException("Impossible for filter on non-input col")
@@ -178,7 +273,7 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
                 }
             op(opStr, ref(colName), scalar(scalarVar))
 
-        // Logical Operators
+            // Logical Operators
         } else if (var1.kind == SqlKind.AND) {
             op("AND", var1.operands.map { op -> op.accept(this) })
         } else if (var1.kind == SqlKind.OR) {
