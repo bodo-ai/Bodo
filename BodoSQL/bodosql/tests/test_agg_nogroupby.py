@@ -580,6 +580,31 @@ def test_any_value(query, spark_info, memory_leak_check):
     )
 
 
+def test_any_value_nulls(memory_leak_check):
+    """
+    Test that ANY_VALUE works when the first element is NULL.
+    See BSE-2934
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([None, 1, 1, 1, 1, 1]),
+        }
+    )
+    ctx = {"TABLE1": df}
+    query = "SELECT ANY_VALUE(A) FROM table1"
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        is_out_distributed=False,
+        expected_output=pd.DataFrame({0: [None]}),
+    )
+
+
 @pytest.mark.tz_aware
 def test_max_min_tz_aware(memory_leak_check):
     """

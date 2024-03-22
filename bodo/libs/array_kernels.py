@@ -3621,6 +3621,32 @@ def _install_bitX_agg_fns():
 _install_bitX_agg_fns()
 
 
+@numba.generated_jit
+def anyvalue_agg(A, parallel=False):
+    """Performs the ANYVALUE_AGG operation on an array by returning the first
+    value from the array. Note that NULL can be returned."""
+
+    def impl(A, parallel=False):  # pragma: no cover
+        if len(A) == 0:
+            return None
+
+        result = A[0]
+        is_none = bodo.libs.array_kernels.isna(A, 0)
+        # if is_none is True, result is some garbage, but we need it for the
+        # broadcast call below
+
+        if parallel:
+            # Let rank 0 decide the global result
+            is_none = bodo.libs.distributed_api.bcast_scalar(is_none)
+            result = bodo.libs.distributed_api.bcast_scalar(result)
+
+        if is_none:
+            return None
+        return result
+
+    return impl
+
+
 @overload(np.unique, inline="always", no_unliteral=True)
 def np_unique(A):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
