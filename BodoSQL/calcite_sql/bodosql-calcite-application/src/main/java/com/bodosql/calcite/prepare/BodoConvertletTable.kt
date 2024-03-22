@@ -89,7 +89,8 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         addAlias(SqlLibraryOperators.RLIKE, StringOperatorTable.REGEXP_LIKE)
         addAlias(StringOperatorTable.RLIKE, StringOperatorTable.REGEXP_LIKE)
         addAlias(SqlBodoOperatorTable.NULL_EQUALS, SqlStdOperatorTable.IS_NOT_DISTINCT_FROM)
-        addAlias(CondOperatorTable.EQUAL_NULL, SqlStdOperatorTable.IS_NOT_DISTINCT_FROM)
+        // TODO: Restore when semi-structured implementations are fixed.
+//        addAlias(CondOperatorTable.EQUAL_NULL, SqlStdOperatorTable.IS_NOT_DISTINCT_FROM)
         registerOp(StringOperatorTable.LENGTH, this::simpleConversion)
         registerOp(SqlStdOperatorTable.PLUS, this::convertPlus)
         registerOp(SqlStdOperatorTable.MINUS, this::convertMinus)
