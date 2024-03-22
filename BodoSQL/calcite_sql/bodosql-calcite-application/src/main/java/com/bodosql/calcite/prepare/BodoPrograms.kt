@@ -6,6 +6,8 @@ import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoSubQueryRemaining
 import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
+import com.bodosql.calcite.prepare.BodoRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE
+import com.bodosql.calcite.prepare.BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
@@ -87,7 +89,7 @@ object BodoPrograms {
             },
             // Simplification & filter push down step.
             if (optimize) {
-                HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES))
+                FilterPushdownPass()
             } else {
                 NoopProgram
             },
@@ -187,11 +189,19 @@ object BodoPrograms {
      * This will run the set of planner rules that we use to optimize
      * the relational expression before we perform code generation.
      */
-    private open class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>) : Program {
+    private open class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>, limitMap: Map<RelOptRule, Int> = mapOf()) : Program {
         private val program =
             HepProgramBuilder().also { b ->
                 for (rule in ruleSet) {
-                    b.addRuleInstance(rule)
+                    if (limitMap.containsKey(rule)) {
+                        // addMatchLimit will apply to all subsequently added rule instances, so we add the limit,
+                        // add the rule instance that we want to limit, and then reset the match limit to the default.
+                        b.addMatchLimit(
+                            limitMap[rule]!!,
+                        ).addRuleInstance(rule).addMatchLimit(org.apache.calcite.plan.hep.HepProgram.MATCH_UNTIL_FIXPOINT)
+                    } else {
+                        b.addRuleInstance(rule)
+                    }
                 }
             }.build()
 
@@ -635,6 +645,17 @@ object BodoPrograms {
 
     private class ProjectionPullUpPass : Program by HepOptimizerProgram(
         PROJECTION_PULL_UP_RULES,
+    )
+
+    private class FilterPushdownPass : Program by HepOptimizerProgram(
+        Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES),
+        mapOf(
+            Pair(com.bodosql.calcite.prepare.BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES, 100),
+            Pair(
+                JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
+                100,
+            ),
+        ),
     )
 
     private class FieldPushdownPass : Program by HepOptimizerProgram(
