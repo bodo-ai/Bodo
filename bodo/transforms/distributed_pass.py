@@ -1936,6 +1936,7 @@ class DistributedPass:
         if (
             fdef[0]
             in {
+                "anyvalue_agg",
                 "boolor_agg",
                 "booland_agg",
                 "boolxor_agg",

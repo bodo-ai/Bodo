@@ -1920,6 +1920,10 @@ class DistributedAnalysis:
             # nunique doesn't affect input's distribution
             return
 
+        if fdef == ("anyvalue_agg", "bodo.libs.array_kernels"):
+            # anyvalue_agg doesn't affect input's distribution
+            return
+
         if fdef == ("boolor_agg", "bodo.libs.array_kernels"):
             # boolor_agg doesn't affect input's distribution
             return

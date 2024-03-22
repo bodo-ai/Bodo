@@ -80,7 +80,6 @@ public class AggCodeGen {
     equivalentPandasMethodMap.put(SqlKind.MEDIAN, "median");
     equivalentPandasMethodMap.put(SqlKind.STDDEV_SAMP, "std");
     equivalentPandasMethodMap.put(SqlKind.VAR_SAMP, "var");
-    equivalentPandasMethodMap.put(SqlKind.ANY_VALUE, "iloc");
 
     equivalentNumpyFuncMap.put(SqlKind.VAR_POP, "np.var");
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
@@ -101,6 +100,7 @@ public class AggCodeGen {
     equivalentHelperFnMap.put("BITOR_AGG", "bitor_agg");
     equivalentHelperFnMap.put("BITAND_AGG", "bitand_agg");
     equivalentHelperFnMap.put("BITXOR_AGG", "bitxor_agg");
+    equivalentHelperFnMap.put("ANY_VALUE", "anyvalue_agg");
 
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
@@ -233,8 +233,8 @@ public class AggCodeGen {
 
       // If the aggregation function is ANY_VALUE, manually alter syntax
       // to use brackets
-      if (aggFunc.equals("iloc")) {
-        aggExpr = new Expr.Index(aggExpr, Expr.Companion.getZero());
+      if (aggFunc.equals("anyvalue_agg")) {
+        aggExpr = new Expr.Call("bodo.libs.array_kernels.anyvalue_agg", aggExpr);
       } else if (aggFunc.equals("np.var")) {
         kotlin.Pair<String, Expr> ddofKwarg = new kotlin.Pair("ddof", Expr.Companion.getZero());
         aggExpr = new Expr.Call("pd.Series", aggExpr);
@@ -459,7 +459,7 @@ public class AggCodeGen {
       Pair<String, Boolean> funcInfo = getAggFuncInfo(a, true);
       String aggFunc = funcInfo.getKey();
       // When inside of a Group By, use .iloc[0] instead of .head(1)[0]
-      if (aggFunc == "iloc") {
+      if (aggFunc == "anyvalue_agg") {
         aggFunc = "first";
       }
       if (!(aggFunc.equals("np.var") || aggFunc.equals("np.std"))) {
@@ -761,11 +761,11 @@ public class AggCodeGen {
         // groupby we must have a filter for this to occur.
         fnString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
-      // If the aggregation function is ANY_VALUE, manually alter syntax
-      // to use brackets
-      if (aggFunc.equals("iloc")) {
+      if (aggFunc.equals("anyvalue_agg")) {
+        // If the aggregation function is ANY_VALUE, use the bodo kernel
+        fnString.append("bodo.libs.array_kernels.anyvalue_agg(");
         fnString.append(seriesVar);
-        fnString.append(".iloc[0]");
+        fnString.append(")");
       } else if (aggFunc.equals("var_pop")) {
         fnString.append(seriesVar);
         fnString.append(".var(ddof=0)");
