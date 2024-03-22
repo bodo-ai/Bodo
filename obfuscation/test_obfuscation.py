@@ -4,8 +4,6 @@ import shutil
 import subprocess
 import sys
 
-
-
 # Now treating the files one by one.
 
 
@@ -24,6 +22,7 @@ def get_variable_expression(func_text, var_name):
     exec(func_text, {}, loc_vars)
     return loc_vars[var_name]
 
+
 if __name__ == "__main__":
     list_test_files = []
 
@@ -32,7 +31,6 @@ if __name__ == "__main__":
     for e_file in content_dir:
         if e_file.startswith("test"):
             list_test_files.append(e_file)
-
 
     for e_file in list_test_files:
         print("testing file: ", e_file)
@@ -69,21 +67,23 @@ if __name__ == "__main__":
             try:
                 val2 = f2(**kwargs)
             except Exception as e:
-                print(f"Original file failed with exception {e}. Did you make a syntax error? Original Code:\n{func_text2}")
+                print(
+                    f"Original file failed with exception {e}. Did you make a syntax error? Original Code:\n{func_text2}"
+                )
                 exit(0)
 
             try:
                 val1 = f1(**kwargs)
             except Exception as e:
-                print(f"Obfuscated file failed with exception {e}.\nGeneratedCode:{func_text1}")
+                print(
+                    f"Obfuscated file failed with exception {e}.\nGeneratedCode:{func_text1}"
+                )
                 exit(0)
 
             if val1 != val2:
-                print(f"obfuscation failed to create an equivalent program for inputs: {kwargs}. Expected={val1}, Found={val2}.\nGeneratedCode:{returncode}")
+                print(
+                    f"obfuscation failed to create an equivalent program for inputs: {kwargs}. Expected={val1}, Found={val2}.\nGeneratedCode:{returncode}"
+                )
                 exit(0)
 
-
-
     print("Successful termination of the obfuscation tests")
-
-
