@@ -66,10 +66,10 @@ A Jupyter server is automatically provisioned for your use when you first enter 
 
 ![Notebook-View](../platform2-screenshots/notebook_view.png#center)
 
-You can view and manage all the Jupyter servers in the "Notebook Manager" section of
-"Workspace Settings".
+You can update / restart Jupyter servers in the "Workspace Settings".
 
-![Notebook-Manager](../platform2-screenshots/notebook_manager.png#center)
+
+![Notebook-Manager](../platform2-gifs/notebook_manager.gif#center)
 
 ## Creating Clusters {#creating_clusters}
 
@@ -110,7 +110,7 @@ automatically.
 ![Cluster-Form-Auto-Pause](../platform2-screenshots/cluster_auto_pause.png#center)
 
 
-Additionally, you can select a value for **Cluster auto shutdown**. Activity is determined through attached notebooks (see
+Additionally, you can select a value for **Cluster auto pause**. Activity is determined through attached notebooks (see
 [how to attach a notebook to a cluster][attaching_notebook_to_cluster]) and jobs
 (see [how to run a job][running-a-job]). Therefore, if you
 don't plan to attach a notebook or a job to this cluster (and use it
@@ -118,7 +118,7 @@ via `ssh` instead), it's recommended to set this to
 `Never`, since otherwise the cluster will be removed after
 the set time.
 
-![Cluster-Form-Advanced](../platform2-screenshots/cluster_auto_shutdown.png#center)
+![Cluster-Form-Advanced](../platform2-screenshots/cluster_auto_stop.png#center)
 
 Finally click on `CREATE`. You will see that a new task for creating the
 cluster has been created. The status is updated to <inpg>INPROGRESS</inpg> when the task starts executing and
@@ -157,9 +157,9 @@ To attach a notebook to a cluster, select the cluster from the drop-down in the 
 
 ![Attach-Cluster](../platform2-gifs/attach-cluster.gif#center)
 
-To execute your code across the attached cluster, use IPyParallel magics `%%px` and `%autopx`.
+To execute your code across the attached cluster, select Parallel Python cell.
 
-![Run-Code-Notebook](../platform2-gifs/parallel-magic.gif#center)
+![Run-Code-Notebook](../platform2-gifs/parallel-python.gif#center)
 
 Note that parallel execution is only allowed when the notebook is attached to a cluster.
 If you execute a cell without a cluster attached, the following warning will be shown:
@@ -237,7 +237,7 @@ Step 2: Register your AWS IAM Role on the Bodo Platform as a new Instance Role:
    * Role ARN: AWS Role ARN from Step 1
    * Description: Short description for Instance Role
 
-![Create-Instance-Role](../platform2-screenshots/instance-role-form.png#center)
+![Create-Instance-Role](../platform2-gifs/instance-role-form.gif#center)
 
 
 2. Click on the **Create** button.
@@ -312,29 +312,16 @@ a cluster in some cases. In that case, you can connect through a notebook
 terminal.
 
 ### Connecting with a Notebook Terminal
+![Notebook-Terminal](../platform2-gifs/notebook-terminal.gif#center)
 
-First, you need to [create a cluster][creating_clusters]
-and [attach a notebook to the cluster][attaching_notebook_to_cluster].
-This will create the ssh-key at ``~/cluster_ssh_keys/id_rsa-<CLUSTER-UUID>``.
-
-Then, go the cluster tab and find your cluster. Click on `DETAILS` and
-copy the cluster `UUID` and `IP address` of the node you would like to connect to.
-
-![Cluster-UUID-Info](../platform_onboarding_screenshots/cluster-ip-info.png#center)
-
-Next, go to the notebooks tab and select `OPEN NOTEBOOK`. In the
-_Launcher_, click on `Terminal`.
-
-![Notebook-Terminal](../platform_onboarding_screenshots/notebook-terminal.png#center)
-
-In the terminal you can connect to any of the cluster nodes by running
+If you cluster have more than one node. In the terminal you can connect to any of the cluster nodes by running
 ```shell
-ssh -i ~/cluster_ssh_keys/id_rsa-<CLUSTER_UUID> <IP>
+ssh <NODE-IP>
 ```
 
 ![Connect-Cluster](../platform2-gifs/connect-to-cluster.gif#center)
 
-Through this terminal, you can interact with the `/shared` folder, which
+Through this terminal, you can interact with the `/bodofs` folder, which
 is shared by all the instances in the cluster and the Notebook instance.
 [Verify your connection][verify_your_connection] to interact directly with your cluster.
 
@@ -346,13 +333,13 @@ that you can run operations across all the instances in the cluster.
 1.  Verify the path to the hostfile for your cluster. You can find it by
     running:
     ```shell
-    ls -la /shared/.hostfile-<CLUSTER UUID>
+    ls -la /home/bodo/hostfile
     ```
 2.  Check that you can run a command across you cluster. To do this,
     run:
 
     ```shell
-    mpiexec -n <TOTAL_CORE_COUNT> -f /shared/.hostfile-<CLUSTER UUID> hostname
+    mpiexec -n <TOTAL_CORE_COUNT> -f /home/bodo/hostfile hostname
     ```
 
     This will print one line per each core in the cluster, with one
@@ -366,12 +353,11 @@ that you can run operations across all the instances in the cluster.
 3.  Verify that you can run a python command across your cluster. For
     example, run:
 
-        mpiexec -n <TOTAL_CORE_COUNT> -f /shared/.hostfile-<CLUSTER_UUID> python --version
+        mpiexec -n <TOTAL_CORE_COUNT> -f /home/bodo/hostfile python --version
 
 If all commands succeed, you should be able to execute workloads across
-your cluster. You can place scripts and small data that are shared
-across cluster nodes in `/shared`. However, external storage, such as
-S3, should be used for reading and writing large data.
+your cluster. You can place scripts and data that are shared
+across cluster nodes in `/bodofs`. 
 
 ## Running a Job  :material-delete-clock:{ title="Soon to be deprecated" }
 
@@ -379,76 +365,46 @@ Bodo Cloud Platform has support for running scheduled (and immediate)
 Python jobs without the need for Jupyter Notebooks. To create a Job,
 navigate to the Jobs page by selecting _Jobs_ in the left bar.
 
-![Sidebar-Jobs](../platform_onboarding_screenshots/side-jobs.png#center)
+![Sidebar-Jobs](../platform2-screenshots/side-jobs.png#center)
 
 This pages displays any <inpg> INPROGRESS</inpg> jobs you have previously scheduled
 and allows you to schedule new Jobs. At the top right corner, click on
-`CREATE JOB`. This opens a job creation form.
+`CREATE JOB DEFINITION`. This opens a job definition creation form.
 
-First, select a name for your job and specify the cluster on which you
-want to deploy your job. If you have an existing cluster that is not
-currently bound to a notebook or another job, you can select this
-cluster from the dropdown menu. Alternatively, you can create a cluster
-specifically for this job by selecting the `NEW` button next to the
-cluster dropdown menu. When creating a cluster specifically for a job,
-note that the cluster is only used for that job and is removed once the
-job completes. After selecting your cluster, indicate when you want your
-job to be executed in the **Schedule** section. Then, enter the
-**Command** that you want to execute inside this cluster.
-
-!!! note
-    This command is automatically prepended with
-    `mpiexec -n <CORE_COUNT> python`. For example, to run a file `ex.py`
-    with the argument 1, you would enter the command `ex.py 1`.
-
-To specify your source code location, fill in the **Path** line with a
-valid Git URL that leads to a repository containing your code.
+First, select a name for your job definition and source type.
+Then specify details for source location. In advance option you can pass arguments, 
+catalog, retry strategy and description. Optionally you can specify Job Cluster definition
+it can be used to create new Cluster for Job Run.
 
 !!! note
     When selecting a GitHub URL, you should select the URL
     available at the top of your web browser and NOT the path when cloning
     the repository, _i.e._ your path SHOULD NOT end in `.git`.
 
-![Jobs-Forms-Standard](../platform2-gifs/create-job.gif#center)
-
-If you are cloning a private repository, you need to provide the
-platform with valid Git credentials to download your repository. To do
-so, select `Show advanced` in the bottom right of the form. Then in
-**Workspace username**, enter your Git username and in **Workspace
-password** enter either your password or a valid Github Access Token.
-The advanced options also allow you to specify a particular commit or
-branch with **Workspace reference** and to load other custom environment
-variables in **Other**.
-
 !!! note
     If your Github Account uses 2FA please use a Github Access
     Token to avoid any possible authentication issues.
 
-Once your form is complete, select `CREATE` to begin your job.
+Once your form is complete, select `SUBMIT` to create your job definition.
 
+![Job-Definition-Form](../platform2-gifs/workspace-job-def.gif#center)
+
+Once you've job definition you can create a Job Run.
 ![Job-Run](../platform2-gifs/job-run.gif#center)
 
-Once you've provided all the necessary details, select `CREATE` to
-begin your job. You will see a <new>NEW</new> task created in your jobs page.
-
-If you created a cluster specifically for this job, a new cluster will
-also appear in your clusters page.
-
-Your job will begin once it reaches its scheduled time and any necessary
-clusters have been created. Then your job will transition to being
-<inpg>INPROGRESS</inpg>.
-
 At this point your job will execute your desired command. Once it
-finishes executing, your job will transition to <fin>FINISHED</fin> status. You
-can find any stdout information that you may need by pressing `DETAILS`
-followed by `SHOW LOGS`. If a cluster was specifically created for this
-job, it will be deleted after the job finishes.
+finishes executing, your job will transition to <fin>SUCCEEDED</fin> status. You
+can find stdout / stderr logs pressing `DETAILS` followed by `Logs`.
+![Job-Run](../platform2-gifs/job-run-logs.gif#center)
+
+!!! note
+    If a cluster was specifically created for this job, it will be deleted after the job finishes.
 
 !!! note
     Bodo **DOES NOT** preserve artifacts written to local storage. If
     you have any information that you need to persist and later review, you
-    should write to external storage, such as Amazon S3. You may also write
-    to stdout/stderr, but output logs may be truncated, so it should not be
+    should write to external storage or to /bodofs (AWS S3/Azure Blob Storage). 
+    You may also write to stdout/stderr, but output logs may be truncated, so it should not be
     considered reliable for large outputs that need to be read later.
 
 ## Troubleshooting
