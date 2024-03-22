@@ -722,8 +722,8 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "FilterExpr('IS_NULL', [ColumnRef('some_new_column')])",
-            "(ds.field('{some_new_column}').is_null())",
+            "[[('some_new_column', 'is', 'NULL')]]",
+            "(((ds.field('{some_new_column}').is_null())))",
         ]
 
     elif filter == "IS_NOT_NULL":
@@ -758,7 +758,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "~((ds.field('{some_new_column}').is_null()))",
+            "((~((ds.field('{some_new_column}').is_null()))))",
         ]
 
     elif filter == "IS_IN":
@@ -796,8 +796,8 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "FilterExpr('IN', [ColumnRef('some_new_column'), Scalar(f0)])",
-            "(ds.field('{some_new_column}').isin(f0))",
+            "[[('some_new_column', 'in', f0)]]",
+            "(((ds.field('{some_new_column}').isin(f0))))",
         ]
     else:
         raise ValueError(f"Unrecognized filter: {filter}")
@@ -1349,7 +1349,7 @@ def test_evolved_struct_fields_within_list_and_map(
             INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
             VALUES
             (
-                array((43, 'todo', 'something'), (43, 'todo', 'something'), null),
+                array((43, 'todo', 'something'), (43, 'todo', 'something'), null), 
                 array('pizza'),
                 array(0, 1, 2),
                 map('post1', (45, 'post1'))
@@ -1377,7 +1377,7 @@ def test_evolved_struct_fields_within_list_and_map(
             INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
             VALUES
             (
-                array((90, 'it', 'marvel'), (43, 'iron', 'mag'), null),
+                array((90, 'it', 'marvel'), (43, 'iron', 'mag'), null), 
                 array('kebab'),
                 array(0, 1, 90),
                 map('post3', struct(90))
@@ -1405,7 +1405,7 @@ def test_evolved_struct_fields_within_list_and_map(
             INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
             VALUES
             (
-                array((190, 'op'), (430, 'msg'), null),
+                array((190, 'op'), (430, 'msg'), null), 
                 array('mango'),
                 array(0, 876, 90),
                 map('post4', struct(990))
@@ -1433,7 +1433,7 @@ def test_evolved_struct_fields_within_list_and_map(
             INSERT INTO hadoop_prod.{DATABASE_NAME}.{table_name}
             VALUES
             (
-                array((190, 'red'), (430, 'orange'), null),
+                array((190, 'red'), (430, 'orange'), null), 
                 array('blue'),
                 array(0, 8760, 90),
                 map('post6', (90, 782348))
