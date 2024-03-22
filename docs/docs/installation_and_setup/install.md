@@ -7,26 +7,15 @@ tags:
 ---
 # Installing Bodo Community Edition {#install}
 
-
-Bodo is available as a Python package on [pip](https://pypi.org/project/bodo/){target=blank},
-and can be installed as follows:
-
-```
-pip install bodo
-```
-
-
-Bodo can also be installed as a using the `conda` command (see how to install [conda][conda] below). 
-If you are installing bodo through conda, we recommend creating a `conda` environment and installing 
+Bodo can be installed as a using the `conda` command (see how to install [conda][conda] below). 
+We recommend creating a `conda` environment and installing 
 Bodo and its dependencies in it as shown below:
 
 ```console
-conda create -n Bodo python=3.9 mamba -c conda-forge
+conda create -n Bodo python=3.12 -c conda-forge
 conda activate Bodo
-mamba install bodo -c bodo.ai -c conda-forge
+conda install bodo -c bodo.ai -c conda-forge
 ```
-
-`mamba` is a drop-in replacement for `conda` that uses the same commands and configuration but is much faster.
 
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
@@ -86,11 +75,6 @@ and
 pip install deltalake
 ```
 
-`mamba` is also useful if `conda` install commands are taking a long time to execute:
-
-```console
-conda install mamba -c conda-forge
-```
 
 <br/>
 <center>

@@ -4,11 +4,17 @@ This quickstart guide will walk you through the process of running a simple Pyth
 
 ## Prerequisites
 
-First, you need to install Bodo. You can install the _Community Edition_ using [conda](https://docs.conda.io/en/latest/), which allows you to use Bodo for free on up to 8 cores. 
+[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
 
-```bash
-conda install bodo bodosql -c bodo.ai -c conda-forge
+
+```console 
+conda create -n Bodo python=3.12 -c conda-forge
+conda activate Bodo
+conda install bodo -c bodo.ai -c conda-forge
 ```
+
+This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
+
 
 ## Generate Sample Data
 

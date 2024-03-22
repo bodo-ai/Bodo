@@ -16,27 +16,19 @@ important concepts briefly.
 Installation
 ------------
 
-We recommend trying Bodo by signing up for a [personalized 1:1 demo](https://www.bodo.ai/see-it-in-action){target="blank"} where you will get a step-by-step guide on how to use the Bodo cloud platform. If you prefer to do it yourself,  see how to [get started with the Bodo platform](quick_start_platform.md)
+We recommend trying Bodo by signing up for a [personalized 1:1 demo](https://www.bodo.ai/see-it-in-action){target="blank"} where you will get a step-by-step guide on how to use the Bodo cloud platform. If you prefer to do it yourself, see how to [get started with the Bodo platform](quick_start_platform.md)
 
-If you prefer a local install, you can also use `pip`:
 
-```console
-pip install bodo
-```
+[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
 
-[Conda](https://docs.conda.io){target="blank"} installation is available too:
 
 ```console 
-conda create -n Bodo python=3.9 mamba -c conda-forge
+conda create -n Bodo python=3.12 -c conda-forge
 conda activate Bodo
-mamba install bodo -c bodo.ai -c conda-forge
+conda install bodo -c bodo.ai -c conda-forge
 ```
 
-This command installs Bodo Community Edition by default, which is free and works on up to 8 cores.
-You can also subscribe to
-[Bodo Platform on AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o){target="blank"}
-or [contact us](https://bodo.ai/contact/){target="blank"} for trial licenses.
-See [the installation section][install] for more details of setting up Bodo.
+This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
 
 Data Transform Example with Bodo
 --------------------------------
