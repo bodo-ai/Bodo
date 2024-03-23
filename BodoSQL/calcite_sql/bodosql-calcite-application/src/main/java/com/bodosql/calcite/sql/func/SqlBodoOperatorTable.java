@@ -44,7 +44,8 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
           SqlKind.NULL_EQUALS,
           30,
           true,
-          ReturnTypes.BOOLEAN_NULLABLE,
+          // Note: The return value is never null, only True/False.
+          ReturnTypes.BOOLEAN,
           InferTypes.FIRST_KNOWN,
           OperandTypes.COMPARABLE_UNORDERED_COMPARABLE_UNORDERED);
 
