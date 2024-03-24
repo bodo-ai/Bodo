@@ -7,7 +7,10 @@
 #endif
 #include <optional>
 
+#include <arrow/compute/cast.h>
 #include <arrow/python/api.h>
+#include <arrow/table.h>
+#include <arrow/util/key_value_metadata.h>
 
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
@@ -16,6 +19,7 @@
 #include "../libs/_array_hash.h"
 #include "../libs/_array_operations.h"
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_shuffle.h"
 #include "../libs/iceberg_transforms.h"
 #include "parquet_write.h"
@@ -61,6 +65,78 @@ std::string generate_iceberg_file_name() {
 }
 
 /**
+ * @brief Update an arrow table derived based on the expected Iceberg
+ * table schema.
+ * @param table Arrow table to be updated
+ * @param iceberg_schema Expected Arrow schema of files written to Iceberg.
+ * @return A new arrow table with the updated schema.
+ */
+std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
+    std::shared_ptr<arrow::Table> input_table,
+    std::shared_ptr<arrow::Schema> iceberg_schema) {
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> arrow_columns;
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    for (int i = 0; i < input_table->num_columns(); i++) {
+        auto expected_field = iceberg_schema->field(i);
+        auto arrow_field = input_table->field(i);
+        auto column = input_table->column(i);
+        if (!expected_field->nullable() && column->null_count() != 0) {
+            std::string err_msg =
+                std::string("Iceberg Parquet Write: Column ") +
+                arrow_field->name() +
+                " contains nulls but is expected to be non-nullable";
+            throw std::runtime_error(err_msg);
+        }
+
+        auto expected_type = iceberg_schema->field(i)->type();
+        auto arrow_type = arrow_field->type();
+        auto dest_type = arrow_type;
+        if (expected_type->id() != arrow::Type::STRING &&
+            expected_type->id() != arrow::Type::LARGE_STRING) {
+            // String types must keep the same type to avoid dictionary encoding
+            // issues.
+            dest_type = expected_type;
+        }
+
+        // Check if the arrow field type matches the expected type. This
+        // is necessary to ensure we perform downcasting.
+        //
+        // Note: We may be able to skip upcasts in the future.
+        if (!arrow_type->Equals(dest_type)) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            std::transform(
+                column->chunks().begin(), column->chunks().end(),
+                std::back_inserter(chunks),
+                [arrow_field, arrow_type,
+                 dest_type](std::shared_ptr<arrow::Array> chunk) {
+                    auto res = arrow::compute::Cast(
+                        *chunk.get(), dest_type,
+                        arrow::compute::CastOptions::Safe(),
+                        bodo::default_buffer_exec_context());
+                    if (!res.ok()) {
+                        std::string err_msg =
+                            std::string("Iceberg Parquet Write: Column ") +
+                            arrow_field->name() + " is type " +
+                            arrow_type->ToString() +
+                            " but is expected to be type " +
+                            dest_type->ToString();
+                        throw std::runtime_error(err_msg);
+                    }
+                    return res.ValueOrDie();
+                });
+            column = std::make_shared<arrow::ChunkedArray>(chunks);
+        }
+        arrow_columns.emplace_back(column);
+        schema_vector.emplace_back(arrow::field(arrow_field->name(), dest_type,
+                                                expected_field->nullable(),
+                                                expected_field->metadata()));
+    }
+    return arrow::Table::Make(
+        arrow::schema(schema_vector, input_table->schema()->metadata()),
+        arrow_columns, input_table->num_rows());
+}
+
+/**
  * Write the Bodo table (the chunk in this process) to a parquet file
  * as part of an Iceberg table
  * @param fpath full path of the parquet file to write
@@ -99,13 +175,26 @@ void iceberg_pq_write_helper(
     // The underlying already is in UTC already
     // for timezone aware types, and for timezone
     // naive, it won't matter.
-    *file_size_in_bytes =
-        pq_write(fpath, table, col_names_arr, nullptr, false, "", compression,
-                 is_parallel, false, 0, 0, 0, "", bucket_region, row_group_size,
-                 "", false /*convert_timedelta_to_int64*/, "UTC",
-                 false /*downcast_time_ns_to_us*/, true, arrow::TimeUnit::MICRO,
-                 md, std::string(fpath), iceberg_arrow_schema);
-    *record_count = table->nrows();
+    std::vector<std::string> col_names = array_to_string_vector(col_names_arr);
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
+        ::arrow::key_value_metadata(md);
+    std::shared_ptr<arrow::Table> arrow_table = bodo_table_to_arrow(
+        table, std::move(col_names), schema_metadata,
+        false /*convert_timedelta_to_int64*/, "UTC", arrow::TimeUnit::MICRO,
+        false /*downcast_time_ns_to_us*/
+    );
+    std::shared_ptr<arrow::Table> iceberg_table =
+        cast_arrow_table_to_iceberg_schema(std::move(arrow_table),
+                                           std::move(iceberg_arrow_schema));
+    std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
+    for (auto col : table->columns) {
+        bodo_array_types.push_back(col->arr_type);
+    }
+    // Convert the arrow table to use the iceberg schema.
+    *file_size_in_bytes = pq_write(
+        fpath, iceberg_table, compression, is_parallel, bucket_region,
+        row_group_size, "", bodo_array_types, true, std::string(fpath));
+    *record_count = iceberg_table->num_rows();
 }
 
 /**
@@ -173,7 +262,7 @@ void iceberg_pq_write(const char *table_data_loc,
         tracing::Event ev_sort("iceberg_pq_write_sort", is_parallel);
         ev_sort.add_attribute("sort_order_len", sort_order_len);
         // Vector to collect the transformed columns
-        std::vector<std::shared_ptr<array_info> > transform_cols;
+        std::vector<std::shared_ptr<array_info>> transform_cols;
         transform_cols.reserve(sort_order_len);
         // Vector of ints (booleans essentially) to be
         // eventually passed to sort_values_table
@@ -234,7 +323,7 @@ void iceberg_pq_write(const char *table_data_loc,
 
         // Create a new table (a copy) with the transforms and then sort it.
         // The transformed columns go in front since they are the keys.
-        std::vector<std::shared_ptr<array_info> > new_cols;
+        std::vector<std::shared_ptr<array_info>> new_cols;
         new_cols.reserve(transform_cols.size() + working_table->columns.size());
         new_cols.insert(new_cols.end(), transform_cols.begin(),
                         transform_cols.end());
@@ -298,7 +387,7 @@ void iceberg_pq_write(const char *table_data_loc,
         // Similar to the ones in sort-order handling
         std::vector<std::string> transform_names;
         transform_names.reserve(partition_spec_len);
-        std::vector<std::shared_ptr<array_info> > transform_cols;
+        std::vector<std::shared_ptr<array_info>> transform_cols;
         transform_cols.reserve(partition_spec_len);
 
         // Iterate over the partition fields and create the transform
@@ -376,7 +465,7 @@ void iceberg_pq_write(const char *table_data_loc,
         // and the rest after (to use multi_col_key for hashing which assumes
         // that keys are at the beginning), and we will then drop the
         // transformed columns from it for writing
-        std::vector<std::shared_ptr<array_info> > new_cols;
+        std::vector<std::shared_ptr<array_info>> new_cols;
         new_cols.reserve(transform_cols.size() + working_table->columns.size());
         new_cols.insert(new_cols.end(), transform_cols.begin(),
                         transform_cols.end());

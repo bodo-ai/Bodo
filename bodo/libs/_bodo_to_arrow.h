@@ -29,7 +29,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
     std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
     const std::string &tz, arrow::TimeUnit::type &time_unit,
-    bool downcast_time_ns_to_us);
+    bool downcast_time_ns_to_us, std::shared_ptr<::arrow::MemoryManager> mm);
 
 /**
  * @brief convert Bodo table to Arrow table
@@ -39,6 +39,43 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
  */
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table);
+
+/**
+ * @brief convert Bodo table to Arrow table with the
+ * provided names for the fields.
+ *
+ * @param table input Bodo table
+ * @param field_names The field names to append.
+ * @param schema_metadata Additional metadata to include in the arrow schema.
+ * @param convert_timedelta_to_int64 : cast timedelta to int64.
+ * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
+ * string ("") to not specify one. This is primarily required for
+ * Iceberg/Snowflake, for which we specify "UTC".
+ * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
+ * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
+ * When this is not nanoseconds, the data is converted to the specified type
+ * before being copied to the Arrow array. Note that in case it's not
+ * nanoseconds, we make a copy of the integer array (array->data1()) since we
+ * cannot modify the existing array, as it might be used elsewhere. This is
+ * primarily required for Iceberg which requires data to be written in
+ * microseconds.
+ * @param downcast_time_ns_to_us (default False): Is time data required to be
+ * written in microseconds? NOTE: this is needed for snowflake write operation.
+ * See gen_snowflake_schema comments.
+ * @param pool Memory pool to use for allocating memory.
+ * @param mm Memory manager to use for allocating memory.
+
+ * @return std::shared_ptr<arrow::Table> Arrow table
+ */
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(
+    std::shared_ptr<table_info> table, std::vector<std::string> field_names,
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = {},
+    bool convert_timedelta_to_int64 = false, std::string tz = "",
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
+    bool downcast_time_ns_to_us = false,
+    bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Convert Arrow array to Bodo array_info with zero-copy.

@@ -111,7 +111,7 @@ def commit_write(
         conn_str: Connection string to catalog
         db_name: Namespace containing the table written to
         table_name: Name of table written to
-        fnames: Names of Parquet file that need to be commited in Iceberg
+        fnames: Names of Parquet file that need to be committed in Iceberg
         all_metrics: Metrics about written data to include in commit
         iceberg_schema_id: Known Schema ID when files were written
         pa_schema: Arrow Schema of written data. In the create/replace
@@ -123,7 +123,7 @@ def commit_write(
         mode: Method of Iceberg write (`create`, `replace`, `append`)
 
     Returns:
-        bool: Whether the action was successfully commited or not
+        bool: Whether the action was successfully committed or not
     """
     catalog_type, _ = parse_conn_str(conn_str)
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)

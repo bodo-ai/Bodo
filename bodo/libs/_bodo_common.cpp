@@ -402,7 +402,6 @@ std::unique_ptr<DataType> DataType::Deserialize(
     return from_byte_helper(arr_array_types, arr_c_types, i);
 }
 
-
 Schema::Schema() : column_types() {}
 Schema::Schema(const Schema& other) {
     this->column_types.reserve(other.column_types.size());
@@ -492,7 +491,8 @@ std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
     bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
                         &arrow_arr, false /*convert_timedelta_to_int64*/, "",
-                        time_unit, false /*downcast_time_ns_to_us*/);
+                        time_unit, false /*downcast_time_ns_to_us*/,
+                        bodo::default_buffer_memory_manager());
     return arrow_arr;
 }
 

@@ -479,6 +479,28 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
     }
 }
 
+/**
+ * @brief Convert a bodo string array to a vector of strings.
+ *
+ * @param arr The Bodo string array.
+ * @return std::vector<std::string> The contents of the array
+ * moved to a vector.
+ */
+inline std::vector<std::string> array_to_string_vector(
+    std::shared_ptr<array_info> arr) {
+    assert(arr->arr_type == bodo_array_type::STRING &&
+           arr->dtype == Bodo_CTypes::STRING);
+    std::vector<std::string> output;
+    char* cur_str = arr->data1();
+    offset_t* offsets = (offset_t*)arr->data2();
+    for (size_t i = 0; i < arr->length; i++) {
+        size_t len = offsets[i + 1] - offsets[i];
+        output.emplace_back(cur_str, len);
+        cur_str += len;
+    }
+    return output;
+}
+
 template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T>
 constexpr inline bool isnan_alltype(T const& val) {

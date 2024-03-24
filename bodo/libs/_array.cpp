@@ -744,7 +744,8 @@ void* pd_pyarrow_array_from_bodo_array_py_entry(array_info* arr) {
         bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(),
                             std::shared_ptr<array_info>(arr), &arrow_arr,
                             false /*convert_timedelta_to_int64*/, "", time_unit,
-                            false /*downcast_time_ns_to_us*/);
+                            false, /*downcast_time_ns_to_us*/
+                            bodo::default_buffer_memory_manager());
 
         // https://arrow.apache.org/docs/python/integration/extending.html
         CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
