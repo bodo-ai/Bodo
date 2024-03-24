@@ -67,11 +67,20 @@ struct DictionaryBuilder {
      * arrays in case there are dictionary-encoded string arrays
      * @param transpose_cache_size The number of array ids to cache transpose
      * information for.
+     * @param filter_transpose_cache_size The number of array ids to cache
+     * transpose filter information for (TransposeExisting API used by Runtime
+     * Join Filters).
+     *   NOTE: A size 2 cache is sufficient since for a given
+     *   column there can only ever be 1 column-level PandasJoinFilter that can
+     *   be generated. The 2nd one is for the case where all the columns are
+     *   available and we need to transpose for calculating the hashes for the
+     *   bloom filter.
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_,
                       std::vector<std::shared_ptr<DictionaryBuilder>>
                           child_dict_builders_ = {},
-                      size_t transpose_cache_size = 2);
+                      size_t transpose_cache_size = 2,
+                      size_t filter_transpose_cache_size = 2);
 
     ~DictionaryBuilder() {
         dict_builder_event.add_attribute("Unify_Cache_ID_Misses",
@@ -93,6 +102,24 @@ struct DictionaryBuilder {
         const std::shared_ptr<array_info>& in_arr);
 
     /**
+     * @brief Transform the input array by replacing its dictionary with the
+     * dictionary of this Dictionary builder and transposing the indices
+     * accordingly. Unlike UnifyDictionaryArray, the DictionaryBuilder's
+     * dictionary isn't modified. Instead, if the input contains a string that
+     * is not already in the DictionaryBuilder's dictionary, we set the row as
+     * null in the output array. Because of this, this essentially acts like a
+     * filtering transpose.
+     * NOTE: The function cannot be marked as 'const' because we modify the
+     * cache.
+     *
+     * @param in_arr Input array to transpose.
+     * @return std::shared_ptr<array_info> Transposed array (with nulls where
+     * there were entries that weren't in the DictionaryBuilder).
+     */
+    std::shared_ptr<array_info> TransposeExisting(
+        const std::shared_ptr<array_info>& in_arr);
+
+    /**
      * @brief Get dictionary hashes
      *
      * @return std::shared_ptr<bodo::vector<uint32_t>> dictionary hashes or null
@@ -101,6 +128,17 @@ struct DictionaryBuilder {
     std::shared_ptr<bodo::vector<uint32_t>> GetDictionaryHashes();
 
    private:
+    /**
+     * @brief Get the index for idx'th row in 'in_arr'. Returns -1 if the string
+     * doesn't exist in the DictionaryBuilder.
+     *
+     * @param in_arr STRING array to get the element from.
+     * @param idx Row ID to get the index of.
+     * @return dict_indices_t Index of the string in the dictionary or -1 if it
+     * doesn't exist in the dictionary.
+     */
+    dict_indices_t GetIndex(const std::shared_ptr<array_info>& in_arr,
+                            size_t idx) const noexcept;
     /**
      * @brief Ensure in_arr[idx] is in the dictionary and return the index for
      * it
@@ -140,6 +178,35 @@ struct DictionaryBuilder {
     // Move an element from any position in the cache to the front.
     const std::vector<int>& _MoveToFrontOfCache(
         DictionaryCache::iterator cache_entry);
+
+    // Caching information for TransposeExisting. This is used by runtime join
+    // filters (see HashJoinState::RuntimeFilter).
+    // Inputs should follow a pattern where several input batches in a row all
+    // use the same dictionary. When we encounter a new array we will cache the
+    // transpose information to limit the compute per batch. The first element
+    // of the pair is the array id, the second is the transpose map. This must
+    // be kept sorted in eviction order to ensure the oldest entry is evicted.
+    DictionaryCache cached_filter_array_transposes;
+
+    // Add cache_entry to the cache.
+    const std::vector<int>& _AddToFilterCache(
+        std::pair<DictionaryID, std::vector<int>> cache_entry);
+
+    // Move an element from any position in the cache to the front.
+    const std::vector<int>& _MoveToFrontOfFilterCache(
+        DictionaryCache::iterator cache_entry);
+
+    /**
+     * @brief Helper function to transpose the input array as per the provided
+     * transpose map.
+     *
+     * @param in_arr Input DICT array to transpose.
+     * @param transpose_map Transpose map to use for the transpose operation.
+     * @return std::shared_ptr<array_info> Transposed DICT array.
+     */
+    std::shared_ptr<array_info> transpose_input_helper(
+        const std::shared_ptr<array_info>& in_arr,
+        const std::vector<int>& transpose_map) const;
 };
 
 /**

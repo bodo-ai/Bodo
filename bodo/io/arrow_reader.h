@@ -246,7 +246,8 @@ class ArrowReader {
         if (selected_fields.size()) {
             // If we are not reading any columns, we don't need to check
             // the number of rows read
-            assert(total_rows_out_ == this->get_local_rows());
+            assert(total_rows_out_ ==
+                   static_cast<uint64_t>(this->get_local_rows()));
         }
         if (rows_left_to_emit != 0) {
             throw std::runtime_error(

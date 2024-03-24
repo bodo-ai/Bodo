@@ -673,16 +673,20 @@ void ChunkedTableBuilder::AppendBatch(
     // Convert bool vector into indices vector
     size_t num_append_rows =
         std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
-    std::vector<int64_t> idxs;
-    idxs.reserve(num_append_rows);
 
     // Convert the bit-vector to a vector of indices. Offset the
     // entries by in_table_start_offset.
+    // We do the "+1" since we need to have at least 1 element in the array for
+    // the branchless loop to work.
+    std::vector<int64_t> idxs(num_append_rows + 1);
+    size_t next_idx = 0;
     for (size_t i_row = 0; i_row < append_rows.size(); i_row++) {
-        if (append_rows[i_row]) {
-            idxs.emplace_back(in_table_start_offset + i_row);
-        }
+        idxs[next_idx] = in_table_start_offset + i_row;
+        size_t delta = append_rows[i_row] ? 1 : 0;
+        next_idx += delta;
     }
+    assert(num_append_rows == next_idx);
+    idxs.resize(next_idx);
 
     this->AppendBatch(in_table, idxs);
 }

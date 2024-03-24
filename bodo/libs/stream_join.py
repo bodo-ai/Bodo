@@ -16,7 +16,7 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
-from numba.extending import intrinsic, lower_builtin, models, register_model
+from numba.extending import intrinsic, lower_builtin, models, overload, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
@@ -75,6 +75,9 @@ ll.add_symbol(
 ll.add_symbol(
     "join_get_partition_top_bitmask_by_idx",
     stream_join_cpp.get_partition_top_bitmask_by_idx,
+)
+ll.add_symbol(
+    "runtime_join_filter_py_entry", stream_join_cpp.runtime_join_filter_py_entry
 )
 
 
@@ -1153,6 +1156,188 @@ def lower_join_build_consume_batch(context, builder, sig, args):
     """lower join_build_consume_batch() using gen_join_build_consume_batch_impl above"""
     impl = gen_join_build_consume_batch_impl(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
+
+
+@intrinsic(prefer_literal=True)
+def _runtime_join_filter(
+    typingctx,
+    join_state,
+    cpp_table,
+    join_key_idxs,
+    process_col_bitmask,
+):
+    def codegen(context, builder, sig, args):
+        join_key_idxs_arr = cgutils.create_struct_proxy(sig.args[2])(
+            context, builder, value=args[2]
+        )
+        process_col_bitmask_arr = cgutils.create_struct_proxy(sig.args[3])(
+            context, builder, value=args[3]
+        )
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # join_state
+                lir.IntType(8).as_pointer(),  # cpp_table
+                lir.IntType(64).as_pointer(),  # join_key_idxs
+                lir.IntType(64),  # join_key_idxs_len
+                lir.IntType(8).as_pointer(),  # process_col_bitmask
+                lir.IntType(64),  # process_col_bitmask_len
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="runtime_join_filter_py_entry"
+        )
+        func_args = [
+            args[0],
+            args[1],
+            join_key_idxs_arr.data,
+            join_key_idxs_arr.nitems,
+            process_col_bitmask_arr.data,
+            process_col_bitmask_arr.nitems,
+        ]
+        table_ret = builder.call(fn_tp, func_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    sig = cpp_table(
+        join_state,
+        cpp_table,
+        join_key_idxs,
+        process_col_bitmask,
+    )
+    return sig, codegen
+
+
+def runtime_join_filter(
+    join_state,
+    table,
+    join_key_idxs,
+    process_col_bitmask,
+):
+    """
+    Apply a runtime join filter to a table.
+
+    Args:
+        join_state (JoinState): C++ JoinState pointer
+        table (table_type): Table to filter.
+        join_key_idxs (Metatype(tuple[int])): Tuple of
+            length join_state->n_keys specifying the index
+            of the column in the input table that corresponds
+            to the i'th join key. -1 if no column corresponding
+            to the i'th join key exists. If none of these are -1,
+            a bloom filter will be applied.
+        process_col_bitmask (Metatype(tuple[bool])): Tuple of length
+            join_state->n_keys specifying whether or not to apply
+            a column level filter on the column corresponding to
+            the i'th join key.
+    """
+    pass
+
+
+@overload(runtime_join_filter, no_unliteral=True)
+def overload_runtime_join_filter(join_state, table, join_key_idxs, process_col_bitmask):
+    if join_state.probe_outer:
+        raise BodoError("Cannot apply runtime join filter in the probe_outer case!")
+
+    n_cols = len(table.arr_types)
+    input_table_t = table
+    join_key_idxs_list = list(unwrap_typeref(join_key_idxs).meta)
+    process_col_bitmask_list = list(unwrap_typeref(process_col_bitmask).meta)
+
+    input_idx_to_join_key_idx = {
+        join_key_idxs_list[i]: i
+        for i in range(len(join_key_idxs_list))
+        if join_key_idxs_list[i] != -1
+    }
+
+    # Bloom filter can only be applied when all key columns are present
+    can_apply_bloom_filter = all([(idx != -1) for idx in join_key_idxs_list])
+    # At this time, the only column level filter we support is when both
+    # the input and its corresponding join key are DICT arrays. If we see
+    # such a combination and if process_col_bitmask_list[i] is true for that
+    # column, we will set this to True.
+    can_apply_col_filter = False
+
+    # Cast the key columns to the correct types (e.g. int32 to int64).
+    # The output type will be the type after the cast to avoid
+    # casting back to the original type. This is fine since we would
+    # do this cast at some point anyway.
+    join_key_types = join_state.key_types
+    if join_key_types == []:
+        # This might happen if the join key types aren't completely resolved yet.
+        # In this case, for now we will assume that the type is the same as
+        # the input type.
+        cast_table_type = input_table_t
+    else:
+        cast_arr_types = []
+        valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+        for i in range(n_cols):
+            if i in input_idx_to_join_key_idx:
+                # If this is a key column, cast it to the join key type.
+                # In case the key type is DICT and the corresponding input column
+                # is STRING, we will keep it as STRING. The C++ function won't
+                # do column level filtering on the column, but it will be able to
+                # use the string values directly for a bloom filter check.
+                # If the key type is STRING and the corresponding input column is
+                # DICT, we will convert the input to a STRING. This will allow us to
+                # apply the bloom filter.
+                input_col_t = input_table_t.arr_types[i]
+                join_key_t = join_key_types[input_idx_to_join_key_idx[i]]
+                if (
+                    (input_col_t != join_key_t)
+                    and (input_col_t in valid_str_types)
+                    and (join_key_t in valid_str_types)
+                ):
+                    casted_type = bodo.string_array_type
+                else:
+                    casted_type = join_key_types[input_idx_to_join_key_idx[i]]
+                cast_arr_types.append(casted_type)
+
+                # At this point, this is the only case where a column level filter
+                # would be applied.
+                if (
+                    casted_type == bodo.dict_str_arr_type
+                    and join_key_t == bodo.dict_str_arr_type
+                    and process_col_bitmask_list[input_idx_to_join_key_idx[i]] == True
+                ):
+                    can_apply_col_filter = True
+            else:
+                # If not a key column, then preserve the original type
+                cast_arr_types.append(input_table_t.arr_types[i])
+
+        cast_table_type = bodo.TableType(tuple(cast_arr_types))
+
+    # If no filter can be applied, just return a NOP implementation
+    # (that will get optimized out) to avoid function call overheads.
+    if (not can_apply_bloom_filter) and (not can_apply_col_filter):
+        return lambda join_state, table, join_key_idxs, process_col_bitmask: table
+
+    col_inds_t = MetaType(tuple(range(n_cols)))
+    col_ind_arr = np.arange(n_cols)
+    join_key_idxs_arr = np.array(join_key_idxs_list)
+    process_col_bitmask_arr = np.array(unwrap_typeref(process_col_bitmask).meta)
+
+    def impl_runtime_join_filter(
+        join_state, table, join_key_idxs, process_col_bitmask
+    ):  # pragma: no cover
+        # Apply the required casting. This will get optimized out if
+        # no casting is actually required.
+        cast_table = bodo.utils.table_utils.table_astype(
+            table, cast_table_type, False, False
+        )
+        cpp_table = py_data_to_cpp_table(cast_table, (), col_inds_t, n_cols)
+        out_cpp_table = _runtime_join_filter(
+            join_state, cpp_table, join_key_idxs_arr, process_col_bitmask_arr
+        )
+        # The output will preserve the casted version of the input, i.e.
+        # we won't cast back to the original input types.
+        out_table = cpp_table_to_py_table(
+            out_cpp_table, col_ind_arr, cast_table_type, 0
+        )
+        delete_table(out_cpp_table)
+        return out_table
+
+    return impl_runtime_join_filter
 
 
 @intrinsic(prefer_literal=True)
