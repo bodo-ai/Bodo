@@ -180,7 +180,7 @@ class GroupbyPartition {
     /// partition hash.
     /// @param hash Partition hash for the row
     /// @return True if row is part of partition, False otherwise.
-    inline bool is_in_partition(const uint32_t& hash) const;
+    inline bool is_in_partition(const uint32_t& hash) const noexcept;
 
     /// @brief Is the partition active?
     inline bool is_active_partition() const { return this->is_active; }

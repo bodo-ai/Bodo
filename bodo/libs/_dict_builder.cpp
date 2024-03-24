@@ -1,4 +1,5 @@
 #include "_dict_builder.h"
+#include <fmt/format.h>
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -9,10 +10,205 @@
 
 /* -------------------------- DictionaryBuilder --------------------------- */
 
+inline dict_indices_t DictionaryBuilder::GetIndex(
+    const std::shared_ptr<array_info>& in_arr, size_t idx) const noexcept {
+    assert(in_arr->arr_type == bodo_array_type::STRING);
+    char* in_data = in_arr->data1<bodo_array_type::STRING>();
+    offset_t* in_offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
+
+    offset_t start_offset = in_offsets[idx];
+    offset_t end_offset = in_offsets[idx + 1];
+    int64_t len = end_offset - start_offset;
+    std::string_view val(&in_data[start_offset], len);
+    auto it = this->dict_str_to_ind->find(val);
+    return (it != this->dict_str_to_ind->end()) ? it->second : -1;
+}
+
+std::shared_ptr<array_info> DictionaryBuilder::transpose_input_helper(
+    const std::shared_ptr<array_info>& in_arr,
+    const std::vector<int>& transpose_map) const {
+    assert(in_arr->arr_type == bodo_array_type::DICT);
+    const std::shared_ptr<array_info>& in_indices_arr = in_arr->child_arrays[1];
+    std::shared_ptr<array_info> out_indices_arr =
+        alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
+    const dict_indices_t* in_inds =
+        (dict_indices_t*)
+            in_indices_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+    dict_indices_t* out_inds =
+        (dict_indices_t*)
+            out_indices_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+    for (size_t i = 0; i < in_indices_arr->length; i++) {
+        if (!in_indices_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                i)) {
+            out_indices_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                i, false);
+            out_inds[i] = -1;
+        } else {
+            dict_indices_t ind = transpose_map[in_inds[i]];
+            out_indices_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                i, (ind != -1));
+            out_inds[i] = ind;
+        }
+    }
+    return create_dict_string_array(this->dict_buff->data_array,
+                                    out_indices_arr);
+}
+
+std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
+    const std::shared_ptr<array_info>& in_arr) {
+    // Handle nested arrays (child_dict_builders)
+    if (this->child_dict_builders.size() > 0) {
+        assert(in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
+               in_arr->arr_type == bodo_array_type::STRUCT ||
+               in_arr->arr_type == bodo_array_type::MAP);
+        assert(this->child_dict_builders.size() == in_arr->child_arrays.size());
+        std::vector<std::shared_ptr<array_info>> transposed_children;
+        for (size_t i = 0; i < this->child_dict_builders.size(); i++) {
+            std::shared_ptr<DictionaryBuilder> child_builder =
+                this->child_dict_builders[i];
+            const std::shared_ptr<array_info>& child_arr =
+                in_arr->child_arrays[i];
+            if (child_builder == nullptr) {
+                transposed_children.emplace_back(child_arr);
+            } else {
+                transposed_children.emplace_back(
+                    child_builder->TransposeExisting(child_arr));
+            }
+        }
+
+        // Recreate array with transposed children
+        // NOTE: assuming that input array buffers can be reused in output
+        // (aren't modified)
+        std::shared_ptr<array_info> out_arr;
+        if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, in_arr->length,
+                in_arr->buffers, transposed_children);
+        }
+        if (in_arr->arr_type == bodo_array_type::STRUCT) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, in_arr->length,
+                in_arr->buffers, transposed_children, 0, 0, 0, -1, false, false,
+                false, 0, in_arr->field_names);
+        }
+        if (in_arr->arr_type == bodo_array_type::MAP) {
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::MAP, Bodo_CTypes::MAP, in_arr->length,
+                std::vector<std::shared_ptr<BodoBuffer>>({}),
+                transposed_children);
+        }
+        return out_arr;
+    }
+
+    if (in_arr->arr_type != bodo_array_type::DICT &&
+        in_arr->arr_type != bodo_array_type::STRING) {
+        throw std::runtime_error(fmt::format(
+            "DictionaryBuilder::TransposeExisting: DICT or STRING array "
+            "expected, but got {} instead",
+            GetArrType_as_string(in_arr->arr_type)));
+    }
+
+    assert(this->dict_buff != nullptr);
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        // TODO Move this out into it's own function
+        std::shared_ptr<array_info> out_indices_arr =
+            alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
+        dict_indices_t* out_inds =
+            (dict_indices_t*)
+                out_indices_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+        void* out_null_bitmask =
+            out_indices_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+
+        for (size_t i = 0; i < in_arr->length; i++) {
+            // Handle nulls in the dictionary
+            dict_indices_t out_ind =
+                in_arr->get_null_bit<bodo_array_type::STRING>(i)
+                    ? this->GetIndex(in_arr, i)
+                    : -1;
+            out_inds[i] = out_ind;
+            // Handles both the cases: either the entry was already null or
+            // is now being set to null since the corresponding string doesn't
+            // exist in the DictionaryBuilder.
+            arrow::bit_util::SetBitTo(static_cast<uint8_t*>(out_null_bitmask),
+                                      i, (out_ind != -1));
+        }
+
+        // Unlike UnifyDictionaryArray, we don't need to update the
+        // dictionary/array id of the dictionary-builder's dictionary since we
+        // haven't modified it (by design).
+
+        return create_dict_string_array(this->dict_buff->data_array,
+                                        out_indices_arr);
+    }
+
+    assert(in_arr->arr_type == bodo_array_type::DICT);
+    std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
+    bool valid_arr_id = batch_dict->array_id >= 0;
+    bool empty_arr = batch_dict->array_id == 0;
+    // An empty array doesn't require any transposing.
+    if (empty_arr) {
+        return in_arr;
+    }
+
+    auto cache_entry = std::find_if(
+        this->cached_filter_array_transposes.begin(),
+        this->cached_filter_array_transposes.end(),
+        [batch_dict](const std::pair<DictionaryID, std::vector<int>> entry) {
+            return entry.first.arr_id == batch_dict->array_id;
+        });
+
+    auto update_transpose_map = [&](std::vector<int>& new_transpose_map) {
+        // Check/update dictionary hash table and create transpose map
+        // if new_transpose_map is already populated, only consider elements
+        // that come after it ends
+        size_t existing_size = new_transpose_map.size();
+        for (size_t i = existing_size; i < batch_dict->length; i++) {
+            // Handle nulls in the dictionary
+            int idx = batch_dict->get_null_bit<bodo_array_type::STRING>(i)
+                          ? this->GetIndex(batch_dict, i)
+                          : -1;
+            new_transpose_map.emplace_back(idx);
+        }
+    };
+
+    std::vector<int> new_transpose_map;
+    new_transpose_map.reserve(batch_dict->length);
+    const std::vector<int>* active_transpose_map = nullptr;
+
+    // Compute the cached_transpose_map if it is not already cached.
+    if (!valid_arr_id ||
+        (cache_entry == this->cached_filter_array_transposes.end())) {
+        // Create transpose map
+        update_transpose_map(new_transpose_map);
+
+        if (valid_arr_id) {
+            auto dict_id =
+                DictionaryID{batch_dict->array_id, batch_dict->length};
+            // Update the cached id and transpose map
+            active_transpose_map = &this->_AddToFilterCache(
+                std::make_pair(dict_id, std::move(new_transpose_map)));
+        } else {
+            active_transpose_map = &new_transpose_map;
+        }
+    } else {
+        if (cache_entry->first.length < batch_dict->length) {
+            auto& new_transpose_map = cache_entry->second;
+            update_transpose_map(new_transpose_map);
+            cache_entry->first.length = batch_dict->length;
+        }
+        active_transpose_map = &this->_MoveToFrontOfFilterCache(cache_entry);
+    }
+
+    // Create output batch array with common dictionary and new transposed
+    // indices
+    return this->transpose_input_helper(in_arr, *active_transpose_map);
+}
+
 inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
     const std::shared_ptr<array_info>& in_arr, size_t idx) {
-    char* in_data = in_arr->data1();
-    offset_t* in_offsets = (offset_t*)in_arr->data2();
+    assert(in_arr->arr_type == bodo_array_type::STRING);
+    char* in_data = in_arr->data1<bodo_array_type::STRING>();
+    offset_t* in_offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
 
     offset_t start_offset = in_offsets[idx];
     offset_t end_offset = in_offsets[idx + 1];
@@ -44,7 +240,7 @@ inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
 DictionaryBuilder::DictionaryBuilder(
     std::shared_ptr<array_info> dict, bool is_key_,
     std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders_,
-    size_t transpose_cache_size)
+    size_t transpose_cache_size, size_t filter_transpose_cache_size)
     : is_key(is_key_),
       child_dict_builders(child_dict_builders_),
       // Note: We cannot guarantee all DictionaryBuilders are created
@@ -53,6 +249,9 @@ DictionaryBuilder::DictionaryBuilder(
       dict_builder_event("DictionaryBuilder::UnifyDictionaryArray", false),
       cached_array_transposes(
           transpose_cache_size,
+          std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())),
+      cached_filter_array_transposes(
+          filter_transpose_cache_size,
           std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())) {
     // Nested arrays don't need other internal state
     if (child_dict_builders_.size() > 0) {
@@ -125,17 +324,21 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         // TODO(aneesh) move this out into it's own function
         std::shared_ptr<array_info> out_indices_arr =
             alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
-        dict_indices_t* out_inds = (dict_indices_t*)out_indices_arr->data1();
+        dict_indices_t* out_inds =
+            (dict_indices_t*)
+                out_indices_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
 
         // copy null bitmask from input to output
-        char* src_null_bitmask = in_arr->null_bitmask();
-        char* dst_null_bitmask = out_indices_arr->null_bitmask();
+        char* src_null_bitmask =
+            in_arr->null_bitmask<bodo_array_type::STRING>();
+        char* dst_null_bitmask =
+            out_indices_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
         size_t bytes_in_bitmask = arrow::bit_util::BytesForBits(in_arr->length);
         memcpy(dst_null_bitmask, src_null_bitmask, bytes_in_bitmask);
 
         for (size_t i = 0; i < in_arr->length; i++) {
             // handle nulls in the dictionary
-            if (!in_arr->get_null_bit(i)) {
+            if (!in_arr->get_null_bit<bodo_array_type::STRING>(i)) {
                 out_inds[i] = -1;
             } else {
                 // We reserve space here instead of in InsertIfNotExists because
@@ -194,13 +397,11 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         // if new_transpose_map is already populated, only consider elements
         // that come after it ends
         for (size_t i = new_transpose_map.size(); i < batch_dict->length; i++) {
-            // handle nulls in the dictionary
-            if (!batch_dict->get_null_bit(i)) {
-                new_transpose_map.emplace_back(-1);
-                continue;
-            }
-            new_transpose_map.emplace_back(
-                this->InsertIfNotExists(batch_dict, i));
+            // Handle nulls in the dictionary
+            int idx = batch_dict->get_null_bit<bodo_array_type::STRING>(i)
+                          ? this->InsertIfNotExists(batch_dict, i)
+                          : -1;
+            new_transpose_map.emplace_back(idx);
         }
     };
     std::vector<int> new_transpose_map;
@@ -239,29 +440,9 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         active_transpose_map = &this->_MoveToFrontOfCache(cache_entry);
     }
 
-    // create output batch array with common dictionary and new transposed
+    // Create output batch array with common dictionary and new transposed
     // indices
-    const std::shared_ptr<array_info>& in_indices_arr = in_arr->child_arrays[1];
-    std::shared_ptr<array_info> out_indices_arr =
-        alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
-    dict_indices_t* in_inds = (dict_indices_t*)in_indices_arr->data1();
-    dict_indices_t* out_inds = (dict_indices_t*)out_indices_arr->data1();
-    for (size_t i = 0; i < in_indices_arr->length; i++) {
-        if (!in_indices_arr->get_null_bit(i)) {
-            out_indices_arr->set_null_bit(i, false);
-            out_inds[i] = -1;
-            continue;
-        }
-        dict_indices_t ind = (*active_transpose_map)[in_inds[i]];
-        out_inds[i] = ind;
-        if (ind == -1) {
-            out_indices_arr->set_null_bit(i, false);
-        } else {
-            out_indices_arr->set_null_bit(i, true);
-        }
-    }
-    return create_dict_string_array(this->dict_buff->data_array,
-                                    out_indices_arr);
+    return this->transpose_input_helper(in_arr, *active_transpose_map);
 }
 
 std::shared_ptr<bodo::vector<uint32_t>>
@@ -276,6 +457,13 @@ const std::vector<int>& DictionaryBuilder::_AddToCache(
     return this->cached_array_transposes.front().second;
 }
 
+const std::vector<int>& DictionaryBuilder::_AddToFilterCache(
+    std::pair<DictionaryID, std::vector<int>> cache_entry) {
+    this->cached_filter_array_transposes.pop_back();
+    this->cached_filter_array_transposes.emplace_front(std::move(cache_entry));
+    return this->cached_filter_array_transposes.front().second;
+}
+
 const std::vector<int>& DictionaryBuilder::_MoveToFrontOfCache(
     DictionaryCache::iterator cache_entry) {
     if (cache_entry != this->cached_array_transposes.begin()) {
@@ -284,6 +472,17 @@ const std::vector<int>& DictionaryBuilder::_MoveToFrontOfCache(
         this->cached_array_transposes.emplace_front(std::move(new_entry));
     }
     return this->cached_array_transposes.front().second;
+}
+
+const std::vector<int>& DictionaryBuilder::_MoveToFrontOfFilterCache(
+    DictionaryCache::iterator cache_entry) {
+    if (cache_entry != this->cached_filter_array_transposes.begin()) {
+        auto new_entry = std::move(*cache_entry);
+        this->cached_filter_array_transposes.erase(cache_entry);
+        this->cached_filter_array_transposes.emplace_front(
+            std::move(new_entry));
+    }
+    return this->cached_filter_array_transposes.front().second;
 }
 
 /* ------------------------------------------------------------------------ */

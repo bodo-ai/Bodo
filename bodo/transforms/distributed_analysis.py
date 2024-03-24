@@ -1638,6 +1638,11 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
+        if fdef == ("runtime_join_filter", "bodo.libs.stream_join"):
+            # Simply match input and output array distributions.
+            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            return
+
         if fdef == (
             "join_probe_consume_batch",
             "bodo.libs.stream_join",
@@ -2367,18 +2372,22 @@ class DistributedAnalysis:
             in_dist = Distribution(
                 min(
                     min(a.value for a in array_dists[rhs.args[0].name]),
-                    Distribution.OneD.value
-                    if ignore_index
-                    else array_dists[rhs.args[1].name].value,
+                    (
+                        Distribution.OneD.value
+                        if ignore_index
+                        else array_dists[rhs.args[1].name].value
+                    ),
                 )
             )
             # return is a tuple(tuple(arrays), array)
             out_dist = Distribution(
                 min(
                     min(a.value for a in array_dists[lhs][0]),
-                    Distribution.OneD.value
-                    if ignore_index
-                    else array_dists[lhs][1].value,
+                    (
+                        Distribution.OneD.value
+                        if ignore_index
+                        else array_dists[lhs][1].value
+                    ),
                     in_dist.value,
                 )
             )
@@ -2406,18 +2415,22 @@ class DistributedAnalysis:
             in_dist = Distribution(
                 min(
                     array_dists[rhs.args[0].name].value,
-                    Distribution.OneD.value
-                    if ignore_index
-                    else array_dists[rhs.args[1].name].value,
+                    (
+                        Distribution.OneD.value
+                        if ignore_index
+                        else array_dists[rhs.args[1].name].value
+                    ),
                 )
             )
             # return is a tuple(table, array)
             out_dist = Distribution(
                 min(
                     array_dists[lhs][0].value,
-                    Distribution.OneD.value
-                    if ignore_index
-                    else array_dists[lhs][1].value,
+                    (
+                        Distribution.OneD.value
+                        if ignore_index
+                        else array_dists[lhs][1].value
+                    ),
                     in_dist.value,
                 )
             )
@@ -3019,9 +3032,11 @@ class DistributedAnalysis:
 
             min_dist = Distribution(
                 min(
-                    array_dists[lhs].value
-                    if isinstance(self.typemap[lhs], TableType)
-                    else min(a.value for a in array_dists[lhs]),
+                    (
+                        array_dists[lhs].value
+                        if isinstance(self.typemap[lhs], TableType)
+                        else min(a.value for a in array_dists[lhs])
+                    ),
                     array_dists[in_df].value,
                 )
             )
@@ -4765,9 +4780,11 @@ class DistributedAnalysis:
             if not isinstance(dist, list):
                 dist = [dist] * len(typs)
             return [
-                self._get_dist(t, dist[i])
-                if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
-                else None
+                (
+                    self._get_dist(t, dist[i])
+                    if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
+                    else None
+                )
                 for i, t in enumerate(typs)
             ]
         return dist

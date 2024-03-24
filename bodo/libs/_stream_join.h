@@ -220,7 +220,7 @@ class JoinPartition {
     /// partition hash.
     /// @param hash Partition hash for the row
     /// @return True if row is part of partition, False otherwise.
-    inline bool is_in_partition(const uint32_t& hash) const;
+    inline bool is_in_partition(const uint32_t& hash) const noexcept;
 
     /// @brief Is the partition active?
     inline bool is_active_partition() const { return this->is_active; }
@@ -613,8 +613,10 @@ class HashJoinState : public JoinState {
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
     std::unique_ptr<BloomFilter> global_bloom_filter;
-    // Track the number of misses pruned by the bloom filter.
-    size_t num_bloom_filter_misses = 0;
+    // Track the number of misses pruned by the runtime filter.
+    // This can either be from the bloom filter, or dictionary-builder
+    // based pruning in RuntimeFilter.
+    size_t num_runtime_filter_misses = 0;
     // Track the total probe table rows processed on this rank.
     size_t num_processed_probe_table_rows = 0;
     // Track the number of probe rows received from the input operator.
@@ -734,6 +736,42 @@ class HashJoinState : public JoinState {
      *
      */
     void FinalizeBuild() override;
+
+    /**
+     * @brief Apply a runtime filter to a table based on information about the
+     * key columns collected during the build stage. At this time, we apply two
+     * types of filters:
+     * 1. Bloom filter: This is applied when none of the entries in
+     * join_key_idxs are -1.
+     * 2. DictionaryBuilder: If a key is a dictionary-encoded column, then we
+     * can use the DictionaryBuilder for that column to filter out rows where
+     * the entry in the corresponding column doesn't exist in the dictionary.
+     *
+     * NOTE: This function is effectively a const. The only reason it cannot be
+     * marked as const is because the transpose cache of the DictionaryBuilder
+     * is modified. No actual changes are made to the JoinState in this
+     * function.
+     * @param in_table Table to filter. We assume this is a small batch (e.g. 4K
+     * rows).
+     * @param join_key_idxs A vector of length this->n_keys. The element at the
+     * i'th index is the index of the column in the input table that corresponds
+     * to the i'th join key. -1 indicates that a column corresponding to the
+     * join key doesn't exist. e.g. If we have 3 keys and join_key_idxs is [2,
+     * 0, -1], then in_table->columns[2] corresponds to the first join key,
+     * in_table->columns[0] corresponds to the second join key and there's no
+     * column corresponding to the third join key. The bloom filter is applied
+     * when none of the entries are -1, i.e. we have all key columns. When this
+     * is the case, this must also be the last instance of RuntimeJoinFilter.
+     * @param process_col_bitmask A vector length this->n_keys that specifies
+     * whether or not to apply a column level filter for the i'th join key. This
+     * is required because ideally we only want to apply the column level filter
+     * only once.
+     * @return std::shared_ptr<table_info> Filtered table.
+     */
+    std::shared_ptr<table_info> RuntimeFilter(
+        std::shared_ptr<table_info> in_table,
+        const std::vector<int64_t>& join_key_idxs,
+        const std::vector<bool>& process_col_bitmask);
 
     /**
      * @brief Finalize any statistic information
