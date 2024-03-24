@@ -47,6 +47,7 @@ from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
     is_nullable_ignore_sentinals,
+    raise_bodo_error,
 )
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
@@ -758,10 +759,17 @@ def get_filters_pyobject(filter_str, vars):  # pragma: no cover
     pass
 
 
+try:
+    import bodo_iceberg_connector as bic
+except ImportError:
+    bic = None
+
+
 @overload(get_filters_pyobject, no_unliteral=True)
 def overload_get_filters_pyobject(filters_str, var_tup):
     """generate a pyobject for filter expression to pass to C++"""
-    import bodo_iceberg_connector as bic
+    if bic == None:
+        raise_bodo_error("bodo_iceberg_connector not found")
 
     filter_str_val = get_overload_const_str(filters_str)
     var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
@@ -775,12 +783,11 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     )
 
     loc_vars = {}
-    glbs = globals()
+    glbs = globals().copy()
     glbs["objmode"] = numba.objmode
-    glbs["FilterExpr"] = bic.FilterExpr
-    glbs["Scalar"] = bic.Scalar
-    glbs["ColumnRef"] = bic.ColumnRef
+    glbs["bic"] = bic
     exec(func_text, glbs, loc_vars)
+
     return loc_vars["impl"]
 
 
@@ -806,10 +813,10 @@ class IcebergFilterVisitor(FilterVisitor[str]):
         self.filter_map = filter_map
 
     def visit_scalar(self, scalar: bif.Scalar) -> str:
-        return f"Scalar({self.filter_map[scalar.val.name]})"
+        return f"bic.Scalar({self.filter_map[scalar.val.name]})"
 
     def visit_ref(self, ref: bif.Ref) -> str:
-        return f"ColumnRef('{ref.val}')"
+        return f"bic.ColumnRef('{ref.val}')"
 
     def visit_op(self, op: bif.Op) -> str:
         op_name = op.op.upper()
@@ -818,7 +825,7 @@ class IcebergFilterVisitor(FilterVisitor[str]):
                 op_name = "STARTS_WITH"
             case "ENDSWITH":
                 op_name = "ENDS_WITH"
-        return f"FilterExpr('{op_name}', [{', '.join(self.visit(x) for x in op.args)}])"
+        return f"bic.FilterExpr('{op_name}', [{', '.join(self.visit(x) for x in op.args)}])"
 
 
 def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
@@ -840,7 +847,7 @@ def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
     """
 
     if filters is None:
-        return "FilterExpr.default()"
+        return "bic.FilterExpr.default()"
 
     visitor = IcebergFilterVisitor(filter_map)
     dict_expr = visitor.visit(filters)
@@ -989,7 +996,6 @@ def _gen_iceberg_reader_chunked_py(
             f"source_pyarrow_schema_{call_id}": source_pyarrow_schema,
         }
     )
-
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     sql_reader_py = loc_vars["sql_reader_chunked_py"]
