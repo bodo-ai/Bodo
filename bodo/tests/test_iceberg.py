@@ -1891,8 +1891,12 @@ INT_MAX: int = np.iinfo(np.int32).max
 INT_MIN: int = np.iinfo(np.int32).min
 DOUBLE_MAX: float = np.finfo(np.float64).max
 DOUBLE_MIN: float = np.finfo(np.float64).min
-NULL_ERR = "to_parquet: Column A contains nulls but is expected to be non-nullable"
-TYPE_ERR = "to_parquet: Column A is type int64 but is expected to be type int32"
+NULL_ERR = (
+    "Iceberg Parquet Write: Column A contains nulls but is expected to be non-nullable"
+)
+TYPE_ERR = (
+    "Iceberg Parquet Write: Column A is type int64 but is expected to be type int32"
+)
 OTHER_ERR = "See other ranks for runtime error"
 DOWNCAST_INFO = [
     (
@@ -1935,8 +1939,8 @@ DOWNCAST_INFO = [
         ),
         pd.DataFrame(
             {
-                "A": pd.Series([INT_MAX + 1, INT_MIN - 1], dtype="int64"),
-                "B": pd.Series([DOUBLE_MAX, DOUBLE_MIN], dtype="float64"),
+                "A": pd.Series([INT_MAX + 1, INT_MIN - 1] * 3, dtype="int64"),
+                "B": pd.Series([DOUBLE_MAX, DOUBLE_MIN] * 3, dtype="float64"),
             }
         ),
         [TYPE_ERR, OTHER_ERR],
@@ -1946,7 +1950,7 @@ DOWNCAST_INFO = [
         [("A", "int", False)],
         pd.DataFrame({"A": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int32")}),
         pd.DataFrame({"A": pd.Series([6, 7, 8, 9, 10], dtype="Int64")}),
-        pd.DataFrame({"A": pd.Series([INT_MAX + 1, None], dtype="Int64")}),
+        pd.DataFrame({"A": pd.Series([INT_MAX + 1, None] * 3, dtype="Int64")}),
         [NULL_ERR, TYPE_ERR, OTHER_ERR],
     ),
 ]

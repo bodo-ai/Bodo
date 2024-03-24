@@ -46,7 +46,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
     std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
     const std::string &tz, arrow::TimeUnit::type &time_unit,
-    bool downcast_time_ns_to_us) {
+    bool downcast_time_ns_to_us, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Return DataType value
     std::shared_ptr<arrow::DataType> ret_type =
         std::shared_ptr<arrow::DataType>(nullptr);
@@ -96,7 +96,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             std::shared_ptr<arrow::Array> inner_array;
             std::shared_ptr<arrow::DataType> inner_type = bodo_array_to_arrow(
                 pool, child_arr, &inner_array, convert_timedelta_to_int64, tz,
-                time_unit, downcast_time_ns_to_us);
+                time_unit, downcast_time_ns_to_us, mm);
             child_arrays.push_back(inner_array);
             // TODO [BE-3247] We should specify nullability of the fields here.
             fields.push_back(
@@ -119,9 +119,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         // convert inner array
         std::shared_ptr<arrow::Array> inner_array;
-        std::shared_ptr<arrow::DataType> inner_type = bodo_array_to_arrow(
-            pool, array->child_arrays[0], &inner_array,
-            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+        std::shared_ptr<arrow::DataType> inner_type =
+            bodo_array_to_arrow(pool, array->child_arrays[0], &inner_array,
+                                convert_timedelta_to_int64, tz, time_unit,
+                                downcast_time_ns_to_us, mm);
 
         // We use `element` for consistency.
         // TODO [BE-3247] We should specify nullability of the fields here.
@@ -159,15 +160,17 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         // Convert key array
         std::shared_ptr<arrow::Array> key_array;
-        std::shared_ptr<arrow::DataType> key_type = bodo_array_to_arrow(
-            pool, struct_arr->child_arrays[0], &key_array,
-            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+        std::shared_ptr<arrow::DataType> key_type =
+            bodo_array_to_arrow(pool, struct_arr->child_arrays[0], &key_array,
+                                convert_timedelta_to_int64, tz, time_unit,
+                                downcast_time_ns_to_us, mm);
 
         // Convert item array
         std::shared_ptr<arrow::Array> item_array;
-        std::shared_ptr<arrow::DataType> item_type = bodo_array_to_arrow(
-            pool, struct_arr->child_arrays[1], &item_array,
-            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+        std::shared_ptr<arrow::DataType> item_type =
+            bodo_array_to_arrow(pool, struct_arr->child_arrays[1], &item_array,
+                                convert_timedelta_to_int64, tz, time_unit,
+                                downcast_time_ns_to_us, mm);
 
         *out = std::make_shared<arrow::MapArray>(
             arrow::map(key_type, item_type, false), array_item_arr->length,
@@ -186,13 +189,15 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::shared_ptr<arrow::Array> index_array;
 
         // Recurse on the dictionary
-        auto dict_type = bodo_array_to_arrow(
-            pool, array->child_arrays[0], &dictionary,
-            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+        auto dict_type =
+            bodo_array_to_arrow(pool, array->child_arrays[0], &dictionary,
+                                convert_timedelta_to_int64, tz, time_unit,
+                                downcast_time_ns_to_us, mm);
         // Recurse on the index array
-        auto index_type = bodo_array_to_arrow(
-            pool, array->child_arrays[1], &index_array,
-            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+        auto index_type =
+            bodo_array_to_arrow(pool, array->child_arrays[1], &index_array,
+                                convert_timedelta_to_int64, tz, time_unit,
+                                downcast_time_ns_to_us, mm);
 
         // Extract the types from the dictionary call.
         // TODO: Can we provide ordered?
@@ -493,9 +498,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         const size_t siztype = numpy_item_size[array->dtype];
         int64_t in_num_bytes = array->length * siztype;
         std::shared_ptr<arrow::Buffer> out_buffer =
-            std::make_shared<arrow::Buffer>(
-                (uint8_t *)array->data1(), in_num_bytes,
-                bodo::default_buffer_memory_manager());
+            std::make_shared<arrow::Buffer>((uint8_t *)array->data1(),
+                                            in_num_bytes, mm);
 
         // set arrow bit mask using category index values (-1 for nulls)
         int64_t null_count_ = 0;
@@ -648,21 +652,31 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(
     std::shared_ptr<table_info> table) {
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-    std::vector<std::shared_ptr<arrow::Array>> arrow_arrs(
-        table->columns.size());
-
-    for (int i = 0; i < (int)table->ncols(); i++) {
-        std::shared_ptr<array_info> arr = table->columns[i];
-        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-        auto arrow_type = bodo_array_to_arrow(
-            bodo::BufferPool::DefaultPtr(), arr, &arrow_arrs[i],
-            false /*convert_timedelta_to_int64*/, "", time_unit,
-            false /*downcast_time_ns_to_us*/);
-        schema_vector.push_back(
-            arrow::field("A" + std::to_string(i), arrow_type, true));
+    size_t num_cols = table->ncols();
+    std::vector<std::string> field_names(num_cols);
+    for (size_t i = 0; i < num_cols; i++) {
+        field_names[i] = "A" + std::to_string(i);
     }
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
+    return bodo_table_to_arrow(std::move(table), std::move(field_names));
+}
+
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(
+    std::shared_ptr<table_info> table, std::vector<std::string> field_names,
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata,
+    bool convert_timedelta_to_int64, std::string tz,
+    arrow::TimeUnit::type time_unit, bool downcast_time_ns_to_us,
+    bodo::IBufferPool *const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::Array>> arrow_arrs(table->ncols());
+
+    for (size_t i = 0; i < table->ncols(); i++) {
+        std::shared_ptr<array_info> arr = table->columns[i];
+        auto arrow_type = bodo_array_to_arrow(
+            pool, arr, &arrow_arrs[i], convert_timedelta_to_int64, tz,
+            time_unit, downcast_time_ns_to_us, mm);
+        schema_vector.emplace_back(
+            arrow::field(field_names[i], arrow_type, true));
+    }
     std::shared_ptr<arrow::Schema> schema =
         std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
     std::shared_ptr<arrow::Table> arrow_table =
