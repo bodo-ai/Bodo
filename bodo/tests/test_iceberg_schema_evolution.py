@@ -722,7 +722,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "FilterExpr('IS_NULL', [ColumnRef('some_new_column')])",
+            "bic.FilterExpr('IS_NULL', [bic.ColumnRef('some_new_column')])",
             "(ds.field('{some_new_column}').is_null())",
         ]
 
@@ -796,7 +796,7 @@ def test_filter_pushdown_on_newly_added_column(
             bodo_impl = impl
 
         expected_filter_pushdown_logs = [
-            "FilterExpr('IN', [ColumnRef('some_new_column'), Scalar(f0)])",
+            "bic.FilterExpr('IN', [bic.ColumnRef('some_new_column'), bic.Scalar(f0)])",
             "(ds.field('{some_new_column}').isin(f0))",
         ]
     else:
