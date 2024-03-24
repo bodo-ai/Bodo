@@ -463,6 +463,15 @@ struct bodo_array_type {
     };
 };
 
+/**
+ * @brief Is typ a nested type (STRUCT, ARRAY_ITEM/LIST or MAP)?
+ *
+ */
+inline bool is_nested_arr_type(bodo_array_type::arr_type_enum typ) {
+    return ((typ == bodo_array_type::ARRAY_ITEM) ||
+            (typ == bodo_array_type::STRUCT) || (typ == bodo_array_type::MAP));
+}
+
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 
 inline std::string GetDtype_as_string(int8_t dtype) {

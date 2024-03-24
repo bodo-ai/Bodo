@@ -643,17 +643,16 @@ GroupbyPartition::GroupbyPartition(
     }
 }
 
-inline bool GroupbyPartition::is_in_partition(const uint32_t& hash) const {
-    if (this->num_top_bits == 0) {
-        // Shifting uint32_t by 32 bits is undefined behavior.
-        // Ref:
-        // https://stackoverflow.com/questions/18799344/shifting-a-32-bit-integer-by-32-bits
-        return true;
-    } else {
-        constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
-        return (hash >> (uint32_bits - this->num_top_bits)) ==
-               this->top_bitmask;
-    }
+inline bool GroupbyPartition::is_in_partition(
+    const uint32_t& hash) const noexcept {
+    constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
+    // Shifting uint32_t by 32 bits is undefined behavior.
+    // Ref:
+    // https://stackoverflow.com/questions/18799344/shifting-a-32-bit-integer-by-32-bits
+    return (this->num_top_bits == 0)
+               ? true
+               : ((hash >> (uint32_bits - this->num_top_bits)) ==
+                  this->top_bitmask);
 }
 
 inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {

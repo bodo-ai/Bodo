@@ -1,8 +1,11 @@
 #include "_stream_join.h"
+#include <arrow/util/bit_util.h>
+#include <fmt/format.h>
 
 #include <bitset>
 #include <memory>
 
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_memory_budget.h"
@@ -130,17 +133,16 @@ JoinPartition::JoinPartition(
     }
 }
 
-inline bool JoinPartition::is_in_partition(const uint32_t& hash) const {
-    if (this->num_top_bits == 0) {
-        // Shifting uint32_t by 32 bits is undefined behavior.
-        // Ref:
-        // https://stackoverflow.com/questions/18799344/shifting-a-32-bit-integer-by-32-bits
-        return true;
-    } else {
-        constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
-        return (hash >> (uint32_bits - this->num_top_bits)) ==
-               this->top_bitmask;
-    }
+inline bool JoinPartition::is_in_partition(
+    const uint32_t& hash) const noexcept {
+    constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
+    // Shifting uint32_t by 32 bits is undefined behavior.
+    // Ref:
+    // https://stackoverflow.com/questions/18799344/shifting-a-32-bit-integer-by-32-bits
+    return (this->num_top_bits == 0)
+               ? true
+               : ((hash >> (uint32_bits - this->num_top_bits)) ==
+                  this->top_bitmask);
 }
 
 template <bool is_active>
@@ -555,7 +557,7 @@ void JoinPartition::AppendInactiveProbeBatch(
         table_nrows = in_table->nrows() - in_table_start_offset;
     }
     assert(table_nrows >= 0);
-    assert(append_rows.size() == table_nrows);
+    assert(static_cast<int64_t>(append_rows.size()) == table_nrows);
     for (size_t i_row = 0; i_row < static_cast<size_t>(table_nrows); i_row++) {
         if (append_rows[i_row]) {
             probe_table_buffer_join_hashes_->push_back(join_hashes[i_row]);
@@ -1493,14 +1495,211 @@ void HashJoinState::FinalizeBuild() {
     }
 }
 
+std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
+    std::shared_ptr<table_info> in_table,
+    const std::vector<int64_t>& join_key_idxs,
+    const std::vector<bool>& process_col_bitmask) {
+    assert(this->n_keys == join_key_idxs.size());
+    assert(this->n_keys == process_col_bitmask.size());
+    assert(this->build_input_finalized);
+    // Cannot filter if probe is on the outer side.
+    // The planner should never generate these and the compiler
+    // would raise an exception if it did, so we just add an assert for now.
+    assert(!this->probe_table_outer);
+
+    // Create a bitmask for the rows to keep and filter
+    // rows using the dict-builders and the bloom filter.
+    // TODO Cache this allocation in the JoinState
+    size_t n_bytes = ::arrow::bit_util::BytesForBits(in_table->nrows());
+    bodo::vector<uint8_t> bitmask(n_bytes, 0xff);
+
+    // If none of the entries in join_key_idxs are -1, then also apply
+    // the bloom filter if one is available.
+    bool apply_bloom_filter = (this->global_bloom_filter != nullptr);
+    for (int64_t idx : join_key_idxs) {
+        apply_bloom_filter &= (idx != -1);
+    }
+
+    // Key arrays for computing the hashes for the bloom filter.
+    std::vector<std::shared_ptr<array_info>> key_arrs_for_bf_hashes;
+    if (apply_bloom_filter) {
+        key_arrs_for_bf_hashes.reserve(this->n_keys);
+    }
+
+    // Were any filters applied. If they weren't, we can short-circuit
+    // expensive steps and just return the table as is.
+    bool applied_any_filter = false;
+
+    // If join_key_idxs[i] is not -1 and process_col_bitmask[i] is true,
+    // then apply a column level filter if one is available.
+    for (size_t i = 0; i < join_key_idxs.size(); i++) {
+        if (join_key_idxs[i] == -1) {
+            assert(!apply_bloom_filter);
+            continue;
+        }
+        if (process_col_bitmask[i] || apply_bloom_filter) {
+            std::shared_ptr<array_info>& in_arr =
+                in_table->columns[join_key_idxs[i]];
+            std::shared_ptr<array_info> unified_arr;
+
+            if (this->build_table_dict_builders[i] != nullptr) {
+                // If a dict builder exists:
+                //  - If only applying column level filter
+                //    - If DICT, then transpose and filter out nulls
+                //    - If STRING, then skip transpose
+                //    - If NESTED, then skip transpose
+                //  - If applying bloom filter
+                //    - If DICT, then transpose for correct hash calculation
+                //    - If STRING, then skip transpose and calculate
+                //      hashes directly on the strings
+                //    - If NESTED, then transpose for correctness.
+                if (in_arr->arr_type == bodo_array_type::DICT) {
+                    assert(
+                        this->build_table_schema->column_types[i]->array_type ==
+                        bodo_array_type::DICT);
+                    unified_arr =
+                        this->build_table_dict_builders[i]->TransposeExisting(
+                            in_arr);
+                    // Filter out nulls in the column if we should filter based
+                    // on this column. This will filter out both: entries that
+                    // didn't exist in the dictionary and regular nulls. The
+                    // former is what we want and the latter is a safe
+                    // side-effect since we want to filter out nulls anyway
+                    // (null keys cannot match with anything in the probe_inner
+                    // case).
+                    if (process_col_bitmask[i] && unified_arr->null_bitmask()) {
+                        const uint8_t* out_arr_bitmask =
+                            (uint8_t*)(unified_arr->null_bitmask());
+                        for (size_t i = 0; i < n_bytes; i++) {
+                            bitmask[i] &= out_arr_bitmask[i];
+                        }
+                        applied_any_filter = true;
+                    }
+                } else if (in_arr->arr_type == bodo_array_type::STRING) {
+                    assert(
+                        this->build_table_schema->column_types[i]->array_type ==
+                        bodo_array_type::DICT);
+                    // Technically, we could do TransposeExisting on this to
+                    // convert this to a DICT. However that would require doing
+                    // a hashmap lookup on every element (potentially billions),
+                    // which would be too expensive for a best-effort filter.
+                    // For now, we will simply utilize the bloom filter which
+                    // can be used in this case since the strings can be hashed
+                    // as is. We may change this in the future.
+                    unified_arr = in_arr;
+                } else if (is_nested_arr_type(in_arr->arr_type)) {
+                    assert(
+                        in_arr->arr_type ==
+                        this->build_table_schema->column_types[i]->array_type);
+                    if (apply_bloom_filter) {
+                        unified_arr = this->build_table_dict_builders[i]
+                                          ->TransposeExisting(in_arr);
+                    } else {
+                        unified_arr = in_arr;
+                    }
+                } else {
+                    throw std::runtime_error(fmt::format(
+                        "HashJoinState::RuntimeFilter: Expected input array "
+                        "type corresponding to key at index {} to be "
+                        "DICT/STRING/STRUCT/MAP/ARRAY_ITEM, but got {} "
+                        "instead!",
+                        i, GetArrType_as_string(in_arr->arr_type)));
+                }
+            } else {
+                // The types should match exactly. Even when
+                // the key column is STRING and the input was originally a DICT,
+                // the compiler should've casted it to a STRING before calling
+                // this function.
+                if (in_arr->arr_type !=
+                    this->build_table_schema->column_types[i]->array_type) {
+                    throw std::runtime_error(fmt::format(
+                        "HashJoinState::RuntimeFilter: Expected input array "
+                        "type corresponding to key at index {} to be {}, but "
+                        "got {} instead!",
+                        i,
+                        GetArrType_as_string(
+                            this->build_table_schema->column_types[i]
+                                ->array_type),
+                        GetArrType_as_string(in_arr->arr_type)));
+                }
+                if (in_arr->dtype !=
+                    this->build_table_schema->column_types[i]->c_type) {
+                    throw std::runtime_error(fmt::format(
+                        "HashJoinState::RuntimeFilter: Expected input data "
+                        "type corresponding to key at index {} to be {}, but "
+                        "got {} instead!",
+                        i,
+                        GetDtype_as_string(
+                            this->build_table_schema->column_types[i]->c_type),
+                        GetDtype_as_string(in_arr->dtype)));
+                }
+                // If not a dict-encoded array, there's no additional
+                // filtering we can do even if process_col_bitmask[i] is true.
+                // This can change in the future, e.g. we may maintain column
+                // level hash-sets or bloom filters or range information for
+                // filtering.
+                unified_arr = in_arr;
+            }
+
+            // We will need the unified array for calculating the hashes
+            // for the bloom filter.
+            if (apply_bloom_filter) {
+                key_arrs_for_bf_hashes.emplace_back(unified_arr);
+            }
+        }
+    }
+    if (apply_bloom_filter) {
+        std::shared_ptr<table_info> unified_in_table_only_keys =
+            std::make_shared<table_info>(key_arrs_for_bf_hashes);
+        // Compute partitioning hashes.
+        // NOTE: In the case where the input column is STRING and the join key
+        // is originally DICT, we can hash the input strings directly since they
+        // would match the dictionary hashes.
+        std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+            dict_hashes = this->GetDictionaryHashesForKeys();
+        std::shared_ptr<uint32_t[]> in_table_hashes_partition =
+            hash_keys_table(unified_in_table_only_keys, this->n_keys,
+                            SEED_HASH_PARTITION, false, true, dict_hashes);
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            bool keep = arrow::bit_util::GetBit(bitmask.data(), i_row) &&
+                        this->global_bloom_filter->Find(
+                            in_table_hashes_partition[i_row]);
+            arrow::bit_util::SetBitTo(bitmask.data(), i_row, keep);
+        }
+        applied_any_filter = true;
+    }
+
+    if (applied_any_filter) {
+        // TODO Cache this allocation in the JoinState.
+        std::vector<int64_t> rows_to_keep(
+            std::max(in_table->nrows(), static_cast<uint64_t>(1)), -1);
+        size_t next_idx = 0;
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            rows_to_keep[next_idx] = i_row;
+            size_t delta =
+                arrow::bit_util::GetBit(bitmask.data(), i_row) ? 1 : 0;
+            next_idx += delta;
+        }
+        rows_to_keep.resize(next_idx);
+        if (rows_to_keep.size() == in_table->nrows()) {
+            // Nothing was filtered out, so skip the copy.
+            return in_table;
+        }
+        this->num_runtime_filter_misses +=
+            (in_table->nrows() - rows_to_keep.size());
+        return RetrieveTable(in_table, rows_to_keep);
+    }
+    return in_table;
+}
+
 void HashJoinState::FinalizeProbe() {
     tracing::Event finalizeProbeEvent("FinalizeProbe");
     // Free the probe shuffle buffer's memory:
     this->probe_shuffle_state.Finalize();
 
     // Add the tracing information.
-    this->probe_event.add_attribute("num_bloom_filter_misses",
-                                    this->num_bloom_filter_misses);
+    this->probe_event.add_attribute("num_runtime_filter_misses",
+                                    this->num_runtime_filter_misses);
     this->probe_event.add_attribute("num_processed_probe_table_rows",
                                     this->num_processed_probe_table_rows);
     this->probe_event.add_attribute("num_input_probe_table_rows",
@@ -1554,7 +1753,7 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
         table_nrows = in_table->nrows() - in_table_start_offset;
     }
     assert(table_nrows >= 0);
-    assert(append_rows.size() == table_nrows);
+    assert(static_cast<int64_t>(append_rows.size()) == table_nrows);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         append_rows_by_partition[i_part] =
             std::vector<bool>(table_nrows, false);
@@ -2136,7 +2335,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         // If just build_parallel = False then we have a broadcast join on
         // the build side. So process all rows.
-        //
         // If just probe_parallel = False and build_parallel = True then we
         // still need to check batch_hashes_partition to know which rows to
         // process.
@@ -2146,13 +2344,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         // Check the bloom filter if we would need to shuffle data
         // or if we would process the row.
         bool check_bloom_filter = shuffle_possible || process_on_rank;
-        // Check bloom filter
+        // Check bloom filter.
         if (use_bloom_filter && check_bloom_filter) {
             // We use batch_hashes_partition to use consistent hashing
             // across ranks for dict-encoded string arrays
             if (!join_state->global_bloom_filter->Find(
                     batch_hashes_partition[i_row])) {
-                join_state->num_bloom_filter_misses++;
+                join_state->num_runtime_filter_misses++;
                 if (probe_table_outer) {
                     // Add unmatched rows from probe table to output table
                     build_idxs.push_back(-1);
@@ -2630,6 +2828,51 @@ table_info* join_probe_consume_batch_py_entry(
 }
 
 /**
+ * @brief Python entrypoint for runtime join filter.
+ *
+ * @param join_state_ Pointer to the join state.
+ * @param in_table_ The table to filter.
+ * @param join_key_idxs_ An array of length join_state->n_keys specifying the
+ * indices in the input table that correspond to the join keys.
+ * @param join_key_idxs_len Length of join_key_idxs_. This must be equal to
+ * join_state->n_keys.
+ * @param process_col_bitmask_ An array of boolean specifying whether a column
+ * level filter for the i'th key should be applied.
+ * @param process_col_bitmask_len Length of process_col_bitmask_. This must be
+ * equal to join_state->n_keys.
+ * @return table_info* Filtered table.
+ */
+table_info* runtime_join_filter_py_entry(JoinState* join_state_,
+                                         table_info* in_table_,
+                                         int64_t* join_key_idxs_,
+                                         int64_t join_key_idxs_len,
+                                         bool* process_col_bitmask_,
+                                         int64_t process_col_bitmask_len) {
+    try {
+        assert(join_key_idxs_len == process_col_bitmask_len);
+        assert(join_key_idxs_len == static_cast<int64_t>(join_state_->n_keys));
+        if (join_state_->n_keys == 0) {
+            // Filters are only supported for equi hash joins.
+            return in_table_;
+        } else {
+            HashJoinState* join_state = (HashJoinState*)join_state_;
+            std::unique_ptr<table_info> in_table =
+                std::unique_ptr<table_info>(in_table_);
+            std::vector<int64_t> join_key_idxs(
+                join_key_idxs_, join_key_idxs_ + join_key_idxs_len);
+            std::vector<bool> process_col_bitmask(
+                process_col_bitmask_,
+                process_col_bitmask_ + process_col_bitmask_len);
+            return new table_info(*(join_state->RuntimeFilter(
+                std::move(in_table), join_key_idxs, process_col_bitmask)));
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief delete join state (called from Python after probe loop is
  * finished)
  *
@@ -2707,6 +2950,7 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, join_state_init_py_entry);
     SetAttrStringFromVoidPtr(m, join_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, join_probe_consume_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, runtime_join_filter_py_entry);
     SetAttrStringFromVoidPtr(m, delete_join_state);
     SetAttrStringFromVoidPtr(m, nested_loop_join_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, generate_array_id);
