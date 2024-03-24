@@ -976,7 +976,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('==', [ColumnRef('B'), Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('==', [bic.ColumnRef('B'), bic.Scalar(f0)])",
         )
         check_logger_no_msg(stream, "Arrow filters pushed down:\nNone")
 
@@ -3748,7 +3748,7 @@ def test_filter_pushdown_arg(iceberg_database, iceberg_table_conn, memory_leak_c
         )
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('A'), Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('A'), bic.Scalar(f0)])",
         )
 
 
@@ -3795,5 +3795,5 @@ def test_filter_pushdown_complex(
         )
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('OR', [FilterExpr('AND', [FilterExpr('>', [ColumnRef('A'), Scalar(f0)]), FilterExpr('NOT', [FilterExpr('STARTS_WITH', [ColumnRef('TY'), Scalar(f1)])])]), FilterExpr('IN', [ColumnRef('B'), Scalar(f2)])])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('OR', [bic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('NOT', [bic.FilterExpr('STARTS_WITH', [bic.ColumnRef('TY'), bic.Scalar(f1)])])]), bic.FilterExpr('IN', [bic.ColumnRef('B'), bic.Scalar(f2)])])",
         )

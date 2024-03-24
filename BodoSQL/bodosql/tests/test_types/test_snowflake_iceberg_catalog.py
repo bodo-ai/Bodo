@@ -149,7 +149,7 @@ def test_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('AND', [FilterExpr('>', [ColumnRef('B'), Scalar(f0)]), FilterExpr('IS_NOT_NULL', [ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
         )
 
 
