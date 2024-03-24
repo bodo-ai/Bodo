@@ -993,16 +993,20 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
 std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    uint64_t n_keys, bool only_keys) {
+    uint64_t n_keys, bool only_transpose_existing_on_key_cols) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(in_table->ncols());
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         std::shared_ptr<array_info> out_arr;
-        if (dict_builders[i] == nullptr || (only_keys && (i >= n_keys))) {
+        if (dict_builders[i] == nullptr) {
             out_arr = in_arr;
         } else {
-            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+            if (only_transpose_existing_on_key_cols && (i < n_keys)) {
+                out_arr = dict_builders[i]->TransposeExisting(in_arr);
+            } else {
+                out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+            }
         }
         out_arrs.emplace_back(out_arr);
     }
@@ -1010,15 +1014,17 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
 }
 
 std::shared_ptr<table_info> JoinState::UnifyBuildTableDictionaryArrays(
-    const std::shared_ptr<table_info>& in_table, bool only_keys) {
+    const std::shared_ptr<table_info>& in_table) {
     return unify_dictionary_arrays_helper(
-        in_table, this->build_table_dict_builders, this->n_keys, only_keys);
+        in_table, this->build_table_dict_builders, this->n_keys, false);
 }
 
 std::shared_ptr<table_info> JoinState::UnifyProbeTableDictionaryArrays(
-    const std::shared_ptr<table_info>& in_table, bool only_keys) {
+    const std::shared_ptr<table_info>& in_table,
+    bool only_transpose_existing_on_key_cols) {
     return unify_dictionary_arrays_helper(
-        in_table, this->probe_table_dict_builders, this->n_keys, only_keys);
+        in_table, this->probe_table_dict_builders, this->n_keys,
+        only_transpose_existing_on_key_cols);
 }
 
 #pragma endregion  // JoinState
@@ -1567,9 +1573,11 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
                     // side-effect since we want to filter out nulls anyway
                     // (null keys cannot match with anything in the probe_inner
                     // case).
-                    if (process_col_bitmask[i] && unified_arr->null_bitmask()) {
+                    if (process_col_bitmask[i] &&
+                        unified_arr->null_bitmask<bodo_array_type::DICT>()) {
                         const uint8_t* out_arr_bitmask =
-                            (uint8_t*)(unified_arr->null_bitmask());
+                            (uint8_t*)(unified_arr->null_bitmask<
+                                       bodo_array_type::DICT>());
                         for (size_t i = 0; i < n_bytes; i++) {
                             bitmask[i] &= out_arr_bitmask[i];
                         }
@@ -2279,16 +2287,35 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     // probe_shuffle_buffer use the same dictionary object for consistency.
     // Non-key DICT columns of probe_table_buffer and probe_shuffle_buffer also
     // share their dictionaries and will also be unified.
-    in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
+    // In the probe inner case, we don't need to expand the dictionaries of the
+    // key columns since if a value doesn't already exist in them, it cannot
+    // ever match anyway. Setting only_transpose_existing_on_key_cols = true
+    // will only transpose the values that already exist in the dict-builder and
+    // set the rest as null. Due to the JoinFilter(s), these values should've
+    // already gotten filtered out, so we don't need to call filter_na_values to
+    // filter them out. 'only_transpose_existing_on_key_cols' just ensures that
+    // the dict-builder isn't needlessly expanded. NOTE: The case where the
+    // input type is STRING but the key type is DICT (and therefore the
+    // column-level JoinFilter would've been a NOP) cannot happen since the
+    // compiler would've converted the key to a simple STRING type in that case.
+    in_table = join_state->UnifyProbeTableDictionaryArrays(
+        in_table,
+        /*only_transpose_existing_on_key_cols*/ !probe_table_outer);
 
     // Prune rows with NA keys (necessary to avoid NA imbalance after shuffle).
     // In case of probe_table_outer = True, write NAs directly to output.
-    in_table = filter_na_values<probe_table_outer, true>(
-        std::move(in_table), join_state->n_keys, join_state->probe_parallel,
-        join_state->build_parallel, join_state->probe_na_counter,
-        *(join_state->output_buffer),
-        active_partition->build_table_buffer->data_table, build_kept_cols,
-        probe_kept_cols);
+    // We only need to do this in the probe_table_outer case since in the inner
+    // case, the planner will automatically generate IS NOT NULL filters
+    // and push them down as much as possible. It won't do so in the outer case
+    // since the rows need to be preserved and we need to handle them here.
+    if (probe_table_outer) {
+        in_table = filter_na_values<probe_table_outer, true>(
+            std::move(in_table), join_state->n_keys, join_state->probe_parallel,
+            join_state->build_parallel, join_state->probe_na_counter,
+            *(join_state->output_buffer),
+            active_partition->build_table_buffer->data_table, build_kept_cols,
+            probe_kept_cols);
+    }
 
     active_partition->probe_table = in_table;
 
@@ -2345,21 +2372,21 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         // or if we would process the row.
         bool check_bloom_filter = shuffle_possible || process_on_rank;
         // Check bloom filter.
-        if (use_bloom_filter && check_bloom_filter) {
+        // NOTE: We only need to do this in the probe_outer case since in the
+        // inner case, the optimizer generates RuntimeFilter calls before the
+        // probe step (and pushes them down as far as possible). It won't do so
+        // in the outer case since the rows need to be preserved, so we need to
+        // apply it here.
+        if (use_bloom_filter && check_bloom_filter && probe_table_outer &&
             // We use batch_hashes_partition to use consistent hashing
             // across ranks for dict-encoded string arrays
-            if (!join_state->global_bloom_filter->Find(
-                    batch_hashes_partition[i_row])) {
-                join_state->num_runtime_filter_misses++;
-                if (probe_table_outer) {
-                    // Add unmatched rows from probe table to output table
-                    build_idxs.push_back(-1);
-                    probe_idxs.push_back(i_row);
-                }
-                continue;
-            }
-        }
-        if (process_on_rank) {
+            (!join_state->global_bloom_filter->Find(
+                batch_hashes_partition[i_row]))) {
+            join_state->num_runtime_filter_misses++;
+            // Add unmatched rows from probe table to output table
+            build_idxs.push_back(-1);
+            probe_idxs.push_back(i_row);
+        } else if (process_on_rank) {
             join_state->num_processed_probe_table_rows++;
             if (active_partition->is_in_partition(
                     batch_hashes_partition[i_row])) {

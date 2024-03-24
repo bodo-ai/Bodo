@@ -475,14 +475,20 @@ class JoinPartition {
  * @param dict_builders Dictionary builders to unify with. The dict builders
  * will be appended with the new values from dictionaries in input_table.
  * @param n_keys number of key columns
- * @param only_keys only unify key columns
+ * @param only_transpose_existing_on_key_cols For key columns, whether or not to
+ * only transpose the values that already exist in the dictionary-builder (and
+ * set the rest as nulls) instead of full unification which would append any
+ * values not already in the dictionary-builder to the dictionary-builder. This
+ * is used in the Probe-Inner case in Join since we statically know that the
+ * dictionary should not grow because if a value doesn't already exist, it will
+ * get filtered out by the Join anyway.
  * @return std::shared_ptr<table_info> input table with dictionaries unified
  * with build table dictionaries.
  */
 std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    uint64_t n_keys, bool only_keys);
+    uint64_t n_keys, bool only_transpose_existing_on_key_cols = false);
 
 class JoinState {
    public:
@@ -560,12 +566,11 @@ class JoinState {
      * buffer's dictionaries and transposing input's indices.
      *
      * @param in_table input table
-     * @param only_keys only unify key columns
      * @return std::shared_ptr<table_info> input table with dictionaries unified
      * with build table dictionaries.
      */
     std::shared_ptr<table_info> UnifyBuildTableDictionaryArrays(
-        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
+        const std::shared_ptr<table_info>& in_table);
 
     /**
      * @brief Unify dictionaries of input table with probe table
@@ -574,12 +579,14 @@ class JoinState {
      * buffer's dictionaries and transposing input's indices.
      *
      * @param in_table input table
-     * @param only_keys only unify key columns
+     * @param only_transpose_existing_on_key_cols See description of the same
+     * parameter in the 'unify_dictionary_arrays_helper' function for details.
      * @return std::shared_ptr<table_info> input table with dictionaries unified
      * with probe table dictionaries.
      */
     std::shared_ptr<table_info> UnifyProbeTableDictionaryArrays(
-        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
+        const std::shared_ptr<table_info>& in_table,
+        bool only_transpose_existing_on_key_cols = false);
 };
 
 class HashJoinState : public JoinState {

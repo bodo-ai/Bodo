@@ -70,17 +70,18 @@ struct DictionaryBuilder {
      * @param filter_transpose_cache_size The number of array ids to cache
      * transpose filter information for (TransposeExisting API used by Runtime
      * Join Filters).
-     *   NOTE: A size 2 cache is sufficient since for a given
+     *   NOTE: A size 3 cache is sufficient since for a given
      *   column there can only ever be 1 column-level PandasJoinFilter that can
      *   be generated. The 2nd one is for the case where all the columns are
      *   available and we need to transpose for calculating the hashes for the
-     *   bloom filter.
+     *   bloom filter. The 3rd one is for use by the Join Probe step (which will
+     *   essentially replace the regular transpose cache usage).
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_,
                       std::vector<std::shared_ptr<DictionaryBuilder>>
                           child_dict_builders_ = {},
                       size_t transpose_cache_size = 2,
-                      size_t filter_transpose_cache_size = 2);
+                      size_t filter_transpose_cache_size = 3);
 
     ~DictionaryBuilder() {
         dict_builder_event.add_attribute("Unify_Cache_ID_Misses",
