@@ -196,7 +196,7 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('AND', [FilterExpr('>', [ColumnRef('B'), Scalar(f0)]), FilterExpr('IS_NOT_NULL', [ColumnRef('A')])])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)]), bic.FilterExpr('IS_NOT_NULL', [bic.ColumnRef('A')])])",
         )
 
 
@@ -366,7 +366,7 @@ def test_limit_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('B'), Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
         )
 
 
@@ -396,7 +396,6 @@ def test_multi_limit_pushdown(memory_leak_check):
 
     py_out = pd.DataFrame({"OUTPUT": [1]})
     query = "SELECT COUNT(*) AS OUTPUT FROM (SELECT * FROM (SELECT * FROM BODOSQL_ICEBERG_READ_TEST LIMIT 2) LIMIT 1)"
-    print(bc.generate_plan(query))
     stream = StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -457,7 +456,7 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
         # Verify no limit pushdown as its after the limit
         check_logger_msg(
-            stream, "Iceberg Filter Pushed Down:\nFilterExpr('ALWAYS_TRUE', [])"
+            stream, "Iceberg Filter Pushed Down:\nbic.FilterExpr('ALWAYS_TRUE', [])"
         )
         # Verify we don't push down the second limit
         check_logger_no_msg(stream, "Constant limit detected, reading at most 2 rows")
@@ -505,10 +504,10 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
             is_out_distributed=False,
         )
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
-        # Verify no limit pushdown as its after the limit
+        # Verify no additional filter pushdown as its after the limit
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nFilterExpr('>', [ColumnRef('B'), Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
         )
 
 
@@ -557,5 +556,5 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
             # Verify filter pushdown
             check_logger_msg(
                 stream,
-                "Iceberg Filter Pushed Down:\nFilterExpr('<=', [ColumnRef('A'), Scalar(f0)])",
+                "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
             )
