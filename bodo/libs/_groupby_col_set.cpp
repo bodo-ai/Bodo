@@ -787,8 +787,9 @@ ListAggColSet::ListAggColSet(
             "dictionary type.");
     }
 
-    char* data_in = string_array->data1();
-    offset_t* offsets_in = (offset_t*)string_array->data2();
+    char* data_in = string_array->data1<bodo_array_type::STRING>();
+    offset_t* offsets_in =
+        (offset_t*)string_array->data2<bodo_array_type::STRING>();
     offset_t end_offset = offsets_in[1];
     std::string substr(&data_in[0], end_offset);
     this->listagg_sep = substr;
@@ -831,17 +832,20 @@ struct listagg_groupby_utils<true> {
         *dict_indices_ptr = in_col->child_arrays[1];
         std::shared_ptr<array_info> string_array = in_col->child_arrays[0];
 
-        *data_in_ptr = string_array->data1();
-        *offsets_in_ptr = (offset_t*)string_array->data2();
+        *data_in_ptr = string_array->data1<bodo_array_type::STRING>();
+        *offsets_in_ptr =
+            (offset_t*)string_array->data2<bodo_array_type::STRING>();
     }
     inline static bool get_null_bit(std::shared_ptr<array_info> in_col,
                                     std::shared_ptr<array_info> dict_indices,
                                     size_t i) {
-        return dict_indices->get_null_bit(i);
+        return dict_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+            i);
     }
     inline static int32_t get_offset_idx(
         std::shared_ptr<array_info> dict_indices, size_t i) {
-        return getv<int32_t>(dict_indices, i);
+        return getv<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(dict_indices,
+                                                                 i);
     }
 };
 
@@ -857,7 +861,7 @@ struct listagg_groupby_utils<false> {
     inline static bool get_null_bit(std::shared_ptr<array_info> in_col,
                                     std::shared_ptr<array_info> dict_indices,
                                     size_t i) {
-        return in_col->get_null_bit(i);
+        return in_col->get_null_bit<bodo_array_type::STRING>(i);
     }
     inline static int32_t get_offset_idx(
         std::shared_ptr<array_info> dict_indices, size_t i) {
@@ -884,7 +888,7 @@ std::shared_ptr<array_info> get_traversal_order(
     std::shared_ptr<array_info> idx_arr =
         alloc_numpy(num_rows, Bodo_CTypes::INT64, pool, mm);
     for (int64_t i = 0; i < num_rows; i++) {
-        getv<int64_t>(idx_arr, i) = i;
+        getv<int64_t, bodo_array_type::NUMPY>(idx_arr, i) = i;
     }
 
     if (n_sort_keys == 0) {
@@ -1035,9 +1039,10 @@ void listagg_update_helper(
     std::shared_ptr<array_info> real_out_arr = alloc_string_array(
         Bodo_CTypes::CTypeEnum::STRING, num_groups, total_output_size, -1, 0,
         false, false, false, pool, mm);
-    char* data_out = real_out_arr->data1();
+    char* data_out = real_out_arr->data1<bodo_array_type::STRING>();
 
-    offset_t* offsets_out = (offset_t*)real_out_arr->data2();
+    offset_t* offsets_out =
+        (offset_t*)real_out_arr->data2<bodo_array_type::STRING>();
 
     // copy to the output offset array
     // This should be num_groups + 1. If you look inside the allocate,

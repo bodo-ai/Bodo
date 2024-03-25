@@ -1695,7 +1695,7 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
         }
         this->num_runtime_filter_misses +=
             (in_table->nrows() - rows_to_keep.size());
-        return RetrieveTable(in_table, rows_to_keep);
+        return RetrieveTable(std::move(in_table), rows_to_keep);
     }
     return in_table;
 }

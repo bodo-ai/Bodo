@@ -169,7 +169,7 @@ inline void CheckEqualityArrayType(std::shared_ptr<array_info> arr1,
  * @return the value as a T value.
  */
 template <typename T>
-inline T GetTentry(char* ptr) {
+inline T GetTentry(const char* ptr) {
     T* ptr_T = (T*)ptr;
     return *ptr_T;
 }
@@ -180,7 +180,7 @@ inline T GetTentry(char* ptr) {
  * @param ptr the value of the pointer passed in argument
  * @return the value as a double.
  */
-inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
+inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, const char* ptr) {
     if (dtype == Bodo_CTypes::INT8)
         return double(GetTentry<int8_t>(ptr));
     if (dtype == Bodo_CTypes::UINT8)
@@ -831,8 +831,9 @@ inline bool does_row_has_nulls(
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];
-            if (memcmp(key_col->data1() + i * siztype, vectNaN.data(),
-                       siztype) == 0) {
+            if (memcmp(key_col->data1<bodo_array_type::CATEGORICAL>() +
+                           i * siztype,
+                       vectNaN.data(), siztype) == 0) {
                 return true;
             }
         } else if (key_col->arr_type == bodo_array_type::STRING ||
@@ -844,14 +845,14 @@ inline bool does_row_has_nulls(
             }
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
             if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
-                 isnan(key_col->at<float>(i))) ||
+                 isnan(key_col->at<float, bodo_array_type::NUMPY>(i))) ||
                 (key_col->dtype == Bodo_CTypes::FLOAT64 &&
-                 isnan(key_col->at<double>(i))) ||
+                 isnan(key_col->at<double, bodo_array_type::NUMPY>(i))) ||
                 (key_col->dtype == Bodo_CTypes::DATETIME &&
-                 key_col->at<int64_t>(i) ==
+                 key_col->at<int64_t, bodo_array_type::NUMPY>(i) ==
                      std::numeric_limits<int64_t>::min()) ||
                 (key_col->dtype == Bodo_CTypes::TIMEDELTA &&
-                 key_col->at<int64_t>(i) ==
+                 key_col->at<int64_t, bodo_array_type::NUMPY>(i) ==
                      std::numeric_limits<int64_t>::min())) {
                 return true;
             }
@@ -1102,7 +1103,7 @@ concept array_item_array =
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline T get_arr_item(array_info& arr, int64_t idx) {
-    return ((T*)arr.data1())[idx];
+    return ((T*)arr.data1<ArrType>())[idx];
 }
 
 /**
@@ -1119,7 +1120,7 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(nullable_array<ArrType> && bool_dtype<DType>)
 inline T get_arr_item(array_info& arr, int64_t idx) {
-    return GetBit((uint8_t*)arr.data1(), idx);
+    return GetBit((uint8_t*)arr.data1<ArrType>(), idx);
 }
 
 /**
@@ -1138,8 +1139,8 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(string_array<ArrType>)
 inline std::string_view get_arr_item_str(array_info& arr, int64_t idx) {
-    char* data = arr.data1();
-    offset_t* offsets = (offset_t*)arr.data2();
+    char* data = arr.data1<ArrType>();
+    offset_t* offsets = (offset_t*)arr.data2<ArrType>();
     offset_t start_offset = offsets[idx];
     offset_t end_offset = offsets[idx + 1];
     offset_t len = end_offset - start_offset;
@@ -1166,8 +1167,9 @@ inline std::string_view get_arr_item_str(array_info& arr, int64_t idx) {
     std::shared_ptr<array_info> indices = arr.child_arrays[1];
     int64_t dict_idx = get_arr_item<bodo_array_type::NULLABLE_INT_BOOL, int64_t,
                                     Bodo_CTypes::INT64>(*indices, idx);
-    char* data = arr.child_arrays[0]->data1();
-    offset_t* offsets = (offset_t*)arr.child_arrays[0]->data2();
+    char* data = arr.child_arrays[0]->data1<bodo_array_type::STRING>();
+    offset_t* offsets =
+        (offset_t*)arr.child_arrays[0]->data2<bodo_array_type::STRING>();
     offset_t start_offset = offsets[dict_idx];
     offset_t end_offset = offsets[dict_idx + 1];
     offset_t len = end_offset - start_offset;
@@ -1186,7 +1188,7 @@ inline std::string_view get_arr_item_str(array_info& arr, int64_t idx) {
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline bool non_null_at(array_info& arr, size_t idx) {
-    return arr.get_null_bit(idx);
+    return arr.get_null_bit<ArrType>(idx);
 }
 
 /**
@@ -1238,7 +1240,7 @@ inline bool non_null_at(array_info& arr, size_t idx) {
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline bool is_null_at(array_info& arr, size_t idx) {
-    return !arr.get_null_bit(idx);
+    return !arr.get_null_bit<ArrType>(idx);
 }
 
 /**
@@ -1289,7 +1291,7 @@ inline bool is_null_at(array_info& arr, size_t idx) {
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline void set_non_null(array_info& arr, size_t idx) {
-    arr.set_null_bit(idx, true);
+    arr.set_null_bit<ArrType>(idx, true);
 }
 
 /**
@@ -1317,7 +1319,7 @@ inline void set_non_null(array_info& arr, size_t idx) {}
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline void set_to_null(array_info& arr, size_t idx) {
-    arr.set_null_bit(idx, false);
+    arr.set_null_bit<ArrType>(idx, false);
 }
 
 /**
@@ -1346,7 +1348,7 @@ inline void set_to_null(array_info& arr, size_t idx) {}
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
-    ((T*)arr.data1())[idx] = val;
+    ((T*)arr.data1<ArrType>())[idx] = val;
 }
 
 /**
@@ -1360,5 +1362,5 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(nullable_array<ArrType> && bool_dtype<DType>)
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
-    SetBitTo((uint8_t*)arr.data1(), idx, val);
+    SetBitTo((uint8_t*)arr.data1<ArrType>(), idx, val);
 }

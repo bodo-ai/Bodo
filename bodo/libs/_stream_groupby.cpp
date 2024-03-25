@@ -572,9 +572,21 @@ std::unique_ptr<uint8_t[]> compute_local_mrnf(
         arrow::bit_util::BytesForBits(in_table->columns[0]->length));
     memset(out_bitmask.get(), 0,
            arrow::bit_util::BytesForBits(in_table->columns[0]->length));
-    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
-        int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
-        arrow::bit_util::SetBit(out_bitmask.get(), row_one_idx);
+
+    if (idx_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+            int64_t row_one_idx =
+                getv<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(idx_col,
+                                                                  group_idx);
+            arrow::bit_util::SetBit(out_bitmask.get(), row_one_idx);
+        }
+    } else {
+        assert(idx_col->arr_type == bodo_array_type::NUMPY);
+        for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+            int64_t row_one_idx =
+                getv<int64_t, bodo_array_type::NUMPY>(idx_col, group_idx);
+            arrow::bit_util::SetBit(out_bitmask.get(), row_one_idx);
+        }
     }
     return out_bitmask;
 }

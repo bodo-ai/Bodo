@@ -86,9 +86,10 @@ static void array_isin_kernel(std::shared_ptr<array_info> out_arr,
     for (int64_t pos = 0; pos < len_values; pos++) {
         eset.insert(pos);
     }
+    uint8_t* out_arr_data = (uint8_t*)out_arr->data1();
     for (int64_t pos = 0; pos < len_in_arr; pos++) {
         bool test = eset.count(pos + len_values) == 1;
-        SetBitTo((uint8_t*)out_arr->data1(), pos, test);
+        SetBitTo(out_arr_data, pos, test);
     }
 }
 
@@ -2114,6 +2115,7 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
                       const bool case_sensitive, const bool match_beginning,
                       char const* const pat,
                       std::shared_ptr<array_info> out_arr) {
+    assert(out_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
     // get_search_regex can be called a different number of times per ank.
     tracing::Event ev("get_search_regex", false);
     // See:
@@ -2137,24 +2139,29 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
     ev.add_attribute("local_nRows", nRow);
     int64_t num_match = 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        offset_t const* const data2 =
-            reinterpret_cast<offset_t*>(in_arr->data2());
-        char const* const data1 = in_arr->data1();
+        offset_t const* const data2 = reinterpret_cast<offset_t*>(
+            in_arr->data2<bodo_array_type::STRING>());
+        char const* const data1 = in_arr->data1<bodo_array_type::STRING>();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = in_arr->get_null_bit(iRow);
+            bool bit = in_arr->get_null_bit<bodo_array_type::STRING>(iRow);
             if (bit) {
                 const offset_t start_pos = data2[iRow];
                 const offset_t end_pos = data2[iRow + 1];
                 if (boost::xpressive::regex_search(data1 + start_pos,
                                                    data1 + end_pos, m, pattern,
                                                    match_flag)) {
-                    SetBitTo((uint8_t*)out_arr->data1(), iRow, true);
+                    SetBitTo((uint8_t*)out_arr
+                                 ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                             iRow, true);
                     num_match++;
                 } else {
-                    SetBitTo((uint8_t*)out_arr->data1(), iRow, false);
+                    SetBitTo((uint8_t*)out_arr
+                                 ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                             iRow, false);
                 }
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                      bit);
         }
         ev.add_attribute("local_num_match", num_match);
 
@@ -2182,18 +2189,26 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
         // Iterate over the indices, and assign values to the output
         // boolean array from dict_arr_out.
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = in_arr->get_null_bit(iRow);
+            bool bit = in_arr->get_null_bit<bodo_array_type::DICT>(iRow);
             if (bit) {
                 // Get index in the dictionary
-                int32_t iiRow = indices_arr->at<int32_t>(iRow);
+                int32_t iiRow =
+                    indices_arr->at<dict_indices_t,
+                                    bodo_array_type::NULLABLE_INT_BOOL>(iRow);
                 // Get output from dict_arr_out for this dict value
-                bool value = GetBit((uint8_t*)dict_arr_out->data1(), iiRow);
-                SetBitTo((uint8_t*)out_arr->data1(), iRow, value);
+                bool value =
+                    GetBit((uint8_t*)dict_arr_out
+                               ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                           iiRow);
+                SetBitTo((uint8_t*)out_arr
+                             ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                         iRow, value);
                 if (value) {
                     num_match++;
                 }
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                      bit);
         }
         ev.add_attribute("local_num_match", num_match);
     } else {
@@ -2234,6 +2249,7 @@ void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
 std::shared_ptr<array_info> get_replace_regex_slice(
     const std::shared_ptr<array_info>& in_arr, char const* const pat,
     char const* replacement, size_t start_idx, size_t end_idx) {
+    assert(in_arr->arr_type == bodo_array_type::STRING);
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
     boost::xpressive::regex_constants::syntax_option_type flag =
@@ -2243,8 +2259,8 @@ std::shared_ptr<array_info> get_replace_regex_slice(
         boost::xpressive::cregex::compile(pat, flag);
 
     offset_t const* const in_data2 =
-        reinterpret_cast<offset_t*>(in_arr->data2());
-    char const* const in_data1 = in_arr->data1();
+        reinterpret_cast<offset_t*>(in_arr->data2<bodo_array_type::STRING>());
+    char const* const in_data1 = in_arr->data1<bodo_array_type::STRING>();
 
     // Look at the pattern length for assumptions about allocated space.
     size_t repLen = strlen(replacement);
@@ -2272,7 +2288,7 @@ std::shared_ptr<array_info> get_replace_regex_slice(
         // TODO: Determine how to dynamically resize the output array since
         // the compute cost seems to dominate.
         for (size_t iRow = start_idx; iRow < end_idx; iRow++) {
-            bool bit = in_arr->get_null_bit(iRow);
+            bool bit = in_arr->get_null_bit<bodo_array_type::STRING>(iRow);
             if (bit) {
                 const offset_t start_pos = in_data2[iRow];
                 const offset_t end_pos = in_data2[iRow + 1];
@@ -2294,13 +2310,14 @@ std::shared_ptr<array_info> get_replace_regex_slice(
     std::shared_ptr<array_info> out_arr =
         alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars, -1, 0,
                            in_arr->is_globally_replicated);
-    offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
+    offset_t* const out_data2 =
+        reinterpret_cast<offset_t*>(out_arr->data2<bodo_array_type::STRING>());
     // Initialize the first offset to 0
     out_data2[0] = 0;
-    char* const out_data1 = out_arr->data1();
+    char* const out_data1 = out_arr->data1<bodo_array_type::STRING>();
     for (size_t outRow = 0, iRow = start_idx; iRow < end_idx;
          iRow++, outRow++) {
-        bool bit = in_arr->get_null_bit(iRow);
+        bool bit = in_arr->get_null_bit<bodo_array_type::STRING>(iRow);
         const offset_t out_offset = out_data2[outRow];
         size_t num_chars = 0;
         if (bit) {
@@ -2311,7 +2328,7 @@ std::shared_ptr<array_info> get_replace_regex_slice(
                 in_data1 + end_pos, pattern, replacement);
             num_chars = out_buffer - (out_data1 + out_offset);
         }
-        out_arr->set_null_bit(outRow, bit);
+        out_arr->set_null_bit<bodo_array_type::STRING>(outRow, bit);
         out_data2[outRow + 1] = out_offset + num_chars;
     }
     return out_arr;

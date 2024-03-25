@@ -3,6 +3,7 @@
 #include "iceberg_transforms.h"
 
 #include <boost/xpressive/xpressive.hpp>
+#include "_bodo_common.h"
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
@@ -50,12 +51,15 @@ std::shared_ptr<array_info> convert_date_to_int64(
     std::shared_ptr<array_info> out_arr =
         alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
     for (uint64_t i = 0; i < nRow; i++) {
-        out_arr->at<int64_t>(i) = in_arr->at<int32_t>(i);
+        out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+            in_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i);
     }
 
     int64_t n_bytes = ((nRow + 7) >> 3);
-    std::copy(in_arr->null_bitmask(), in_arr->null_bitmask() + n_bytes,
-              out_arr->null_bitmask());
+    std::copy(
+        in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+        in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>() + n_bytes,
+        out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>());
 
     return out_arr;
 }
@@ -96,14 +100,15 @@ std::shared_ptr<array_info> convert_datetime_ns_to_us(
             // if value is NaT (equals
             // std::numeric_limits<int64_t>::min()) we set it as
             // null in the transformed array.
-            out_arr->set_null_bit(i, false);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
             // Set it to -1 to avoid non-deterministic behavior (e.g. during
             // hashing)
-            out_arr->at<int64_t>(i) = -1;
+            out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) = -1;
         } else {
             // convert from nanoseconds to microseconds
-            out_arr->set_null_bit(i, true);
-            out_arr->at<int64_t>(i) = in_arr->at<int64_t>(i) / 1000;
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, true);
+            out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                in_arr->at<int64_t>(i) / 1000;
         }
     }
     return out_arr;
@@ -210,8 +215,8 @@ std::shared_ptr<array_info> array_transform_bucket_N(
 
     std::shared_ptr<array_info> out_arr =
         alloc_nullable_array(nRow, Bodo_CTypes::UINT32, 0);
-    std::unique_ptr<uint32_t[]> hashes =
-        std::unique_ptr<uint32_t[]>((uint32_t*)out_arr->data1());
+    std::unique_ptr<uint32_t[]> hashes = std::unique_ptr<uint32_t[]>(
+        (uint32_t*)out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>());
 
     int64_t n_bytes = ((nRow + 7) >> 3);
 
@@ -222,24 +227,30 @@ std::shared_ptr<array_info> array_transform_bucket_N(
         // Calculate hashes on the dict
         std::unique_ptr<uint32_t[]> dict_hashes =
             std::make_unique<uint32_t[]>(in_arr->child_arrays[0]->length);
-        hash_array(dict_hashes, in_arr->child_arrays[0],
-                   in_arr->child_arrays[0]->length, 0, is_parallel, false,
-                   /*use_murmurhash=*/true);
+        hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
+            dict_hashes, in_arr->child_arrays[0],
+            in_arr->child_arrays[0]->length, 0, is_parallel, false);
         // Iterate over the elements and assign hash from the dict
         for (uint64_t i = 0; i < nRow; i++) {
-            if (!in_arr->child_arrays[1]->get_null_bit(i)) {
+            if (!in_arr->child_arrays[1]
+                     ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                 // in case index i is null,
-                // in_arr->child_arrays[1]->at<uint32_t>(i) is a garbage value
+                // in_arr->child_arrays[1]->at<int32_t>(i) is a garbage value
                 // and might be out of bounds for dict_hashes, so we set the
                 // hash to -1 to avoid access errors.
                 hashes[i] = -1;
             } else {
                 hashes[i] =
-                    dict_hashes[in_arr->child_arrays[1]->at<uint32_t>(i)];
+                    dict_hashes[in_arr->child_arrays[1]
+                                    ->at<dict_indices_t,
+                                         bodo_array_type::NULLABLE_INT_BOOL>(
+                                        i)];
             }
         }
         // Copy the null bitmask from the indices array
-        memcpy(out_arr->null_bitmask(), in_arr->child_arrays[1]->null_bitmask(),
+        memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               in_arr->child_arrays[1]
+                   ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
                n_bytes);
     } else {
         // hash_array doesn't hash nulls
@@ -251,13 +262,16 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             // is important for correctness) and then hash
             std::shared_ptr<array_info> us_array =
                 convert_datetime_ns_to_us(in_arr);
+            assert(us_array->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
             // DATETIME arrays are always NUMPY so there's no null_bitmask
             // in in_arr. The array could have NaTs though, which
             // convert_datetime_ns_to_us will convert to nulls, so we can
             // use the bitmask from us_array as is for the out_arr.
-            memcpy(out_arr->null_bitmask(), us_array->null_bitmask(), n_bytes);
-            hash_array(hashes, us_array, nRow, 0, is_parallel, false,
-                       /*use_murmurhash=*/true);
+            memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                   us_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                   n_bytes);
+            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
+                hashes, us_array, nRow, 0, is_parallel, false);
         } else if (in_arr->dtype == Bodo_CTypes::DATE) {
             // Based on
             // https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements,
@@ -266,11 +280,13 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             // Iceberg Spec seems to use int64.
             std::shared_ptr<array_info> i64_array(
                 convert_date_to_int64(in_arr));
-            hash_array(hashes, i64_array, nRow, 0, is_parallel, false,
-                       /*use_murmurhash=*/true);
+            assert(i64_array->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
+                hashes, i64_array, nRow, 0, is_parallel, false);
             // DATE arrays are always NULLABLE_INT_BOOL arrays, so we can copy
             // over the null_bitmask as is.
-            memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
+            memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                   in_arr->null_bitmask(), n_bytes);
         } else if (in_arr->dtype == Bodo_CTypes::INT32) {
             // in case of int32, we need to cast to int64 before hashing
             // (https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements)
@@ -282,33 +298,39 @@ std::shared_ptr<array_info> array_transform_bucket_N(
                 memcpy(int64_arr->null_bitmask(), in_arr->null_bitmask(),
                        n_bytes);
                 // Copy it over to the out_arr null_bitmask as well
-                memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(),
-                       n_bytes);
+                memcpy(
+                    out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    in_arr->null_bitmask(), n_bytes);
             } else {
                 // In case this array type (NUMPY) doesn't have a null_bitmask
                 // there should be no nulls in the array and we can set
                 // null_bitmask to all 1s.
-                memset(out_arr->null_bitmask(), 0xFF, n_bytes);
+                memset(
+                    out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    0xFF, n_bytes);
             }
             for (uint64_t i = 0; i < nRow; i++) {
                 int64_arr->at<int64_t>(i) = (int64_t)in_arr->at<int32_t>(i);
             }
-            hash_array(hashes, int64_arr, nRow, 0, is_parallel, false,
-                       /*use_murmurhash=*/true);
+            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
+                hashes, int64_arr, nRow, 0, is_parallel, false);
         } else {
-            hash_array(hashes, in_arr, nRow, 0, is_parallel, false,
-                       /*use_murmurhash=*/true);
+            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
+                hashes, in_arr, nRow, 0, is_parallel, false);
             if (in_arr->null_bitmask()) {
                 // Copy the null bitmask if it exists for the arr type
-                memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(),
-                       n_bytes);
+                memcpy(
+                    out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    in_arr->null_bitmask(), n_bytes);
             } else {
                 // Otherwise set it to all 1s.
                 // DATETIME which uses a NUMPY array (but can have NaTs)
                 // is handled separately above, and floats (which can have NaNs)
                 // are not supported for the bucket transform at all, so this
                 // should be safe.
-                memset(out_arr->null_bitmask(), 0xFF, n_bytes);
+                memset(
+                    out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    0xFF, n_bytes);
             }
         }
     }
@@ -337,12 +359,13 @@ std::shared_ptr<array_info> array_transform_truncate_W(
 
     std::shared_ptr<array_info> out_arr;
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        offset_t* in_offsets = (offset_t*)in_arr->data2();
+        offset_t* in_offsets =
+            (offset_t*)in_arr->data2<bodo_array_type::STRING>();
         offset_t str_len;
         uint64_t n_chars = 0;
         // Calculate the total chars first
         for (uint64_t i = 0; i < nRow; i++) {
-            if (!in_arr->get_null_bit(i)) {
+            if (!in_arr->get_null_bit<bodo_array_type::STRING>(i)) {
                 continue;
             }
             str_len = in_offsets[i + 1] - in_offsets[i];
@@ -355,20 +378,22 @@ std::shared_ptr<array_info> array_transform_truncate_W(
                                      in_arr->is_globally_replicated, false,
                                      in_arr->is_locally_sorted);
         // Copy over truncated strings to the new array
-        offset_t* out_offsets = (offset_t*)out_arr->data2();
+        offset_t* out_offsets =
+            (offset_t*)out_arr->data2<bodo_array_type::STRING>();
         out_offsets[0] = 0;
         for (uint64_t i = 0; i < nRow; i++) {
-            if (!in_arr->get_null_bit(i)) {
-                out_arr->set_null_bit(i, false);
+            if (!in_arr->get_null_bit<bodo_array_type::STRING>(i)) {
+                out_arr->set_null_bit<bodo_array_type::STRING>(i, false);
                 out_offsets[i + 1] = out_offsets[i];
                 continue;
             }
             str_len = in_offsets[i + 1] - in_offsets[i];
             str_len = std::min(str_len, (offset_t)width);
-            memcpy(out_arr->data1() + out_offsets[i],
-                   in_arr->data1() + in_offsets[i], sizeof(char) * str_len);
+            memcpy(out_arr->data1<bodo_array_type::STRING>() + out_offsets[i],
+                   in_arr->data1<bodo_array_type::STRING>() + in_offsets[i],
+                   sizeof(char) * str_len);
             out_offsets[i + 1] = out_offsets[i] + str_len;
-            out_arr->set_null_bit(i, true);
+            out_arr->set_null_bit<bodo_array_type::STRING>(i, true);
         }
         return out_arr;
     }
@@ -376,16 +401,18 @@ std::shared_ptr<array_info> array_transform_truncate_W(
         if (in_arr->dtype == Bodo_CTypes::INT32) {
             out_arr = alloc_numpy(nRow, in_arr->dtype);
             for (uint64_t i = 0; i < nRow; i++) {
-                out_arr->at<int32_t>(i) =
-                    int_truncate_helper<int32_t>(in_arr->at<int32_t>(i), width);
+                out_arr->at<int32_t, bodo_array_type::NUMPY>(i) =
+                    int_truncate_helper<int32_t>(
+                        in_arr->at<int32_t, bodo_array_type::NUMPY>(i), width);
             }
             return out_arr;
         }
         if (in_arr->dtype == Bodo_CTypes::INT64) {
             out_arr = alloc_numpy(nRow, in_arr->dtype);
             for (uint64_t i = 0; i < nRow; i++) {
-                out_arr->at<int64_t>(i) =
-                    int_truncate_helper<int64_t>(in_arr->at<int64_t>(i), width);
+                out_arr->at<int64_t, bodo_array_type::NUMPY>(i) =
+                    int_truncate_helper<int64_t>(
+                        in_arr->at<int64_t, bodo_array_type::NUMPY>(i), width);
             }
             return out_arr;
         }
@@ -398,26 +425,36 @@ std::shared_ptr<array_info> array_transform_truncate_W(
         if (in_arr->dtype == Bodo_CTypes::INT32) {
             out_arr = alloc_nullable_array(nRow, in_arr->dtype, 0);
             for (uint64_t i = 0; i < nRow; i++) {
-                if (!in_arr->get_null_bit(i)) {
-                    out_arr->set_null_bit(i, false);
+                if (!in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        i)) {
+                    out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        i, false);
                     continue;
                 }
-                out_arr->at<int32_t>(i) =
-                    int_truncate_helper<int32_t>(in_arr->at<int32_t>(i), width);
-                out_arr->set_null_bit(i, true);
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    int_truncate_helper<int32_t>(
+                        in_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                            i),
+                        width);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
             return out_arr;
         }
         if (in_arr->dtype == Bodo_CTypes::INT64) {
             out_arr = alloc_nullable_array(nRow, in_arr->dtype, 0);
             for (uint64_t i = 0; i < nRow; i++) {
-                if (!in_arr->get_null_bit(i)) {
-                    out_arr->set_null_bit(i, false);
+                if (!in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        i)) {
+                    out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        i, false);
                     continue;
                 }
-                out_arr->at<int64_t>(i) =
-                    int_truncate_helper<int64_t>(in_arr->at<int64_t>(i), width);
-                out_arr->set_null_bit(i, true);
+                out_arr->at<int64_t>(i) = int_truncate_helper<int64_t>(
+                    in_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i),
+                    width);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
             return out_arr;
         }
@@ -464,12 +501,16 @@ std::shared_ptr<array_info> array_transform_year(
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            int64_t days = in_arr->at<int32_t>(i);
+            int64_t days =
+                in_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i);
             int64_t years = days_to_yearsdays(&days);
-            out_arr->at<int32_t>(i) = years - 1970;
+            out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                years - 1970;
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
+        memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
         return out_arr;
     }
     if ((in_arr->arr_type == bodo_array_type::NUMPY ||
@@ -480,14 +521,18 @@ std::shared_ptr<array_info> array_transform_year(
                 // if value is NaT (equals
                 // std::numeric_limits<int64_t>::min()) we set it as
                 // null in the transformed array.
-                out_arr->set_null_bit(i, false);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
                 // Set it to -1 to avoid non-deterministic behavior (e.g. during
                 // hashing)
-                out_arr->at<int32_t>(i) = -1;
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    -1;
             } else {
-                out_arr->at<int32_t>(i) = get_years_since_epoch_from_datetime(
-                    &in_arr->at<int64_t>(i));
-                out_arr->set_null_bit(i, true);
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    get_years_since_epoch_from_datetime(
+                        &in_arr->at<int64_t>(i));
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
         }
         return out_arr;
@@ -509,13 +554,19 @@ std::shared_ptr<array_info> array_transform_month(
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            int64_t days = in_arr->at<int32_t>(i), month = 0;
+            int64_t days =
+                        in_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                            i),
+                    month = 0;
             int64_t years = days_to_yearsdays(&days);
             get_month_day(years, days, &month, &days);
-            out_arr->at<int32_t>(i) = (years - 1970) * 12 + month;
+            out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                (years - 1970) * 12 + month;
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
+        memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
         return out_arr;
     }
 
@@ -527,15 +578,18 @@ std::shared_ptr<array_info> array_transform_month(
                 // if value is NaT (equals
                 // std::numeric_limits<int64_t>::min()) we set it as
                 // null in the transformed array.
-                out_arr->set_null_bit(i, false);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
                 // Set it to -1 to avoid non-deterministic behavior (e.g. during
                 // hashing)
-                out_arr->at<int32_t>(i) = -1;
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    -1;
             } else {
-                out_arr->at<int32_t>(i) =
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
                     (int32_t)get_months_since_epoch_from_datetime(
                         &in_arr->at<int64_t>(i));
-                out_arr->set_null_bit(i, true);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
         }
         return out_arr;
@@ -559,10 +613,13 @@ std::shared_ptr<array_info> array_transform_day(
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            out_arr->at<int64_t>(i) = in_arr->at<int32_t>(i);
+            out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                in_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i);
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
+        memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
         return out_arr;
     }
 
@@ -574,14 +631,17 @@ std::shared_ptr<array_info> array_transform_day(
                 // if value is NaT (equals
                 // std::numeric_limits<int64_t>::min()) we set it as
                 // null in the transformed array.
-                out_arr->set_null_bit(i, false);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
                 // Set it to -1 to avoid non-deterministic behavior (e.g. during
                 // hashing)
-                out_arr->at<int64_t>(i) = -1;
+                out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    -1;
             } else {
-                out_arr->at<int64_t>(i) =
+                out_arr->at<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
                     get_days_since_epoch_from_datetime(&in_arr->at<int64_t>(i));
-                out_arr->set_null_bit(i, true);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
         }
         return out_arr;
@@ -609,14 +669,18 @@ std::shared_ptr<array_info> array_transform_hour(
                 // if value is NaT (equals
                 // std::numeric_limits<int64_t>::min()) we set it as
                 // null in the transformed array.
-                out_arr->set_null_bit(i, false);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
                 // Set it to -1 to avoid non-deterministic behavior (e.g. during
                 // hashing)
-                out_arr->at<int32_t>(i) = -1;
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    -1;
             } else {
-                out_arr->at<int32_t>(i) = get_hours_since_epoch_from_datetime(
-                    &in_arr->at<int64_t>(i));
-                out_arr->set_null_bit(i, true);
+                out_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+                    get_hours_since_epoch_from_datetime(
+                        &in_arr->at<int64_t>(i));
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,
+                                                                          true);
             }
         }
         return out_arr;
@@ -752,7 +816,9 @@ PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
             bool is_true;
             if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                 // Nullable booleans have 1 bit per boolean
-                is_true = GetBit((uint8_t*)arr->data1(), idx);
+                is_true = GetBit(
+                    (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    idx);
             } else {
                 is_true = arr->at<bool>(idx);
             }
@@ -765,19 +831,25 @@ PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
         case Bodo_CTypes::STRING: {
             switch (arr->arr_type) {
                 case bodo_array_type::DICT: {
-                    int32_t dict_idx = arr->child_arrays[1]->at<int32_t>(idx);
-                    offset_t* offsets =
-                        (offset_t*)arr->child_arrays[0]->data2();
+                    int32_t dict_idx =
+                        arr->child_arrays[1]
+                            ->at<dict_indices_t,
+                                 bodo_array_type::NULLABLE_INT_BOOL>(idx);
+                    offset_t* offsets = (offset_t*)arr->child_arrays[0]
+                                            ->data2<bodo_array_type::STRING>();
                     return PyUnicode_FromString(
-                        std::string(
-                            arr->child_arrays[0]->data1() + offsets[dict_idx],
-                            offsets[dict_idx + 1] - offsets[dict_idx])
+                        std::string(arr->child_arrays[0]
+                                            ->data1<bodo_array_type::STRING>() +
+                                        offsets[dict_idx],
+                                    offsets[dict_idx + 1] - offsets[dict_idx])
                             .c_str());
                 }
                 default: {
-                    offset_t* offsets = (offset_t*)arr->data2();
+                    offset_t* offsets =
+                        (offset_t*)arr->data2<bodo_array_type::STRING>();
                     return PyUnicode_FromString(
-                        std::string(arr->data1() + offsets[idx],
+                        std::string(arr->data1<bodo_array_type::STRING>() +
+                                        offsets[idx],
                                     offsets[idx + 1] - offsets[idx])
                             .c_str());
                 }

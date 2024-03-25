@@ -224,7 +224,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             AllocateBuffer(nbytes, pool);
         CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", buffer);
 
-        bool *in_data = (bool *)array->data1();
+        bool *in_data = (bool *)array->data1<bodo_array_type::NUMPY>();
         for (size_t i = 0; i < array->length; i++) {
             bool bit = in_data[i];
             SetBitTo(buffer->mutable_data(), i, bit);
@@ -339,6 +339,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                         "not supported for Timedelta.");
                 break;
             case Bodo_CTypes::DATETIME:
+                assert(array->arr_type == bodo_array_type::NUMPY);
                 // input from Bodo uses int64 for datetimes (datetime64[ns])
                 in_num_bytes = sizeof(int64_t) * array->length;
                 if (tz.length() > 0) {
@@ -347,9 +348,9 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                     type = arrow::timestamp(time_unit);
                 }
 
-                // convert Bodo NaT to Arrow null bitmap
+                // Convert Bodo NaT to Arrow null bitmap
                 for (size_t i = 0; i < array->length; i++) {
-                    if ((array->at<int64_t>(i) ==
+                    if ((array->at<int64_t, bodo_array_type::NUMPY>(i) ==
                          std::numeric_limits<int64_t>::min()) &&
                         GetBit(null_bitmap->mutable_data(), i)) {
                         // if value is NaT (equals
@@ -381,7 +382,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
                 int64_t *new_data1 = (int64_t *)out_buffer->mutable_data();
                 for (size_t i = 0; i < array->length; i++) {
-                    // convert to the specified time unit
+                    // Convert to the specified time unit
+                    // TODO XXX The 'at' needs to be templated on the arr type!
                     new_data1[i] = array->at<int64_t>(i) / divide_factor;
                 }
             } else {
@@ -393,7 +395,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
                 int32_t *new_data1 = (int32_t *)out_buffer->mutable_data();
                 for (size_t i = 0; i < array->length; i++) {
-                    // convert to the specified time unit
+                    // Convert to the specified time unit.
+                    // TODO XXX The 'at' needs to be templated on the arr type!
                     new_data1[i] = array->at<int64_t>(i) / divide_factor;
                 }
             }
@@ -437,7 +440,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
             int64_t *new_data1 = (int64_t *)out_buffer->mutable_data();
             for (size_t i = 0; i < array->length; i++) {
-                // convert to the specified time unit
+                // Convert to the specified time unit.
+                // TODO XXX The 'at' needs to be templated on the arr type!
                 new_data1[i] = array->at<int64_t>(i) / divide_factor;
             }
 
@@ -498,13 +502,15 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         const size_t siztype = numpy_item_size[array->dtype];
         int64_t in_num_bytes = array->length * siztype;
         std::shared_ptr<arrow::Buffer> out_buffer =
-            std::make_shared<arrow::Buffer>((uint8_t *)array->data1(),
-                                            in_num_bytes, mm);
+            std::make_shared<arrow::Buffer>(
+                (uint8_t *)array->data1<bodo_array_type::CATEGORICAL>(),
+                in_num_bytes, mm);
 
         // set arrow bit mask using category index values (-1 for nulls)
         int64_t null_count_ = 0;
         for (size_t i = 0; i < array->length; i++) {
-            char *ptr = array->data1() + (i * siztype);
+            char *ptr =
+                array->data1<bodo_array_type::CATEGORICAL>() + (i * siztype);
             if (isnan_categorical_ptr(array->dtype, ptr)) {
                 null_count_++;
                 SetBitTo(null_bitmap->mutable_data(), i, false);
@@ -543,23 +549,31 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             switch (array->dtype) {
                 case Bodo_CTypes::INT8:
                     max_ind = *std::max_element(
-                        (int8_t *)array->data1(),
-                        ((int8_t *)array->data1()) + array->length);
+                        (int8_t *)array->data1<bodo_array_type::CATEGORICAL>(),
+                        ((int8_t *)
+                             array->data1<bodo_array_type::CATEGORICAL>()) +
+                            array->length);
                     break;
                 case Bodo_CTypes::INT16:
                     max_ind = *std::max_element(
-                        (int16_t *)array->data1(),
-                        ((int16_t *)array->data1()) + array->length);
+                        (int16_t *)array->data1<bodo_array_type::CATEGORICAL>(),
+                        ((int16_t *)
+                             array->data1<bodo_array_type::CATEGORICAL>()) +
+                            array->length);
                     break;
                 case Bodo_CTypes::INT32:
                     max_ind = *std::max_element(
-                        (int32_t *)array->data1(),
-                        ((int32_t *)array->data1()) + array->length);
+                        (int32_t *)array->data1<bodo_array_type::CATEGORICAL>(),
+                        ((int32_t *)
+                             array->data1<bodo_array_type::CATEGORICAL>()) +
+                            array->length);
                     break;
                 case Bodo_CTypes::INT64:
                     max_ind = *std::max_element(
-                        (int64_t *)array->data1(),
-                        ((int64_t *)array->data1()) + array->length);
+                        (int64_t *)array->data1<bodo_array_type::CATEGORICAL>(),
+                        ((int64_t *)
+                             array->data1<bodo_array_type::CATEGORICAL>()) +
+                            array->length);
                     break;
                 default:
                     throw std::runtime_error(
@@ -589,8 +603,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         // Convert Bodo TimestampTZ array to Arrow String array
         std::shared_ptr<arrow::DataType> arrow_type = arrow::utf8();
         auto builder = arrow::StringBuilder();
-        auto ts_buffer = (int64_t *)array->data1();
-        auto tz_buffer = (int16_t *)array->data2();
+        auto ts_buffer =
+            (int64_t *)array->data1<bodo_array_type::TIMESTAMPTZ>();
+        auto tz_buffer =
+            (int16_t *)array->data2<bodo_array_type::TIMESTAMPTZ>();
 
         // Allocate buffer for timestamp string - we know that the timestamp
         // string can only ever be 38 characters, but the compiler we use in CI
@@ -795,10 +811,11 @@ std::shared_ptr<array_info> arrow_null_array_to_bodo(
     auto out_array = alloc_array_top_level(n, 0, 0, bodo_array_type::STRING,
                                            Bodo_CTypes::STRING);
     // set offsets to zero
-    memset(out_array->data2(), 0, sizeof(offset_t) * (n + 1));
+    memset(out_array->data2<bodo_array_type::STRING>(), 0,
+           sizeof(offset_t) * (n + 1));
     // setting all to null
     int64_t n_null_bytes = ((n + 7) >> 3);
-    memset(out_array->null_bitmask(), 0, n_null_bytes);
+    memset(out_array->null_bitmask<bodo_array_type::STRING>(), 0, n_null_bytes);
 
     return out_array;
 }

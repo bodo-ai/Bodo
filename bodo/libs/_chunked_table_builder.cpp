@@ -250,11 +250,12 @@ template <bodo_array_type::arr_type_enum out_arr_type,
 void ChunkedTableArrayBuilder::UnsafeAppendRows(
     const std::shared_ptr<array_info>& in_arr,
     const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
-    offset_t* out_offsets = (offset_t*)this->data_array->data1();
-    offset_t* in_offsets = (offset_t*)in_arr->data1();
+    offset_t* out_offsets = (offset_t*)this->data_array->data1<out_arr_type>();
+    offset_t* in_offsets = (offset_t*)in_arr->data1<in_arr_type>();
 
-    uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
-    const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+    uint8_t* out_bitmask =
+        (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+    const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
 
     for (size_t i = 0; i < idx_length; i++) {
         int64_t row_idx = idxs[i + idx_start];
@@ -307,8 +308,9 @@ template <bodo_array_type::arr_type_enum out_arr_type,
 void ChunkedTableArrayBuilder::UnsafeAppendRows(
     const std::shared_ptr<array_info>& in_arr,
     const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
-    uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
-    const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+    uint8_t* out_bitmask =
+        (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+    const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
 
     for (size_t i = 0; i < idx_length; i++) {
         int64_t row_idx = idxs[i + idx_start];

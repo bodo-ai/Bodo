@@ -22,15 +22,18 @@ template <typename T>
 void copy_nullable_values_transform(std::shared_ptr<array_info> update_col,
                                     std::shared_ptr<array_info> tmp_col,
                                     const grouping_info& grp_info) {
+    assert(tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+    assert(update_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
     int64_t nrows = update_col->length;
     for (int64_t iRow = 0; iRow < nrows; iRow++) {
         int64_t igrp = grp_info.row_to_group[iRow];
         // Update the bitmap
-        bool bit = tmp_col->get_null_bit(igrp);
-        update_col->set_null_bit(iRow, bit);
+        bool bit =
+            tmp_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(igrp);
+        update_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow, bit);
         // Update the value
-        T& val = getv<T>(tmp_col, igrp);
-        T& val2 = getv<T>(update_col, iRow);
+        T& val = getv<T, bodo_array_type::NULLABLE_INT_BOOL>(tmp_col, igrp);
+        T& val2 = getv<T, bodo_array_type::NULLABLE_INT_BOOL>(update_col, iRow);
         val2 = val;
     }
 }
@@ -51,6 +54,7 @@ void copy_string_values_transform(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(tmp_col->arr_type == bodo_array_type::STRING);
     int64_t num_groups = grp_info.num_groups;
     std::shared_ptr<array_info> out_arr = NULL;
     // first we have to deal with offsets first so we
@@ -63,8 +67,8 @@ void copy_string_values_transform(
     int64_t nRowOut = update_col->length;
     // Store size of data per row
     bodo::vector<offset_t> ListSizes(nRowOut, pool);
-    offset_t* in_offsets = (offset_t*)tmp_col->data2();
-    char* in_data1 = tmp_col->data1();
+    offset_t* in_offsets = (offset_t*)tmp_col->data2<bodo_array_type::STRING>();
+    char* in_data1 = tmp_col->data1<bodo_array_type::STRING>();
     // 1. Determine needed length (total number of characters)
     // and number of characters per element/row
     // All rows in same group gets same data
@@ -85,8 +89,9 @@ void copy_string_values_transform(
     out_arr =
         alloc_array_top_level(nRowOut, n_chars, -1, arr_type, dtype, -1, 0, 0,
                               false, false, false, pool, std::move(mm));
-    offset_t* out_offsets = (offset_t*)out_arr->data2();
-    char* out_data1 = out_arr->data1();
+    offset_t* out_offsets =
+        (offset_t*)out_arr->data2<bodo_array_type::STRING>();
+    char* out_data1 = out_arr->data1<bodo_array_type::STRING>();
     // keep track of output array position
     offset_t pos = 0;
     // 2. Copy data from tmp_col to corresponding rows in out_arr
@@ -100,8 +105,8 @@ void copy_string_values_transform(
         out_offsets[iRow] = pos;
         memcpy(out_ptr, in_ptr, size);
         pos += size;
-        bit = tmp_col->get_null_bit(igrp);
-        out_arr->set_null_bit(iRow, bit);
+        bit = tmp_col->get_null_bit<bodo_array_type::STRING>(igrp);
+        out_arr->set_null_bit<bodo_array_type::STRING>(iRow, bit);
     }
     out_offsets[nRowOut] = pos;
     *update_col = std::move(*out_arr);
@@ -121,6 +126,7 @@ void copy_values(std::shared_ptr<array_info> update_col,
                  std::shared_ptr<array_info> tmp_col,
                  const grouping_info& grp_info) {
     if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        assert(update_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
         if (tmp_col->dtype == Bodo_CTypes::_BOOL) {
             // Nullable booleans store 1 bit per boolean so we have
             // a separate code path.
@@ -128,11 +134,19 @@ void copy_values(std::shared_ptr<array_info> update_col,
             for (int64_t iRow = 0; iRow < nrows; iRow++) {
                 int64_t igrp = grp_info.row_to_group[iRow];
                 // Update the bitmap
-                bool null_bit = tmp_col->get_null_bit(igrp);
-                update_col->set_null_bit(iRow, null_bit);
+                bool null_bit =
+                    tmp_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        igrp);
+                update_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    iRow, null_bit);
                 // Update the value
-                bool data_bit = GetBit((uint8_t*)tmp_col->data1(), igrp);
-                SetBitTo((uint8_t*)update_col->data1(), iRow, data_bit);
+                bool data_bit = GetBit(
+                    (uint8_t*)
+                        tmp_col->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    igrp);
+                SetBitTo((uint8_t*)update_col
+                             ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                         iRow, data_bit);
             }
         } else {
             copy_nullable_values_transform<T>(update_col, tmp_col, grp_info);
@@ -144,6 +158,7 @@ void copy_values(std::shared_ptr<array_info> update_col,
         int64_t nrows = update_col->length;
         for (int64_t iRow = 0; iRow < nrows; iRow++) {
             int64_t igrp = grp_info.row_to_group[iRow];
+            // TODO XXX getv needs to be templated with the arr type!
             T& val = getv<T>(tmp_col, igrp);
             T& val2 = getv<T>(update_col, iRow);
             val2 = val;

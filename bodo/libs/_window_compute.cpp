@@ -78,8 +78,9 @@ void min_row_number_filter_no_sort(
     if (idx_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // Set all entries to NOT NA since we will be setting all of them
         // to valid values.
-        InitializeBitMask((uint8_t*)(idx_col->null_bitmask()), idx_col->length,
-                          true);
+        InitializeBitMask((uint8_t*)(idx_col->null_bitmask<
+                                     bodo_array_type::NULLABLE_INT_BOOL>()),
+                          idx_col->length, true);
     }
     for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
         getv<int64_t>(idx_col, group_idx) =
@@ -155,9 +156,10 @@ void min_row_number_filter_window_computation_no_sort(
                                   na_pos_vect, ftype, use_sql_rules);
     // Now we have the idxmin/idxmax in the idx_col for each group.
     // We need to set the corresponding indices in the final array to true.
+    uint8_t* out_arr_data1 = (uint8_t*)(out_arr->data1());
     for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
         int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
-        SetBitTo((uint8_t*)out_arr->data1(), row_one_idx, true);
+        SetBitTo(out_arr_data1, row_one_idx, true);
     }
 }
 
@@ -177,13 +179,14 @@ void min_row_number_filter_window_computation_already_sorted(
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx) {
     int64_t prev_group = -1;
+    uint8_t* out_arr_data1 = (uint8_t*)out_arr->data1();
     for (uint64_t i = 0; i < out_arr->length; i++) {
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         // If the current group is differne from the group of the previous row,
         // then this row is the row where the row number is 1
         if (curr_group != prev_group) {
             int64_t row_one_idx = getv<int64_t>(sorted_idx, i);
-            SetBitTo((uint8_t*)out_arr->data1(), row_one_idx, true);
+            SetBitTo(out_arr_data1, row_one_idx, true);
             prev_group = curr_group;
         }
     }
@@ -303,9 +306,12 @@ inline void rank_tie_upward_batch_update(std::shared_ptr<array_info> rank_arr,
                                          int64_t group_start_idx,
                                          int64_t tie_start_idx,
                                          int64_t tie_end_idx) {
+    assert(rank_arr->arr_type == bodo_array_type::NUMPY);
     int64_t fill_value = tie_end_idx - group_start_idx;
-    std::fill((int64_t*)(rank_arr->data1()) + tie_start_idx,
-              (int64_t*)(rank_arr->data1()) + tie_end_idx, fill_value);
+    std::fill(
+        (int64_t*)(rank_arr->data1<bodo_array_type::NUMPY>()) + tie_start_idx,
+        (int64_t*)(rank_arr->data1<bodo_array_type::NUMPY>()) + tie_end_idx,
+        fill_value);
 }
 
 /**
@@ -617,6 +623,9 @@ void conditional_true_event_computation(
     int64_t n = out_arr->length;
     int64_t prev_group = -1;
     int64_t counter = 0;
+    const uint8_t* input_col_data1 = (uint8_t*)input_col->data1();
+    const uint8_t* input_col_null_bitmask =
+        (uint8_t*)(input_col->null_bitmask());
     for (int64_t i = 0; i < n; i++) {
         // Get the index in the output array.
         int64_t idx = getv<int64_t>(sorted_idx, i);
@@ -629,12 +638,14 @@ void conditional_true_event_computation(
         }
         // If the current row is true, increment the counter
         if (input_col->arr_type == bodo_array_type::NUMPY) {
-            if (getv<uint8_t>(input_col, idx))
+            if (getv<uint8_t, bodo_array_type::NUMPY>(input_col, idx)) {
                 counter++;
+            }
         } else {
-            if (input_col->get_null_bit(idx) &&
-                GetBit((uint8_t*)input_col->data1(), idx))
+            if (GetBit(input_col_null_bitmask, idx) &&
+                GetBit(input_col_data1, idx)) {
                 counter++;
+            }
         }
         getv<int64_t>(out_arr, idx) = counter;
     }
@@ -679,7 +690,9 @@ void conditional_change_event_computation(
             last_non_null = -1;
         }
         // If the current row is non-null and does not equal
-        // the most recent non-null row, increment the counter
+        // the most recent non-null row, increment the counter.
+        // XXX TODO We need to template both the get_null_bit and the
+        // TestEqualColumn calls!
         if (input_col->arr_type == bodo_array_type::NUMPY ||
             input_col->get_null_bit(idx)) {
             if (last_non_null != -1 &&

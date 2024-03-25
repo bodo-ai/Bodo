@@ -696,14 +696,17 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             alloc_string_array(dtype, total_distinct_strings,
                                total_distinct_chars, -1, 0, false, true);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
-        offset_t* out_offsets = (offset_t*)dict_arr->data2();
+        offset_t* out_offsets =
+            (offset_t*)dict_arr->data2<bodo_array_type::STRING>();
         // We know there's no nulls in the dictionary, so memset the
         // null_bitmask
-        memset(dict_arr->null_bitmask(), 0xFF, n_null_bytes);
+        memset(dict_arr->null_bitmask<bodo_array_type::STRING>(), 0xFF,
+               n_null_bytes);
         out_offsets[0] = 0;
         for (auto& it : str_to_ind) {
-            memcpy(dict_arr->data1() + it.second.second, it.first.c_str(),
-                   it.first.size());
+            memcpy(
+                dict_arr->data1<bodo_array_type::STRING>() + it.second.second,
+                it.first.c_str(), it.first.size());
             out_offsets[it.second.first] = it.second.second;
         }
         out_offsets[total_distinct_strings] =
@@ -723,19 +726,24 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             (OFFSET_TYPE*)str_arr->value_offsets()->data();
         for (int64_t i = 0; i < n_strings; i++) {
             if (str_arr->IsNull(i)) {
-                indices_arr->set_null_bit(n_strings_copied + i, false);
+                indices_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    n_strings_copied + i, false);
                 continue;
             }
-            indices_arr->set_null_bit(n_strings_copied + i, true);
+            indices_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                n_strings_copied + i, true);
             const uint64_t length = in_offsets[str_start_offset + i + 1] -
                                     in_offsets[str_start_offset + i];
             std::string_view val = str_arr->GetView(i);
             if (auto it = str_to_ind.find(val); it != str_to_ind.end()) {
-                indices_arr->at<int32_t>(n_strings_copied + i) =
-                    it->second.first;
+                indices_arr
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                        n_strings_copied + i) = it->second.first;
             } else {
-                indices_arr->at<int32_t>(n_strings_copied + i) = count;
-                std::pair<int32_t, uint64_t> ind_offset_len =
+                indices_arr
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                        n_strings_copied + i) = count;
+                std::pair<dict_indices_t, uint64_t> ind_offset_len =
                     std::make_pair(count++, total_distinct_chars);
                 // TODO: remove std::string() after upgrade to C++23
                 str_to_ind[std::string(val)] = ind_offset_len;
@@ -822,10 +830,12 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
         out_array = alloc_array_top_level(length, 0, 0, bodo_array_type::STRING,
                                           Bodo_CTypes::STRING);
         // set offsets to zero
-        memset(out_array->data2(), 0, sizeof(offset_t) * length);
+        memset(out_array->data2<bodo_array_type::STRING>(), 0,
+               sizeof(offset_t) * length);
         // setting all to null
         int64_t n_null_bytes = ((length + 7) >> 3);
-        memset(out_array->null_bitmask(), 0, n_null_bytes);
+        memset(out_array->null_bitmask<bodo_array_type::STRING>(), 0,
+               n_null_bytes);
     }
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {}

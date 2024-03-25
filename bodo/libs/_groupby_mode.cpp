@@ -38,7 +38,7 @@ void mode_operation(
             // If the current entry is non-null, increment
             // the hashtable or the nan count
             if (non_null_at<ArrType, T, DType>(*arr, i)) {
-                if (isnan_alltype<T, DType>(getv<T>(arr, i))) {
+                if (isnan_alltype<T, DType>(getv<T, ArrType>(arr, i))) {
                     nan_count++;
                 } else {
                     ++counts[get_arr_item<ArrType, T, DType>(*arr, i)];
@@ -93,8 +93,9 @@ void mode_operation_strings(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
-    char* data = arr->data1();
-    offset_t* offsets = (offset_t*)arr->data2();
+    assert(arr->arr_type == bodo_array_type::STRING);
+    char* data = arr->data1<bodo_array_type::STRING>();
+    offset_t* offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
     size_t num_groups = out_arr->length;
     // Set up the vectors to store the null bits and the most
     // frequent string for each group
@@ -114,7 +115,7 @@ void mode_operation_strings(
             // If the current element in the group is not null,
             // extract the corresponding string from the character
             // buffer and increment its count in the hashtable
-            if (arr->get_null_bit(i)) {
+            if (arr->get_null_bit<bodo_array_type::STRING>(i)) {
                 offset_t start_offset = offsets[i];
                 offset_t end_offset = offsets[i + 1];
                 offset_t len = end_offset - start_offset;
@@ -203,12 +204,16 @@ void mode_operation_timestamptz(
     std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
     const grouping_info& grp_info,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
-    int64_t* data = (int64_t*)arr->data1();
-    int16_t* offsets = (int16_t*)arr->data2();
+    assert(arr->arr_type == bodo_array_type::TIMESTAMPTZ);
+    assert(out_arr->arr_type == bodo_array_type::TIMESTAMPTZ);
+    int64_t* data = (int64_t*)arr->data1<bodo_array_type::TIMESTAMPTZ>();
+    int16_t* offsets = (int16_t*)arr->data2<bodo_array_type::TIMESTAMPTZ>();
     size_t num_groups = out_arr->length;
 
-    int64_t* out_data = (int64_t*)out_arr->data1();
-    int16_t* out_offsets = (int16_t*)out_arr->data2();
+    int64_t* out_data =
+        (int64_t*)out_arr->data1<bodo_array_type::TIMESTAMPTZ>();
+    int16_t* out_offsets =
+        (int16_t*)out_arr->data2<bodo_array_type::TIMESTAMPTZ>();
 
     for (size_t igrp = 0; igrp < num_groups; igrp++) {
         // Set up a hashtable mapping each TimestampTZ seen in the group
@@ -224,7 +229,7 @@ void mode_operation_timestamptz(
             // If the current element in the group is not null,
             // get the corresponding UTC timestamp and increment its count in
             // the hashtable
-            if (arr->get_null_bit(i)) {
+            if (arr->get_null_bit<bodo_array_type::TIMESTAMPTZ>(i)) {
                 int64_t ts = data[i];
                 if (counts.contains(ts)) {
                     counts[ts].second++;
@@ -238,7 +243,7 @@ void mode_operation_timestamptz(
         // largest count and set the first value with the same UTC value as the
         // answer for the current group, storing it in the vector
         if (counts.size() > 0) {
-            out_arr->set_null_bit(igrp, true);
+            out_arr->set_null_bit<bodo_array_type::TIMESTAMPTZ>(igrp, true);
             size_t best_elem_idx = 0;
             size_t best_count = 0;
             // Find timestamp with the highest count
@@ -254,7 +259,7 @@ void mode_operation_timestamptz(
             out_offsets[igrp] = offsets[best_elem_idx];
         } else {
             // Otherwise, the mode of the group is set to null
-            out_arr->set_null_bit(igrp, false);
+            out_arr->set_null_bit<bodo_array_type::TIMESTAMPTZ>(igrp, false);
         }
     }
 }
