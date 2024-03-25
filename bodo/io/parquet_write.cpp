@@ -562,29 +562,36 @@ void pq_write_partitioned_py_entry(
                         // TODO(njriasan): Simplify/remove this assumption by
                         // having a null count in individual arrays we can just
                         // check.
-                        bool isna = !GetBit((uint8_t *)part_col->child_arrays[1]
-                                                ->null_bitmask(),
-                                            i);
+                        bool isna = !GetBit(
+                            (uint8_t *)part_col->child_arrays[1]
+                                ->null_bitmask<
+                                    bodo_array_type::NULLABLE_INT_BOOL>(),
+                            i);
                         if (isna) {
                             value_str = "null";
                         } else {
                             int32_t dict_ind =
                                 ((int32_t *)part_col->child_arrays[1]
-                                     ->data1())[i];
+                                     ->data1<bodo_array_type::
+                                                 NULLABLE_INT_BOOL>())[i];
                             // get start_offset and end_offset of the string
                             // value referred to by dict_index i
                             offset_t start_offset =
                                 ((offset_t *)part_col->child_arrays[0]
-                                     ->data2())[dict_ind];
+                                     ->data2<
+                                         bodo_array_type::STRING>())[dict_ind];
                             offset_t end_offset =
                                 ((offset_t *)part_col->child_arrays[0]
-                                     ->data2())[dict_ind + 1];
+                                     ->data2<bodo_array_type::STRING>())
+                                    [dict_ind + 1];
                             // get length of the string value
                             offset_t len = end_offset - start_offset;
                             // extract string value from string buffer
-                            std::string val(&((char *)part_col->child_arrays[0]
-                                                  ->data1())[start_offset],
-                                            len);
+                            std::string val(
+                                &((char *)part_col->child_arrays[0]
+                                      ->data1<bodo_array_type::STRING>())
+                                    [start_offset],
+                                len);
                             value_str = val;
                         }
                     } else {

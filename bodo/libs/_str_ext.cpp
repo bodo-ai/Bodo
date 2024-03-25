@@ -917,13 +917,15 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
  * @return array_info* Output Dictionary Array with Copied Contents
  */
 array_info* str_to_dict_str_array(array_info* str_arr) {
+    assert(str_arr->arr_type == bodo_array_type::STRING);
     const auto arr_len = str_arr->length;
     const auto num_null_bitmask_bytes = (arr_len + 7) >> 3;
 
     // Dictionary Indices Array
     std::shared_ptr<array_info> indices_arr =
         alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
-    memcpy(indices_arr->null_bitmask(), str_arr->null_bitmask(),
+    memcpy(indices_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+           str_arr->null_bitmask<bodo_array_type::STRING>(),
            num_null_bitmask_bytes);
 
     // Map string to its new index in dictionary values array
@@ -933,12 +935,13 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     uint32_t num_dict_strs = 0;
     uint64_t total_dict_chars = 0;
 
-    offset_t* offsets = (offset_t*)str_arr->data2();
+    offset_t* offsets = (offset_t*)str_arr->data2<bodo_array_type::STRING>();
     for (uint64_t i = 0; i < arr_len; i++) {
-        if (!str_arr->get_null_bit(i))
+        if (!str_arr->get_null_bit<bodo_array_type::STRING>(i))
             continue;
-        std::string_view elem(str_arr->data1() + offsets[i],
-                              offsets[i + 1] - offsets[i]);
+        std::string_view elem(
+            str_arr->data1<bodo_array_type::STRING>() + offsets[i],
+            offsets[i + 1] - offsets[i]);
 
         int32_t elem_idx;
         if (!str_to_ind.contains(elem)) {
@@ -952,7 +955,8 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
             elem_idx = str_to_ind.find(elem)->second.first;
         }
 
-        indices_arr->at<int32_t>(i) = elem_idx;
+        indices_arr->at<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(i) =
+            elem_idx;
     }
     delete str_arr;
 
@@ -961,13 +965,15 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     std::shared_ptr<array_info> values_arr = alloc_string_array(
         Bodo_CTypes::STRING, num_dict_strs, total_dict_chars, dict_id);
     int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
-    memset(values_arr->null_bitmask(), 0xFF, n_null_bytes);  // No nulls
+    memset(values_arr->null_bitmask<bodo_array_type::STRING>(), 0xFF,
+           n_null_bytes);  // No nulls
 
-    offset_t* out_offsets = (offset_t*)values_arr->data2();
+    offset_t* out_offsets =
+        (offset_t*)values_arr->data2<bodo_array_type::STRING>();
     out_offsets[0] = 0;
     for (auto& it : str_to_ind) {
-        memcpy(values_arr->data1() + it.second.second, it.first.c_str(),
-               it.first.size());
+        memcpy(values_arr->data1<bodo_array_type::STRING>() + it.second.second,
+               it.first.c_str(), it.first.size());
         out_offsets[it.second.first] = it.second.second;
     }
     out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);

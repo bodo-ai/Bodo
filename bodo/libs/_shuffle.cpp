@@ -81,7 +81,8 @@ bodo::vector<int> get_inner_array_row_dest(
             GetArrType_as_string(parent_arr->arr_type) + "!");
     }
     bodo::vector<int> row_dest_inner;
-    offset_t* offsets = (offset_t*)parent_arr->data1();
+    offset_t* offsets =
+        (offset_t*)parent_arr->data1<bodo_array_type::ARRAY_ITEM>();
     row_dest_inner.reserve(offsets[parent_arr->length]);
     for (size_t i = 0; i < parent_arr->length; i++) {
         row_dest_inner.insert(row_dest_inner.end(), offsets[i + 1] - offsets[i],
@@ -469,15 +470,18 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
     // dispatch to proper function
     // TODO: general dispatcher
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
-                                   (uint8_t*)in_arr->null_bitmask(),
-                                   comm_info.send_disp_null, comm_info.n_pes,
-                                   n_rows, comm_info.row_dest);
+        fill_send_array_null_inner(
+            (uint8_t*)send_arr->null_bitmask(),
+            (uint8_t*)
+                in_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+            comm_info.send_disp_null, comm_info.n_pes, n_rows,
+            comm_info.row_dest);
         if (in_arr->dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean uses 1 bit per boolean so we can reuse the
             // null_bitmap function
             return fill_send_array_null_inner(
-                (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
+                (uint8_t*)send_arr->data1(),
+                (uint8_t*)in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
                 comm_info.send_disp_null, comm_info.n_pes, n_rows,
                 comm_info.row_dest);
         }
@@ -797,7 +801,8 @@ void update_local_dictionary_remove_duplicates(
     for (size_t i = 0; i < dict_array->child_arrays[1]->length; i++) {
         if (GetBit(null_bitmask, i)) {
             dict_indices_t& index =
-                dict_array->child_arrays[1]->at<dict_indices_t>(i);
+                dict_array->child_arrays[1]
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(i);
             if (local_to_global_index[index] < 0) {
                 // This has to be an NA since all values in local dictionary
                 // (except NA) _must_ be in the global/deduplicated
@@ -1588,11 +1593,12 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     const bodo::vector<int>& row_dest = comm_info.row_dest;
+    char* out_arr_data1 = out_arr->data1();
     for (int64_t i = 0; i < out_len; i++) {
         size_t node = row_dest[i];
         offset_t str_len = out_offset[i + 1] - out_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
-        char* out_ptr = out_arr->data1() + out_offset[i];
+        char* out_ptr = out_arr_data1 + out_offset[i];
         char* in_ptr = (char*)tmp_recv.data() + c_ind;
         memcpy(out_ptr, in_ptr, str_len);
         tmp_offset_sub[node] += str_len;

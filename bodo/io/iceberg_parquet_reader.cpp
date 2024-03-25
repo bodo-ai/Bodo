@@ -939,9 +939,11 @@ table_info* iceberg_pq_read_py_entry(
             }
 
             // Equivalent to np.arange(*total_rows_out, dtype=np.int64)
-            std::iota((int64_t*)row_id_col_arr->data1(),
-                      (int64_t*)row_id_col_arr->data1() + num_local_rows,
-                      init_val);
+            std::iota(
+                (int64_t*)row_id_col_arr->data1<bodo_array_type::NUMPY>(),
+                (int64_t*)row_id_col_arr->data1<bodo_array_type::NUMPY>() +
+                    num_local_rows,
+                init_val);
 
             read_output->columns.push_back(row_id_col_arr);
         }

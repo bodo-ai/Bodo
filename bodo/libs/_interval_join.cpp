@@ -22,7 +22,8 @@ inline bool isna_sql(const std::shared_ptr<array_info>& arr,
     }
     // Datetime still uses a NaT value. TODO: Remove.
     if (arr->dtype == Bodo_CTypes::DATETIME) {
-        int64_t* dt64_arr = (int64_t*)arr->data1();
+        assert(arr->arr_type == bodo_array_type::NUMPY);
+        int64_t* dt64_arr = (int64_t*)arr->data1<bodo_array_type::NUMPY>();
         return dt64_arr[idx] == std::numeric_limits<int64_t>::min();
     }
     return false;
@@ -151,6 +152,9 @@ std::pair<bodo::vector<int64_t>, bodo::vector<int64_t>> interval_merge(
     for (uint64_t interval_pos = 0; interval_pos < interval_table->nrows();
          interval_pos++) {
         // Skip intervals that contain NA values, resetting prev_point_pos_end.
+        // XXX TODO The isna_sql checks are expensive because they're not
+        // templated for the array types, i.e. it will go through a switch
+        // statement for every row multiple times. Needs to be fixed.
         if (isna_sql(left_inter_col, interval_pos) ||
             isna_sql(right_inter_col, interval_pos)) {
             // Skip intervals that contain NA values, resetting

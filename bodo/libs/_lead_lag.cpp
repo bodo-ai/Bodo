@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include "_bodo_common.h"
 
 /*
  * Search for next non-null value shift_amt away from write_i,
@@ -50,7 +51,7 @@ inline void copy_value(const std::shared_ptr<array_info> &in_col,
         // If we have a null at read_i
         if (is_null_at<ArrType, T, DType>(*in_col, read_i)) {
             // Copy it to the position at write_i
-            out_col->set_null_bit(write_i, false);
+            out_col->set_null_bit<ArrType>(write_i, false);
             return;
         }
     }
@@ -72,7 +73,8 @@ inline void handle_out_of_bounds(const std::unique_ptr<array_info> &out_col,
         set_arr_item<bodo_array_type::NULLABLE_INT_BOOL, T, DType>(
             *out_col, write_i, *default_fill_val);
     } else {
-        out_col->set_null_bit(write_i, false);
+        out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(write_i,
+                                                                  false);
     }
 }
 
@@ -199,12 +201,13 @@ inline void copy_offsets(
     const std::shared_ptr<array_info> &in_col,
     std::vector<std::optional<std::pair<offset_t, offset_t>>> &out_offsets,
     int64_t read_i, int64_t write_i, offset_t &allocation_size) {
+    assert(in_col->arr_type == ArrType);
     // If we have a null, mark a null to copy in this location.
     if (is_null_at<ArrType, T, DType>(*in_col, read_i)) {
         return;
     }
 
-    const auto in_offsets = (offset_t *)in_col->data2();
+    const auto in_offsets = (offset_t *)in_col->data2<ArrType>();
 
     // Find the beginning and end of the string to copy
     const offset_t start_offset = in_offsets[read_i];
@@ -323,6 +326,7 @@ std::unique_ptr<array_info> lead_lag_seq(
     const std::shared_ptr<array_info> &in_col, int64_t shift_amt,
     const std::optional<T> &default_fill_val,
     int64_t default_fill_val_len = 0) {
+    assert(in_col->arr_type == ArrType);
     // Note slight precision loss here from uint64_t
     const int64_t n = static_cast<int64_t>(in_col->length);
 
@@ -361,7 +365,8 @@ std::unique_ptr<array_info> lead_lag_seq(
         alloc_string_array(in_col->dtype, n, allocation_size);
 
     // Offsets from output
-    const auto out_offsets = (offset_t *)out_col->data2();
+    const auto out_offsets =
+        (offset_t *)out_col->data2<bodo_array_type::STRING>();
 
     // Copy strings from input to output appropriatel
     // The cursor keeps track of what offsets we are copying *to* in the output
@@ -378,8 +383,8 @@ std::unique_ptr<array_info> lead_lag_seq(
             if (start == std::numeric_limits<offset_t>::max() &&
                 end == std::numeric_limits<offset_t>::max()) {
                 // We copy the default value in!
-                memcpy(out_col->data1() + cursor, *default_fill_val,
-                       default_fill_val_len);
+                memcpy(out_col->data1<bodo_array_type::STRING>() + cursor,
+                       *default_fill_val, default_fill_val_len);
 
                 // ...and increment our cursor
                 cursor += default_fill_val_len;
@@ -390,14 +395,15 @@ std::unique_ptr<array_info> lead_lag_seq(
             const offset_t len = end - start;
 
             // Copy the actual value from the appropriate offests
-            memcpy(out_col->data1() + cursor, in_col->data1() + start, len);
+            memcpy(out_col->data1<bodo_array_type::STRING>() + cursor,
+                   in_col->data1<ArrType>() + start, len);
 
             // Increment our copy cursor by the amount of data we have added
             // to keep track of the offsets.
             cursor += len;
         } else {
             // Nullopt case--corresponds to a null value
-            out_col->set_null_bit(i, false);
+            out_col->set_null_bit<bodo_array_type::STRING>(i, false);
         }
     }
 
@@ -429,6 +435,7 @@ std::unique_ptr<array_info> lead_lag_seq(
     const std::shared_ptr<array_info> &in_col, int64_t shift_amt,
     const std::optional<T> &default_fill_val,
     int64_t default_fill_val_len = 0) {
+    assert(in_col->arr_type == bodo_array_type::DICT);
     const std::shared_ptr<array_info> in_data = in_col->child_arrays[0];
     const std::shared_ptr<array_info> in_indices = in_col->child_arrays[1];
 
@@ -441,8 +448,9 @@ std::unique_ptr<array_info> lead_lag_seq(
     if constexpr (has_default) {
         const auto default_str = std::basic_string_view(*default_fill_val);
 
-        const char *in_data_chars = in_data->data1();
-        const offset_t *in_data_offsets = (offset_t *)in_data->data2();
+        const char *in_data_chars = in_data->data1<bodo_array_type::STRING>();
+        const offset_t *in_data_offsets =
+            (offset_t *)in_data->data2<bodo_array_type::STRING>();
         const uint64_t in_data_len = in_data->length;
         const uint64_t in_data_n_chars = in_data_offsets[in_data_len];
 
@@ -453,8 +461,9 @@ std::unique_ptr<array_info> lead_lag_seq(
         out_data = alloc_string_array(DType, in_data_len + 1,
                                       in_data_n_chars + default_str.length(), 0,
                                       0, in_data->is_globally_replicated);
-        char *out_data_chars = out_data->data1();
-        offset_t *out_data_offsets = (offset_t *)out_data->data2();
+        char *out_data_chars = out_data->data1<bodo_array_type::STRING>();
+        offset_t *out_data_offsets =
+            (offset_t *)out_data->data2<bodo_array_type::STRING>();
 
         // Copy our original string data to the new array
         std::copy(in_data_chars, in_data_chars + in_data_n_chars,

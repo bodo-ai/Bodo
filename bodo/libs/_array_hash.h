@@ -105,11 +105,11 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
     const uint32_t seed, bool is_parallel);
 
-template <typename hashes_t>
+template <typename hashes_t, bool use_murmurhash = false>
     requires(hashes_arr_type<hashes_t>)
 void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
                 size_t n_rows, const uint32_t seed, bool is_parallel,
-                bool global_dict_needed, bool use_murmurhash = false,
+                bool global_dict_needed,
                 std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
                 size_t start_row_offset = 0);
 
@@ -250,18 +250,24 @@ struct multi_col_key {
                                 "multi-key-hashing dictionary the columns are "
                                 "not unified.");
                         }
-                        if (c1->get_null_bit(row) !=
-                            c2->get_null_bit(other.row)) {
+                        if (c1->get_null_bit<bodo_array_type::DICT>(row) !=
+                            c2->get_null_bit<bodo_array_type::DICT>(
+                                other.row)) {
                             return false;
                         }
-                        if (!c1->get_null_bit(row)) {
+                        if (!c1->get_null_bit<bodo_array_type::DICT>(row)) {
                             // If both are null then continue because
                             // the dictionary contains garbage
                             continue;
                         }
                         bool match =
-                            c1->child_arrays[1]->at<dict_indices_t>(row) ==
-                            c2->child_arrays[1]->at<dict_indices_t>(other.row);
+                            c1->child_arrays[1]
+                                ->at<dict_indices_t,
+                                     bodo_array_type::NULLABLE_INT_BOOL>(row) ==
+                            c2->child_arrays[1]
+                                ->at<dict_indices_t,
+                                     bodo_array_type::NULLABLE_INT_BOOL>(
+                                    other.row);
                         if (!match) {
                             return false;
                         }
@@ -274,22 +280,34 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::NULLABLE_INT_BOOL:
-                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row)) {
+                    if (c1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                            row) !=
+                        c2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                            other.row)) {
                         return false;
                     }
-                    if (!c1->get_null_bit(row)) {
+                    if (!c1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                            row)) {
                         continue;
                     }
                     if (c1->dtype == Bodo_CTypes::_BOOL) {
                         // Nullable bools are stored as 1 bit
-                        if (GetBit((uint8_t*)c1->data1(), row) !=
-                            GetBit((uint8_t*)c2->data1(), other.row)) {
+                        if (GetBit((uint8_t*)c1->data1<
+                                       bodo_array_type::NULLABLE_INT_BOOL>(),
+                                   row) !=
+                            GetBit((uint8_t*)c2->data1<
+                                       bodo_array_type::NULLABLE_INT_BOOL>(),
+                                   other.row)) {
                             return false;
                         }
                     } else {
                         size_type = numpy_item_size[c1->dtype];
-                        if (memcmp(c1->data1() + size_type * row,
-                                   c2->data1() + size_type * other.row,
+                        if (memcmp(c1->data1<
+                                       bodo_array_type::NULLABLE_INT_BOOL>() +
+                                       size_type * row,
+                                   c2->data1<
+                                       bodo_array_type::NULLABLE_INT_BOOL>() +
+                                       size_type * other.row,
                                    size_type) != 0) {
                             return false;
                         }
@@ -298,47 +316,68 @@ struct multi_col_key {
 
                 case bodo_array_type::CATEGORICAL:  // Even in missing case
                                                     // (value -1) this works
+                    size_type = numpy_item_size[c1->dtype];
+                    if (memcmp(c1->data1<bodo_array_type::CATEGORICAL>() +
+                                   size_type * row,
+                               c2->data1<bodo_array_type::CATEGORICAL>() +
+                                   size_type * other.row,
+                               size_type) != 0) {
+                        return false;
+                    }
+                    continue;
                 case bodo_array_type::NUMPY:
                     size_type = numpy_item_size[c1->dtype];
-                    if (memcmp(c1->data1() + size_type * row,
-                               c2->data1() + size_type * other.row,
+                    if (memcmp(c1->data1<bodo_array_type::NUMPY>() +
+                                   size_type * row,
+                               c2->data1<bodo_array_type::NUMPY>() +
+                                   size_type * other.row,
                                size_type) != 0) {
                         return false;
                     }
                     continue;
                 case bodo_array_type::STRING: {
-                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
-                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
+                    uint8_t* c1_null_bitmask =
+                        (uint8_t*)c1->null_bitmask<bodo_array_type::STRING>();
+                    uint8_t* c2_null_bitmask =
+                        (uint8_t*)c2->null_bitmask<bodo_array_type::STRING>();
                     if (GetBit(c1_null_bitmask, row) !=
                         GetBit(c2_null_bitmask, other.row)) {
                         return false;
                     }
-                    offset_t* c1_offsets = (offset_t*)c1->data2();
-                    offset_t* c2_offsets = (offset_t*)c2->data2();
+                    offset_t* c1_offsets =
+                        (offset_t*)c1->data2<bodo_array_type::STRING>();
+                    offset_t* c2_offsets =
+                        (offset_t*)c2->data2<bodo_array_type::STRING>();
                     offset_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
                     offset_t c2_str_len =
                         c2_offsets[other.row + 1] - c2_offsets[other.row];
                     if (c1_str_len != c2_str_len) {
                         return false;
                     }
-                    char* c1_str = c1->data1() + c1_offsets[row];
-                    char* c2_str = c2->data1() + c2_offsets[other.row];
+                    char* c1_str =
+                        c1->data1<bodo_array_type::STRING>() + c1_offsets[row];
+                    char* c2_str = c2->data1<bodo_array_type::STRING>() +
+                                   c2_offsets[other.row];
                     if (memcmp(c1_str, c2_str, c1_str_len) != 0) {
                         return false;
                     }
                 }
                     continue;
                 case bodo_array_type::TIMESTAMPTZ:
-                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row)) {
+                    if (c1->get_null_bit<bodo_array_type::TIMESTAMPTZ>(row) !=
+                        c2->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                            other.row)) {
                         return false;
                     }
-                    if (!c1->get_null_bit(row)) {
+                    if (!c1->get_null_bit<bodo_array_type::TIMESTAMPTZ>(row)) {
                         continue;
                     }
                     // compare data1 only. (Ignore offsets)
                     size_type = numpy_item_size[c1->dtype];
-                    if (memcmp(c1->data1() + size_type * row,
-                               c2->data1() + size_type * other.row,
+                    if (memcmp(c1->data1<bodo_array_type::TIMESTAMPTZ>() +
+                                   size_type * row,
+                               c2->data1<bodo_array_type::TIMESTAMPTZ>() +
+                                   size_type * other.row,
                                size_type) != 0) {
                         return false;
                     }

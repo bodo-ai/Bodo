@@ -498,7 +498,8 @@ class GroupbyPipeline {
         rank_start_row = rank_end_row - num_rows;
         // generate start/end range
         for (int64_t i = 0; i < num_rows; i++) {
-            uint64_t& val = getv<uint64_t>(head_sort_col, i);
+            uint64_t& val =
+                getv<uint64_t, bodo_array_type::NUMPY>(head_sort_col, i);
             val = rank_start_row + i;
         }
         in_table->columns.push_back(head_sort_col);

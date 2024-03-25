@@ -545,8 +545,8 @@ struct DataType {
      * @return std::unique_ptr<DataType> Output DataType
      */
     static std::unique_ptr<DataType> Deserialize(
-    const std::span<const int8_t> arr_array_types,
-    const std::span<const int8_t> arr_c_types);
+        const std::span<const int8_t> arr_array_types,
+        const std::span<const int8_t> arr_c_types);
 
     ///@brief Serialize a bodo::Schema to a Python <-> C++ communication format
     virtual void Serialize(std::vector<int8_t>& arr_array_types,
@@ -1013,14 +1013,16 @@ struct array_info {
         return -1;
     }
 
-    template <typename T>
+    template <typename T, bodo_array_type::arr_type_enum arr_type =
+                              bodo_array_type::UNKNOWN>
     T& at(size_t idx) {
-        return ((T*)data1())[idx];
+        return ((T*)data1<arr_type>())[idx];
     }
 
-    template <typename T>
+    template <typename T, bodo_array_type::arr_type_enum arr_type =
+                              bodo_array_type::UNKNOWN>
     const T& at(size_t idx) const {
-        return ((T*)data1())[idx];
+        return ((T*)data1<arr_type>())[idx];
     }
 
     template <
@@ -1033,17 +1035,23 @@ struct array_info {
      * Return code in position `idx` of categorical array as int64
      */
     int64_t get_code_as_int64(size_t idx) {
-        if (arr_type != bodo_array_type::CATEGORICAL)
+        if (this->arr_type != bodo_array_type::CATEGORICAL) {
             throw std::runtime_error("get_code: not a categorical array");
+        }
         switch (dtype) {
             case Bodo_CTypes::INT8:
-                return (int64_t)(this->at<int8_t>(idx));
+                return (int64_t)(this->at<int8_t, bodo_array_type::CATEGORICAL>(
+                    idx));
             case Bodo_CTypes::INT16:
-                return (int64_t)(this->at<int16_t>(idx));
+                return (
+                    int64_t)(this->at<int16_t, bodo_array_type::CATEGORICAL>(
+                    idx));
             case Bodo_CTypes::INT32:
-                return (int64_t)(this->at<int32_t>(idx));
+                return (
+                    int64_t)(this->at<int32_t, bodo_array_type::CATEGORICAL>(
+                    idx));
             case Bodo_CTypes::INT64:
-                return this->at<int64_t>(idx);
+                return this->at<int64_t, bodo_array_type::CATEGORICAL>(idx);
             default:
                 throw std::runtime_error(
                     "get_code: codes have unrecognized dtype");
@@ -1156,18 +1164,20 @@ struct array_info {
      */
     bodo::vector<bool> get_notna_vector() {
         bodo::vector<bool> not_na(length, true);
-        switch (arr_type) {
+        switch (this->arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
             case bodo_array_type::TIMESTAMPTZ:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
-            case bodo_array_type::MAP:
+            case bodo_array_type::MAP: {
+                const uint8_t* _null_bitmask = (uint8_t*)this->null_bitmask();
                 for (size_t i = 0; i < length; i++) {
-                    not_na[i] = get_null_bit(i);
+                    not_na[i] = GetBit(_null_bitmask, i);
                 }
-                break;
+            } break;
+
             case bodo_array_type::CATEGORICAL:
                 for (size_t i = 0; i < length; i++) {
                     // TODO: Ensure templated for faster access.
@@ -1176,7 +1186,8 @@ struct array_info {
                 break;
             case bodo_array_type::NUMPY:
                 if (dtype == Bodo_CTypes::TIMEDELTA) {
-                    int64_t* data = (int64_t*)data1();
+                    int64_t* data =
+                        (int64_t*)this->data1<bodo_array_type::NUMPY>();
                     for (size_t i = 0; i < length; i++) {
                         // TIMEDELTA NaT is the min int64_t.
                         not_na[i] =
@@ -1406,14 +1417,16 @@ std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
    We cannot use at(idx) statements.
  */
 
-template <typename T>
+template <typename T,
+          bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
 inline T& getv(const std::shared_ptr<array_info>& arr, size_t idx) {
-    return ((T*)arr->data1())[idx];
+    return ((T*)arr->data1<arr_type>())[idx];
 }
 
-template <typename T>
+template <typename T,
+          bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
 inline T& getv(const std::unique_ptr<array_info>& arr, size_t idx) {
-    return ((T*)arr->data1())[idx];
+    return ((T*)arr->data1<arr_type>())[idx];
 }
 
 struct mpi_comm_info {

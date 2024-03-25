@@ -4,6 +4,7 @@
 #include <concepts>
 #include <span>
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_groupby_ftypes.h"
 /**
  * The file contains the templated aggregate functions that are used
@@ -244,10 +245,13 @@ template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::min> {
     inline static void apply(const std::shared_ptr<array_info>& arr,
                              int64_t idx, bool& v2) {
-        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+        bool v1 = GetBit(
+            (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(), idx);
         // And to get the output.
         v1 = v1 && v2;
-        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+        SetBitTo((uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                 idx, v1);
     }
 };
 
@@ -307,10 +311,13 @@ template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::max> {
     inline static void apply(const std::shared_ptr<array_info>& arr,
                              int64_t idx, bool& v2) {
-        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+        bool v1 = GetBit(
+            (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(), idx);
         // OR to get the output.
         v1 = v1 || v2;
-        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+        SetBitTo((uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                 idx, v1);
     }
 };
 
@@ -343,9 +350,12 @@ template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
     inline static void apply(const std::shared_ptr<array_info>& arr,
                              int64_t idx, bool& v2) {
-        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+        bool v1 = GetBit(
+            (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(), idx);
         v1 = v1 && v2;
-        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+        SetBitTo((uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                 idx, v1);
     }
 };
 
@@ -607,7 +617,9 @@ template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::last> {
     inline static void apply(const std::shared_ptr<array_info>& arr,
                              int64_t idx, bool& v2) {
-        SetBitTo((uint8_t*)arr->data1(), idx, v2);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+        SetBitTo((uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                 idx, v2);
     }
 };
 

@@ -541,11 +541,15 @@ std::string array_info::val_to_str(size_t idx) {
                 // In case of dictionary encoded string array
                 // get the string value by indexing into the dictionary
                 return this->child_arrays[0]->val_to_str(
-                    this->child_arrays[1]->at<int32_t>(idx));
+                    this->child_arrays[1]
+                        ->at<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(idx));
             }
-            offset_t* offsets = (offset_t*)data2();
-            return std::string(data1() + offsets[idx],
-                               offsets[idx + 1] - offsets[idx]);
+            offset_t* offsets =
+                (offset_t*)this->data2<bodo_array_type::STRING>();
+            return std::string(
+                this->data1<bodo_array_type::STRING>() + offsets[idx],
+                offsets[idx + 1] - offsets[idx]);
         }
         case Bodo_CTypes::DATE: {
             int64_t day = this->at<int32_t>(idx);
@@ -566,7 +570,9 @@ std::string array_info::val_to_str(size_t idx) {
         case Bodo_CTypes::_BOOL:
             bool val;
             if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                val = GetBit((uint8_t*)data1(), idx);
+                val = GetBit(
+                    (uint8_t*)this->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    idx);
             } else {
                 val = this->at<bool>(idx);
             }
@@ -704,7 +710,8 @@ std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     std::unique_ptr<array_info> arr = alloc_nullable_array(
         length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask(), 0xff, n_bytes);  // null not possible
+    memset(arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(), 0xff,
+           n_bytes);  // null not possible
     return arr;
 }
 
@@ -718,7 +725,8 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     std::unique_ptr<array_info> arr = alloc_nullable_array(
         length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask(), 0x00, n_bytes);  // all nulls
+    memset(arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(), 0x00,
+           n_bytes);  // all nulls
     return arr;
 }
 
@@ -819,8 +827,8 @@ std::unique_ptr<array_info> create_string_array(
         alloc_string_array(typ_enum, len, nb_char, array_id, 0, false, false,
                            false, pool, std::move(mm));
     // update string array payload to reflect change
-    char* data_o = out_col->data1();
-    offset_t* offsets_o = (offset_t*)out_col->data2();
+    char* data_o = out_col->data1<bodo_array_type::STRING>();
+    offset_t* offsets_o = (offset_t*)out_col->data2<bodo_array_type::STRING>();
     offset_t pos = 0;
     iter = list_string.begin();
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
@@ -832,7 +840,7 @@ std::unique_ptr<array_info> create_string_array(
             data_o += len_str;
             pos += len_str;
         }
-        out_col->set_null_bit(i_grp, bit);
+        out_col->set_null_bit<bodo_array_type::STRING>(i_grp, bit);
         iter++;
     }
     offsets_o[len] = pos;
@@ -868,11 +876,14 @@ std::unique_ptr<array_info> create_list_string_array(
         len,
         alloc_string_array(Bodo_CTypes::CTypeEnum::STRING, nb_string, nb_char));
 
-    uint8_t* sub_null_bitmask_o =
-        (uint8_t*)new_out_col->child_arrays[0]->null_bitmask();
-    char* data_o = new_out_col->child_arrays[0]->data1();
-    offset_t* data_offsets_o = (offset_t*)new_out_col->child_arrays[0]->data2();
-    offset_t* index_offsets_o = (offset_t*)new_out_col->data1();
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->child_arrays[0]
+                                      ->null_bitmask<bodo_array_type::STRING>();
+    char* data_o =
+        new_out_col->child_arrays[0]->data1<bodo_array_type::STRING>();
+    offset_t* data_offsets_o = (offset_t*)new_out_col->child_arrays[0]
+                                   ->data2<bodo_array_type::STRING>();
+    offset_t* index_offsets_o =
+        (offset_t*)new_out_col->data1<bodo_array_type::ARRAY_ITEM>();
 
     // Writing the list_strings in output
     data_offsets_o[0] = 0;
@@ -881,7 +892,7 @@ std::unique_ptr<array_info> create_list_string_array(
     iter = list_list_pair.begin();
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
         bool bit = GetBit(null_bitmap.data(), i_grp);
-        new_out_col->set_null_bit(i_grp, bit);
+        new_out_col->set_null_bit<bodo_array_type::ARRAY_ITEM>(i_grp, bit);
         index_offsets_o[i_grp] = pos_index;
         if (bit) {
             bodo::vector<std::pair<std::string, bool>> e_list = *iter;
@@ -1225,8 +1236,12 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         memcpy(farr->data1(), earr->data1(), siztype * earr->length);
     } else if (earr->arr_type == bodo_array_type::INTERVAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
-        memcpy(farr->data2(), earr->data2(), siztype * earr->length);
+        memcpy(farr->data1<bodo_array_type::INTERVAL>(),
+               earr->data1<bodo_array_type::INTERVAL>(),
+               siztype * earr->length);
+        memcpy(farr->data2<bodo_array_type::INTERVAL>(),
+               earr->data2<bodo_array_type::INTERVAL>(),
+               siztype * earr->length);
     } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t data_copy_size;
         int64_t n_bytes = ((earr->length + 7) >> 3);
@@ -1235,33 +1250,46 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         } else {
             data_copy_size = earr->length * numpy_item_size[earr->dtype];
         }
-        memcpy(farr->data1(), earr->data1(), data_copy_size);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+        memcpy(farr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+               earr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+               data_copy_size);
+        memcpy(farr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               earr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
     } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
         int64_t timestamp_bytes =
             earr->length * numpy_item_size[Bodo_CTypes::TIMESTAMPTZ];
         int64_t offset_bytes =
             earr->length * numpy_item_size[Bodo_CTypes::INT16];
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->data1(), earr->data1(), timestamp_bytes);
-        memcpy(farr->data2(), earr->data2(), offset_bytes);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+        memcpy(farr->data1<bodo_array_type::TIMESTAMPTZ>(),
+               earr->data1<bodo_array_type::TIMESTAMPTZ>(), timestamp_bytes);
+        memcpy(farr->data2<bodo_array_type::TIMESTAMPTZ>(),
+               earr->data2<bodo_array_type::TIMESTAMPTZ>(), offset_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(),
+               earr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(), n_bytes);
     } else if (earr->arr_type == bodo_array_type::STRING) {
-        memcpy(farr->data1(), earr->data1(), earr->n_sub_elems());
-        memcpy(farr->data2(), earr->data2(),
+        memcpy(farr->data1<bodo_array_type::STRING>(),
+               earr->data1<bodo_array_type::STRING>(), earr->n_sub_elems());
+        memcpy(farr->data2<bodo_array_type::STRING>(),
+               earr->data2<bodo_array_type::STRING>(),
                sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::STRING>(),
+               earr->null_bitmask<bodo_array_type::STRING>(), n_bytes);
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
-        memcpy(farr->data1(), earr->data1(),
+        memcpy(farr->data1<bodo_array_type::ARRAY_ITEM>(),
+               earr->data1<bodo_array_type::ARRAY_ITEM>(),
                sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::ARRAY_ITEM>(),
+               earr->null_bitmask<bodo_array_type::ARRAY_ITEM>(), n_bytes);
     } else if (earr->arr_type == bodo_array_type::MAP) {
         // Map array has no buffers to copy
     } else if (earr->arr_type == bodo_array_type::STRUCT) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+        memcpy(farr->null_bitmask<bodo_array_type::STRUCT>(),
+               earr->null_bitmask<bodo_array_type::STRUCT>(), n_bytes);
     } else {
         throw std::runtime_error(
             "copy_array: " + GetArrType_as_string(earr->arr_type) +

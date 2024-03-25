@@ -45,8 +45,10 @@ int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
  * The cumulative_computation function. It uses the symbolic information
  * to compute the cumsum/cumprod/cummin/cummax
  *
- * @param[in] arr: input array, string array
- * @param[out] out_arr: output array, regular string array
+ * @param[in] arr: input array, cannot be a string (or dict-encoded string)
+ * array
+ * @param[out] out_arr: output array, cannot be a string (or dict-encoded
+ * string) array
  * @param[in] grp_info: groupby information
  * @param[in] ftype: THe function type.
  * @param[in] skipna: Whether to skip NA values.
@@ -60,8 +62,8 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
     if (arr->arr_type == bodo_array_type::STRING ||
         arr->arr_type == bodo_array_type::DICT) {
         throw std::runtime_error(
-            "There is no cumulative operation for the string or list string "
-            "case");
+            "There is no cumulative operation for the string or dict-encoded "
+            "string case");
     }
     auto cum_computation = [&](auto const& get_entry,
                                auto const& set_entry) -> void {
@@ -117,7 +119,7 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
                 [=](int64_t pos) -> std::pair<bool, T> {
                     // in DATETIME/TIMEDELTA case, the types is necessarily
                     // int64_t
-                    T eVal = arr->at<T>(pos);
+                    T eVal = arr->at<T, bodo_array_type::NUMPY>(pos);
                     bool isna = (eVal == std::numeric_limits<T>::min());
                     return {isna, eVal};
                 },
@@ -130,7 +132,7 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
         } else {
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
-                    T eVal = arr->at<T>(pos);
+                    T eVal = arr->at<T, bodo_array_type::NUMPY>(pos);
                     bool isna = isnan_alltype<T, DType>(eVal);
                     return {isna, eVal};
                 },
@@ -144,9 +146,10 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
             [=](int64_t pos) -> std::pair<bool, T> {
                 return {
                     !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(pos),
-                    arr->at<T>(pos)};
+                    arr->at<T, bodo_array_type::NULLABLE_INT_BOOL>(pos)};
             },
             [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
+                // XXX TODO These need to be templated!
                 out_arr->set_null_bit(pos, !ePair.first);
                 out_arr->at<T>(pos) = ePair.second;
             });
@@ -172,6 +175,7 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
                                         grouping_info const& grp_info,
                                         int32_t const& ftype,
                                         bool const& skipna) {
+    assert(arr->arr_type == bodo_array_type::ARRAY_ITEM);
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for list-strings");
@@ -179,7 +183,8 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
     int64_t n = arr->length;
     using T = std::pair<bool, bodo::vector<std::pair<std::string, bool>>>;
     bodo::vector<T> null_bit_val_vec(n);
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
+    uint8_t* null_bitmask =
+        (uint8_t*)arr->null_bitmask<bodo_array_type::ARRAY_ITEM>();
 
     uint8_t* sub_null_bitmask;
     char* data;
@@ -189,7 +194,7 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
     sub_null_bitmask = (uint8_t*)arr->child_arrays[0]->null_bitmask();
     data = arr->child_arrays[0]->data1();
     data_offsets = (offset_t*)arr->child_arrays[0]->data2();
-    index_offsets = (offset_t*)arr->data1();
+    index_offsets = (offset_t*)arr->data1<bodo_array_type::ARRAY_ITEM>();
 
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
@@ -269,6 +274,7 @@ void cumulative_computation_string(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(arr->arr_type == bodo_array_type::STRING);
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for strings");
@@ -276,9 +282,10 @@ void cumulative_computation_string(
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
     bodo::vector<T> null_bit_val_vec(n, pool);
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
-    char* data = arr->data1();
-    offset_t* offsets = (offset_t*)arr->data2();
+    uint8_t* null_bitmask =
+        (uint8_t*)arr->null_bitmask<bodo_array_type::STRING>();
+    char* data = arr->data1<bodo_array_type::STRING>();
+    offset_t* offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_offset = offsets[i];
@@ -366,12 +373,14 @@ void cumulative_computation_dict_encoded_string(
     uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask();
     char* data = arr->child_arrays[0]->data1();
     offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2();
+    dict_indices_t* arr_indices_data1 =
+        (dict_indices_t*)arr->child_arrays[1]->data1();
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         if (isna) {
             return {isna, ""};
         }
-        int32_t dict_ind = ((int32_t*)arr->child_arrays[1]->data1())[i];
+        int32_t dict_ind = arr_indices_data1[i];
         offset_t start_offset = offsets[dict_ind];
         offset_t end_offset = offsets[dict_ind + 1];
         offset_t len = end_offset - start_offset;
@@ -724,6 +733,8 @@ void median_computation(std::shared_ptr<array_info> arr,
         Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
         return;
     }
+    assert(out_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+    assert(out_arr->dtype == Bodo_CTypes::FLOAT64);
     auto median_operation = [&](auto const& isnan_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
@@ -755,7 +766,8 @@ void median_computation(std::shared_ptr<array_info> arr,
             // even if skipna=True
             if (HasNaN || ListValue.size() == 0) {
                 // We always set the output to NA.
-                out_arr->set_null_bit(igrp, false);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    igrp, false);
                 continue;
             } else {
                 size_t len = ListValue.size();
@@ -770,17 +782,19 @@ void median_computation(std::shared_ptr<array_info> arr,
                 }
             }
             // The output array is always a nullable float64 array
-            out_arr->set_null_bit(igrp, true);
-            out_arr->at<double>(igrp) = valReturn;
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(igrp,
+                                                                      true);
+            out_arr->at<double, bodo_array_type::NULLABLE_INT_BOOL>(igrp) =
+                valReturn;
         }
     };
     if (arr->arr_type == bodo_array_type::NUMPY) {
         median_operation([=](size_t pos) -> bool {
             if (arr->dtype == Bodo_CTypes::FLOAT32) {
-                return isnan(arr->at<float>(pos));
+                return isnan(arr->at<float, bodo_array_type::NUMPY>(pos));
             }
             if (arr->dtype == Bodo_CTypes::FLOAT64) {
-                return isnan(arr->at<double>(pos));
+                return isnan(arr->at<double, bodo_array_type::NUMPY>(pos));
             }
             return false;
         });
@@ -867,15 +881,23 @@ void var_combine(const std::shared_ptr<array_info>& count_col_in,
                  const std::shared_ptr<array_info>& mean_col_out,
                  const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info) {
+    const uint8_t* count_col_in_null_bitmask =
+        (uint8_t*)count_col_in->null_bitmask();
+    uint8_t* count_col_out_null_bitmask =
+        (uint8_t*)count_col_out->null_bitmask();
+    uint8_t* mean_col_out_null_bitmask = (uint8_t*)mean_col_out->null_bitmask();
+    uint8_t* m2_col_out_null_bitmask = (uint8_t*)m2_col_out->null_bitmask();
     for (size_t i = 0; i < count_col_in->length; i++) {
         // Var always has null compute columns even
         // if there is an original numpy input. All arrays
         // will have the same null bit value so just check 1.
-        if (count_col_in->get_null_bit(i)) {
+        if (GetBit(count_col_in_null_bitmask, i)) {
             int64_t group_num = grp_info.row_to_group[i];
             if (group_num == -1) {
                 continue;
             }
+            // TODO XXX If the arr types of count_col_out, count_col_in, etc.
+            // are known, we need to template the getv calls.
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             // TODO: Can I delete this comment + condition
@@ -898,9 +920,9 @@ void var_combine(const std::shared_ptr<array_info>& count_col_in,
             m2_a = m2_a + m2_b + delta * delta * count_a * count_b / count;
             count_a = count;
             // Set all the null bits to true.
-            count_col_out->set_null_bit(i, true);
-            mean_col_out->set_null_bit(i, true);
-            m2_col_out->set_null_bit(i, true);
+            SetBitTo(count_col_out_null_bitmask, i, true);
+            SetBitTo(mean_col_out_null_bitmask, i, true);
+            SetBitTo(m2_col_out_null_bitmask, i, true);
         }
     }
 }
@@ -911,29 +933,37 @@ void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
                      const std::shared_ptr<array_info>& one_col_out,
                      const std::shared_ptr<array_info>& two_col_out,
                      grouping_info const& grp_info) {
+    const uint8_t* one_col_in_null_bitmask =
+        (uint8_t*)(one_col_in->null_bitmask());
+    const uint8_t* one_col_in_data1 = (uint8_t*)(one_col_in->data1());
+    const uint8_t* two_col_in_data1 = (uint8_t*)(two_col_in->data1());
+    uint8_t* one_col_out_data1 = (uint8_t*)(one_col_out->data1());
+    uint8_t* two_col_out_data1 = (uint8_t*)(two_col_out->data1());
+    uint8_t* one_col_out_null_bitmask = (uint8_t*)(one_col_out->null_bitmask());
+    uint8_t* two_col_out_null_bitmask = (uint8_t*)(two_col_out->null_bitmask());
     for (size_t i = 0; i < one_col_in->length; i++) {
-        if (one_col_in->get_null_bit(i)) {
+        if (GetBit(one_col_in_null_bitmask, i)) {
             int64_t group_num = grp_info.row_to_group[i];
             if (group_num == -1) {
                 continue;
             }
 
             // Fetch the input data
-            bool one_in = GetBit((uint8_t*)one_col_in->data1(), i);
-            bool two_in = GetBit((uint8_t*)two_col_in->data1(), i);
+            bool one_in = GetBit(one_col_in_data1, i);
+            bool two_in = GetBit(two_col_in_data1, i);
 
             // Get the existing group values
-            bool one_out = GetBit((uint8_t*)one_col_out->data1(), group_num);
-            bool two_out = GetBit((uint8_t*)two_col_out->data1(), group_num);
+            bool one_out = GetBit(one_col_out_data1, group_num);
+            bool two_out = GetBit(two_col_out_data1, group_num);
             two_out = two_out || two_in || (one_in && one_out);
 
             // Update the group values.
             one_out = one_out || one_in;
-            SetBitTo((uint8_t*)one_col_out->data1(), group_num, one_out);
-            SetBitTo((uint8_t*)two_col_out->data1(), group_num, two_out);
+            SetBitTo(one_col_out_data1, group_num, one_out);
+            SetBitTo(two_col_out_data1, group_num, two_out);
             // Set all the null bits to true.
-            one_col_out->set_null_bit(group_num, true);
-            two_col_out->set_null_bit(group_num, true);
+            SetBitTo(one_col_out_null_bitmask, group_num, true);
+            SetBitTo(two_col_out_null_bitmask, group_num, true);
         }
     }
 }
@@ -948,13 +978,23 @@ void skew_combine(const std::shared_ptr<array_info>& count_col_in,
                   const std::shared_ptr<array_info>& m2_col_out,
                   const std::shared_ptr<array_info>& m3_col_out,
                   grouping_info const& grp_info) {
+    const uint8_t* count_col_in_null_bitmask =
+        (uint8_t*)count_col_in->null_bitmask();
+    uint8_t* count_col_out_null_bitmask =
+        (uint8_t*)count_col_out->null_bitmask();
+    uint8_t* m1_col_out_null_bitmask = (uint8_t*)m1_col_out->null_bitmask();
+    uint8_t* m2_col_out_null_bitmask = (uint8_t*)m2_col_out->null_bitmask();
+    uint8_t* m3_col_out_null_bitmask = (uint8_t*)m3_col_out->null_bitmask();
+
     for (size_t i = 0; i < count_col_in->length; i++) {
-        if (count_col_in->get_null_bit(i)) {
+        if (GetBit(count_col_in_null_bitmask, i)) {
             int64_t group_num = grp_info.row_to_group[i];
             if (group_num == -1) {
                 continue;
             }
 
+            // XXX TODO Are the types of count_col_out, count_col_in, etc.
+            // known? If they are we need to template the getv calls.
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             if (count_b == 0) {
@@ -972,10 +1012,10 @@ void skew_combine(const std::shared_ptr<array_info>& count_col_in,
             m3_a += m3_b;
 
             // Set all the null bits to true.
-            count_col_out->set_null_bit(group_num, true);
-            m1_col_out->set_null_bit(group_num, true);
-            m2_col_out->set_null_bit(group_num, true);
-            m3_col_out->set_null_bit(group_num, true);
+            SetBitTo(count_col_out_null_bitmask, group_num, true);
+            SetBitTo(m1_col_out_null_bitmask, group_num, true);
+            SetBitTo(m2_col_out_null_bitmask, group_num, true);
+            SetBitTo(m3_col_out_null_bitmask, group_num, true);
         }
     }
 }
@@ -992,13 +1032,24 @@ void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
                   const std::shared_ptr<array_info>& m3_col_out,
                   const std::shared_ptr<array_info>& m4_col_out,
                   grouping_info const& grp_info) {
+    const uint8_t* count_col_in_null_bitmask =
+        (uint8_t*)count_col_in->null_bitmask();
+    uint8_t* count_col_out_null_bitmask =
+        (uint8_t*)count_col_out->null_bitmask();
+    uint8_t* m1_col_out_null_bitmask = (uint8_t*)m1_col_out->null_bitmask();
+    uint8_t* m2_col_out_null_bitmask = (uint8_t*)m2_col_out->null_bitmask();
+    uint8_t* m3_col_out_null_bitmask = (uint8_t*)m3_col_out->null_bitmask();
+    uint8_t* m4_col_out_null_bitmask = (uint8_t*)m4_col_out->null_bitmask();
     for (size_t i = 0; i < count_col_in->length; i++) {
-        if (count_col_in->get_null_bit(i)) {
+        if (GetBit(count_col_in_null_bitmask, i)) {
             int64_t group_num = grp_info.row_to_group[i];
             if (group_num == -1) {
                 continue;
             }
 
+            // XXX TODO Are arr types of count_col_out, etc. known statically?
+            // If so, we need to template the getv calls! Else, we need to use
+            // macros for the different possible arr types.
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             if (count_b == 0) {
@@ -1019,11 +1070,11 @@ void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
             m4_a += m4_b;
 
             // Set all the null bits to true.
-            count_col_out->set_null_bit(group_num, true);
-            m1_col_out->set_null_bit(group_num, true);
-            m2_col_out->set_null_bit(group_num, true);
-            m3_col_out->set_null_bit(group_num, true);
-            m4_col_out->set_null_bit(group_num, true);
+            SetBitTo(count_col_out_null_bitmask, group_num, true);
+            SetBitTo(m1_col_out_null_bitmask, group_num, true);
+            SetBitTo(m2_col_out_null_bitmask, group_num, true);
+            SetBitTo(m3_col_out_null_bitmask, group_num, true);
+            SetBitTo(m4_col_out_null_bitmask, group_num, true);
         }
     }
 }
@@ -1139,13 +1190,16 @@ inline bool should_keep_row(const std::shared_ptr<array_info>& sorted_data,
  */
 std::shared_ptr<array_info> array_agg_drop_string_nulls(
     const std::shared_ptr<array_info>& sorted_data, size_t non_null_count) {
+    assert(sorted_data->arr_type == bodo_array_type::STRING);
     // Allocate a new offset buffer with the number of rows minus the nulls.
     size_t n_total = sorted_data->length;
-    offset_t* in_offsets = (offset_t*)sorted_data->data2();
+    offset_t* in_offsets =
+        (offset_t*)sorted_data->data2<bodo_array_type::STRING>();
     int64_t n_chars = in_offsets[n_total];
     std::shared_ptr<array_info> data_without_nulls =
         alloc_string_array(Bodo_CTypes::STRING, non_null_count, n_chars);
-    offset_t* out_offsets = (offset_t*)data_without_nulls->data2();
+    offset_t* out_offsets =
+        (offset_t*)data_without_nulls->data2<bodo_array_type::STRING>();
     out_offsets[non_null_count] = n_chars;
 
     // Move the non null offsets from the data column to the new array.
@@ -1153,14 +1207,14 @@ std::shared_ptr<array_info> array_agg_drop_string_nulls(
     for (size_t i = 0; i < n_total; i++) {
         // If the current element is non null, write it to the next empty
         // position in data_without_nulls
-        if (sorted_data->get_null_bit(i)) {
+        if (sorted_data->get_null_bit<bodo_array_type::STRING>(i)) {
             out_offsets[write_idx] = in_offsets[i];
             write_idx++;
         }
     }
     out_offsets[write_idx] = in_offsets[n_total];
     char* in_data = sorted_data->data1();
-    char* out_data = data_without_nulls->data1();
+    char* out_data = data_without_nulls->data1<bodo_array_type::STRING>();
     memcpy(out_data, in_data, n_chars);
     return data_without_nulls;
 }
@@ -1406,14 +1460,17 @@ void object_agg_computation(const std::shared_ptr<array_info>& key_col,
     // should be copied over.
     size_t non_null_count = 0;
     std::vector<int64_t> rows_to_copy;
+    const uint8_t* keys_null_bitmask = (uint8_t*)keys->null_bitmask();
+    // NOTE: values_null_bitmask will be nullptr in the NUMPY case.
+    const uint8_t* values_null_bitmask = (uint8_t*)values->null_bitmask();
+    const bool all_values_non_null = (values_null_bitmask == nullptr);
     for (size_t i = 0; i < n_total; i++) {
         if (i > 0 && !TestEqualColumn(groups, i, groups, i - 1, true)) {
             offset_buffer[offset_idx] = non_null_count;
             offset_idx++;
         }
-        if (keys->get_null_bit(i) &&
-            (values->arr_type == bodo_array_type::NUMPY ||
-             values->get_null_bit(i))) {
+        if (GetBit(keys_null_bitmask, i) &&
+            (all_values_non_null || GetBit(values_null_bitmask, i))) {
             non_null_count++;
             rows_to_copy.push_back(i);
         }
@@ -1487,6 +1544,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
+        char* arr_data1 = arr->data1();
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
@@ -1497,7 +1555,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             eset.clear();
             bool HasNullRow = false;
             while (true) {
-                char* ptr = arr->data1() + (i * siztype);
+                char* ptr = arr_data1 + (i * siztype);
                 if (!isnan_entry(ptr)) {
                     eset.insert(i);
                 } else {
@@ -1513,7 +1571,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::STRING) {
-        offset_t* in_offsets = (offset_t*)arr->data2();
+        offset_t* in_offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
         const uint32_t seed = SEED_HASH_CONTAINER;
 
         HashNuniqueComputationString hash_fct{arr, in_offsets, seed};

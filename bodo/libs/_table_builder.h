@@ -998,8 +998,11 @@ struct ArrayBuildBuffer {
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
 
                 // append offset
-                offset_t* curr_offsets = (offset_t*)data_array->data1();
-                offset_t* in_offsets = (offset_t*)in_arr->data1();
+                offset_t* curr_offsets =
+                    (offset_t*)this->data_array
+                        ->data1<bodo_array_type::ARRAY_ITEM>();
+                offset_t* in_offsets =
+                    (offset_t*)in_arr->data1<bodo_array_type::ARRAY_ITEM>();
                 curr_offsets[size + 1] = curr_offsets[size] +
                                          in_offsets[row_ind + 1] -
                                          in_offsets[row_ind];
@@ -1014,8 +1017,13 @@ struct ArrayBuildBuffer {
                 }
 
                 // set null bit
-                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                bool bit = GetBit(
+                    (uint8_t*)
+                        in_arr->null_bitmask<bodo_array_type::ARRAY_ITEM>(),
+                    row_ind);
+                SetBitTo((uint8_t*)data_array
+                             ->null_bitmask<bodo_array_type::ARRAY_ITEM>(),
+                         size, bit);
             } break;
             case bodo_array_type::STRUCT: {
                 CHECK_ARROW_MEM(
@@ -1032,8 +1040,12 @@ struct ArrayBuildBuffer {
                 }
 
                 // set null bit
-                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                bool bit = GetBit(
+                    (uint8_t*)in_arr->null_bitmask<bodo_array_type::STRUCT>(),
+                    row_ind);
+                SetBitTo((uint8_t*)data_array
+                             ->null_bitmask<bodo_array_type::STRUCT>(),
+                         size, bit);
             } break;
             case bodo_array_type::MAP: {
                 this->child_array_builders[0].UnsafeAppendRow(

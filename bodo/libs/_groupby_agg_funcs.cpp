@@ -1,5 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
+#include "_bodo_common.h"
 
 /**
  * This file contains groupby update functions that still correspond to the
@@ -47,8 +48,8 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
         }
     }
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        char* data = in_arr->data1();
-        offset_t* offsets = (offset_t*)in_arr->data2();
+        char* data = in_arr->data1<bodo_array_type::STRING>();
+        offset_t* offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
         // Load the old data.
         offset_t start_offset_old = offsets[curr_idx];
         offset_t end_offset_old = offsets[curr_idx + 1];
@@ -77,8 +78,12 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
             return true;
         }
     } else if (in_arr->arr_type == bodo_array_type::DICT) {
-        int32_t old_index = getv<int32_t>(in_arr->child_arrays[1], curr_idx);
-        int32_t new_index = getv<int32_t>(in_arr->child_arrays[1], in_idx);
+        int32_t old_index =
+            getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                in_arr->child_arrays[1], curr_idx);
+        int32_t new_index =
+            getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                in_arr->child_arrays[1], in_idx);
         // Fast path via index comparison.
         if (old_index == new_index) {
             return false;
@@ -100,8 +105,10 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
             }
         } else {
             // We need to load the actual data and compare it.
-            char* data = in_arr->child_arrays[0]->data1();
-            offset_t* offsets = (offset_t*)in_arr->child_arrays[0]->data2();
+            char* data =
+                in_arr->child_arrays[0]->data1<bodo_array_type::STRING>();
+            offset_t* offsets = (offset_t*)in_arr->child_arrays[0]
+                                    ->data2<bodo_array_type::STRING>();
             // Load the old data.
             offset_t start_offset_old = offsets[old_index];
             offset_t end_offset_old = offsets[old_index + 1];
@@ -158,9 +165,14 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
                 if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     // Nullable boolean arrays store 1 bit per boolean, so we
                     // need a separate path to get the values.
-                    bool old_value =
-                        GetBit((uint8_t*)in_arr->data1(), curr_idx);
-                    bool new_value = GetBit((uint8_t*)in_arr->data1(), in_idx);
+                    bool old_value = GetBit(
+                        (uint8_t*)
+                            in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                        curr_idx);
+                    bool new_value = GetBit(
+                        (uint8_t*)
+                            in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                        in_idx);
                     STANDARD_EQUALITY_CHECK
                 } else {
                     bool old_value = getv<bool>(in_arr, curr_idx);
