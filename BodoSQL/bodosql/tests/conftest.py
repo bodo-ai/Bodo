@@ -31,7 +31,7 @@ from bodo.tests.utils import gen_nonascii_list
 # Revert the change
 py4j.java_gateway.get_return_value = py4j.protocol.get_return_value
 # Remove the exception handler
-pyspark.errors.exceptions.install_exception_handler = lambda: None
+pyspark.errors.exceptions.captured.install_exception_handler = lambda: None
 
 
 # Fix Issue on Azure CI where the driver defaults to a different Python version
