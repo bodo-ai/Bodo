@@ -42,7 +42,7 @@ inline int64_t get_group_for_row(const grouping_info& grp_info,
  * @return true This group is valid.
  * @return false This group is not valid and should be skipped.
  */
-template <int ftype>
+template <int ftype, bodo_array_type::arr_type_enum in_col_arr_type>
 inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
                                  const std::shared_ptr<array_info>& in_col,
                                  const std::shared_ptr<array_info>& index_pos) {
@@ -53,10 +53,13 @@ inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
             // visiting a group once we see a NA value. We
             // initialize the output values to all be non-NA values
             // to ensure this.
+            // XXX Is the array type of index_pos known? If so, we need
+            // to template the call to 'get_null_bit'.
             return (i_grp != -1) & index_pos->get_null_bit(i_grp);
         default:
             // idxmin and idxmax only work on non-null entries
-            return (i_grp != -1) & in_col->get_null_bit(row_num);
+            return (i_grp != -1) &
+                   in_col->get_null_bit<in_col_arr_type>(row_num);
     }
 }
 
@@ -72,7 +75,7 @@ inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
  * @return true Should the non-NA input path be taken.
  * @return false Should the NA input path be taken?
  */
-template <int ftype>
+template <int ftype, bodo_array_type::arr_type_enum in_col_arr_type>
 inline bool idx_func_take_non_na_path(
     size_t row_num, const std::shared_ptr<array_info>& in_col) {
     switch (ftype) {
@@ -80,7 +83,7 @@ inline bool idx_func_take_non_na_path(
         case Bodo_FTypes::idxmin_na_first:
             // idxmax_na_first and idxmin_na_first handle
             // null values as the selected values.
-            return in_col->get_null_bit(row_num);
+            return in_col->get_null_bit<in_col_arr_type>(row_num);
         default:
             // If a group is valid idxmin and idxmax
             // only work on non-NA values.
@@ -157,6 +160,7 @@ void apply_sum_to_column_string(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::STRING);
     // allocate output array (length is number of groups, number of chars same
     // as input)
     size_t num_groups = grp_info.num_groups;
@@ -165,18 +169,19 @@ void apply_sum_to_column_string(
         alloc_string_array(out_col->dtype, num_groups, n_chars, -1, 0, false,
                            false, false, pool, std::move(mm));
     size_t n_bytes = (num_groups + 7) >> 3;
-    memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
+    memset(out_arr->null_bitmask<bodo_array_type::STRING>(), 0xff,
+           n_bytes);  // null not possible
 
     // find offsets for each output string
     bodo::vector<offset_t> str_offsets(num_groups + 1, 0, pool);
-    char* data_i = in_col->data1();
-    offset_t* offsets_i = (offset_t*)in_col->data2();
-    char* data_o = out_arr->data1();
-    offset_t* offsets_o = (offset_t*)out_arr->data2();
+    char* data_i = in_col->data1<bodo_array_type::STRING>();
+    offset_t* offsets_i = (offset_t*)in_col->data2<bodo_array_type::STRING>();
+    char* data_o = out_arr->data1<bodo_array_type::STRING>();
+    offset_t* offsets_o = (offset_t*)out_arr->data2<bodo_array_type::STRING>();
 
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+        if ((i_grp != -1) && in_col->get_null_bit<bodo_array_type::STRING>(i)) {
             offset_t len = offsets_i[i + 1] - offsets_i[i];
             str_offsets[i_grp + 1] += len;
         }
@@ -188,7 +193,7 @@ void apply_sum_to_column_string(
     // copy characters to output
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+        if ((i_grp != -1) && in_col->get_null_bit<bodo_array_type::STRING>(i)) {
             offset_t len = offsets_i[i + 1] - offsets_i[i];
             memcpy(&data_o[str_offsets[i_grp]], data_i + offsets_i[i], len);
             str_offsets[i_grp] += len;
@@ -222,20 +227,23 @@ void apply_to_column_string(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::STRING);
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
     bodo::vector<uint8_t> V(n_bytes, 0, pool);
     bodo::vector<std::string> ListString(num_groups, pool);
-    char* data_i = in_col->data1();
-    offset_t* offsets_i = (offset_t*)in_col->data2();
+    char* data_i = in_col->data1<bodo_array_type::STRING>();
+    offset_t* offsets_i = (offset_t*)in_col->data2<bodo_array_type::STRING>();
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                if ((i_grp != -1) &&
+                    in_col->get_null_bit<bodo_array_type::STRING>(i)) {
                     // Note: int is unused since we would only use an NA check.
                     count_agg<int, Bodo_CTypes::STRING>::apply(
-                        getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+                        getv<int64_t>(out_col, i_grp),
+                        getv<int, bodo_array_type::STRING>(in_col, i));
                 }
             }
             return;
@@ -243,9 +251,11 @@ void apply_to_column_string(
         case Bodo_FTypes::bitor_agg:
         case Bodo_FTypes::bitand_agg:
         case Bodo_FTypes::bitxor_agg: {
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                if ((i_grp != -1) &&
+                    in_col->get_null_bit<bodo_array_type::STRING>(i)) {
                     // Get isolated string from data_i
                     offset_t start_offset = offsets_i[i];
                     offset_t end_offset = offsets_i[i + 1];
@@ -262,11 +272,12 @@ void apply_to_column_string(
                             "castable to numeric types.");
                     }
 
-                    // Get output value and perform operation on it
+                    // Get output value and perform operation on it.
+                    // TODO XXX Need to template the getv call!
                     int64_t& out_val = getv<int64_t>(out_col, i_grp);
                     casted_aggfunc<int64_t, double, Bodo_CTypes::FLOAT64,
                                    ftype>::apply(out_val, double_substr);
-                    out_col->set_null_bit(i_grp, true);
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
                 }
             }
             return;
@@ -285,12 +296,17 @@ void apply_to_column_string(
             // inlined functions to handle the differences between these
             // cases and avoid function call overhead
             std::shared_ptr<array_info> index_pos = aux_cols[0];
+            uint8_t* index_pos_null_bitmask =
+                (uint8_t*)(index_pos->null_bitmask());
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Code path taken by all code when we might want to look
                 // at a row.
-                if (idx_func_valid_group<ftype>(i_grp, i, in_col, index_pos)) {
-                    if (idx_func_take_non_na_path<ftype>(i, in_col)) {
+                if (idx_func_valid_group<ftype, bodo_array_type::STRING>(
+                        i_grp, i, in_col, index_pos)) {
+                    if (idx_func_take_non_na_path<ftype,
+                                                  bodo_array_type::STRING>(
+                            i, in_col)) {
                         // This assumes the input row is not NA.
                         bool out_bit_set = GetBit(V.data(), i_grp);
                         offset_t start_offset = offsets_i[i];
@@ -316,7 +332,7 @@ void apply_to_column_string(
                         // set the null bit for the count so we know
                         // to stop visiting the group. The data is still
                         // valid.
-                        index_pos->set_null_bit(i_grp, false);
+                        SetBitTo(index_pos_null_bitmask, i_grp, false);
                     }
                 }
             }
@@ -334,7 +350,8 @@ void apply_to_column_string(
             // Computing the strings used in output.
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                if ((i_grp != -1) &&
+                    in_col->get_null_bit<bodo_array_type::STRING>(i)) {
                     bool out_bit_set = GetBit(V.data(), i_grp);
                     if (ftype == Bodo_FTypes::first && out_bit_set) {
                         continue;
@@ -377,6 +394,7 @@ void apply_sum_to_column_dict(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::DICT);
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = 0;
     size_t n_bytes = (num_groups + 7) >> 3;
@@ -386,12 +404,17 @@ void apply_sum_to_column_dict(
     // every string has a start and end offset so len(offsets) == (len(data) +
     // 1)
     bodo::vector<offset_t> str_offsets(num_groups + 1, 0, pool);
-    char* data_i = in_col->child_arrays[0]->data1();
-    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
+    char* data_i = in_col->child_arrays[0]->data1<bodo_array_type::STRING>();
+    offset_t* offsets_i =
+        (offset_t*)in_col->child_arrays[0]->data2<bodo_array_type::STRING>();
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
-            int32_t dict_ind = getv<int32_t>(in_col->child_arrays[1], i);
+        if ((i_grp != -1) &&
+            in_col->child_arrays[1]
+                ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+            dict_indices_t dict_ind =
+                getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                    in_col->child_arrays[1], i);
             offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
             str_offsets[i_grp + 1] += len;
             n_chars += len;
@@ -401,9 +424,10 @@ void apply_sum_to_column_dict(
     std::shared_ptr<array_info> out_arr =
         alloc_string_array(out_col->dtype, num_groups, n_chars, -1, 0, false,
                            false, false, pool, std::move(mm));
-    memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
-    char* data_o = out_arr->data1();
-    offset_t* offsets_o = (offset_t*)out_arr->data2();
+    memset(out_arr->null_bitmask<bodo_array_type::STRING>(), 0xff,
+           n_bytes);  // null not possible
+    char* data_o = out_arr->data1<bodo_array_type::STRING>();
+    offset_t* offsets_o = (offset_t*)out_arr->data2<bodo_array_type::STRING>();
 
     std::partial_sum(str_offsets.begin(), str_offsets.end(),
                      str_offsets.begin());
@@ -412,8 +436,12 @@ void apply_sum_to_column_dict(
     // copy characters to output
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
-            int32_t dict_ind = getv<int32_t>(in_col->child_arrays[1], i);
+        if ((i_grp != -1) &&
+            in_col->child_arrays[1]
+                ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+            dict_indices_t dict_ind =
+                getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                    in_col->child_arrays[1], i);
             offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
             memcpy(&data_o[str_offsets[i_grp]], data_i + offsets_i[dict_ind],
                    len);
@@ -445,6 +473,7 @@ void apply_to_column_dict(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::DICT);
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
     std::shared_ptr<array_info> indices_arr = nullptr;
@@ -455,20 +484,25 @@ void apply_to_column_dict(
         indices_arr =
             alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0, pool, mm);
         // Output is null if all values in group are null
-        memset(indices_arr->null_bitmask(), 0, ((num_groups + 7) >> 3));
+        memset(indices_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               0, ((num_groups + 7) >> 3));
     }
     bodo::vector<uint8_t> V(n_bytes, 0,
                             pool);  // bitmask to mark if group's been updated
-    char* data_i = in_col->child_arrays[0]->data1();
-    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
+    char* data_i = in_col->child_arrays[0]->data1<bodo_array_type::STRING>();
+    offset_t* offsets_i =
+        (offset_t*)in_col->child_arrays[0]->data2<bodo_array_type::STRING>();
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if (i_grp != -1 && in_col->child_arrays[1]->get_null_bit(i)) {
+                if (i_grp != -1 &&
+                    in_col->child_arrays[1]
+                        ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                     // Note: int is unused since we would only use an NA check.
                     count_agg<int, Bodo_CTypes::STRING>::apply(
-                        getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+                        getv<int64_t>(out_col, i_grp),
+                        getv<int, bodo_array_type::DICT>(in_col, i));
                 }
             }
             return;
@@ -476,11 +510,16 @@ void apply_to_column_dict(
         case Bodo_FTypes::bitor_agg:
         case Bodo_FTypes::bitand_agg:
         case Bodo_FTypes::bitxor_agg: {
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Get index of the string data
-                int32_t& dict_idx = getv<int32_t>(in_col->child_arrays[1], i);
-                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+                dict_indices_t& dict_idx =
+                    getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                        in_col->child_arrays[1], i);
+                if ((i_grp != -1) &&
+                    in_col->child_arrays[1]
+                        ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                     // Get isolated string from data_i
                     offset_t start_offset = offsets_i[dict_idx];
                     offset_t end_offset = offsets_i[dict_idx + 1];
@@ -501,10 +540,11 @@ void apply_to_column_dict(
                     }
 
                     // Get output value and perform operation on it
+                    // TODO XXX The getv call needs to be templated.
                     int64_t& out_val = getv<int64_t>(out_col, i_grp);
                     casted_aggfunc<int64_t, double, Bodo_CTypes::FLOAT64,
                                    ftype>::apply(out_val, double_substr);
-                    out_col->set_null_bit(i_grp, true);
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
                 }
             }
             return;
@@ -519,17 +559,26 @@ void apply_to_column_dict(
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first: {
             std::shared_ptr<array_info> index_pos = aux_cols[0];
+            uint8_t* index_pos_null_bitmask =
+                (uint8_t*)index_pos->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Code path taken by all code when we might want to look
                 // at a row.
-                if (idx_func_valid_group<ftype>(i_grp, i, in_col, index_pos)) {
-                    if (idx_func_take_non_na_path<ftype>(i, in_col)) {
+                if (idx_func_valid_group<ftype, bodo_array_type::DICT>(
+                        i_grp, i, in_col, index_pos)) {
+                    if (idx_func_take_non_na_path<ftype, bodo_array_type::DICT>(
+                            i, in_col)) {
                         // This assumes the input row is not NA.
                         bool out_bit_set = GetBit(V.data(), i_grp);
-                        int32_t& dict_ind =
-                            getv<int32_t>(in_col->child_arrays[1], i);
-                        int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                        dict_indices_t& dict_ind =
+                            getv<dict_indices_t,
+                                 bodo_array_type::NULLABLE_INT_BOOL>(
+                                in_col->child_arrays[1], i);
+                        dict_indices_t& org_ind =
+                            getv<dict_indices_t,
+                                 bodo_array_type::NULLABLE_INT_BOOL>(
+                                indices_arr, i_grp);
                         if (out_bit_set) {
                             // Get the address and length of the new value to be
                             // compared
@@ -544,25 +593,30 @@ void apply_to_column_dict(
                             offset_t len_org =
                                 end_offset_org - start_offset_org;
                             std::string s1(&data_i[start_offset_org], len_org);
+                            // XXX TODO This getv needs to be templated.
                             uint64_t& index_val =
                                 getv<uint64_t>(index_pos, i_grp);
                             idx_dict_func_apply_to_row<ftype>(
                                 org_ind, dict_ind, s1, s2, index_val, i);
                         } else {
                             org_ind = dict_ind;
+                            // XXX TODO This getv needs to be templated.
                             getv<uint64_t>(index_pos, i_grp) = i;
                             SetBitTo(V.data(), i_grp, true);
-                            indices_arr->set_null_bit(i_grp, true);
+                            indices_arr->set_null_bit<
+                                bodo_array_type::NULLABLE_INT_BOOL>(i_grp,
+                                                                    true);
                         }
                     } else {
                         // idxmax_na_first and idxmin_na_first only!
                         // If we have an NA value mark this group as
-                        // done and update the index
+                        // done and update the index.
+                        // XXX TODO This getv needs to be templated.
                         getv<uint64_t>(index_pos, i_grp) = i;
                         // set the null bit for the count so we know
                         // to stop visiting the group. The data is still
                         // valid.
-                        index_pos->set_null_bit(i_grp, false);
+                        SetBitTo(index_pos_null_bitmask, i_grp, false);
                     }
                 }
             }
@@ -573,18 +627,27 @@ void apply_to_column_dict(
             // so we avoid allocating for the underlying strings.
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+                if ((i_grp != -1) &&
+                    in_col->child_arrays[1]
+                        ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                     bool out_bit_set = GetBit(V.data(), i_grp);
-                    int32_t& dict_ind =
-                        getv<int32_t>(in_col->child_arrays[1], i);
-                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    dict_indices_t& dict_ind =
+                        getv<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(
+                            in_col->child_arrays[1], i);
+                    dict_indices_t& org_ind =
+                        getv<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(indices_arr,
+                                                                 i_grp);
                     if (out_bit_set) {
                         aggfunc<int32_t, Bodo_CTypes::STRING,
                                 Bodo_FTypes::last>::apply(org_ind, dict_ind);
                     } else {
                         org_ind = dict_ind;
                         SetBitTo(V.data(), i_grp, true);
-                        indices_arr->set_null_bit(i_grp, true);
+                        indices_arr
+                            ->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                                i_grp, true);
                     }
                 }
             }
@@ -594,14 +657,21 @@ void apply_to_column_dict(
             // Populate the new indices array.
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+                if ((i_grp != -1) &&
+                    in_col->child_arrays[1]
+                        ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                     bool out_bit_set = GetBit(V.data(), i_grp);
                     if (ftype == Bodo_FTypes::first && out_bit_set) {
                         continue;
                     }
-                    int32_t& dict_ind =
-                        getv<int32_t>(in_col->child_arrays[1], i);
-                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    dict_indices_t& dict_ind =
+                        getv<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(
+                            in_col->child_arrays[1], i);
+                    dict_indices_t& org_ind =
+                        getv<dict_indices_t,
+                             bodo_array_type::NULLABLE_INT_BOOL>(indices_arr,
+                                                                 i_grp);
                     if (out_bit_set) {
                         // Get the address and length of the new value to be
                         // compared
@@ -618,7 +688,9 @@ void apply_to_column_dict(
                     } else {
                         org_ind = dict_ind;
                         SetBitTo(V.data(), i_grp, true);
-                        indices_arr->set_null_bit(i_grp, true);
+                        indices_arr
+                            ->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                                i_grp, true);
                     }
                 }
             }
@@ -628,17 +700,19 @@ void apply_to_column_dict(
     // Start at 1 since 0 is is returned by the hashmap if data needs to be
     // inserted.
     int32_t k = 1;
-    bodo::unord_map_container<int32_t, int32_t> old_to_new(
+    bodo::unord_map_container<dict_indices_t, dict_indices_t> old_to_new(
         pool);  // Maps old index to new index
     old_to_new.reserve(num_groups);
     for (size_t i = 0; i < num_groups; i++) {
         // check if the value for the group is NaN
-        if (!indices_arr->get_null_bit(i)) {
+        if (!indices_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
             continue;
         }
         // Insert 0 into the map if key is not in it.
-        int32_t& old_ind = getv<int32_t>(indices_arr, i);
-        int32_t& new_ind = old_to_new[old_ind];
+        dict_indices_t& old_ind =
+            getv<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                indices_arr, i);
+        dict_indices_t& new_ind = old_to_new[old_ind];
         if (new_ind == 0) {
             new_ind =
                 k++;  // Updates the value in the map without another lookup
@@ -683,12 +757,13 @@ template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
 void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
                                  std::shared_ptr<array_info> out_col,
                                  const grouping_info& grp_info) {
+    assert(in_col->arr_type == bodo_array_type::CATEGORICAL);
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T& val = getv<T>(in_col, i);
+                    T& val = getv<T, bodo_array_type::CATEGORICAL>(in_col, i);
                     if (!isnan_categorical<T, DType>(val)) {
                         count_agg<T, DType>::apply(
                             getv<int64_t>(out_col, i_grp), val);
@@ -703,7 +778,7 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T& val = getv<T>(in_col, i);
+                    T& val = getv<T, bodo_array_type::CATEGORICAL>(in_col, i);
                     if (!isnan_categorical<T, DType>(val)) {
                         aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),
                                                         val);
@@ -725,7 +800,7 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T& val = getv<T>(in_col, i);
+                    T& val = getv<T, bodo_array_type::CATEGORICAL>(in_col, i);
                     if (!isnan_categorical<T, DType>(val)) {
                         aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),
                                                         val);
@@ -739,7 +814,7 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
             bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                T val = getv<T>(in_col, i);
+                T val = getv<T, bodo_array_type::CATEGORICAL>(in_col, i);
                 if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
                     !isnan_categorical<T, DType>(val)) {
                     getv<T>(out_col, i_grp) = val;
@@ -773,26 +848,34 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                            std::shared_ptr<array_info> out_col,
                            std::vector<std::shared_ptr<array_info>>& aux_cols,
                            const grouping_info& grp_info) {
+    assert(in_col->arr_type == bodo_array_type::NUMPY);
     switch (ftype) {
         case Bodo_FTypes::mean: {
             std::shared_ptr<array_info> count_col = aux_cols[0];
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
+            uint8_t* count_col_null_bitmask =
+                (uint8_t*)count_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    mean_agg<T, DType>::apply(getv<double>(out_col, i_grp),
-                                              getv<T>(in_col, i),
-                                              getv<uint64_t>(count_col, i_grp));
+                    // TODO XXX The getv calls need to be templated.
+                    mean_agg<T, DType>::apply(
+                        getv<double>(out_col, i_grp),
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
+                        getv<uint64_t>(count_col, i_grp));
                     // Mean always has a nullable output even
                     // if there is a numpy input.
-                    out_col->set_null_bit(i_grp, true);
-                    count_col->set_null_bit(i_grp, true);
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
+                    SetBitTo(count_col_null_bitmask, i_grp, true);
                 }
             }
             break;
         }
         case Bodo_FTypes::mean_eval: {
             for (size_t i = 0; i < in_col->length; i++) {
-                mean_eval(getv<double>(out_col, i), getv<uint64_t>(in_col, i));
+                // TODO XXX The getv call needs to be templated on the arr type.
+                mean_eval(getv<double>(out_col, i),
+                          getv<uint64_t, bodo_array_type::NUMPY>(in_col, i));
             }
             break;
         }
@@ -803,19 +886,26 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             std::shared_ptr<array_info> count_col = aux_cols[0];
             std::shared_ptr<array_info> mean_col = aux_cols[1];
             std::shared_ptr<array_info> m2_col = aux_cols[2];
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
+            uint8_t* count_col_null_bitmask =
+                (uint8_t*)count_col->null_bitmask();
+            uint8_t* mean_col_null_bitmask = (uint8_t*)mean_col->null_bitmask();
+            uint8_t* m2_col_null_bitmask = (uint8_t*)m2_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    var_agg<T, DType>::apply(getv<T>(in_col, i),
-                                             getv<uint64_t>(count_col, i_grp),
-                                             getv<double>(mean_col, i_grp),
-                                             getv<double>(m2_col, i_grp));
+                    // XXX TODO The getv calls need to be templated!
+                    var_agg<T, DType>::apply(
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
+                        getv<uint64_t>(count_col, i_grp),
+                        getv<double>(mean_col, i_grp),
+                        getv<double>(m2_col, i_grp));
                     // Var always has a nullable output even
                     // if there is a numpy input
-                    out_col->set_null_bit(i_grp, true);
-                    count_col->set_null_bit(i_grp, true);
-                    mean_col->set_null_bit(i_grp, true);
-                    m2_col->set_null_bit(i_grp, true);
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
+                    SetBitTo(count_col_null_bitmask, i_grp, true);
+                    SetBitTo(mean_col_null_bitmask, i_grp, true);
+                    SetBitTo(m2_col_null_bitmask, i_grp, true);
                 }
             }
             break;
@@ -825,19 +915,27 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             std::shared_ptr<array_info> m1_col = aux_cols[1];
             std::shared_ptr<array_info> m2_col = aux_cols[2];
             std::shared_ptr<array_info> m3_col = aux_cols[3];
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
+            uint8_t* count_col_null_bitmask =
+                (uint8_t*)count_col->null_bitmask();
+            uint8_t* m1_col_null_bitmask = (uint8_t*)m1_col->null_bitmask();
+            uint8_t* m2_col_null_bitmask = (uint8_t*)m2_col->null_bitmask();
+            uint8_t* m3_col_null_bitmask = (uint8_t*)m3_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    skew_agg<T, DType>::apply(getv<T>(in_col, i),
-                                              getv<uint64_t>(count_col, i_grp),
-                                              getv<double>(m1_col, i_grp),
-                                              getv<double>(m2_col, i_grp),
-                                              getv<double>(m3_col, i_grp));
-                    out_col->set_null_bit(i_grp, true);
-                    count_col->set_null_bit(i_grp, true);
-                    m1_col->set_null_bit(i_grp, true);
-                    m2_col->set_null_bit(i_grp, true);
-                    m3_col->set_null_bit(i_grp, true);
+                    // TODO XXX The getv calls need to be templated.
+                    skew_agg<T, DType>::apply(
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
+                        getv<uint64_t>(count_col, i_grp),
+                        getv<double>(m1_col, i_grp),
+                        getv<double>(m2_col, i_grp),
+                        getv<double>(m3_col, i_grp));
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
+                    SetBitTo(count_col_null_bitmask, i_grp, true);
+                    SetBitTo(m1_col_null_bitmask, i_grp, true);
+                    SetBitTo(m2_col_null_bitmask, i_grp, true);
+                    SetBitTo(m3_col_null_bitmask, i_grp, true);
                 }
             }
             break;
@@ -848,21 +946,30 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             std::shared_ptr<array_info> m2_col = aux_cols[2];
             std::shared_ptr<array_info> m3_col = aux_cols[3];
             std::shared_ptr<array_info> m4_col = aux_cols[4];
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
+            uint8_t* count_col_null_bitmask =
+                (uint8_t*)count_col->null_bitmask();
+            uint8_t* m1_col_null_bitmask = (uint8_t*)m1_col->null_bitmask();
+            uint8_t* m2_col_null_bitmask = (uint8_t*)m2_col->null_bitmask();
+            uint8_t* m3_col_null_bitmask = (uint8_t*)m3_col->null_bitmask();
+            uint8_t* m4_col_null_bitmask = (uint8_t*)m4_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    kurt_agg<T, DType>::apply(getv<T>(in_col, i),
-                                              getv<uint64_t>(count_col, i_grp),
-                                              getv<double>(m1_col, i_grp),
-                                              getv<double>(m2_col, i_grp),
-                                              getv<double>(m3_col, i_grp),
-                                              getv<double>(m4_col, i_grp));
-                    out_col->set_null_bit(i_grp, true);
-                    count_col->set_null_bit(i_grp, true);
-                    m1_col->set_null_bit(i_grp, true);
-                    m2_col->set_null_bit(i_grp, true);
-                    m3_col->set_null_bit(i_grp, true);
-                    m4_col->set_null_bit(i_grp, true);
+                    // TODO XXX The getv calls need to be templated.
+                    kurt_agg<T, DType>::apply(
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
+                        getv<uint64_t>(count_col, i_grp),
+                        getv<double>(m1_col, i_grp),
+                        getv<double>(m2_col, i_grp),
+                        getv<double>(m3_col, i_grp),
+                        getv<double>(m4_col, i_grp));
+                    SetBitTo(out_col_null_bitmask, i_grp, true);
+                    SetBitTo(count_col_null_bitmask, i_grp, true);
+                    SetBitTo(m1_col_null_bitmask, i_grp, true);
+                    SetBitTo(m2_col_null_bitmask, i_grp, true);
+                    SetBitTo(m3_col_null_bitmask, i_grp, true);
+                    SetBitTo(m4_col_null_bitmask, i_grp, true);
                 }
             }
             break;
@@ -909,8 +1016,9 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    count_agg<T, DType>::apply(getv<int64_t>(out_col, i_grp),
-                                               getv<T>(in_col, i));
+                    count_agg<T, DType>::apply(
+                        getv<int64_t>(out_col, i_grp),
+                        getv<T, bodo_array_type::NUMPY>(in_col, i));
                 }
             }
             break;
@@ -919,7 +1027,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             std::shared_ptr<array_info> bitmask = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                T val = getv<T>(in_col, i);
+                T val = getv<T, bodo_array_type::NUMPY>(in_col, i);
                 if ((i_grp != -1) &&
                     !GetBit((uint8_t*)bitmask->data1(), i_grp) &&
                     !isnan_alltype<T, DType>(val)) {
@@ -935,7 +1043,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
                     idxmax_agg<T, DType>::apply(
-                        getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                        getv<T>(out_col, i_grp),
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
                         getv<uint64_t>(index_pos, i_grp), i);
                 }
             }
@@ -947,7 +1056,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
                     idxmin_agg<T, DType>::apply(
-                        getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                        getv<T>(out_col, i_grp),
+                        getv<T, bodo_array_type::NUMPY>(in_col, i),
                         getv<uint64_t>(index_pos, i_grp), i);
                 }
             }
@@ -960,6 +1070,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             // NaN should be based upon wherever they would be sorted. This
             // may need to be handled to match SQL, but is a separate issue.
             std::shared_ptr<array_info> index_pos = aux_cols[0];
+            uint8_t* index_pos_null_bitmask =
+                (uint8_t*)(index_pos->null_bitmask());
             if (DType == Bodo_CTypes::DATETIME ||
                 DType == Bodo_CTypes::TIMEDELTA) {
                 for (size_t i = 0; i < in_col->length; i++) {
@@ -968,9 +1080,10 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     // visiting a group once we see a NA value. We
                     // initialize the output values to all be non-NA values
                     // to ensure this.
-                    if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (i_grp != -1 && GetBit(index_pos_null_bitmask, i_grp)) {
                         // If we see NA/NaN mark this as the match.
-                        T input_val = getv<T>(in_col, i);
+                        T input_val =
+                            getv<T, bodo_array_type::NUMPY>(in_col, i);
                         if (!isnan_alltype<T, DType>(input_val)) {
                             idxmax_agg<T, DType>::apply(
                                 getv<T>(out_col, i_grp), input_val,
@@ -982,7 +1095,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                             // set the null bit for the count so we know
                             // to stop visiting the group. The data is still
                             // valid.
-                            index_pos->set_null_bit(i_grp, false);
+                            SetBitTo(index_pos_null_bitmask, i_grp, false);
                         }
                     }
                 }
@@ -991,7 +1104,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     int64_t i_grp = get_group_for_row(grp_info, i);
                     if (i_grp != -1) {
                         idxmax_agg<T, DType>::apply(
-                            getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                            getv<T>(out_col, i_grp),
+                            getv<T, bodo_array_type::NUMPY>(in_col, i),
                             getv<uint64_t>(index_pos, i_grp), i);
                     }
                 }
@@ -1007,27 +1121,32 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             std::shared_ptr<array_info> index_pos = aux_cols[0];
             if (DType == Bodo_CTypes::DATETIME ||
                 DType == Bodo_CTypes::TIMEDELTA) {
+                uint8_t* index_pos_null_bitmask =
+                    (uint8_t*)index_pos->null_bitmask();
                 for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = get_group_for_row(grp_info, i);
                     // If we are putting NA values first then we stop
                     // visiting a group once we see a NA value. We
                     // initialize the output values to all be non-NA values
                     // to ensure this.
-                    if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (i_grp != -1 && GetBit(index_pos_null_bitmask, i_grp)) {
                         // If we see NA/NaN mark this as the match.
-                        T input_val = getv<T>(in_col, i);
+                        T input_val =
+                            getv<T, bodo_array_type::NUMPY>(in_col, i);
                         if (!isnan_alltype<T, DType>(input_val)) {
                             idxmin_agg<T, DType>::apply(
                                 getv<T>(out_col, i_grp), input_val,
                                 getv<uint64_t>(index_pos, i_grp), i);
                         } else {
                             // If we have an NA value mark this group as
-                            // done and update the index
+                            // done and update the index.
+                            // XXX What's the array type of index_pos? We should
+                            // use templated getv calls.
                             getv<uint64_t>(index_pos, i_grp) = i;
                             // set the null bit for the count so we know
                             // to stop visiting the group. The data is still
                             // valid.
-                            index_pos->set_null_bit(i_grp, false);
+                            SetBitTo(index_pos_null_bitmask, i_grp, false);
                         }
                     }
                 }
@@ -1036,7 +1155,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     int64_t i_grp = get_group_for_row(grp_info, i);
                     if (i_grp != -1) {
                         idxmin_agg<T, DType>::apply(
-                            getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                            getv<T>(out_col, i_grp),
+                            getv<T, bodo_array_type::NUMPY>(in_col, i),
                             getv<uint64_t>(index_pos, i_grp), i);
                     }
                 }
@@ -1045,15 +1165,16 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
         }
         case Bodo_FTypes::boolor_agg:
         case Bodo_FTypes::booland_agg: {
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T val2 = getv<T>(in_col, i);
+                    T val2 = getv<T, bodo_array_type::NUMPY>(in_col, i);
                     // Skip NA values
                     if (!isnan_alltype<T, DType>(val2)) {
                         bool_aggfunc<T, DType, ftype>::apply(out_col, i_grp,
                                                              val2);
-                        out_col->set_null_bit(i_grp, true);
+                        SetBitTo(out_col_null_bitmask, i_grp, true);
                     }
                 }
             }
@@ -1062,13 +1183,15 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
         case Bodo_FTypes::boolxor_agg: {
             std::shared_ptr<array_info> one_col = out_col;
             std::shared_ptr<array_info> two_col = aux_cols[0];
+            uint8_t* one_col_null_bitmask = (uint8_t*)one_col->null_bitmask();
+            uint8_t* two_col_null_bitmask = (uint8_t*)two_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T val = getv<T>(in_col, i);
+                    T val = getv<T, bodo_array_type::NUMPY>(in_col, i);
                     boolxor_agg<T, DType>::apply(val, one_col, two_col, i_grp);
-                    one_col->set_null_bit(i_grp, true);
-                    two_col->set_null_bit(i_grp, true);
+                    SetBitTo(one_col_null_bitmask, i_grp, true);
+                    SetBitTo(two_col_null_bitmask, i_grp, true);
                 }
             }
             break;
@@ -1076,10 +1199,11 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
         case Bodo_FTypes::bitor_agg:
         case Bodo_FTypes::bitand_agg:
         case Bodo_FTypes::bitxor_agg: {
+            uint8_t* out_col_null_bitmask = (uint8_t*)out_col->null_bitmask();
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    T val2 = getv<T>(in_col, i);
+                    T val2 = getv<T, bodo_array_type::NUMPY>(in_col, i);
                     // Skip NA values
                     // We treat NaN as NA in this case, since it is a runtime
                     // error in snowflake anyway.
@@ -1087,16 +1211,18 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                         // If we have an integer
                         if (std::is_integral<T>::value) {
                             // output type = input type
+                            // TODO XXX Need to use templated getv here!
                             T& val1 = getv<T>(out_col, i_grp);
                             casted_aggfunc<T, T, DType, ftype>::apply(val1,
                                                                       val2);
                         } else {
                             // otherwise, always use int64_t
+                            // TODO XXX Need to use templated getv here!
                             int64_t& val1 = getv<int64_t>(out_col, i_grp);
                             casted_aggfunc<int64_t, T, DType, ftype>::apply(
                                 val1, val2);
                         }
-                        out_col->set_null_bit(i_grp, true);
+                        SetBitTo(out_col_null_bitmask, i_grp, true);
                     }
                 }
             }
@@ -1107,7 +1233,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
                     bool_sum(getv<int64_t>(out_col, i_grp),
-                             getv<bool>(in_col, i));
+                             getv<bool, bodo_array_type::NUMPY>(in_col, i));
                 }
             }
             break;
@@ -1128,12 +1254,14 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                             // If the output is current NA assign to the first
                             // value we see. This is because NaT is represented
                             // as the minimum integer.
-                            output_val = getv<T>(in_col, i);
+                            output_val =
+                                getv<T, bodo_array_type::NUMPY>(in_col, i);
                         } else {
                             // Once the output has been initialized we can
                             // actually compute min.
                             aggfunc<T, DType, Bodo_FTypes::min>::apply(
-                                getv<T>(out_col, i_grp), getv<T>(in_col, i));
+                                getv<T>(out_col, i_grp),
+                                getv<T, bodo_array_type::NUMPY>(in_col, i));
                         }
                     }
                 }
@@ -1142,7 +1270,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     int64_t i_grp = get_group_for_row(grp_info, i);
                     if (i_grp != -1) {
                         aggfunc<T, DType, Bodo_FTypes::min>::apply(
-                            getv<T>(out_col, i_grp), getv<T>(in_col, i));
+                            getv<T>(out_col, i_grp),
+                            getv<T, bodo_array_type::NUMPY>(in_col, i));
                     }
                 }
             }
@@ -1152,8 +1281,9 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),
-                                                    getv<T>(in_col, i));
+                    aggfunc<T, DType, ftype>::apply(
+                        getv<T>(out_col, i_grp),
+                        getv<T, bodo_array_type::NUMPY>(in_col, i));
                 }
             }
         }
@@ -1161,13 +1291,13 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
 }
 
 /**
- * @brief Apply the given aggregation function to an input nullable
+ * @brief Apply the given aggregation function to an input timestamptz
  * array.
  *
  * @tparam T The actual C++ type for the underlying array data.
  * @tparam ftype The function type.
  * @tparam dtype The Bodo dtype for the array.
- * @param[in] in_col The input column. This must be a nullable array type.
+ * @param[in] in_col The input column. This must be a timestamptz array type.
  * @param[in, out] out_col The output column.
  * @param[in, out] aux_cols Auxillary columns used to for certain operations
  * that require multiple columns (e.g. mean).
@@ -1178,13 +1308,15 @@ void apply_to_column_timestamptz(
     std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
     std::vector<std::shared_ptr<array_info>>& aux_cols,
     const grouping_info& grp_info) {
+    assert(in_col->arr_type == bodo_array_type::TIMESTAMPTZ);
     constexpr Bodo_CTypes::CTypeEnum CType = Bodo_CTypes::TIMESTAMPTZ;
     using DType = typename dtype_to_type<CType>::type;
 
     switch (ftype) {
         case Bodo_FTypes::count:
         case Bodo_FTypes::size:
-            return apply_to_column_nullable<DType, ftype, CType>(
+            return apply_to_column_nullable<DType, ftype, CType,
+                                            bodo_array_type::TIMESTAMPTZ>(
                 in_col, out_col, aux_cols, grp_info);
         case Bodo_FTypes::first:
         case Bodo_FTypes::last:
@@ -1284,17 +1416,20 @@ void apply_to_column_timestamptz(
  * @tparam T The actual C++ type for the underlying array data.
  * @tparam ftype The function type.
  * @tparam dtype The Bodo dtype for the array.
+ * @tparam ArrType Array type of the input column.
  * @param[in] in_col The input column. This must be a nullable array type.
  * @param[in, out] out_col The output column.
  * @param[in, out] aux_cols Auxillary columns used to for certain operations
  * that require multiple columns (e.g. mean).
  * @param[in] grp_info The grouping information.
  */
-template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
+template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType,
+          bodo_array_type::arr_type_enum ArrType>
 void apply_to_column_nullable(
     std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
     std::vector<std::shared_ptr<array_info>>& aux_cols,
     const grouping_info& grp_info) {
+    assert(in_col->arr_type == ArrType);
 // macros to reduce code duplication
 
 // Find the group number. Eval doesn't care about group number.
@@ -1318,63 +1453,67 @@ void apply_to_column_nullable(
 // Find the valid group condition. The eval functions check if the sample
 //  is large enough. First checks if we have already seen a value.
 //  idx***_na_first check if we have already found NA.
+// TODO XXX The getv and set_null_bit calls need to be templated with the arr
+// types!
 #ifndef APPLY_TO_COLUMN_VALID_GROUP
-#define APPLY_TO_COLUMN_VALID_GROUP                                         \
-    switch (ftype) {                                                        \
-        case Bodo_FTypes::mean_eval:                                        \
-            valid_group =                                                   \
-                in_col->get_null_bit(i) && getv<uint64_t>(in_col, i) > 0;   \
-            break;                                                          \
-        case Bodo_FTypes::boolxor_eval:                                     \
-            valid_group = aux_cols[0]->get_null_bit(i);                     \
-            break;                                                          \
-        case Bodo_FTypes::var_pop_eval:                                     \
-        case Bodo_FTypes::std_pop_eval:                                     \
-            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
-                          getv<uint64_t>(aux_cols[0], i) > 0;               \
-            break;                                                          \
-        case Bodo_FTypes::var_eval:                                         \
-        case Bodo_FTypes::std_eval:                                         \
-            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
-                          getv<uint64_t>(aux_cols[0], i) > 1;               \
-            break;                                                          \
-        case Bodo_FTypes::skew_eval:                                        \
-            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
-                          getv<uint64_t>(aux_cols[0], i) > 2;               \
-            break;                                                          \
-        case Bodo_FTypes::kurt_eval:                                        \
-            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
-                          getv<uint64_t>(aux_cols[0], i) > 3;               \
-            break;                                                          \
-        case Bodo_FTypes::first:                                            \
-            valid_group = (i_grp != -1) && !out_col->get_null_bit(i_grp) && \
-                          in_col->get_null_bit(i);                          \
-            break;                                                          \
-        case Bodo_FTypes::idxmax_na_first:                                  \
-        case Bodo_FTypes::idxmin_na_first:                                  \
-            valid_group = i_grp != -1 && aux_cols[0]->get_null_bit(i_grp);  \
-            break;                                                          \
-        default:                                                            \
-            valid_group = (i_grp != -1) && in_col->get_null_bit(i);         \
+#define APPLY_TO_COLUMN_VALID_GROUP                                          \
+    switch (ftype) {                                                         \
+        case Bodo_FTypes::mean_eval:                                         \
+            valid_group = in_col->get_null_bit<ArrType>(i) &&                \
+                          getv<uint64_t, ArrType>(in_col, i) > 0;            \
+            break;                                                           \
+        case Bodo_FTypes::boolxor_eval:                                      \
+            valid_group = aux_cols[0]->get_null_bit(i);                      \
+            break;                                                           \
+        case Bodo_FTypes::var_pop_eval:                                      \
+        case Bodo_FTypes::std_pop_eval:                                      \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                    \
+                          getv<uint64_t>(aux_cols[0], i) > 0;                \
+            break;                                                           \
+        case Bodo_FTypes::var_eval:                                          \
+        case Bodo_FTypes::std_eval:                                          \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                    \
+                          getv<uint64_t>(aux_cols[0], i) > 1;                \
+            break;                                                           \
+        case Bodo_FTypes::skew_eval:                                         \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                    \
+                          getv<uint64_t>(aux_cols[0], i) > 2;                \
+            break;                                                           \
+        case Bodo_FTypes::kurt_eval:                                         \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                    \
+                          getv<uint64_t>(aux_cols[0], i) > 3;                \
+            break;                                                           \
+        case Bodo_FTypes::first:                                             \
+            valid_group = (i_grp != -1) && !out_col->get_null_bit(i_grp) &&  \
+                          in_col->get_null_bit<ArrType>(i);                  \
+            break;                                                           \
+        case Bodo_FTypes::idxmax_na_first:                                   \
+        case Bodo_FTypes::idxmin_na_first:                                   \
+            valid_group = i_grp != -1 && aux_cols[0]->get_null_bit(i_grp);   \
+            break;                                                           \
+        default:                                                             \
+            valid_group = (i_grp != -1) && in_col->get_null_bit<ArrType>(i); \
     }
 #endif
 
 // Generate the NA special path check. This is only ever
 // true for idxmax_na_first and idxmax_na_first
 #ifndef APPLY_TO_COLUMN_IS_NA_SPECIAL_CASE
-#define APPLY_TO_COLUMN_IS_NA_SPECIAL_CASE    \
-    switch (ftype) {                          \
-        case Bodo_FTypes::idxmax_na_first:    \
-        case Bodo_FTypes::idxmin_na_first:    \
-            is_na = !in_col->get_null_bit(i); \
-            break;                            \
-        default:                              \
-            is_na = false;                    \
+#define APPLY_TO_COLUMN_IS_NA_SPECIAL_CASE             \
+    switch (ftype) {                                   \
+        case Bodo_FTypes::idxmax_na_first:             \
+        case Bodo_FTypes::idxmin_na_first:             \
+            is_na = !in_col->get_null_bit<ArrType>(i); \
+            break;                                     \
+        default:                                       \
+            is_na = false;                             \
     }
 #endif
 
 // Generate the NA special path. idx***_na_first
 // initialize the group with this value.
+// TODO XXX The getv and set_null_bit calls need to be templated with the arr
+// types!
 #ifndef APPLY_TO_COLUMN_NA_SPECIAL_CASE
 #define APPLY_TO_COLUMN_NA_SPECIAL_CASE              \
     switch (ftype) {                                 \
@@ -1391,22 +1530,24 @@ void apply_to_column_nullable(
 // This controls the aggregation function run on a valid group.
 // These just call the dedicated kernels and set values to be
 // non-null.
+// TODO XXX The getv and set_null_bit calls need to be templated with the arr
+// types!
 #ifndef APPLY_TO_COLUMN_REGULAR_CASE
 #define APPLY_TO_COLUMN_REGULAR_CASE                                           \
     switch (ftype) {                                                           \
         case Bodo_FTypes::count:                                               \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 count_agg<bool, DType>::apply(getv<int64_t>(out_col, i_grp),   \
                                               data_bit);                       \
             } else {                                                           \
                 count_agg<T, DType>::apply(getv<int64_t>(out_col, i_grp),      \
-                                           getv<T>(in_col, i));                \
+                                           getv<T, ArrType>(in_col, i));       \
             }                                                                  \
             break;                                                             \
         case Bodo_FTypes::mean:                                                \
             mean_agg<T, DType>::apply(getv<double>(out_col, i_grp),            \
-                                      getv<T>(in_col, i),                      \
+                                      getv<T, ArrType>(in_col, i),             \
                                       getv<uint64_t>(aux_cols[0], i_grp));     \
             out_col->set_null_bit(i_grp, true);                                \
             aux_cols[0]->set_null_bit(i_grp, true);                            \
@@ -1415,7 +1556,7 @@ void apply_to_column_nullable(
         case Bodo_FTypes::std_pop:                                             \
         case Bodo_FTypes::var:                                                 \
         case Bodo_FTypes::std:                                                 \
-            var_agg<T, DType>::apply(getv<T>(in_col, i),                       \
+            var_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),              \
                                      getv<uint64_t>(aux_cols[0], i_grp),       \
                                      getv<double>(aux_cols[1], i_grp),         \
                                      getv<double>(aux_cols[2], i_grp));        \
@@ -1425,7 +1566,7 @@ void apply_to_column_nullable(
             aux_cols[2]->set_null_bit(i_grp, true);                            \
             break;                                                             \
         case Bodo_FTypes::skew:                                                \
-            skew_agg<T, DType>::apply(getv<T>(in_col, i),                      \
+            skew_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),             \
                                       getv<uint64_t>(aux_cols[0], i_grp),      \
                                       getv<double>(aux_cols[1], i_grp),        \
                                       getv<double>(aux_cols[2], i_grp),        \
@@ -1437,7 +1578,7 @@ void apply_to_column_nullable(
             aux_cols[3]->set_null_bit(i_grp, true);                            \
             break;                                                             \
         case Bodo_FTypes::kurtosis:                                            \
-            kurt_agg<T, DType>::apply(getv<T>(in_col, i),                      \
+            kurt_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),             \
                                       getv<uint64_t>(aux_cols[0], i_grp),      \
                                       getv<double>(aux_cols[1], i_grp),        \
                                       getv<double>(aux_cols[2], i_grp),        \
@@ -1455,7 +1596,8 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i, true);                                    \
             break;                                                             \
         case Bodo_FTypes::mean_eval:                                           \
-            mean_eval(getv<double>(out_col, i), getv<uint64_t>(in_col, i));    \
+            mean_eval(getv<double>(out_col, i),                                \
+                      getv<uint64_t, ArrType>(in_col, i));                     \
             out_col->set_null_bit(i, true);                                    \
             break;                                                             \
         case Bodo_FTypes::var_pop_eval:                                        \
@@ -1496,22 +1638,22 @@ void apply_to_column_nullable(
             break;                                                             \
         case Bodo_FTypes::first:                                               \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 SetBitTo((uint8_t*)out_col->data1(), i_grp, data_bit);         \
             } else {                                                           \
-                getv<T>(out_col, i_grp) = getv<T>(in_col, i);                  \
+                getv<T>(out_col, i_grp) = getv<T, ArrType>(in_col, i);         \
             }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::idxmax:                                              \
         case Bodo_FTypes::idxmax_na_first:                                     \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 idxmax_bool(out_col, i_grp, data_bit,                          \
                             getv<uint64_t>(aux_cols[0], i_grp), i);            \
             } else {                                                           \
                 idxmax_agg<T, DType>::apply(                                   \
-                    getv<T>(out_col, i_grp), getv<T>(in_col, i),               \
+                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),      \
                     getv<uint64_t>(aux_cols[0], i_grp), i);                    \
             }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
@@ -1519,12 +1661,12 @@ void apply_to_column_nullable(
         case Bodo_FTypes::idxmin:                                              \
         case Bodo_FTypes::idxmin_na_first:                                     \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 idxmin_bool(out_col, i_grp, data_bit,                          \
                             getv<uint64_t>(aux_cols[0], i_grp), i);            \
             } else {                                                           \
                 idxmin_agg<T, DType>::apply(                                   \
-                    getv<T>(out_col, i_grp), getv<T>(in_col, i),               \
+                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),      \
                     getv<uint64_t>(aux_cols[0], i_grp), i);                    \
             }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
@@ -1532,22 +1674,22 @@ void apply_to_column_nullable(
         case Bodo_FTypes::boolor_agg:                                          \
         case Bodo_FTypes::booland_agg:                                         \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
                                                         data_bit);             \
             } else {                                                           \
-                bool_aggfunc<T, DType, ftype>::apply(out_col, i_grp,           \
-                                                     getv<T>(in_col, i));      \
+                bool_aggfunc<T, DType, ftype>::apply(                          \
+                    out_col, i_grp, getv<T, ArrType>(in_col, i));              \
             }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::boolxor_agg:                                         \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 boolxor_agg<bool, DType>::apply(data_bit, out_col,             \
                                                 aux_cols[0], i_grp);           \
             } else {                                                           \
-                T val = getv<T>(in_col, i);                                    \
+                T val = getv<T, ArrType>(in_col, i);                           \
                 boolxor_agg<T, DType>::apply(val, out_col, aux_cols[0],        \
                                              i_grp);                           \
             }                                                                  \
@@ -1557,7 +1699,7 @@ void apply_to_column_nullable(
         case Bodo_FTypes::bitor_agg:                                           \
         case Bodo_FTypes::bitand_agg:                                          \
         case Bodo_FTypes::bitxor_agg: {                                        \
-            T val2 = getv<T>(in_col, i);                                       \
+            T val2 = getv<T, ArrType>(in_col, i);                              \
             if (!isnan_alltype<T, DType>(val2)) {                              \
                 if (std::is_integral<T>::value) {                              \
                     T& val1 = getv<T>(out_col, i_grp);                         \
@@ -1572,20 +1714,20 @@ void apply_to_column_nullable(
             break;                                                             \
         }                                                                      \
         case Bodo_FTypes::count_if: {                                          \
-            bool data_bit = GetBit((uint8_t*)in_col->data1(), i);              \
+            bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);     \
             bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                 \
             break;                                                             \
         }                                                                      \
         case Bodo_FTypes::sum:                                                 \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 bool_sum(getv<int64_t>(out_col, i_grp), data_bit);             \
                 out_col->set_null_bit(i_grp, true);                            \
                 break;                                                         \
             }                                                                  \
         case Bodo_FTypes::min:                                                 \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
                                                         data_bit);             \
                 out_col->set_null_bit(i_grp, true);                            \
@@ -1593,13 +1735,13 @@ void apply_to_column_nullable(
             }                                                                  \
         default:                                                               \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
                                                         data_bit);             \
                 out_col->set_null_bit(i_grp, true);                            \
             } else {                                                           \
                 aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),       \
-                                                getv<T>(in_col, i));           \
+                                                getv<T, ArrType>(in_col, i));  \
                 out_col->set_null_bit(i_grp, true);                            \
             }                                                                  \
     }
@@ -1649,6 +1791,7 @@ void apply_to_column_array_item(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::ARRAY_ITEM);
     offset_t* in_offset_buffer =
         (offset_t*)(in_col->buffers[0]->mutable_data());
     offset_t* out_offset_buffer =
@@ -1668,7 +1811,7 @@ void apply_to_column_array_item(
         bool found_match = false;
         for (; i < grp_info.row_to_group.size(); ++i) {
             if (((size_t)grp_info.row_to_group[i]) == i_grp &&
-                in_col->get_null_bit(i)) {
+                in_col->get_null_bit<bodo_array_type::ARRAY_ITEM>(i)) {
                 found_match = true;
                 break;
             }
@@ -1713,13 +1856,16 @@ void apply_to_column_array_item(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::ARRAY_ITEM);
+    assert(out_col->arr_type == bodo_array_type::NUMPY);
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
         if ((i_grp != -1) &&
             in_col->get_null_bit<bodo_array_type::ARRAY_ITEM>(i)) {
             // Note: int is unused since we would only use an NA check.
             count_agg<int, Bodo_CTypes::LIST>::apply(
-                getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+                getv<int64_t, bodo_array_type::NUMPY>(out_col, i_grp),
+                getv<int, bodo_array_type::ARRAY_ITEM>(in_col, i));
         }
     }
 }
@@ -1744,6 +1890,7 @@ void apply_to_column_struct(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::STRUCT);
     size_t n_groups = grp_info.num_groups;
     std::vector<int64_t> rows_to_copy;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
@@ -1756,7 +1903,7 @@ void apply_to_column_struct(
         bool found_match = false;
         for (; i < grp_info.row_to_group.size(); ++i) {
             if (((size_t)grp_info.row_to_group[i]) == i_grp &&
-                in_col->get_null_bit(i)) {
+                in_col->get_null_bit<bodo_array_type::STRUCT>(i)) {
                 found_match = true;
                 break;
             }
@@ -1796,12 +1943,15 @@ void apply_to_column_struct(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
+    assert(in_col->arr_type == bodo_array_type::STRUCT);
+    assert(out_col->arr_type == bodo_array_type::NUMPY);
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
         if ((i_grp != -1) && in_col->get_null_bit<bodo_array_type::STRUCT>(i)) {
             // Note: int is unused since we would only use an NA check.
             count_agg<int, Bodo_CTypes::STRUCT>::apply(
-                getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+                getv<int64_t, bodo_array_type::NUMPY>(out_col, i_grp),
+                getv<int, bodo_array_type::STRUCT>(in_col, i));
         }
     }
 }
@@ -1851,7 +2001,8 @@ void apply_to_column(
                                                  grp_info, pool, std::move(mm));
         }
         case bodo_array_type::NULLABLE_INT_BOOL:
-            return apply_to_column_nullable<T, ftype, DType>(
+            return apply_to_column_nullable<T, ftype, DType,
+                                            bodo_array_type::NULLABLE_INT_BOOL>(
                 in_col, out_col, aux_cols, grp_info);
 
         case bodo_array_type::TIMESTAMPTZ:
@@ -1888,6 +2039,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
         for (size_t i = 0; i < in_col->length; i++) {
             int64_t i_grp = grp_info.row_to_group[i];
             if (i_grp != -1) {
+                // XXX TODO The getv calls need to be templated!
                 size_agg<int64_t, Bodo_CTypes::INT64>::apply(
                     getv<int64_t>(out_col, i_grp), getv<int64_t>(in_col, i));
             }

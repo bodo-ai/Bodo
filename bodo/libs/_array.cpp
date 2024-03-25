@@ -1101,8 +1101,8 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     bodo_array_type::arr_type_enum arr_type = arr->arr_type;
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to check the offsets.
-        offset_t* offsets = (offset_t*)arr->data2();
-        char* in_data1 = arr->data1();
+        offset_t* offsets = (offset_t*)arr->data2<bodo_array_type::STRING>();
+        char* in_data1 = arr->data1<bodo_array_type::STRING>();
         offset_t start_offset = offsets[row_num];
         offset_t end_offset = offsets[row_num + 1];
         offset_t size = end_offset - start_offset;

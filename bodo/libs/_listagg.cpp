@@ -10,6 +10,7 @@
 #include "_listagg.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 
 /**
  * @brief Collection of templated helper functions that
@@ -37,7 +38,8 @@ struct listagg_seq_utils {
         if constexpr (arr_typ == bodo_array_type::arr_type_enum::DICT) {
             const std::shared_ptr<array_info> &dict_indices_array =
                 in_col->child_arrays[1];
-            return getv<int32_t>(dict_indices_array, i);
+            return getv<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                dict_indices_array, i);
         } else {
             return i;
         }
@@ -55,7 +57,9 @@ size_t get_total_chars_needed_for_output(
     size_t num_char_from_existing_strings = 0;
     std::shared_ptr<array_info> string_array =
         listagg_seq_utils<arr_typ>::get_string_arr(sorted_agg_col);
-    offset_t *offsets_ptr = (offset_t *)string_array->data2();
+    assert(string_array->arr_type == bodo_array_type::STRING);
+    offset_t *offsets_ptr =
+        (offset_t *)string_array->data2<bodo_array_type::STRING>();
 
     const uint8_t *null_bitmap = (uint8_t *)sorted_agg_col->null_bitmask();
 
@@ -104,8 +108,10 @@ void copy_array_to_output_string(
     const std::string &separator) {
     std::shared_ptr<array_info> string_array =
         listagg_seq_utils<arr_typ>::get_string_arr(sorted_agg_col);
-    offset_t *offsets_ptr = (offset_t *)string_array->data2();
-    char *data_ptr = (char *)string_array->data1();
+    assert(string_array->arr_type == bodo_array_type::STRING);
+    offset_t *offsets_ptr =
+        (offset_t *)string_array->data2<bodo_array_type::STRING>();
+    char *data_ptr = (char *)string_array->data1<bodo_array_type::STRING>();
     size_t offset_into_output_string = 0;
     bool seen_non_null = false;
 

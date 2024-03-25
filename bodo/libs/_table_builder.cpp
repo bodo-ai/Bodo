@@ -517,7 +517,7 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr,
         // update data buffer to be able to store all strings that have their
         // corresponding entry in reserve_rows set to true
         size_t new_capacity_chars = 0;
-        offset_t* offsets = (offset_t*)in_arr->data2();
+        offset_t* offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
         for (uint64_t i = 0; i < in_arr->length; i++) {
             if (reserve_rows[i]) {
                 new_capacity_chars += offsets[i + 1] - offsets[i];
@@ -582,7 +582,7 @@ void ArrayBuildBuffer::ReserveArrayRow(
 
     if (in_arr->arr_type == bodo_array_type::STRING) {
         // update data buffer to be able to store the string at in_arr[row_idx]
-        offset_t* offsets = (offset_t*)in_arr->data2();
+        offset_t* offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
         size_t len = offsets[row_idx + 1] - offsets[row_idx];
         this->ReserveSpaceForStringAppend(len);
     }

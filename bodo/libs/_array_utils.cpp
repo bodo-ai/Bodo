@@ -2,6 +2,7 @@
 #include "_array_utils.h"
 #include "../io/arrow_reader.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 
 #include <arrow/array/array_nested.h>
@@ -301,10 +302,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
         bodo::default_buffer_memory_manager()) {
     std::shared_ptr<array_info> out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    assert(arr_type == bodo_array_type::NUMPY);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     uint64_t siztype = numpy_item_size[dtype];
     std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-    char* in_data1 = in_arr->data1();
+    char* in_data1 = in_arr->data1<bodo_array_type::NUMPY>();
     // use nullable int/float/bool array if dtype is integer/float/bool and
     // use_nullable_arr is specified
     if (use_nullable_arr &&
@@ -312,7 +314,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
         out_arr = alloc_array_top_level(
             nRowOut, -1, -1, bodo_array_type::NULLABLE_INT_BOOL, dtype, -1, 0,
             0, false, false, false, pool, std::move(mm));
-        char* out_data1 = out_arr->data1();
+        char* out_data1 = out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
         if (dtype == Bodo_CTypes::_BOOL) {
             // Boolean needs a special implementation because the output
             // array stores 1 bit per boolean.
@@ -324,7 +326,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
                     SetBitTo((uint8_t*)out_data1, iRow, data_bit);
                     bit = true;
                 }
-                out_arr->set_null_bit(iRow, bit);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                          bit);
             }
         } else {
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -337,7 +340,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
                     memcpy(out_ptr, in_ptr, siztype);
                     bit = true;
                 }
-                out_arr->set_null_bit(iRow, bit);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                          bit);
             }
         }
     } else {
@@ -349,8 +353,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             using T = int32_t;
             T na_val;
             memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
-            T* out_data1 = (T*)out_arr->data1();
-            T* in_data1 = (T*)in_arr->data1();
+            T* out_data1 = (T*)out_arr->data1<bodo_array_type::NUMPY>();
+            T* in_data1 = (T*)in_arr->data1<bodo_array_type::NUMPY>();
 
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -364,8 +368,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             using T = int64_t;
             T na_val;
             memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
-            T* out_data1 = (T*)out_arr->data1();
-            T* in_data1 = (T*)in_arr->data1();
+            T* out_data1 = (T*)out_arr->data1<bodo_array_type::NUMPY>();
+            T* in_data1 = (T*)in_arr->data1<bodo_array_type::NUMPY>();
 
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -374,7 +378,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             return out_arr;
         }
 
-        char* out_data1 = out_arr->data1();
+        char* out_data1 = out_arr->data1<bodo_array_type::NUMPY>();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
@@ -410,6 +414,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    assert(arr_type == bodo_array_type::NULLABLE_INT_BOOL);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     std::shared_ptr<array_info> out_arr =
         alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
@@ -419,38 +424,45 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     if (dtype == Bodo_CTypes::_BOOL) {
         // Nullable boolean arrays use 1 bit per boolean
         // so we need a specialized loop.
-        uint8_t* in_data1 = (uint8_t*)in_arr->data1();
-        uint8_t* out_data1 = (uint8_t*)out_arr->data1();
+        uint8_t* in_data1 =
+            (uint8_t*)in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+        uint8_t* out_data1 =
+            (uint8_t*)out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             bool null_bit = false;
             if (idx >= 0) {
                 bool data_bit = GetBit(in_data1, idx);
                 SetBitTo(out_data1, iRow, data_bit);
-                null_bit = in_arr->get_null_bit(idx);
+                null_bit =
+                    in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        idx);
             }
-            out_arr->set_null_bit(iRow, null_bit);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                      null_bit);
         }
         return out_arr;
     }
 
     if (siztype == sizeof(int32_t)) {
         using T = int32_t;
-        T* in_data1 = (T*)in_arr->data1();
-        T* out_data1 = (T*)out_arr->data1();
+        T* in_data1 = (T*)in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+        T* out_data1 = (T*)out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             bool bit = false;
             if (idx >= 0) {
                 out_data1[iRow] = in_data1[idx];
-                bit = in_arr->get_null_bit(idx);
+                bit = in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    idx);
             } else {
                 // set index value of dict-encoded string arrays to zero in case
                 // some other code accesses it by mistake. see
                 // https://bodo.atlassian.net/browse/BE-4146
                 out_data1[iRow] = 0;
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                      bit);
         }
         return out_arr;
     }
@@ -458,22 +470,24 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     // TODO: refactor duplicate code
     if (siztype == sizeof(int64_t)) {
         using T = int64_t;
-        T* in_data1 = (T*)in_arr->data1();
-        T* out_data1 = (T*)out_arr->data1();
+        T* in_data1 = (T*)in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+        T* out_data1 = (T*)out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             bool bit = false;
             if (idx >= 0) {
                 out_data1[iRow] = in_data1[idx];
-                bit = in_arr->get_null_bit(idx);
+                bit = in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    idx);
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                      bit);
         }
         return out_arr;
     }
 
-    char* in_data1 = in_arr->data1();
-    char* out_data1 = out_arr->data1();
+    char* in_data1 = in_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+    char* out_data1 = out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
     for (size_t iRow = 0; iRow < nRowOut; iRow++) {
         int64_t idx = in_arr_idxs[iRow];
         bool bit = false;
@@ -481,9 +495,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
         if (idx >= 0) {
             char* in_ptr = in_data1 + siztype * idx;
             memcpy(out_ptr, in_ptr, siztype);
-            bit = in_arr->get_null_bit(idx);
+            bit = in_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(idx);
         }
-        out_arr->set_null_bit(iRow, bit);
+        out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow, bit);
     }
 
     return out_arr;
@@ -509,25 +523,26 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_timestamptz(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    assert(arr_type == bodo_array_type::TIMESTAMPTZ);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     std::shared_ptr<array_info> out_arr =
         alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
                               false, false, pool, std::move(mm));
     using T1 = typename dtype_to_type<Bodo_CTypes::INT64>::type;
     using T2 = typename dtype_to_type<Bodo_CTypes::INT16>::type;
-    T1* in_ts_data = (T1*)in_arr->data1();
-    T1* out_ts_data = (T1*)out_arr->data1();
-    T2* in_offset_data = (T2*)in_arr->data2();
-    T2* out_offset_data = (T2*)out_arr->data2();
+    T1* in_ts_data = (T1*)in_arr->data1<bodo_array_type::TIMESTAMPTZ>();
+    T1* out_ts_data = (T1*)out_arr->data1<bodo_array_type::TIMESTAMPTZ>();
+    T2* in_offset_data = (T2*)in_arr->data2<bodo_array_type::TIMESTAMPTZ>();
+    T2* out_offset_data = (T2*)out_arr->data2<bodo_array_type::TIMESTAMPTZ>();
     for (size_t iRow = 0; iRow < nRowOut; iRow++) {
         int64_t idx = in_arr_idxs[iRow];
         bool bit = false;
         if (idx >= 0) {
             out_ts_data[iRow] = in_ts_data[idx];
             out_offset_data[iRow] = in_offset_data[idx];
-            bit = in_arr->get_null_bit(idx);
+            bit = in_arr->get_null_bit<bodo_array_type::TIMESTAMPTZ>(idx);
         }
-        out_arr->set_null_bit(iRow, bit);
+        out_arr->set_null_bit<bodo_array_type::TIMESTAMPTZ>(iRow, bit);
     }
     return out_arr;
 }
@@ -549,8 +564,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // then the bitmask is set to false.
             int64_t n_chars = 0;
             bodo::vector<offset_t> ListSizes(nRowOut, pool);
-            offset_t* in_offsets = (offset_t*)in_arr->data2();
-            char* in_data1 = in_arr->data1();
+            offset_t* in_offsets =
+                (offset_t*)in_arr->data2<bodo_array_type::STRING>();
+            char* in_data1 = in_arr->data1<bodo_array_type::STRING>();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
                 offset_t size = 0;
@@ -566,8 +582,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             out_arr = alloc_array_top_level(nRowOut, n_chars, -1, arr_type,
                                             dtype, -1, 0, 0, false, false,
                                             false, pool, std::move(mm));
-            offset_t* out_offsets = (offset_t*)out_arr->data2();
-            char* out_data1 = out_arr->data1();
+            offset_t* out_offsets =
+                (offset_t*)out_arr->data2<bodo_array_type::STRING>();
+            char* out_data1 = out_arr->data1<bodo_array_type::STRING>();
             offset_t pos = 0;
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -581,9 +598,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                     char* in_ptr = in_data1 + start_offset;
                     memcpy(out_ptr, in_ptr, size);
                     pos += size;
-                    bit = in_arr->get_null_bit(idx);
+                    bit = in_arr->get_null_bit<bodo_array_type::STRING>(idx);
                 }
-                out_arr->set_null_bit(iRow, bit);
+                out_arr->set_null_bit<bodo_array_type::STRING>(iRow, bit);
             }
             out_offsets[nRowOut] = pos;
             break;
@@ -611,13 +628,13 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // Interval array requires copying left and right data
             uint64_t siztype = numpy_item_size[dtype];
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-            char* left_data = in_arr->data1();
-            char* right_data = in_arr->data2();
+            char* left_data = in_arr->data1<bodo_array_type::INTERVAL>();
+            char* right_data = in_arr->data2<bodo_array_type::INTERVAL>();
             out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype,
                                             -1, 0, 0, false, false, false, pool,
                                             std::move(mm));
-            char* out_left_data = out_arr->data1();
-            char* out_right_data = out_arr->data2();
+            char* out_left_data = out_arr->data1<bodo_array_type::INTERVAL>();
+            char* out_right_data = out_arr->data2<bodo_array_type::INTERVAL>();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
                 char* out_left_ptr = out_left_data + siztype * iRow;
@@ -643,11 +660,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             uint64_t siztype = numpy_item_size[dtype];
             std::vector<char> vectNaN =
                 RetrieveNaNentry(dtype);  // returns a -1 for integer values.
-            char* in_data1 = in_arr->data1();
+            char* in_data1 = in_arr->data1<bodo_array_type::CATEGORICAL>();
             int64_t num_categories = in_arr->num_categories;
             out_arr = alloc_categorical(nRowOut, dtype, num_categories, pool,
                                         std::move(mm));
-            char* out_data1 = out_arr->data1();
+            char* out_data1 = out_arr->data1<bodo_array_type::CATEGORICAL>();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
                 char* out_ptr = out_data1 + siztype * iRow;
@@ -833,19 +850,26 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
             bool bit = false;
-            char* out_ptr = out_indices->data1() + siztype * iRow;
+            char* out_ptr =
+                out_indices->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                siztype * iRow;
             if (ArrRow.second >= 0) {
                 std::shared_ptr<array_info> e_col = ArrRow.first;
                 char* in_ptr =
-                    e_col->child_arrays[1]->data1() + siztype * ArrRow.second;
+                    e_col->child_arrays[1]
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                    siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
-                bit = e_col->child_arrays[1]->get_null_bit(ArrRow.second);
+                bit = e_col->child_arrays[1]
+                          ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                              ArrRow.second);
             } else {
                 // set index value to zero in case some other code accesses it
                 // by mistake. see https://bodo.atlassian.net/browse/BE-4146
                 memset(out_ptr, 0, siztype);
             }
-            out_indices->set_null_bit(iRow, bit);
+            out_indices->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                          bit);
         }
         out_arr = create_dict_string_array(arr1->child_arrays[0], out_indices);
     }
@@ -1465,8 +1489,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     }
     if (arr1->arr_type == bodo_array_type::TIMESTAMPTZ) {
         // Check the bitmask and the values.
-        bool bit1 = arr1->get_null_bit(pos1);
-        bool bit2 = arr2->get_null_bit(pos2);
+        bool bit1 = arr1->get_null_bit<bodo_array_type::TIMESTAMPTZ>(pos1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::TIMESTAMPTZ>(pos2);
         // If bitmask is opposite then they are clearly not equal.
         if (bit1 != bit2) {
             return false;
@@ -1474,8 +1498,10 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         // If both bitmasks are false, then no need to check the data values
         if (bit1) {
             uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 = arr1->data1() + siztype * pos1;
-            char* ptr2 = arr2->data1() + siztype * pos2;
+            char* ptr1 =
+                arr1->data1<bodo_array_type::TIMESTAMPTZ>() + siztype * pos1;
+            char* ptr2 =
+                arr2->data1<bodo_array_type::TIMESTAMPTZ>() + siztype * pos2;
             if (memcmp(ptr1, ptr2, siztype) != 0) {
                 return false;
             }
@@ -1614,8 +1640,9 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
         // For STRING case we need to deal bitmask and the values.
+        assert(arr2->arr_type == bodo_array_type::STRING);
         bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
-        bool bit2 = arr2->get_null_bit(iRow2);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
         if (reply != 0)
@@ -1626,7 +1653,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             // Here we consider the shifts in data2 for the comparison.
             offset_t* data2_1 =
                 (offset_t*)arr1->data2<bodo_array_type::STRING>();
-            offset_t* data2_2 = (offset_t*)arr2->data2();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::STRING>();
             offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
             offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
@@ -1658,6 +1686,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                     "have unified dictionary");
             }
         }
+        assert(arr2->arr_type == bodo_array_type::DICT);
         // Since arr1->child_arrays[0] == arr2->child_arrays[0] (if arr2 is
         // DICT)
         std::shared_ptr<array_info> arr_dict = arr1->child_arrays[0];
@@ -1675,8 +1704,12 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
 
         // NULLABLE case. We need to consider the bitmask and the values (of
         // the indices)
-        bool bit1 = arr1_indices->get_null_bit(iRow1);
-        bool bit2 = arr2_indices->get_null_bit(iRow2);
+        bool bit1 =
+            arr1_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                iRow1);
+        bool bit2 =
+            arr2_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                iRow2);
         // If one bitmask is T and the other the reverse then they are
         // clearly not equal.
         int reply = process_bits(bit1, bit2);
@@ -1691,8 +1724,14 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         // they are storing.
         if (bit1) {
             // Get the index for the dict array
-            int32_t new_iRow1 = arr1_indices->at<int32_t>(iRow1);
-            int32_t new_iRow2 = arr2_indices->at<int32_t>(iRow2);
+            int32_t new_iRow1 =
+                arr1_indices
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                        iRow1);
+            int32_t new_iRow2 =
+                arr2_indices
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                        iRow2);
 
             // Now we compare the dict entries (same as the STRING logic)
             return KeyComparisonAsPython_Column(na_position_bis, arr_dict,
@@ -1742,7 +1781,8 @@ template <Bodo_CTypes::CTypeEnum DType>
 void fill_null_bitmask_numpy(uint8_t* bitmask,
                              const std::shared_ptr<array_info> arr) {
     using T = typename dtype_to_type<DType>::type;
-    T* data = (T*)(arr->data1());
+    assert(arr->arr_type == bodo_array_type::NUMPY);
+    T* data = (T*)(arr->data1<bodo_array_type::NUMPY>());
     for (size_t i = 0; i < arr->length; i++) {
         SetBitTo(bitmask, i, !isnan_alltype<T, DType>(data[i]));
     }
@@ -1786,7 +1826,7 @@ uint8_t* create_temp_null_bitmask_for_array(
         }
         case bodo_array_type::CATEGORICAL: {
             uint64_t siztype = numpy_item_size[arr->dtype];
-            char* data_ptr = arr->data1();
+            char* data_ptr = arr->data1<bodo_array_type::CATEGORICAL>();
             for (size_t i = 0; i < arr->length; i++) {
                 SetBitTo(bitmask, i,
                          !isnan_categorical_ptr(arr->dtype,
@@ -1955,18 +1995,23 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
 
 std::string GetTimestamptzString(const std::shared_ptr<array_info>& arr,
                                  size_t idx) {
-    int64_t ts_utc = ((int64_t*)(arr->data1()))[idx];
-    int16_t offset_mintues_raw = ((int16_t*)(arr->data2()))[idx];
+    assert(arr->arr_type == bodo_array_type::TIMESTAMPTZ);
+    int64_t ts_utc =
+        ((int64_t*)(arr->data1<bodo_array_type::TIMESTAMPTZ>()))[idx];
+    int16_t offset_mintues_raw =
+        ((int16_t*)(arr->data2<bodo_array_type::TIMESTAMPTZ>()))[idx];
     int16_t offset_hours = std::abs(offset_mintues_raw) / 60;
     int16_t offset_minutes = std::abs(offset_mintues_raw) % 60;
     std::string sign = (offset_mintues_raw > 0 ? " +" : " -");
     // Conver the offset to ±hh:mm format
     std::string hour_str = std::to_string(offset_hours);
     std::string minute_str = std::to_string(offset_minutes);
-    if (hour_str.size() == 1)
+    if (hour_str.size() == 1) {
         hour_str = "0" + hour_str;
-    if (minute_str.size() == 1)
+    }
+    if (minute_str.size() == 1) {
         minute_str = "0" + minute_str;
+    }
     // Extract the second & subsecond components, then convert
     // the seconds to a timestamp (format: "YYYY-MM-DD HH:MM:SS")
     int64_t subsecond = ts_utc % 1000000000;
@@ -2196,7 +2241,10 @@ bodo::vector<std::string> GetColumn_as_ListString(
                 bool bit =
                     arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow);
                 if (bit) {
-                    bool data_bit = GetBit((uint8_t*)arr->data1(), iRow);
+                    bool data_bit = GetBit(
+                        (uint8_t*)
+                            arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                        iRow);
                     strOut = std::to_string(data_bit);
                 } else {
                     strOut = "NA";
@@ -2237,7 +2285,7 @@ bodo::vector<std::string> GetColumn_as_ListString(
         bodo::vector<std::string> indexStr(nRow);
         indexStr = GetColumn_as_ListString(arr->child_arrays[1]);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = arr->get_null_bit(iRow);
+            bool bit = arr->get_null_bit<bodo_array_type::DICT>(iRow);
             if (!bit) {
                 strOut = "NA";
             } else {
@@ -2290,7 +2338,7 @@ bodo::vector<std::string> GetColumn_as_ListString(
     }
     if (arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = arr->get_null_bit(iRow);
+            bool bit = arr->get_null_bit<bodo_array_type::TIMESTAMPTZ>(iRow);
             if (bit) {
                 strOut = GetTimestamptzString(arr, iRow);
             } else {

@@ -4,6 +4,7 @@
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_distributed.h"
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
@@ -157,7 +158,7 @@ std::shared_ptr<array_info> compute_categorical_index(
         } else {
             pos = entSet[iRow + n_rows_full];
         }
-        out_arr->at<int32_t>(iRow) = pos;
+        out_arr->at<int32_t, bodo_array_type::CATEGORICAL>(iRow) = pos;
     }
     return out_arr;
 }
@@ -190,6 +191,7 @@ void mpi_exscan_computation_numpy_T(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
     int* ftypes, int* func_offsets, bool is_parallel, bool skip_na_data) {
+    assert(cat_column->arr_type == bodo_array_type::CATEGORICAL);
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -214,6 +216,7 @@ void mpi_exscan_computation_numpy_T(
     }
     bodo::vector<T> cumulative_recv = cumulative;
     std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
+    assert(in_col->arr_type == bodo_array_type::NUMPY);
     T nan_value = GetTentry<T>(RetrieveNaNentry(DType).data());
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
@@ -221,12 +224,13 @@ void mpi_exscan_computation_numpy_T(
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-                Tkey idx = cat_column->at<Tkey>(i_row);
+                Tkey idx =
+                    cat_column->at<Tkey, bodo_array_type::CATEGORICAL>(i_row);
                 if (idx == miss_idx) {
                     work_col->at<T>(i_row) = nan_value;
                 } else {
                     size_t pos = idx + max_row_idx * (j - start);
-                    T val = in_col->at<T>(i_row);
+                    T val = in_col->at<T, bodo_array_type::NUMPY>(i_row);
                     if (skip_na_data && isnan_alltype<T, DType>(val)) {
                         work_col->at<T>(i_row) = val;
                     } else {
@@ -281,7 +285,8 @@ void mpi_exscan_computation_numpy_T(
         //   the cumulative can be a NaN. The sum also works correctly.
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-                Tkey idx = cat_column->at<Tkey>(i_row);
+                Tkey idx =
+                    cat_column->at<Tkey, bodo_array_type::CATEGORICAL>(i_row);
                 if (idx != miss_idx) {
                     size_t pos = idx + max_row_idx * (j - start);
                     T val = work_col->at<T>(i_row);
@@ -326,6 +331,7 @@ void mpi_exscan_computation_nullable_T(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
     int* ftypes, int* func_offsets, bool is_parallel, bool skip_na_data) {
+    assert(cat_column->arr_type == bodo_array_type::CATEGORICAL);
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -357,19 +363,26 @@ void mpi_exscan_computation_nullable_T(
         cumulative_mask_recv = bodo::vector<uint8_t>(max_row_idx * n_oper, 0);
     }
     std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
+    assert(in_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
         const std::shared_ptr<array_info>& work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
+            const uint8_t* in_col_null_bitmask =
+                (uint8_t*)
+                    in_col->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+            uint8_t* work_col_null_bitmask = (uint8_t*)work_col->null_bitmask();
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-                Tkey idx = cat_column->at<Tkey>(i_row);
+                Tkey idx =
+                    cat_column->at<Tkey, bodo_array_type::CATEGORICAL>(i_row);
                 if (idx == miss_idx) {
-                    work_col->set_null_bit(i_row, false);
+                    SetBitTo(work_col_null_bitmask, i_row, false);
                 } else {
                     size_t pos = idx + max_row_idx * (j - start);
-                    T val = in_col->at<T>(i_row);
-                    bool bit_i = in_col->get_null_bit(i_row);
+                    T val = in_col->at<T, bodo_array_type::NULLABLE_INT_BOOL>(
+                        i_row);
+                    bool bit_i = GetBit(in_col_null_bitmask, i_row);
                     T new_val = oper(val, cumulative[pos]);
                     bool bit_o = bit_i;
                     work_col->at<T>(i_row) = new_val;
@@ -387,7 +400,7 @@ void mpi_exscan_computation_nullable_T(
                             cumulative_mask[pos] = 1;
                         }
                     }
-                    work_col->set_null_bit(i_row, bit_o);
+                    SetBitTo(work_col_null_bitmask, i_row, bit_o);
                 }
             }
         };
@@ -434,15 +447,18 @@ void mpi_exscan_computation_nullable_T(
         std::shared_ptr<array_info> work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
+            uint8_t* work_col_null_bitmask = (uint8_t*)work_col->null_bitmask();
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-                Tkey idx = cat_column->at<Tkey>(i_row);
+                Tkey idx =
+                    cat_column->at<Tkey, bodo_array_type::CATEGORICAL>(i_row);
                 if (idx != miss_idx) {
                     size_t pos = idx + max_row_idx * (j - start);
                     T val = work_col->at<T>(i_row);
                     T new_val = oper(val, cumulative_recv[pos]);
                     work_col->at<T>(i_row) = new_val;
-                    if (!skip_na_data && cumulative_mask_recv[pos] == 1)
-                        work_col->set_null_bit(i_row, false);
+                    if (!skip_na_data && cumulative_mask_recv[pos] == 1) {
+                        SetBitTo(work_col_null_bitmask, i_row, false);
+                    }
                 }
             }
         };

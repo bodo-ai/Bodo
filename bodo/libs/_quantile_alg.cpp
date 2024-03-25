@@ -494,7 +494,7 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
     } else {
         if (arr->arr_type == bodo_array_type::NUMPY) {
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
-                T eVal = arr->at<T>(i_row);
+                T eVal = arr->at<T, bodo_array_type::NUMPY>(i_row);
                 bool isna = isnan_alltype<T, DType>(eVal);
                 if (!isna) {
                     my_array.emplace_back(eVal);
@@ -502,10 +502,13 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
             }
         }
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
+            const uint8_t *null_bitmask =
+                (uint8_t *)
+                    arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
                 if (GetBit(null_bitmask, i_row)) {
-                    T eVal = arr->at<T>(i_row);
+                    T eVal =
+                        arr->at<T, bodo_array_type::NULLABLE_INT_BOOL>(i_row);
                     my_array.emplace_back(eVal);
                 }
             }
@@ -572,7 +575,8 @@ template <typename T, Bodo_CTypes::CTypeEnum DType>
 std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
+        const uint8_t *null_bitmask =
+            (uint8_t *)arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
             if (GetBit(null_bitmask, i_row)) {
                 nb_ok++;
@@ -583,7 +587,7 @@ std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
-            T eVal = arr->at<T>(i_row);
+            T eVal = arr->at<T, bodo_array_type::NUMPY>(i_row);
             bool isna = isnan_alltype<T, DType>(eVal);
             if (isna) {
                 nb_miss++;
@@ -890,7 +894,8 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             siz_recv = ghost_length - pos_index;
         if (siz_recv > 0) {
             MPI_Request mpi_recv;
-            char *ptr_recv = ghost_arr->data1() + siztype * pos_index;
+            char *ptr_recv = ghost_arr->data1<bodo_array_type::NUMPY>() +
+                             siztype * pos_index;
             int tag = 2046 + n_pes * i_next + myrank;
             int pe = myrank + 1 + i_next;
             MPI_Irecv((void *)ptr_recv, siz_recv, mpi_typ, pe, tag,
@@ -900,6 +905,7 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
         }
     }
     uint64_t pos_already = 0;
+    char *arr_data1 = arr->data1();
     for (int64_t i_prev = 0; i_prev < n_prev; i_prev++) {
         size_t siz_prev = ListPrevSizes[i_prev];
         size_t siz_send;
@@ -913,7 +919,7 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
         }
         if (siz_send > 0) {
             MPI_Request mpi_send;
-            char *ptr_send = arr->data1();
+            char *ptr_send = arr_data1;
             int pe = myrank - 1 - i_prev;
             int tag = 2046 + n_pes * i_prev + pe;
             MPI_Isend((void *)ptr_send, siz_send, mpi_typ, pe, tag,
@@ -942,9 +948,10 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
         uint64_t siztype = numpy_item_size[arr->dtype];
         // First checking monotonicity locally
         auto do_local_computation = [&]() -> int {
+            char *arr_data1 = arr->data1();
             for (int64_t i_row = 0; i_row < n_rows - 1; i_row++) {
-                char *ptr1 = arr->data1() + siztype * i_row;
-                char *ptr2 = arr->data1() + siztype * (i_row + 1);
+                char *ptr1 = arr_data1 + siztype * i_row;
+                char *ptr2 = arr_data1 + siztype * (i_row + 1);
                 bool na_position = false;
                 int test =
                     NumericComparison(arr->dtype, ptr1, ptr2, na_position);
@@ -1023,9 +1030,10 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
                 return;
             }
             double sum1 = 0, sum2 = 0, sum12 = 0, sum11 = 0, sum22 = 0;
+            const char *arr_data1 = arr->data1();
             for (uint64_t i_row = 0; i_row < n_rows - lag; i_row++) {
-                char *ptr1 = arr->data1() + siztype * i_row;
-                char *ptr2 = arr->data1() + siztype * (i_row + lag);
+                const char *ptr1 = arr_data1 + siztype * i_row;
+                const char *ptr2 = arr_data1 + siztype * (i_row + lag);
                 double val1 = GetDoubleEntry(arr->dtype, ptr1);
                 double val2 = GetDoubleEntry(arr->dtype, ptr2);
                 sum1 += val1;
@@ -1066,16 +1074,15 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
             uint64_t n_rows_cons =
                 n_rows + ghost_siz -
                 lag;  // the ghost may provide the additional rows or may not
+            const char *arr_data1 = arr->data1();
+            const char *ghost_arr_data1 = ghost_arr->data1();
             for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
-                char *ptr1 = arr->data1() + siztype * i_row;
+                const char *ptr1 = arr_data1 + siztype * i_row;
                 double val1 = GetDoubleEntry(arr->dtype, ptr1);
-                char *ptr2;
-                if (i_row < n_rows - lag) {
-                    ptr2 = arr->data1() + siztype * (i_row + lag);
-                } else {
-                    ptr2 =
-                        ghost_arr->data1() + siztype * (i_row - n_rows + lag);
-                }
+                const char *ptr2 =
+                    (i_row < n_rows - lag)
+                        ? (arr_data1 + siztype * (i_row + lag))
+                        : (ghost_arr_data1 + siztype * (i_row - n_rows + lag));
                 double val2 = GetDoubleEntry(arr->dtype, ptr2);
                 sum1 += val1;
                 sum2 += val2;
@@ -1125,10 +1132,12 @@ double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
     TDigest td(/*delta*/ 100, /*buffer_size*/ 500);
     tracing::Event ev("approx_percentile_T", parallel);
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
+        const uint8_t *null_bitmask =
+            (uint8_t *)arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
         for (uint64_t i = 0; i < arr->length; i++) {
             if (GetBit(null_bitmask, i)) {
-                double val_double = to_double<T, DType>(getv<T>(arr, i));
+                double val_double = to_double<T, DType>(
+                    getv<T, bodo_array_type::NULLABLE_INT_BOOL>(arr, i));
                 td.NanAdd(val_double);
             }
         }

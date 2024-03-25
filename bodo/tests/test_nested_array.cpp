@@ -548,7 +548,7 @@ static bodo::tests::suite tests([] {
 
         // Check arrays compared from different start_row_offsets hash the same
         hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr1, 4, 0, false, false, false, {}, 1);
+        hash_array(hashes2, arr1, 4, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_struct_array_hashing", [] {
@@ -609,7 +609,7 @@ static bodo::tests::suite tests([] {
 
         // Check structs compared from different start_row_offsets hash the same
         hash_array(hashes1, struct_arr1, 10, 0, false, false);
-        hash_array(hashes2, struct_arr1, 9, 0, false, false, false, {}, 1);
+        hash_array(hashes2, struct_arr1, 9, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_map_array_hashing", [] {
@@ -692,7 +692,7 @@ static bodo::tests::suite tests([] {
 
         // Check that two values with different start offsets hash the same
         hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 4, 0, false, false, false, {}, 1);
+        hash_array(hashes2, map_arr2, 4, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_nested_is_na_equal", [] {

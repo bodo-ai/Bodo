@@ -104,7 +104,8 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
         // fill a range in the indices array
         fill_input_file_name_col_indices(
             file_paths.size() - 1,
-            this->input_file_name_col_indices_arr->data1(),
+            this->input_file_name_col_indices_arr
+                ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
             this->input_file_name_col_indices_offset, num_rows);
         this->input_file_name_col_indices_offset += num_rows;
         this->input_file_name_col_dict_arr_total_chars +=
@@ -423,13 +424,14 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         this->input_file_name_col_dict_arr =
             alloc_string_array(Bodo_CTypes::STRING, this->file_paths.size(),
                                this->input_file_name_col_dict_arr_total_chars);
-        offset_t* offsets =
-            (offset_t*)this->input_file_name_col_dict_arr->data2();
+        offset_t* offsets = (offset_t*)this->input_file_name_col_dict_arr
+                                ->data2<bodo_array_type::STRING>();
         offsets[0] = 0;
-        fill_input_file_name_col_dict(
-            this->file_paths, this->prefix,
-            this->input_file_name_col_dict_arr->data1(),
-            this->input_file_name_col_dict_arr->data2());
+        fill_input_file_name_col_dict(this->file_paths, this->prefix,
+                                      this->input_file_name_col_dict_arr
+                                          ->data1<bodo_array_type::STRING>(),
+                                      this->input_file_name_col_dict_arr
+                                          ->data2<bodo_array_type::STRING>());
 
         // create the final dictionary-encoded input_file_name
         // column from the indices array and dictionary

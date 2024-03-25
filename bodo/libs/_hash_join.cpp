@@ -2390,13 +2390,16 @@ std::shared_ptr<table_info> hash_join_table_inner(
             }
             // Left is null
             if ((*left_write_idxs)[rownum] == -1) {
-                indicator_col->data1()[rownum] = 1;
+                indicator_col->data1<bodo_array_type::CATEGORICAL>()[rownum] =
+                    1;
                 // Right is null
             } else if ((*right_write_idxs)[rownum] == -1) {
-                indicator_col->data1()[rownum] = 0;
+                indicator_col->data1<bodo_array_type::CATEGORICAL>()[rownum] =
+                    0;
                 // Neither is null
             } else {
-                indicator_col->data1()[rownum] = 2;
+                indicator_col->data1<bodo_array_type::CATEGORICAL>()[rownum] =
+                    2;
             }
         }
         out_arrs.emplace_back(indicator_col);

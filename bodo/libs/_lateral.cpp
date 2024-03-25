@@ -232,7 +232,6 @@ void lateral_flatten_copy_numeric_value_with_dtypes(
         set_arr_item<bodo_array_type::NUMPY, T_out, in_dtype>(
             *out_arr, write_idx, casted_val);
     }
-    getv<T_out>(out_arr, write_idx) = casted_val;
 }
 
 /**
@@ -350,6 +349,7 @@ std::shared_ptr<array_info> interleave_string_arrays(
         int64_t field_to_pick = fields_to_pick[row];
         int64_t row_to_pick = rows_to_pick[row];
         if (row_to_pick != -1 &&
+            // TODO XXX Can this get_null_bit be templated?
             inner_arrs[field_to_pick]->get_null_bit(row_to_pick)) {
             SetBitTo(null_vector.data(), row, 1);
             std::string s;
@@ -417,6 +417,7 @@ std::shared_ptr<array_info> interleave_array_item_arrays(
             sub_rows_to_pick.push_back(static_cast<int64_t>(idx));
         }
         array_sizes.push_back(end_idx - start_idx);
+        // TODO XXX Can this get_null_bit be templated?
         is_null.push_back(
             !(inner_arrs[field_to_pick]->get_null_bit(row_to_pick)));
     }
@@ -442,7 +443,7 @@ std::shared_ptr<array_info> interleave_array_item_arrays(
         curr_offset += array_sizes[row];
         offset_buffer[row + 1] = curr_offset;
         if (is_null[row]) {
-            result->set_null_bit(row, false);
+            result->set_null_bit<bodo_array_type::ARRAY_ITEM>(row, false);
         }
     }
     return result;
@@ -477,13 +478,15 @@ std::shared_ptr<array_info> interleave_numeric_arrays(
     for (size_t row = 0; row < rows_kept; row++) {
         int64_t field_to_pick = fields_to_pick[row];
         int64_t row_to_pick = rows_to_pick[row];
+        // TODO XXX Can this get_null_bit be templated?
         if (row_to_pick != -1 &&
             ((inner_arrs[field_to_pick]->arr_type == bodo_array_type::NUMPY) ||
              (inner_arrs[field_to_pick]->get_null_bit(row_to_pick)))) {
             lateral_flatten_copy_numeric_value(
                 out_arr, row, inner_arrs[field_to_pick], row_to_pick);
         } else {
-            out_arr->set_null_bit(row, false);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row,
+                                                                      false);
         }
     }
     return out_arr;
@@ -646,7 +649,8 @@ std::unique_ptr<table_info> lateral_flatten_array(
             offset_t start_offset = offset_buffer[i];
             offset_t end_offset = offset_buffer[i + 1];
             for (offset_t j = start_offset; j < end_offset; j++) {
-                getv<int64_t>(idx_arr, j) = j - start_offset;
+                getv<int64_t, bodo_array_type::NULLABLE_INT_BOOL>(idx_arr, j) =
+                    j - start_offset;
             }
         }
         if (is_outer) {
@@ -791,8 +795,10 @@ std::unique_ptr<table_info> lateral_flatten_struct(
     size_t n_fields = (explode_arr->child_arrays).size();
     size_t exploded_size = 0;
     std::vector<int64_t> rows_to_copy;
+    const uint8_t *explode_arr_null_bitmask =
+        (uint8_t *)explode_arr->null_bitmask();
     for (size_t i = 0; i < n_structs; i++) {
-        if (!(explode_arr->get_null_bit(i))) {
+        if (!(GetBit(explode_arr_null_bitmask, i))) {
             // If in outer mode, add 1 dummy for any null rows.
             if (is_outer) {
                 rows_to_copy.push_back(i);
@@ -822,15 +828,17 @@ std::unique_ptr<table_info> lateral_flatten_struct(
             exploded_size, Bodo_CTypes::INT32, 0, pool, mm);
         size_t write_idx = 0;
         for (size_t i = 0; i < n_structs; i++) {
-            if (!explode_arr->get_null_bit(i)) {
+            if (!GetBit(explode_arr_null_bitmask, i)) {
                 if (is_outer) {
-                    idx_arr->set_null_bit(write_idx, false);
+                    idx_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                        write_idx, false);
                     write_idx++;
                 }
                 continue;
             }
             for (size_t j = 0; j < n_fields; j++) {
-                getv<int32_t>(idx_arr, write_idx) = j;
+                getv<int32_t, bodo_array_type::NULLABLE_INT_BOOL>(
+                    idx_arr, write_idx) = j;
                 write_idx++;
             }
         }
@@ -846,7 +854,7 @@ std::unique_ptr<table_info> lateral_flatten_struct(
         std::vector<int64_t> fields_to_pick;
         std::vector<int64_t> rows_to_pick;
         for (size_t row = 0; row < n_structs; row++) {
-            if (!explode_arr->get_null_bit(row)) {
+            if (!GetBit(explode_arr_null_bitmask, row)) {
                 if (is_outer) {
                     fields_to_pick.push_back(-1);
                     rows_to_pick.push_back(-1);
