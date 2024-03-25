@@ -196,7 +196,11 @@ jobs:
           GIT_SHA: ${{ env.SHA }}
           SKIP_CREATE_IMAGES: ${{ needs.setup.outputs.skipCreateImages }}
           PYTHON_VERSION: ${{ github.event.inputs.pythonVersion  }}
-          BODO_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
+          BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
+          BODOSQL_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
+          BODOSQL_CHANNEL: ${{ needs.setup.outputs.bodoSQLCondaChannel }}
+          ICEBERG_CONNECTOR_VERSION: ${{ needs.setup.outputs.icebergConnectorVersion }}
+          ICEBERG_CONNECTOR_CHANNEL: ${{ needs.setup.outputs.bodoIcebergCondaChannel }}
           BUILD_NAME: ${{ needs.setup.outputs.buildName }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
