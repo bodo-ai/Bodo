@@ -29,8 +29,8 @@ available to use in your interactive notebook.
  
 ## Using Database Catalogs in Interactive Notebooks
 
-:fontawesome-brands-aws: On AWS only ·
-:octicons-beaker-24:{.beta} Experimental 
+:fontawesome-brands-aws: Supported On AWS ·
+:material-microsoft-azure:{.azure} Supported on Azure
 
 When you create a code cell in your interactive notebook, you will notice a blue selector on the
 top right hand corner of the code cell. By default, this will be set to _Parallel-Python_.
@@ -47,9 +47,6 @@ figure below.
 The output of the SQL query is automatically saved in a distributed dataframe named _LAST\_SQL\_OUTPUT_. This dataframe will be
 overwritten every time a SQL query is run. 
 
-!!! warning
-
-    This is an experimental feature currently only available on AWS.
     
 ## Viewing Database Catalogs Data
 
