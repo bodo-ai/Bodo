@@ -1,6 +1,6 @@
 # Bodo SQL Quickstart (Local) {#quickstart-local-sql}
 
-This quickstart guide will walk you through the process of running a simple SQL query using Bodo on your local machine using a local SQL table.
+This quickstart guide will walk you through the process of running a simple SQL query using Bodo on your local machine.
 
 
 ## Prerequisites
@@ -14,12 +14,12 @@ conda activate Bodo
 conda install bodosql -c bodo.ai -c conda-forge
 ```
 
-This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
+These commands create a conda environment called `Bodo` and install Bodo Community Edition.
 
 
 ## Generate Sample Data
 
-Let's start by creating a parquet file with some sample data. The following Python code creates a parquet file with two columns `A` and `B` and 20 million rows. The column `A` contains values from 0 to 29, and the column `B` contains values from 0 to 19,999,999.
+Let's start by creating a Parquet file with some sample data. The following Python code creates a Parquet file with two columns `A` and `B` and 20 million rows. The column `A` contains values from 0 to 29, and the column `B` contains values from 0 to 19,999,999.
 
 ```python
 import pandas as pd
@@ -37,9 +37,9 @@ df = pd.DataFrame({
 df.to_parquet("my_data.pq")
 ```
 
-## Create a local SQL Table
+## Create a local in-memory SQL Table
 
-Now let's create a local SQL table from the parquet file. We can use the [`TablePATH` API][tablepath-api] to register the table into our [`BodoSQLContext`][bodosqlcontext-api].
+Now let's create a local in-memory SQL table from the Parquet file. We can use the [`TablePATH` API][tablepath-api] to register the table into our [`BodoSQLContext`][bodosqlcontext-api].
 
 ```python
 bc = bodosql.BodoSQLContext(
@@ -51,14 +51,13 @@ bc = bodosql.BodoSQLContext(
 
 ## Write a SQL Query
 
-Now we can write a SQL query to compute the sum of column `A` for all rows where `B` is greater than 4. Since we are using a BodoSQLContext locally, we need to encapsulate the statement within a `@bodo.jit` decorated function to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
+Now we can write a SQL query to compute the sum of column `A` for all rows where `B` is greater than 4. We encapsulate the statement within a `@bodo.jit` decorated function to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
 
 ```python
 @bodo.jit(cache=True)
 def query(bc):
     t1 = time.time()
     df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
-    # print the execution time only on one core
     print("Execution time:", time.time() - t1)
     return df1
 

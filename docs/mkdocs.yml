@@ -127,7 +127,8 @@ nav:
     - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
   - Guides:
       - integrating_bodo/index.md
-      - Developer's Quick Start Guide: quick_start/dev_guide.md
+      - Python Development Guide: quick_start/dev_guide.md
+      - Running jobs on the Bodo Platform: integrating_bodo/bodo-jobs.md
       - Using native SQL with Catalogs: integrating_bodo/database_catalog.md
       - Installation and Setup Guides:
           - installation_and_setup/index.md
@@ -148,7 +149,6 @@ nav:
           - Typing Considerations: bodo_parallelism/typing_considerations.md
           - Unsupported Programs: bodo_parallelism/not_supported.md
       - Scalable Data I/O with Bodo: file_io.md
-      - Running jobs on the Bodo Platform: integrating_bodo/bodo-jobs.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Measuring Performance: performance/performance.md
       - Caching: performance/caching.md

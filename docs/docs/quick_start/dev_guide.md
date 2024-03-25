@@ -7,19 +7,18 @@ tags:
 
 ---
 
-# Developer's Quick Start Guide {#devguide}
+# Python Development Guide {#devguide}
 
 
-This page provides an introduction to programming with Bodo and explains its
+This page provides an introduction to Python programming with Bodo and explains its
 important concepts briefly.
 
 Installation
 ------------
 
-We recommend trying Bodo by signing up for a [personalized 1:1 demo](https://www.bodo.ai/see-it-in-action){target="blank"} where you will get a step-by-step guide on how to use the Bodo cloud platform. If you prefer to do it yourself, see how to [get started with the Bodo platform](quick_start_platform.md)
-
-
-[Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo on your local environment. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
+We recommend Bodo Platform on AWS or Azure for using Bodo.
+See how to [get started with the Bodo platform](quick_start_platform.md).
+If you prefer a local environment, [Conda](https://docs.conda.io){target="blank"} is the recommended way to install Bodo locally. You can install the _Community Edition_ using conda, which allows you to use Bodo for free on up to 8 cores. 
 
 
 ```console 
@@ -28,7 +27,7 @@ conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
 
-This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
+These commands create a conda environment called `Bodo` and install Bodo Community Edition.
 
 Data Transform Example with Bodo
 --------------------------------
