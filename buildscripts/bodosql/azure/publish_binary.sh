@@ -26,7 +26,7 @@ export IS_RELEASE=`git tag --points-at HEAD`
 # i.e. 2021.9.0betarc1 or 2021.11.0rc2
 # For more information, please see our confluence doc: https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist
 label=""
-if [[ -n "$IS_RELEASE" == 1 ]] && [[ "$BODOSQL_CHANNEL_NAME" == "bodo.ai" ]]; then
+if [[ -n "$IS_RELEASE" ]] && [[ "$BODOSQL_CHANNEL_NAME" == "bodo.ai" ]]; then
     # If we have a major release upload with our main anaconda label
     label="main"
 fi
