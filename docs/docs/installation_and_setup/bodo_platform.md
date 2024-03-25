@@ -2,7 +2,7 @@
 
 ## Bodo Cloud Platform Concepts {#bodo_platform_concepts}
 
-This page describes the fundamental concepts you need to know to use the Bodo Cloud Platform.
+This page describes the fundamental concepts needed to use the Bodo Cloud Platform.
 
 ### Organizations
 
@@ -20,9 +20,9 @@ It consists of:
    For AWS accounts, this is done through a cross-account IAM role.
    For Azure account, this is done through a service principal (scoped to a specific resource group)
    for the Bodo Platform application.
-   This gives the platform the ability to provision and manage cloud resources in your account.
+   This allows the platform to provision and manage cloud resources in your account.
 2. Details regarding metadata storage. The platform needs to store
-   certain metadata to carry out its functions, such as the state of your various cloud deployments, logs, etc.
+   specific metadata to carry out its functions, such as the state of your various cloud deployments, logs, etc.
    On AWS, this data is stored in an S3 bucket and a DynamoDB table.
    On Azure, this data is stored in a storage container.
 
@@ -34,22 +34,22 @@ It consists of:
 A *workspace* on the Bodo Cloud Platform consists of:
 
 1. A shared filesystem where you can collaborate with your team on your projects.
-2. Networking infrastructure such as virtual networks, security groups and subnets in which
+2. Networking infrastructure such as virtual networks, security groups, and subnets in which
    your compute clusters and Jupyter servers will be securely deployed.
 
-A workspace is tied to a particular cloud-configuration and has its own user-management i.e.,
+A workspace is tied to a particular cloud configuration and has its own user management, i.e.,
 you can have different subsets of users with different sets of roles
 and permissions in different workspaces within the same organization.
 
 !!! info "Important"
-     If a user that is not part of the organization, is invited to a workspace in the organization,
-    it is automatically added to the organization with minimal permissions.
+     If a user who is not part of the organization is invited to a workspace in the organization,
+    they are automatically added to the organization with minimal permissions.
 
 ![Workspaces](../platform2-screenshots/workspace.png#center)
 
-To create a workspace, go to the "Workspaces" section in the sidebar and click on "Create Workspace". In the
-creation form, enter the name of the workspace, select the cloud-configuration to use for provisioning
-it and the region where it should be deployed, and click on "Create Workspace".
+To create a workspace, go to the "Workspaces" section in the sidebar and click "Create Workspace." In the
+creation form, enter the name of the workspace, select the cloud configuration to use for provisioning
+it and the region where it should be deployed, and click on "Create Workspace."
 
 ![Create-Workspace](../platform2-screenshots/create-workspace-form.png#center)
 
@@ -60,33 +60,37 @@ the button next to it to enter it.
 
 ## Notebooks
 
-Jupyter servers act as your interface to both your shared file-system and your compute clusters.
+Jupyter servers act as your interface to your shared file system and compute clusters.
 Users can execute code from their notebooks on the compute cluster from the Jupyter interface.
-A Jupyter server is automatically provisioned for your use when you first enter the workspace.
+A Jupyter server is automatically provisioned when you first enter the workspace.
 
 ![Notebook-View](../platform2-screenshots/notebook_view.png#center)
 
-You can update / restart Jupyter servers in the "Workspace Settings".
+You can update/restart Jupyter servers in the "Workspace Settings."
 
 
 ![Notebook-Manager](../platform2-gifs/notebook_manager.gif#center)
 
-## Creating Clusters {#creating_clusters}
+## Clusters {#creating_clusters}
 
-In the left bar click on _Clusters_ (or click on the second step in the
-_Onboarding_ list). This will take you to the _Clusters_ page. At the top right corner,
-click on `Create Cluster` which opens the cluster creation form.
+In the left bar, click on _Clusters_ (or click on the second step in the
+_Onboarding_ list). This action will take you to the _Clusters_ page. At the top right corner,
+click `Create Cluster,` which opens the cluster creation form.
 
 ![Cluster-Create](../platform2-gifs/create_cluster.gif#center)
 
-Cluster creation form:
+### Cluster basic configuration
 
 ![Cluster-Form](../platform2-gifs/create_cluster_form.gif#center)
 
-First, choose a name for your cluster.
+**Cluster Name:** 
 
-Then, select the type of nodes in the cluster to be created from the **Instance type** dropdown
-list. [EFA](https://aws.amazon.com/hpc/efa/){target="blank"} will be used if the instance type supports it.
+Choose a name for your cluster.
+
+**Instance type:** 
+
+Select the type of nodes in the cluster to be created from the dropdown list.
+[EFA](https://aws.amazon.com/hpc/efa/){target="blank"} will be used if the instance type supports it.
 
 ![Cluster-Form-Instance](../platform2-gifs/create_cluster_list.gif#center)
 
@@ -96,29 +100,65 @@ list. [EFA](https://aws.amazon.com/hpc/efa/){target="blank"} will be used if the
     Please see how to set your [AWS][setting_aws_credentials]
     or [Azure][setting_azure_credentials] credentials and make sure your credentials are valid.
 
-Next, enter the number of nodes for your cluster in **Number of
-Instances**. and choose the Bodo Version to be installed on your
-cluster. Typically the three latest Bodo Releases are available.
+**Use Spot Instances:** 
+
+This option enables spot instances in the cluster. Use this option to reduce the cost of VMs.
+
+![Cluster-Spot-Instance](../platform2-screenshots/use_spot_instance.png#center)
+
+!!! note
+    However, it's important to note that selecting this option can also have some drawbacks. 
+    For further insights, please refer to the breakdowns associated with AWS and Azure spot instances.
+    [Azure Spot](https://azure.microsoft.com/en-us/products/virtual-machines/spot), [AWS Spot](https://aws.amazon.com/ec2/spot/)
+
+**Number of Instances:** 
+
+This option specifies the number of nodes in your cluster.
+
+**Bodo Version:** 
+
+This option specifies the Bodo version to be installed on your cluster. 
+Typically, the three latest Bodo Releases are available.
 
 ![Cluster-Form-Bodo](../platform2-screenshots/cluster_bodo_version.png#center)
 
+**Cluster Auto Pause:** 
 
-Then, select a value for **Cluster auto pause**. This is the amount
-of time of inactivity after which the platform will pause the cluster
-automatically.
+This is the amount of time of inactivity after which the platform will pause the cluster automatically.
 
 ![Cluster-Form-Auto-Pause](../platform2-screenshots/cluster_auto_pause.png#center)
 
+### Cluster advanced configuration
+Additionally, you can specify the following advanced configuration options for cluster.
 
-Additionally, you can select a value for **Cluster auto pause**. Activity is determined through attached notebooks (see
+![Cluster-Form-Advanced](../platform2-screenshots/cluster_advanced.png#center)
+
+**Availability Zone:** 
+
+:fontawesome-brands-aws: On AWS only
+
+Select the availability zone where you want to deploy your cluster. By default, this is set to `Auto Select`.
+
+**Auto Stop:** 
+
+Activity is determined through attached notebooks (see
 [how to attach a notebook to a cluster][attaching_notebook_to_cluster]) and jobs
-(see [how to run a job][running-a-job]). Therefore, if you
+(see [how to run a job][running-a-batch-job]). Therefore, if you
 don't plan to attach a notebook or a job to this cluster (and use it
-via `ssh` instead), it's recommended to set this to
-`Never`, since otherwise the cluster will be removed after
+via `ssh` instead), we recommend that you to set this to
+`Never,` since otherwise, the cluster will be stopped after
 the set time.
 
-![Cluster-Form-Advanced](../platform2-screenshots/cluster_auto_stop.png#center)
+**Instance Role:** 
+
+:fontawesome-brands-aws: On AWS only 
+
+Is the instance role that should be attached to the cluster instances. 
+You can define these in Settings. By default, a new role will be created and attached.
+
+**Cluster description:** 
+
+Description for the cluster.
 
 Finally click on `CREATE`. You will see that a new task for creating the
 cluster has been created. The status is updated to <inpg>INPROGRESS</inpg> when the task starts executing and
@@ -126,13 +166,13 @@ cluster creation is in progress.
 
 ![Cluster-Status-InProgress](../platform2-screenshots/cluster_inprogress.png#center)
 
-You can click on the `Details` drop down to monitor the progress for the
+You can click on the `Details` drop-down to monitor the progress of the
 cluster creation.
 
 ![Cluster-Info](../platform2-screenshots/cluster_inprogress_deatails.png#center)
 
 Once the cluster is successfully created and ready to use, the status is
-updated to <fin>FINISHED</fin>.
+updated to <fin>RUNNING</fin>.
 
 ![Cluster-Status-Finished](../platform2-gifs/create_cluster_details.gif#center)
 
@@ -143,12 +183,17 @@ experiment to find the best configuration for your specific use case.
 
 | Snowflake Warehouse Size | Bodo Cluster Spec |
 |--------------------------|-------------------|
-| XS                       | 1 x c5n.2xlarge   |
-| S                        | 1 x r5n.4xlarge   |
-| M                        | 1 x r5n.8xlarge   |
-| L                        | 1 x r5n.24xlarge  |
-| XL                       | 2 x r5n.24xlarge  |
-| 2XL                      | 5 x r5n.24xlarge  |
+| 2X-Small                 | 1 x i4i.xlarge    |
+| X-Small                  | 1 x i4i.2xlarge   |
+| Small                    | 1 x i4i.4xlarge   |
+| Medium                   | 1 x i4i.8xlarge   |
+| Large                    | 1 x i4i.16xlarge  |
+| X-Large                  | 1 x i4i.32xlarge  |
+| 2X-Large                 | 2 x i4i.32xlarge  |
+| 3X-Large                 | 4 x i4i.32xlarge  |
+| 4X-Large                 | 8 x i4i.32xlarge  |
+| 5X-Large                 | 16 x i4i.32xlarge |
+| 6X-Large                 | 32 x i4i.32xlarge |
 
 
 ## Attaching a Notebook to a Cluster {#attaching_notebook_to_cluster}
@@ -157,25 +202,32 @@ To attach a notebook to a cluster, select the cluster from the drop-down in the 
 
 ![Attach-Cluster](../platform2-gifs/attach-cluster.gif#center)
 
-To execute your code across the attached cluster, select Parallel Python cell.
+To execute your code across the attached cluster, select the _Parallel Python_ cell type from the cell type selector dropdown.
 
 ![Run-Code-Notebook](../platform2-gifs/parallel-python.gif#center)
 
-Note that parallel execution is only allowed when the notebook is attached to a cluster.
-If you execute a cell without a cluster attached, the following warning will be shown:
+To run a SQL query, first select the catalog you want to use, then select the SQL cell type from the cell type selector dropdown. 
+For more information on SQL catalogs, refer to the [SQL Catalogs usage guide][sql_catalog].
+
+![Run-Code-Notebook](../platform2-gifs/sql.gif#center)
+
+
+!!! note 
+    Execution is only allowed when the notebook is attached to a cluster.
+    If you execute a cell without a cluster attached, the following warning will be shown:
 
 ![Detached-Notebook-Warning](../platform2-gifs/not-attached-to-cluster-warning.gif#center)
 
 ## Using your own Instance Role for a Cluster {#instance_role_cluster}
 ### AWS
-In cases where you want to access additional AWS resources from Bodo clusters e.g. S3 buckets,
-you can create an IAM Role in your AWS account and then register it as an Instance Role on the Bodo Platform which will allow you to access those resources from Bodo clusters without using AWS keys.
+In cases where you want to access additional AWS resources from Bodo clusters e.g., S3 buckets,
+you can create an IAM Role in your AWS account and then register it as an Instance Role on the Bodo Platform, which will allow you to access those resources from Bodo clusters without using AWS keys.
 
 ![View-Instance-Roles](../platform2-gifs/instance-role-list.gif#center)
 
-Note that, by default, Bodo creates an IAM role with necessary policies for each cluster. When you register your own role with the Bodo Platform, it will automatically attach the other required policies to this role.
+Note that, by default, Bodo creates an IAM role with the necessary policies for each cluster. When you register your own role with the Bodo Platform, it will automatically attach the other required policies to this role.
 
-Here we walk through the process of setting up an IAM Role in AWS and then registering it as an Instance Role on the Bodo Platform. For this example, we will be creating a role with access to an S3 bucket in your AWS account:
+Here, we walk through setting up an IAM Role in AWS and then registering it as an Instance Role on the Bodo Platform. For this example, we will be creating a role with access to an S3 bucket in your AWS account:
 
 Step 1: Create an AWS IAM Role on the [AWS Management Console](https://aws.amazon.com/console/):
 1. Go to the IAM service.
@@ -186,13 +238,13 @@ Step 1: Create an AWS IAM Role on the [AWS Management Console](https://aws.amazo
 
 ![AWS-IAM-ROLE](../platform2-screenshots/aws_iam_role.png#center)
 
-3. Click on button `Create role`, then select:
+3. Click on the button `Create role`, then select:
    * Trusted entity type: **AWS service**
    * Common use cases: **EC2**
 
 ![AWS-IAM-Role-Form](../platform2-screenshots/aws_iam_role_form.png#center)
 
-4. Click next, and then create new policy that will be attached to this role:
+4. Click next, and then create a new policy that will be attached to this role:
    * json policy:
 ```
 {
@@ -223,7 +275,7 @@ Step 1: Create an AWS IAM Role on the [AWS Management Console](https://aws.amazo
 }
 ```
 
-5. Go back to Create role, refresh list of policies and add the policy that was created.
+5. Go back to Create role, refresh the list of policies, and add the policy that you created.
 6. Click **Next**, then in the Role name field, type a role name and click **Create role**.
 7. Copy the Role ARN from the role summary.
 
@@ -246,7 +298,7 @@ Step 2: Register your AWS IAM Role on the Bodo Platform as a new Instance Role:
 The Instance Role will now be registered on the Platform. It can have one of two status-es:
 * **Active**: Instance Role is ready to use
 * **Failed**: Something went wrong while registering the Instance Role and it cannot be used. Some possible problems could be:
-   * The Platform wasn't able to find the specified Role.
+   * The Platform wasn't able to find the specified role.
    * The Platform was not able to attach additional Bodo polices that are required for normal cluster operations.
 
 ## Managing Packages on the cluster using IPyParallel magics - Conda and Pip
@@ -254,7 +306,7 @@ The Instance Role will now be registered on the Platform. It can have one of two
 We recommend all packages to be installed using Conda as that is what we use in our environments.
 Any conda command can be run in parallel on all the nodes of your cluster using `%pconda`.
 To install a new package on all the nodes of your cluster you can use `%pconda install`.
-All conda install arguments work as expected, e.g. `-c conda-forge` to set the channel.
+All conda install arguments work as expected, e.g., `-c conda-forge` to set the channel.
 
 ```shell
 %pconda install -c conda-forge <PACKAGE_NAME>
@@ -265,7 +317,7 @@ To learn more about the packages installed on the cluster nodes `%pconda list`.
 %pconda list
 ```
 
-To remove a conda package on all the nodes of your cluster, use `%pconda remove`.
+To remove a conda package on all your cluster nodes, use `%pconda remove`.
 
 ```shell
 %pconda remove <PACKAGE_NAME>
@@ -307,21 +359,22 @@ Shell commands can be run in parallel on the nodes of your cluster using `%psh <
 ## Connecting to a Cluster {#connecting_to_a_cluster}
 
 We recommend interacting with clusters primarily through Jupyter
-notebooks and Jobs. However, it may be necessary to connect directly to
+Notebooks and Jobs. However, it may be necessary to connect directly to
 a cluster in some cases. In that case, you can connect through a notebook
 terminal.
 
 ### Connecting with a Notebook Terminal
 ![Notebook-Terminal](../platform2-gifs/notebook-terminal.gif#center)
 
-If you cluster have more than one node. In the terminal you can connect to any of the cluster nodes by running
+If your cluster has more than one node , you can connect to any of the cluster nodes by running the following command in the terminal:
+
 ```shell
 ssh <NODE-IP>
 ```
 
 ![Connect-Cluster](../platform2-gifs/connect-to-cluster.gif#center)
 
-Through this terminal, you can interact with the `/bodofs` folder, which
+Through this terminal, you can access the `/bodofs` folder, which
 is shared by all the instances in the cluster and the Notebook instance.
 [Verify your connection][verify_your_connection] to interact directly with your cluster.
 
@@ -330,12 +383,12 @@ is shared by all the instances in the cluster and the Notebook instance.
 Once you have connected to a node in your cluster, you should verify
 that you can run operations across all the instances in the cluster.
 
-1.  Verify the path to the hostfile for your cluster. You can find it by
+1. Verify the path to the hostfile for your cluster. You can find it by
     running:
     ```shell
     ls -la /home/bodo/hostfile
     ```
-2.  Check that you can run a command across you cluster. To do this,
+2. Check that you can run a command across you cluster. To do this,
     run:
 
     ```shell
@@ -350,7 +403,7 @@ that you can run operations across all the instances in the cluster.
     your cluster. For example, if you have a 4 instance cluster of
     c5.4xlarge, then your `TOTAL_CORE_COUNT` is 32.
 
-3.  Verify that you can run a python command across your cluster. For
+3. Verify that you can run a python command across your cluster. For
     example, run:
 
         mpiexec -n <TOTAL_CORE_COUNT> -f /home/bodo/hostfile python --version
@@ -359,75 +412,54 @@ If all commands succeed, you should be able to execute workloads across
 your cluster. You can place scripts and data that are shared
 across cluster nodes in `/bodofs`. 
 
-## Running a Job  :material-delete-clock:{ title="Soon to be deprecated" }
-
-Bodo Cloud Platform has support for running scheduled (and immediate)
-Python jobs without the need for Jupyter Notebooks. To create a Job,
-navigate to the Jobs page by selecting _Jobs_ in the left bar.
+## Running a Batch Job
+Bodo Cloud Platform has support for running Python and SQL batch jobs.
 
 ![Sidebar-Jobs](../platform2-screenshots/side-jobs.png#center)
 
-This pages displays any <inpg> INPROGRESS</inpg> jobs you have previously scheduled
-and allows you to schedule new Jobs. At the top right corner, click on
-`CREATE JOB DEFINITION`. This opens a job definition creation form.
+1. Creating batch job definition:
 
-First, select a name for your job definition and source type.
-Then specify details for source location. In advance option you can pass arguments, 
-catalog, retry strategy and description. Optionally you can specify Job Cluster definition
-it can be used to create new Cluster for Job Run.
+    ![Job-Definition-Form](../platform2-gifs/workspace-job-def.gif#center)
 
-!!! note
-    When selecting a GitHub URL, you should select the URL
-    available at the top of your web browser and NOT the path when cloning
-    the repository, _i.e._ your path SHOULD NOT end in `.git`.
 
-!!! note
-    If your Github Account uses 2FA please use a Github Access
-    Token to avoid any possible authentication issues.
+2. Running a batch job:
 
-Once your form is complete, select `SUBMIT` to create your job definition.
+    ![Job-Run](../platform2-gifs/job-run.gif#center)
 
-![Job-Definition-Form](../platform2-gifs/workspace-job-def.gif#center)
 
-Once you've job definition you can create a Job Run.
-![Job-Run](../platform2-gifs/job-run.gif#center)
+3. Job run logs:
 
-At this point your job will execute your desired command. Once it
-finishes executing, your job will transition to <fin>SUCCEEDED</fin> status. You
-can find stdout / stderr logs pressing `DETAILS` followed by `Logs`.
-![Job-Run](../platform2-gifs/job-run-logs.gif#center)
+    ![Job-Run](../platform2-gifs/job-run-logs.gif#center)
 
-!!! note
-    If a cluster was specifically created for this job, it will be deleted after the job finishes.
-
-!!! note
-    Bodo **DOES NOT** preserve artifacts written to local storage. If
-    you have any information that you need to persist and later review, you
-    should write to external storage or to /bodofs (AWS S3/Azure Blob Storage). 
-    You may also write to stdout/stderr, but output logs may be truncated, so it should not be
-    considered reliable for large outputs that need to be read later.
+For further information, please refer to the [Batch Job Guide.][batch-jobs]
 
 ## Troubleshooting
 
 Here are solutions to potential issues you may encounter while using the
 Bodo Cloud Platform. 
 
-### Unexpected number of ranks
+### Notebook: 403 Forbidden
 
-If you are getting an unexpected number of ranks then the issue could be an inaccurate 
-MPI hostfile for the cluster. This is mostly likely to happen after scaling up a cluster. 
-You can update the hostfile using IPyParallel Magic `%update_hostfile` and then restart 
-the kernel to apply the changes.
+![Notebook-403-Error](../platform2-screenshots/notebook_403_error.png#center)
 
-```shell
-%update_hostfile
-```
+This error is typically caused by an incorrect token, often occurring when a token is cached from accessing a different workspace. 
+There are two recommended workarounds:
 
-![Update-Hostfile](../platform2-gifs/update-hostfile.gif#center)
+First, attempt to resolve the issue by navigating back to the organization using the left menu `Back to Organization`. 
+Once there, re-enter the workspace.
 
-### File Save Error
+If the problem persists, try clearing your web browser's cache and then logging in to Bodo Platform once more.
 
-![File-Save-Error](../platform2-screenshots/file_save_error.png#center)
+### Notebook: 404 Not Found / 502 Bad Gateway
+
+![Notebook-404-Error](../platform2-screenshots/notebook_404_error.png#center)
+
+If for some reason `My Notebook` is displaying error code 404 / 502, you should try to update and then restart the notebook server
+using left menu. If this does not help, please [contact us](https://bodo.ai/contact/){target="blank"} for further assistance.
+
+### Notebook: File Save Error
+
+![Notebook-File-Save-Error](../platform2-screenshots/file_save_error.png#center)
 
 If you get a file save error with message `invalid response: 413`
 make sure your notebook (`.ipynb`) file is less than 16MB in size. Bodo Platform
