@@ -13,12 +13,12 @@ conda activate Bodo
 conda install bodo -c bodo.ai -c conda-forge
 ```
 
-This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
+These commands create a conda environment called `Bodo` and install Bodo Community Edition.
 
 
 ## Generate Sample Data
 
-Let's start by creating a parquet file with some sample data. The following Python code creates a parquet file with two columns `A` and `B` and 20 million rows. The column `A` contains values from 0 to 29, and the column `B` contains values from 0 to 19,999,999.
+Let's start by creating a Parquet file with some sample data. The following Python code creates a Parquet file with two columns `A` and `B` and 20 million rows. The column `A` contains values from 0 to 29, and the column `B` contains values from 0 to 19,999,999.
 
 ```python
 import pandas as pd
@@ -37,7 +37,7 @@ df.to_parquet("my_data.pq")
 
 ## A Simple Pandas Computation
 
-Now let's write a simple Python function that computes the sum of column `A` for all rows where `B` is greater than 4 using pandas. We need to decorate the function with `@bodo.jit` to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
+Now let's write a simple Python function that computes the sum of column `A` for all rows where `B` is greater than 4 using pandas. We decorate the function with `@bodo.jit` to indicate that we want to compile the code using Bodo. Let's also add a timer to measure the execution time.
 
 
 ```python
