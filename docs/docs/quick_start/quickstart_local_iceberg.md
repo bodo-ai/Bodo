@@ -15,15 +15,16 @@ conda activate Bodo
 conda install bodo bodo-iceberg-connector -c bodo.ai -c conda-forge
 ```
 
-This command creates a conda environment called `Bodo` to run your code in and installs Bodo Community Edition by default, which is free and works on up to 8 cores.
+These commands create a conda environment called `Bodo` and install Bodo Community Edition.
 
 
 ## Create a local Iceberg Table
 
 
-Now let's create a function to create an Iceberg table from a sample dataframe. Our sample dataframe from which we will write the data will have two columns `A` and `B` and 20 million rows. The column `A` contains values from 0 to 29, and the column `B` contains values from 0 to 19,999,999.
+Now let's create a function to create an Iceberg table from a sample DataFrame with two columns (`A` and `B`) and 20 million rows.
+Column `A` contains values from 0 to 29, and column `B` contains values from 0 to 19,999,999.
 
- Our function will write it to a local directory called "MY_DATABASE". The table will be stored under the "MY_SCHEMA" schema (which is a folder under my database) and will be named "MY_TABLE".
+Our function will write data to a local directory called _MY_DATABASE_. The table named _MY_TABLE_ will be stored under the _MY_SCHEMA_ schema (which is a folder under _MY_DATABASE_).
 
 
 ```python
@@ -64,7 +65,7 @@ def example_read_iceberg():
             con="iceberg://MY_DATABASE",
             schema="MY_SCHEMA"
          )
-    print(df) # print the dataframe to see the results
+    print(df)
     return df
 
 
@@ -109,7 +110,7 @@ def example_read_iceberg():
             con="iceberg://MY_DATABASE",
             schema="MY_SCHEMA"
          )
-    print(df) # print the dataframe to see the results
+    print(df)
     return df
 
 df_read = example_read_iceberg()
@@ -249,5 +250,5 @@ Replace `8` with the number of cores you want to use. The output will be distrib
     ```
 </details>
 
-Note that this quickstart uses a local Iceberg table, but you can also use Bodo with Iceberg tables on S3, ADLS or GCS as well.
+Note that this quickstart uses a local Iceberg table, but you can also use Bodo with Iceberg tables on S3, ADLS, and GCS as well.
 
