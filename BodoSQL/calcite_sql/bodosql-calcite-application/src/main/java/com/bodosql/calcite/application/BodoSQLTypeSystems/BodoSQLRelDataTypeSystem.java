@@ -38,11 +38,21 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
    */
   private @Nullable Integer weekOfYearPolicy;
 
+  public static class CatalogContext {
+    public String currentDatabase;
+    public String currentAccount;
+
+    public CatalogContext(String database, String account) {
+      this.currentDatabase = database;
+      this.currentAccount = account;
+    }
+  }
+
   /*
   CURRENT_DATABSE: Name of the database in use for the current session.
 
   */
-  private String currentDatabase;
+  private CatalogContext currentDatabase;
 
   public BodoSQLRelDataTypeSystem() {
     this(BodoTZInfo.UTC, 0, 0, null);
@@ -52,7 +62,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       BodoTZInfo tzInfo,
       Integer weekStart,
       Integer weekOfYearPolicy,
-      @Nullable String currentDatabase) {
+      @Nullable CatalogContext currentDatabase) {
     defaultTZInfo = tzInfo;
     this.weekStart = weekStart;
     this.weekOfYearPolicy = weekOfYearPolicy;
@@ -200,7 +210,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
     return weekOfYearPolicy;
   }
 
-  public @Nullable String getCatalogName() {
+  public @Nullable CatalogContext getCatalogContext() {
     return currentDatabase;
   }
 

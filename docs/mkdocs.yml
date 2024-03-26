@@ -290,6 +290,7 @@ nav:
             - Context Functions:
                 - api_docs/sql/context/index.md
                 - api_docs/sql/context/current_database.md
+                - api_docs/sql/context/current_account.md
             - Control Flow Functions:
                 - api_docs/sql/control/index.md
                 - api_docs/sql/control/coalesce.md
