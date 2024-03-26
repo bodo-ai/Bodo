@@ -3050,7 +3050,8 @@ def test_merge_into_cow_write_api(
             warehouse_loc,
             old_fnames,
             [new_fname],
-            {"record_count": [4], "size": [0]},
+            [0],
+            [{"rowCount": 4}],
             snapshot_id,
         )
         assert success, "MERGE INTO Commit Operation Failed"
@@ -3149,7 +3150,8 @@ def test_merge_into_cow_write_api_partitioned(
             warehouse_loc,
             old_fnames,
             new_paths,
-            {"record_count": record_counts, "size": [0] * len(new_paths)},
+            [0] * len(new_paths),
+            [{"rowCount": x} for x in record_counts],
             snapshot_id,
         )
         assert success, "MERGE INTO Commit Operation Failed"
@@ -3235,7 +3237,8 @@ def test_merge_into_cow_write_api_snapshot_check(
             warehouse_loc,
             old_fnames,
             [new_fname],
-            {"record_count": [4], "size": [0]},
+            [0],
+            [{"rowCount": 4}],
             snapshot_id,
         )
         assert not success, "MERGE INTO Commit Operation should not have succeeded"

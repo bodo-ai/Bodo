@@ -2340,16 +2340,14 @@ def with_iceberg_field_id_md_from_ref_field(
     field: pa.Field, ref_field: pa.Field
 ) -> pa.Field:
     """
-    Adds/Updates Iceberg Field IDs in the PyArrow field's metadata
-    based on the reference field. The reference field must have
-    the field ID in its metadata.
-    In the case of nested types, we recurse and assign unique field IDs to
-    the child fields as well.
+    Replaces the Iceberg field with the reference field containing the correct
+    type and field ID. In the case of nested types, we recurse to ensure we
+    accurately select the proper subset of structs.
 
+    Note: The ref_field must also contain metadata with the Iceberg field ID.
     Args:
         field (pa.Field): Original field
         ref_field (pa.Field): Reference field to get the Iceberg field ID from.
-
     Returns:
         pa.Field:  New field with the field ID added to the field
             metadata (including all the child fields).
@@ -2413,7 +2411,7 @@ def with_iceberg_field_id_md_from_ref_field(
             pa.map_(new_key_field, new_item_field)
         ).with_metadata(new_md)
     else:
-        new_field = field.with_metadata(new_md)
+        new_field = ref_field.with_metadata(new_md)
     return new_field
 
 
@@ -2465,6 +2463,7 @@ def add_iceberg_field_id_md_to_pa_schema(
         for field in schema:
             ref_field = ref_schema.field(field.name)
             assert ref_field is not None, field
+            # This ensures we select the correct subset of any structs.
             new_field = with_iceberg_field_id_md_from_ref_field(field, ref_field)
             new_fields.append(new_field)
         return pa.schema(new_fields)
@@ -2496,7 +2495,7 @@ def get_table_details_before_write(
     partition_spec = []
     sort_order = []
     iceberg_schema_str = ""
-    pa_schema = None
+    output_pyarrow_schema = None
 
     # Map column name to index for efficient lookup
     col_name_to_idx_map = {col: i for (i, col) in enumerate(df_schema.names)}
@@ -2566,7 +2565,7 @@ def get_table_details_before_write(
             # Add Iceberg Field ID to the fields' metadata.
             # If we received an existing schema (pa_schema) in the append case,
             # then port over the existing field IDs, else generate new ones.
-            df_schema = add_iceberg_field_id_md_to_pa_schema(
+            output_pyarrow_schema = add_iceberg_field_id_md_to_pa_schema(
                 df_schema, ref_schema=pa_schema
             )
 
@@ -2574,7 +2573,9 @@ def get_table_details_before_write(
                 # When the table doesn't exist, i.e. we're creating a new one,
                 # we need to create iceberg_schema_str from the PyArrow schema
                 # of the dataframe.
-                iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(df_schema)
+                iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(
+                    output_pyarrow_schema
+                )
 
         except connector.IcebergError as e:
             comm_exc = BodoError(e.message)
@@ -2590,8 +2591,7 @@ def get_table_details_before_write(
     partition_spec = comm.bcast(partition_spec)
     sort_order = comm.bcast(sort_order)
     iceberg_schema_str = comm.bcast(iceberg_schema_str)
-    pa_schema = comm.bcast(pa_schema)
-    df_schema = comm.bcast(df_schema)
+    output_pyarrow_schema = comm.bcast(output_pyarrow_schema)
 
     if iceberg_schema_id is None:
         already_exists = False
@@ -2608,15 +2608,13 @@ def get_table_details_before_write(
         partition_spec,
         sort_order,
         iceberg_schema_str,
-        # We use the expected schema at the parquet write step (in C++)
-        # so we can reuse the df_schema for create and replace cases
-        pa_schema if if_exists == "append" and pa_schema is not None else df_schema,
-        # This has the Iceberg field IDs in the fields' metadata.
-        df_schema,
+        output_pyarrow_schema,
     )
 
 
-def collect_file_info(iceberg_files_info) -> tuple[list[str], list[int], list[int]]:
+def generate_data_file_info(
+    iceberg_files_info: pt.List[pt.Tuple[pt.Any]],
+) -> pt.Tuple[pt.List[str], pt.List[int], pt.List[pt.Dict[str, pt.Any]]]:
     """
     Collect C++ Iceberg File Info to a single rank
     and process before handing off to the connector / committing functions
@@ -2624,38 +2622,61 @@ def collect_file_info(iceberg_files_info) -> tuple[list[str], list[int], list[in
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
+    # Information we need:
+    # 1. File names
+    # 2. file_size_in_bytes
 
-    # Metrics to provide to Iceberg:
-    # Required:
-    # 1. record_count -- Number of records/rows in this file
-    # 2. file_size_in_bytes -- Total file size in bytes
+    # Metrics we provide to Iceberg:
+    # 1. rowCount -- Number of rows in this file
+    # 2. columnSizes -- Number of records per field id. This is most useful for
+    #    nested data types where each row may have multiple records.
+    # 3. nullValueCounts - Null count per field id.
+    # 4. lowerBounds - Lower bounds per field id.
+    # 5. upperBounds - Upper bounds per field id.
 
-    # TODO [BE-3099] Metrics currently not provided:
-    # Optional:
-    # 3. column_sizes
-    # 4. value_counts
-    # 5. null_value_counts
-    # 6. nan_value_counts
-    # 7. distinct_counts
-    # 8. lower_bounds
-    # 9. upper_bounds
+    def extract_and_gather(i: int) -> pt.List[pt.Any]:
+        """Extract field i from iceberg_files_info
+        and gather the results on rank 0.
 
-    # Collect the file names
-    fnames_local = [x[0] for x in iceberg_files_info]
-    fnames_lists = comm.gather(fnames_local)
+        Args:
+            i (int): The field index
 
-    # Flatten the list of lists
-    fnames = (
-        [item for sub in fnames_lists for item in sub] if comm.Get_rank() == 0 else None
-    )
+        Returns:
+            pt.List[pt.Any]: The gathered result
+        """
+        values_local = [x[i] for x in iceberg_files_info]
+        values_local_list = comm.gather(values_local)
+        # Flatten the list of lists
+        return (
+            [item for sub in values_local_list for item in sub]
+            if comm.Get_rank() == 0
+            else None
+        )
+
+    fnames = extract_and_gather(0)
 
     # Collect the metrics
     record_counts_local = np.array([x[1] for x in iceberg_files_info], dtype=np.int64)
     file_sizes_local = np.array([x[2] for x in iceberg_files_info], dtype=np.int64)
     record_counts = bodo.gatherv(record_counts_local).tolist()
     file_sizes = bodo.gatherv(file_sizes_local).tolist()
-
-    return fnames, record_counts, file_sizes  # type: ignore
+    # Collect the file based metrics
+    value_counts = extract_and_gather(3)
+    null_counts = extract_and_gather(4)
+    lower_bounds = extract_and_gather(5)
+    upper_bounds = extract_and_gather(6)
+    metrics = [
+        # Note: These names must match Metrics.java fields in Iceberg.
+        {
+            "rowCount": record_counts[i],
+            "valueCounts": value_counts[i],
+            "nullValueCounts": null_counts[i],
+            "lowerBounds": lower_bounds[i],
+            "upperBounds": upper_bounds[i],
+        }
+        for i in range(len(record_counts))
+    ]
+    return fnames, file_sizes, metrics
 
 
 def register_table_write(
@@ -2664,7 +2685,8 @@ def register_table_write(
     table_name: str,
     table_loc: str,
     fnames: list[str],
-    all_metrics: dict[str, list[pt.Any]],  # TODO: Explain?
+    file_size_bytes: list[int],
+    all_metrics: dict[str, pt.Any],  # TODO: Explain?
     iceberg_schema_id: int,
     pa_schema,
     partition_spec,
@@ -2691,6 +2713,7 @@ def register_table_write(
             table_name,
             table_loc,
             fnames,
+            file_size_bytes,
             all_metrics,
             schema_id,
             pa_schema,
@@ -2711,6 +2734,7 @@ def register_table_merge_cow(
     table_loc: str,
     old_fnames: list[str],
     new_fnames: list[str],
+    file_size_bytes: list[int],
     all_metrics: dict[str, list[pt.Any]],  # TODO: Explain?
     snapshot_id: int,
 ):  # pragma: no cover
@@ -2733,6 +2757,7 @@ def register_table_merge_cow(
             table_loc,
             old_fnames,
             new_fnames,
+            file_size_bytes,
             all_metrics,
             snapshot_id,
         )
@@ -2894,8 +2919,7 @@ def iceberg_write(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
-        expected_schema="pyarrow_schema_type",
-        df_pyarrow_schema="pyarrow_schema_type",
+        output_pyarrow_schema="pyarrow_schema_type",
     ):
         (
             already_exists,
@@ -2904,10 +2928,9 @@ def iceberg_write(
             partition_spec,
             sort_order,
             iceberg_schema_str,
-            expected_schema,
             # This has the Iceberg field IDs in the metadata of every field
             # which is required for correctness.
-            df_pyarrow_schema,
+            output_pyarrow_schema,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -2937,11 +2960,11 @@ def iceberg_write(
         sort_order,
         iceberg_schema_str,
         is_parallel,
-        expected_schema,
+        output_pyarrow_schema,
     )
 
     with numba.objmode(success="bool_"):
-        fnames, record_counts, file_sizes = collect_file_info(iceberg_files_info)
+        fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector
         success = register_table_write(
@@ -2950,9 +2973,10 @@ def iceberg_write(
             table_name,
             table_loc,
             fnames,
-            {"size": file_sizes, "record_count": record_counts},
+            file_size_bytes,
+            metrics,
             iceberg_schema_id,
-            df_pyarrow_schema,
+            output_pyarrow_schema,
             partition_spec,
             sort_order,
             mode,
@@ -3079,7 +3103,7 @@ def iceberg_merge_cow(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
-        expected_schema="pyarrow_schema_type",
+        output_pyarrow_schema="pyarrow_schema_type",
     ):
         (
             already_exists,
@@ -3088,8 +3112,7 @@ def iceberg_merge_cow(
             partition_spec,
             sort_order,
             iceberg_schema_str,
-            expected_schema,
-            _,
+            output_pyarrow_schema,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -3110,11 +3133,11 @@ def iceberg_merge_cow(
         sort_order,
         iceberg_schema_str,
         is_parallel,
-        expected_schema,
+        output_pyarrow_schema,
     )
 
     with numba.objmode(success="bool_"):
-        fnames, record_counts, file_sizes = collect_file_info(iceberg_files_info)
+        fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector
         success = register_table_merge_cow(
@@ -3124,7 +3147,8 @@ def iceberg_merge_cow(
             table_loc,
             old_fnames,
             fnames,
-            {"size": file_sizes, "record_count": record_counts},
+            file_size_bytes,
+            metrics,
             snapshot_id,
         )
 
