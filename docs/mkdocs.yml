@@ -127,13 +127,9 @@ nav:
     - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
   - Guides:
       - integrating_bodo/index.md
-      - Python Development Guide: quick_start/dev_guide.md
-      - Running jobs on the Bodo Platform: integrating_bodo/bodo-jobs.md
-      - Using native SQL with Catalogs: integrating_bodo/database_catalog.md
       - Installation and Setup Guides:
           - installation_and_setup/index.md
           - Bodo Platform:
-            - Bodo Platform Basics: installation_and_setup/bodo_platform.md
             - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
             - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
             - Bodo Platform SDK: installation_and_setup/platform_sdk.md
@@ -143,6 +139,19 @@ nav:
             - Interactive Bodo Cluster Setup using IPyParallel: installation_and_setup/ipyparallel.md
             - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
             - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
+      - Python Development Guide: quick_start/dev_guide.md
+      - Using the Bodo Cloud Platform:
+          - guides/using_bodo_platform/index.md
+          - Organization Basics: guides/using_bodo_platform/organization.md
+          - Creating a Cluster: guides/using_bodo_platform/clusters.md
+          - Using Notebooks: guides/using_bodo_platform/notebooks.md
+          - Using Native SQL with Catalogs: integrating_bodo/database_catalog.md
+          - Running a Batch Job: guides/using_bodo_platform/bodo-jobs.md
+          - Using your own Instance Role for a Cluster: guides/using_bodo_platform/instance_role.md
+          - Managing Packages Manually: guides/using_bodo_platform/packages.md
+          - Running Shell Commands on a Cluster: guides/using_bodo_platform/shell.md
+          - Connecting to a Cluster: guides/using_bodo_platform/connect.md
+          - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
       - Understanding Parallelism with Bodo:
           - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
           - Advanced Parallelism Topics: bodo_parallelism/advanced.md
