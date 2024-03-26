@@ -49,6 +49,9 @@ static MPI_Datatype get_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
+static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
+                               int64_t* out_timestamp, int64_t* out_offset,
+                               bool is_max) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 template <typename Alloc>
@@ -251,11 +254,91 @@ static int barrier() {
     return 0;
 }
 
+/**
+ * Compute the min or the max of TimestampTZ values as an MPI reduction.
+ *
+ * @param in input value
+ * @param out currently reduced value, and the destination for the new reduced
+ * value
+ * @param len number of elements
+ * @param type MPI datatype
+ * @param is_max if true, compute the max, otherwise compute the min
+ */
+static void min_max_timestamptz(void* in, void* out, int* len,
+                                MPI_Datatype* type, bool is_max) {
+    int64_t* in64 = (int64_t*)in;
+    int64_t* out64 = (int64_t*)out;
+
+    int64_t in_value = *in64;
+    int32_t in_offset = *(int32_t*)(in64 + 1);
+
+    int64_t out_value = *out64;
+
+    bool in_is_greater = in_value > out_value;
+
+    if (in_is_greater == is_max) {
+        *out64 = in_value;
+        *(int32_t*)(out64 + 1) = in_offset;
+    }
+}
+
+// see min_max_timestamptz
+static void max_timestamptz(void* in, void* out, int* len, MPI_Datatype* type) {
+    min_max_timestamptz(in, out, len, type, true);
+}
+
+// see min_max_timestamptz
+static void min_timestamptz(void* in, void* out, int* len, MPI_Datatype* type) {
+    min_max_timestamptz(in, out, len, type, false);
+}
+
+// Distributed reduction of TimestampTZ scalar values - note that only min and
+// max are supported.
+static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
+                               int64_t* out_timestamp, int64_t* out_offset,
+                               bool is_max) {
+    MPI_Op cmp_ttz;
+    MPI_Op_create(is_max ? max_timestamptz : min_timestamptz, 1, &cmp_ttz);
+
+    // If we pack the value and the offset together we can create a stable
+    // value for reducing - while only the value is needed for correctness, it
+    // can be quite confusing for users if the offset isn't preserved.
+    int64_t value = in_timestamp;
+    int16_t offset = in_offset;
+    MPI_Datatype mpi_typ = MPI_LONG_INT;
+
+    // Determine the size of the pointer to allocate - note that MPI does
+    // not use any padding
+    constexpr int struct_size = sizeof(int64_t) + sizeof(int32_t);
+    int mpi_struct_size;
+    MPI_Type_size(mpi_typ, &mpi_struct_size);
+    assert(mpi_struct_size == struct_size);
+
+    char in_val[struct_size];
+    char out_val[struct_size];
+
+    memcpy(in_val, &value, sizeof(int64_t));
+    // Cast offset to i32
+    int32_t offset32 = offset;
+    memcpy(in_val + sizeof(int64_t), &offset32, sizeof(int32_t));
+
+    MPI_Allreduce(in_val, out_val, 1, mpi_typ, cmp_ttz, MPI_COMM_WORLD);
+    MPI_Op_free(&cmp_ttz);
+
+    // Extract timestamp and offset from the reduced value
+    *out_timestamp = *((int64_t*)out_val);
+    int32_t out_offset32 = *((int32_t*)(out_val + sizeof(int64_t)));
+    *out_offset = out_offset32;
+}
+
 static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
                         int type_enum) {
     // printf("reduce value: %d\n", value);
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
+
+    // This is a hack because TimestampTZ's scalar representation isn't the same
+    // as it's array representation.
 
     // argmax and argmin need special handling
     if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {

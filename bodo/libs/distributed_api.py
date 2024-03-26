@@ -95,6 +95,7 @@ ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
 ll.add_symbol("c_recv", hdist.dist_recv)
 ll.add_symbol("c_send", hdist.dist_send)
+ll.add_symbol("timestamptz_reduce", hdist.timestamptz_reduce)
 ll.add_symbol("_dist_transpose_comm", hdist._dist_transpose_comm)
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
@@ -576,6 +577,11 @@ _dist_arr_reduce = types.ExternalFunction(
     "dist_arr_reduce", types.void(types.voidptr, types.int64, types.int32, types.int32)
 )
 
+_timestamptz_reduce = types.ExternalFunction(
+    "timestamptz_reduce",
+    types.void(types.int64, types.int64, types.voidptr, types.voidptr, types.boolean),
+)
+
 
 @numba.njit
 def dist_reduce(value, reduce_op):
@@ -622,6 +628,43 @@ def dist_reduce_impl(value, reduce_op):
             )
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
+
+    if isinstance(value, bodo.TimestampTZType):
+        # This requires special handling because TimestampTZ's scalar
+        # representation isn't the same as it's array representation - as such,
+        # we need to extract the timestamp and offset separately, otherwise the
+        # pointer passed into reduce will be a pointer to the following struct:
+        #  struct {
+        #      pd.Timestamp timestamp;
+        #      int64_t offset;
+        #  }
+        # This is problematic since `timestamp` itself is a struct, and
+        # extracting the right values is error-prone (and possibly not
+        # portable).
+        # TODO(aneesh): unify array and scalar representations of TimestampTZ to
+        # avoid this.
+        def impl(value, reduce_op):  # pragma: no cover
+            if reduce_op not in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
+                raise BodoError(
+                    "Only max/min scalar reduction is supported for TimestampTZ"
+                )
+
+            value_ts = value.utc_timestamp.value
+            # using i64 for all numeric values
+            out_ts_ptr = value_to_ptr(value_ts)
+            out_offset_ptr = value_to_ptr(value_ts)
+            _timestamptz_reduce(
+                value.utc_timestamp.value,
+                value.offset_minutes,
+                out_ts_ptr,
+                out_offset_ptr,
+                reduce_op == Reduce_Type.Max.value,
+            )
+            out_ts = load_val_ptr(out_ts_ptr, value_ts)
+            out_offset = load_val_ptr(out_offset_ptr, value_ts)
+            return bodo.TimestampTZ(pd.Timestamp(out_ts), out_offset)
+
+        return impl
 
     def impl(value, reduce_op):  # pragma: no cover
         in_ptr = value_to_ptr(value)

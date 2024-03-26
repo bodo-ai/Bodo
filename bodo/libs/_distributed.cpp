@@ -659,6 +659,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
     SetAttrStringFromVoidPtr(m, permutation_int);
     SetAttrStringFromVoidPtr(m, permutation_array_index);
+    SetAttrStringFromVoidPtr(m, timestamptz_reduce);
     SetAttrStringFromVoidPtr(m, _dist_transpose_comm);
 
     // add actual int value to module
