@@ -87,7 +87,7 @@ add_compile_options(
 )
 if (LINUX)
   add_compile_options(
-    # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)  
+    # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
     "-march=haswell"
     # Avoid GCC errors for using int64 in allocations
     "-Wno-alloc-size-larger-than")
@@ -176,7 +176,7 @@ add_custom_command(
   DEPENDS bodo/io/pyfs.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/pyfs.cpp" "bodo/io/pyfs.pyx"
   COMMAND cp "bodo/io/pyfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/pyfs.cpp"
   COMMENT "Cythonizing Source bodo/io/pyfs.pyx into bodo/io/pyfs.cpp"
 )
@@ -194,7 +194,7 @@ add_custom_command(
   DEPENDS bodo/io/_hdfs.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/_hdfs.cpp" "bodo/io/_hdfs.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "bodo/io/_hdfs.cpp" "bodo/io/_hdfs.pyx"
   COMMAND cp "bodo/io/_hdfs.cpp" "${CMAKE_CURRENT_BINARY_DIR}/bodo/io/_hdfs.cpp"
   COMMENT "Cythonizing Source bodo/io/_hdfs.pyx into bodo/io/_hdfs.cpp"
 )
@@ -218,7 +218,7 @@ add_custom_command(
   DEPENDS bodo/utils/tracing.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c" "bodo/utils/tracing.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" -3 -E "BODO_DEV_BUILD=${BODO_DEV_BUILD}" --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/utils/tracing.c" "bodo/utils/tracing.pyx"
   COMMENT "Cythonizing Source bodo/utils/tracing.pyx into bodo/utils/tracing.c"
 )
 
@@ -233,7 +233,7 @@ add_custom_command(
   DEPENDS bodo/libs/memory.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/memory.cpp" "bodo/libs/memory.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/memory.cpp" "bodo/libs/memory.pyx"
   COMMENT "Cythonizing Source bodo/libs/memory.pyx into bodo/libs/memory.cpp"
 )
 
@@ -377,15 +377,18 @@ target_include_directories(
     "bodo/libs/HashLibs/TSL/sparse-map"
 )
 
-# Required when using boost::stacktrace for debugging
-target_compile_definitions(
-  ext
-  PRIVATE
-    "BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED=1"
-)
 
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
-  target_compile_definitions(ext PRIVATE "IS_TESTING=1")
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+  target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
+
+else()
+  target_compile_definitions(
+    ext
+    PRIVATE
+      # Required when using boost::stacktrace for debugging
+      "BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED=1"
+      "IS_TESTING=1"
+  )
 endif()
 
 target_compile_options(
@@ -438,7 +441,7 @@ if (IS_PLATFORM)
 endif()
 
 if (DEFINED ENV{BUILD_WITH_V8})
-  target_link_libraries(ext PRIVATE 
+  target_link_libraries(ext PRIVATE
     v8_libbase
     v8_libplatform
     v8_base_without_compiler

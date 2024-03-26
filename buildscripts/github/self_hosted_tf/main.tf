@@ -99,7 +99,7 @@ module "runners" {
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_xlarge_"
         # Max # of Runners of this Size
-        runners_maximum_count = 3
+        runners_maximum_count = 5
       })
     }
   }

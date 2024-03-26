@@ -19,6 +19,17 @@
 
 #include "../libs/_bodo_common.h"
 
+/**
+ * @brief Unwrap PyArrow Schema PyObject and return the C++ value
+ * NOTE: Not calling arrow::py::unwrap_schema() in ArrowReader constructor
+ * directly due to a segfault with pip. See:
+ * https://bodo.atlassian.net/browse/BSE-2925
+ *
+ * @param pyarrow_schema input PyArrow Schema
+ * @return std::shared_ptr<arrow::Schema> C++ Schema
+ */
+std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema);
+
 #define CHECK_ARROW(expr, msg)                                               \
     if (!(expr.ok())) {                                                      \
         std::string err_msg = std::string("Error in Arrow Reader: ") + msg + \
@@ -149,11 +160,7 @@ class ArrowReader {
 
     inline void set_arrow_schema(PyObject* pyarrow_schema) {
         this->pyarrow_schema = pyarrow_schema;
-
-        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
-        CHECK_ARROW_AND_ASSIGN(
-            arrow::py::unwrap_schema(pyarrow_schema),
-            "Unwrapping Arrow Schema from Python Object Failed", this->schema);
+        this->schema = unwrap_schema(pyarrow_schema);
     }
 
     /**
