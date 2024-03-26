@@ -1,6 +1,8 @@
 package com.bodo.iceberg;
 
+import com.bodo.iceberg.gson.ByteBufferAdapter;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 import java.math.BigDecimal;
@@ -10,7 +12,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.apache.avro.util.Utf8;
-import org.apache.iceberg.*;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.types.Type;
@@ -20,16 +29,15 @@ public class DataFileInfo {
 
   private final String path;
 
-  // file size in bytes
-  private final long size;
+  @SerializedName("file_size_in_bytes")
+  private final long fileSizeInBytes;
 
-  @SerializedName("record_count")
-  private final long recordCount;
+  private final Metrics metrics;
 
-  DataFileInfo(String path, long size, long recordCount) {
+  DataFileInfo(String path, Long fileSizeInBytes, Metrics metrics) {
     this.path = path;
-    this.size = size;
-    this.recordCount = recordCount;
+    this.fileSizeInBytes = fileSizeInBytes.longValue();
+    this.metrics = metrics;
   }
 
   /**
@@ -38,13 +46,14 @@ public class DataFileInfo {
    * <p>The representation is in the form
    *
    * <pre>
-   * [{"path": "...", size: ..., record_count: ...}, {...}, ...]
+   * [{"path": "...", file_size_in_bytes: ...,  metrics: {...}}, {...}, ...]
    * </pre>
    *
    * and gets automatically parsed by looking at the class properties.
    */
   public static List<DataFileInfo> fromJson(String infoStr) {
-    Gson gson = new Gson();
+    Gson gson =
+        new GsonBuilder().registerTypeAdapter(ByteBuffer.class, new ByteBufferAdapter()).create();
     java.lang.reflect.Type listType = new TypeToken<List<DataFileInfo>>() {}.getType();
     return gson.fromJson(infoStr, listType);
   }
@@ -53,17 +62,17 @@ public class DataFileInfo {
     return path;
   }
 
-  public long getSize() {
-    return size;
+  public long getFileSizeInBytes() {
+    return fileSizeInBytes;
   }
 
-  public long getRecordCount() {
-    return recordCount;
+  public Metrics getMetrics() {
+    return metrics;
   }
 
   public String toString() {
     return String.format(
-        "(Path: %s, Size: %d, Record Count: %d)", getPath(), getSize(), getRecordCount());
+        "(Path: %s, Size: %d, Metrics: %d)", getPath(), getFileSizeInBytes(), getMetrics());
   }
 
   /** Construct an Iceberg DataFile from DataFileInfo instance */
@@ -72,8 +81,8 @@ public class DataFileInfo {
         DataFiles.builder(spec)
             .withFormat(FileFormat.PARQUET)
             .withPath(getPath())
-            .withFileSizeInBytes(getSize())
-            .withRecordCount(getRecordCount())
+            .withFileSizeInBytes(getFileSizeInBytes())
+            .withMetrics(getMetrics())
             .withSortOrder(order);
 
     if (isPartitionedPath) {

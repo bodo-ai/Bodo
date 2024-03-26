@@ -7,6 +7,7 @@
 #endif
 #include <optional>
 
+#include <arrow/array.h>
 #include <arrow/compute/cast.h>
 #include <arrow/python/api.h>
 #include <arrow/table.h>
@@ -16,12 +17,15 @@
 #include <boost/uuid/uuid_generators.hpp>  // generators
 #include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
 
+#include <fmt/format.h>
+
 #include "../libs/_array_hash.h"
 #include "../libs/_array_operations.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_shuffle.h"
 #include "../libs/iceberg_transforms.h"
+#include "iceberg_helpers.h"
 #include "parquet_write.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -40,6 +44,410 @@
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
+
+constexpr int NUM_ICEBERG_DATA_FILE_STATS = 6;
+constexpr int NUM_ICEBERG_FIELDS_WITH_FILENAME =
+    NUM_ICEBERG_DATA_FILE_STATS + 1;
+
+/**
+ * @brief Converts a value to a little endian bytes object.
+ *
+ * @tparam T The C data type of the value to convert.
+ * @param value The value to convert.
+ * @return PyObject* A Python bytes object containing the little endian
+ * encoding of the value.
+ */
+template <typename T>
+PyObject *buffer_to_little_endian_bytes(T value) {
+    const char *bytes;
+    if constexpr (std::endian::native == std::endian::little) {
+        bytes = reinterpret_cast<const char *>(&value);
+    } else {
+        // Convert to little endian
+        const char *bytes_be = reinterpret_cast<char *>(&value);
+        std::string str = std::string(bytes_be, sizeof(T));
+        std::reverse(std::begin(str), std::end(str));
+        bytes = str.c_str();
+    }
+    return PyBytes_FromStringAndSize(bytes, sizeof(T));
+}
+
+/**
+ * @brief Converts an Arrow scalar to a Python bytes object
+ * that matches the scalar encoding from the Iceberg spec.
+ * https://iceberg.apache.org/spec/#appendix-d-single-value-serialization
+ *
+ * @return PyObject* A Python bytes object containing the encoding of the
+ * value according to the serialization rules in the Iceberg spec.
+ */
+PyObject *arrow_scalar_to_iceberg_bytes(std::shared_ptr<arrow::Scalar> scalar) {
+    switch (scalar->type->id()) {
+        case (arrow::Type::BOOL): {
+            auto bool_scalar =
+                std::static_pointer_cast<arrow::BooleanScalar>(scalar);
+            bool value = bool_scalar->value;
+            char byte_value = value ? 0x1 : 0x0;
+            return PyBytes_FromStringAndSize(&byte_value, 1);
+        }
+        case (arrow::Type::INT32): {
+            auto int32_scalar =
+                std::static_pointer_cast<arrow::Int32Scalar>(scalar);
+            int32_t value = int32_scalar->value;
+            return buffer_to_little_endian_bytes<int32_t>(value);
+        }
+        case (arrow::Type::INT64): {
+            auto int64_scalar =
+                std::static_pointer_cast<arrow::Int64Scalar>(scalar);
+            int64_t value = int64_scalar->value;
+            return buffer_to_little_endian_bytes<int64_t>(value);
+        }
+        case (arrow::Type::FLOAT): {
+            auto float_scalar =
+                std::static_pointer_cast<arrow::FloatScalar>(scalar);
+            float value = float_scalar->value;
+            return buffer_to_little_endian_bytes<float>(value);
+        }
+        case (arrow::Type::DOUBLE): {
+            auto double_scalar =
+                std::static_pointer_cast<arrow::DoubleScalar>(scalar);
+            double value = double_scalar->value;
+            return buffer_to_little_endian_bytes<double>(value);
+        }
+        case (arrow::Type::DATE32): {
+            auto date_scalar =
+                std::static_pointer_cast<arrow::Date32Scalar>(scalar);
+            int32_t value = date_scalar->value;
+            return buffer_to_little_endian_bytes<int32_t>(value);
+        }
+        case (arrow::Type::TIME64): {
+            auto time_scalar =
+                std::static_pointer_cast<arrow::Time64Scalar>(scalar);
+            int64_t value = time_scalar->value;
+            return buffer_to_little_endian_bytes<int64_t>(value);
+        }
+        case (arrow::Type::TIMESTAMP): {
+            auto timestamp_scalar =
+                std::static_pointer_cast<arrow::TimestampScalar>(scalar);
+            int64_t value = timestamp_scalar->value;
+            return buffer_to_little_endian_bytes<int64_t>(value);
+        }
+        case (arrow::Type::STRING): {
+            auto string_scalar =
+                std::static_pointer_cast<arrow::StringScalar>(scalar);
+            // Note: The string should already be in UTF-8 format
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char *>(string_scalar->value->data()),
+                string_scalar->value->size());
+        }
+        case (arrow::Type::LARGE_STRING): {
+            auto string_scalar =
+                std::static_pointer_cast<arrow::LargeStringScalar>(scalar);
+            // Note: The string should already be in UTF-8 format
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char *>(string_scalar->value->data()),
+                string_scalar->value->size());
+        }
+        case (arrow::Type::BINARY): {
+            auto binary_scalar =
+                std::static_pointer_cast<arrow::BinaryScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char *>(binary_scalar->value->data()),
+                binary_scalar->value->size());
+        }
+        case (arrow::Type::LARGE_BINARY): {
+            auto binary_scalar =
+                std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char *>(binary_scalar->value->data()),
+                binary_scalar->value->size());
+        }
+        case (arrow::Type::DECIMAL128): {
+            auto decimal_scalar =
+                std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+            arrow::Decimal128 value = decimal_scalar->value;
+            const char *bytes;
+            // TODO: Implement the "minimum" number of bytes
+            if constexpr (std::endian::native == std::endian::big) {
+                bytes = reinterpret_cast<const char *>(&value);
+            } else {
+                // Convert to big endian
+                const char *bytes_be = reinterpret_cast<char *>(&value);
+                std::string str =
+                    std::string(bytes_be, sizeof(arrow::Decimal128));
+                std::reverse(std::begin(str), std::end(str));
+                bytes = str.c_str();
+            }
+            return PyBytes_FromStringAndSize(bytes, sizeof(arrow::Decimal128));
+        }
+        default: {
+            std::string err_msg = fmt::format(
+                "Iceberg Parquet Write: Unsupported scalar type for "
+                "lower_bound or upper_bound: {}",
+                scalar->type->ToString());
+            throw std::runtime_error(err_msg);
+        }
+    }
+}
+
+/**
+ * @brief Convert a dictionary array into a format that can be used
+ * to compute metrics like min and max. Dictionary arrays cannot directly
+ * call compute functions because they are not supported in arrow and may
+ * have value in the dictionary that are not used by any row in the
+ * column. This function extracts the underlying dictionary and converts
+ * any elements without matching index to null.
+ *
+ * @param dict_array The dictionary array from which to extract the data.
+ * @return std::shared_ptr<arrow::ChunkedArray> A string array that can
+ * be used to compute metrics like min and max.
+ */
+std::shared_ptr<arrow::ChunkedArray>
+get_metrics_computable_array_for_dictionary(
+    const std::shared_ptr<arrow::ChunkedArray> &dict_array) {
+    // Dictionary arrays cannot directly call MinMax because
+    // they are not supported. We need to convert them to
+    // get the underlying data array and skip any values we
+    // don't actually have in our table.
+    // Unify all of the dictionaries. This should be
+    // unnecessary, but we need to ensure we can prove this.
+    arrow::Result<std::shared_ptr<::arrow::ChunkedArray>> unified_arr_res =
+        arrow::DictionaryUnifier::UnifyChunkedArray(dict_array);
+    std::shared_ptr<::arrow::ChunkedArray> unified_arr;
+    CHECK_ARROW_AND_ASSIGN(unified_arr_res,
+                           "Runtime error in chunk array "
+                           "dictionary unification...",
+                           unified_arr)
+    // After unification, all chunks should have the same
+    // dictionary
+    // TODO Verify
+    std::shared_ptr<arrow::Array> first_chunk = (unified_arr->chunk(0));
+    std::shared_ptr<arrow::Array> dictionary =
+        reinterpret_cast<arrow::DictionaryArray *>(first_chunk.get())
+            ->dictionary();
+    // We mark elements as seen/not seen by marking them
+    // as null in the values we pass to arrow. This requires
+    // a copy of the null bitmask, but not the underlying
+    // data.
+    // Note: This can be null if there are no nulls.
+    auto old_null_bitmap = dictionary->null_bitmap();
+    // Initialize to all nulls
+    size_t num_null_bytes = arrow::bit_util::BytesForBits(dictionary->length());
+    arrow::Result<std::shared_ptr<arrow::Buffer>> res =
+        AllocateBuffer(num_null_bytes, bodo::BufferPool::DefaultPtr());
+    std::shared_ptr<arrow::Buffer> new_null_bitmap;
+    CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", new_null_bitmap);
+    // Ensure 0 allocated.
+    memset(new_null_bitmap->mutable_data(), 0x0,
+           static_cast<size_t>(num_null_bytes));
+    // Iterate through the indices and mark the dictionary
+    for (auto chunk : unified_arr->chunks()) {
+        std::shared_ptr<arrow::Array> indices =
+            reinterpret_cast<arrow::DictionaryArray *>(chunk.get())->indices();
+        auto indices_type_id = indices->type()->id();
+        if (indices_type_id == arrow::Type::INT32) {
+            auto indices_arr = std::dynamic_pointer_cast<
+                arrow::NumericArray<arrow::Int32Type>>(indices);
+            const int32_t *raw_values = indices_arr->raw_values();
+            for (int64_t j = 0; j < indices_arr->length(); j++) {
+                bool is_null_index = indices_arr->IsNull(j);
+                int32_t index = is_null_index ? 0 : raw_values[j];
+                bool is_null_bit = dictionary->IsNull(index);
+                if (!is_null_index && !is_null_bit) {
+                    arrow::bit_util::SetBit(new_null_bitmap->mutable_data(),
+                                            index);
+                }
+            }
+        } else {
+            throw std::runtime_error(
+                "Iceberg Parquet Write: Dictionary indices must be INT32");
+        }
+    }
+    // Dictionary can be either string or large string.
+    auto dict_type_id = dictionary->type()->id();
+    std::shared_ptr<arrow::Array> new_array;
+    if (dict_type_id == arrow::Type::STRING) {
+        auto dict_string_array =
+            std::dynamic_pointer_cast<arrow::StringArray>(dictionary);
+        new_array = make_shared<arrow::StringArray>(
+            dict_string_array->length(), dict_string_array->value_offsets(),
+            dict_string_array->value_data(), new_null_bitmap);
+    } else {
+        assert(dict_type_id == arrow::Type::LARGE_STRING);
+        auto dict_string_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(dictionary);
+        new_array = make_shared<arrow::LargeStringArray>(
+            dict_string_array->length(), dict_string_array->value_offsets(),
+            dict_string_array->value_data(), new_null_bitmap);
+    }
+    return make_shared<arrow::ChunkedArray>(new_array);
+}
+
+/**
+ * @brief Compute the min and max for an iceberg field and update the
+ * lower_bound_dict_py and upper_bound_dict_py dictionaries.
+ *
+ * @param[in] column Arrow chunked array for the field.
+ * @param[in] field_id_py Python integer object for the field id.
+ * @param[out] lower_bound_dict_py Python dictionary object for writing the
+ * lower bound information for the field.
+ * @param[out] upper_bound_dict_py Python dictionary object for writing the
+ * upper bound information for the field.
+ */
+void compute_min_max_iceberg_field(
+    const std::shared_ptr<arrow::ChunkedArray> &column, PyObject *field_id_py,
+    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py) {
+    std::shared_ptr<arrow::ChunkedArray> chunked_array;
+    if (column->type()->id() == arrow::Type::DICTIONARY) {
+        chunked_array = get_metrics_computable_array_for_dictionary(column);
+    } else {
+        chunked_array = column;
+    }
+    auto minMaxRes = arrow::compute::MinMax(chunked_array);
+    CHECK_ARROW(minMaxRes.status(), "Error in computing min/max");
+    std::shared_ptr<arrow::Scalar> minMax =
+        std::move(minMaxRes.ValueOrDie()).scalar();
+    std::shared_ptr<arrow::StructScalar> minMaxStruct =
+        std::static_pointer_cast<arrow::StructScalar>(minMax);
+    std::shared_ptr<arrow::Scalar> min =
+        minMaxStruct->field(arrow::FieldRef("min")).ValueOrDie();
+    std::shared_ptr<arrow::Scalar> max =
+        minMaxStruct->field(arrow::FieldRef("max")).ValueOrDie();
+    // Convert to Python objects
+    PyObject *min_object = arrow_scalar_to_iceberg_bytes(min);
+    PyObject *max_object = arrow_scalar_to_iceberg_bytes(max);
+    PyDict_SetItem(lower_bound_dict_py, field_id_py, min_object);
+    PyDict_SetItem(upper_bound_dict_py, field_id_py, max_object);
+    Py_DECREF(min_object);
+    Py_DECREF(max_object);
+}
+
+/**
+ * @brief Generate all metrics associated with an Iceberg field.
+ * For types with nested data this may generate multiple metrics
+ * for the children fields.
+ *
+ * @param[in] column Arrow chunked array for the field
+ * @param[in] field Arrow field used to generate the field id information.
+ * @param compute_min_and_max Whether to compute the min and max. This gets
+ * modified for nested data.
+ * @param[out] column_size_dict_py Python dictionary object
+ * for writing the column size information for the field(s).
+ * @param[out] null_count_dict_py Python dictionary object
+ * for writing the null count information for the field(s).
+ * @param[out] lower_bound_dict_py Python dictionary object
+ * for writing the lower bound information for the field(s).
+ * @param[out] upper_bound_dict_py Python dictionary object
+ * for writing the upper bound information for the field(s).
+ */
+void generate_iceberg_field_metrics(
+    const std::shared_ptr<arrow::ChunkedArray> &column,
+    const std::shared_ptr<arrow::Field> &field, bool compute_min_and_max,
+    PyObject *column_size_dict_py, PyObject *null_count_dict_py,
+    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py) {
+    auto type_id = field->type()->id();
+    if (type_id == arrow::Type::LIST) {
+        // If we have a list we want to recurse onto the child values.
+        std::vector<std::shared_ptr<arrow::Array>> chunks;
+        std::transform(
+            column->chunks().begin(), column->chunks().end(),
+            std::back_inserter(chunks),
+            [](std::shared_ptr<arrow::Array> chunk) {
+                return std::static_pointer_cast<arrow::ListArray>(chunk)
+                    ->values();
+            });
+        std::shared_ptr<arrow::ChunkedArray> child_column =
+            std::make_shared<arrow::ChunkedArray>(chunks);
+        std::shared_ptr<arrow::BaseListType> list_type =
+            std::static_pointer_cast<arrow::BaseListType>(field->type());
+        std::shared_ptr<arrow::Field> child_field = list_type->value_field();
+        generate_iceberg_field_metrics(
+            child_column, child_field, false, column_size_dict_py,
+            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+    } else if (type_id == arrow::Type::LARGE_LIST) {
+        // If we have a large list we want to recurse onto the child values.
+        std::vector<std::shared_ptr<arrow::Array>> chunks;
+        std::transform(
+            column->chunks().begin(), column->chunks().end(),
+            std::back_inserter(chunks),
+            [](std::shared_ptr<arrow::Array> chunk) {
+                return std::static_pointer_cast<arrow::LargeListArray>(chunk)
+                    ->values();
+            });
+        std::shared_ptr<arrow::ChunkedArray> child_column =
+            std::make_shared<arrow::ChunkedArray>(chunks);
+        std::shared_ptr<arrow::BaseListType> list_type =
+            std::static_pointer_cast<arrow::BaseListType>(field->type());
+        std::shared_ptr<arrow::Field> child_field = list_type->value_field();
+        generate_iceberg_field_metrics(
+            child_column, child_field, false, column_size_dict_py,
+            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+    } else if (type_id == arrow::Type::MAP) {
+        // If we have a map we recurse onto the key and value.
+        std::vector<std::shared_ptr<arrow::Array>> key_chunks;
+        std::vector<std::shared_ptr<arrow::Array>> value_chunks;
+        for (auto chunk : column->chunks()) {
+            auto map_chunk = std::static_pointer_cast<arrow::MapArray>(chunk);
+            key_chunks.push_back(map_chunk->keys());
+            value_chunks.push_back(map_chunk->items());
+        }
+        std::shared_ptr<arrow::ChunkedArray> key_column =
+            std::make_shared<arrow::ChunkedArray>(key_chunks);
+        std::shared_ptr<arrow::MapType> map_type =
+            std::static_pointer_cast<arrow::MapType>(field->type());
+
+        std::shared_ptr<arrow::Field> key_field = map_type->key_field();
+        generate_iceberg_field_metrics(
+            key_column, key_field, false, column_size_dict_py,
+            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+        std::shared_ptr<arrow::ChunkedArray> value_column =
+            std::make_shared<arrow::ChunkedArray>(value_chunks);
+        std::shared_ptr<arrow::Field> value_field = map_type->item_field();
+        generate_iceberg_field_metrics(
+            value_column, value_field, false, column_size_dict_py,
+            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+    } else if (type_id == arrow::Type::STRUCT) {
+        // If we have a struct we recurse onto the children.
+        std::shared_ptr<arrow::StructType> struct_type =
+            std::static_pointer_cast<arrow::StructType>(field->type());
+        std::vector<std::vector<std::shared_ptr<arrow::Array>>> child_chunks(
+            struct_type->num_fields());
+        for (auto chunk : column->chunks()) {
+            auto struct_chunk =
+                std::static_pointer_cast<arrow::StructArray>(chunk);
+            for (int i = 0; i < struct_chunk->num_fields(); i++) {
+                child_chunks[i].push_back(struct_chunk->field(i));
+            }
+        }
+        for (int i = 0; i < struct_type->num_fields(); i++) {
+            std::shared_ptr<arrow::Field> child_field = struct_type->field(i);
+            std::shared_ptr<arrow::ChunkedArray> child_column =
+                std::make_shared<arrow::ChunkedArray>(child_chunks[i]);
+            // Structs should still compute the min and max.
+            generate_iceberg_field_metrics(
+                child_column, child_field, compute_min_and_max,
+                column_size_dict_py, null_count_dict_py, lower_bound_dict_py,
+                upper_bound_dict_py);
+        }
+    } else {
+        int field_id = get_iceberg_field_id(field);
+        PyObject *field_id_py = PyLong_FromLongLong(field_id);
+        int64_t column_size = column->length();
+        PyObject *column_size_py = PyLong_FromLongLong(column_size);
+        PyDict_SetItem(column_size_dict_py, field_id_py, column_size_py);
+        Py_DECREF(column_size_py);
+        int64_t null_count = column->null_count();
+        PyObject *null_count_py = PyLong_FromLongLong(null_count);
+        PyDict_SetItem(null_count_dict_py, field_id_py, null_count_py);
+        Py_DECREF(null_count_py);
+        // Generate max and min if they exist.
+        if (compute_min_and_max && null_count != column_size) {
+            compute_min_max_iceberg_field(
+                column, field_id_py, lower_bound_dict_py, upper_bound_dict_py);
+        }
+        // Decref the field IDs so there is 1 reference per dictionary.
+        Py_DECREF(field_id_py);
+    }
+}
 
 /**
  * @brief Generate a random file name for Iceberg Table write.
@@ -92,9 +500,12 @@ std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
         auto arrow_type = arrow_field->type();
         auto dest_type = arrow_type;
         if (expected_type->id() != arrow::Type::STRING &&
-            expected_type->id() != arrow::Type::LARGE_STRING) {
+            expected_type->id() != arrow::Type::LARGE_STRING &&
+            expected_type->id() != arrow::Type::BINARY &&
+            expected_type->id() != arrow::Type::LARGE_BINARY) {
             // String types must keep the same type to avoid dictionary encoding
-            // issues.
+            // issues. We also don't want to require casts between Binary and
+            // LargeBinary since they are the same Iceberg type.
             dest_type = expected_type;
         }
 
@@ -153,13 +564,16 @@ std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
  * Parquet files should match
  * @param[out] record_count Number of records in this file
  * @param[out] file_size_in_bytes Size of the file in bytes
+ * @return A vector of Python Objects representing the metadata information
+ * that needs to be written back to the data file. If there is no metadata
+ * this returns an empty vector.
  */
-void iceberg_pq_write_helper(
+std::vector<PyObject *> iceberg_pq_write_helper(
     const char *fpath, const std::shared_ptr<table_info> table,
     const std::shared_ptr<array_info> col_names_arr, const char *compression,
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
-    char *iceberg_metadata, std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
-    int64_t *record_count, int64_t *file_size_in_bytes) {
+    char *iceberg_metadata,
+    std::shared_ptr<arrow::Schema> iceberg_arrow_schema) {
     std::unordered_map<std::string, std::string> md = {
         {"iceberg.schema", std::string(iceberg_metadata)}};
 
@@ -191,10 +605,37 @@ void iceberg_pq_write_helper(
         bodo_array_types.push_back(col->arr_type);
     }
     // Convert the arrow table to use the iceberg schema.
-    *file_size_in_bytes = pq_write(
+    int64_t file_size_in_bytes = pq_write(
         fpath, iceberg_table, compression, is_parallel, bucket_region,
         row_group_size, "", bodo_array_types, true, std::string(fpath));
-    *record_count = iceberg_table->num_rows();
+    int64_t record_count = iceberg_table->num_rows();
+    if (record_count == 0) {
+        return {};
+    } else {
+        std::vector<PyObject *> iceberg_py_objs(NUM_ICEBERG_DATA_FILE_STATS);
+        PyObject *record_count_py = PyLong_FromLongLong(record_count);
+        iceberg_py_objs[0] = record_count_py;
+        PyObject *file_size_in_bytes_py =
+            PyLong_FromLongLong(file_size_in_bytes);
+        iceberg_py_objs[1] = file_size_in_bytes_py;
+        // Generate per column stats.
+        PyObject *column_size_dict_py = PyDict_New();
+        iceberg_py_objs[2] = column_size_dict_py;
+        PyObject *null_count_dict_py = PyDict_New();
+        iceberg_py_objs[3] = null_count_dict_py;
+        PyObject *lower_bound_dict_py = PyDict_New();
+        iceberg_py_objs[4] = lower_bound_dict_py;
+        PyObject *upper_bound_dict_py = PyDict_New();
+        iceberg_py_objs[5] = upper_bound_dict_py;
+        for (int i = 0; i < iceberg_table->num_columns(); i++) {
+            auto column = iceberg_table->column(i);
+            auto field = iceberg_table->schema()->field(i);
+            generate_iceberg_field_metrics(
+                column, field, true, column_size_dict_py, null_count_dict_py,
+                lower_bound_dict_py, upper_bound_dict_py);
+        }
+        return iceberg_py_objs;
+    }
 }
 
 /**
@@ -502,7 +943,8 @@ void iceberg_pq_write(const char *table_data_loc,
                 // 3 (for file_name, record_count and file_size) + number of
                 // partition fields (same as number of transform cols).
                 // See function description string for more details.
-                p.iceberg_file_info_py = PyTuple_New(3 + num_keys);
+                p.iceberg_file_info_py =
+                    PyTuple_New(NUM_ICEBERG_FIELDS_WITH_FILENAME + num_keys);
 
                 for (int64_t j = 0; j < num_keys; j++) {
                     auto transformed_part_col = transform_cols[j];
@@ -517,7 +959,8 @@ void iceberg_pq_write(const char *table_data_loc,
                     // and then add it to the iceberg-file-info tuple.
                     PyObject *partition_val_py =
                         iceberg_transformed_val_to_py(transformed_part_col, i);
-                    PyTuple_SET_ITEM(p.iceberg_file_info_py, 3 + j,
+                    PyTuple_SET_ITEM(p.iceberg_file_info_py,
+                                     NUM_ICEBERG_FIELDS_WITH_FILENAME + j,
                                      partition_val_py);
                 }
                 // create a random file name
@@ -569,19 +1012,15 @@ void iceberg_pq_write(const char *table_data_loc,
             // Write the file and then attach the relevant information
             // to the iceberg-file-info tuple for this file.
             // We don't need to check if record count is zero in this case.
-            int64_t record_count, file_size_in_bytes;
-            iceberg_pq_write_helper(
+            std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
                 p.fpath.c_str(), part_table, col_names_arr, compression, false,
-                bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
-                &record_count, &file_size_in_bytes);
+                bucket_region, row_group_size, iceberg_metadata,
+                iceberg_schema);
 
-            PyObject *record_count_py = PyLong_FromLongLong(record_count);
-            PyObject *file_size_in_bytes_py =
-                PyLong_FromLongLong(file_size_in_bytes);
-            PyTuple_SET_ITEM(p.iceberg_file_info_py, 1, record_count_py);
-            PyTuple_SET_ITEM(p.iceberg_file_info_py, 2, file_size_in_bytes_py);
-            // PyTuple_SET_ITEM steals a reference so decref isn't needed for
-            // record_count_py and file_size_in_bytes_py
+            for (int i = 0; i < NUM_ICEBERG_DATA_FILE_STATS; i++) {
+                PyObject *obj = iceberg_py_objs[i];
+                PyTuple_SET_ITEM(p.iceberg_file_info_py, i + 1, obj);
+            }
             PyList_Append(iceberg_files_info_py, p.iceberg_file_info_py);
             Py_DECREF(p.iceberg_file_info_py);
         }
@@ -592,8 +1031,6 @@ void iceberg_pq_write(const char *table_data_loc,
         // If no partition spec, then write the working table (after sort if
         // there was a sort order else the table as is)
         std::string fname = generate_iceberg_file_name();
-        int64_t record_count;
-        int64_t file_size_in_bytes;
         std::string fpath(table_data_loc);
         if (fpath.back() != '/')
             fpath += "/";
@@ -609,23 +1046,20 @@ void iceberg_pq_write(const char *table_data_loc,
         // We can't at the moment due to how pq_write works. Once we
         // refactor that a little, we should be able to handle this
         // more elegantly.
-        iceberg_pq_write_helper(
+        std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
             fpath.c_str(), working_table, col_names_arr, compression, false,
-            bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
-            &record_count, &file_size_in_bytes);
+            bucket_region, row_group_size, iceberg_metadata, iceberg_schema);
 
-        if (record_count > 0) {
-            // Only need to report the file back if we created it
+        if (iceberg_py_objs.size() > 0) {
             PyObject *file_name_py = PyUnicode_FromString(fname.c_str());
-            PyObject *record_count_py = PyLong_FromLongLong(record_count);
-            PyObject *file_size_in_bytes_py =
-                PyLong_FromLongLong(file_size_in_bytes);
-            PyObject *iceberg_file_info_py = PyTuple_New(3);
+
+            PyObject *iceberg_file_info_py =
+                PyTuple_New(NUM_ICEBERG_FIELDS_WITH_FILENAME);
             PyTuple_SET_ITEM(iceberg_file_info_py, 0, file_name_py);
-            PyTuple_SET_ITEM(iceberg_file_info_py, 1, record_count_py);
-            PyTuple_SET_ITEM(iceberg_file_info_py, 2, file_size_in_bytes_py);
-            // PyTuple_SET_ITEM steals a reference so decref isn't needed for
-            // record_count_py and file_size_in_bytes_py
+            for (int i = 0; i < NUM_ICEBERG_DATA_FILE_STATS; i++) {
+                PyObject *obj = iceberg_py_objs[i];
+                PyTuple_SET_ITEM(iceberg_file_info_py, i + 1, obj);
+            }
             PyList_Append(iceberg_files_info_py, iceberg_file_info_py);
             Py_DECREF(iceberg_file_info_py);
         }
