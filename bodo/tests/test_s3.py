@@ -1114,21 +1114,21 @@ def test_read_parquet_invalid_list_of_files(
 
     with pytest.raises(
         BodoError,
-        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+        match=r"Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
     ):
         fnames = ["s3://bodo-test/groupby3.pq", "s3://bodo-test/int_nulls_multi.pq"]
         bodo.jit(test_impl)(fnames)
 
     with pytest.raises(
         BodoError,
-        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+        match=r"Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
     ):
         fnames = ["s3://bodo-test/int_nulls_multi.pq", "s3://bodo-test/groupby3.pq"]
         bodo.jit(test_impl)(fnames)
 
     with pytest.raises(
         BodoError,
-        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+        match=r"Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
     ):
         fnames = [
             "s3://bodo-test/test_df_bodo_1D.pq",

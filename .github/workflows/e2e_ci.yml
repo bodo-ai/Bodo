@@ -40,7 +40,7 @@ jobs:
             remote_max_retries: 5
             remote_backoff_factor: 60
             aggressive_update_packages: []
-    
+
       - name: Print Environment Specs
         run: |
           micromamba list
@@ -65,7 +65,7 @@ jobs:
 
       - name: Disable AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
-        with: 
+        with:
           unset-current-credentials: true
           aws-region: us-east-2
 

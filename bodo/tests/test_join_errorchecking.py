@@ -257,7 +257,7 @@ def test_merge_lefton_righton_len_unequal(memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, left_on=["A"], right_on=["A", "B"])
 
-    with pytest.raises(BodoError, match="len\(right_on\) must equal len\(left_on\)"):
+    with pytest.raises(BodoError, match=r"len\(right_on\) must equal len\(left_on\)"):
         bodo.jit(impl)(df1, df2)
 
 

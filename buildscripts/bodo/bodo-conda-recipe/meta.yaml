@@ -14,12 +14,24 @@ build:
   # Necessary for sccache to find AWS
   - AWS_ACCESS_KEY_ID
   - AWS_SECRET_ACCESS_KEY
+  # Flag for disabling sccache in the build environment
+  - DISABLE_SCCACHE_IN_BUILD
+
+  # Conda-Build deletes .git, so we need to determine the version beforehand
+  # and then pass it to setuptools_scm in the build script (setup.py).
+  # https://conda-forge.org/docs/maintainer/knowledge_base.html#using-setuptools-scm
+  - SETUPTOOLS_SCM_PRETEND_VERSION={{ BODO_VERSION }}
+
 
 requirements:
   build:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - sccache
+    # This should be installed automatically as a depended of the cpp compiler,
+    # but we need to explicitly specify it so that we can pin the version with
+    # the variant file for pip.
+    - libstdcxx-ng
 
   host:
     - python
@@ -52,6 +64,8 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+    # See comment on build libstdcxx-ng above
+    - libstdcxx-ng
 
   run:
     - python
