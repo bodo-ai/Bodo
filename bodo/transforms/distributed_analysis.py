@@ -3284,6 +3284,18 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
+        if (
+            func_name == "execute_javascript_udf"
+            and func_mod == "bodo.libs.bodosql_javascript_udf_array_kernels"
+        ):  # pragma: no cover
+            # All of the arguments could be scalars or arrays, but all of the
+            # arrays need to meet one another
+            self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            arrays = [lhs]
+            # TODO: handle arguments
+            self._meet_several_array_dists(arrays, array_dists)
+            return
+
         # handle calling other Bodo functions that have distributed flags
         func_type = self.typemap[func_var]
         if isinstance(func_type, types.Dispatcher) and issubclass(

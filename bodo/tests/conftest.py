@@ -863,3 +863,9 @@ def pytest_collect_file(parent, file_path: Path):
         return CppTestFile.from_parent(
             parent, path=file_path, filename=file_path.name, tests=tests
         )
+
+
+pytest_mark_javascript = pytest.mark.skipif(
+    not bodo.libs.bodosql_javascript_udf_array_kernels.javascript_udf_enabled,
+    reason="JavaScript UDFs are not enabled",
+)
