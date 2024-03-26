@@ -253,4 +253,6 @@ public interface BodoSQLCatalog {
       SqlCreateTable.CreateTableType createTableType,
       IfExistsBehavior ifExistsBehavior,
       Variable columnNamesGlobal);
+
+  String getAccountName();
 }

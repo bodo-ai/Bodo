@@ -42,7 +42,21 @@ public final class ContextOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.SYSTEM);
 
-  private List<SqlOperator> functionList = Arrays.asList(CURRENT_DATABASE);
+  public static final SqlBasicFunction CURRENT_ACCOUNT =
+      SqlBasicFunction.create(
+          "CURRENT_ACCOUNT",
+          // What Value should the return type be
+          // Snowflake returns VARCHAR(16K)
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION,
+          // What Input Types does the function accept.
+          OperandTypes.NILADIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.SYSTEM);
+  public static final SqlFunction CURRENT_ACCOUNT_NAME =
+      CURRENT_ACCOUNT.withName("CURRENT_ACCOUNT_NAME");
+
+  private List<SqlOperator> functionList =
+      Arrays.asList(CURRENT_DATABASE, CURRENT_ACCOUNT, CURRENT_ACCOUNT_NAME);
 
   @Override
   public void lookupOperatorOverloads(

@@ -1961,4 +1961,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           tableName, schema, ifExistsBehavior, columnNamesGlobal, generatePythonConnStr(schema));
     }
   }
+
+  public @Nullable String getAccountName() {
+    return accountName;
+  }
 }

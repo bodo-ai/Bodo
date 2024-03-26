@@ -110,16 +110,19 @@ open class RexToPandasTranslator(
     private var weekStart: Int? = null
     private var weekOfYearPolicy: Int? = null
     private var currentDatabase: String? = null
+    private var currentAccount: String? = null
 
     init {
         if (typeSystem is BodoSQLRelDataTypeSystem) {
             weekStart = typeSystem.weekStart
             weekOfYearPolicy = typeSystem.weekOfYearPolicy
-            currentDatabase = typeSystem.catalogName
+            currentDatabase = typeSystem.catalogContext?.currentDatabase
+            currentAccount = typeSystem.catalogContext?.currentAccount
         } else {
             weekStart = 0
             weekOfYearPolicy = 0
             currentDatabase = null
+            currentAccount = null
         }
     }
 
@@ -1321,6 +1324,18 @@ open class RexToPandasTranslator(
                         makeConsistent,
                     )
 
+            "CURRENT_ACCOUNT", "CURRENT_ACCOUNT_NAME" ->
+                if (currentAccount != null) {
+                    var acct = currentAccount!!
+                    val idx = acct.lastIndexOf('.')
+                    if (idx != -1) {
+                        acct = acct.substring(0, idx)
+                    }
+                    acct = acct.uppercase()
+                    systemCall = Expr.StringLiteral(acct)
+                } else {
+                    throw BodoSQLCodegenException("No information about current account is found.")
+                }
             "CURRENT_DATABASE" ->
                 if (currentDatabase != null) {
                     systemCall = Expr.StringLiteral(currentDatabase!!)
@@ -1903,7 +1918,15 @@ open class RexToPandasTranslator(
                         )
                     }
 
-                    "GETDATE", "CURRENT_TIME", "UTC_TIMESTAMP", "UTC_DATE", "CURRENT_DATE", "CURRENT_DATABASE" -> {
+                    "GETDATE",
+                    "CURRENT_TIME",
+                    "UTC_TIMESTAMP",
+                    "UTC_DATE",
+                    "CURRENT_DATE",
+                    "CURRENT_DATABASE",
+                    "CURRENT_ACCOUNT",
+                    "CURRENT_ACCOUNT_NAME",
+                    -> {
                         assert(operands.isEmpty())
                         return visitGeneralContextFunction(fnOperation)
                     }
