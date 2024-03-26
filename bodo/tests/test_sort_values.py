@@ -180,7 +180,7 @@ pytestmark = pytest_pandas
                 },
             ),
             id="binary_df",
-        )
+        ),
         # TODO: timedelta
     ]
 )
@@ -1465,12 +1465,18 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 ),
             ],
             [
-                np.array([date(2018, 12, 12), None]),
-                np.array([date(2018, 12, 12), pd.NA]),
-                np.array([pd.NA, pd.NA]),
-                np.array([None, None]),
-                np.array([date(2018, 12, 12), date(2019, 12, 12)]),
-                np.array([date(2019, 12, 12), date(2019, 12, 12)]),
+                pd.array([date(2018, 12, 12), None], dtype=pd.ArrowDtype(pa.date32())),
+                pd.array([date(2018, 12, 12), pd.NA], dtype=pd.ArrowDtype(pa.date32())),
+                pd.array([pd.NA, pd.NA], dtype=pd.ArrowDtype(pa.date32())),
+                pd.array([None, None], dtype=pd.ArrowDtype(pa.date32())),
+                pd.array(
+                    [date(2018, 12, 12), date(2019, 12, 12)],
+                    dtype=pd.ArrowDtype(pa.date32()),
+                ),
+                pd.array(
+                    [date(2019, 12, 12), date(2019, 12, 12)],
+                    dtype=pd.ArrowDtype(pa.date32()),
+                ),
             ],
             date.min,
             date.max,
