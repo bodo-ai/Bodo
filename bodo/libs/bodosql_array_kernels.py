@@ -24,6 +24,7 @@ from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
 from bodo.libs.bodosql_variant_array_kernels import *  # noqa
 from bodo.libs.bodosql_window_agg_array_kernels import *  # noqa
 from bodo.libs.bodosql_parse_url_array_kernel import *  # noqa
+from bodo.libs.bodosql_javascript_udf_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
     "abs",

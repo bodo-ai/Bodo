@@ -1439,9 +1439,9 @@ open class RexToPandasTranslator(
         }
         // Lower the globals needed to create the UDF
         val udfBody = udf.functionBody
-        val textVar = visitor.lowerAsGlobal(TripleQuotedString(udfBody))
+        val textVar = visitor.lowerAsMetaType(TripleQuotedString(udfBody))
         val paramNamesExpr = udf.parameterNames.map { Expr.StringLiteral(it) }
-        val paramNamesVar = visitor.lowerAsGlobal(Expr.Tuple(paramNamesExpr))
+        val paramNamesVar = visitor.lowerAsMetaType(Expr.Tuple(paramNamesExpr))
         val returnTypeExpr = BodoArrayHelpers.sqlTypeToBodoArrayType(returnType, false, visitor.genDefaultTZ().zoneExpr)
         val returnTypeVar = visitor.lowerAsGlobal(returnTypeExpr)
         // Construct the create function and place it before the pipeline.
