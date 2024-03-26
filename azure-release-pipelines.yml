@@ -151,45 +151,28 @@ stages:
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
 
-# Pip Packages. Usually disabled for Nightly Runs
-# But useful to have when testing all Pip Builds
-- stage: Build_Bodo_Binary_Pip
-  displayName: 'Build Bodo Binary for Pip'
-  dependsOn: []
-  condition: or(eq('${{ parameters.BUILD_PIP }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
-  jobs:
-  - template: buildscripts/bodo/azure/azure-build-pip-linux.yml
-    parameters:
-      name: Linux_pip
-
-#  - template: buildscripts/bodo/azure/azure-build-pip-windows.yml
-#    parameters:
-#      name: Windows_pip
-#      vmImage: windows-2019
-#      platformBuild: false
-  # - template: buildscripts/bodo/azure/azure-build-pip-macos-x86.yml
-  #   parameters:
-  #     name: macOS_x86_pip
-  #     vmImage: macOS-latest
-  #     platformBuild: false
 
 # Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
 # modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
 # of Bodo, I'm requiring that we update the recipe in buildscripts/bodosql/conda-recipe/meta.yaml,
 # and do a mini-release.
 
-- stage: Build_BodoSQL_Binary
-  displayName: 'Build BodoSQL Binary'
+# BodoSQL build: Conda and Pip
+- stage: Build_BodoSQL_Conda_Binary
+  displayName: 'Build BodoSQL Conda Binary'
   dependsOn: Build_Bodo_Binary_Linux_Conda
   jobs:
-
-  # BodoSQL build:
   - template: buildscripts/bodosql/azure/azure-build-conda.yml
     parameters:
       name: BodoSQL_Conda_Build
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.12
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
+
+- stage: Build_BodoSQL_Pip_Wheel
+  displayName: 'Build BodoSQL Pip Wheel'
+  dependsOn: Build_Bodo_Binary_Linux_Conda
+  jobs:
   - template: buildscripts/bodosql/azure/azure-build-pip.yml
     parameters:
       name: BodoSQL_Pip_Build
@@ -234,7 +217,7 @@ stages:
   # BodoSQL tests
 - stage: Test_BodoSQL_Binary_Streaming
   displayName: 'Test BodoSQL Binary Streaming'
-  dependsOn: Build_BodoSQL_Binary
+  dependsOn: Build_BodoSQL_Conda_Binary
   jobs:
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
