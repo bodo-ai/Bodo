@@ -202,4 +202,8 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
             summaryRowCount
         }
     }
+
+    override fun getAccountName(): String? {
+        return null
+    }
 }
