@@ -25,7 +25,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
         {
             "A": np.array([True, False, True, True] * 25, dtype=np.bool_),
             "B": pd.Series([False, None, True, False, None] * 20, dtype="boolean"),
-            "C": np.array([1, 1, 0, 1, 0] * 20).tobytes(),
+            "C": np.array([b"1", b"1", b"0", b"1", b"0"] * 20, dtype=object),
         },
         [
             ("A", "boolean", True),

@@ -1,7 +1,9 @@
+import base64
 import json
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import pyarrow as pa
 from py4j.protocol import Py4JError
 
@@ -10,6 +12,7 @@ from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
     get_bodo_iceberg_handler_class,
+    get_data_file_class,
     get_java_table_handler,
 )
 from bodo_iceberg_connector.schema_helper import (
@@ -27,24 +30,37 @@ class DataFileInfo:
     """
 
     path: str
-    size: int
-    record_count: int
+    file_size_in_bytes: int
+    metrics: Dict[str, Any]
+
+
+class BytesEncoder(json.JSONEncoder):
+    """
+    JSON Encoder for bytes objects for lower/upper bound.
+    """
+
+    def default(self, o):
+        if isinstance(o, bytes):
+            return base64.b64encode(o).decode("ascii")
+        else:
+            return super().default(o)
 
 
 def process_file_infos(
     fnames: List[str],
-    all_metrics: Dict[str, Any],
+    file_size_bytes: List[int],
+    metrics: List[Dict[str, Any]],
     table_loc: str,
     db_name: str,
     table_name: str,
 ):
     """
-    Process file name and metrics to a JSON string that can be transmitted
-    and deserialized in the Java side.
+    Process file name and metrics to a Java objects that can be passed
+    to the connector.
 
     Args:
         fnames: List of file paths (possibly relative or absolute)
-        all_metrics: Metrics about written data to include in commit
+        metrics: Metrics about written data to include in commit
         table_loc: Warehouse location of data/ path (and files)
         db_name: Namespace / Database schema containing Iceberg table
         table_name: Name of Iceberg table
@@ -54,15 +70,11 @@ def process_file_infos(
     """
 
     fnames = [gen_file_loc(table_loc, db_name, table_name, name) for name in fnames]
-
     file_infos = [
         asdict(DataFileInfo(fname, size, count))
-        for fname, size, count in zip(
-            fnames, all_metrics["size"], all_metrics["record_count"]
-        )
+        for fname, size, count in zip(fnames, file_size_bytes, metrics)
     ]
-
-    return json.dumps(file_infos)
+    return json.dumps(file_infos, cls=BytesEncoder)
 
 
 def get_schema_with_init_field_ids(schema: pa.Schema) -> pa.Schema:
@@ -97,7 +109,8 @@ def commit_write(
     table_name: str,
     table_loc: str,
     fnames: List[str],
-    all_metrics: Dict[str, List[Any]],
+    file_size_bytes: List[int],
+    metrics: List[Dict[str, Any]],
     iceberg_schema_id: Optional[int],
     pa_schema: pa.Schema,
     partition_spec: Optional[str],
@@ -112,7 +125,8 @@ def commit_write(
         db_name: Namespace containing the table written to
         table_name: Name of table written to
         fnames: Names of Parquet file that need to be committed in Iceberg
-        all_metrics: Metrics about written data to include in commit
+        file_size_bytes: Size of each file in bytes.
+        metrics: Metrics about written data to include in commit
         iceberg_schema_id: Known Schema ID when files were written
         pa_schema: Arrow Schema of written data. In the create/replace
             case, make sure to use 'get_schema_with_init_field_ids'
@@ -128,7 +142,7 @@ def commit_write(
     catalog_type, _ = parse_conn_str(conn_str)
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
     file_info_str = process_file_infos(
-        fnames, all_metrics, table_loc, db_name, table_name
+        fnames, file_size_bytes, metrics, table_loc, db_name, table_name
     )
 
     if mode == "create":
@@ -178,7 +192,8 @@ def commit_merge_cow(
     table_loc: str,
     old_fnames: List[str],
     new_fnames: List[str],
-    all_metrics: Dict[str, List[Any]],
+    file_size_bytes: List[int],
+    metrics: List[Dict[str, Any]],
     snapshot_id: int,
 ):
     """
@@ -191,18 +206,20 @@ def commit_merge_cow(
         table_loc: Location of data/ folder for an Iceberg table
         old_fnames: List of old file paths to invalidate in commit
         new_fnames: List of written files to replace old_fnames
-        all_metrics: Iceberg metrics for new_fnames
+        file_size_bytes: Size of each file in bytes.
+        metrics: Iceberg metrics for new_fnames
         snapshot_id: Expected current snapshot ID
 
     Returns:
-        True if commit suceeded, False otherwise
+        True if commit succeeded, False otherwise
     """
 
     catalog_type, _ = parse_conn_str(conn_str)
     old_fnames_java = convert_list_to_java(old_fnames)
     new_file_info_str = process_file_infos(
         new_fnames,
-        all_metrics,
+        file_size_bytes,
+        metrics,
         table_loc,
         db_name,
         table_name,
