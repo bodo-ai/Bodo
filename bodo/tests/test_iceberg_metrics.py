@@ -447,8 +447,8 @@ def test_struct_metrics(
     )
     df = pd.DataFrame({"A": struct_array})
     create_table_jit(df, table_name, conn, db_schema)
-    expected_value_counts = {"A.f1": 5, "A.f2": 5, "A.f3": 5}
-    expected_null_counts = {"A.f1": 1, "A.f2": 2, "A.f3": 3}
+    expected_value_counts = {"A": 5, "A.f1": 5, "A.f2": 5, "A.f3": 5}
+    expected_null_counts = {"A": 0, "A.f1": 1, "A.f2": 2, "A.f3": 3}
     expected_lower_bounds = {
         "A.f1": b"\x01\x00\x00\x00",
         "A.f2": "AAC".encode("utf-8"),
@@ -502,8 +502,8 @@ def test_list_metrics(
     )
     df = pd.DataFrame({"A": list_int_array, "B": list_string_array})
     create_table_jit(df, table_name, conn, db_schema)
-    expected_value_counts = {"A.element": 12, "B.element": 9}
-    expected_null_counts = {"A.element": 2, "B.element": 3}
+    expected_value_counts = {"A": 5, "B": 5, "A.element": 12, "B.element": 9}
+    expected_null_counts = {"A": 1, "B": 1, "A.element": 2, "B.element": 3}
     expected_lower_bounds = {}
     expected_upper_bounds = {}
     validate_metrics(
@@ -539,8 +539,8 @@ def test_map_metrics(
     )
     df = pd.DataFrame({"A": map_str_int})
     create_table_jit(df, table_name, conn, db_schema)
-    expected_value_counts = {"A.key": 7, "A.value": 7}
-    expected_null_counts = {"A.key": 0, "A.value": 3}
+    expected_value_counts = {"A": 5, "A.key": 7, "A.value": 7}
+    expected_null_counts = {"A": 1, "A.key": 0, "A.value": 3}
     expected_lower_bounds = {}
     expected_upper_bounds = {}
     validate_metrics(

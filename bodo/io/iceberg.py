@@ -2628,7 +2628,7 @@ def generate_data_file_info(
 
     # Metrics we provide to Iceberg:
     # 1. rowCount -- Number of rows in this file
-    # 2. columnSizes -- Number of records per field id. This is most useful for
+    # 2. valueCounts -- Number of records per field id. This is most useful for
     #    nested data types where each row may have multiple records.
     # 3. nullValueCounts - Null count per field id.
     # 4. lowerBounds - Lower bounds per field id.
