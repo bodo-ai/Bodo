@@ -1,8 +1,6 @@
 """
 Helper script to dump the content of avro files for manual inspection.
-You will need to install the avro package to use this script.
-
-pip install avro
+Avro is installed by default on the dev conda lock.
 """
 import sys
 

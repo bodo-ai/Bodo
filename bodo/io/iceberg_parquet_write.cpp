@@ -59,17 +59,16 @@ constexpr int NUM_ICEBERG_FIELDS_WITH_FILENAME =
  */
 template <typename T>
 PyObject *buffer_to_little_endian_bytes(T value) {
-    const char *bytes;
+    const char *initial_bytes = reinterpret_cast<const char *>(&value);
     if constexpr (std::endian::native == std::endian::little) {
-        bytes = reinterpret_cast<const char *>(&value);
+        return PyBytes_FromStringAndSize(initial_bytes, sizeof(T));
     } else {
         // Convert to little endian
-        const char *bytes_be = reinterpret_cast<char *>(&value);
-        std::string str = std::string(bytes_be, sizeof(T));
+        std::string str = std::string(initial_bytes, sizeof(T));
         std::reverse(std::begin(str), std::end(str));
-        bytes = str.c_str();
+        const char *bytes = str.c_str();
+        return PyBytes_FromStringAndSize(bytes, sizeof(T));
     }
-    return PyBytes_FromStringAndSize(bytes, sizeof(T));
 }
 
 /**
@@ -165,19 +164,20 @@ PyObject *arrow_scalar_to_iceberg_bytes(std::shared_ptr<arrow::Scalar> scalar) {
             auto decimal_scalar =
                 std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
             arrow::Decimal128 value = decimal_scalar->value;
-            const char *bytes;
+            const char *initial_bytes = reinterpret_cast<const char *>(&value);
             // TODO: Implement the "minimum" number of bytes
             if constexpr (std::endian::native == std::endian::big) {
-                bytes = reinterpret_cast<const char *>(&value);
+                return PyBytes_FromStringAndSize(initial_bytes,
+                                                 sizeof(arrow::Decimal128));
             } else {
                 // Convert to big endian
-                const char *bytes_be = reinterpret_cast<char *>(&value);
                 std::string str =
-                    std::string(bytes_be, sizeof(arrow::Decimal128));
+                    std::string(initial_bytes, sizeof(arrow::Decimal128));
                 std::reverse(std::begin(str), std::end(str));
-                bytes = str.c_str();
+                const char *bytes = str.c_str();
+                return PyBytes_FromStringAndSize(bytes,
+                                                 sizeof(arrow::Decimal128));
             }
-            return PyBytes_FromStringAndSize(bytes, sizeof(arrow::Decimal128));
         }
         default: {
             std::string err_msg = fmt::format(
