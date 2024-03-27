@@ -339,8 +339,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                         "not supported for Timedelta.");
                 break;
             case Bodo_CTypes::DATETIME:
-                assert(array->arr_type == bodo_array_type::NUMPY);
-                // input from Bodo uses int64 for datetimes (datetime64[ns])
+                // input from Bodo uses int64 for datetime values
+                // (datetime64[ns])
                 in_num_bytes = sizeof(int64_t) * array->length;
                 if (tz.length() > 0) {
                     type = arrow::timestamp(time_unit, tz);
@@ -348,16 +348,18 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                     type = arrow::timestamp(time_unit);
                 }
 
-                // Convert Bodo NaT to Arrow null bitmap
-                for (size_t i = 0; i < array->length; i++) {
-                    if ((array->at<int64_t, bodo_array_type::NUMPY>(i) ==
-                         std::numeric_limits<int64_t>::min()) &&
-                        GetBit(null_bitmap->mutable_data(), i)) {
-                        // if value is NaT (equals
-                        // std::numeric_limits<int64_t>::min()) we set it as a
-                        // null element in output Arrow array
-                        null_count_++;
-                        SetBitTo(null_bitmap->mutable_data(), i, false);
+                if (array->arr_type == bodo_array_type::NUMPY) {
+                    // Convert Bodo NaT to Arrow null bitmap for numpy arrays.
+                    for (size_t i = 0; i < array->length; i++) {
+                        if ((array->at<int64_t, bodo_array_type::NUMPY>(i) ==
+                             std::numeric_limits<int64_t>::min()) &&
+                            GetBit(null_bitmap->mutable_data(), i)) {
+                            // if value is NaT (equals
+                            // std::numeric_limits<int64_t>::min()) we set it as
+                            // a null element in output Arrow array
+                            null_count_++;
+                            SetBitTo(null_bitmap->mutable_data(), i, false);
+                        }
                     }
                 }
                 break;

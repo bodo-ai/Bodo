@@ -1350,18 +1350,36 @@ def group_files_by_schema_group_identifier(
         tuple[str, tuple[int | tuple], tuple[str | tuple]]
     ] = list(zip(fpaths, iceberg_field_ids, pq_field_names))
     # Sort/Groupby the field-ids and field-names tuples.
+    # We must flatten the tuples for sorting because you
+    # cannot compare ints to tuples in Python and nested types
+    # will generate tuples. This is safe because a nested field
+    # can never become a primitive column (and vice-versa).
+    sort_key_func = lambda item: (flatten_tuple(item[1]), flatten_tuple(item[2]))
     keyfunc = lambda item: (item[1], item[2])
-
     schema_group_id_to_fpaths: dict[
         tuple[tuple[int, ...], tuple[str, ...]], list[str]
     ] = {
         k: [x[0] for x in list(v)]
         for k, v in itertools.groupby(
-            sorted(fpaths_schema_group_ids, key=keyfunc), keyfunc
+            sorted(fpaths_schema_group_ids, key=sort_key_func), keyfunc
         )
     }
-
     return schema_group_id_to_fpaths
+
+
+def flatten_tuple(x):
+    """
+    Flatten a tuple of tuples into a single tuple. This is needed
+    to handle nested tuples in the schema group identifier due to
+    nested data types.
+    """
+    values = []
+    for val in x:
+        if isinstance(val, tuple):
+            values.extend(flatten_tuple(val))
+        else:
+            values.append(val)
+    return tuple(values)
 
 
 def get_row_counts_for_schema_group(
@@ -1754,7 +1772,17 @@ def get_iceberg_pq_dataset(
     ] = flatten_concatenation(pieces)
 
     # 4. Sort the list based on the schema-group identifier (filename to break ties).
-    pieces = sorted(pieces, key=lambda piece: (piece[2], piece[0]))
+    # We must flatten the tuples for sorting because you
+    # cannot compare ints to tuples in Python and nested types
+    # will generate tuples. This is safe because a nested field
+    # can never become a primitive column (and vice-versa).
+    pieces = sorted(
+        pieces,
+        key=lambda piece: (
+            (flatten_tuple(piece[2][0]), flatten_tuple(piece[2][1])),
+            flatten_tuple(piece[0]),
+        ),
+    )
 
     # 5. Create a list of SchemaGroups (same ordering scheme).
     #    Also create an IcebergPiece for each file. This is similar to ParquetPiece
@@ -2186,7 +2214,7 @@ def are_schemas_compatible(
     pa_schema: pa.Schema, df_schema: pa.Schema, allow_downcasting: bool = False
 ) -> bool:
     """
-    Check if the input Dataframe schema is compatible with the Iceberg table's
+    Check if the input DataFrame schema is compatible with the Iceberg table's
     schema for append-like operations (including MERGE INTO). Compatibility
     consists of the following:
     - The df_schema either has the same columns as pa_schema or is only missing
@@ -2200,67 +2228,124 @@ def are_schemas_compatible(
         - C is an float64 while C' is an float32 (if allow_downcasting is True)
         - C is nullable while C' is non-nullable (if allow_downcasting is True)
 
-    Note that allow_downcasting should be used if the output Dataframe df will be
+    Note that allow_downcasting should be used if the output DataFrame df will be
     casted to fit pa_schema (making sure there are no nulls, downcasting arrays).
     """
     if pa_schema.equals(df_schema):
         return True
 
-    # If the schemas are not the same size, it is still possible that the dataframe
-    # can be appended iff the dataframe schema is a subset of the iceberg schema and
+    # If the schemas are not the same size, it is still possible that the DataFrame
+    # can be appended iff the DataFrame schema is a subset of the iceberg schema and
     # each missing field is optional
     if len(df_schema) < len(pa_schema):
-        # Create a new "subset" pa schema that only contains the fields that are
-        # in the dataframe schema
-        subset_fields = []
+        # Replace df_schema with a fully expanded schema tha contains the default
+        # values for missing fields.
+        kept_fields = []
         for pa_field in pa_schema:
-            df_field = df_schema.field_by_name(pa_field.name)
+            df_field_index = df_schema.get_field_index(pa_field.name)
+            if df_field_index != -1:
+                kept_fields.append(df_schema.field(df_field_index))
+            elif pa_field.nullable:
+                # Append optional missing fields.
+                kept_fields.append(pa_field)
 
-            # Don't include the field only if it isn't in the dataframe schema
-            # and it is nullable
-            if not (df_field is None and pa_field.nullable):
-                subset_fields.append(pa_field)
-        pa_schema = pa.schema(subset_fields)
+        df_schema = pa.schema(kept_fields)
 
-    if len(pa_schema) != len(df_schema):
+    if len(df_schema) != len(pa_schema):
         return False
 
     # Compare each field individually for "compatibility"
-    # Only the dataframe schema is potentially modified during this step
+    # Only the DataFrame schema is potentially modified during this step
     for idx in range(len(df_schema)):
         df_field = df_schema.field(idx)
         pa_field = pa_schema.field(idx)
-
-        if df_field.equals(pa_field):
-            continue
-
-        df_type = df_field.type
-        pa_type = pa_field.type
-
-        # df_field can only be downcasted as of now
-        # TODO: Should support upcasting in the future if necessary
-        if (
-            not df_type.equals(pa_type)
-            and allow_downcasting
-            and (
-                (
-                    pa.types.is_signed_integer(df_type)
-                    and pa.types.is_signed_integer(pa_type)
-                )
-                or (pa.types.is_floating(df_type) and pa.types.is_floating(pa_type))
-            )
-            and df_type.bit_width > pa_type.bit_width
-        ):
-            df_field = df_field.with_type(pa_type)
-
-        if not df_field.nullable and pa_field.nullable:
-            df_field = df_field.with_nullable(True)
-        elif allow_downcasting and df_field.nullable and not pa_field.nullable:
-            df_field = df_field.with_nullable(False)
-
-        df_schema = df_schema.set(idx, df_field)
+        new_field = _update_field(df_field, pa_field, allow_downcasting)
+        df_schema = df_schema.set(idx, new_field)
 
     return df_schema.equals(pa_schema)
+
+
+def _update_field(
+    df_field: pa.Field, pa_field: pa.Field, allow_downcasting: bool
+) -> pa.Field:
+    """
+    Update the field 'df_field' to match the type and nullability of 'pa_field',
+    including ignoring any optional fields.
+    """
+    if df_field.equals(pa_field):
+        return df_field
+
+    df_type = df_field.type
+    pa_type = pa_field.type
+
+    if pa.types.is_struct(df_type) and pa.types.is_struct(pa_type):
+        kept_child_fields = []
+        for pa_child_field in pa_type:
+            df_child_field_index = df_type.get_field_index(pa_child_field.name)
+            if df_child_field_index != -1:
+                kept_child_fields.append(
+                    _update_field(
+                        df_type.field(df_child_field_index),
+                        pa_child_field,
+                        allow_downcasting,
+                    )
+                )
+            elif pa_child_field.nullable:
+                # Append optional missing fields.
+                kept_child_fields.append(pa_child_field)
+        struct_type = pa.struct(kept_child_fields)
+        df_field = df_field.with_type(struct_type)
+    elif pa.types.is_map(df_type) and pa.types.is_map(pa_type):
+        new_key_field = _update_field(
+            df_type.key_field, pa_type.key_field, allow_downcasting
+        )
+        new_item_field = _update_field(
+            df_type.item_field, pa_type.item_field, allow_downcasting
+        )
+        map_type = pa.map_(new_key_field, new_item_field)
+        df_field = df_field.with_type(map_type)
+    # TODO: Should list types be unifiable?
+    elif pa.types.is_list(df_type) and pa.types.is_list(pa_type):
+        new_element_field = _update_field(
+            df_type.field(0), pa_type.field(0), allow_downcasting
+        )
+        list_type = pa.list_(new_element_field, list_size=df_type.list_size)
+        df_field = df_field.with_type(list_type)
+    elif pa.types.is_fixed_size_list(df_type) and pa.types.is_fixed_size_list(pa_type):
+        new_element_field = _update_field(
+            df_type.field(0), pa_type.field(0), allow_downcasting
+        )
+        fixed_size_list_type = pa.fixed_size_list(new_element_field, df_type.list_size)
+        df_field = df_field.with_type(fixed_size_list_type)
+    elif pa.types.is_large_list(df_type) and pa.types.is_large_list(pa_type):
+        new_element_field = _update_field(
+            df_type.field(0), pa_type.field(0), allow_downcasting
+        )
+        large_list_type = pa.large_list(new_element_field)
+        df_field = df_field.with_type(large_list_type)
+
+    # df_field can only be downcasted as of now
+    # TODO: Should support upcasting in the future if necessary
+    elif (
+        not df_type.equals(pa_type)
+        and allow_downcasting
+        and (
+            (
+                pa.types.is_signed_integer(df_type)
+                and pa.types.is_signed_integer(pa_type)
+            )
+            or (pa.types.is_floating(df_type) and pa.types.is_floating(pa_type))
+        )
+        and df_type.bit_width > pa_type.bit_width
+    ):
+        df_field = df_field.with_type(pa_type)
+
+    if not df_field.nullable and pa_field.nullable:
+        df_field = df_field.with_nullable(True)
+    elif allow_downcasting and df_field.nullable and not pa_field.nullable:
+        df_field = df_field.with_nullable(False)
+
+    return df_field
 
 
 def with_iceberg_field_id_md(
@@ -2390,11 +2475,13 @@ def with_iceberg_field_id_md_from_ref_field(
     elif pa.types.is_struct(field.type):
         assert pa.types.is_struct(ref_field.type), ref_field
         new_children_fields = []
-        for i in range(field.type.num_fields):
+        field_type = field.type
+        ref_type = ref_field.type
+        for child_field in field_type:
+            ref_field_index = ref_type.get_field_index(child_field.name)
+            ref_field = ref_type.field(ref_field_index)
             new_children_fields.append(
-                with_iceberg_field_id_md_from_ref_field(
-                    field.type.field(i), ref_field.type.field(i)
-                )
+                with_iceberg_field_id_md_from_ref_field(child_field, ref_field)
             )
         new_field = field.with_type(pa.struct(new_children_fields)).with_metadata(
             new_md
@@ -2545,7 +2632,6 @@ def get_table_details_before_write(
                     (col_name_to_idx_map[col_name], *rest)
                     for col_name, *rest in sort_order
                 ]
-
                 if (pa_schema is not None) and (
                     not are_schemas_compatible(pa_schema, df_schema, allow_downcasting)
                 ):
