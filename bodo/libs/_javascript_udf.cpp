@@ -1,7 +1,12 @@
 #include "_javascript_udf.h"
 #include <fmt/format.h>
 #include <random>
+#include <stdexcept>
 #include "_bodo_common.h"
+
+#include "_bodo_common.h"
+#include "include/libplatform/libplatform.h"
+#include "include/v8-exception.h"
 
 #include "include/libplatform/libplatform.h"
 #include "include/v8-function.h"
@@ -11,14 +16,37 @@
 #include "include/v8-primitive.h"
 #include "include/v8-script.h"
 
+#define CHECK_V8_EXCEPTION(isolate, context, try_catch, error_prefix)         \
+    if (try_catch.HasCaught()) {                                              \
+        v8::String::Utf8Value exception(isolate, try_catch.Exception());      \
+        v8::Local<v8::Message> message = try_catch.Message();                 \
+        if (message.IsEmpty()) {                                              \
+            throw std::runtime_error(                                         \
+                fmt::format("{}\n{}", error_prefix, *exception));             \
+        } else {                                                              \
+            v8::String::Utf8Value filename(                                   \
+                isolate, message->GetScriptOrigin().ResourceName());          \
+            int linenum = message->GetLineNumber(context).FromMaybe(-1);      \
+            if (linenum == -1) {                                              \
+                throw std::runtime_error(fmt::format(                         \
+                    "{}\n{}: {}", error_prefix, *filename, *exception));      \
+            } else {                                                          \
+                throw std::runtime_error(fmt::format("{}\n{}:{}: {}",         \
+                                                     error_prefix, *filename, \
+                                                     linenum, *exception));   \
+            }                                                                 \
+        }                                                                     \
+    }
+
 static std::unique_ptr<v8::Platform> platform;
 static v8::Isolate::CreateParams create_params;
 static std::shared_ptr<v8::Isolate> isolate;
 static bool v8_initialized = false;
 
-// @brief Create a new isolate wrapped in a shared pointer and set configure it
-// for throughput over latency
-// @return The new isolate
+/** @brief Create a new isolate wrapped in a shared pointer and set configure it
+ * for throughput over latency
+ * @return The new isolate
+ */
 std::shared_ptr<v8::Isolate> create_new_isolate() {
     v8::Isolate *isolate = v8::Isolate::New(create_params);
     // Favor throughput over latency
@@ -62,12 +90,19 @@ JavaScriptFunction::JavaScriptFunction(
       arg_names(_arg_names),
       context(isolate.get(), v8::Context::New(isolate.get())),
       tracing_event("JavaScript UDF") {
+    v8::Local<v8::Context> local_context = context.Get(isolate.get());
+
+    // Disallow code generation from strings to prevent eval, this matches
+    // Snowflake's behavior
+    local_context->AllowCodeGenerationFromStrings(false);
+
     v8::Isolate::Scope isolate_scope(isolate.get());
     // Create the handle scope and set the active context
     v8::HandleScope handle_scope(isolate.get());
-    v8::Context::Scope context_scope(this->context.Get(isolate.get()));
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    v8::Context::Scope context_scope(local_context);
+    v8::TryCatch try_catch(isolate.get());
+
+    std::mt19937 gen;
     std::uniform_int_distribution<> distrib(65, 90);
     char random_function_name_char_arr[this->size_rand_names];
     for (int i = 0; i < this->size_rand_names; i++) {
@@ -82,16 +117,21 @@ JavaScriptFunction::JavaScriptFunction(
     v8::Local<v8::String> source =
         v8::String::NewFromUtf8(isolate.get(), script_str.c_str())
             .ToLocalChecked();
-    v8::Local<v8::Script> script =
-        v8::Script::Compile(this->context.Get(isolate.get()), source)
-            .ToLocalChecked();
-    script->Run(this->context.Get(isolate.get())).ToLocalChecked();
+
+    v8::MaybeLocal<v8::Script> maybe_script =
+        v8::Script::Compile(local_context, source);
+    CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
+                       "Error initializing JavaScript UDF");
+    v8::Local<v8::Script> script = maybe_script.ToLocalChecked();
+
+    script->Run(local_context).IsEmpty();
+    CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
+                       "Error initializing JavaScript UDF");
 
     v8::Local<v8::String> v8_func_name =
         v8::String::NewFromUtf8(isolate.get(),
                                 this->random_function_name.c_str())
             .ToLocalChecked();
-    v8::Local<v8::Context> local_context = this->context.Get(isolate.get());
     v8::Local<v8::Value> v8_func_value = local_context->Global()
                                              ->Get(local_context, v8_func_name)
                                              .ToLocalChecked();
@@ -153,6 +193,7 @@ std::shared_ptr<array_info> execute_javascript_udf(
     v8::Isolate::Scope isolate_scope(isolate.get());
     // Create the handle scope and set the active context
     v8::HandleScope handle_scope(isolate.get());
+    v8::TryCatch try_catch(isolate.get());
     v8::Local<v8::Context> local_context = func->context.Get(isolate.get());
     v8::Context::Scope context_scope(local_context);
     v8::Local<v8::Function> local_v8_func = func->v8_func.Get(isolate.get());
@@ -162,10 +203,11 @@ std::shared_ptr<array_info> execute_javascript_udf(
         alloc_array_top_level(out_count, 0, 0, func->return_type->array_type,
                               func->return_type->c_type);
     for (size_t i = 0; i < out_count; ++i) {
-        auto result =
-            local_v8_func
-                ->Call(local_context, local_context->Global(), 0, nullptr)
-                .ToLocalChecked();
+        auto maybe_result = local_v8_func->Call(
+            local_context, local_context->Global(), 0, nullptr);
+        CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
+                           "Error executing JavaScript UDF")
+        auto result = maybe_result.ToLocalChecked();
         int64_t retval = result->IntegerValue(local_context).ToChecked();
         // this needs to become something like
         // cast_v8_value_to_bodo_array<array_type, ctype>(result);
