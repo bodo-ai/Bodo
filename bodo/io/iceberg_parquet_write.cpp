@@ -330,8 +330,8 @@ void compute_min_max_iceberg_field(
  * @param[in] field Arrow field used to generate the field id information.
  * @param compute_min_and_max Whether to compute the min and max. This gets
  * modified for nested data.
- * @param[out] column_size_dict_py Python dictionary object
- * for writing the column size information for the field(s).
+ * @param[out] value_counts_dict_py Python dictionary object
+ * for writing the value counts information for the field(s).
  * @param[out] null_count_dict_py Python dictionary object
  * for writing the null count information for the field(s).
  * @param[out] lower_bound_dict_py Python dictionary object
@@ -342,8 +342,22 @@ void compute_min_max_iceberg_field(
 void generate_iceberg_field_metrics(
     const std::shared_ptr<arrow::ChunkedArray> &column,
     const std::shared_ptr<arrow::Field> &field, bool compute_min_and_max,
-    PyObject *column_size_dict_py, PyObject *null_count_dict_py,
+    PyObject *value_counts_dict_py, PyObject *null_count_dict_py,
     PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py) {
+    // Compute the value counts and null count for all columns. This differs
+    // from Spark (which doesn't compute any statistics for anything but the
+    // bottom-most level of nested arrays), but the null values may be useful
+    // to us and it should be cheap to compute.
+    int field_id = get_iceberg_field_id(field);
+    PyObject *field_id_py = PyLong_FromLongLong(field_id);
+    int64_t value_counts = column->length();
+    PyObject *value_counts_py = PyLong_FromLongLong(value_counts);
+    PyDict_SetItem(value_counts_dict_py, field_id_py, value_counts_py);
+    Py_DECREF(value_counts_py);
+    int64_t null_count = column->null_count();
+    PyObject *null_count_py = PyLong_FromLongLong(null_count);
+    PyDict_SetItem(null_count_dict_py, field_id_py, null_count_py);
+    Py_DECREF(null_count_py);
     auto type_id = field->type()->id();
     if (type_id == arrow::Type::LIST) {
         // If we have a list we want to recurse onto the child values.
@@ -361,7 +375,7 @@ void generate_iceberg_field_metrics(
             std::static_pointer_cast<arrow::BaseListType>(field->type());
         std::shared_ptr<arrow::Field> child_field = list_type->value_field();
         generate_iceberg_field_metrics(
-            child_column, child_field, false, column_size_dict_py,
+            child_column, child_field, false, value_counts_dict_py,
             null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
     } else if (type_id == arrow::Type::LARGE_LIST) {
         // If we have a large list we want to recurse onto the child values.
@@ -379,7 +393,7 @@ void generate_iceberg_field_metrics(
             std::static_pointer_cast<arrow::BaseListType>(field->type());
         std::shared_ptr<arrow::Field> child_field = list_type->value_field();
         generate_iceberg_field_metrics(
-            child_column, child_field, false, column_size_dict_py,
+            child_column, child_field, false, value_counts_dict_py,
             null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
     } else if (type_id == arrow::Type::MAP) {
         // If we have a map we recurse onto the key and value.
@@ -397,13 +411,13 @@ void generate_iceberg_field_metrics(
 
         std::shared_ptr<arrow::Field> key_field = map_type->key_field();
         generate_iceberg_field_metrics(
-            key_column, key_field, false, column_size_dict_py,
+            key_column, key_field, false, value_counts_dict_py,
             null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
         std::shared_ptr<arrow::ChunkedArray> value_column =
             std::make_shared<arrow::ChunkedArray>(value_chunks);
         std::shared_ptr<arrow::Field> value_field = map_type->item_field();
         generate_iceberg_field_metrics(
-            value_column, value_field, false, column_size_dict_py,
+            value_column, value_field, false, value_counts_dict_py,
             null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
     } else if (type_id == arrow::Type::STRUCT) {
         // If we have a struct we recurse onto the children.
@@ -425,28 +439,18 @@ void generate_iceberg_field_metrics(
             // Structs should still compute the min and max.
             generate_iceberg_field_metrics(
                 child_column, child_field, compute_min_and_max,
-                column_size_dict_py, null_count_dict_py, lower_bound_dict_py,
+                value_counts_dict_py, null_count_dict_py, lower_bound_dict_py,
                 upper_bound_dict_py);
         }
     } else {
-        int field_id = get_iceberg_field_id(field);
-        PyObject *field_id_py = PyLong_FromLongLong(field_id);
-        int64_t column_size = column->length();
-        PyObject *column_size_py = PyLong_FromLongLong(column_size);
-        PyDict_SetItem(column_size_dict_py, field_id_py, column_size_py);
-        Py_DECREF(column_size_py);
-        int64_t null_count = column->null_count();
-        PyObject *null_count_py = PyLong_FromLongLong(null_count);
-        PyDict_SetItem(null_count_dict_py, field_id_py, null_count_py);
-        Py_DECREF(null_count_py);
         // Generate max and min if they exist.
-        if (compute_min_and_max && null_count != column_size) {
+        if (compute_min_and_max && null_count != value_counts) {
             compute_min_max_iceberg_field(
                 column, field_id_py, lower_bound_dict_py, upper_bound_dict_py);
         }
-        // Decref the field IDs so there is 1 reference per dictionary.
-        Py_DECREF(field_id_py);
     }
+    // Decref the field IDs so there is 1 reference per dictionary.
+    Py_DECREF(field_id_py);
 }
 
 /**
@@ -619,8 +623,8 @@ std::vector<PyObject *> iceberg_pq_write_helper(
             PyLong_FromLongLong(file_size_in_bytes);
         iceberg_py_objs[1] = file_size_in_bytes_py;
         // Generate per column stats.
-        PyObject *column_size_dict_py = PyDict_New();
-        iceberg_py_objs[2] = column_size_dict_py;
+        PyObject *value_counts_dict_py = PyDict_New();
+        iceberg_py_objs[2] = value_counts_dict_py;
         PyObject *null_count_dict_py = PyDict_New();
         iceberg_py_objs[3] = null_count_dict_py;
         PyObject *lower_bound_dict_py = PyDict_New();
@@ -631,7 +635,7 @@ std::vector<PyObject *> iceberg_pq_write_helper(
             auto column = iceberg_table->column(i);
             auto field = iceberg_table->schema()->field(i);
             generate_iceberg_field_metrics(
-                column, field, true, column_size_dict_py, null_count_dict_py,
+                column, field, true, value_counts_dict_py, null_count_dict_py,
                 lower_bound_dict_py, upper_bound_dict_py);
         }
         return iceberg_py_objs;
