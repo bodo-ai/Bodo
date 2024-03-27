@@ -17,6 +17,9 @@ pytestmark = pytest_mark_javascript
 
 
 def test_javascript_udf_no_args_return_int(memory_leak_check):
+    """
+    Test a simple UDF without arguments that returns an integer value.
+    """
     body = MetaType("return 2 + 1")
     args = MetaType(tuple())
     ret_type = IntegerArrayType(bodo.int64)
@@ -32,6 +35,9 @@ def test_javascript_udf_no_args_return_int(memory_leak_check):
 
 
 def test_javascript_interleaved_execution(memory_leak_check):
+    """
+    Test interleaved execution of two UDFs.
+    """
     body_a = MetaType("return 2 + 1")
     body_b = MetaType("return 2 + 2")
     args = MetaType(tuple())
@@ -50,6 +56,44 @@ def test_javascript_interleaved_execution(memory_leak_check):
 
     expected_output = (3, 4, 3, 4)
     check_func(f, tuple(), py_output=expected_output)
+
+
+def test_javascript_invalid_body(memory_leak_check):
+    """
+    Test a UDF with an invalid body and check if an exception is raised.
+    """
+    body = MetaType("return 2 + '")
+    args = MetaType(tuple())
+    ret_type = IntegerArrayType(bodo.int64)
+
+    @bodo.jit
+    def f():
+        f = create_javascript_udf(body, args, ret_type)
+        out = execute_javascript_udf(f, tuple())
+        delete_javascript_udf(f)
+        return out
+
+    with pytest.raises(Exception, match="1: SyntaxError: Invalid or unexpected token"):
+        f()
+
+
+def test_javascript_throws_exception(memory_leak_check):
+    """
+    Test a UDF that throws an exception and check if the exception is raised.
+    """
+    body = MetaType("throw 'error_string'")
+    args = MetaType(tuple())
+    ret_type = IntegerArrayType(bodo.int64)
+
+    @bodo.jit
+    def f():
+        f = create_javascript_udf(body, args, ret_type)
+        out = execute_javascript_udf(f, tuple())
+        delete_javascript_udf(f)
+        return out
+
+    with pytest.raises(Exception, match="1: error_string"):
+        f()
 
 
 @pytest.mark.skip(reason="Returning strings isn't implemented yet")
