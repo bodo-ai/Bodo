@@ -340,6 +340,32 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("B", "string", True),
         ],
     ),
+    "OPTIONAL_TABLE_MIDDLE": (
+        {
+            "A": np.array([1, 2] * 25, np.int32),
+            "B": np.array(["a", "b"] * 25),
+            "C": pd.Series(
+                [{"f1": 1.0, "f2": "A", "f3": 3.0}, {"f1": 4.0, "f2": "b", "f3": 6.0}]
+                * 25,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            ("f1", pa.float64()),
+                            ("f2", pa.string()),
+                            ("f3", pa.float64()),
+                        ]
+                    )
+                ),
+            ),
+            "D": np.array([1, 2] * 25, np.int64),
+        },
+        [
+            ("A", "int", False),
+            ("B", "string", True),
+            ("C", "STRUCT<f1: double, f2: string, f3: double>", True),
+            ("D", "long", False),
+        ],
+    ),
 }
 
 

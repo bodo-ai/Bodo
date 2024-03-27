@@ -70,6 +70,7 @@ from bodo.tests.utils import (
     convert_non_pandas_columns,
     gen_nonascii_list,
     reduce_sum,
+    run_rank0,
     sync_dtypes,
 )
 from bodo.utils.testing import ensure_clean2
@@ -2346,6 +2347,93 @@ def test_iceberg_missing_optional_column_incorrect_field_order(
         ),
     ):
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
+@pytest.mark.slow
+def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
+    """
+    Test support for adding a dataframe to an iceberg table where the dataframe
+    is missing an optional column in the middle of the schema and in the middle
+    of a struct.
+    The entire column should be filled with nulls instead of failing.
+    """
+    table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
+    write_table_name = f"{table_name}_WRITE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    if bodo.get_rank() == 0:
+        spark = get_spark()
+    else:
+        spark = None
+
+    @run_rank0
+    def create_table():
+        spark.sql(
+            f"CREATE TABLE hadoop_prod.{db_schema}.{write_table_name} AS SELECT * FROM hadoop_prod.{db_schema}.{table_name}"
+        )
+
+    create_table()
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+            "C": pd.Series(
+                [{"f1": 10.321, "f3": 30.5}] * 100,
+                dtype=pd.ArrowDtype(
+                    pa.struct([("f1", pa.float64()), ("f3", pa.float64())])
+                ),
+            ),
+            "D": np.array([1, 2, 3, 4] * 25, dtype=np.int64),
+        }
+    )
+    try:
+        bodo.jit(distributed=["df"])(impl)(
+            _get_dist_arg(df), write_table_name, conn, db_schema
+        )
+
+        # Read the bodo output
+        @bodo.jit
+        def read_bodo(table_name, conn, db_schema):
+            return pd.read_sql_table(table_name, conn, db_schema)
+
+        bodo_out = read_bodo(write_table_name, conn, db_schema)
+        bodo_out = _gather_output(bodo_out)
+
+        # Read the columns with Spark and check that the missing column is filled
+        # with nulls.
+        @run_rank0
+        def validate_output(bodo_out):
+            spark_out, _, _ = spark_reader.read_iceberg_table(
+                write_table_name, db_schema
+            )
+            assert (
+                spark_out["B"].isna().sum() == 100
+            ), "Missing column not filled with nulls on spark read"
+            assert (
+                spark_out["C"].map(lambda x: x["f2"]).isna().sum() == 100
+            ), "Missing field not filled with nulls on spark read"
+            assert (
+                bodo_out["B"].isna().sum() == 100
+            ), "Missing column not filled with nulls on Bodo read"
+            assert (
+                bodo_out["C"].map(lambda x: x["f2"]).isna().sum() == 100
+            ), "Missing field not filled with nulls on Bodo read"
+            bodo_out = convert_non_pandas_columns(bodo_out)
+            spark_out = convert_non_pandas_columns(spark_out)
+            assert _test_equal_guard(
+                bodo_out, spark_out, reset_index=True, sort_output=True
+            ), "Bodo and Spark outputs do not match"
+
+        validate_output(bodo_out)
+    finally:
+        if bodo.get_rank() == 0:
+            spark.sql(
+                f"DROP TABLE IF EXISTS hadoop_prod.{db_schema}.{write_table_name}"
+            )
 
 
 def truncate_impl(x: pd.Series, W: int):
