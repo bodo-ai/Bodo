@@ -1301,7 +1301,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
     "dfs, bounds_list, min_val, max_val",
     [
         ## Edge Cases
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1315,9 +1315,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             float("-inf"),
             float("inf"),
+            id="edge_case",
         ),
         ## Very simple test
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1331,9 +1332,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             float("-inf"),
             float("inf"),
+            id="simple",
         ),
         ## Test that it works in the empty table case
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1347,9 +1349,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             float("-inf"),
             float("inf"),
+            id="empty",
         ),
         ## Integers: Data x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1366,9 +1369,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             float("-inf"),
             float("inf"),
+            id="int64",
         ),
         ## Nullable Integers: Data (with nulls, without nulls)  x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1391,9 +1395,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             np.iinfo(np.int64).min,
             np.iinfo(np.int64).max,
+            id="Int64",
         ),
         ## Floats: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.4], [10, 20], [20, 20])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1428,9 +1433,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             float("-inf"),
             float("inf"),
+            id="float64",
         ),
         ## Date: Data (with nulls, without nulls)  x bounds ([D1, NA], [NA, NA], [D1, D2], [D2, D2])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1480,9 +1486,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             date.min,
             date.max,
+            id="date",
         ),
         ## Datetime: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1556,9 +1563,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             pd.Timestamp.min,
             pd.Timestamp.max,
+            id="datetime",
         ),
         ## Timedelta: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1620,9 +1628,10 @@ def test_sort_values_input_boundaries(memory_leak_check):
             ],
             pd.Timedelta.min,
             pd.Timedelta.max,
+            id="timedelta",
         ),
         ## Time: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1680,16 +1689,23 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 ),
             ],
             [
-                np.array([bodo.Time(4, 10, 45), None]),
-                np.array([None, None]),
-                np.array([bodo.Time(4, 10, 45), bodo.Time(18, 14, 59)]),
-                np.array([bodo.Time(18, 10, 45), bodo.Time(18, 10, 45)]),
+                pd.array([bodo.Time(4, 10, 45), None], pd.ArrowDtype(pa.time64("ns"))),
+                pd.array([None, None], pd.ArrowDtype(pa.time64("ns"))),
+                pd.array(
+                    [bodo.Time(4, 10, 45), bodo.Time(18, 14, 59)],
+                    pd.ArrowDtype(pa.time64("ns")),
+                ),
+                pd.array(
+                    [bodo.Time(18, 10, 45), bodo.Time(18, 10, 45)],
+                    pd.ArrowDtype(pa.time64("ns")),
+                ),
             ],
             bodo.Time(0, 0, 0, 0, 0, 0, 9),
             bodo.Time(23, 59, 59, 999, 999, 999, 9),
+            id="time",
         ),
         ## Decimals: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.5], [10, 20], [20, 20])
-        (
+        pytest.param(
             [
                 pd.DataFrame(
                     {
@@ -1751,6 +1767,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
             # For our purposes, just using large values should be sufficient.
             Decimal(-99999999),
             Decimal(99999999),
+            id="decimal",
         ),
     ],
 )

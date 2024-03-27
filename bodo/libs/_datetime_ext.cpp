@@ -478,6 +478,9 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
     // Pandas usually stores NaT for date arrays
     PyObject* C_NAT = PyObject_GetAttrString(pd_mod, "NaT");
     CHECK(C_NAT, "getting pd.NaT failed");
+    PyObject* datetime = PyImport_ImportModule("datetime");
+    CHECK(datetime, "importing datetime module failed");
+    PyObject* datetime_time_class = PyObject_GetAttrString(datetime, "time");
 
     arrow::Status status;
 
@@ -494,9 +497,32 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
             // Set na data to a legal value for array getitem.
             value_data = 0;
         } else {
-            PyObject* value_obj = PyObject_GetAttrString(s, "value");
-            value_data = PyLong_AsLongLong(value_obj);
-            Py_DECREF(value_obj);
+            // Pyarrow boxes into datetime.time objects.
+            // TODO: Determine how to get the underlying arrow data.
+            if (PyObject_IsInstance(s, datetime_time_class)) {
+                PyObject* hour_obj = PyObject_GetAttrString(s, "hour");
+                PyObject* minute_obj = PyObject_GetAttrString(s, "minute");
+                PyObject* second_obj = PyObject_GetAttrString(s, "second");
+                PyObject* microsecond_obj =
+                    PyObject_GetAttrString(s, "microsecond");
+
+                int64_t hour = PyLong_AsLongLong(hour_obj);
+                int64_t minute = PyLong_AsLongLong(minute_obj);
+                int64_t second = PyLong_AsLongLong(second_obj);
+                int64_t microsecond = PyLong_AsLongLong(microsecond_obj);
+
+                value_data =
+                    hour * _NANOS_PER_HOUR + minute * _NANOS_PER_MINUTE +
+                    second * _NANOS_PER_SECOND + microsecond * _NANOS_PER_MICRO;
+                Py_DECREF(hour_obj);
+                Py_DECREF(minute_obj);
+                Py_DECREF(second_obj);
+                Py_DECREF(microsecond_obj);
+            } else {
+                PyObject* value_obj = PyObject_GetAttrString(s, "value");
+                value_data = PyLong_AsLongLong(value_obj);
+                Py_DECREF(value_obj);
+            }
             value_bitmap = true;
         }
         data[i] = value_data;
@@ -508,6 +534,8 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
         Py_DECREF(s);
     }
 
+    Py_DECREF(datetime_time_class);
+    Py_DECREF(datetime);
     Py_DECREF(C_NA);
     Py_DECREF(C_NAT);
     Py_DECREF(pd_mod);
