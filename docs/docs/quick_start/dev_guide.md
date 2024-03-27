@@ -436,7 +436,7 @@ import bodo
 
 @bodo.jit
 def df_unsupported():
-    df = pd.DataFrame({"A": [1, 2, 3])
+    df = pd.DataFrame({"A": [1, 2, 3]})
     df2 = df.transpose()
     return df2
 
@@ -519,7 +519,7 @@ def groupby_keys(extra_keys):
 
 
 if __name__ == "__main__":
-    keys = get_keys()
+    keys = get_keys(["A"], False)
     groupby_keys(False)
 ```
 
