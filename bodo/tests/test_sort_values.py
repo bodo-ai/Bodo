@@ -1730,11 +1730,22 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 ),
             ],
             [
-                np.array([Decimal(10.5), None]),
-                np.array([None, None]),
-                np.array([Decimal(10.0), Decimal(20.5)]),
-                np.array([Decimal(10.0), Decimal(20.0)]),
-                np.array([Decimal(20.0), Decimal(20.0)]),
+                pd.array(
+                    [Decimal(10.5), None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))
+                ),
+                pd.array([None, None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))),
+                pd.array(
+                    [Decimal(10.0), Decimal(20.5)],
+                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                ),
+                pd.array(
+                    [Decimal(10.0), Decimal(20.0)],
+                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                ),
+                pd.array(
+                    [Decimal(20.0), Decimal(20.0)],
+                    dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+                ),
             ],
             # Using Decimal("-Infinity") and Decimal("Infinity") leads to unrelated issues.
             # For our purposes, just using large values should be sufficient.
