@@ -95,18 +95,27 @@ class Time:
     def __hash__(self):
         return int(self.value)
 
-    def __eq__(self, other):
-        # datetime.time doesn't have all the Time fields
-        if isinstance(other, datetime.time):
-            return (
-                (self.hour == other.hour)
-                and (self.minute == other.minute)
-                and (self.second == other.second)
-                and (self.millisecond == 0)
-                and (self.microsecond == other.microsecond)
-                and (self.nanosecond == 0)
+    @staticmethod
+    def _convert_datetime_to_bodo_time(dt_time):
+        if isinstance(dt_time, datetime.time):
+            return Time(
+                hour=dt_time.hour,
+                minute=dt_time.minute,
+                second=dt_time.second,
+                millisecond=dt_time.microsecond // 1000,
+                microsecond=dt_time.microsecond % 1000,
+                nanosecond=0,
+                precision=9,
             )
+        else:
+            return dt_time
 
+    def _check_can_compare(self, other):
+        if not isinstance(other, Time):
+            raise TypeError("Cannot compare Time with non-Time type")
+
+    def __eq__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
         if not isinstance(other, Time):  # pragma: no cover
             return False
         # Removing precision check. It does not affect how Bodo computes `value`.
@@ -115,15 +124,13 @@ class Time:
         return self.value == other.value
 
     def __ne__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
         if not isinstance(other, Time):  # pragma: no cover
             return True
         return self.value != other.value
 
-    def _check_can_compare(self, other):
-        if not isinstance(other, Time):
-            raise TypeError("Cannot compare Time with non-Time type")
-
     def __lt__(self, other):  # pragma: no cover
+        other = self._convert_datetime_to_bodo_time(other)
         if other is None or other == float("inf"):  # pragma: no cover
             # None will be transformed to float('inf') during < comparison
             # with other Time objects in pandas.Series
@@ -132,6 +139,7 @@ class Time:
         return self.value < other.value
 
     def __le__(self, other):  # pragma: no cover
+        other = self._convert_datetime_to_bodo_time(other)
         if other is None or other == float("inf"):  # pragma: no cover
             # None will be transformed to float('inf') during <= comparison
             # with other Time objects in pandas.Series
@@ -140,6 +148,7 @@ class Time:
         return self.value <= other.value
 
     def __gt__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
         if other is None or other == float("-inf"):  # pragma: no cover
             # None will be transformed to float('inf') during > comparison
             # with other Time objects in pandas.Series
@@ -148,6 +157,7 @@ class Time:
         return self.value > other.value
 
     def __ge__(self, other):
+        other = self._convert_datetime_to_bodo_time(other)
         if other is None or other == float("-inf"):  # pragma: no cover
             # None will be transformed to float('-inf') during >= comparison
             # with other Time objects in pandas.Series
