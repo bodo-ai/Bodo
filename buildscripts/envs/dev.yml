@@ -42,6 +42,8 @@ dependencies:
   - maven
   - pyspark=3.5
   - mmh3
+  # Install avro to enable reading avro files in Iceberg testing.
+  - avro
 
   # Excel
   - xlrd
@@ -72,6 +74,6 @@ dependencies:
   # - pytorch=1.9
   # - bokeh=2.3
   # - torchvision=0.10
-  # - tensorflow 
+  # - tensorflow
   # - pip:
   #   - horovod
