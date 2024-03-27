@@ -1,5 +1,6 @@
 import datetime
 import zoneinfo
+from typing import Optional
 
 import numba
 import numpy as np
@@ -9,6 +10,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
+from bodo.hiframes.timestamptz_ext import TimestampTZ
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_literal_value,
@@ -640,6 +642,116 @@ def overload_to_timestamptz(
     return impl
 
 
+@numba.generated_jit(nopython=True, no_unliteral=True)
+def to_timestamptz_string_parser(str_val):
+    """Parses timestamps with the timezone fully specified. Returns None if the
+    timezone couldn't be parsed, and a TimestampTZ otherwise."""
+
+    def impl(str_val: str) -> Optional[TimestampTZ]:
+        if not len(str_val):
+            return None
+
+        sign = 1
+        str_val = str_val.strip()
+        if str_val.endswith("Z"):
+            # Z for 0 offset
+            timestamp_str = str_val[:-1].strip()
+            offset = 0
+        else:
+            # extract the timestamp string and offset by finding the offset
+            # suffix
+            if "+" in str_val:
+                timestamp_str, offset_str = str_val.rsplit("+", 1)
+            else:
+                # Filter out all empty strings
+                parts = [p for p in str_val.split(" ") if p]
+                # If we can't clearly split the string into [date, time,
+                # offset], maybe the time and offset don't have a space between
+                # them - this means the delimiter must be '-', since '+' is
+                # handled above.
+                if len(parts) != 3:
+                    if "-" in str_val:
+                        timestamp_str, offset_str = str_val.rsplit("-", 1)
+                        sign = -1
+                    else:
+                        return None
+                else:
+                    timestamp_str = parts[0] + " " + parts[1]
+                    offset_str = parts[2]
+                    # If there was a sign, record it and remove it from offset_str
+                    if offset_str[0] == "-":
+                        sign = -1
+                        offset_str = offset_str[1:]
+                    elif offset_str[0] == "+":
+                        sign = 1
+                        offset_str = offset_str[1:]
+
+            if ":" in offset_str:
+                # parse offset as one of HH:MM, H:MM, HH:M
+                parts = offset_str.split(":")
+                if not len(parts) == 2:
+                    return None
+                hours, minutes = parts
+                if not hours.isdigit() or not minutes.isdigit():
+                    return None
+
+                hours = int(hours)
+                if hours < 0 or hours > 23:
+                    return None
+                minutes = int(minutes)
+                if minutes < 0 or minutes > 59:
+                    return None
+
+                offset = int(hours) * 60 + int(minutes)
+            else:
+                # parse offset as one of HH, HMM, HHMM
+                if not offset_str.isdigit():
+                    return None
+
+                if len(offset_str) == 2:
+                    # HH
+                    if not offset_str.isdigit():
+                        return None
+                    hours = int(offset_str)
+                    if hours < 0 or hours > 23:
+                        return None
+                    offset = int(offset_str) * 60
+                elif len(offset_str) == 3:
+                    # HMM
+                    offset_raw = int(offset_str)
+                    hours = offset_raw // 100
+                    minutes = offset_raw % 100
+                    if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+                        return None
+                    offset = hours * 60 + minutes
+                elif len(offset_str) == 4:
+                    # HHMM
+                    # This is only actually allowed in Snowflake if the string is in a
+                    # specific format, but we'll allow it here for simplicity
+                    offset_raw = int(offset_str)
+                    hours = offset_raw // 100
+                    minutes = offset_raw % 100
+                    if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+                        return None
+                    offset = hours * 60 + minutes
+                else:
+                    return None
+
+            # apply the sign
+            offset *= sign
+
+        local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(
+            timestamp_str, None, None, 0
+        )
+        if local_timestamp is None:
+            return None
+        return bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(
+            local_timestamp, offset
+        )
+
+    return impl
+
+
 @overload(to_timestamptz_util, no_unliteral=True)
 def overload_to_timestamptz_util(
     conversion_val, time_zone, dict_encoding_state, func_id
@@ -661,28 +773,12 @@ def overload_to_timestamptz_util(
     use_dict_caching = not is_overload_none(dict_encoding_state)
     prefix_code = ""
     if is_valid_string_arg(conversion_val):
-        scalar_text = "parsed = False\n"
-        scalar_text += "if len(arg0) > 5:\n"
-        scalar_text += "  timestamp_str = arg0[:-5].strip()\n"
-        scalar_text += "  offset_str = arg0[-5:]\n"
-        scalar_text += "  if ':' not in offset_str and (offset_str[0] == ' ' or offset_str[0] == '-' or offset_str[0] == '+'):\n"
-        scalar_text += "    offset_sign = -1 if offset_str[0] == '-' else 1\n"
-        scalar_text += "    offset_int = abs(int(offset_str))\n"
-        # Parse the offset as HHMM or HMM
-        scalar_text += "    offset_hours = offset_int // 100\n"
-        scalar_text += "    offset_minutes = offset_int % 100\n"
-        # We don't pass in a timezone here because it's contained in the offset
-        scalar_text += "    local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(timestamp_str, None, None, 0)\n"
-        scalar_text += (
-            "    offset = offset_sign * (offset_hours * 60 + offset_minutes)\n"
-        )
-        scalar_text += "    parsed = True\n"
-        scalar_text += "if not parsed and arg0.endswith(' Z'):\n"
-        scalar_text += "  timestamp_str = arg0[:-2]\n"
-        scalar_text += "  offset = 0\n"
-        scalar_text += "  local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(timestamp_str, None, None, 0)\n"
-        scalar_text += "  parsed = True\n"
-        scalar_text += "if not parsed:\n"
+        scalar_text = "val = bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamptz_string_parser(arg0)\n"
+        # The timestamp might be None if the string didn't have a timezone -
+        # attempt to parse it as a normal timestamp
+        scalar_text += "if val is not None:\n"
+        scalar_text += "  res[i] = val\n"
+        scalar_text += "else:\n"
         scalar_text += "  offset = 0\n"
         scalar_text += "  local_timestamp = bodo.libs.bodosql_array_kernels.to_timestamp(arg0, None, None, 0)\n"
         if time_zone is not None:
@@ -690,14 +786,10 @@ def overload_to_timestamptz_util(
             scalar_text += "  if not arg0.isdigit():\n"
             scalar_text += f"    offset = int(local_timestamp.tz_localize('{time_zone}').utcoffset().total_seconds() / 60)\n"
             # If there's a time in the string, then We need to use the default timezone as the offset
-        scalar_text += "if local_timestamp is None:\n"
-        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
-        scalar_text += "else:\n"
-        scalar_text += (
-            "  utc_timestamp = local_timestamp - pd.Timedelta(minutes=offset)\n"
-        )
-
-        scalar_text += "  res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(utc_timestamp, offset)\n"
+        scalar_text += "  if local_timestamp is None:\n"
+        scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(local_timestamp, offset)\n"
     elif is_valid_tz_aware_datetime_arg(conversion_val):
         scalar_text = "offset = int(arg0.utcoffset().total_seconds() / 60)\n"
         scalar_text += "utc_timestamp = arg0.tz_convert('UTC').tz_localize(None)\n"
