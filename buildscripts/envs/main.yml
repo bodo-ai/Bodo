@@ -13,7 +13,7 @@ dependencies:
   - libcurl <=8.5
 
   # Core
-  - numba =0.59.0
+  - numba =0.59.1
   - numpy >=1.24,<1.27
   - pandas >=2.1,<2.2
 
