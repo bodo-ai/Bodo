@@ -4,7 +4,6 @@ Avro is installed by default on the dev conda lock.
 """
 import sys
 
-import avro
 from avro.datafile import DataFileReader
 from avro.io import DatumReader
 

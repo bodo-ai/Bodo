@@ -4,7 +4,6 @@ Implements time array kernels that are specific to BodoSQL
 """
 
 import numba
-import numpy as np
 from numba.core import types
 
 import bodo

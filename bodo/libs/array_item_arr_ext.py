@@ -11,14 +11,12 @@ offsets:           [0, 2, 3, 3, 6, 6]
 """
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
-    NativeValue,
     box,
     intrinsic,
     models,
@@ -31,19 +29,11 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.libs import array_ext
+from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_alloc_meminfo,
     gen_allocate_array,
-    get_array_elem_counts,
-    get_bitmap_bit,
-    is_na_value,
     meminfo_to_np_arr,
-    pyarray_setitem,
-    seq_getitem,
-    set_bitmap_bit,
-    to_arr_obj_if_list_obj,
 )
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (

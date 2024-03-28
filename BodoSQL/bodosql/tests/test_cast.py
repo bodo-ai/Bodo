@@ -9,7 +9,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 

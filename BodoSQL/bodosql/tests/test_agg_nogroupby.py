@@ -5,7 +5,6 @@ Test correctness of SQL aggregation operations without groupby on BodoSQL
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 import bodo
@@ -13,7 +12,6 @@ import bodosql
 from bodo.tests.utils import (
     DistTestPipeline,
     check_func,
-    count_array_OneDs,
     count_array_REPs,
     dist_IR_contains,
     pytest_slow_unless_groupby,

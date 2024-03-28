@@ -74,7 +74,6 @@ from bodo.utils.indexing import (
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_int,
-    get_overload_const_str,
     is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_int,

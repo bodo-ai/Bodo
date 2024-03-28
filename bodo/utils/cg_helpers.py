@@ -8,7 +8,7 @@ from numba.extending import intrinsic
 import bodo
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist  # isort:skip
+from bodo.libs import array_ext, hdist  # noqa: F401
 
 ll.add_symbol("array_getitem", array_ext.array_getitem)
 ll.add_symbol("seq_getitem", array_ext.seq_getitem)

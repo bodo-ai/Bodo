@@ -12,7 +12,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import check_func, pytest_mark_one_rank
+from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
 

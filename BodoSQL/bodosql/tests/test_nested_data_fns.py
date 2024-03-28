@@ -11,12 +11,9 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
-    _get_dist_arg,
-    check_func,
     pytest_mark_one_rank,
     pytest_slow_unless_codegen,
 )
-from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed

@@ -41,7 +41,7 @@ from bodo.hiframes.pd_offsets_ext import (
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.series_impl import SeriesType
 from bodo.hiframes.time_ext import TimeType
-from bodo.hiframes.timestamptz_ext import TimestampTZArrayType, TimestampTZType
+from bodo.hiframes.timestamptz_ext import TimestampTZType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type

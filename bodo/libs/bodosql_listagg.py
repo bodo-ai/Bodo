@@ -21,7 +21,6 @@ from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_str,
     get_overload_const_tuple,
-    is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_constant_tuple,
     raise_bodo_error,

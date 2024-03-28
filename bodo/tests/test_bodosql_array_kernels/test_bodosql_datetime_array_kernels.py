@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )

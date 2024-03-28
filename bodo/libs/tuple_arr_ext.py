@@ -7,7 +7,6 @@ import numba
 import numpy as np
 from numba.core import types
 from numba.extending import (
-    NativeValue,
     box,
     intrinsic,
     make_attribute_wrapper,
@@ -23,8 +22,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.libs.struct_arr_ext import (
     StructArrayType,
-    box_struct_arr,
-    unbox_struct_array,
 )
 from bodo.utils.typing import BodoError, is_list_like_index_type
 

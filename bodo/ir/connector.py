@@ -22,7 +22,6 @@ from bodo.ir.filter import (
     Filter,
     FilterVisitor,
     Scalar,
-    get_filter_predicate_compute_func,
     supported_arrow_funcs_map,
 )
 from bodo.transforms.distributed_analysis import Distribution

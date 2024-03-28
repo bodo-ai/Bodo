@@ -4,7 +4,7 @@ Python Objects usable inside Bodo.
 """
 import os
 from collections import namedtuple
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 from py4j.protocol import Py4JError

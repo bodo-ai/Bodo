@@ -3,7 +3,6 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pyarrow as pa
 from py4j.protocol import Py4JError
 
@@ -12,7 +11,6 @@ from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
     get_bodo_iceberg_handler_class,
-    get_data_file_class,
     get_java_table_handler,
 )
 from bodo_iceberg_connector.schema_helper import (

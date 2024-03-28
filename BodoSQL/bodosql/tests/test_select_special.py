@@ -2,9 +2,7 @@
 """
 Test correctness of special SELECT operators
 """
-import numpy as np
 import pandas as pd
-import pytest
 
 from bodosql.tests.utils import check_query
 

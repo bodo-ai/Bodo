@@ -6,24 +6,15 @@ of helper functions needed.
 
 import re
 
-import numba
 import numpy as np
 from numba.core import types
-from numba.extending import overload, register_jitable
+from numba.extending import overload
 
 import bodo
 import bodo.libs.uuid
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.str_arr_ext import str_arr_set_na
-from bodo.utils.typing import (
-    BodoError,
-    get_overload_const_bool,
-    get_overload_const_int,
-    get_overload_const_str,
-    is_overload_constant_int,
-    is_overload_false,
-    is_overload_none,
-)
+from bodo.utils.typing import is_overload_false
 
 
 def parse_url(data, permissive_flag=False):
@@ -277,7 +268,7 @@ def parse_netlock_into_host_and_port_overload(netloc):
         # from the netloc string using regex in one expression,
         # but I'm not sure how to do that and this works in Bodo,
         # so I'm not going to push my luck.
-        match = re.match(".*:\d+\Z", netloc)
+        match = re.match(r".*:\d+\Z", netloc)
         if not (match is None):
             port_splic_loc = netloc.rfind(":")
             return (netloc[:port_splic_loc], netloc[port_splic_loc + 1 :])

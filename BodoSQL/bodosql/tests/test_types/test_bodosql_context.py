@@ -14,7 +14,7 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.conftest import (  # pragma: no cover
+from bodo.tests.conftest import (  # noqa: F401
     iceberg_database,
     iceberg_table_conn,
 )

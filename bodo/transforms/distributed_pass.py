@@ -7,7 +7,6 @@ import hashlib
 import inspect
 import operator
 import sys
-import types as pytypes  # avoid confusion with numba.core.types
 import warnings
 from collections import defaultdict
 

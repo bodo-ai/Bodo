@@ -1,13 +1,11 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Checks for functionality on Series containing timezone values.
 """
-import datetime
-
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
+from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa: F401
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 

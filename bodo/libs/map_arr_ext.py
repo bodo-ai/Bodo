@@ -9,13 +9,10 @@ For example: [{1: 2.1, 3: 1.1}, {5: -1.0}]
 """
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
-from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
-    NativeValue,
     box,
     intrinsic,
     make_attribute_wrapper,
@@ -29,10 +26,8 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
     is_list_like_index_type,
@@ -41,7 +36,7 @@ from bodo.utils.typing import (
 )
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist  # isort:skip
+from bodo.libs import array_ext, hdist  # noqa: F401  # isort:skip
 
 
 class MapScalarType(types.Type):

@@ -3,8 +3,9 @@
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
-from pandas.api.types import is_float_dtype, is_string_dtype
+from pandas.api.types import is_float_dtype
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *

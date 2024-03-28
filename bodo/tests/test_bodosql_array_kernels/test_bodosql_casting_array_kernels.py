@@ -1,7 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for casting
 """
-
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ from pandas.api.types import is_float_dtype, is_string_dtype
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     str_to_bool,
 )

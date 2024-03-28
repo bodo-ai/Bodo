@@ -17,8 +17,6 @@ from bodo.utils.typing import (
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
-    to_nullable_type,
-    unwrap_typeref,
 )
 from bodo.utils.utils import is_array_typ
 

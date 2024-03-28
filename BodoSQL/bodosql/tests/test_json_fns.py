@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from numba.core.errors import TypingError
 
 import bodo
 from bodo.tests.utils import pytest_mark_one_rank
