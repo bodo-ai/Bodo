@@ -1,7 +1,6 @@
 import os
-import sys
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple, get_args
+from typing import Dict, List, Literal, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError, IcebergWarning

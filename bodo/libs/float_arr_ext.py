@@ -32,7 +32,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hstr_ext  # isort:skip
+from bodo.libs import array_ext, hstr_ext  # noqa: F401  # isort:skip
 
 ll.add_symbol("is_pd_float_array", array_ext.is_pd_float_array)
 ll.add_symbol("float_array_from_sequence", array_ext.float_array_from_sequence)

@@ -14,7 +14,6 @@ import pandas as pd
 import pyspark
 from mpi4py import MPI
 from pyspark.sql.types import (
-    BooleanType,
     ByteType,
     DayTimeIntervalType,
     DoubleType,
@@ -25,7 +24,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    TimestampNTZType,
     TimestampType,
 )
 

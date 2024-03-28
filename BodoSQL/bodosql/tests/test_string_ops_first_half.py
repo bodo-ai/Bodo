@@ -3,6 +3,7 @@
 Test correctness of SQL string operation queries on BodoSQL
 """
 
+import pandas as pd
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen

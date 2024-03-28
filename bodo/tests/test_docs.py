@@ -1,11 +1,9 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
-import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
-import bodo
 from bodo.tests.utils import pytest_mark_one_rank
 
 

@@ -3,7 +3,6 @@
 Tests the core functionality with the file system catalog.
 """
 import os
-import shutil
 import tempfile
 
 import numpy as np

@@ -14,7 +14,7 @@ from bodo.libs.stream_groupby import (
     init_groupby_state,
 )
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
-from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
+from bodo.utils.typing import ColNamesMetaType, MetaType
 
 ##################### COMMON HELPERS #####################
 

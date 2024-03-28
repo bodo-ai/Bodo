@@ -2,6 +2,7 @@
 """
 Test correctness of SQL ANY and ALL clauses.
 """
+import pandas as pd
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen

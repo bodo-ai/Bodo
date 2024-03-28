@@ -10,7 +10,6 @@ import pandas as pd
 import pytest
 
 import bodo
-import bodosql
 from bodo.tests.timezone_common import (  # noqa
     representative_tz,
 )

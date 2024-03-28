@@ -5,9 +5,8 @@ import traceback
 import numba
 import numpy as np
 import pandas as pd
-from llvmlite import ir as lir
 from mpi4py import MPI
-from numba.core import cgutils, types
+from numba.core import types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
     AbstractTemplate,

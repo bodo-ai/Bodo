@@ -69,7 +69,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     raise_bodo_error,
     to_nullable_type,
-    to_str_arr_if_dict_array,
 )
 
 ll.add_symbol("is_np_array", hstr_ext.is_np_array)

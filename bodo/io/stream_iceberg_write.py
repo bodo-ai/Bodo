@@ -498,8 +498,6 @@ def gen_iceberg_writer_append_table_impl_inner(
     is_last,
     iter,
 ):  # pragma: no cover
-    from bodo.hiframes.pd_dataframe_ext import DataFrameType
-
     if not isinstance(writer, IcebergWriterType):  # pragma: no cover
         raise BodoError(
             f"iceberg_writer_append_table: Expected type IcebergWriterType "

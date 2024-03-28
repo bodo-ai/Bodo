@@ -1,4 +1,3 @@
-import numba
 import numpy as np
 import pandas as pd
 from llvmlite import binding as ll
@@ -10,12 +9,11 @@ import bodo
 from bodo.libs.array import ArrayInfoType, array_to_info, delete_info, info_to_array
 from bodo.utils.typing import (
     MetaType,
-    is_scalar_type,
     is_tuple_like_type,
     raise_bodo_error,
     unwrap_typeref,
 )
-from bodo.utils.utils import is_array_typ, numba_to_c_array_types, numba_to_c_types
+from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 # javascript_udf_cpp is only built when BUILD_WITH_V8 is set so
 # we need to check if the module is available

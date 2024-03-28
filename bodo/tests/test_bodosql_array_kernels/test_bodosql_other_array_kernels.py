@@ -3,6 +3,7 @@
 """
 
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -10,6 +11,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed

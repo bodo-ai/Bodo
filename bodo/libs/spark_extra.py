@@ -2,8 +2,6 @@
 import math
 import zlib
 
-import numpy as np
-
 from bodo.utils.typing import gen_objmode_func_overload
 
 #### zlib.crc32 support ####

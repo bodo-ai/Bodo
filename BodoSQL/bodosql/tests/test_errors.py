@@ -12,7 +12,6 @@ import pytest
 import bodo
 import bodosql
 from bodo.utils.typing import BodoError
-from bodosql.utils import BodoSQLWarning
 
 
 @pytest.mark.slow

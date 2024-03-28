@@ -44,6 +44,6 @@ os.environ["BODO_HDFS_CORE_SITE_LOC_DIR"] = HDFS_CORE_SITE_LOC_DIR.name
 # degrades performance, we could require it to be done by the user
 # instead.
 try:
-    import bodo_azurefs_sas_token_provider  # isort:skip
+    import bodo_azurefs_sas_token_provider  # noqa: F401  isort:skip
 except:
     pass

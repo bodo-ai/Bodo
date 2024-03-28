@@ -7,6 +7,8 @@ at BodoSQL/bodosql/libs/merge_into.py
 import io
 import random
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa

@@ -3,6 +3,7 @@
 Implements a number of array kernels that handling casting functions for BodoSQL
 """
 
+import numpy as np
 from numba.core import types
 from numba.extending import overload
 

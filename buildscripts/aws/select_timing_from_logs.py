@@ -7,7 +7,6 @@
 
 import argparse
 import collections
-import datetime
 import re
 
 # Example that matches timing_start from a log:

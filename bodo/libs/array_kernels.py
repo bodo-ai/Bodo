@@ -76,7 +76,6 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_bin_arr_type,
     is_overload_constant_bool,
-    is_overload_constant_float,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,

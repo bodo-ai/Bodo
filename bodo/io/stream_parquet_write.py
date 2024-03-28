@@ -398,8 +398,6 @@ def gen_parquet_writer_append_table_impl_inner(
     is_last,
     iter,
 ):  # pragma: no cover
-    from bodo.hiframes.pd_dataframe_ext import DataFrameType
-
     if not isinstance(writer, ParquetWriterType):  # pragma: no cover
         raise BodoError(
             f"parquet_writer_append_table: Expected type ParquetWriterType "

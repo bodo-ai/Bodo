@@ -1,5 +1,4 @@
 import io
-import re
 from datetime import date, datetime
 from typing import Any
 
@@ -31,9 +30,6 @@ from bodo.tests.iceberg_database_helpers.schema_evolution_tables import (
     create_schema_evolution_tables,
 )
 from bodo.tests.iceberg_database_helpers.simple_tables import (
-    BASE_MAP,
-)
-from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLE_MAP,
 )
 from bodo.tests.iceberg_database_helpers.utils import (
@@ -60,7 +56,6 @@ from bodo.tests.utils import (
     reduce_sum,
     run_rank0,
 )
-from bodo.utils.typing import BodoError
 
 pytestmark = [
     pytest.mark.iceberg,

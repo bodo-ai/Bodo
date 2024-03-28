@@ -1,5 +1,4 @@
 import datetime
-import zoneinfo
 from typing import Optional
 
 import numba
@@ -16,7 +15,6 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
-    get_overload_const_str,
     is_literal_type,
     is_overload_constant_int,
     is_overload_constant_str,

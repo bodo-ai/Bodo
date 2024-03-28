@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed

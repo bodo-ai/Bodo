@@ -3,7 +3,6 @@ import uuid
 import pandas as pd
 import pytest
 
-import bodo
 from bodo.tests.utils import (
     gen_nonascii_list,
     pytest_mark_one_rank,

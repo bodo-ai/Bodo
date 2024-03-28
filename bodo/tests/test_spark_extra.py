@@ -3,7 +3,6 @@ import zlib
 
 import pytest
 
-import bodo
 from bodo.tests.utils import check_func
 
 

@@ -3,7 +3,6 @@
 Test correctness of the LISTAGG SQL aggregation operations with and without groupby for BodoSQL
 """
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_groupby

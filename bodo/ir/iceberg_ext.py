@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import typing as pt
-from dataclasses import dataclass
 
 import llvmlite.binding as ll
 import numba
@@ -52,7 +50,6 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     inlined_check_and_propagate_cpp_exception,
-    is_array_typ,
 )
 
 if pt.TYPE_CHECKING:  # pragma: no cover

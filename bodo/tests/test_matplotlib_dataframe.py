@@ -8,9 +8,9 @@
 from .test_matplotlib import bodo_check_figures_equal
 
 try:
-    import matplotlib  # pragma: no cover
+    import matplotlib  # noqa: F401  # pragma: no cover
     from matplotlib.testing.decorators import (
-        check_figures_equal,  # pragma: no cover
+        check_figures_equal,  # noqa: F401  # pragma: no cover
     )
 
     matplotlib_import_failed = False
