@@ -204,8 +204,7 @@ def validate_metrics(
 def test_numeric_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "numeric_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -262,8 +261,7 @@ def test_numeric_metrics(
 def test_datetime_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "datetime_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -338,8 +336,7 @@ def test_datetime_metrics(
 def test_string_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "string_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -387,8 +384,7 @@ def test_string_metrics(
 def test_boolean_binary_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "boolean_binary_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -427,8 +423,7 @@ def test_boolean_binary_metrics(
 def test_struct_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "struct_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -474,8 +469,7 @@ def test_struct_metrics(
 def test_list_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "list_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -521,8 +515,7 @@ def test_list_metrics(
 def test_map_metrics(
     iceberg_database,
     iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     table_name = "map_metrics_table"
     db_schema, warehouse_loc = iceberg_database(table_name)

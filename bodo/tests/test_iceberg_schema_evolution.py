@@ -928,7 +928,6 @@ def test_filter_pushdown_filter_on_pruned_column(
         )
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
 def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check):
     """

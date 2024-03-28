@@ -139,8 +139,7 @@ def test_simple_table_read(
     iceberg_database,
     iceberg_table_conn,
     table_name,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test simple read operation on test tables
@@ -208,8 +207,7 @@ def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
 def test_simple_tz_aware_table_read(
     iceberg_database,
     iceberg_table_conn,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test simple read operation on SIMPLE_TZ_AWARE_TABLE.
@@ -248,8 +246,7 @@ def test_simple_tz_aware_table_read(
 def test_simple_numeric_table_read(
     iceberg_database,
     iceberg_table_conn,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test simple read operation on test table SIMPLE_NUMERIC_TABLE
@@ -286,8 +283,7 @@ def test_simple_list_table_read(
     iceberg_database,
     iceberg_table_conn,
     table_name,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test reading SIMPLE_LIST_TABLE which consists of columns of lists.
@@ -315,8 +311,7 @@ def test_simple_list_table_read(
 def test_simple_bool_binary_table_read(
     iceberg_database,
     iceberg_table_conn,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test reading SIMPLE_BOOL_BINARY_TABLE which consists of boolean
@@ -354,8 +349,7 @@ def test_simple_bool_binary_table_read(
 def test_simple_struct_table_read(
     iceberg_database,
     iceberg_table_conn,
-    # Add back after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test reading SIMPLE_STRUCT_TABLE which consists of columns of structs.
@@ -382,9 +376,8 @@ def test_simple_struct_table_read(
     )
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_column_pruning(iceberg_database, iceberg_table_conn):
+def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Test simple read operation on test table SIMPLE_NUMERIC_TABLE
     with column pruning.
@@ -718,9 +711,10 @@ def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
         check_logger_msg(stream, "Columns ['B'] using dictionary encoding")
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
+def test_no_files_after_filter_pushdown(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
     Test the use case where Iceberg filters out all files
     based on the provided filters. We need to load an empty
@@ -782,9 +776,10 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     ), "Bodo loaded snapshot id doesn't match spark"
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
+def test_read_merge_into_cow_row_id_col(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
     Test that reading from an Iceberg table in MERGE INTO COW mode
     returns a DataFrame with an additional row id column
@@ -829,9 +824,10 @@ def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
     )
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
+def test_filter_pushdown_partitions(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
     """
     Test that simple date based partitions can be read as expected.
     """
@@ -1029,9 +1025,8 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
     assert fir.meta_head_only_info[0] == head_size
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_limit_pushdown(iceberg_database, iceberg_table_conn):
+def test_limit_pushdown(iceberg_database, iceberg_table_conn, memory_leak_check):
     """Test that Limit Pushdown is successfully enabled"""
     table_name = "SIMPLE_STRING_TABLE"
     db_schema, warehouse_loc = iceberg_database(table_name)
@@ -1139,8 +1134,7 @@ def test_basic_write_replace(
     iceberg_table_conn,
     simple_dataframe,
     read_behavior,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """Test basic Iceberg table replace on Spark table"""
 
@@ -1238,8 +1232,7 @@ def test_basic_write_new_append(
     simple_dataframe,
     behavior,
     initial_write,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test basic Iceberg table write + append on new table
@@ -1697,10 +1690,7 @@ def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
 
 @pytest.mark.slow
 def test_basic_write_runtime_cols_fail(
-    iceberg_database,
-    iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    iceberg_database, iceberg_table_conn, memory_leak_check
 ):
     """
     Test that Iceberg writes throw an error at compile-time when
@@ -1728,10 +1718,7 @@ def test_basic_write_runtime_cols_fail(
 
 @pytest.mark.slow
 def test_basic_write_append_not_null_arrays(
-    iceberg_database,
-    iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    iceberg_database, iceberg_table_conn, memory_leak_check
 ):
     """
     Test that Iceberg appends can write non-nullable float and timestamp
@@ -1822,8 +1809,7 @@ def test_basic_write_upcasting(
     sql_schema,
     df,
     df_write,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Test that Bodo is able to perform null upcasting when writing
@@ -1967,8 +1953,8 @@ def test_basic_write_downcasting_fail(
     iceberg_database,
     iceberg_table_conn,
     downcasting_table_info,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    # Tests that throw errors are known to cause memory leaks
+    # memory_leak_check
 ):
     """
     Test that writing to an Iceberg table with incorrect types
@@ -2002,8 +1988,8 @@ def test_basic_write_downcasting(
     iceberg_database,
     iceberg_table_conn,
     downcasting_table_info,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    # Tests that throw errors are known to cause memory leaks
+    # memory_leak_check
 ):
     """
     Test that writing to an Iceberg table while performing type
@@ -2082,10 +2068,7 @@ def test_basic_write_downcasting(
 
 @pytest.mark.slow
 def test_basic_write_downcasting_copy(
-    iceberg_database,
-    iceberg_table_conn,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    iceberg_database, iceberg_table_conn, memory_leak_check
 ):
     """
     Test that downcasting during Iceberg write does not affect the
@@ -2160,9 +2143,8 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
         bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)
 
 
-# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 @pytest.mark.slow
-def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
+def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Some compilation errors can only be observed when running multiple steps.
     This is to test one such common use case, which is reading a table
@@ -2584,8 +2566,7 @@ def test_write_partitioned(
     iceberg_table_conn,
     base_name: str,
     part_spec: List[PartitionField],
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Tests that appending to a table with a defined partition spec works
@@ -2720,11 +2701,7 @@ def sort_cases(request):
 
 @pytest.mark.slow
 def test_write_sorted(
-    iceberg_database,
-    iceberg_table_conn,
-    sort_cases,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    iceberg_database, iceberg_table_conn, sort_cases, memory_leak_check
 ):
     """
     Test that we can append to tables with a defined sort-order.
@@ -2846,11 +2823,7 @@ def test_write_sorted(
 @pytest.mark.slow
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
 def test_write_part_sort(
-    iceberg_database,
-    iceberg_table_conn,
-    use_dict_encoding_boxing,
-    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
-    # memory_leak_check,
+    iceberg_database, iceberg_table_conn, use_dict_encoding_boxing, memory_leak_check
 ):
     """
     Append to a table with both a partition spec and a sort order,
