@@ -1,7 +1,6 @@
 """Remove docstrings from a python file and replace it
 """
 import ast
-import sys
 from pathlib import Path
 
 import astunparse

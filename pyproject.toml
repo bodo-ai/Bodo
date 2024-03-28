@@ -99,11 +99,11 @@ exclude = 'demo/.*'
 
 [tool.ruff]
 unsafe-fixes = true
-extend-select = [
+lint.extend-select = [
     "I",  # isort
     "C4"  # flake8-comprehensions
 ]
-ignore = [
+lint.ignore = [
     # Permanently Disabled Rules
     "E501",  # Line too long. Black should manage this only
     "E741",  # Ambiguous variable name: {name}
@@ -111,7 +111,6 @@ ignore = [
     # TODO: Gradually Enable in Next PR
 
     # PyFlakes (subset of Flake8)
-    "F401",  # {name} imported but unused; consider using importlib.util.find_spec to test for availability
     "F403",  # from {name} import * used; unable to detect undefined names
     "F405",  # {name} may be undefined, or defined from star imports
     "F522",  # `.format` call has unused named argument(s): ...
@@ -162,5 +161,5 @@ exclude = [
     "BodoSQL/buildscripts/python_library_build/generate_libraries.py",
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]

@@ -4,7 +4,6 @@ Implements kernels for FFT functions. Note that this file will only be imported
 if the user has scipy installed.
 """
 
-import numba
 import numpy as np
 import scipy.fft
 import scipy.fftpack
@@ -16,8 +15,7 @@ from numba.extending import intrinsic, overload
 import bodo
 from bodo.ext import fft_cpp
 from bodo.libs.array import array_to_info, delete_info, info_to_array
-from bodo.utils.conversion import flatten_array
-from bodo.utils.typing import is_overload_int, raise_bodo_error
+from bodo.utils.typing import raise_bodo_error
 
 ll.add_symbol(
     "fft2_py_entry",

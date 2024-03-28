@@ -3,8 +3,6 @@
 Implements string array kernels that are specific to BodoSQL
 """
 
-import re
-
 import numba
 import numpy as np
 from numba.core import types
@@ -13,14 +11,12 @@ from numba.extending import overload, register_jitable
 import bodo
 import bodo.libs.uuid
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.libs.str_arr_ext import str_arr_set_na
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_str,
     is_overload_constant_int,
-    is_overload_false,
     is_overload_none,
 )
 

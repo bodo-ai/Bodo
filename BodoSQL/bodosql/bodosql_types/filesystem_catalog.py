@@ -3,8 +3,6 @@ catalog contains all information needed to connect use the Hadoop, POSIX or S3 F
 for organizing tables.
 """
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
-import typing as pt
-
 from numba.core import types
 from numba.extending import (
     NativeValue,

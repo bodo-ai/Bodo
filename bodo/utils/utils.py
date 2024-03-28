@@ -6,7 +6,6 @@ import hashlib
 import inspect
 import keyword
 import re
-import sys
 import warnings
 from enum import Enum
 from typing import Iterable, TypeGuard
@@ -34,7 +33,6 @@ from numba.np.numpy_support import as_dtype
 
 import bodo
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.timestamptz_ext import timestamptz_array_type, timestamptz_type
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type

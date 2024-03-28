@@ -11,7 +11,6 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.pandas_compat import pandas_version
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,

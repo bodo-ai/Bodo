@@ -8,7 +8,6 @@ from numba.extending import intrinsic, overload
 
 import bodo.utils.utils
 from bodo.ext import uuid_cpp
-from bodo.utils.typing import unliteral_val
 
 ll.add_symbol("uuidV4", uuid_cpp.uuidV4)
 ll.add_symbol("uuidV5", uuid_cpp.uuidV5)

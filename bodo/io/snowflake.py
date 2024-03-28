@@ -20,7 +20,6 @@ import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.io.helpers import (
-    ExceptionPropagatingThread,
     _get_numba_typ_from_pa_typ,
     update_env_vars,
     update_file_contents,

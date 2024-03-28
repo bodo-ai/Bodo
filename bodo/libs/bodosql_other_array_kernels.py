@@ -14,9 +14,7 @@ from numba.extending import intrinsic, overload
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.bodosql_array_kernels import get_field
-from bodo.libs.null_arr_ext import null_array_type, null_dtype
 from bodo.utils.typing import (
-    dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
     raise_bodo_error,

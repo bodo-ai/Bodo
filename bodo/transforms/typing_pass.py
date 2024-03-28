@@ -9,7 +9,7 @@ import operator
 import typing as pt
 import warnings
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set
 
 import numba
 import numpy as np
@@ -49,7 +49,6 @@ from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import get_table_iterator
 from bodo.ir.filter import (
     build_filter_from_ir,
-    get_filter_predicate_compute_func,
     supported_arrow_funcs_map,
     supported_funcs_map,
 )
@@ -3049,7 +3048,7 @@ class TypingTransforms:
         """Infers output type of CASE kernel when not provided by BodoSQL and updates
         the IR.
         """
-        import bodosql
+        import bodosql  # noqa: F401
 
         if any(self.typemap[v.name] in unresolved_types for v in rhs.args[:-1]):
             self.needs_transform = True

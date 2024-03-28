@@ -6,7 +6,7 @@ File that contains some IO related helpers.
 import os
 import threading
 import uuid
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numba
 import numpy as np
@@ -47,7 +47,6 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.utils import tracing
 from bodo.utils.typing import (
     BodoError,
     is_nullable_ignore_sentinals,

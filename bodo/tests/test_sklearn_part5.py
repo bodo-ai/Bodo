@@ -11,7 +11,7 @@ import pytest
 from sklearn.preprocessing import RobustScaler
 
 from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
-from bodo.tests.test_sklearn_part4 import robust_scalar_data  # pragma: no cover
+from bodo.tests.test_sklearn_part4 import robust_scalar_data  # noqa: F401
 from bodo.tests.utils import check_func, pytest_ml
 
 pytestmark = pytest_ml

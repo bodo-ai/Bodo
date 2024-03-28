@@ -9,11 +9,9 @@ B:             [1, 2, 4]
 """
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 from llvmlite import ir as lir
 from numba import generated_jit
 from numba.core import cgutils, types
@@ -34,17 +32,10 @@ from numba.parfors.array_analysis import ArrayAnalysis
 from numba.typed.typedobjectutils import _cast
 
 import bodo
-from bodo.hiframes.time_ext import TimeType
-from bodo.libs import array_ext
+from bodo.libs import array_ext  # noqa: F401
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
-    get_array_elem_counts,
-    get_bitmap_bit,
     is_na_value,
-    pyarray_setitem,
-    seq_getitem,
-    set_bitmap_bit,
-    to_arr_obj_if_list_obj,
 )
 from bodo.utils.typing import (
     BodoError,

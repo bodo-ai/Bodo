@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import overload
-from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.time_ext import cast_time_to_int

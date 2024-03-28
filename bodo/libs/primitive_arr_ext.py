@@ -27,7 +27,7 @@ from bodo.utils.cg_helpers import meminfo_to_np_arr
 from bodo.utils.typing import BodoArrayIterator
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hstr_ext  # isort:skip
+from bodo.libs import array_ext, hstr_ext  # noqa: F401  # isort:skip
 
 
 class PrimitiveArrayType(types.IterableType, types.ArrayCompatible):

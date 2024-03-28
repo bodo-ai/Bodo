@@ -8,10 +8,12 @@ from builtins import round as py_round
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,

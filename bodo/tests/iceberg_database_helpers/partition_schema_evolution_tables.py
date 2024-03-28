@@ -3,7 +3,6 @@ from bodo.tests.iceberg_database_helpers.partition_tables import (
     create_partition_tables,
 )
 from bodo.tests.iceberg_database_helpers.schema_evolution_tables import (
-    COLUMN_DROP_TABLES_MAP,
     gen_column_reorder_tables,
     gen_nullable_tables,
 )

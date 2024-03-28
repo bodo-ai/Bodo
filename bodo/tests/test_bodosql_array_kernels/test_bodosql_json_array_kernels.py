@@ -6,6 +6,7 @@
 import json
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo

@@ -2,7 +2,6 @@ import glob
 import os
 import traceback
 
-import numpy as np
 import pandas as pd
 import pytest
 from mpi4py import MPI
@@ -34,7 +33,7 @@ from bodo.tests.test_iceberg import (
     _test_file_part,
     _test_file_sorted,
     _verify_pq_schema_in_files,
-    simple_dataframe,
+    simple_dataframe,  # noqa: F401
 )
 from bodo.tests.utils import (
     _gather_output,
