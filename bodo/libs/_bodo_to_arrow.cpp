@@ -1107,16 +1107,31 @@ std::shared_ptr<array_info> arrow_boolean_array_to_bodo(
 
     // As BooleanArray does not expose the raw_values ptr, we cannot easily
     // copy the underlying boolean array starting from the offset. If offset
-    // is zero, we cast to UInt8Array as a hack to access the buffer, otherwise
-    // we avoid zero-copy.
+    // is at a byte boundary, we can get access to the 'raw_values_' pointer and
+    // apply the offset ourselves (which is what 'raw_values()' does for numeric
+    // types, etc. anyway).
     int64_t offset_bits = arrow_bool_arr->offset();
+    int64_t offset_bytes = offset_bits / 8;
     std::shared_ptr<BodoBuffer> data_buf_buffer;
-    if (offset_bits == 0) {
-        arrow::UInt8Array *arrow_uint8_arr =
-            reinterpret_cast<arrow::UInt8Array *>(arrow_bool_arr.get());
-        data_buf_buffer = arrow_buffer_to_bodo(
-            arrow_bool_arr->values(), (void *)arrow_uint8_arr->raw_values(),
-            n_bytes, Bodo_CTypes::UINT8);
+    if (offset_bits % 8 == 0) {
+        /**
+         * We can see at
+         * https://github.com/apache/arrow/blob/a61f4af724cd06c3a9b4abd20491345997e532c0/cpp/src/arrow/array/array_primitive.h#L51
+         * that Value(i) is just:
+         * `GetBit(reinterpret_cast<const int8_t*>(raw_values_),
+         *         i + data_->offset)`.
+         * offset_bits is already 'data_->offset'.
+         * `data_` can be accessed through `data()`
+         * (https://github.com/apache/arrow/blob/a61f4af724cd06c3a9b4abd20491345997e532c0/cpp/src/arrow/array/array_base.h#L187).
+         * As per
+         * https://github.com/apache/arrow/blob/a61f4af724cd06c3a9b4abd20491345997e532c0/cpp/src/arrow/array/array_base.h#L261,
+         * raw_values_ = data->GetValuesSafe<uint8_t>(1, 0)
+         */
+        const uint8_t *data =
+            arrow_bool_arr->data()->GetValuesSafe<uint8_t>(1, offset_bytes);
+        data_buf_buffer =
+            arrow_buffer_to_bodo(arrow_bool_arr->values(), (void *)data,
+                                 n_bytes, Bodo_CTypes::UINT8);
     } else {
         data_buf_buffer = AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
         uint8_t *data_buf = (uint8_t *)data_buf_buffer->mutable_data();
