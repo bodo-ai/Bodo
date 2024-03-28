@@ -1585,7 +1585,7 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         pytest.param(3, id="adls", marks=pytest.mark.slow),
     ],
 )
-@pytest.mark.timeout(1000)
+@pytest.mark.timeout(500)
 def test_batched_write_agg(
     sf_write_use_put,
     sf_write_streaming_num_files,
@@ -1697,6 +1697,7 @@ def test_batched_write_agg(
             # by default.
             impl_write_dist = bodo.jit(cache=False)(impl_write)
             total0 = impl_write_dist(conn_r, conn_w)
+            bodo.barrier()
             total1 = impl_check(conn_w)
             assert total0 == total1, (
                 f"Distributed streaming write failed: "
