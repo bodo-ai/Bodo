@@ -279,3 +279,13 @@ img[src*='#center'] {
     color: var(--md-default-fg-color--light);
     font-weight: 700;
 }
+
+/*add a border left only if the level of the unordered list is more than top level*/
+[data-md-level="1"] .md-nav__list ul {
+    border-left: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-nav--secondary .md-nav__list ul {
+    border-left: 1px solid var(--md-default-fg-color--lightest);
+}
+

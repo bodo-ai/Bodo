@@ -11,7 +11,7 @@ This guide describes how to create a cluster, and walks through various configur
 
 --- 
 
-## [Using Notebooks][using notebooks]
+## [Using Notebooks][notebooks]
 This guide describes how to attach a notebook to a cluster to perform computation on the cluster. 
 
 ---
