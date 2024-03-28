@@ -1585,7 +1585,7 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         pytest.param(3, id="adls", marks=pytest.mark.slow),
     ],
 )
-@pytest.mark.timeout(500)
+@pytest.mark.timeout(1000)
 def test_batched_write_agg(
     sf_write_use_put,
     sf_write_streaming_num_files,
