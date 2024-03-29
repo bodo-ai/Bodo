@@ -1,5 +1,13 @@
 #include "_utils.h"
 
+#ifdef __linux__
+#include <unistd.h>
+#endif
+
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 #include <mpi.h>
 
 std::tuple<int, int> dist_get_ranks_on_node() {
@@ -61,4 +69,27 @@ std::optional<std::chrono::steady_clock::time_point> start_now(bool get) {
     return get ? std::optional<std::chrono::steady_clock::time_point>(
                      std::chrono::steady_clock::now())
                : std::nullopt;
+}
+
+uint64_t get_physically_installed_memory() {
+// Handle Linux
+#ifdef __linux__
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    if (pages == -1 || page_size == -1) {
+        throw std::runtime_error("Failed to get memory size");
+    }
+    return pages * page_size;
+#endif
+
+// Handle macOS
+#ifdef __APPLE__
+    uint64_t memory;
+    size_t memorySize = sizeof(memory);
+    if (sysctlbyname("hw.memsize", (void*)&memory, &memorySize, nullptr, 0) !=
+        0) {
+        throw std::runtime_error("Failed to get memory size");
+    };
+    return memory;
+#endif
 }
