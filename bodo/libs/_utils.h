@@ -30,3 +30,6 @@ std::string BytesToHumanReadableString(const size_t bytes);
 
 /// @brief Helper Function to Get the Current Time if `get` argument is true
 std::optional<std::chrono::steady_clock::time_point> start_now(bool get);
+
+/// @brief Get the amount of physically installed memory in bytes
+uint64_t get_physically_installed_memory();
