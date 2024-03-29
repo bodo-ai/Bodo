@@ -166,7 +166,7 @@ def test_with_iceberg_field_id_md(
                     ),
                     pa.field(
                         "LIST_C",
-                        pa.list_(
+                        pa.large_list(
                             pa.field(
                                 "item",
                                 pa.map_(
@@ -187,17 +187,19 @@ def test_with_iceberg_field_id_md(
                         ),
                         metadata={ICEBERG_FIELD_ID_MD_KEY: "5"},
                     ),
-                    pa.field("B", pa.string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "2"}),
+                    pa.field(
+                        "B", pa.large_string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "2"}
+                    ),
                     pa.field(
                         "STRUCT_D",
                         pa.struct(
                             [
                                 pa.field(
                                     "p1",
-                                    pa.list_(
+                                    pa.large_list(
                                         pa.field(
                                             "item",
-                                            pa.string(),
+                                            pa.large_string(),
                                             metadata={ICEBERG_FIELD_ID_MD_KEY: "10"},
                                         )
                                     ),
@@ -226,7 +228,7 @@ def test_with_iceberg_field_id_md(
                     ),
                     pa.field(
                         "LIST_C",
-                        pa.list_(
+                        pa.large_list(
                             pa.field(
                                 "item",
                                 pa.map_(
@@ -253,10 +255,10 @@ def test_with_iceberg_field_id_md(
                             [
                                 pa.field(
                                     "p1",
-                                    pa.list_(
+                                    pa.large_list(
                                         pa.field(
                                             "item",
-                                            pa.string(),
+                                            pa.large_string(),
                                             metadata={ICEBERG_FIELD_ID_MD_KEY: "10"},
                                         )
                                     ),
@@ -313,7 +315,7 @@ def test_add_iceberg_field_id_md_to_pa_schema_with_ref(
                     pa.field("A", pa.int32(), metadata={ICEBERG_FIELD_ID_MD_KEY: "1"}),
                     pa.field(
                         "LIST_C",
-                        pa.list_(
+                        pa.large_list(
                             pa.field(
                                 "element",
                                 pa.map_(
@@ -334,17 +336,19 @@ def test_add_iceberg_field_id_md_to_pa_schema_with_ref(
                         ),
                         metadata={ICEBERG_FIELD_ID_MD_KEY: "2"},
                     ),
-                    pa.field("B", pa.string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "3"}),
+                    pa.field(
+                        "B", pa.large_string(), metadata={ICEBERG_FIELD_ID_MD_KEY: "3"}
+                    ),
                     pa.field(
                         "STRUCT_D",
                         pa.struct(
                             [
                                 pa.field(
                                     "p1",
-                                    pa.list_(
+                                    pa.large_list(
                                         pa.field(
                                             "element",
-                                            pa.string(),
+                                            pa.large_string(),
                                             metadata={ICEBERG_FIELD_ID_MD_KEY: "10"},
                                         )
                                     ),
