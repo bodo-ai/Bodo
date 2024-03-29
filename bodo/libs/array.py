@@ -1605,7 +1605,11 @@ def convert_arrow_arr_to_dict(arr, arrow_type):
     Returns:
         pa.Array: converted PyArrow array
     """
-    if pa.types.is_large_list(arrow_type) or pa.types.is_list(arrow_type):
+    if (
+        pa.types.is_large_list(arrow_type)
+        or pa.types.is_list(arrow_type)
+        or pa.types.is_fixed_size_list(arrow_type)
+    ):
         new_arr = arr.from_arrays(
             arr.offsets, convert_arrow_arr_to_dict(arr.values, arrow_type.value_type)
         )
@@ -1748,7 +1752,11 @@ def _convert_to_pa_map_arr(arr, arrow_type):
 
     # Convert list(struct) to map
     if (
-        (pa.types.is_large_list(arr.type) or pa.types.is_list(arr.type))
+        (
+            pa.types.is_large_list(arr.type)
+            or pa.types.is_list(arr.type)
+            or pa.types.is_fixed_size_list(arr.type)
+        )
         and pa.types.is_struct(arr.type.value_type)
         and pa.types.is_map(arrow_type)
     ):
@@ -1778,7 +1786,11 @@ def _convert_to_pa_map_arr(arr, arrow_type):
         )
 
     # Handle list recursively
-    if pa.types.is_large_list(arr.type) or pa.types.is_list(arr.type):
+    if (
+        pa.types.is_large_list(arr.type)
+        or pa.types.is_list(arr.type)
+        or pa.types.is_fixed_size_list(arr.type)
+    ):
         new_arr = pa.LargeListArray.from_arrays(
             arr.offsets, _convert_to_pa_map_arr(arr.values, arrow_type.value_type)
         )

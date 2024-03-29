@@ -22,6 +22,7 @@ from bodo_iceberg_connector.py4j_support import (
 from bodo_iceberg_connector.schema_helper import (
     arrow_schema_j2py,
     b_ICEBERG_FIELD_ID_MD_KEY,
+    convert_arrow_schema_to_large_types,
 )
 
 # Types I didn't figure out how to test with Spark:
@@ -132,6 +133,7 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             pyarrow_schema: pa.Schema = arrow_schema_j2py(
                 java_table_info.getArrowSchema()
             )
+            pyarrow_schema = convert_arrow_schema_to_large_types(pyarrow_schema)
             assert (
                 py_schema.colnames == pyarrow_schema.names
             ), "Iceberg Schema Field Names Should be Equal in PyArrow Schema"
