@@ -128,7 +128,6 @@ struct DictionaryBuilder {
      */
     std::shared_ptr<bodo::vector<uint32_t>> GetDictionaryHashes();
 
-   private:
     /**
      * @brief Get the index for idx'th row in 'in_arr'. Returns -1 if the string
      * doesn't exist in the DictionaryBuilder.
@@ -151,6 +150,15 @@ struct DictionaryBuilder {
     dict_indices_t InsertIfNotExists(const std::shared_ptr<array_info>& in_arr,
                                      size_t idx);
 
+    /**
+     * @brief Ensure value is in the dictionary and return the index for it
+     * @param value string value to insert
+     * @return index of the existing entry for value or the index of the newly
+     * created entry for it.
+     */
+    dict_indices_t InsertIfNotExists(const std::string_view& value);
+
+   private:
     /**
      * @brief a unique identifier for a dictionary at a point in time
      */
