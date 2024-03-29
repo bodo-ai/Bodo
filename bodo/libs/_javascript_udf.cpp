@@ -1,11 +1,9 @@
 #include "_javascript_udf.h"
 #include <fmt/format.h>
+#include <iostream>
 #include <random>
 #include <stdexcept>
-#include "_bodo_common.h"
-
-#include "_bodo_common.h"
-#include "include/libplatform/libplatform.h"
+#include "_utils.h"
 #include "include/v8-exception.h"
 
 #include "include/libplatform/libplatform.h"
@@ -68,6 +66,8 @@ void init_v8() {
         create_params.array_buffer_allocator_shared =
             std::shared_ptr<v8::ArrayBuffer::Allocator>(
                 v8::ArrayBuffer::Allocator::NewDefaultAllocator());
+        create_params.constraints.ConfigureDefaults(
+            get_physically_installed_memory(), 0);
         v8_initialized = true;
         isolate = create_new_isolate();
     }
@@ -105,7 +105,7 @@ JavaScriptFunction::JavaScriptFunction(
     std::mt19937 gen;
     std::uniform_int_distribution<> distrib(65, 90);
     char random_function_name_char_arr[this->size_rand_names];
-    for (int i = 0; i < this->size_rand_names; i++) {
+    for (size_t i = 0; i < this->size_rand_names; i++) {
         random_function_name_char_arr[i] = distrib(gen);
     }
     this->random_function_name =
