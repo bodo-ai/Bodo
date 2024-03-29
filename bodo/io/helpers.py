@@ -146,7 +146,13 @@ _pyarrow_numba_type_map = {
     # We use int64 in Bodo for strings, so
     # we can map both to string_type
     pa.large_string(): string_type,
+    # The difference between pa.binary and pa.large_binary
+    # is the int offset type, which is 32bit for binary
+    # and 64bit for large_binary.
+    # We use int64 in Bodo for binary, so
+    # we can map both to bytes_type
     pa.binary(): bytes_type,
+    pa.large_binary(): bytes_type,
     # date
     pa.date32(): datetime_date_type,
     pa.date64(): types.NPDatetime("ns"),
@@ -206,7 +212,11 @@ def _get_numba_typ_from_pa_typ(
     removed the column.
     """
 
-    if pa.types.is_list(pa_typ.type) or pa.types.is_large_list(pa_typ.type):
+    if (
+        pa.types.is_list(pa_typ.type)
+        or pa.types.is_large_list(pa_typ.type)
+        or pa.types.is_fixed_size_list(pa_typ.type)
+    ):
         # nullable_from_metadata is only used for non-nested Int arrays
         arr_typ, supported = _get_numba_typ_from_pa_typ(
             pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
@@ -359,14 +369,11 @@ def _numba_to_pyarrow_type(
     numba_type: types.ArrayCompatible,
     is_iceberg: bool = False,
     use_dict_arr: bool = False,
-    is_pq: bool = False,
 ):
     """
     Convert Numba / Bodo Array Types to Equivalent PyArrow Type
     An additional flag `is_iceberg` is to handle the datetime type that must be
     converted to microseconds before writing to Iceberg tables.
-    `is_iceberg` and `is_pq` flags return `pa.list_` and `pa.string` instead of
-    `pa.large_list` and `pa.large_string` which correspond to equivalent Bodo arrays.
     """
     if isinstance(numba_type, ArrayItemArrayType):
         # Set inner field name to 'element' so we can compare without worrying about
@@ -374,23 +381,14 @@ def _numba_to_pyarrow_type(
         # Bodo List Arrays are always nullable (both the outer lists and inner elements)
         inner_elem = pa.field(
             "element",
-            _numba_to_pyarrow_type(numba_type.dtype, is_iceberg, use_dict_arr, is_pq)[
-                0
-            ],
+            _numba_to_pyarrow_type(numba_type.dtype, is_iceberg, use_dict_arr)[0],
         )
-        # NOTE: pa.large_list and pa.large_string correspond to equivalent Bodo array
-        # types since we use int64 offsets, but Iceberg and Parquet schemas expect
-        # pa.list_ and pa.string currently.
-        dtype = (
-            pa.list_(inner_elem) if (is_iceberg or is_pq) else pa.large_list(inner_elem)
-        )
+        dtype = pa.large_list(inner_elem)
 
     elif isinstance(numba_type, StructArrayType):
         fields = []
         for name, inner_type in zip(numba_type.names, numba_type.data):
-            pa_type, _ = _numba_to_pyarrow_type(
-                inner_type, is_iceberg, use_dict_arr, is_pq
-            )
+            pa_type, _ = _numba_to_pyarrow_type(inner_type, is_iceberg, use_dict_arr)
             # We set nullable as true here to match the schema
             # written to parquet files, which doesn't contain
             # nullability info (and hence defaults to nullable).
@@ -401,18 +399,16 @@ def _numba_to_pyarrow_type(
     elif isinstance(numba_type, bodo.TupleArrayType):
         fields = []
         for i, inner_type in enumerate(numba_type.data):
-            pa_type, _ = _numba_to_pyarrow_type(
-                inner_type, is_iceberg, use_dict_arr, is_pq
-            )
+            pa_type, _ = _numba_to_pyarrow_type(inner_type, is_iceberg, use_dict_arr)
             fields.append(pa.field(f"_bodo_tuple_array_field{i}", pa_type, True))
         dtype = pa.struct(fields)
 
     elif isinstance(numba_type, bodo.MapArrayType):
         key_type, _ = _numba_to_pyarrow_type(
-            numba_type.key_arr_type, is_iceberg, use_dict_arr, is_pq
+            numba_type.key_arr_type, is_iceberg, use_dict_arr
         )
         item_type, _ = _numba_to_pyarrow_type(
-            numba_type.value_arr_type, is_iceberg, use_dict_arr, is_pq
+            numba_type.value_arr_type, is_iceberg, use_dict_arr
         )
         dtype = pa.map_(key_type, item_type)
 
@@ -422,25 +418,19 @@ def _numba_to_pyarrow_type(
     elif isinstance(numba_type, CategoricalArrayType):
         cat_dtype: PDCategoricalDtype = numba_type.dtype  # type: ignore
         dtype = pa.dictionary(
-            _numba_to_pyarrow_type(cat_dtype.int_type, is_iceberg, use_dict_arr, is_pq)[
-                0
-            ],
-            _numba_to_pyarrow_type(
-                cat_dtype.elem_type, is_iceberg, use_dict_arr, is_pq
-            )[0],
+            _numba_to_pyarrow_type(cat_dtype.int_type, is_iceberg, use_dict_arr)[0],
+            _numba_to_pyarrow_type(cat_dtype.elem_type, is_iceberg, use_dict_arr)[0],
             ordered=False if cat_dtype.ordered is None else cat_dtype.ordered,
         )
 
     elif numba_type == boolean_array_type:
         dtype = pa.bool_()
     elif use_dict_arr and numba_type == bodo.dict_str_arr_type:
-        dtype = pa.dictionary(
-            pa.int32(), pa.string() if (is_iceberg or is_pq) else pa.large_string()
-        )
+        dtype = pa.dictionary(pa.int32(), pa.large_string())
     elif numba_type in (string_array_type, bodo.dict_str_arr_type):
-        dtype = pa.string() if (is_iceberg or is_pq) else pa.large_string()
+        dtype = pa.large_string()
     elif numba_type == binary_array_type:
-        dtype = pa.binary()
+        dtype = pa.large_binary()
     elif numba_type == datetime_date_array_type:
         dtype = pa.date32()
     elif isinstance(numba_type, bodo.DatetimeArrayType) or (
@@ -461,7 +451,7 @@ def _numba_to_pyarrow_type(
         tz = numba_type.tz if isinstance(numba_type, bodo.DatetimeArrayType) else None
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", tz)
 
-    # TODO: Figure out how to raise an error her for Iceberg (is_icberg is set to True).
+    # TODO: Figure out how to raise an error here for Iceberg (is_iceberg is set to True).
     elif isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns:
         dtype = pa.duration("ns")
     elif (
@@ -491,16 +481,12 @@ def _numba_to_pyarrow_type(
     return dtype, is_nullable_arrow_out(numba_type)
 
 
-def numba_to_pyarrow_schema(
-    df: DataFrameType, is_iceberg: bool = False, is_pq: bool = False
-) -> pa.Schema:
+def numba_to_pyarrow_schema(df: DataFrameType, is_iceberg: bool = False) -> pa.Schema:
     """Construct a PyArrow Schema from Bodo's DataFrame Type"""
     fields = []
     for name, col_type in zip(df.columns, df.data):
         try:
-            pyarrow_type, nullable = _numba_to_pyarrow_type(
-                col_type, is_iceberg, is_pq=is_pq
-            )
+            pyarrow_type, nullable = _numba_to_pyarrow_type(col_type, is_iceberg)
         except BodoError as e:
             raise_bodo_error(e.msg, e.loc)
 
@@ -518,7 +504,11 @@ def pyarrow_type_to_numba(arrow_type):
         types.Type: Bodo array type
     """
 
-    if pa.types.is_large_list(arrow_type) or pa.types.is_list(arrow_type):
+    if (
+        pa.types.is_large_list(arrow_type)
+        or pa.types.is_list(arrow_type)
+        or pa.types.is_fixed_size_list(arrow_type)
+    ):
         return ArrayItemArrayType(pyarrow_type_to_numba(arrow_type.value_type))
 
     if pa.types.is_struct(arrow_type):
@@ -561,7 +551,11 @@ def pyarrow_type_to_numba(arrow_type):
     if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
         return string_array_type
 
-    if pa.types.is_binary(arrow_type) or pa.types.is_large_binary(arrow_type):
+    if (
+        pa.types.is_binary(arrow_type)
+        or pa.types.is_large_binary(arrow_type)
+        or pa.types.is_fixed_size_binary(arrow_type)
+    ):
         return binary_array_type
 
     if (
@@ -941,3 +935,11 @@ def stream_writer_alloc_codegen(
     stream_writer = context.make_helper(builder, stream_writer_type)
     stream_writer.meminfo = meminfo
     return stream_writer._getvalue()
+
+
+def is_pyarrow_list_type(arrow_type):
+    return (
+        pa.types.is_list(arrow_type)
+        or pa.types.is_large_list(arrow_type)
+        or pa.types.is_fixed_size_list(arrow_type)
+    )

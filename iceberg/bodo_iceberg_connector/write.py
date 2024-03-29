@@ -16,6 +16,7 @@ from bodo_iceberg_connector.py4j_support import (
 from bodo_iceberg_connector.schema_helper import (
     arrow_schema_j2py,
     arrow_to_iceberg_schema,
+    convert_arrow_schema_to_large_types,
 )
 
 
@@ -98,7 +99,8 @@ def get_schema_with_init_field_ids(schema: pa.Schema) -> pa.Schema:
     # Convert the Iceberg schema to a Arrow schema:
     init_arrow_schema_jvm = bodo_arrow_schema_utils_class.convert(init_iceberg_schema)
     # Convert the JVM Arrow schema to a PyArrow schema:
-    return arrow_schema_j2py(init_arrow_schema_jvm)
+    pyarrow_schema = arrow_schema_j2py(init_arrow_schema_jvm)
+    return convert_arrow_schema_to_large_types(pyarrow_schema)
 
 
 def commit_write(

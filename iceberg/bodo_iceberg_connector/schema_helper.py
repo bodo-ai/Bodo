@@ -146,6 +146,57 @@ def arrow_type_j2py(jvm_field) -> pa.DataType:
         raise IcebergError(f"Unsupported Java Arrow type: {type_str}")
 
 
+def convert_arrow_field_to_large_types(field: pa.Field) -> pa.Field:
+    """
+    Convert an Arrow field to the corresponding large type for all
+    non-large BINARY, STRING, and LIST types.
+
+    Args:
+        field (pa.Field): The field to convert.
+
+    Returns:
+        pa.Field: The new field with possibly the type information modified.
+    """
+    field_type = field.type
+    if pa.types.is_struct(field_type):
+        new_fields = [convert_arrow_field_to_large_types(f) for f in field_type]
+        new_type = pa.struct(new_fields)
+    elif pa.types.is_map(field_type):
+        key_field = convert_arrow_field_to_large_types(field_type.key_field)
+        item_field = convert_arrow_field_to_large_types(field_type.item_field)
+        new_type = pa.map_(key_field, item_field)
+    elif (
+        pa.types.is_list(field_type)
+        or pa.types.is_large_list(field_type)
+        or pa.types.is_fixed_size_list(field_type)
+    ):
+        elem_field = convert_arrow_field_to_large_types(field_type.field(0))
+        new_type = pa.large_list(elem_field)
+    elif pa.types.is_binary(field_type) or pa.types.is_fixed_size_binary(field_type):
+        new_type = pa.large_binary()
+    elif pa.types.is_string(field_type):
+        new_type = pa.large_string()
+    else:
+        new_type = field_type
+    return field.with_type(new_type)
+
+
+def convert_arrow_schema_to_large_types(schema: pa.Schema) -> pa.Schema:
+    """
+    Converts an arrow schema derived from an Iceberg table's type
+    information and converts all non-large BINARY, STRING, and LIST
+    types to the "LARGE" variant.
+
+    Args:
+        schema (pa.Schema): The original schema to convert.
+
+    Returns:
+        pa.Schema: The new schema with the converted types.
+    """
+    new_fields = [convert_arrow_field_to_large_types(f) for f in schema]
+    return pa.schema(new_fields)
+
+
 def arrow_to_iceberg_schema(schema: pa.Schema):
     """
     Construct an Iceberg Java Schema object from a PyArrow Schema instance.
@@ -177,7 +228,7 @@ def arrow_to_iceberg_field(field: pa.Field):
 
 def arrow_to_iceberg_type(field_type: pa.DataType):
     """
-    Convert a PyArrow data type to the correspoding Iceberg type.
+    Convert a PyArrow data type to the corresponding Iceberg type.
     Handling cases when some PyArrow types are not supported in Iceberg.
 
     :param field_type: PyArrow DataType to convert
@@ -197,7 +248,7 @@ def arrow_to_iceberg_type(field_type: pa.DataType):
         return IcebergTypes.DoubleType.get()
     elif pa.types.is_string(field_type) or pa.types.is_large_string(field_type):
         return IcebergTypes.StringType.get()
-    elif pa.types.is_binary(field_type):
+    elif pa.types.is_binary(field_type) or pa.types.is_large_binary(field_type):
         return IcebergTypes.BinaryType.get()
     elif pa.types.is_fixed_size_binary(field_type):
         return IcebergTypes.BinaryType.ofLength(field_type.byte_width)

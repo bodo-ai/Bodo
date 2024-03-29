@@ -503,13 +503,9 @@ std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
         auto expected_type = iceberg_schema->field(i)->type();
         auto arrow_type = arrow_field->type();
         auto dest_type = arrow_type;
-        if (expected_type->id() != arrow::Type::STRING &&
-            expected_type->id() != arrow::Type::LARGE_STRING &&
-            expected_type->id() != arrow::Type::BINARY &&
-            expected_type->id() != arrow::Type::LARGE_BINARY) {
+        if (expected_type->id() != arrow::Type::LARGE_STRING) {
             // String types must keep the same type to avoid dictionary encoding
-            // issues. We also don't want to require casts between Binary and
-            // LargeBinary since they are the same Iceberg type.
+            // issues.
             dest_type = expected_type;
         }
 

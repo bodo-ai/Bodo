@@ -34,6 +34,7 @@ import bodo.utils.tracing as tracing
 from bodo.io.fs_io import get_s3_bucket_region_njit, validate_gcsfs_installed
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
+    is_pyarrow_list_type,
     pyarrow_schema_type,
     sync_and_reraise_error,
 )
@@ -481,6 +482,7 @@ class IcebergSchemaGroup:
                 pa.types.is_map(final_field.type)
                 or pa.types.is_list(final_field.type)
                 or pa.types.is_large_list(final_field.type)
+                or pa.types.is_fixed_size_list(final_field.type)
                 or pa.types.is_struct(final_field.type)
             ):
                 raise RuntimeError(
@@ -510,6 +512,7 @@ class IcebergSchemaGroup:
                 pa.types.is_map(final_field.type)
                 or pa.types.is_list(final_field.type)
                 or pa.types.is_large_list(final_field.type)
+                or pa.types.is_fixed_size_list(final_field.type)
                 or pa.types.is_struct(final_field.type)
             ):
                 raise RuntimeError(
@@ -600,9 +603,7 @@ class IcebergSchemaGroup:
                 return final_field.with_type(pa.struct(read_fields)).with_name(
                     parquet_field_names[0]
                 )
-            elif pa.types.is_list(final_field.type) or pa.types.is_large_list(
-                final_field.type
-            ):
+            elif pa.types.is_large_list(final_field.type):
                 assert len(iceberg_field_ids) == len(parquet_field_names) == 2
                 read_value_field = IcebergSchemaGroup.gen_read_field(
                     iceberg_field_ids[1],
@@ -610,14 +611,9 @@ class IcebergSchemaGroup:
                     final_field.type.value_field,
                     field_name_for_err_msg=f"{field_name_for_err_msg}.element",
                 )
-                if pa.types.is_list(final_field.type):
-                    return final_field.with_type(pa.list_(read_value_field)).with_name(
-                        parquet_field_names[0]
-                    )
-                else:
-                    return final_field.with_type(
-                        pa.large_list(read_value_field)
-                    ).with_name(parquet_field_names[0])
+                return final_field.with_type(pa.large_list(read_value_field)).with_name(
+                    parquet_field_names[0]
+                )
             else:
                 assert pa.types.is_map(final_field.type)
                 assert len(iceberg_field_ids) == len(parquet_field_names) == 3
@@ -1255,7 +1251,11 @@ def get_schema_group_identifier_from_pa_field(
             key_field_schema_group_identifier[1],
             item_field_schema_group_identifier[1],
         )
-    elif pa.types.is_list(field_type) or pa.types.is_large_list(field_type):
+    elif (
+        pa.types.is_list(field_type)
+        or pa.types.is_large_list(field_type)
+        or pa.types.is_fixed_size_list(field_type)
+    ):
         value_field_schema_group_identifier = get_schema_group_identifier_from_pa_field(
             field_type.value_field, f"{field_name_for_err_msg}.element"
         )
@@ -1618,7 +1618,7 @@ def get_iceberg_pq_dataset(
             exists in.
         table_name (str): Name of the table to use.
         typing_pa_table_schema (pa.Schema): Final/Target PyArrow schema
-            for the Iceberg table generated at compile time.This must
+            for the Iceberg table generated at compile time. This must
             have Iceberg Field IDs in the metadata of the fields.
         str_as_dict_cols (list[str]): List of column names
             that will be read with dictionary encoding.
@@ -2304,26 +2304,29 @@ def _update_field(
         )
         map_type = pa.map_(new_key_field, new_item_field)
         df_field = df_field.with_type(map_type)
-    # TODO: Should list types be unifiable?
-    elif pa.types.is_list(df_type) and pa.types.is_list(pa_type):
+    # We always convert the expected type to large list
+    elif (
+        pa.types.is_list(df_type)
+        or pa.types.is_large_list(df_type)
+        or pa.types.is_fixed_size_list(df_type)
+    ) and pa.types.is_large_list(pa_type):
         new_element_field = _update_field(
             df_type.field(0), pa_type.field(0), allow_downcasting
         )
-        list_type = pa.list_(new_element_field, list_size=df_type.list_size)
+        list_type = pa.large_list(new_element_field)
         df_field = df_field.with_type(list_type)
-    elif pa.types.is_fixed_size_list(df_type) and pa.types.is_fixed_size_list(pa_type):
-        new_element_field = _update_field(
-            df_type.field(0), pa_type.field(0), allow_downcasting
-        )
-        fixed_size_list_type = pa.fixed_size_list(new_element_field, df_type.list_size)
-        df_field = df_field.with_type(fixed_size_list_type)
-    elif pa.types.is_large_list(df_type) and pa.types.is_large_list(pa_type):
-        new_element_field = _update_field(
-            df_type.field(0), pa_type.field(0), allow_downcasting
-        )
-        large_list_type = pa.large_list(new_element_field)
-        df_field = df_field.with_type(large_list_type)
-
+    # We always convert the expected type to large string
+    elif (
+        pa.types.is_string(df_type) or pa.types.is_large_string(df_type)
+    ) and pa.types.is_large_string(pa_type):
+        df_field = df_field.with_type(pa.large_string())
+    # We always convert the expected type to large binary
+    elif (
+        pa.types.is_binary(df_type)
+        or pa.types.is_large_binary(df_type)
+        or pa.types.is_fixed_size_binary(df_type)
+    ) and pa.types.is_large_binary(pa_type):
+        df_field = df_field.with_type(pa.large_binary())
     # df_field can only be downcasted as of now
     # TODO: Should support upcasting in the future if necessary
     elif (
@@ -2451,13 +2454,15 @@ def with_iceberg_field_id_md_from_ref_field(
     new_field: pa.Field = None
     # Recurse in the nested data type case:
     if pa.types.is_list(field.type):
-        assert pa.types.is_list(ref_field.type), ref_field
+        # Reference type may have already been converted to large list.
+        assert is_pyarrow_list_type(ref_field.type), ref_field
         new_value_field = with_iceberg_field_id_md_from_ref_field(
             field.type.value_field, ref_field.type.value_field
         )
         new_field = field.with_type(pa.list_(new_value_field)).with_metadata(new_md)
     elif pa.types.is_fixed_size_list(field.type):
-        assert pa.types.is_fixed_size_list(ref_field.type), ref_field
+        # Reference type may have already been converted to large list.
+        assert is_pyarrow_list_type(ref_field.type), ref_field
         new_value_field = with_iceberg_field_id_md_from_ref_field(
             field.type.value_field, ref_field.type.value_field
         )
@@ -2465,7 +2470,8 @@ def with_iceberg_field_id_md_from_ref_field(
             pa.list_(new_value_field, list_size=field.type.list_size)
         ).with_metadata(new_md)
     elif pa.types.is_large_list(field.type):
-        assert pa.types.is_large_list(ref_field.type), ref_field
+        # Reference type may have already been converted to large list.
+        assert is_pyarrow_list_type(ref_field.type), ref_field
         new_value_field = with_iceberg_field_id_md_from_ref_field(
             field.type.value_field, ref_field.type.value_field
         )
@@ -2553,7 +2559,10 @@ def add_iceberg_field_id_md_to_pa_schema(
             # This ensures we select the correct subset of any structs.
             new_field = with_iceberg_field_id_md_from_ref_field(field, ref_field)
             new_fields.append(new_field)
-        return pa.schema(new_fields)
+        pyarrow_schema = pa.schema(new_fields)
+        return connector.schema_helper.convert_arrow_schema_to_large_types(
+            pyarrow_schema
+        )
 
 
 def get_table_details_before_write(
@@ -2647,7 +2656,6 @@ def get_table_details_before_write(
                         raise BodoError(
                             "DataFrame schema needs to be an ordered subset of Iceberg table for append"
                         )
-
             # Add Iceberg Field ID to the fields' metadata.
             # If we received an existing schema (pa_schema) in the append case,
             # then port over the existing field IDs, else generate new ones.
