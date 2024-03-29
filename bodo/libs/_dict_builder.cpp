@@ -214,22 +214,59 @@ inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
     offset_t end_offset = in_offsets[idx + 1];
     int64_t len = end_offset - start_offset;
     std::string_view val(&in_data[start_offset], len);
+    return this->InsertIfNotExists(val);
+}
 
+inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
+    const std::string_view& val) {
     dict_indices_t ind;
-
     // get existing index if already in hash table
     if (auto it = this->dict_str_to_ind->find(val);
         it != this->dict_str_to_ind->end()) {
         ind = it->second;
     } else {
+        this->dict_buff->ReserveSize(1);
+        this->dict_buff->ReserveSpaceForStringAppend(val.size());
+
+        // Resize buffers
+        CHECK_ARROW_MEM(
+            this->dict_buff->data_array->buffers[1]->SetSize(
+                (this->dict_buff->size + 2) * sizeof(offset_t)),
+            "DictionaryBuilder::InsertIfNotExists: SetSize failed!");
+        CHECK_ARROW_MEM(
+            this->dict_buff->data_array->buffers[2]->SetSize(
+                arrow::bit_util::BytesForBits(this->dict_buff->size + 1)),
+            "DictionaryBuilder::InsertIfNotExists: SetSize failed!");
+
+        CHECK_ARROW_MEM(
+            this->dict_buff->data_array->buffers[0]->SetSize(
+                this->dict_buff->data_array->n_sub_elems() + val.size()),
+            "DictionaryBuilder::InsertIfNotExists: SetSize failed!");
         // insert into hash table if not exists
         ind = this->dict_str_to_ind->size();
         // TODO: remove std::string() after upgrade to C++23
         (*this->dict_str_to_ind)[std::string(val)] = ind;
-        this->dict_buff->UnsafeAppendRow(in_arr, idx);
+
+        // copy string into buffer
+        memcpy(this->dict_buff->data_array->data1<bodo_array_type::STRING>() +
+                   this->dict_buff->data_array
+                       ->data2<bodo_array_type::STRING, offset_t>()[ind],
+               val.data(), val.length());
+
+        // Set the offsets
+        this->dict_buff->data_array
+            ->data2<bodo_array_type::STRING, offset_t>()[ind + 1] =
+            this->dict_buff->data_array
+                ->data2<bodo_array_type::STRING, offset_t>()[ind] +
+            val.size();
+        // Set the null bit
+        this->dict_buff->data_array->set_null_bit<bodo_array_type::STRING>(
+            ind, true);
+        this->dict_buff->data_array->length++;
+
         if (this->is_key) {
             uint32_t hash;
-            hash_string_32(&in_data[start_offset], (const int)len,
+            hash_string_32(val.data(), (const int)val.size(),
                            SEED_HASH_PARTITION, &hash);
             this->dict_hashes->emplace_back(hash);
         }
@@ -341,11 +378,6 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             if (!in_arr->get_null_bit<bodo_array_type::STRING>(i)) {
                 out_inds[i] = -1;
             } else {
-                // We reserve space here instead of in InsertIfNotExists because
-                // it shouldn't really make a big difference. The downside is
-                // that we're checking the capacity and computing the length for
-                // each element.
-                this->dict_buff->ReserveArrayRow(in_arr, i);
                 out_inds[i] = this->InsertIfNotExists(in_arr, i);
             }
         }
@@ -390,9 +422,6 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         });
 
     auto do_unify = [&](std::vector<int>& new_transpose_map) {
-        // TODO make this only reserve for new elements
-        this->dict_buff->ReserveArray(batch_dict);
-
         // Check/update dictionary hash table and create transpose map
         // if new_transpose_map is already populated, only consider elements
         // that come after it ends

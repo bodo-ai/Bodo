@@ -311,7 +311,7 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     const std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
-inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
+constexpr inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::UINT8)
         return true;
     if (typ == Bodo_CTypes::UINT16)
@@ -323,7 +323,7 @@ inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     return false;
 }
 
-inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
+constexpr inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
     if (is_unsigned_integer(typ))
         return true;
     if (typ == Bodo_CTypes::INT8)
@@ -342,7 +342,7 @@ inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
 /**
  * @brief Check if typ is FLOAT32 or FLOAT64.
  */
-inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
+constexpr inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
     return ((typ == Bodo_CTypes::FLOAT32) || (typ == Bodo_CTypes::FLOAT64));
 }
 
@@ -357,7 +357,7 @@ constexpr inline bool is_complex(Bodo_CTypes::CTypeEnum typ) {
 /**
  * @brief Check if typ is an integer, floating, complex or decimal type.
  */
-inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
+constexpr inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
     return (is_integer(typ) || is_float(typ) || is_complex(typ) ||
             (typ == Bodo_CTypes::DECIMAL));
 }
@@ -832,12 +832,13 @@ struct array_info {
     /**
      * @brief returns the first data pointer for the array if any.
      *
-     * @return char* data pointer
+     * @return U* data pointer
      */
     template <
-        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN,
+        typename U = char>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    char* data1() const {
+    U* data1() const {
         switch (this->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::STRING:
@@ -846,7 +847,8 @@ struct array_info {
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::TIMESTAMPTZ:
-                return (char*)this->buffers[0]->mutable_data() + this->offset;
+                return reinterpret_cast<U*>(this->buffers[0]->mutable_data() +
+                                            this->offset);
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
             case bodo_array_type::MAP:
@@ -858,11 +860,11 @@ struct array_info {
     /**
      * @brief returns the first data pointer for the array if any.
      *
-     * @return char* data pointer
+     * @return U* data pointer
      */
-    template <bodo_array_type::arr_type_enum arr_type>
+    template <bodo_array_type::arr_type_enum arr_type, typename U = char>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    char* data1() const {
+    U* data1() const {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::STRING:
@@ -871,7 +873,8 @@ struct array_info {
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::TIMESTAMPTZ:
-                return (char*)this->buffers[0]->mutable_data() + this->offset;
+                return reinterpret_cast<U*>(this->buffers[0]->mutable_data() +
+                                            this->offset);
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
             case bodo_array_type::MAP:
@@ -883,17 +886,18 @@ struct array_info {
     /**
      * @brief returns the second data pointer for the array if any.
      *
-     * @return char* data pointer
+     * @return U* data pointer
      */
     template <
-        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN,
+        typename U = char>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    char* data2() const {
+    U* data2() const {
         switch (this->arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::TIMESTAMPTZ:
-                return (char*)this->buffers[1]->mutable_data();
+                return reinterpret_cast<U*>(this->buffers[1]->mutable_data());
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
@@ -909,17 +913,18 @@ struct array_info {
     /**
      * @brief returns the second data pointer for the array if any.
      *
-     * @return char* data pointer
+     * @return U* data pointer
      */
     template <
-        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN,
+        typename U = char>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    char* data2() const {
+    U* data2() const {
         switch (arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::TIMESTAMPTZ:
-                return (char*)this->buffers[1]->mutable_data();
+                return reinterpret_cast<U*>(this->buffers[1]->mutable_data());
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:

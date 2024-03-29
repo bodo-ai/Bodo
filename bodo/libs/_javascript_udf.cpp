@@ -1,8 +1,6 @@
 #include "_javascript_udf.h"
 #include <fmt/format.h>
-#include <iostream>
 #include <random>
-#include <stdexcept>
 #include "_utils.h"
 #include "include/v8-exception.h"
 
@@ -12,29 +10,6 @@
 #include "include/v8-isolate.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
-#include "include/v8-script.h"
-
-#define CHECK_V8_EXCEPTION(isolate, context, try_catch, error_prefix)         \
-    if (try_catch.HasCaught()) {                                              \
-        v8::String::Utf8Value exception(isolate, try_catch.Exception());      \
-        v8::Local<v8::Message> message = try_catch.Message();                 \
-        if (message.IsEmpty()) {                                              \
-            throw std::runtime_error(                                         \
-                fmt::format("{}\n{}", error_prefix, *exception));             \
-        } else {                                                              \
-            v8::String::Utf8Value filename(                                   \
-                isolate, message->GetScriptOrigin().ResourceName());          \
-            int linenum = message->GetLineNumber(context).FromMaybe(-1);      \
-            if (linenum == -1) {                                              \
-                throw std::runtime_error(fmt::format(                         \
-                    "{}\n{}: {}", error_prefix, *filename, *exception));      \
-            } else {                                                          \
-                throw std::runtime_error(fmt::format("{}\n{}:{}: {}",         \
-                                                     error_prefix, *filename, \
-                                                     linenum, *exception));   \
-            }                                                                 \
-        }                                                                     \
-    }
 
 static std::unique_ptr<v8::Platform> platform;
 static v8::Isolate::CreateParams create_params;
