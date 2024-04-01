@@ -1,4 +1,6 @@
+#include <functional>
 #include <limits>
+#include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_javascript_udf.h"
 #include "./test.hpp"
@@ -8,6 +10,83 @@
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
 #include "include/v8-script.h"
+
+// Helper utility to test a JavaScript UDF with certain arguments and verify the
+// result
+void test_javascript_udf_output(
+    std::unique_ptr<JavaScriptFunction> &f,
+    const std::vector<std::shared_ptr<array_info>> &args,
+    std::string expected_result) {
+    // Call the UDF
+    auto out_arr = execute_javascript_udf(f.get(), args);
+    // Dumping the column to a string to ensure it matches the expected output.
+    std::stringstream ss;
+    DEBUG_PrintColumn(ss, out_arr);
+    bodo::tests::check(ss.str() == expected_result);
+}
+
+// Helper utility to create arrays used for testing JavaScript UDFs.
+// Creates an integer column from vectors of ints and nulls
+template <Bodo_CTypes::CTypeEnum dtype, typename T>
+    requires(dtype != Bodo_CTypes::_BOOL)
+std::shared_ptr<array_info> nullable_array_from_vector(
+    std::vector<T> numbers, std::vector<bool> nulls) {
+    size_t length = numbers.size();
+    auto result = alloc_nullable_array_no_nulls(length, dtype, 0);
+    T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
+    for (size_t i = 0; i < length; i++) {
+        if (nulls[i]) {
+            buffer[i] = (T)numbers[i];
+        } else {
+            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+        }
+    }
+    return result;
+}
+
+// Special case of nullable_array_from_vector for booleans
+template <Bodo_CTypes::CTypeEnum dtype, typename T>
+    requires(dtype == Bodo_CTypes::_BOOL)
+std::shared_ptr<array_info> nullable_array_from_vector(
+    std::vector<bool> booleans, std::vector<bool> nulls) {
+    size_t length = booleans.size();
+    auto result = alloc_nullable_array_no_nulls(length, dtype, 0);
+    uint8_t *buffer =
+        result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
+    for (size_t i = 0; i < length; i++) {
+        if (nulls[i]) {
+            SetBitTo(buffer, i, booleans[i]);
+        } else {
+            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+        }
+    }
+    return result;
+}
+
+// Variant of nullable_array_from_vector to build a string array from vectors
+std::shared_ptr<array_info> string_array_from_vector(
+    bodo::vector<std::string> strings, bodo::vector<bool> nulls,
+    Bodo_CTypes::CTypeEnum dtype) {
+    size_t length = strings.size();
+
+    bodo::vector<uint8_t> null_bitmask((length + 7) >> 3, 0);
+    for (size_t i = 0; i < length; i++) {
+        SetBitTo(null_bitmask.data(), i, nulls[i]);
+    }
+    return create_string_array(dtype, null_bitmask, strings, -1);
+}
+
+// Variant of nullable_array_from_vector to build a dict array from vectors
+std::shared_ptr<array_info> dict_array_from_vector(
+    bodo::vector<std::string> strings, std::vector<int32_t> indices,
+    std::vector<bool> nulls) {
+    bodo::vector<bool> string_nulls(strings.size(), true);
+    std::shared_ptr<array_info> dict_arr =
+        string_array_from_vector(strings, string_nulls, Bodo_CTypes::STRING);
+    std::shared_ptr<array_info> index_arr =
+        nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(indices, nulls);
+    return create_dict_string_array(dict_arr, index_arr);
+}
 
 static bodo::tests::suite tests([] {
     init_v8();
@@ -44,11 +123,257 @@ static bodo::tests::suite tests([] {
         auto f = JavaScriptFunction::create(
             "return 2", {},
             std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
-                                             Bodo_CTypes::INT64));
+                                             Bodo_CTypes::INT32));
         auto out_arr = execute_javascript_udf(f.get(), {});
         bodo::tests::check(out_arr->data1()[0] == 2);
     });
-
+    bodo::tests::test("test_single_integer_arg_one_row", [] {
+        // Simple test: take in an integer 9 and square it
+        auto f = JavaScriptFunction::create(
+            "return i * i", {"i"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate first argument array: [9]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::UINT64, uint64_t>(
+            {9}, {true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=1 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=81\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_single_integer_arg_multiple_rows", [] {
+        // Take in multiple integers and squares them
+        auto f = JavaScriptFunction::create(
+            "return i * i", {"i"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate first argument array: [2, 3, -4, 5, -6]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(
+            {2, 3, -4, 5, -6}, {true, true, true, true, true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=5 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=4\n"
+            "i_row=1 S=9\n"
+            "i_row=2 S=16\n"
+            "i_row=3 S=25\n"
+            "i_row=4 S=36\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_single_integer_arg_multiple_rows_with_null", [] {
+        // Takes in multiple integers and halves them, including
+        // some nulls
+        auto f = JavaScriptFunction::create(
+            "return (i == null) ? null : i / 2", {"i"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate first argument array: [30, 40, NA, 64, NA]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(
+            {30, 40, -1, 64, -1}, {true, true, false, true, false});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=5 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=15\n"
+            "i_row=1 S=20\n"
+            "i_row=2 S=NA\n"
+            "i_row=3 S=32\n"
+            "i_row=4 S=NA\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_multiple_integer_args_multiple_rows_with_null", [] {
+        // Takes in multiple integer args and returns the
+        // pythagoream theorem result, including some nulls
+        auto f = JavaScriptFunction::create(
+            "if (a == null) return null\n"
+            "if (b == null) return null\n"
+            "return Math.sqrt(a*a + b*b)",
+            {"a", "b"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(2);
+        // Allocate first argument array: [NA, 3, 5, 8, 40]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT16, int16_t>(
+            {-1, 3, 5, 8, 40}, {false, true, true, true, true});
+        // Allocate second argument array: [NA, 4, 12, NA, 9]
+        args[1] = nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(
+            {-1, 4, 12, -1, 9}, {false, true, true, false, true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=5 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=NA\n"
+            "i_row=1 S=5\n"
+            "i_row=2 S=13\n"
+            "i_row=3 S=NA\n"
+            "i_row=4 S=41\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_float_args", [] {
+        // Takes in multiple floats and returns the sign
+        auto f = JavaScriptFunction::create(
+            "if (i == 0) return 0\n"
+            "if (i > 0) return 1\n"
+            "return -1",
+            {"i"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT8));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate first argument array: [0.0, 1.2, -3.4, 5.6, -7.8]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::FLOAT32, float32_t>(
+            {0.0, 1.2, -3.4, 5.6, -7.8}, {true, true, true, true, true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=5 arr=NULLABLE dtype=INT8\n"
+            "i_row=0 S=0\n"
+            "i_row=1 S=1\n"
+            "i_row=2 S=-1\n"
+            "i_row=3 S=1\n"
+            "i_row=4 S=-1\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_date_args", [] {
+        // Takes in multiple dates and returns the month
+        auto f = JavaScriptFunction::create(
+            "return (dt == null) ? null : dt.getMonth()", {"dt"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate first argument array: [2024-03-14, NA, 1999-12-31,
+        // 2004-01-21, 2010-07-01]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::DATE, int32_t>(
+            {19796, -1, 10596, 12530, 14792}, {true, false, true, true, true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=5 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=2\n"
+            "i_row=1 S=NA\n"
+            "i_row=2 S=0\n"
+            "i_row=3 S=3\n"
+            "i_row=4 S=6\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_boolean_args", [] {
+        // Takes in two booleans and returns a diferent number
+        // based on which of them are true/false/null
+        auto f = JavaScriptFunction::create(
+            "var m = 1\n"
+            "if (a == null) m = 2\n"
+            "else if (a) m = 3\n"
+            "var n = 4\n"
+            "if (b == null) n = 5\n"
+            "else if (b) n = 6\n"
+            "return m * n",
+            {"a", "b"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(2);
+        // Allocate first argument array: [T, T, T, F, F, F, N, N, N]
+        args[0] = nullable_array_from_vector<Bodo_CTypes::_BOOL, bool>(
+            {true, true, true, false, false, false, false, false, false},
+            {true, true, true, true, true, true, false, false, false});
+        // Allocate second argument array: [T, F, N, T, F, N, T, F, N]
+        args[1] = nullable_array_from_vector<Bodo_CTypes::_BOOL, bool>(
+            {true, false, false, true, false, false, true, false, false},
+            {true, true, false, true, true, false, true, true, false});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=9 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=18\n"
+            "i_row=1 S=12\n"
+            "i_row=2 S=15\n"
+            "i_row=3 S=6\n"
+            "i_row=4 S=4\n"
+            "i_row=5 S=5\n"
+            "i_row=6 S=12\n"
+            "i_row=7 S=8\n"
+            "i_row=8 S=10\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_string_args", [] {
+        // Takes in strings and returns the index of the first space
+        auto f = JavaScriptFunction::create(
+            "if (s == null) return null\n"
+            "return s.indexOf(' ')",
+            {"s"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate the argument array: ["Alphabet Soup Is Delicious", NA,
+        // "#HelloWorld"]
+        args[0] = string_array_from_vector(
+            {
+                "Alphabet Soup Is Delicious",
+                "",
+                "#HelloWorld",
+            },
+            {true, false, true}, Bodo_CTypes::STRING);
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=3 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=8\n"
+            "i_row=1 S=NA\n"
+            "i_row=2 S=-1\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_binary_args", [] {
+        // Takes in binary and returns the first byte.
+        auto f = JavaScriptFunction::create(
+            "if (u == null) return null\n"
+            "return u[0]",
+            {"u"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate the argument array.
+        args[0] = string_array_from_vector(
+            {"Alphabet", "", "soup"}, {true, false, true}, Bodo_CTypes::BINARY);
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=3 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=65\n"
+            "i_row=1 S=NA\n"
+            "i_row=2 S=115\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
+    bodo::tests::test("test_dict_args", [] {
+        // Takes in strings via a dictionary encoded array and returns
+        // the length of the longest word
+        auto f = JavaScriptFunction::create(
+            "if (s == null) return null\n"
+            "var longest = 0\n"
+            "for (word of s.split(' ')) {\n"
+            "   if (word.length > longest) longest = word.length;\n"
+            "}\n"
+            "return longest",
+            {"s"},
+            std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32));
+        std::vector<std::shared_ptr<array_info>> args(1);
+        // Allocate the argument array: [s0, s1, s2, NA, s0, s2, NA, s0]
+        args[0] = dict_array_from_vector(
+            {
+                "Alphabet Soup Is Delicious",
+                "The quick brown fox jumps over the lazy dog.",
+                "#HelloWorld",
+            },
+            {0, 1, 2, -1, 0, 2, -1, 0},
+            {true, true, true, false, true, true, false, true});
+        // Compare the UDF output against the expected answer
+        std::string refsol =
+            "ARRAY_INFO: Column n=8 arr=NULLABLE dtype=INT32\n"
+            "i_row=0 S=9\n"
+            "i_row=1 S=5\n"
+            "i_row=2 S=11\n"
+            "i_row=3 S=NA\n"
+            "i_row=4 S=9\n"
+            "i_row=5 S=11\n"
+            "i_row=6 S=NA\n"
+            "i_row=7 S=9\n";
+        test_javascript_udf_output(f, args, refsol);
+    });
     bodo::tests::test("test_javascript_to_bodo_conversion_string", [] {
         v8::Isolate::CreateParams create_params;
         create_params.array_buffer_allocator_shared =

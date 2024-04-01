@@ -1,10 +1,13 @@
 #include "_javascript_udf.h"
 #include <fmt/format.h>
+#include <iostream>
 #include <random>
+#include <stdexcept>
+#include "_bodo_common.h"
 #include "_utils.h"
-#include "include/v8-exception.h"
-
 #include "include/libplatform/libplatform.h"
+#include "include/v8-date.h"
+#include "include/v8-exception.h"
 #include "include/v8-function.h"
 #include "include/v8-initialization.h"
 #include "include/v8-isolate.h"
@@ -162,16 +165,16 @@ JavaScriptFunction *create_javascript_udf_py_entry(
                         return_array_c_type + size_return_array_type));
         assert(arg_names->arr_type == bodo_array_type::STRING);
         assert(arg_names->dtype == Bodo_CTypes::STRING);
-
         std::vector<std::string> arg_names_vec;
         arg_names_vec.reserve(arg_names->length);
         for (size_t i = 0; i < arg_names->length; ++i) {
-            arg_names_vec.push_back(std::string(
-                arg_names->data1<bodo_array_type::STRING>()[i],
-                ((offset_t *)
-                     arg_names->data2<bodo_array_type::STRING>())[i + 1] -
-                    ((offset_t *)
-                         arg_names->data2<bodo_array_type::STRING>())[i]));
+            offset_t start =
+                arg_names->data2<bodo_array_type::STRING, offset_t>()[i];
+            offset_t end =
+                arg_names->data2<bodo_array_type::STRING, offset_t>()[i + 1];
+            arg_names_vec.push_back(
+                std::string(arg_names->data1<bodo_array_type::STRING>() + start,
+                            end - start));
         }
         v8::Isolate::Scope isolate_scope(isolate.get());
         v8::HandleScope handle_scope(isolate.get());
@@ -202,33 +205,411 @@ void delete_javascript_udf_py_entry(JavaScriptFunction *func) {
     }
 }
 
+// Convert numeric args from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(numpy_array<arr_type> || nullable_array<arr_type>)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    using T = typename dtype_to_type<dtype>::type;
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (non_null_at<arr_type, T, dtype>(*src_arr, i)) {
+            T arg_val = src_arr->data1<arr_type, T>()[i];
+            arg_col.emplace_back(v8::Number::New(isolate.get(), arg_val));
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert date arguments from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires((numpy_array<arr_type> || nullable_array<arr_type>) &&
+             dtype == Bodo_CTypes::DATE)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    using T = typename dtype_to_type<dtype>::type;
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (non_null_at<arr_type, T, dtype>(*src_arr, i)) {
+            T arg_val = src_arr->data1<arr_type, T>()[i];
+            // Convert from days since unix epoch to ms since unix epoch.
+            int64_t arg_ms = ((int64_t)arg_val) * 24 * 60 * 60 * 1000;
+            arg_col.emplace_back(
+                v8::Date::New(local_context, arg_ms).ToLocalChecked());
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert nullable booleans from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(nullable_array<arr_type> && bool_dtype<dtype>)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (src_arr->get_null_bit<arr_type>(i)) {
+            bool arg_val = GetBit(src_arr->data1<arr_type, uint8_t>(), i);
+            arg_col.emplace_back(v8::Boolean::New(isolate.get(), arg_val));
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert numpy booleans from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(numpy_array<arr_type> && bool_dtype<dtype>)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    for (size_t i = 0; i < src_arr->length; i++) {
+        bool arg_val = src_arr->data1<arr_type, uint8_t>()[i];
+        arg_col.emplace_back(v8::Boolean::New(isolate.get(), arg_val));
+    }
+}
+
+// Convert regular strings from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(string_array<arr_type>)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    char *raw_data_ptr = src_arr->data1<bodo_array_type::STRING>();
+    offset_t *offsets = src_arr->data2<bodo_array_type::STRING, offset_t>();
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (src_arr->get_null_bit<arr_type>(i)) {
+            offset_t start_offset = offsets[i];
+            offset_t end_offset = offsets[i + 1];
+            offset_t len = end_offset - start_offset;
+            v8::MaybeLocal<v8::String> maybeLocalStr = v8::String::NewFromUtf8(
+                isolate.get(), &raw_data_ptr[start_offset],
+                v8::NewStringType::kNormal, len);
+            arg_col.emplace_back(maybeLocalStr.ToLocalChecked());
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert binary data from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(string_array<arr_type> && dtype == Bodo_CTypes::BINARY)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    char *raw_data_ptr = src_arr->data1<bodo_array_type::STRING>();
+    offset_t *offsets = src_arr->data2<bodo_array_type::STRING, offset_t>();
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (src_arr->get_null_bit<arr_type>(i)) {
+            offset_t start_offset = offsets[i];
+            offset_t end_offset = offsets[i + 1];
+            offset_t len = end_offset - start_offset;
+            v8::Local<v8::ArrayBuffer> localBuffer =
+                v8::ArrayBuffer::New(isolate.get(), len);
+            memcpy(localBuffer->Data(), &raw_data_ptr[start_offset], len);
+            v8::Local<v8::Uint8Array> localBinary =
+                v8::Uint8Array::New(localBuffer, 0, len);
+            arg_col.emplace_back(localBinary);
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert dictionary-encoded strings from Bodo to V8
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(dict_array<arr_type>)
+void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
+                               const std::shared_ptr<array_info> &src_arr,
+                               std::vector<v8::Local<v8::Value>> &arg_col) {
+    std::shared_ptr<array_info> string_arr = src_arr->child_arrays[0];
+    std::shared_ptr<array_info> idx_arr = src_arr->child_arrays[1];
+    char *raw_data_ptr = string_arr->data1<bodo_array_type::STRING>();
+    offset_t *offsets = string_arr->data2<bodo_array_type::STRING, offset_t>();
+    dict_indices_t *indices =
+        idx_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, dict_indices_t>();
+    for (size_t i = 0; i < src_arr->length; i++) {
+        if (src_arr->get_null_bit<arr_type>(i)) {
+            int64_t dict_idx = indices[i];
+            offset_t start_offset = offsets[dict_idx];
+            offset_t end_offset = offsets[dict_idx + 1];
+            offset_t len = end_offset - start_offset;
+            v8::MaybeLocal<v8::String> maybeLocalStr = v8::String::NewFromUtf8(
+                isolate.get(), &raw_data_ptr[start_offset],
+                v8::NewStringType::kNormal, len);
+            arg_col.emplace_back(maybeLocalStr.ToLocalChecked());
+        } else {
+            arg_col.emplace_back(v8::Null(isolate.get()));
+        }
+    }
+}
+
+// Convert a Bodo array to a vector of V8 values
+void convert_bodo_to_v8(v8::Local<v8::Context> &local_context,
+                        const std::shared_ptr<array_info> &src_arr,
+                        std::vector<v8::Local<v8::Value>> &arg_col) {
+#define bodo_to_v8_case(arr_type, dtype)                                   \
+    case dtype:                                                            \
+        convert_bodo_to_v8_helper<arr_type, dtype>(local_context, src_arr, \
+                                                   arg_col);               \
+        break;
+    switch (src_arr->arr_type) {
+        case bodo_array_type::NUMPY: {
+            switch (src_arr->dtype) {
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::UINT8);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::UINT16);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::UINT32);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::INT16);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::INT32);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT32);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::_BOOL);
+                bodo_to_v8_case(bodo_array_type::NUMPY, Bodo_CTypes::DATE);
+                default:
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported argument dtype "
+                        "for numpy array " +
+                        GetArrType_as_string(src_arr->dtype));
+            }
+            break;
+        }
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            switch (src_arr->dtype) {
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::UINT8);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::UINT16);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::UINT32);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::UINT64);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT8);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT16);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT32);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT64);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::FLOAT32);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::FLOAT64);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::_BOOL);
+                bodo_to_v8_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::DATE);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported argument dtype "
+                        "for nullable array " +
+                        GetArrType_as_string(src_arr->dtype));
+                }
+            }
+            break;
+        }
+        case bodo_array_type::STRING: {
+            switch (src_arr->dtype) {
+                bodo_to_v8_case(bodo_array_type::STRING, Bodo_CTypes::STRING);
+                bodo_to_v8_case(bodo_array_type::STRING, Bodo_CTypes::BINARY);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported argument dtype "
+                        "for string array " +
+                        GetArrType_as_string(src_arr->dtype));
+                }
+            }
+            break;
+        }
+        case bodo_array_type::DICT: {
+            switch (src_arr->dtype) {
+                bodo_to_v8_case(bodo_array_type::DICT, Bodo_CTypes::STRING);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported argument dtype "
+                        "for dictionary encoded array " +
+                        GetArrType_as_string(src_arr->dtype));
+                }
+            }
+            break;
+        }
+        default: {
+            throw std::runtime_error(
+                "execute_javascript_udf: unsupported argument array type " +
+                GetArrType_as_string(src_arr->arr_type));
+        }
+    }
+}
+
+// Templated helper for execute_javascript_udf to handle array/dtype-specific
+// logic
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+void execute_javascript_udf_body(
+    v8::Local<v8::Context> local_context, v8::Local<v8::Function> local_v8_func,
+    std::shared_ptr<ArrayBuildBuffer> ret, size_t out_count, size_t argc,
+    const std::vector<std::vector<v8::Local<v8::Value>>> &arg_columns) {
+    v8::TryCatch trycatch(isolate.get());
+    for (size_t i = 0; i < out_count; ++i) {
+        // Place all of the arguments from the current row in an array
+        std::vector<v8::Local<v8::Value>> argv;
+        for (size_t arg = 0; arg < argc; arg++) {
+            argv.emplace_back(arg_columns[arg][i]);
+        }
+        // Call the UDF
+        auto pre_result = local_v8_func->Call(
+            local_context, local_context->Global(), argc, argv.data());
+        CHECK_V8_EXCEPTION(
+            local_context->GetIsolate(), local_context, trycatch,
+            "execute_javascript_udf_body: executing functin failed")
+        auto result = pre_result.ToLocalChecked();
+
+        // Write the result to the Bodo array
+        append_v8_handle<arr_type, dtype>(local_context, result, ret, trycatch);
+    }
+}
+
 std::shared_ptr<array_info> execute_javascript_udf(
-    JavaScriptFunction *func, std::vector<std::unique_ptr<array_info>> args) {
+    JavaScriptFunction *func,
+    const std::vector<std::shared_ptr<array_info>> &args) {
     auto tracingEvent(func->tracing_event.iteration());
-    // We don't support args for now.
-    assert(args.size() == 0);
     v8::Isolate::Scope isolate_scope(isolate.get());
     // Create the handle scope and set the active context
     v8::HandleScope handle_scope(isolate.get());
-    v8::TryCatch try_catch(isolate.get());
     v8::Local<v8::Context> local_context = func->context.Get(isolate.get());
     v8::Context::Scope context_scope(local_context);
     v8::Local<v8::Function> local_v8_func = func->v8_func.Get(isolate.get());
 
-    size_t out_count = args.size() == 0 ? 1 : args[0]->length;
-    std::shared_ptr<array_info> ret =
-        alloc_array_top_level(out_count, 0, 0, func->return_type->array_type,
-                              func->return_type->c_type);
-    for (size_t i = 0; i < out_count; ++i) {
-        auto maybe_result = local_v8_func->Call(
-            local_context, local_context->Global(), 0, nullptr);
-        CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
-                           "Error executing JavaScript UDF")
-        auto result = maybe_result.ToLocalChecked();
-        int64_t retval = result->IntegerValue(local_context).ToChecked();
-        // this needs to become something like
-        // cast_v8_value_to_bodo_array<array_type, ctype>(result);
-        reinterpret_cast<int64_t *>(ret->data1())[i] = retval;
+    size_t argc = args.size();
+    size_t out_count = argc == 0 ? 1 : args[0]->length;
+
+    // Allocate the output array/builder
+    std::shared_ptr<array_info> ret = alloc_array_top_level(
+        0, 0, 0, func->return_type->array_type, func->return_type->c_type);
+    std::shared_ptr<ArrayBuildBuffer> arr_builder =
+        std::make_shared<ArrayBuildBuffer>(ret);
+    arr_builder->ReserveSize(out_count);
+
+    // For each argument, construct a column of values converted to V8
+    std::vector<std::vector<v8::Local<v8::Value>>> arg_columns(argc);
+    for (size_t arg_idx = 0; arg_idx < argc; arg_idx++) {
+        convert_bodo_to_v8(local_context, args[arg_idx], arg_columns[arg_idx]);
+    }
+
+#define execute_js_udf_dtype_case(arr_type, dtype)                      \
+    case dtype: {                                                       \
+        execute_javascript_udf_body<arr_type, dtype>(                   \
+            local_context, local_v8_func, arr_builder, out_count, argc, \
+            arg_columns);                                               \
+        break;                                                          \
+    }
+    switch (func->return_type->array_type) {
+        case bodo_array_type::NUMPY: {
+            switch (func->return_type->c_type) {
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT8);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT16);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT32);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT64);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT8);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT16);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT32);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT64);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::FLOAT32);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::FLOAT64);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::_BOOL);
+                execute_js_udf_dtype_case(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::DATE);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported output dtype " +
+                        GetArrType_as_string(func->return_type->c_type));
+                }
+            }
+            break;
+        }
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            switch (func->return_type->c_type) {
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT8);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT16);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT32);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT64);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT8);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT16);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT32);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT64);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::FLOAT32);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::FLOAT64);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::_BOOL);
+                execute_js_udf_dtype_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::DATE);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported output dtype " +
+                        GetArrType_as_string(func->return_type->c_type));
+                }
+            }
+            break;
+        }
+        case bodo_array_type::STRING: {
+            switch (func->return_type->c_type) {
+                execute_js_udf_dtype_case(bodo_array_type::STRING,
+                                          Bodo_CTypes::STRING);
+                execute_js_udf_dtype_case(bodo_array_type::STRING,
+                                          Bodo_CTypes::BINARY);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported output dtype "
+                        "for string array " +
+                        GetArrType_as_string(func->return_type->c_type));
+                }
+            }
+            break;
+        }
+        case bodo_array_type::DICT: {
+            switch (func->return_type->c_type) {
+                execute_js_udf_dtype_case(bodo_array_type::DICT,
+                                          Bodo_CTypes::STRING);
+                default: {
+                    throw std::runtime_error(
+                        "execute_javascript_udf: unsupported output dtype "
+                        "for dictionary encoded array " +
+                        GetArrType_as_string(func->return_type->c_type));
+                }
+            }
+            break;
+        }
+        default: {
+            throw std::runtime_error(
+                "execute_javascript_udf: unsupported output array type " +
+                GetArrType_as_string(func->return_type->array_type));
+        }
     }
 
     if (enable_mem_debug) {
@@ -245,15 +626,16 @@ std::shared_ptr<array_info> execute_javascript_udf(
 
 // Assumes length of args == func->arg_names.size()
 array_info *execute_javascript_udf_py_entry(JavaScriptFunction *func,
-                                            array_info **args) {
+                                            table_info *args) {
     try {
-        std::vector<std::unique_ptr<array_info>> args_vec;
-        args_vec.reserve(func->arg_names.size());
-        for (size_t i = 0; i < func->arg_names.size(); ++i) {
-            args_vec.push_back(std::unique_ptr<array_info>(args[i]));
+        if (args == nullptr) {
+            return new array_info(*execute_javascript_udf(func, {}));
+        } else {
+            std::unique_ptr<table_info> args_ptr =
+                std::unique_ptr<table_info>(args);
+            return new array_info(
+                *execute_javascript_udf(func, args_ptr->columns));
         }
-        return new array_info(
-            *execute_javascript_udf(func, std::move(args_vec)));
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
