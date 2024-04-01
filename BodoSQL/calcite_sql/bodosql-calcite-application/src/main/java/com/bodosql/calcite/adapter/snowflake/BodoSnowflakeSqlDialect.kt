@@ -340,7 +340,8 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
             // a literal, so we need to remap it to a TO_TIMESTAMP_TZ call.
             writer.print("TO_TIMESTAMP_TZ")
             val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
-            writer.print(String.format(Locale.ROOT, "'%s'", literal.toFormattedString()))
+            val tsTzString = literal.toFormattedString().replace("GMT", "")
+            writer.print(String.format(Locale.ROOT, "'%s'", tsTzString))
             writer.endList(frame)
         } else {
             super.unparseDateTimeLiteral(writer, literal, leftPrec, rightPrec)
