@@ -6,7 +6,13 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic, models, overload, register_model
 
 import bodo
-from bodo.libs.array import ArrayInfoType, array_to_info, delete_info, info_to_array
+from bodo.libs.array import (
+    ArrayInfoType,
+    array_to_info,
+    delete_info,
+    info_to_array,
+    py_table_to_cpp_table,
+)
 from bodo.utils.typing import (
     MetaType,
     is_tuple_like_type,
@@ -219,14 +225,48 @@ def _execute_javascript_udf(typing_context, js_func, js_func_args):  # pragma: n
     return sig, codegen
 
 
+def arrays_to_cpp_table(arrs_tup):  # pragma: no cover
+    pass
+
+
+@overload(arrays_to_cpp_table)
+def overload_arrays_to_cpp_table(arrs_tup):
+    """
+    Converts a collection of arrays into a C++ table
+    """
+    n_cols = len(arrs_tup)
+    kept_cols = MetaType(tuple(range(len(arrs_tup))))
+    table_type = bodo.hiframes.table.TableType(tuple(arrs_tup.types))
+    arrs_text = [f"arrs_tup[{i}]" for i in range(n_cols)]
+    func_text = "def impl(arrs_tup):\n"
+    func_text += f"  T = bodo.hiframes.table.logical_table_to_table((), ({', '.join(arrs_text)},), kept_cols, 0)\n"
+    func_text += "  return py_table_to_cpp_table(T, table_type)"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "py_table_to_cpp_table": py_table_to_cpp_table,
+            "table_type": table_type,
+            "kept_cols": kept_cols,
+        },
+        loc_vars,
+    )
+    return loc_vars["impl"]
+
+
 def execute_javascript_udf(js_func, args):  # pragma: no cover
     pass
 
 
 @overload(execute_javascript_udf)
 def overload_execute_javascript_udf(js_func, args):  # pragma: no cover
-    """Overload for execute_javascript_udf, ensures we have the cpp extension, checks the input types and calls the intrinsic.
-    Converts ouput to scalars if no args are provided. Once we support arguments this will need to broadcast scalars to arrays.
+    """Overload for execute_javascript_udf, ensures we have the cpp extension,
+    checks the input types and calls the intrinsic. Converts ouput to scalars
+    if no args are provided or all arguments are scalars. If any of the arguments
+    are arrays, all scalars are broadcasted to arrays of that size and the result
+    is an arary of the same length. It is assumed that all array arguments passed
+    in are of the same length.
     """
 
     if not javascript_udf_enabled:
@@ -243,24 +283,68 @@ def overload_execute_javascript_udf(js_func, args):  # pragma: no cover
     args_type = unwrap_typeref(args)
     if not is_tuple_like_type(args_type):
         raise_bodo_error(f"Expected args to be type tuple, got {args_type}")
-    if len(args_type) != 0:
-        raise_bodo_error("JavaScript UDFs with arguments are not yet supported")
+
+    # Used to keep track of which argument index is an array so we can broadcast scalars
+    # to use that length
+    first_array_arg = -1
+    # Boolean to track whether all of the inputs (and therefore the output) are scalar
+    is_scalar = True
+    # Booleans indicating whether each individual argument is scalar
+    scalar_args = []
+    # Strings specifying how to get each argument as an array
+    args_text = []
+    for i, typ in enumerate(args_type):
+        if bodo.utils.utils.is_array_typ(typ):
+            first_array_arg = i
+            is_scalar = False
+            scalar_args.append(False)
+            args_text.append(f"args[{i}]")
+        else:
+            scalar_args.append(True)
+            # length_arg will be defined to be the length of the first array argument
+            args_text.append(f"coerce_scalar_to_array(args[{i}], length_arg, unknown)")
 
     ret_type = js_func_type.return_type
 
-    def impl(js_func, args):  # pragma: no cover
-        if len(args) != 0:
-            args_arr = [array_to_info(arg) for arg in args]
-        else:
-            args_arr = None
+    func_text = "def impl(js_func, args):\n"
+    if len(args_type) == 0:
+        # If there are no arguments, pass in a nullptr for the args
+        func_text += "  args_table = None\n"
+    else:
+        # Otherwise, place all of them in a combined buffer. If any of them were scalars,
+        # add a statement to indicate what length to use
+        if any(scalar_args):
+            if all(scalar_args):
+                func_text += f"  length_arg = 1\n"
+            else:
+                func_text += f"  length_arg = len(args[{first_array_arg}])\n"
+        func_text += f"  args_table = arrays_to_cpp_table(({','.join(args_text)},))\n"
+    # Run the UDF and extract the result array
+    func_text += "  ret_info = _execute_javascript_udf(js_func, args_table)\n"
+    func_text += "  ret_array = info_to_array(ret_info, ret_type)\n"
+    func_text += "  delete_info(ret_info)\n"
+    # If all of the inputs were scalars, return the singleton output. Otherwise, return
+    # the entire array output.
+    if is_scalar:
+        func_text += "  return None if bodo.libs.array_kernels.isna(ret_array, 0) else ret_array[0]"
+    else:
+        func_text += "  return ret_array"
 
-        ret_info = _execute_javascript_udf(js_func, args_arr)
-
-        ret_array = info_to_array(ret_info, ret_type)
-        delete_info(ret_info)
-        # If there are no args, the return type is scalar
-        if len(args) == 0:
-            return None if bodo.libs.array_kernels.isna(ret_array, 0) else ret_array[0]
-        return ret_array
-
-    return impl
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "ret_type": ret_type,
+            "_execute_javascript_udf": _execute_javascript_udf,
+            "unknown": types.unknown,
+            "coerce_scalar_to_array": bodo.utils.conversion.coerce_scalar_to_array,
+            "info_to_array": info_to_array,
+            "array_to_info": array_to_info,
+            "delete_info": delete_info,
+            "np": np,
+            "arrays_to_cpp_table": arrays_to_cpp_table,
+        },
+        loc_vars,
+    )
+    return loc_vars["impl"]

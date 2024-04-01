@@ -111,7 +111,7 @@ void delete_javascript_udf_py_entry(JavaScriptFunction *func);
  * @return The resulting array_info
  */
 array_info *execute_javascript_udf_py_entry(JavaScriptFunction *f,
-                                            array_info **args);
+                                            table_info *args);
 
 /**
  * @brief Calls the JavaScriptFunction with the supplied args and returns the
@@ -123,7 +123,8 @@ array_info *execute_javascript_udf_py_entry(JavaScriptFunction *f,
  * length args[0] or 1 if there are no args
  */
 std::shared_ptr<array_info> execute_javascript_udf(
-    JavaScriptFunction *func, std::vector<std::unique_ptr<array_info>> args);
+    JavaScriptFunction *func,
+    const std::vector<std::shared_ptr<array_info>> &args);
 
 /**
  * @brief Append a v8::Value into an array_info, assumes arr has enough capacity
