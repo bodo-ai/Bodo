@@ -25,6 +25,9 @@ if bodo.get_rank() == 0:
         ColumnDataTypeClass = gateway.jvm.com.bodosql.calcite.table.ColumnDataTypeInfo
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
         LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
+        PandasCodeSqlPlanPairClass = (
+            gateway.jvm.com.bodosql.calcite.schema.PandasCodeSqlPlanPair
+        )
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
@@ -52,6 +55,7 @@ else:
     ColumnDataTypeClass = None
     LocalTableClass = None
     LocalSchemaClass = None
+    PandasCodeSqlPlanPairClass = None
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogClass = None
