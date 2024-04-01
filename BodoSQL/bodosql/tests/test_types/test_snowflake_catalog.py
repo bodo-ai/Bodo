@@ -3300,6 +3300,43 @@ def test_read_timestamptz(test_db_snowflake_catalog, memory_leak_check):
             check_func(impl, (bc, query), py_output=expected_output)
 
 
+def test_read_literal_timestamptz_filter(test_db_snowflake_catalog, memory_leak_check):
+    """Test reading from Snowflake with a filter involving
+    a timestamptz literal"""
+    with enable_timestamptz():
+        db = test_db_snowflake_catalog.database
+        schema = test_db_snowflake_catalog.connection_params["schema"]
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+        def impl(bc, query):
+            return bc.sql(query)
+
+        rows = [
+            "2020-01-02 03:04:05 +0000",
+            "2020-01-02 03:04:05 +0607",
+            "2020-01-02 03:04:05 -0607",
+            None,
+            "2020-01-01 00:00:00.123456789 -0800",
+            "2020-01-01 00:00:00.123456789 +0000",
+            "1900-01-01 01:01:01 +0000",
+        ]
+        # In order to test nulls we need to convert None to "0" and then use an
+        # IFF statement to convert it back to null. Otherwise flatten will drop
+        # the null.
+        input_arr = (
+            "[" + ", ".join([f"'{r}'::timestamptz" if r else "0" for r in rows]) + "]"
+        )
+        # The TO_TIMESTAMP_TZ is needed to convert the column type to
+        # TIMESTAMP_TZ instead of VARIANT
+        table_query = f"SELECT SEQ8() AS S, TO_TIMESTAMP_TZ(IFF(TYPEOF(VALUE) = 'TIMESTAMP_TZ', VALUE, NULL)) as A from table(flatten(input => {input_arr}))"
+        with create_snowflake_table_from_select_query(
+            table_query, "timestamptz_test", db, schema
+        ) as table_name:
+            query = f"SELECT S FROM {table_name} where A IS NULL OR A::TIMESTAMPTZ < TO_TIMESTAMP_TZ('2020-01-01 12:00:00 +06:00')"
+            expected_output = pd.DataFrame({"S": np.array([3, 5, 6])})
+            check_func(impl, (bc, query), py_output=expected_output, check_dtype=False)
+
+
 def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
     """Test writing timestamptz from Snowflake"""
     with enable_timestamptz():
