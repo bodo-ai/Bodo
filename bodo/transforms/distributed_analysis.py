@@ -3292,8 +3292,11 @@ class DistributedAnalysis:
             # arrays need to meet one another
             self._set_var_dist(lhs, array_dists, Distribution.OneD)
             arrays = [lhs]
-            # TODO: handle arguments
-            self._meet_several_array_dists(arrays, array_dists)
+            for arg in rhs.args:
+                if is_array_typ(self.typemap[arg.name]):
+                    arrays.append(arg.name)
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
             return
 
         # handle calling other Bodo functions that have distributed flags
