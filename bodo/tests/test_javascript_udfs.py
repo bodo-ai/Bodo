@@ -1,3 +1,5 @@
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,7 @@ from bodo.libs.bodosql_array_kernels import (
     delete_javascript_udf,
     execute_javascript_udf,
 )
+from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.tests.conftest import (
     pytest_mark_javascript,
@@ -322,4 +325,110 @@ def test_javascript_unicode_in_body(memory_leak_check):
         return out_arr
 
     expected_output = "hëllo"
+    check_func(f, tuple(), py_output=expected_output)
+
+
+@pytest.mark.parametrize(
+    "body_text, ret_type, expected_output",
+    [
+        pytest.param(
+            "return 255",
+            IntegerArrayType(bodo.uint8),
+            255,
+            id="uint8",
+        ),
+        pytest.param(
+            "return 2 ** 16 - 1",
+            IntegerArrayType(bodo.uint16),
+            2**16 - 1,
+            id="uint16",
+        ),
+        pytest.param(
+            "return 2 ** 32 -1",
+            IntegerArrayType(bodo.uint32),
+            2**32 - 1,
+            id="uint32",
+        ),
+        pytest.param(
+            "return 2 ** 64 - 1",
+            IntegerArrayType(bodo.uint64),
+            2**64 - 1,
+            id="uint64",
+        ),
+        pytest.param(
+            "return 2 ** 8 / 2 - 1",
+            IntegerArrayType(bodo.int8),
+            127,
+            id="int8",
+        ),
+        pytest.param(
+            "return 2 ** 16 / 2 - 1",
+            IntegerArrayType(bodo.int16),
+            2**16 / 2 - 1,
+            id="int16",
+        ),
+        pytest.param(
+            "return 2 ** 32 / 2 - 1",
+            IntegerArrayType(bodo.int32),
+            2**32 / 2 - 1,
+            id="int32",
+        ),
+        pytest.param(
+            "return 2 ** 64 / 2 - 1",
+            IntegerArrayType(bodo.int64),
+            2**64 / 2 - 1,
+            id="int64",
+        ),
+        pytest.param(
+            "return 2 + 1.1",
+            IntegerArrayType(bodo.float32),
+            3.1,
+            id="float32",
+        ),
+        pytest.param(
+            # Bigger than a float32 can represent
+            "return 4 * 10**40",
+            IntegerArrayType(bodo.float64),
+            float(4 * 10**40),
+            id="float64",
+        ),
+        pytest.param(
+            "return 2 + 1",
+            BooleanArrayType(),
+            True,
+            id="bool",
+        ),
+        pytest.param(
+            "return 'hello'",
+            bodo.string_array_type,
+            "hello",
+            id="string",
+        ),
+        pytest.param(
+            "return new Date('2021-01-01')",
+            bodo.datetime_date_array_type,
+            datetime.date(2021, 1, 1),
+            id="date",
+        ),
+        pytest.param(
+            "return new Uint8Array([1, 2, 3])",
+            bodo.binary_array_type,
+            b"\x01\x02\x03",
+            id="binary",
+        ),
+    ],
+)
+def test_javascript_return(body_text, ret_type, expected_output, memory_leak_check):
+    """
+    Test a UDF that returns a value for all supported types.
+    """
+    body = MetaType(body_text)
+    args = MetaType(tuple())
+
+    def f():
+        f = create_javascript_udf(body, args, ret_type)
+        out_arr = execute_javascript_udf(f, tuple())
+        delete_javascript_udf(f)
+        return out_arr
+
     check_func(f, tuple(), py_output=expected_output)
