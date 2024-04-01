@@ -3,6 +3,8 @@
 #include <fmt/format.h>
 
 #include <bitset>
+#include <cassert>
+#include <cstddef>
 #include <memory>
 
 #include "_array_utils.h"
@@ -569,8 +571,35 @@ void JoinPartition::AppendInactiveProbeBatch(
 
 /**
  * @brief Helper function for join_probe_consume_batch and
+ * FinalizeProbeForInactivePartition to probe the
+ * build table and return group ids.
+ *
+ * NOTE: Assumes that the row is in the partition.
+ * NOTE: Inlined since it's called inside loops.
+ *
+ * @param partition Partition that this row belongs to.
+ *  NOTE: This function assumes that the partition is already pinned.
+ * @param i_row Row index in partition->probe_table to probe.
+ * @param[in, out] group_ids Vector of group ids to fill after each probe.
+ * Similar to build table convention, 0 means not in build table (ids start from
+ * 1).
+ */
+inline void handle_probe_input_for_partition(JoinPartition* partition,
+                                             size_t i_row,
+                                             bodo::vector<int64_t>& group_ids) {
+    auto iter = partition->build_hash_table_guard.value()->find(-i_row - 1);
+    if (iter == partition->build_hash_table_guard.value()->end()) {
+        group_ids.emplace_back(0);
+    } else {
+        group_ids.emplace_back(iter->second);
+    }
+}
+
+/**
+ * @brief Helper function for join_probe_consume_batch and
  * FinalizeProbeForInactivePartition to update 'build_idxs'
- * and 'probe_idxs'. It also updates the 'build_table_matched'
+ * and 'probe_idxs' and produce output when they are "full" (to avoid OOM).
+ * It also updates the 'build_table_matched'
  * bitmap of the partition in the `build_table_outer` case.
  *
  * NOTE: Assumes that the row is in the partition.
@@ -583,14 +612,15 @@ void JoinPartition::AppendInactiveProbeBatch(
  * all-equality conditions case.
  * @param[in, out] partition Partition that this row belongs to.
  *  NOTE: This function assumes that the partition is already pinned.
- * @param i_row Row index in partition->probe_table to produce the output
- * for,
+ * @param i_row Row index in partition->probe_table to produce the output.
+ * @param batch_start_row Offset to skip when looking up in group_ids.
+ * @param group_ids Vector of group ids for each row.
  * @param[in, out] build_idxs Build table indices for the output. This will
  * be updated in place.
  * @param[in, out] probe_idxs Probe table indices for the output. This will
  * be updated in place.
  *
- * The rest of the parameters are output of get_gen_cond_data_ptrs on the
+ * These parameters are output of get_gen_cond_data_ptrs on the
  * build and probe table and are only relevant for the condition function
  * case:
  * @param build_table_info_ptrs
@@ -599,19 +629,40 @@ void JoinPartition::AppendInactiveProbeBatch(
  * @param probe_col_ptrs
  * @param build_null_bitmaps
  * @param probe_null_bitmaps
+ *
+ * These parameters are for output generation with AppendJoinOutput (see
+ * join_probe_consume_batch for more details):
+ * @param output_buffer
+ * @param build_table
+ * @param probe_table
+ * @param build_kept_cols
+ * @param probe_kept_cols
  */
 template <bool build_table_outer, bool probe_table_outer,
           bool non_equi_condition>
-inline void handle_probe_input_for_partition(
+inline void produce_probe_output(
     cond_expr_fn_t cond_func, JoinPartition* partition, size_t i_row,
+    size_t batch_start_row, bodo::vector<int64_t>& group_ids,
     bodo::vector<int64_t>& build_idxs, bodo::vector<int64_t>& probe_idxs,
     std::vector<array_info*>& build_table_info_ptrs,
     std::vector<array_info*>& probe_table_info_ptrs,
     std::vector<void*>& build_col_ptrs, std::vector<void*>& probe_col_ptrs,
     std::vector<void*>& build_null_bitmaps,
-    std::vector<void*>& probe_null_bitmaps) {
-    auto iter = partition->build_hash_table_guard.value()->find(-i_row - 1);
-    if (iter == partition->build_hash_table_guard.value()->end()) {
+    std::vector<void*>& probe_null_bitmaps,
+    const std::shared_ptr<ChunkedTableBuilder>& output_buffer,
+    const std::shared_ptr<table_info>& build_table,
+    const std::shared_ptr<table_info>& probe_table,
+    const std::vector<uint64_t>& build_kept_cols,
+    const std::vector<uint64_t>& probe_kept_cols) {
+    const int64_t group_id = group_ids[i_row - batch_start_row];
+
+    // -1 means ignore row (e.g. shouldn't be processed on this rank)
+    if (group_id == -1) {
+        return;
+    }
+
+    // 0 means not found in build table
+    if (group_id == 0) {
         if (probe_table_outer) {
             // Add unmatched rows from probe table to output table
             build_idxs.push_back(-1);
@@ -619,13 +670,12 @@ inline void handle_probe_input_for_partition(
         }
         return;
     }
+
     // TODO Pass pinned groups_offsets vector instead of pinning for each
     // row.
     auto& partition_groups_offsets_ = partition->groups_offsets_guard.value();
-    const size_t group_start_idx =
-        (*partition_groups_offsets_)[iter->second - 1];
-    const size_t group_end_idx =
-        (*partition_groups_offsets_)[iter->second - 1 + 1];
+    const size_t group_start_idx = (*partition_groups_offsets_)[group_id - 1];
+    const size_t group_end_idx = (*partition_groups_offsets_)[group_id - 1 + 1];
     // Initialize to true for pure hash join so the final branch
     // is non-equality condition only.
     bool has_match = !non_equi_condition;
@@ -634,6 +684,7 @@ inline void handle_probe_input_for_partition(
     // TODO Pass pinned build_table_matched instead of pinning every time.
     auto& partition_build_table_matched_ =
         partition->build_table_matched_guard.value();
+
     for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
         const size_t j_build = (*partition_groups_)[idx];
         if (non_equi_condition) {
@@ -653,10 +704,22 @@ inline void handle_probe_input_for_partition(
         }
         build_idxs.push_back(j_build);
         probe_idxs.push_back(i_row);
+
+        // Produce output in a chunked builder periodically to avoid OOM
+        if (build_idxs.size() >= static_cast<size_t>(STREAMING_BATCH_SIZE)) {
+            output_buffer->AppendJoinOutput(build_table, probe_table,
+                                            build_idxs, probe_idxs,
+                                            build_kept_cols, probe_kept_cols);
+            build_idxs.clear();
+            probe_idxs.clear();
+        }
     }
     // non-equality condition only branch
     if (!has_match && probe_table_outer) {
         // Add unmatched rows from probe table to output table
+        // NOTE: build_idxs.size() check like above isn't required here since
+        // in the worst case, this would add as many rows as the probe batch,
+        // which is always a small number.
         build_idxs.push_back(-1);
         probe_idxs.push_back(i_row);
     }
@@ -714,6 +777,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     // This should always be 0 here but just in case
     this->probe_table_hashes_offset = 0;
 
+    bodo::vector<int64_t> group_ids;
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
     // Raw array pointers from arrays for passing to non-equijoin condition
@@ -751,12 +815,19 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         }
 
         for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
-            handle_probe_input_for_partition<
-                build_table_outer, probe_table_outer, non_equi_condition>(
-                cond_func, this, i_row, build_idxs, probe_idxs,
-                build_table_info_ptrs, probe_table_info_ptrs, build_col_ptrs,
-                probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps);
+            handle_probe_input_for_partition(this, i_row, group_ids);
         }
+        assert(group_ids.size() == this->probe_table->nrows());
+        for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
+            produce_probe_output<build_table_outer, probe_table_outer,
+                                 non_equi_condition>(
+                cond_func, this, i_row, 0, group_ids, build_idxs, probe_idxs,
+                build_table_info_ptrs, probe_table_info_ptrs, build_col_ptrs,
+                probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps,
+                output_buffer, this->build_table_buffer->data_table,
+                this->probe_table, build_kept_cols, probe_kept_cols);
+        }
+        group_ids.clear();
 
         output_buffer->AppendJoinOutput(
             this->build_table_buffer->data_table, this->probe_table, build_idxs,
@@ -2337,6 +2408,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
                         shuffle_possible, true, dict_hashes);
 
+    bodo::vector<int64_t> group_ids;
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -2383,26 +2455,36 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             (!join_state->global_bloom_filter->Find(
                 batch_hashes_partition[i_row]))) {
             join_state->num_runtime_filter_misses++;
-            // Add unmatched rows from probe table to output table
-            build_idxs.push_back(-1);
-            probe_idxs.push_back(i_row);
+            group_ids.emplace_back(0);
         } else if (process_on_rank) {
             join_state->num_processed_probe_table_rows++;
             if (active_partition->is_in_partition(
                     batch_hashes_partition[i_row])) {
-                handle_probe_input_for_partition<
-                    build_table_outer, probe_table_outer, non_equi_condition>(
-                    join_state->cond_func, active_partition.get(), i_row,
-                    build_idxs, probe_idxs, build_table_info_ptrs,
-                    probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
-                    build_null_bitmaps, probe_null_bitmaps);
+                handle_probe_input_for_partition(active_partition.get(), i_row,
+                                                 group_ids);
             } else {
                 append_to_probe_inactive_partition[i_row] = true;
+                group_ids.emplace_back(-1);
             }
         } else if (shuffle_possible) {
             append_to_probe_shuffle_buffer[i_row] = true;
+            group_ids.emplace_back(-1);
+        } else {
+            group_ids.emplace_back(-1);
         }
     }
+    assert(group_ids.size() == in_table->nrows());
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        produce_probe_output<build_table_outer, probe_table_outer,
+                             non_equi_condition>(
+            join_state->cond_func, active_partition.get(), i_row, 0, group_ids,
+            build_idxs, probe_idxs, build_table_info_ptrs,
+            probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
+            build_null_bitmaps, probe_null_bitmaps, join_state->output_buffer,
+            active_partition->build_table_buffer->data_table, in_table,
+            build_kept_cols, probe_kept_cols);
+    }
+    group_ids.clear();
 
     if (join_state->partitions.size() > 1) {
         // Skip this in the single-partition case:
@@ -2488,25 +2570,37 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                                         /*global_dict_needed*/ false,
                                         new_data_dict_hashes, batch_start_row,
                                         nrows);
+
                     // Initialize bit-vector to false.
                     append_to_probe_inactive_partition.resize(nrows, false);
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
                         if (active_partition->is_in_partition(
                                 batch_hashes_partition[i_row])) {
-                            handle_probe_input_for_partition<
-                                build_table_outer, probe_table_outer,
-                                non_equi_condition>(
-                                join_state->cond_func, active_partition.get(),
+                            handle_probe_input_for_partition(
+                                active_partition.get(),
                                 // Add offset to get the actual row index in the
                                 // full table:
-                                i_row + batch_start_row, build_idxs, probe_idxs,
-                                build_table_info_ptrs, probe_table_info_ptrs,
-                                build_col_ptrs, probe_col_ptrs,
-                                build_null_bitmaps, probe_null_bitmaps);
+                                i_row + batch_start_row, group_ids);
                         } else {
                             append_to_probe_inactive_partition[i_row] = true;
+                            group_ids.emplace_back(-1);
                         }
                     }
+                    assert(group_ids.size() == nrows);
+                    for (size_t i_row = 0; i_row < nrows; i_row++) {
+                        produce_probe_output<build_table_outer,
+                                             probe_table_outer,
+                                             non_equi_condition>(
+                            join_state->cond_func, active_partition.get(),
+                            i_row + batch_start_row, batch_start_row, group_ids,
+                            build_idxs, probe_idxs, build_table_info_ptrs,
+                            probe_table_info_ptrs, build_col_ptrs,
+                            probe_col_ptrs, build_null_bitmaps,
+                            probe_null_bitmaps, join_state->output_buffer,
+                            active_partition->build_table_buffer->data_table,
+                            new_data, build_kept_cols, probe_kept_cols);
+                    }
+                    group_ids.clear();
                     join_state->AppendProbeBatchToInactivePartition(
                         new_data, batch_hashes_join, batch_hashes_partition,
                         append_to_probe_inactive_partition,
@@ -2517,17 +2611,27 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 } else {
                     // Fast path for the single partition case:
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
-                        handle_probe_input_for_partition<build_table_outer,
-                                                         probe_table_outer,
-                                                         non_equi_condition>(
-                            join_state->cond_func, active_partition.get(),
+                        handle_probe_input_for_partition(
+                            active_partition.get(),
                             // Add offset to get the actual row index in the
                             // full table:
-                            i_row + batch_start_row, build_idxs, probe_idxs,
-                            build_table_info_ptrs, probe_table_info_ptrs,
-                            build_col_ptrs, probe_col_ptrs, build_null_bitmaps,
-                            probe_null_bitmaps);
+                            i_row + batch_start_row, group_ids);
                     }
+                    assert(group_ids.size() == nrows);
+                    for (size_t i_row = 0; i_row < nrows; i_row++) {
+                        produce_probe_output<build_table_outer,
+                                             probe_table_outer,
+                                             non_equi_condition>(
+                            join_state->cond_func, active_partition.get(),
+                            i_row + batch_start_row, batch_start_row, group_ids,
+                            build_idxs, probe_idxs, build_table_info_ptrs,
+                            probe_table_info_ptrs, build_col_ptrs,
+                            probe_col_ptrs, build_null_bitmaps,
+                            probe_null_bitmaps, join_state->output_buffer,
+                            active_partition->build_table_buffer->data_table,
+                            new_data, build_kept_cols, probe_kept_cols);
+                    }
+                    group_ids.clear();
                 }
 
                 // Reset active partition state
