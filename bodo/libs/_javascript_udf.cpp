@@ -15,6 +15,10 @@ static std::unique_ptr<v8::Platform> platform;
 static v8::Isolate::CreateParams create_params;
 static std::shared_ptr<v8::Isolate> isolate;
 static bool v8_initialized = false;
+static const char *enable_mem_debug_env_var = std::getenv("BODO_DEBUG_V8_MEM");
+static const bool enable_mem_debug =
+    enable_mem_debug_env_var != nullptr &&
+    std::string(enable_mem_debug_env_var) == "1";
 
 /** @brief Create a new isolate wrapped in a shared pointer and set configure it
  * for throughput over latency
@@ -41,8 +45,30 @@ void init_v8() {
         create_params.array_buffer_allocator_shared =
             std::shared_ptr<v8::ArrayBuffer::Allocator>(
                 v8::ArrayBuffer::Allocator::NewDefaultAllocator());
-        create_params.constraints.ConfigureDefaults(
-            get_physically_installed_memory(), 0);
+        uint64_t max_mem = get_physically_installed_memory();
+        create_params.constraints.ConfigureDefaults(max_mem, 0);
+        if (enable_mem_debug) {
+            std::cerr << "Configuring V8 with "
+                      << BytesToHumanReadableString(max_mem) << " of memory"
+                      << std::endl;
+            std::cerr << "Set V8 constraints to " << std::endl;
+            std::cerr << "  max_old_space_size: "
+                      << BytesToHumanReadableString(
+                             create_params.constraints
+                                 .max_old_generation_size_in_bytes())
+                      << std::endl;
+            std::cerr << "  max_young_space_size: "
+                      << BytesToHumanReadableString(
+                             create_params.constraints
+                                 .max_young_generation_size_in_bytes())
+                      << std::endl;
+            if (create_params.constraints.stack_limit() != nullptr) {
+                std::cerr << "  stack_limit: "
+                          << create_params.constraints.stack_limit()
+                          << std::endl;
+            }
+            std::cerr << std::endl;
+        }
         v8_initialized = true;
         isolate = create_new_isolate();
     }
@@ -113,6 +139,14 @@ JavaScriptFunction::JavaScriptFunction(
     assert(v8_func_value->IsFunction());
     this->v8_func.Reset(isolate.get(),
                         v8::Local<v8::Function>::Cast(v8_func_value));
+    if (enable_mem_debug) {
+        v8::HeapStatistics heap_stats;
+        isolate->GetHeapStatistics(&heap_stats);
+        std::cerr << "UDF created. V8 heap physical size: "
+                  << BytesToHumanReadableString(
+                         heap_stats.total_physical_size())
+                  << std::endl;
+    }
 }
 
 JavaScriptFunction *create_javascript_udf_py_entry(
@@ -155,6 +189,14 @@ JavaScriptFunction *create_javascript_udf_py_entry(
 void delete_javascript_udf_py_entry(JavaScriptFunction *func) {
     try {
         delete func;
+        if (enable_mem_debug) {
+            v8::HeapStatistics heap_stats;
+            isolate->GetHeapStatistics(&heap_stats);
+            std::cerr << "Deleted JavaScript UDF. V8 heap physical size: "
+                      << BytesToHumanReadableString(
+                             heap_stats.total_physical_size())
+                      << std::endl;
+        }
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -187,6 +229,15 @@ std::shared_ptr<array_info> execute_javascript_udf(
         // this needs to become something like
         // cast_v8_value_to_bodo_array<array_type, ctype>(result);
         reinterpret_cast<int64_t *>(ret->data1())[i] = retval;
+    }
+
+    if (enable_mem_debug) {
+        v8::HeapStatistics heap_stats;
+        isolate->GetHeapStatistics(&heap_stats);
+        std::cerr << "Executed JavaScript UDF. V8 heap physical size: "
+                  << BytesToHumanReadableString(
+                         heap_stats.total_physical_size())
+                  << std::endl;
     }
 
     return ret;
