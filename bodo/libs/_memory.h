@@ -387,9 +387,6 @@ class SizeClass final {
     /// needs to call on them for eviction
     const std::span<std::unique_ptr<StorageManager>> storage_managers_;
 
-    /// @brief Start of address range for this size class.
-    uint8_t* address_;
-
     /// @brief Bitmask for whether the frame is currently mapped to
     /// real memory.
     std::vector<uint8_t> mapped_bitmask_;
@@ -417,6 +414,9 @@ class SizeClass final {
 
     /// @brief Trace time spent in various functions
     const bool tracing_mode_;
+
+    /// @brief Start of address range for this size class.
+    uint8_t* const address_;
 
     /// @brief Helper function to mark the frame at
     /// index idx as "mapped", i.e. taken.
