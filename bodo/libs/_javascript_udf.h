@@ -148,18 +148,25 @@ void append_v8_handle(v8::Local<v8::Context> ctx, v8::Local<v8::Value> obj,
                       const std::shared_ptr<ArrayBuildBuffer> &arr,
                       v8::TryCatch &trycatch) {
     size_t idx = arr->size;
-    auto maybe_js_val = obj->ToBigInt(ctx);
-    CHECK_V8_EXCEPTION(ctx->GetIsolate(), ctx, trycatch,
-                       "append_v8_handle: ToBigInt failed")
-    auto js_val = maybe_js_val.ToLocalChecked();
     using val_t = dtype_to_type<arr_c_type>::type;
     val_t val;
-    // Cast to the correct type based on the array type
-    // and truncate if necessary
-    if constexpr (arr_c_type == Bodo_CTypes::INT64) {
-        val = js_val->Int64Value();
-    } else if constexpr (arr_c_type == Bodo_CTypes::UINT64) {
-        val = js_val->Uint64Value();
+    // For some reason you can't convert a Number to a BigInt directly
+    if (obj->IsNumber()) {
+        // Since we know this is a number we don't need to check
+        // the trycatch
+        val = static_cast<val_t>(obj->NumberValue(ctx).ToChecked());
+    } else {
+        auto maybe_js_val = obj->ToBigInt(ctx);
+        CHECK_V8_EXCEPTION(ctx->GetIsolate(), ctx, trycatch,
+                           "append_v8_handle: ToBigInt failed")
+        auto js_val = maybe_js_val.ToLocalChecked();
+        // Cast to the correct type based on the array type
+        // and truncate if necessary
+        if constexpr (arr_c_type == Bodo_CTypes::INT64) {
+            val = js_val->Int64Value();
+        } else if constexpr (arr_c_type == Bodo_CTypes::UINT64) {
+            val = js_val->Uint64Value();
+        }
     }
     arr->data_array->data1<arr_arr_type, val_t>()[idx] = val;
     CHECK_ARROW_MEM(
