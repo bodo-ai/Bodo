@@ -753,7 +753,7 @@ class BodoRexSimplify(
 
     // Takes in a TimeZone and a specific day and returns another time zone object referencing the fixed offset of
     // that time zone in that time of year.
-    private fun getOffsetOfTimestamp(year: Int, month: Int, day: Int, hour: Int, minute: Int, zone: TimeZone): TimeZone {
+    fun getOffsetOfTimestamp(year: Int, month: Int, day: Int, hour: Int, minute: Int, zone: TimeZone): TimeZone {
         // Get the raw offset in milliseconds from UTC of the current timezone in the specified time of year
         val hourMinuteAsMs = hour * 3_600_000 + minute * 60_000
         val msOffset = zone.getOffset(1, year, month - 1, day, 1, hourMinuteAsMs)
