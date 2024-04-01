@@ -21,6 +21,7 @@ important optimizations to `stderr` using Python's `logging` package.
 
 Below is an example using the `verbose mode` to verify that Bodo is only loading the 1 column from a parquet file that is actually needed as opposed to any additional columns.
 
+
 ```py
 bodo.set_verbose_level(1)
 
@@ -33,17 +34,25 @@ load_data("my_file.pq")
 ```
 
 ```console
-2022-03-24 11:50:21,656 - Bodo Default Logger - INFO -
+2024-03-24 10:44:21,023 - Bodo Default Logger - INFO - 
+================================================================================
+--------------------------------Filter Pushdown---------------------------------
+Arrow filters pushed down:
+None
+None
+
+
+================================================================================
+2024-03-24 10:44:21,023 - Bodo Default Logger - INFO - 
 ================================================================================
 ---------------------------------Column Pruning---------------------------------
 Finish column pruning on read_parquet node:
 
-File "verbose_ex.py", line 8:
+File "objmode.py", line 10:
 def load_data(filename):
     df = pd.read_parquet(filename)
     ^
 Columns loaded ['id']
-
 
 ================================================================================
 ```
@@ -68,6 +77,9 @@ def load_data(filename):
 load_data("my_file.pq")
 ```
 
+The output will be written to `example.log` in the current working directory.
+
+```console
 
 ## Leveraging Optimizations for Debugging
 
@@ -86,12 +98,21 @@ load_data("my_file.pq")
 ```
 
 ```console
-2022-03-25 11:22:24,619 - Bodo Default Logger - INFO -
+2024-03-24 10:48:19,046 - Bodo Default Logger - INFO - 
+================================================================================
+--------------------------------Filter Pushdown---------------------------------
+Arrow filters pushed down:
+None
+None
+
+
+================================================================================
+2024-03-24 10:48:19,047 - Bodo Default Logger - INFO - 
 ================================================================================
 ---------------------------------Column Pruning---------------------------------
 Finish column pruning on read_parquet node:
 
-File "verbose_ex.py", line 10:
+File "objmode.py", line 11:
 def load_data(filename):
     df = pd.read_parquet(filename)
     ^

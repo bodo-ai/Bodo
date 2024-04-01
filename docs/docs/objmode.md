@@ -15,6 +15,7 @@ regular Python, but variable `y` is returned to JIT code (since it is
 used after the `with` block). Therefore, the `y="float64"` type
 annotation is required.
 
+
 ``` py
 import pandas as pd
 import numpy as np
@@ -119,7 +120,7 @@ require communication. In general:
 
 The example below demonstrates a valid use of Object Mode, since it uses
 `df.apply(axis=1)` which runs on different rows
-independently.
+independently. 
 
 ``` py
 df_type = bodo.typeof(pd.DataFrame({"A": [1], "B": [1], "C": [1]}))
@@ -167,47 +168,83 @@ def invalid_objmode():
 invalid_objmode()
 ```
 
-## Groupby/Apply Object Mode Pattern
+[//]: # (TODO: Uncomment when installation of prophet is resolved or a different example is produced)
 
-ML algorithms and other complex data science computations are often
-called on groups of dataframe rows. Bodo supports parallelizing these
-computations (which may not have JIT support yet) using Object Mode
-inside `groupby/apply`. For example, the code below runs
-[Prophet](https://facebook.github.io/prophet/) on groups of rows. This
-is a valid use of Object Mode since Bodo handles shuffle communication
-for groupby/apply and brings all rows of each group in the same local
-chunk. Therefore, the apply function running in Object Mode has all the
-data it needs.
+[//]: # (## Groupby/Apply Object Mode Pattern)
 
-``` py
-import bodo
-import pandas as pd
-import numpy as np
-from fbprophet import Prophet
+[//]: # ()
+[//]: # (ML algorithms and other complex data science computations are often)
 
-prophet_output_type = bodo.typeof(pd.DataFrame({"ds": pd.date_range("2017-01-03", periods=1), "yhat": [0.0]}))
+[//]: # (called on groups of dataframe rows. Bodo supports parallelizing these)
 
-def run_prophet(df):
-    m = Prophet()
-    m.fit(df)
-    return m.predict(df)[["ds", "yhat"]]
+[//]: # (computations &#40;which may not have JIT support yet&#41; using Object Mode)
 
+[//]: # (inside `groupby/apply`. For example, the code below runs)
 
-@bodo.jit
-def apply_func(df):
-    with bodo.objmode(df2=prophet_output_type):
-        df2 = run_prophet(df)
-    return df2
+[//]: # ([Prophet]&#40;https://facebook.github.io/prophet/&#41; on groups of rows. This)
 
+[//]: # (is a valid use of Object Mode since Bodo handles shuffle communication)
 
-@bodo.jit
-def f(df):
-    df2 = df.groupby("A").apply(apply_func)
-    return df2
+[//]: # (for groupby/apply and brings all rows of each group in the same local)
 
+[//]: # (chunk. Therefore, the apply function running in Object Mode has all the)
 
-n = 10
-df = pd.DataFrame({"A": np.arange(n) % 3, "ds": pd.date_range("2017-01-03", periods=n), "y": np.arange(n)})
-print(f(df))
-```
+[//]: # (data it needs.)
 
+[//]: # ()
+[//]: # (``` py)
+
+[//]: # (import bodo)
+
+[//]: # (import pandas as pd)
+
+[//]: # (import numpy as np)
+
+[//]: # ()
+[//]: # (from orbit.models.dlt import DLTFull)
+
+[//]: # ()
+[//]: # (orbit_output_type = bodo.typeof&#40;pd.DataFrame&#40;{"ds": pd.date_range&#40;"2017-01-03", periods=1&#41;, "yhat": [0.0]}&#41;&#41;)
+
+[//]: # ()
+[//]: # (def run_orbit&#40;df&#41;:)
+
+[//]: # (    m = DLTFull&#40;response_col="yhat", date_col="ds"&#41;)
+
+[//]: # (    m.fit&#40;df&#41;)
+
+[//]: # (    return m.predict&#40;df&#41;)
+
+[//]: # ()
+[//]: # ()
+[//]: # (@bodo.jit)
+
+[//]: # (def apply_func&#40;df&#41;:)
+
+[//]: # (    with bodo.objmode&#40;df2=orbit_output_type&#41;:)
+
+[//]: # (        df2 = run_orbit&#40;df&#41;)
+
+[//]: # (    return df2)
+
+[//]: # ()
+[//]: # ()
+[//]: # (@bodo.jit)
+
+[//]: # (def f&#40;df&#41;:)
+
+[//]: # (    df2 = df.groupby&#40;"A"&#41;.apply&#40;apply_func&#41;)
+
+[//]: # (    return df2)
+
+[//]: # ()
+[//]: # ()
+[//]: # (n = 10)
+
+[//]: # (df = pd.DataFrame&#40;{"A": np.arange&#40;n&#41; % 3, "ds": pd.date_range&#40;"2017-01-03", periods=n&#41;, "y": np.arange&#40;n&#41;}&#41;)
+
+[//]: # (print&#40;f&#40;df&#41;&#41;)
+
+[//]: # (```)
+
+[//]: # ()
