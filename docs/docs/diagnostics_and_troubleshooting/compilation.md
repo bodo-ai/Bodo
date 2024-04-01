@@ -16,6 +16,10 @@ file name in regular Python, and uses Bodo JIT *only* for data load and
 processing:
 
 ```py
+import bodo
+import pandas as pd
+import os
+
 def get_filename():
     if os.path.exists("input.parquet"):
         return "input.parquet"
@@ -66,11 +70,12 @@ For example:
 ...     return df.swapaxes(0, 1)
 ...
 >>> f(df)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1198, in _compile_for_args
-        raise error
-    bodo.utils.typing.BodoError: DataFrame.swapaxes() not supported yet
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+    raise error
+bodo.utils.typing.BodoError: DataFrame.swapaxes() not supported yet
+
 ```
 
 ### Unsupported Attributes
@@ -90,11 +95,12 @@ For example:
 ...     return df.flags
 ...
 >>> f(df)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1198, in _compile_for_args
-        raise error
-    bodo.utils.typing.BodoError: DataFrame.flags not supported yet
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+    raise error
+bodo.utils.typing.BodoError: DataFrame.flags not supported yet
+
 ```
 
 ### Unsupported Arguments
@@ -105,6 +111,7 @@ unsupported argument will result in a `BodoError`:
 ```
 BodoError: <method>: <keyword> argument not supported yet
 ```
+
 For example:
 
 ```py
@@ -113,11 +120,13 @@ For example:
 ...     return df.sort_index(key=lambda x: x.str.lower())
 ...
 >>> f(df)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1198, in _compile_for_args
-        raise error
-    bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+    raise error
+bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
+Please check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/dataframe/).
+
 ```
 
 ## Type Stability Errors
@@ -137,13 +146,11 @@ example, variable `a` below could either be an integer or a string:
 ...     return a
 ...
 >>> f(True)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1163, in _compile_for_args
-        error_rewrite(e, "typing")
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1043, in error_rewrite
-        raise e.with_traceback(None)
-    numba.core.errors.TypingError: Cannot unify Literal[str](A) and Literal[int](3) for 'a.2', defined at <stdin> (7)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+    raise error
+bodo.utils.typing.BodoError: Unable to unify the following function return types: [Literal[int](3), Literal[str](A)]
 ```
 
 The error `TypingError: Cannot unify <type1> and <type2>` means that the
@@ -166,13 +173,15 @@ runtime value of `flag`, which results in a type stability error:
 ...     print(df)
 ...
 >>> f(True)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1163, in _compile_for_args
-        error_rewrite(e, "typing")
-    File "/Users/user/bodo/bodo/numba_compat.py", line 1043, in error_rewrite
-        raise e.with_traceback(None)
-    numba.core.errors.TypingError: Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), 1D_Block_Var, False) and dataframe((array(int64, 1d, C), array(float64, 1d, C)), RangeIndexType(none), ('A', 'B'), 1D_Block_Var, False) for 'df', defined at <stdin> (3)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 854, in _compile_for_args
+    error_rewrite(e, 'typing')
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 763, in error_rewrite
+    raise e.with_traceback(None)
+numba.core.errors.TypingError: Cannot unify dataframe((Array(int64, 1, 'C', False, aligned=True),), RangeIndexType(none), ('A',), 1D_Block_Var, False, False) and dataframe((Array(int64, 1, 'C', False, aligned=True), Array(float64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B'), 1D_Block_Var, False, False) for 'df', defined at <stdin> (3)
+
+
 ```
 
 Additionally, some function arguments need to be constant to ensure type
@@ -198,11 +207,12 @@ in this case):
 >>> S1 = pd.Series([1, 2, 3], name="A")
 >>> S2 = pd.Series([3, 4, 5], name="B")
 >>> f(S1, S2, False)
-    Traceback (most recent call last):
-    File "<stdin>", line 1, in <module>
-    File "/Users/ehsan/dev/bodo/bodo/numba_compat.py", line 1198, in _compile_for_args
-        raise error
-    bodo.utils.typing.BodoError: pd.concat(): 'axis' should be a constant integer
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+    raise error
+bodo.utils.typing.BodoError: pd.concat(): 'axis' should be a constant integer
+
 
 >>> @bodo.jit
 ... def f(S1, S2, axis):
@@ -242,11 +252,11 @@ issues try the following:
     ...     return df.sort_index(key=lambda x: x.str.lower())
     ...
     >>> f(df)
-        Traceback (most recent call last):
-        File "<stdin>", line 1, in <module>
-        File "/Users/ehsan/dev/bodo/bodo/numba_compat.py", line 1198, in _compile_for_args
-            raise error
-        bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 874, in _compile_for_args
+        raise error
+    bodo.utils.typing.BodoError: DataFrame.sort_index(): key parameter only supports default value None
 
     >>> @bodo.jit
     ... def f(df):
@@ -282,13 +292,15 @@ issues try the following:
     ...     df.to_parquet("out.parquet")
     ...
     >>> f(flag)
-        Traceback (most recent call last):
-        File "<stdin>", line 1, in <module>
-        File "/Users/ehsan/dev/bodo/bodo/numba_compat.py", line 1163, in _compile_for_args
-            error_rewrite(e, "typing")
-        File "/Users/ehsan/dev/bodo/bodo/numba_compat.py", line 1043, in error_rewrite
-            raise e.with_traceback(None)
-        numba.core.errors.TypingError: Cannot unify dataframe((array(int64, 1d, C),), StringIndexType(none), ('a',), 1D_Block_Var, True) and dataframe((array(int64, 1d, C), array(int64, 1d, C)), StringIndexType(none), ('a', 'C'), 1D_Block_Var, True) for 'df', defined at <stdin> (3)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 854, in _compile_for_args
+        error_rewrite(e, 'typing')
+      File "/opt/miniconda3/envs/Bodo/lib/python3.12/site-packages/bodo/numba_compat.py", line 763, in error_rewrite
+        raise e.with_traceback(None)
+    numba.core.errors.TypingError: Cannot unify dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B'), 1D_Block_Var, True, False) and dataframe((Array(datetime64[ns], 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True), Array(int64, 1, 'C', False, aligned=True)), RangeIndexType(none), ('A', 'B', 'C'), 1D_Block_Var, True, False) for 'df', defined at <stdin> (3)
+
+
 
     >>> @bodo.jit
     ... def f1():
