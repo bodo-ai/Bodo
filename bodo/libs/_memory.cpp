@@ -110,32 +110,34 @@ SizeClass::SizeClass(
       swips_(capacity, nullptr),
       spill_on_unpin_(spill_on_unpin),
       move_on_unpin_(move_on_unpin),
-      tracing_mode_(tracing_mode) {
-    // Allocate the address range using mmap.
-    // Create a private (i.e. only visible to this process) anonymous (i.e. not
-    // backed by a physical file) mapping.
-    // Ref: https://man7.org/linux/man-pages/man2/mmap.2.html
-    // We use MAP_NORESERVE which doesn't reserve swap space up front.
-    // It will reserve swap space lazily when it needs it.
-    // This is fine for our use-case since we're mapping a large
-    // address space up front. If we reserve swap space, it will
-    // block other applications (e.g. Spark in our unit tests) from
-    // being able to allocate memory.
-    // Ref:
-    // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
-    // https://man7.org/linux/man-pages/man5/proc.5.html (see the
-    // /proc/sys/vm/overcommit_memory section)
-    void* ptr = mmap(/*addr*/ nullptr, this->byteSize_,
-                     /*We need both read/write access*/ PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
-                     /*offset*/ 0);
-    if (ptr == MAP_FAILED || ptr == nullptr) {
+      tracing_mode_(tracing_mode),
+      address_(
+          // Mmap guarantees alignment to page size.
+          // 4096 is the smallest page size on x86_64 and ARM64.
+          std::assume_aligned<4096>(static_cast<uint8_t* const>(
+              // Allocate the address range using mmap.
+              // Create a private (i.e. only visible to this process) anonymous
+              // (i.e. not backed by a physical file) mapping. Ref:
+              // https://man7.org/linux/man-pages/man2/mmap.2.html We use
+              // MAP_NORESERVE which doesn't reserve swap space up front. It
+              // will reserve swap space lazily when it needs it. This is fine
+              // for our use-case since we're mapping a large address space up
+              // front. If we reserve swap space, it will block other
+              // applications (e.g. Spark in our unit tests) from being able to
+              // allocate memory. Ref:
+              // https://unix.stackexchange.com/questions/571043/what-is-lazy-swap-reservation
+              // https://man7.org/linux/man-pages/man5/proc.5.html (see the
+              // /proc/sys/vm/overcommit_memory section)
+              mmap(/*addr*/ nullptr, this->byteSize_,
+                   /*We need both read/write access*/ PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
+                   /*offset*/ 0)))) {
+    if (this->address_ == MAP_FAILED || this->address_ == nullptr) {
         throw std::runtime_error(
             fmt::format("SizeClass::SizeClass: Could not allocate memory for "
                         "SizeClass {}. Failed with errno: {}.",
                         block_size, std::strerror(errno)));
     }
-    this->address_ = static_cast<uint8_t*>(ptr);
 }
 
 SizeClass::~SizeClass() {
