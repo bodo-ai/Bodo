@@ -54,6 +54,7 @@ from bodo.ir.filter import (
 )
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
+from bodo.sql_plan_cache import BodoSqlPlanCache
 from bodo.utils.transform import (
     ReplaceFunc,
     compile_func_single_block,
@@ -5615,9 +5616,12 @@ class TypingTransforms:
             (
                 impl,
                 additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_and_glbls_for_query(
+                sql_plan,
+            ) = bodosql.context_ext._gen_sql_plan_pd_func_and_glbls_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
+            # Save the plan if a cache location is set up.
+            BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
         elif func_name == "_test_sql_unoptimized":
             (
                 impl,

@@ -2,6 +2,7 @@
 Assumes an immutable context where table names and DataFrames are not modified inplace,
 which allows typing and optimization.
 """
+
 import datetime
 import re
 import time
@@ -362,17 +363,17 @@ def overload_remove_catalog(bc):
     return impl
 
 
-def _gen_pd_func_text_and_lowered_globals(
+def _gen_sql_plan_pd_func_text_and_lowered_globals(
     bodo_sql_context_type: BodoSQLContextType,
     sql_str: str,
     param_keys: Tuple[str],
     param_values: Tuple[Any],
     hide_credentials: bool,
     is_optimized: bool = True,
-) -> Tuple[str, Dict[str, Any]]:
+) -> Tuple[str, Dict[str, Any], str]:
     """
     Helper function called by _gen_pd_func_for_query and _gen_pd_func_str_for_query
-    that generates the func_text by calling our calcite application on rank 0.
+    that generates the SQL plan and func_text by calling our calcite application on rank 0.
 
     Args:
         bodo_sql_context_type (BodoSQLContextType): The BodoSQL context type used to derive
@@ -391,8 +392,8 @@ def _gen_pd_func_text_and_lowered_globals(
         BodoError: If the given SQL cannot be properly processed it raises an error.
 
     Returns:
-        Tuple[str, Dict[str, Any]]: Returns the generated func_text as well as a dictionary
-            containing the lowered global variables.
+        Tuple[str, Dict[str, Any], str]: Returns the generated func_text, a dictionary
+            containing the lowered global variables and the SQL plan.
     """
     from mpi4py import MPI
 
@@ -416,6 +417,7 @@ def _gen_pd_func_text_and_lowered_globals(
             f"Unable to determine one or more DataFrames in BodoSQL query: {e}"
         )
     failed = False
+    sql_plan = None
     if bodo.get_rank() == 0:
         # This outermost try except should normally never be invoked, but it's here for safety
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
@@ -486,9 +488,18 @@ def _gen_pd_func_text_and_lowered_globals(
                     write_type,
                 )
                 if is_optimized:
-                    pd_code = str(generator.getPandasString(sql_str))
+                    pd_code_sql_plan_pair = generator.getPandasAndPlanString(
+                        sql_str, False, True
+                    )
+                    pd_code = str(pd_code_sql_plan_pair.getPdCode())
+                    sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
                 else:
-                    pd_code = str(generator.getPandasStringUnoptimized(sql_str))
+                    pd_code_sql_plan_pair = generator.getPandasAndPlanStringUnoptimized(
+                        sql_str, False
+                    )
+                    pd_code = str(pd_code_sql_plan_pair.getPdCode())
+                    sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
+
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
@@ -510,6 +521,7 @@ def _gen_pd_func_text_and_lowered_globals(
     func_text_or_error_msg = bcast_scalar(func_text_or_error_msg)
     if failed:
         raise bodo.utils.typing.BodoError(func_text_or_error_msg)
+    sql_plan = comm.bcast(sql_plan)
     globalsToLower = comm.bcast(globalsToLower)
 
     # Convert the globalsToLower from a list of tuples of strings to a dict of string varname -> value
@@ -532,10 +544,10 @@ def _gen_pd_func_text_and_lowered_globals(
             locs,
         )
         outGlobalsDict[varname] = locs["value"]
-    return func_text_or_error_msg, outGlobalsDict
+    return func_text_or_error_msg, outGlobalsDict, sql_plan
 
 
-def _gen_pd_func_and_glbls_for_query(
+def _gen_sql_plan_pd_func_and_glbls_for_query(
     bodo_sql_context_type, sql_str, param_keys, param_values
 ):
     """Generate a Pandas function for query given the data type of SQL context.
@@ -543,7 +555,7 @@ def _gen_pd_func_and_glbls_for_query(
     """
     import bodosql
 
-    func_text, glblsToLower = _gen_pd_func_text_and_lowered_globals(
+    func_text, glblsToLower, sql_plan = _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type,
         sql_str,
         param_keys,
@@ -571,7 +583,7 @@ def _gen_pd_func_and_glbls_for_query(
         loc_vars,
     )
     impl = loc_vars["impl"]
-    return impl, glblsToLower
+    return impl, glblsToLower, sql_plan
 
 
 @overload_method(BodoSQLContextType, "sql", inline="always", no_unliteral=True)
@@ -591,8 +603,12 @@ def _gen_pd_func_str_for_query(
     Used in Bodo's typing pass to handle BodoSQLContext.convert_to_pandas() calls
     """
 
-    # Don't need globals here, just need the func_text
-    returned_func_text, globalsToLower = _gen_pd_func_text_and_lowered_globals(
+    # Don't need globals or the plan here, just need the func_text
+    (
+        returned_func_text,
+        globalsToLower,
+        _,
+    ) = _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type,
         sql_str,
         param_keys,
@@ -643,7 +659,7 @@ def _gen_pd_func_and_globals_for_unoptimized_query(
     """
     import bodosql
 
-    func_text, globalsToLower = _gen_pd_func_text_and_lowered_globals(
+    func_text, globalsToLower, _ = _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type,
         sql_str,
         param_keys,

@@ -122,6 +122,13 @@ enable_runtime_join_filters = (
 
 # --------------------------- End Streaming Config ---------------------------
 
+# ---------------------------- SQL Caching Config ----------------------------
+
+# Directory where sql plans generated during compilation should be stored.
+# This is expected to be a distributed filesystem which all nodes have access to.
+sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
+
+# -------------------------- End SQL Caching Config --------------------------
 
 # For pip version of Bodo:
 # Bodo needs to use the same libraries as Arrow (the same library files that pyarrow

@@ -427,9 +427,39 @@ public class RelationalAlgebraGenerator {
     return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
+  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts)
+      throws Exception {
+    RelNode newRoot = PandasUtilKt.pandasProject(root);
+    if (includeCosts) {
+      StringWriter sw = new StringWriter();
+      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
+      newRoot.explain(costWriter);
+      return sw.toString();
+    } else {
+      return RelOptUtil.toString(newRoot);
+    }
+  }
+
+  public PandasCodeSqlPlanPair getPandasAndPlanString(
+      String sql, boolean debugDeltaTable, boolean includeCosts) throws Exception {
+    RelRoot optimizedPlan = getRelationalAlgebra(sql, true);
+    String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+    String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
+    return new PandasCodeSqlPlanPair(pandasString, planString);
+  }
+
   // Default debugDeltaTable to false
   public String getPandasString(String sql) throws Exception {
     return getPandasString(sql, false);
+  }
+
+  public PandasCodeSqlPlanPair getPandasAndPlanStringUnoptimized(
+      String sql, boolean debugDeltaTable) throws Exception {
+    RelRoot unOptimizedPlan = getRelationalAlgebra(sql, false);
+    String pandasString = getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
+    String planString = RelOptUtil.toString(PandasUtilKt.pandasProject(unOptimizedPlan));
+    return new PandasCodeSqlPlanPair(pandasString, planString);
   }
 
   public String getPandasStringUnoptimized(String sql, boolean debugDeltaTable) throws Exception {
@@ -469,16 +499,7 @@ public class RelationalAlgebraGenerator {
 
   public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
     RelRoot root = getRelationalAlgebra(sql, true);
-    RelNode newRoot = PandasUtilKt.pandasProject(root);
-    if (includeCosts) {
-      StringWriter sw = new StringWriter();
-      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
-      newRoot.explain(costWriter);
-      return sw.toString();
-    } else {
-      return RelOptUtil.toString(newRoot);
-    }
+    return getOptimizedPlanStringFromRoot(root, includeCosts);
   }
 
   public String getUnoptimizedPlanString(String sql) throws Exception {
