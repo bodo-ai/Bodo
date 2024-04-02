@@ -122,12 +122,13 @@ def convert_scalar(val):
     elif isinstance(val, np.datetime64):
         return convert_dt64(val)
     elif isinstance(val, list):
+        converted_val = [convert_scalar(v) for v in val]
         array_const_class = get_array_const_class()
         # NOTE: Iceberg takes regular Java lists in this case, not Literal lists.
         # see predicate(Expression.Operation op, java.lang.String name,
         #               java.lang.Iterable<T> values)
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
-        return array_const_class(convert_list_to_java(val))
+        return array_const_class(convert_list_to_java(converted_val))
     else:
         # If we don't support a scalar return None and
         # we will generate a NOOP
