@@ -330,6 +330,7 @@ set(sources_list
   "bodo/libs/_utils.cpp"
   "bodo/libs/_fft.cpp"
   "bodo/libs/_uuid.cpp"
+  "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/gason/gason.cpp"
 )
 
@@ -357,6 +358,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_nested_array.cpp"
     "bodo/tests/test_stream_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
+    "bodo/tests/test_query_profile_collector.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
       set(sources_list "${sources_list}"

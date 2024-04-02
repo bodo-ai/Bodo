@@ -1882,6 +1882,7 @@ PyMODINIT_FUNC PyInit_fft_cpp(void);
 #ifdef BUILD_WITH_V8
 PyMODINIT_FUNC PyInit_javascript_udf_cpp(void);
 #endif
+PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void);
 PyMODINIT_FUNC PyInit_uuid_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
