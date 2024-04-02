@@ -170,8 +170,8 @@ class QueryProfileCollector {
         if (tracing_level_env_) {
             return atoi(tracing_level_env_);
         } else {
-            // If env var is not set default to 1
-            return 1;
+            // If env var is not set default to 0
+            return 0;
         }
     }
 };
