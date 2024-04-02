@@ -31,7 +31,15 @@ public class FilterExpr extends Filter {
 
   ArrayList<Object> asConstArr(Filter f) {
     if (f instanceof ArrayConst) {
-      return ((ArrayConst) f).value;
+      ArrayList<Object> outVal = new ArrayList<>();
+      for (Object o : ((ArrayConst) f).value) {
+        if (o instanceof Const) {
+          outVal.add(((Const) o).value.value());
+        } else {
+          throw new IllegalArgumentException("Value in ArrayConst is not a Const: " + o.getClass());
+        }
+      }
+      return outVal;
     } else {
       throw new IllegalArgumentException("Arg is not an ArrayConst");
     }

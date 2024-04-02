@@ -577,11 +577,6 @@ def test_filter_pushdown_on_newly_added_column(
         all_null_col,
         isin_tuple,
     ) = dtype_cols_to_add_isin_tuple
-    if (dtype == "date") and (filter == "IS_IN"):
-        # TODO Open a task for this.
-        pytest.skip(
-            reason="[BSE-2800] Gap in DNF filter conversion where datetime.date objects are not handled properly when passing them to Java."
-        )
     if (dtype == "timestamp") and (filter == "IS_IN"):
         pytest.skip(reason="Series.isin() on Timezone-aware series not yet supported.")
     if (filter == "IS_IN") and (isin_tuple is None):
