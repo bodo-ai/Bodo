@@ -326,17 +326,20 @@ def test_timestamp_tz_dateadd(
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "TIMESTAMPDIFF(day, T, current_date :: TIMESTAMP_TZ)",
+            # Note that in the constant timestamp in this query, the UTC date
+            # is a different day from the local date - this tests that datediff
+            # is comparing using the UTC date
+            "TIMESTAMPDIFF(day, T, TO_TIMESTAMP_TZ('2024-01-01 00:00:00 +1234'))",
             pd.array(
                 [
-                    (pd.Timestamp.now().date() - datetime.date(2024, 4, 1)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2024, 4, 1)).days,
                     None,
-                    (pd.Timestamp.now().date() - datetime.date(2024, 7, 4)).days,
-                    (pd.Timestamp.now().date() - datetime.date(2000, 1, 1)).days,
-                    (pd.Timestamp.now().date() - datetime.date(2024, 1, 1)).days,
-                    (pd.Timestamp.now().date() - datetime.date(2024, 2, 29)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2024, 7, 4)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2000, 1, 1)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2024, 1, 1)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2024, 2, 29)).days,
                     None,
-                    (pd.Timestamp.now().date() - datetime.date(2024, 4, 1)).days,
+                    (datetime.date(2023, 12, 31) - datetime.date(2024, 4, 1)).days,
                 ],
                 dtype=pd.Int32Dtype(),
             ),
