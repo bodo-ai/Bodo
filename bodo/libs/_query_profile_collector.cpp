@@ -6,11 +6,20 @@
 #include <unordered_set>
 #include "../io/_io.h"
 #include "_bodo_common.h"
+#include "_memory_budget.h"
 
 void QueryProfileCollector::Init() {
     QueryProfileCollector new_query_profile_collector;
     *this = new_query_profile_collector;
     tracing_level = getTracingLevel();
+
+    // Get the initial memory budget
+    auto operator_comptroller = OperatorComptroller::Default();
+    size_t num_operators = operator_comptroller->GetNumOperators();
+    for (size_t i = 0; i < num_operators; i++) {
+        auto budget = operator_comptroller->GetOperatorBudget(i);
+        initial_operator_budget.push_back(budget);
+    }
 }
 
 static uint64_t us_since_epoch() {
@@ -115,6 +124,13 @@ void QueryProfileCollector::Finalize() {
         pipelines[std::to_string(pipeline_id)] = pipeline;
     }
     profile["pipelines"] = pipelines;
+
+    boost::json::object initial_operator_budgets;
+    for (size_t i = 0; i < initial_operator_budget.size(); i++) {
+        initial_operator_budgets[std::to_string(i)] =
+            initial_operator_budget[i];
+    }
+    profile["initial_operator_budgets"] = initial_operator_budgets;
 
     std::unordered_set<operator_stage_t> seen_operator_stages;
     for (const auto& [op_stage, _] : operator_stage_time) {

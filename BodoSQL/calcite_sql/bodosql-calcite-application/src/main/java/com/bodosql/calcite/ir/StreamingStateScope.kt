@@ -79,9 +79,22 @@ class StreamingStateScope {
         return inits
     }
 
+    fun genQueryProfileCollectorInit(): List<Op> {
+        return listOf(Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.init")))
+    }
+
+    fun genQueryProfileCollectorFinalize(): Op {
+        return Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.finalize"))
+    }
+
     fun addToFrame(frame: Frame) {
         if (operators.size > 0) {
+            // This order is important. Because we're prepending, this ensures that all OperatorComptroller calls come before the QueryProfileCollector calls, which allows the QueryProfiler to read the initial allocated budget.
+            frame.prependAll(genQueryProfileCollectorInit())
             frame.prependAll(genOpComptrollerInit())
+
+            // Insert the finalize call for the QueryProfileCollector as the last step
+            frame.addBeforeReturn(genQueryProfileCollectorFinalize())
         }
     }
 }

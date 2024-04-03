@@ -34,6 +34,22 @@ class CodegenFrame : Frame {
     }
 
     /**
+     * Adds the list of operations just before the return statement in the active Frame.
+     * If there is no return statement yet, just add op to the end of the frame.
+     * @param ops Operations to add to the active Frame.
+     */
+    override fun addBeforeReturn(op: Op) {
+        // TODO(aneesh) consider refactoring this to only allow it on the main frame
+        var inserted = false
+        if (code.size > 0 && code[code.size - 1] is Op.ReturnStatement) {
+            code.add(code.size - 1, op)
+            return
+        }
+        // There is no return yet, so just add the statement to the end
+        code.add(op)
+    }
+
+    /**
      * Adds the list of operations to the end of the active Frame.
      * @param ops Operations to add to the active Frame.
      */
