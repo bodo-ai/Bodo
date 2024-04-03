@@ -29,6 +29,13 @@ interface Frame {
     fun addAll(ops: List<Op>)
 
     /**
+     * Adds the list of operations just before the return statement in the active Frame.
+     * If there is no return statement yet, just add op to the end of the frame.
+     * @param ops Operations to add to the active Frame.
+     */
+    fun addBeforeReturn(op: Op)
+
+    /**
      * This simulates appending code directly to a StringBuilder.
      * It is primarily meant as a way to support older code
      * and shouldn't be used anymore.

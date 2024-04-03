@@ -165,6 +165,8 @@ class QueryProfileCollector {
     std::unordered_map<operator_stage_t, std::vector<MetricBase>>
         operator_stage_metrics;
 
+    std::vector<int64_t> initial_operator_budget;
+
     int getTracingLevel() {
         char* tracing_level_env_ = std::getenv("BODO_TRACING_LEVEL");
         if (tracing_level_env_) {

@@ -44,6 +44,10 @@ class StreamingPipelineFrame(
         for (initVal in initializations) {
             initVal.emit(doc)
         }
+
+        val profilerInitialize = Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.start_pipeline", Expr.IntegerLiteral(pipelineID)))
+        profilerInitialize.emit(doc)
+
         /** Add variable tracking iteration number **/
         code.add(Op.Assign(iterVar, Expr.Binary("+", iterVar, Expr.IntegerLiteral(1))))
         /** Add operator IO control logic **/
@@ -56,6 +60,12 @@ class StreamingPipelineFrame(
         for (term in terminations) {
             term.emit(doc)
         }
+
+        val profilerFinalize =
+            Op.Stmt(
+                Expr.Call("bodo.libs.query_profile_collector.end_pipeline", Expr.IntegerLiteral(pipelineID), iterVar),
+            )
+        profilerFinalize.emit(doc)
     }
 
     /**
@@ -80,6 +90,15 @@ class StreamingPipelineFrame(
      */
     override fun addAll(ops: List<Op>) {
         code.addAll(ops)
+    }
+
+    /**
+     * Adds the list of operations just before the return statement in the active Frame.
+     * If there is no return statement yet, just add op to the end of the frame.
+     * @param ops Operations to add to the active Frame.
+     */
+    override fun addBeforeReturn(op: Op) {
+        code.addBeforeReturn(op)
     }
 
     /**
