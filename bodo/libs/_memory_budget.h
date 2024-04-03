@@ -196,6 +196,8 @@ class OperatorComptroller {
      */
     void PrintBudgetAllocations(std::ostream& os);
 
+    size_t GetNumOperators() const { return num_operators; }
+
    private:
     /// @brief Total budget for each pipeline. Set during `Initialize`.
     size_t total_budget = 0;
