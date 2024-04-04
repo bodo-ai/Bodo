@@ -1,6 +1,6 @@
 # Supported DataFrame Data Types
 
-BodoSQL uses Pandas DataFrames to represent SQL tables in memory and
+BodoSQL uses its internal Python tables to represent SQL tables in memory and
 converts SQL types to corresponding Python types which are used by Bodo.
 Below is a table mapping SQL types used in BodoSQL to their respective
 Python types and Bodo data types.
@@ -8,35 +8,40 @@ Python types and Bodo data types.
 
 <center>
 
-| SQL Type(s)          | Equivalent Python Type | Bodo Data Type       |
-|----------------------|------------------------|----------------------|
-| `TINYINT`            | `np.int8`              | `bodo.int8`          |
-| `SMALLINT`           | `np.int16`             | `bodo.int16`         |
-| `INT`                | `np.int32`             | `bodo.int32`         |
-| `BIGINT`             | `np.int64`             | `bodo.int64`         |
-| `FLOAT`              | `np.float32`           | `bodo.float32`       |
-| `DECIMAL`, `DOUBLE`  | `np.float64`           | `bodo.float64`       |
-| `VARCHAR`, `CHAR`    | `str`                  | `bodo.string_type`   |
-| `TIMESTAMP`, `DATE`  | `np.datetime64[ns]`    | `bodo.datetime64ns`  |
-| `INTERVAL(day-time)` | `np.timedelta64[ns]`   | `bodo.timedelta64ns` |
-| `BOOLEAN`            | `np.bool_`             | `bodo.bool_`         |
+| SQL Type(s)           | Equivalent Python Type | Bodo Data Type                       |
+|-----------------------|------------------------|--------------------------------------|
+| `BOOLEAN`             | `np.bool_`             | `bodo.bool_`                         |
+| `TINYINT`             | `np.int8`              | `bodo.int8`                          |
+| `SMALLINT`            | `np.int16`             | `bodo.int16`                         |
+| `INT`                 | `np.int32`             | `bodo.int32`                         |
+| `BIGINT`              | `np.int64`             | `bodo.int64`                         |
+| `FLOAT`               | `np.float32`           | `bodo.float32`                       |
+| `DOUBLE`              | `np.float64`           | `bodo.float64`                       |
+| `VARCHAR`, `CHAR`     | `str`                  | `bodo.string_type`                   |
+| `VARBINARY`, `BINARY` | `bytes`                | `bodo.bytes_type`                    |
+| `DATE`                | `datetime.date`        | `bodo.datetime_date_type`            |
+| `TIME`                | `bodo.Time`            | `bodo.TimeType`                      |
+| `TIMESTAMP_NTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(None)`     |
+| `TIMESTAMP_LTZ`       | `pd.Timestamp`         | `bodo.PandasTimestampType(local_tz)` |
+| `TIMESTAMP_TZ`        | `bodo.TimestampTZ`     | `bodo.timestamptz_type`              |
+| `INTERVAL(day-time)`  | `np.timedelta64[ns]`   | `bodo.timedelta64ns`                 |
+| `ARRAY`               | `pyarrow.large_list`   | `bodo.ArrayItemArray`                |
+| `MAP`                 | `pyarrow.map`          | `bodo.MapScalarType`                 |
+| `NULL`                | `pyarrow.NA`           | `bodo.null_dtype`                    |
 
 </center>
 
-BodoSQL can also process DataFrames that contain Categorical or Date
-columns. However, Bodo will convert these columns to one of the
-supported types, which incurs a performance cost. We recommend
-restricting your DataFrames to the directly supported types when
-possible.
+BodoSQL may be able to handle additional column types if the data is unused. When loading
+data from Snowflake or other sources, BodoSQL will treat Decimal columns as either BigInt
+or Float64 depending on the column's scale and precision.
 
-### Nullable and Unsigned Types
+### Unsigned Types
 
-Although SQL does not explicitly support unsigned types, by default,
-BodoSQL maintains the exact types of the existing DataFrames registered
-in a [BodoSQLContext], including unsigned and non-nullable
-type behavior. If an operation has the possibility of creating null
-values or requires casting data, BodoSQL will convert the input of that
-operation to a nullable, signed version of the type.
+Although SQL does not explicitly support unsigned types,
+BodoSQL typically maintains the types of the existing DataFrames registered
+in a [BodoSQLContext]. If these types are unsigned, then this may result in
+different behavior than expected. We always recommend working with signed types
+to avoid any potential issues.
 
 ## Supported Literals
 
@@ -50,6 +55,7 @@ BodoSQL supports the following literal types:
 -   `#!sql interval_literal`
 -   `#!sql object_literal`
 -   `#!sql string_literal`
+-   `#!sql binary_literal`
 
 ### Array Literal {#array_literal}
 
@@ -61,7 +67,7 @@ BodoSQL supports the following literal types:
 
 where `<[>` and `<]>` indicate literal `[` and `]`s, and `expr` is any expression.
 
-Array literals are lists of comma seperated expressions wrapped in square brackets.
+Array literals are lists of comma separated expressions wrapped in square brackets.
 
 Note that BodoSQL currently only supports homogenous lists, and all `expr`s
 must coerce to a single type.
@@ -83,6 +89,7 @@ Boolean literals are case-insensitive.
 
 ```sql
 DATE 'yyyy-mm-dd' |
+TIME 'HH:mm:ss' |
 TIMESTAMP 'yyyy-mm-dd' |
 TIMESTAMP 'yyyy-mm-dd HH:mm:ss'
 ```
@@ -149,3 +156,14 @@ when all values are the same type.
 ```
 
 Where char is a character literal in a Python string.
+
+
+### Binary Literal {#binary_literal}
+
+**Syntax**:
+
+```sql
+X'hex [ ... ]'
+```
+
+Where hex is a hexadecimal character between 0-F.
