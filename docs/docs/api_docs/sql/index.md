@@ -11,7 +11,7 @@ the first time.
 ## Aliasing
 
 In all but the most trivial cases, BodoSQL generates internal names to
-avoid conflicts in the intermediate dataframes. By default, BodoSQL
+avoid conflicts in the intermediate DataFrames. By default, BodoSQL
 does not rename the columns for the final output of a query using a
 consistent approach. For example the query:
 
@@ -645,7 +645,7 @@ run_query(bc)
 
 When working with tables in the `FileSystemCatalog`, BodoSQL uses the full name of any
 directory or file as the object's name and is case sensitive. When constructing a query
-you must following the BodoSQL rules for [identifier case sensitivity](#identifier_case_sensitivity).
+you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
 
 To simplify your queries you can also provide a default schema resolution path to the `FileSystemCatalog` constructor.
 For example, this code provides a default schema of `MY_SCHEMA.other_schema` for loading `OTHER_TABLE` from
@@ -708,7 +708,7 @@ To access S3 BodoSQL uses the following environment variables to connect to S3:
 If you encounter any issues connecting to s3 or accessing a table, please ensure that these environment variables are set.
 For more information please refer to the [AWS documentation.](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html)
 
-## <a name="identifier_case_sensitivity"></a> Identifier Case Sensitivity
+## Identifier Case Sensitivity
 
 In BodoSQL all identifiers not wrapped in quotes are automatically converted to upper case.
 If you are a Snowflake user who is using either the Snowflake Catalog or Table Path API, then this should not impact you and the

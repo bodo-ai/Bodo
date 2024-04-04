@@ -1,15 +1,15 @@
 # Common Bodo SQL Errors  {#bodosql_errors}
 
 BodoSQL can raise a number of different errors when parsing SQL queries.
-This page contains a list of the most commonly encountered parsing errors and their causes.
+This page contains a list of commonly encountered parsing errors and their causes.
 
 
--  **A binary operation was used on two types for which it is not supported.** 
+-  **A binary operation was used on two types for which it is not supported.**
 
  ```py
  "Cannot apply 'OP' to arguments of type '<SQL_TYPE_ENUM> OP <SQL_TYPE_ENUM>'"
  ```
- 
+
  This error can be resolved by casting either side of the expression to a common type.
 
 <br>
@@ -37,7 +37,7 @@ This page contains a list of the most commonly encountered parsing errors and th
 <br>
 
 -  **The specified column (`COL_NAME`) of one of the pandas DataFrames used to initialize a BodoSQLContext has an unsupported type.**
- 
+
 
  ```py
  "Pandas column 'COL_NAME' with type PANDAS_TYPE not supported in BodoSQL."
@@ -48,9 +48,9 @@ This page contains a list of the most commonly encountered parsing errors and th
 
 <br>
 
--  **The parser encountered something other than a query at a location where a query was expected.** 
-  
-  
+-  **The parser encountered something other than a query at a location where a query was expected.**
+
+
  ```py
  "Non-query expression encountered in illegal context"
  ```
@@ -59,14 +59,15 @@ This page contains a list of the most commonly encountered parsing errors and th
 
 <br>
 
--  **The table name specified in a SQL query doesn't match a table name registered in the BodoSQLContext.** 
- 
- 
+-  **The table name specified in a SQL query doesn't match a table name registered in the BodoSQLContext.**
+
+
  ```py
  "Object 'tablename' not found"
  ```
 
  Generally, this is caused by misnaming a table when initializing the BodoSqlContext, or misnaming a table in the query itself.
+ If you encounter this issue please check BodoSQL's [case sensitivity rules][identifier-case-sensitivity].
 
 <br>
 
@@ -77,46 +78,49 @@ This page contains a list of the most commonly encountered parsing errors and th
  "Column 'COL_NAME' not found in any table"
  ```
 
-  Generally, this is caused by misnaming a column while initializing the BodoSQLContext, or misnaming a column in the query itself.``
+  Generally, this is caused by misnaming a column while initializing the BodoSQLContext, or misnaming a column in the query itself.
+  If you encounter this issue please check BodoSQL's [case sensitivity rules][identifier-case-sensitivity].
 
 <br>
 
 -  **The query attempted to select a column for two or more tables, and the column was present in multiple tables.**
 
-  
+
  ```py
  "Column 'COL_NAME' is ambiguous"
  ```
 
 <br>
 
--  **The types of arguments supplied to the function don't match the types supported by the function.** 
-  
-  
- ```py
- "Cannot apply 'FN_NAME' to arguments of type 'FN_NAME(<ARG1_SQL_TYPE>, <ARG2_SQL_TYPE>, ...)'. Supported form(s): 'FN_NAME(<ARG1_SQL_TYPE>, <ARG2_SQL_TYPE>, ...)'"
- ```
-
  Generally, this can be resolved by the specifying the origin table like so:
 
  ``Select A from table1, table2`` → ``Select table1.A from table1, table2``
+
+-  **The types of arguments supplied to the function don't match the types supported by the function.**
+
+
+ ```py
+ "Cannot apply 'FN_NAME' to arguments of type 'FN_NAME(<ARG1_SQL_TYPE>, <ARG2_SQL_TYPE>, ...)'. Supported form(s): 'FN_NAME(<ARG1_SQL_TYPE>, <ARG2_SQL_TYPE>, ...)'"
+ ```
 
  This can be resolved by explicitly casting the problematic argument(s) to the appropriate type.
 
 <br>
 
 -  **Either BodoSQL doesn't support the function or an incorrect number of arguments was supplied.**
-  
-  
+
+
  ```py
  "No match found for function signature FN_NAME(<ARG1_SQL_TYPE>, <ARG2_SQL_TYPE>, ...)"
  ```
 
+This generally means that the function you are trying to use does not support the types
+you have provided or may not be supported in BodoSQL.
 
 <br>
 
 - **A Window function that does not support windows with a `ROWS_BETWEEN` clause was called over a window containing a `ROWS_BETWEEN` clause.**
- 
+
 
  ```py
  "ROW/RANGE not allowed with RANK, DENSE_RANK or ROW_NUMBER functions"
@@ -128,14 +132,14 @@ This page contains a list of the most commonly encountered parsing errors and th
 <br>
 
 -  **BodoSQL was unable to parse your SQL because the query contained unsupported syntax.**
- 
- 
+
+
  ```py
  "Encountered "KEYWORD" at line X, column Y. Was expecting one of: ..."
  ```
 
   There are a variety of reasons this could occur, but here are some of the common ones:
- 
+
  * A typo in one of the query words, for example ``groupby`` instead of ``group by``. In this situation ``line X, column Y`` should point you to the first typo.
  * All the components are legal SQL keywords, but they are used in an incorrect order. Please refer to our support syntax to check for legal constructions. If you believe your query should be supported [please file an issue](https://github.com/Bodo-inc/Feedback).
  * Trying to use double-quotes for a string literal (i.e. ```py"example"
@@ -146,7 +150,7 @@ This page contains a list of the most commonly encountered parsing errors and th
 
 -  **A parameter was not properly registered in the BodoSQLContext.**
 
-  
+
  ```py
  "SQL query contains a unregistered parameter: '@param_name'"
  ```
