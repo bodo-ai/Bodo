@@ -129,10 +129,22 @@ def convert_scalar(val):
         #               java.lang.Iterable<T> values)
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
         return array_const_class(convert_list_to_java(converted_val))
+    elif isinstance(val, bytes):
+        temp = convert_bytes(val)
+        return temp
     else:
-        # If we don't support a scalar return None and
-        # we will generate a NOOP
-        return None
+        raise NotImplementedError(
+            f"Unsupported scalar type in iceberg filter pushdown: {type(val)}"
+        )
+
+
+def convert_bytes(val):
+    """
+    Convert a Python bytes object into an Iceberg Java
+    binary Literal.
+    """
+    converter = get_literal_converter_class()
+    return converter.asBinaryLiteral(val)
 
 
 def convert_timestamp(val):
