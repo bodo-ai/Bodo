@@ -43,4 +43,8 @@ public class LiteralConverters {
   public static Const asBoolLiteral(boolean val) {
     return new Const(Literal.of(val));
   }
+
+  public static Const asBinaryLiteral(byte[] val) {
+    return new Const(Literal.of(val));
+  }
 }

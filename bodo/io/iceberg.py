@@ -1162,6 +1162,21 @@ def get_iceberg_file_list_parallel(
             snapshot_id_or_e = e
         ev_iceberg_snapshot.finalize()
 
+        if bodo.user_logging.get_verbose_level() >= 1 and isinstance(
+            pq_abs_path_file_list_or_e, list
+        ):
+            num_files_read = len(pq_abs_path_file_list_or_e)
+            if len(pq_abs_path_file_list_or_e) <= 10:
+                log_msg = f"Files selected for read: {pq_abs_path_file_list_or_e}"
+            else:
+                file_list = ", ".join(pq_abs_path_file_list_or_e[:10])
+                log_msg = f"Reading {num_files_read} files: {file_list} ... and {num_files_read-10} more."
+
+            bodo.user_logging.log_message(
+                "Iceberg File Pruning:",
+                log_msg,
+            )
+
     # Send list to all ranks
     (
         pq_abs_path_file_list_or_e,
