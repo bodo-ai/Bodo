@@ -1431,6 +1431,7 @@ def get_schema_from_metadata(
         dtype = type_code_to_arrow_type(
             field_meta.type_code, field_meta, tz, is_select_query
         )
+        is_nullable = field_meta.is_nullable
         # For any UnknownSnowflakeType columns, fetch metadata to get internal
         if isinstance(dtype, UnknownSnowflakeType):
             can_system_sample = can_table_be_system_sampled(cursor, orig_table)
@@ -1468,10 +1469,18 @@ def get_schema_from_metadata(
                     can_system_sample,
                 )
 
+        # We may set dtype to pa.null() in get_variant_type_from_metadata if the
+        # data is empty, but the actual column's metadata may be set to
+        # non-nullable.
+        # Setting the nullable flag to True is necessary to avoid Arrow errors.
+        # See https://bodo.atlassian.net/browse/BSE-2918?focusedCommentId=29750
+        if dtype == pa.null():
+            is_nullable = True
+
         assert isinstance(
             dtype, pa.DataType
         ), "All Snowflake Columns Should Have a PyArrow DataType by Now"
-        arrow_dtypes.append((field_meta.name, dtype, field_meta.is_nullable))
+        arrow_dtypes.append((field_meta.name, dtype, is_nullable))
 
     # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
     # the smallest viable integer type (number of bytes)
