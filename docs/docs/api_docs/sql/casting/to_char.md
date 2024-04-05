@@ -31,3 +31,7 @@ we will get the following output:
 2    2   true      0
 ```
 
+Note that if the input is a `TIMESTAMP_TZ` the only currently supported output
+format that includes `TZH` or `TZM` is `YYYY-MM-DD HH:MM:SS.SSSSSSSSS +TZH:TZM`
+(where `+` represents `+` or `-`). Formats that do not include those
+identifiers are supported.

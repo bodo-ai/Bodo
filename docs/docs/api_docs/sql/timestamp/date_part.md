@@ -17,6 +17,10 @@ string literals:
 -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
 -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
 -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
+-   TZH
+-   TZM
 
-Supported with timezone-aware data.
+Supported with timezone-aware data. Note that `TZH`/`TZM` are only supported for
+`TIMESTAMP_TZ` inputs and extracts the offset hours and offset minutes
+respectively.
 
