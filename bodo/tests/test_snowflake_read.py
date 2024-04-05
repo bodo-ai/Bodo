@@ -3310,3 +3310,25 @@ def test_disable_result_cache_session_param(memory_leak_check):
             ), "'USE_CACHED_RESULT' is not set to false by snowflake_connect()"
     finally:
         pd.read_sql(f"alter user set USE_CACHED_RESULT={old_value}", conn)
+
+
+@pytest_mark_one_rank
+def test_snowflake_read_empty_non_nullable_variant(memory_leak_check):
+    """Make sure "A null type field may not be non-nullable" of Arrow is not thrown
+    when reading an empty non-nullable VARIANT column.
+    See https://bodo.atlassian.net/browse/BSE-2918?focusedCommentId=29750
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    # Table created with:
+    # create or replace TRANSIENT TABLE TEST_DB.PUBLIC.VARIANT_TABLE3 (
+    #  A VARIANT not null
+    # )
+    query = "SELECT * FROM VARIANT_TABLE3"
+    check_func(impl, (query, conn), only_seq=True)
