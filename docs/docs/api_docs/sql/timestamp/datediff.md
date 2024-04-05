@@ -27,3 +27,6 @@ abbreviations as string literals:
 -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
 -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
 
+Note that if `timestamp1` or `timestamp2` are `TIMESTAMP_TZ` they will first be
+converted their to `UTC` timestamps (offset is subtracted from the local timestamp
+value).
