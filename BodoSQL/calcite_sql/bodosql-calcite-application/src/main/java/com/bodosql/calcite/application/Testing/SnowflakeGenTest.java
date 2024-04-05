@@ -97,7 +97,7 @@ public class SnowflakeGenTest {
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String optimizedPlanStr = getRelationalAlgebraString(generator, sql, true);
+    String optimizedPlanStr = getRelationalAlgebraString(generator, sql);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
     String pandasStr = generator.getPandasString(sql);
@@ -106,9 +106,9 @@ public class SnowflakeGenTest {
   }
 
   private static String getRelationalAlgebraString(
-      RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+      RelationalAlgebraGenerator generator, String sql) {
     try {
-      RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
+      RelRoot root = generator.getRelationalAlgebra(sql);
       RelNode newRoot = PandasUtilKt.pandasProject(root);
       StringWriter sw = new StringWriter();
       RelCostAndMetaDataWriter costWriter =
