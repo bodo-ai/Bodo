@@ -5,42 +5,40 @@
 #include <stdexcept>
 #include "_bodo_common.h"
 #include "_utils.h"
-#include "include/libplatform/libplatform.h"
 #include "include/v8-date.h"
 #include "include/v8-exception.h"
 #include "include/v8-function.h"
 #include "include/v8-initialization.h"
-#include "include/v8-isolate.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
 
-static std::unique_ptr<v8::Platform> platform;
 static v8::Isolate::CreateParams create_params;
-static std::shared_ptr<v8::Isolate> isolate;
 static bool v8_initialized = false;
 static const char *enable_mem_debug_env_var = std::getenv("BODO_DEBUG_V8_MEM");
 static const bool enable_mem_debug =
     enable_mem_debug_env_var != nullptr &&
     std::string(enable_mem_debug_env_var) == "1";
 
-/** @brief Create a new isolate wrapped in a shared pointer and set configure it
+/** @brief Create a new isolate configured
  * for throughput over latency
  * @return The new isolate
  */
-std::shared_ptr<v8::Isolate> create_new_isolate() {
+v8::Isolate *create_new_isolate() {
     v8::Isolate *isolate = v8::Isolate::New(create_params);
     // Favor throughput over latency
     isolate->SetRAILMode(v8::PERFORMANCE_LOAD);
-    // No delete, Isolate::Dispose should be used instead
-    return std::shared_ptr<v8::Isolate>(
-        isolate, [](v8::Isolate *isolate) { isolate->Dispose(); });
+    return isolate;
 }
 
 void init_v8() {
     if (!v8_initialized) {
+        v8::V8::SetFlagsFromString("--single-threaded");
+        v8_platform_isolate_instance = std::make_shared<v8_platform_isolate>();
         // Use a single threaded platform so we don't have contention
-        platform = v8::platform::NewSingleThreadedDefaultPlatform();
-        v8::V8::InitializePlatform(platform.get());
+        v8_platform_isolate_instance->platform =
+            v8::platform::NewSingleThreadedDefaultPlatform();
+        v8::V8::InitializePlatform(
+            v8_platform_isolate_instance->platform.get());
 
         v8::V8::Initialize();
         // Create a new Isolate and make it the current one, we'll only ever
@@ -73,7 +71,7 @@ void init_v8() {
             std::cerr << std::endl;
         }
         v8_initialized = true;
-        isolate = create_new_isolate();
+        v8_platform_isolate_instance->isolate = create_new_isolate();
     }
 }
 
@@ -81,7 +79,7 @@ std::unique_ptr<JavaScriptFunction> JavaScriptFunction::create(
     std::string _body, std::vector<std::string> _arg_names,
     std::unique_ptr<bodo::DataType> _return_type) {
     init_v8();
-    v8::HandleScope handle_scope(isolate.get());
+    v8::HandleScope handle_scope(v8_platform_isolate_instance->isolate);
     std::unique_ptr<JavaScriptFunction> f = std::unique_ptr<JavaScriptFunction>(
         new JavaScriptFunction(_body, _arg_names, std::move(_return_type)));
     return f;
@@ -92,19 +90,21 @@ JavaScriptFunction::JavaScriptFunction(
     std::unique_ptr<bodo::DataType> _return_type)
     : return_type(std::move(_return_type)),
       arg_names(_arg_names),
-      context(isolate.get(), v8::Context::New(isolate.get())),
+      context(v8_platform_isolate_instance->isolate,
+              v8::Context::New(v8_platform_isolate_instance->isolate)),
       tracing_event("JavaScript UDF") {
-    v8::Local<v8::Context> local_context = context.Get(isolate.get());
+    v8::Local<v8::Context> local_context =
+        context.Get(v8_platform_isolate_instance->isolate);
 
     // Disallow code generation from strings to prevent eval, this matches
     // Snowflake's behavior
     local_context->AllowCodeGenerationFromStrings(false);
 
-    v8::Isolate::Scope isolate_scope(isolate.get());
+    v8::Isolate::Scope isolate_scope(v8_platform_isolate_instance->isolate);
     // Create the handle scope and set the active context
-    v8::HandleScope handle_scope(isolate.get());
+    v8::HandleScope handle_scope(v8_platform_isolate_instance->isolate);
     v8::Context::Scope context_scope(local_context);
-    v8::TryCatch try_catch(isolate.get());
+    v8::TryCatch try_catch(v8_platform_isolate_instance->isolate);
 
     std::mt19937 gen;
     std::uniform_int_distribution<> distrib(65, 90);
@@ -119,32 +119,33 @@ JavaScriptFunction::JavaScriptFunction(
         fmt::format("function {}({}) {{ {} }}", this->random_function_name,
                     fmt::join(this->arg_names, ", "), _body);
     v8::Local<v8::String> source =
-        v8::String::NewFromUtf8(isolate.get(), script_str.c_str())
+        v8::String::NewFromUtf8(v8_platform_isolate_instance->isolate,
+                                script_str.c_str())
             .ToLocalChecked();
 
     v8::MaybeLocal<v8::Script> maybe_script =
         v8::Script::Compile(local_context, source);
-    CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
-                       "Error initializing JavaScript UDF");
+    CHECK_V8_EXCEPTION(v8_platform_isolate_instance->isolate, local_context,
+                       try_catch, "Error initializing JavaScript UDF");
     v8::Local<v8::Script> script = maybe_script.ToLocalChecked();
 
     script->Run(local_context).IsEmpty();
-    CHECK_V8_EXCEPTION(isolate.get(), local_context, try_catch,
-                       "Error initializing JavaScript UDF");
+    CHECK_V8_EXCEPTION(v8_platform_isolate_instance->isolate, local_context,
+                       try_catch, "Error initializing JavaScript UDF");
 
     v8::Local<v8::String> v8_func_name =
-        v8::String::NewFromUtf8(isolate.get(),
+        v8::String::NewFromUtf8(v8_platform_isolate_instance->isolate,
                                 this->random_function_name.c_str())
             .ToLocalChecked();
     v8::Local<v8::Value> v8_func_value = local_context->Global()
                                              ->Get(local_context, v8_func_name)
                                              .ToLocalChecked();
     assert(v8_func_value->IsFunction());
-    this->v8_func.Reset(isolate.get(),
+    this->v8_func.Reset(v8_platform_isolate_instance->isolate,
                         v8::Local<v8::Function>::Cast(v8_func_value));
     if (enable_mem_debug) {
         v8::HeapStatistics heap_stats;
-        isolate->GetHeapStatistics(&heap_stats);
+        v8_platform_isolate_instance->isolate->GetHeapStatistics(&heap_stats);
         std::cerr << "UDF created. V8 heap physical size: "
                   << BytesToHumanReadableString(
                          heap_stats.total_physical_size())
@@ -176,8 +177,8 @@ JavaScriptFunction *create_javascript_udf_py_entry(
                 std::string(arg_names->data1<bodo_array_type::STRING>() + start,
                             end - start));
         }
-        v8::Isolate::Scope isolate_scope(isolate.get());
-        v8::HandleScope handle_scope(isolate.get());
+        v8::Isolate::Scope isolate_scope(v8_platform_isolate_instance->isolate);
+        v8::HandleScope handle_scope(v8_platform_isolate_instance->isolate);
         JavaScriptFunction *f =
             new JavaScriptFunction(std::string(body, body_len), arg_names_vec,
                                    std::move(return_datatype));
@@ -194,7 +195,8 @@ void delete_javascript_udf_py_entry(JavaScriptFunction *func) {
         delete func;
         if (enable_mem_debug) {
             v8::HeapStatistics heap_stats;
-            isolate->GetHeapStatistics(&heap_stats);
+            v8_platform_isolate_instance->isolate->GetHeapStatistics(
+                &heap_stats);
             std::cerr << "Deleted JavaScript UDF. V8 heap physical size: "
                       << BytesToHumanReadableString(
                              heap_stats.total_physical_size())
@@ -215,9 +217,11 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
     for (size_t i = 0; i < src_arr->length; i++) {
         if (non_null_at<arr_type, T, dtype>(*src_arr, i)) {
             T arg_val = src_arr->data1<arr_type, T>()[i];
-            arg_col.emplace_back(v8::Number::New(isolate.get(), arg_val));
+            arg_col.emplace_back(v8::Number::New(
+                v8_platform_isolate_instance->isolate, arg_val));
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -238,7 +242,8 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
             arg_col.emplace_back(
                 v8::Date::New(local_context, arg_ms).ToLocalChecked());
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -252,9 +257,11 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
     for (size_t i = 0; i < src_arr->length; i++) {
         if (src_arr->get_null_bit<arr_type>(i)) {
             bool arg_val = GetBit(src_arr->data1<arr_type, uint8_t>(), i);
-            arg_col.emplace_back(v8::Boolean::New(isolate.get(), arg_val));
+            arg_col.emplace_back(v8::Boolean::New(
+                v8_platform_isolate_instance->isolate, arg_val));
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -267,7 +274,8 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
                                std::vector<v8::Local<v8::Value>> &arg_col) {
     for (size_t i = 0; i < src_arr->length; i++) {
         bool arg_val = src_arr->data1<arr_type, uint8_t>()[i];
-        arg_col.emplace_back(v8::Boolean::New(isolate.get(), arg_val));
+        arg_col.emplace_back(
+            v8::Boolean::New(v8_platform_isolate_instance->isolate, arg_val));
     }
 }
 
@@ -285,11 +293,12 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
             offset_t end_offset = offsets[i + 1];
             offset_t len = end_offset - start_offset;
             v8::MaybeLocal<v8::String> maybeLocalStr = v8::String::NewFromUtf8(
-                isolate.get(), &raw_data_ptr[start_offset],
-                v8::NewStringType::kNormal, len);
+                v8_platform_isolate_instance->isolate,
+                &raw_data_ptr[start_offset], v8::NewStringType::kNormal, len);
             arg_col.emplace_back(maybeLocalStr.ToLocalChecked());
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -307,14 +316,15 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
             offset_t start_offset = offsets[i];
             offset_t end_offset = offsets[i + 1];
             offset_t len = end_offset - start_offset;
-            v8::Local<v8::ArrayBuffer> localBuffer =
-                v8::ArrayBuffer::New(isolate.get(), len);
+            v8::Local<v8::ArrayBuffer> localBuffer = v8::ArrayBuffer::New(
+                v8_platform_isolate_instance->isolate, len);
             memcpy(localBuffer->Data(), &raw_data_ptr[start_offset], len);
             v8::Local<v8::Uint8Array> localBinary =
                 v8::Uint8Array::New(localBuffer, 0, len);
             arg_col.emplace_back(localBinary);
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -338,11 +348,12 @@ void convert_bodo_to_v8_helper(v8::Local<v8::Context> &local_context,
             offset_t end_offset = offsets[dict_idx + 1];
             offset_t len = end_offset - start_offset;
             v8::MaybeLocal<v8::String> maybeLocalStr = v8::String::NewFromUtf8(
-                isolate.get(), &raw_data_ptr[start_offset],
-                v8::NewStringType::kNormal, len);
+                v8_platform_isolate_instance->isolate,
+                &raw_data_ptr[start_offset], v8::NewStringType::kNormal, len);
             arg_col.emplace_back(maybeLocalStr.ToLocalChecked());
         } else {
-            arg_col.emplace_back(v8::Null(isolate.get()));
+            arg_col.emplace_back(
+                v8::Null(v8_platform_isolate_instance->isolate));
         }
     }
 }
@@ -454,7 +465,7 @@ void execute_javascript_udf_body(
     v8::Local<v8::Context> local_context, v8::Local<v8::Function> local_v8_func,
     std::shared_ptr<ArrayBuildBuffer> ret, size_t out_count, size_t argc,
     const std::vector<std::vector<v8::Local<v8::Value>>> &arg_columns) {
-    v8::TryCatch trycatch(isolate.get());
+    v8::TryCatch trycatch(v8_platform_isolate_instance->isolate);
     for (size_t i = 0; i < out_count; ++i) {
         // Place all of the arguments from the current row in an array
         std::vector<v8::Local<v8::Value>> argv;
@@ -478,12 +489,14 @@ std::shared_ptr<array_info> execute_javascript_udf(
     JavaScriptFunction *func,
     const std::vector<std::shared_ptr<array_info>> &args) {
     auto tracingEvent(func->tracing_event.iteration());
-    v8::Isolate::Scope isolate_scope(isolate.get());
+    v8::Isolate::Scope isolate_scope(v8_platform_isolate_instance->isolate);
     // Create the handle scope and set the active context
-    v8::HandleScope handle_scope(isolate.get());
-    v8::Local<v8::Context> local_context = func->context.Get(isolate.get());
+    v8::HandleScope handle_scope(v8_platform_isolate_instance->isolate);
+    v8::Local<v8::Context> local_context =
+        func->context.Get(v8_platform_isolate_instance->isolate);
     v8::Context::Scope context_scope(local_context);
-    v8::Local<v8::Function> local_v8_func = func->v8_func.Get(isolate.get());
+    v8::Local<v8::Function> local_v8_func =
+        func->v8_func.Get(v8_platform_isolate_instance->isolate);
 
     size_t argc = args.size();
     size_t out_count = argc == 0 ? 1 : args[0]->length;
@@ -614,7 +627,7 @@ std::shared_ptr<array_info> execute_javascript_udf(
 
     if (enable_mem_debug) {
         v8::HeapStatistics heap_stats;
-        isolate->GetHeapStatistics(&heap_stats);
+        v8_platform_isolate_instance->isolate->GetHeapStatistics(&heap_stats);
         std::cerr << "Executed JavaScript UDF. V8 heap physical size: "
                   << BytesToHumanReadableString(
                          heap_stats.total_physical_size())

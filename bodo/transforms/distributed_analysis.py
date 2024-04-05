@@ -3284,9 +3284,9 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
-        if (
-            func_name == "execute_javascript_udf"
-            and func_mod == "bodo.libs.bodosql_javascript_udf_array_kernels"
+        if func_name == "execute_javascript_udf" and (
+            func_mod == "bodo.libs.bodosql_javascript_udf_array_kernels"
+            or func_mod == "bodo.libs.bodosql_array_kernels"
         ):  # pragma: no cover
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another

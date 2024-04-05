@@ -1,9 +1,9 @@
 #include <functional>
 #include <limits>
-#include "../libs/_array_utils.h"
-#include "../libs/_bodo_common.h"
-#include "../libs/_javascript_udf.h"
-#include "./test.hpp"
+#include "../../bodo/libs/_array_utils.h"
+#include "../../bodo/libs/_bodo_common.h"
+#include "../../bodo/libs/_javascript_udf.h"
+#include "../../bodo/tests/test.hpp"
 #include "include/v8-context.h"
 #include "include/v8-date.h"
 #include "include/v8-isolate.h"
@@ -222,7 +222,8 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT8));
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [0.0, 1.2, -3.4, 5.6, -7.8]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::FLOAT32, float32_t>(
+        args[0] = nullable_array_from_vector<
+            Bodo_CTypes::FLOAT32, dtype_to_type<Bodo_CTypes::FLOAT32>::type>(
             {0.0, 1.2, -3.4, 5.6, -7.8}, {true, true, true, true, true});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -710,7 +711,7 @@ static bodo::tests::suite tests([] {
                 append_v8_handle<bodo_array_type::NULLABLE_INT_BOOL, ctype>(
                     context, js_string, int_arr_builder, trycatch);
                 // Check the data and null bitmap
-                int check_int = is_unsigned_integer(ctype) ? 2 : -2;
+                val_t check_int = is_unsigned_integer(ctype) ? 2 : -2;
                 bodo::tests::check(
                     bodo_int_array->data1<bodo_array_type::NULLABLE_INT_BOOL,
                                           val_t>()[1] == check_int);
