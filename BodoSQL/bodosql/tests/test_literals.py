@@ -63,29 +63,6 @@ def test_timestamp_literals(
     )
 
 
-def test_timestamp_literals_extract(
-    basic_df, timestamp_literal_strings, spark_info, memory_leak_check
-):
-    """
-    tests that timestamp literals can be used with basic functions
-    """
-    query = f"""
-    SELECT
-        A, EXTRACT(YEAR FROM TIMESTAMP '{timestamp_literal_strings}')
-    FROM
-        table1
-    """
-
-    check_query(
-        query,
-        basic_df,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        optimize_calcite_plan=False,
-    )
-
-
 @pytest.mark.skip(
     "Currently parses with calcite, unsupported timestamp due to a pandas error"
 )

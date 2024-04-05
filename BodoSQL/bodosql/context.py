@@ -720,7 +720,6 @@ class BodoSQLContext:
 
     def _compile(self, sql, params_dict=None):
         """compiles the query in Bodo."""
-        optimizePlan = True
         import bodosql
 
         if params_dict is None:
@@ -728,7 +727,6 @@ class BodoSQLContext:
 
         func_text, lowered_globals = self._convert_to_pandas(
             sql,
-            optimizePlan,
             params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
@@ -794,7 +792,6 @@ class BodoSQLContext:
         """converts SQL code to Pandas"""
         pd_code, lowered_globals = self._convert_to_pandas(
             sql,
-            True,
             params_dict,
             hide_credentials,
         )
@@ -828,25 +825,6 @@ class BodoSQLContext:
             + pd_code
         )
 
-    def _convert_to_pandas_unoptimized(
-        self,
-        sql,
-        params_dict=None,
-    ):
-        """convert SQL code to Pandas"""
-        pd_code, lowered_globals = self._convert_to_pandas(
-            sql,
-            False,
-            params_dict,
-            False,  # We need to execute the code so don't hide credentials.
-        )
-        # Add the global variable definitions at the begining of the fn,
-        # for better readability
-        added_defs = ""
-        for varname, glbl in lowered_globals.items():
-            added_defs += varname + " = " + repr(glbl) + "\n"
-        return added_defs + pd_code
-
     def _setup_named_params(self, params_dict):
         assert (
             bodo.get_rank() == 0
@@ -866,7 +844,6 @@ class BodoSQLContext:
     def _convert_to_pandas(
         self,
         sql: str,
-        optimize_plan: bool,
         params_dict: Dict[str, Any],
         hide_credentials: bool,
     ) -> Tuple[str, Dict[str, Any]]:
@@ -905,9 +882,7 @@ class BodoSQLContext:
                 self._setup_named_params(params_dict)
 
                 # Generate the code
-                pd_code, globalsToLower = self._get_pandas_code(
-                    sql, optimize_plan, hide_credentials
-                )
+                pd_code, globalsToLower = self._get_pandas_code(sql, hide_credentials)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [(str(k), str(v)) for k, v in globalsToLower.items()]
@@ -952,12 +927,6 @@ class BodoSQLContext:
         return func_text_or_err_msg, globalsDict
 
     def sql(self, sql, params_dict=None, **jit_options):
-        return self._sql(sql, True, params_dict, **jit_options)
-
-    def _test_sql_unoptimized(self, sql, params_dict=None, **jit_options):
-        return self._sql(sql, False, params_dict, **jit_options)
-
-    def _sql(self, sql, optimizePlan, params_dict, **jit_options):
         import bodosql
 
         if params_dict is None:
@@ -965,7 +934,6 @@ class BodoSQLContext:
 
         func_text, lowered_globals = self._convert_to_pandas(
             sql,
-            optimizePlan,
             params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
@@ -1050,46 +1018,8 @@ class BodoSQLContext:
             raise BodoError(plan_or_err_msg)
         return plan_or_err_msg
 
-    def generate_unoptimized_plan(self, sql, params_dict=None):
-        """
-        Return the unoptimized plan for the SQL code as
-        as a Python string.
-        """
-
-        failed = False
-        plan_or_err_msg = ""
-        if bodo.get_rank() == 0:
-            try:
-                self._setup_named_params(params_dict)
-                generator = self._create_generator(False)
-                # Handle the parsing step.
-                generator.parseQuery(sql)
-                # Determine the write type
-                write_type = generator.getWriteType(sql)
-                # Update the schema with types.
-                update_schema(
-                    self.schema,
-                    self.names,
-                    self.df_types,
-                    self.estimated_row_counts,
-                    self.orig_bodo_types,
-                    False,
-                    write_type,
-                )
-                plan_or_err_msg = str(generator.getUnoptimizedPlanString(sql))
-                # Remove the named Params table
-                self._remove_named_params()
-            except Exception as e:
-                failed = True
-                plan_or_err_msg = error_to_string(e)
-        failed = bcast_scalar(failed)
-        plan_or_err_msg = bcast_scalar(plan_or_err_msg)
-        if failed:
-            raise BodoError(plan_or_err_msg)
-        return plan_or_err_msg
-
     def _get_pandas_code(
-        self, sql: str, optimized: bool, hide_credentials: bool
+        self, sql: str, hide_credentials: bool
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate the Pandas code for the given SQL string.
 
@@ -1132,32 +1062,17 @@ class BodoSQLContext:
             write_type,
         )
 
-        if optimized:
-            try:
-                pd_code = str(generator.getPandasString(sql, debugDeltaTable))
-                failed = False
-            except Exception as e:
-                message = error_to_string(e)
-                failed = True
-            if failed:
-                # Raise BodoError outside except to avoid stack trace
-                raise bodo.utils.typing.BodoError(
-                    f"Unable to parse SQL Query. Error message:\n{message}"
-                )
-        else:
-            try:
-                pd_code = str(
-                    generator.getPandasStringUnoptimized(sql, debugDeltaTable)
-                )
-                failed = False
-            except Exception as e:
-                message = error_to_string(e)
-                failed = True
-            if failed:
-                # Raise BodoError outside except to avoid stack trace
-                raise bodo.utils.typing.BodoError(
-                    f"Unable to parse SQL Query. Error message:\n{message}"
-                )
+        try:
+            pd_code = str(generator.getPandasString(sql, debugDeltaTable))
+            failed = False
+        except Exception as e:
+            message = error_to_string(e)
+            failed = True
+        if failed:
+            # Raise BodoError outside except to avoid stack trace
+            raise bodo.utils.typing.BodoError(
+                f"Unable to parse SQL Query. Error message:\n{message}"
+            )
         if failed:
             # Raise BodoError outside except to avoid stack trace
             raise bodo.utils.typing.BodoError(

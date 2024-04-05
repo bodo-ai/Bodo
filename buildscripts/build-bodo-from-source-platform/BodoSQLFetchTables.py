@@ -1,9 +1,13 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 """
 Attempt to fetch all of the tables used by BodoSQL. This works by calling
-generate_unoptimized_plan() on each query and then relying on logging to output
+generate_plan() on each query and then relying on logging to output
 which tables were accessed. This script also records which files successfully
-validated + created an unoptimized plan and which files failed to do so.
+validated + created a plan and which files failed to do so.
+
+Note: This script currently runs the plan optimizations since we removed the
+unoptimized API. If we want to use this again we should consider exposing a
+validate query instead.
 """
 
 import argparse
@@ -40,7 +44,7 @@ def timeout(func, args=(), timeout_duration=300):
 
 
 def check_validation(bc, sql_text: str, filename: str):
-    """Attempt to validate a query by running bc.generate_unoptimized_plan(sql_text).
+    """Attempt to validate a query by running bc.generate_plan(sql_text).
     Logs if a file succeeds or fails.
 
     Args:
@@ -49,7 +53,7 @@ def check_validation(bc, sql_text: str, filename: str):
         filename (str): The filename for the query. Used for logging success/failure.
     """
     try:
-        timeout(bc.generate_unoptimized_plan, (sql_text,))
+        timeout(bc.generate_plan, (sql_text,))
         print(f"Successfully validated query file: {filename}")
     except Exception as e:
         print(f"Encountered error: {str(e)}")
@@ -98,7 +102,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="BodoSQLFetchTables",
-        description="Attempt to compute generate_unoptimized_plan() for each query file to find the tables used",
+        description="Attempt to compute generate_plan() for each query file to find the tables used",
     )
 
     parser.add_argument(

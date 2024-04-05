@@ -116,10 +116,7 @@ public class PandasGenTest {
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);
-    System.out.println("Unoptimized plan:");
-    System.out.println(unOptimizedPlanStr + "\n");
-    String optimizedPlanStr = getRelationalAlgebraString(generator, sql, true);
+    String optimizedPlanStr = getRelationalAlgebraString(generator, sql);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
 
@@ -131,9 +128,9 @@ public class PandasGenTest {
   }
 
   private static String getRelationalAlgebraString(
-      RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+      RelationalAlgebraGenerator generator, String sql) {
     try {
-      RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
+      RelRoot root = generator.getRelationalAlgebra(sql);
       return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
     } catch (Exception e) {
       throw new RuntimeException(e);

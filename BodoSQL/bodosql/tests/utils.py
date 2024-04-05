@@ -78,7 +78,6 @@ def check_query(
     only_jit_1DVar: Optional[bool] = None,
     spark_dataframe_dict: Optional[Dict[str, pd.DataFrame]] = None,
     equivalent_spark_query: Optional[str] = None,
-    optimize_calcite_plan: bool = True,
     spark_input_cols_to_cast: Optional[Dict[str, Dict[str, str]]] = None,
     pyspark_schemas: Optional[Dict[str, pyspark.sql.types.StructType]] = None,
     named_params_timedelta_interval: bool = False,
@@ -197,9 +196,6 @@ def check_query(
             the expected output, if different from the query string used with
             BodoSQL.
 
-        optimize_calcite_plan: Controls if the calcite plan used to construct
-            the pandas code is optimized or not
-
         spark_input_cols_to_cast: A hashmap of dataframe --> list of tuples in the form
             (colname, typename) as strings. The specified columns in the specified
             dataframe are cast to the specified types before the expected
@@ -310,9 +306,7 @@ def check_query(
         print("Query:")
         print(query)
         bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
-        print("Unoptimized Plan:")
-        print(bc.generate_unoptimized_plan(query, named_params))
-        print("Optimized Plan:")
+        print("Plan:")
         print(bc.generate_plan(query, named_params))
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params))
@@ -417,7 +411,6 @@ def check_query(
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
             convert_columns_to_pandas,
             session_tz,
@@ -436,7 +429,6 @@ def check_query(
         check_dtype,
         sort_output,
         expected_output,
-        optimize_calcite_plan,
         convert_nullable_bodosql,
         use_table_format,
         use_dict_encoded_strings,
@@ -457,19 +449,11 @@ def check_query(
 
     # Return Pandas code if requested
     if return_codegen:
-        if optimize_calcite_plan:
-            result["pandas_code"] = bc.convert_to_pandas(query, named_params)
-        else:
-            result["pandas_code"] = bc._convert_to_pandas_unoptimized(
-                query, named_params
-            )
+        result["pandas_code"] = bc.convert_to_pandas(query, named_params)
 
     # Return sequential output if requested
     if return_seq_dataframe:
-        if optimize_calcite_plan:
-            result["output_df"] = bc.sql(query, named_params)
-        else:
-            result["output_df"] = bc._test_sql_unoptimized(query, named_params)
+        result["output_df"] = bc.sql(query, named_params)
     return result
 
 
@@ -484,7 +468,6 @@ def check_query_jit(
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     use_table_format,
     use_dict_encoded_strings,
@@ -582,7 +565,6 @@ def check_query_jit(
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
                 check_typing_issues,
                 convert_columns_to_pandas,
@@ -599,7 +581,6 @@ def check_query_jit(
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
@@ -617,7 +598,6 @@ def check_query_jit(
                 check_dtype,
                 sort_output,
                 expected_output,
-                optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
@@ -645,7 +625,6 @@ def check_query_jit(
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
             session_tz=session_tz,
             enable_timestamp_tz=enable_timestamp_tz,
@@ -675,7 +654,6 @@ def check_query_jit(
             check_dtype,
             sort_output,
             expected_output,
-            optimize_calcite_plan,
             convert_nullable_bodosql,
             session_tz=session_tz,
             enable_timestamp_tz=enable_timestamp_tz,
@@ -700,7 +678,6 @@ def check_query_python(
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     convert_columns_to_pandas,
     session_tz,
@@ -743,10 +720,7 @@ def check_query_python(
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
     bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
-    if optimize_calcite_plan:
-        bodosql_output = bc.sql(query, named_params)
-    else:
-        bodosql_output = bc._test_sql_unoptimized(query, named_params)
+    bodosql_output = bc.sql(query, named_params)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -770,7 +744,6 @@ def check_query_jit_seq(
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     check_typing_issues,
     convert_columns_to_pandas,
@@ -822,7 +795,6 @@ def check_query_jit_seq(
         dataframe_dict,
         named_params,
         InputDist.REP,
-        optimize_calcite_plan,
         False,
         session_tz,
         check_typing_issues=check_typing_issues,
@@ -850,7 +822,6 @@ def check_query_jit_1D(
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
@@ -903,7 +874,6 @@ def check_query_jit_1D(
         dataframe_dict,
         named_params,
         InputDist.OneD,
-        optimize_calcite_plan,
         is_out_distributed,
         session_tz,
         check_typing_issues=check_typing_issues,
@@ -942,7 +912,6 @@ def check_query_jit_1DVar(
     check_dtype,
     sort_output,
     expected_output,
-    optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
@@ -995,7 +964,6 @@ def check_query_jit_1DVar(
         dataframe_dict,
         named_params,
         InputDist.OneDVar,
-        optimize_calcite_plan,
         is_out_distributed,
         session_tz,
         check_typing_issues=check_typing_issues,
@@ -1031,7 +999,6 @@ def _run_jit_query(
     dataframe_dict,
     named_params,
     input_dist,
-    optimize_calcite_plan,
     is_out_distributed,
     session_tz,
     check_typing_issues,
@@ -1100,10 +1067,7 @@ def _run_jit_query(
     if session_tz is not None:
         func_text += f"        , default_tz={repr(session_tz)}\n"
     func_text += "    )\n"
-    if optimize_calcite_plan:
-        func_text += f"    result = bc.sql(query"
-    else:
-        func_text += f"    result = bc._test_sql_unoptimized(query"
+    func_text += f"    result = bc.sql(query"
     if keys_list:
         func_text += ", {"
         for key in keys_list:

@@ -369,7 +369,6 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
     param_keys: Tuple[str],
     param_values: Tuple[Any],
     hide_credentials: bool,
-    is_optimized: bool = True,
 ) -> Tuple[str, Dict[str, Any], str]:
     """
     Helper function called by _gen_pd_func_for_query and _gen_pd_func_str_for_query
@@ -487,19 +486,11 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     True,
                     write_type,
                 )
-                if is_optimized:
-                    pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                        sql_str, False, True
-                    )
-                    pd_code = str(pd_code_sql_plan_pair.getPdCode())
-                    sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
-                else:
-                    pd_code_sql_plan_pair = generator.getPandasAndPlanStringUnoptimized(
-                        sql_str, False
-                    )
-                    pd_code = str(pd_code_sql_plan_pair.getPdCode())
-                    sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
-
+                pd_code_sql_plan_pair = generator.getPandasAndPlanString(
+                    sql_str, False, True
+                )
+                pd_code = str(pd_code_sql_plan_pair.getPdCode())
+                sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
@@ -647,51 +638,3 @@ def overload_convert_to_pandas(bodo_sql_context, sql_str, param_dict=None):
     bodo.utils.typing.raise_bodo_error(
         "Invalid BodoSQLContext.convert_to_pandas() call"
     )
-
-
-def _gen_pd_func_and_globals_for_unoptimized_query(
-    bodo_sql_context_type, sql_str, param_keys, param_values
-):
-    """Generate a Pandas function for query given the data type of SQL context.
-    Used in Bodo typing pass to handle BodoSQLContext._test_sql_unoptimized() calls.
-    This function generates code without performing optimizations for testing
-    coverage of operations that tend to have simple cases optimized out.
-    """
-    import bodosql
-
-    func_text, globalsToLower, _ = _gen_sql_plan_pd_func_text_and_lowered_globals(
-        bodo_sql_context_type,
-        sql_str,
-        param_keys,
-        param_values,
-        False,  # Don't hide credentials because we need to execute this code.
-        is_optimized=False,
-    )
-
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "pd": pd,
-            "np": np,
-            "bodo": bodo,
-            "re": re,
-            "bodosql": bodosql,
-            "time": time,
-            "bif": bodo.ir.filter,
-        },
-        loc_vars,
-    )
-    impl = loc_vars["impl"]
-    return impl, globalsToLower
-
-
-@overload_method(
-    BodoSQLContextType, "_test_sql_unoptimized", inline="always", no_unliteral=True
-)
-def overload_test_sql_unoptimized(bodo_sql_context, sql_str):
-    """BodoSQLContextType._test_sql_unoptimized() should be handled in bodo typing pass since the
-    generated code cannot be handled in regular overloads
-    (requires Bodo's untyped pass and typing pass)
-    """
-    bodo.utils.typing.raise_bodo_error("Invalid BodoSQLContext.sql() call")

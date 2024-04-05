@@ -2960,7 +2960,6 @@ class TypingTransforms:
         # to avoid paying the import overhead for Bodo calls with no BodoSQL.
         if isinstance(func_mod, ir.Var) and func_name in (
             "sql",
-            "_test_sql_unoptimized",
             "convert_to_pandas",
         ):  # pragma: no cover
             # Try import BodoSQL and check the type
@@ -5400,13 +5399,6 @@ class TypingTransforms:
     ):  # pragma: no cover
         """inline BodoSQLContextType.sql() calls since the generated code cannot
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
-
-        This code is also used for _test_sql_unoptimized, which is an internal testing
-        API that generates Pandas code on the original non-optimized plan. We use the
-        testing function to check coverage of operators that would otherwise be
-        optimized out. We use this so our test suite can have simple cases but we can
-        have confidence in the complex cases when optimizations may not be possible
-        (i.e. testing scalar support using literals).
         """
         import bodosql
         from bodosql.context_ext import BodoSQLContextType
@@ -5622,13 +5614,6 @@ class TypingTransforms:
             )
             # Save the plan if a cache location is set up.
             BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
-        elif func_name == "_test_sql_unoptimized":
-            (
-                impl,
-                additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_and_globals_for_unoptimized_query(
-                sql_context_type, sql_str, keys, value_typs
-            )
         elif func_name == "convert_to_pandas":
             (
                 impl,

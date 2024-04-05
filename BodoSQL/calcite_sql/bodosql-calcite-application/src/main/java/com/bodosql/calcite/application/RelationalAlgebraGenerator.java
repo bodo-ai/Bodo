@@ -348,35 +348,6 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  private RelRoot getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    SqlNode validatedSqlNode = validateQuery(sql);
-    RelRoot result = planner.rel(validatedSqlNode);
-    result = result.withRel(planner.transform(0, planner.getEmptyTraitSet(), result.rel));
-    if (closePlanner) {
-      // TODO(jsternberg): Rework this logic because these are some incredibly leaky abstractions.
-      // We won't be doing optimizations so transform the relational algebra to use the pandas nodes
-      // now. This is a temporary thing while we transition to using the volcano planner.
-      RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-      result = result.withRel(planner.transform(2, requiredOutputTraits, result.rel));
-      planner.close();
-    }
-    // Close any open connections from catalogs
-    if (catalog != null) {
-      catalog.closeConnections();
-    }
-    return result;
-  }
-
-  private RelRoot getOptimizedRelationalAlgebra(RelRoot nonOptimizedPlan)
-      throws RelConversionException {
-    RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-    RelRoot optimizedPlan =
-        nonOptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, nonOptimizedPlan.rel));
-    planner.close();
-    return optimizedPlan;
-  }
-
   /**
    * Takes a sql statement and converts it into an optimized relational algebra node. The result of
    * this function is a logical plan that has been optimized using a rule based optimizer.
@@ -388,13 +359,98 @@ public class RelationalAlgebraGenerator {
    * @throws SqlSyntaxException, SqlValidationException, RelConversionException
    */
   @VisibleForTesting
-  public RelRoot getRelationalAlgebra(String sql, boolean performOptimizations)
+  public RelRoot getRelationalAlgebra(String sql)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    RelRoot nonOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, !performOptimizations);
-    if (!performOptimizations) {
-      return nonOptimizedPlan;
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql);
+      RelRoot baseResult = planner.rel(validatedSqlNode);
+      RelRoot unoptimizedPlan =
+          baseResult.withRel(planner.transform(0, planner.getEmptyTraitSet(), baseResult.rel));
+      RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
+      RelRoot optimizedPlan =
+          unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
+      return optimizedPlan;
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
     }
-    return getOptimizedRelationalAlgebra(nonOptimizedPlan);
+  }
+
+  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts)
+      throws Exception {
+    RelNode newRoot = PandasUtilKt.pandasProject(root);
+    if (includeCosts) {
+      StringWriter sw = new StringWriter();
+      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
+      newRoot.explain(costWriter);
+      return sw.toString();
+    } else {
+      return RelOptUtil.toString(newRoot);
+    }
+  }
+
+  // Default debugDeltaTable to false
+  public String getPandasString(String sql) throws Exception {
+    return getPandasString(sql, false);
+  }
+
+  private String getPandasStringFromPlan(
+      RelRoot plan, String originalSQL, boolean debugDeltaTable) {
+    /**
+     * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
+     * this, we use two components. First, each RelNode comes with a unique id, which This is used
+     * to track exprTypes before code generation.
+     */
+    RelNode rel = PandasUtilKt.pandasProject(plan);
+    this.loweredGlobalVariables = new HashMap<>();
+    PandasCodeGenVisitor codegen =
+        new PandasCodeGenVisitor(
+            this.loweredGlobalVariables,
+            originalSQL,
+            this.typeSystem,
+            debugDeltaTable,
+            this.verboseLevel,
+            this.streamingBatchSize);
+    codegen.go(rel);
+    return codegen.getGeneratedCode();
+  }
+
+  public HashMap<String, String> getLoweredGlobalVariables() {
+    return this.loweredGlobalVariables;
+  }
+
+  private static PlannerType choosePlannerType(int plannerType) {
+    switch (plannerType) {
+      case VOLCANO_PLANNER:
+        return PlannerType.VOLCANO;
+      case STREAMING_PLANNER:
+        return PlannerType.STREAMING;
+      default:
+        throw new RuntimeException("Unexpected Planner option");
+    }
+  }
+
+  // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
+  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
+    RelRoot root = getRelationalAlgebra(sql);
+    return getOptimizedPlanStringFromRoot(root, includeCosts);
+  }
+
+  public PandasCodeSqlPlanPair getPandasAndPlanString(
+      String sql, boolean debugDeltaTable, boolean includeCosts) throws Exception {
+    RelRoot optimizedPlan = getRelationalAlgebra(sql);
+    String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+    String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
+    return new PandasCodeSqlPlanPair(pandasString, planString);
+  }
+
+  public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
+    RelRoot optimizedPlan = getRelationalAlgebra(sql);
+    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
   /**
@@ -419,106 +475,6 @@ public class RelationalAlgebraGenerator {
       // If there is no write then the return value
       // doesn't matter.
       return "INSERT";
-    }
-  }
-
-  public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    RelRoot optimizedPlan = getRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
-  }
-
-  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts)
-      throws Exception {
-    RelNode newRoot = PandasUtilKt.pandasProject(root);
-    if (includeCosts) {
-      StringWriter sw = new StringWriter();
-      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
-      newRoot.explain(costWriter);
-      return sw.toString();
-    } else {
-      return RelOptUtil.toString(newRoot);
-    }
-  }
-
-  public PandasCodeSqlPlanPair getPandasAndPlanString(
-      String sql, boolean debugDeltaTable, boolean includeCosts) throws Exception {
-    RelRoot optimizedPlan = getRelationalAlgebra(sql, true);
-    String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
-    String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
-    return new PandasCodeSqlPlanPair(pandasString, planString);
-  }
-
-  // Default debugDeltaTable to false
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, false);
-  }
-
-  public PandasCodeSqlPlanPair getPandasAndPlanStringUnoptimized(
-      String sql, boolean debugDeltaTable) throws Exception {
-    RelRoot unOptimizedPlan = getRelationalAlgebra(sql, false);
-    String pandasString = getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
-    String planString = RelOptUtil.toString(PandasUtilKt.pandasProject(unOptimizedPlan));
-    return new PandasCodeSqlPlanPair(pandasString, planString);
-  }
-
-  public String getPandasStringUnoptimized(String sql, boolean debugDeltaTable) throws Exception {
-    RelRoot unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
-  }
-
-  // Default debugDeltaTable to false
-  public String getPandasStringUnoptimized(String sql) throws Exception {
-    return getPandasStringUnoptimized(sql, false);
-  }
-
-  private String getPandasStringFromPlan(
-      RelRoot plan, String originalSQL, boolean debugDeltaTable) {
-    /**
-     * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
-     * this, we use two components. First, each RelNode comes with a unique id, which This is used
-     * to track exprTypes before code generation.
-     */
-    RelNode rel = PandasUtilKt.pandasProject(plan);
-    this.loweredGlobalVariables = new HashMap<>();
-    PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(
-            this.loweredGlobalVariables,
-            originalSQL,
-            this.typeSystem,
-            debugDeltaTable,
-            this.verboseLevel,
-            this.streamingBatchSize);
-    codegen.go(rel);
-    return codegen.getGeneratedCode();
-  }
-
-  public String getOptimizedPlanString(String sql) throws Exception {
-    return getOptimizedPlanString(sql, false);
-  }
-
-  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
-    RelRoot root = getRelationalAlgebra(sql, true);
-    return getOptimizedPlanStringFromRoot(root, includeCosts);
-  }
-
-  public String getUnoptimizedPlanString(String sql) throws Exception {
-    RelRoot root = getRelationalAlgebra(sql, false);
-    return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
-  }
-
-  public HashMap<String, String> getLoweredGlobalVariables() {
-    return this.loweredGlobalVariables;
-  }
-
-  private static PlannerType choosePlannerType(int plannerType) {
-    switch (plannerType) {
-      case VOLCANO_PLANNER:
-        return PlannerType.VOLCANO;
-      case STREAMING_PLANNER:
-        return PlannerType.STREAMING;
-      default:
-        throw new RuntimeException("Unexpected Planner option");
     }
   }
 }
