@@ -43,6 +43,133 @@ in a [BodoSQLContext]. If these types are unsigned, then this may result in
 different behavior than expected. We always recommend working with signed types
 to avoid any potential issues.
 
+### TIMESTAMP\_TZ
+
+Note that `bodo.TimestampTZ` in python is a custom type provided by the Bodo
+library. In `sql` this datatype is compatible with [Snowflake's
+TIMESTAMP\_TZ](https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz).
+
+`TIMESTAMP_TZ` stores a timestamp along with a `UTC` offset with a resolution of
+minutes. This offset can be arbitrary, but it is not dependant on the timestamp
+value. In other words, it is not aware of timezones and changes in offset such
+as `DST`. While most operations will use the timestamp value (not `UTC`), any
+comparison between two `TIMESTAMP_TZ` values will treat them as equal if
+their `UTC` time is equal. For example:
+
+```sql
+SELECT '2024-01-01 00:00:00 +00:00'::timestamptz = '2024-01-01 01:00:00 +01:00'::timestamptz
+```
+The above query will output a row with `TRUE`  - the timestamps *are* the same
+with respect to `UTC` even though their values without the offset are different.
+
+```sql
+SELECT '2024-01-01 00:00:00 +00:00'::timestamptz = '2024-01-01 00:00:00 +05:00'::timestamptz
+```
+The above query will output a row with `False` - the timestamps *are not* the same
+with respect to `UTC` even though their values without the offset are equal.
+
+This means that grouping by a `TIMESTAMP_TZ` value will follow the same equality
+rules above, and we make no guarantees about what the offset of the key for a
+group will be - only guarantee is that the key's `UTC` timestamp is equal to all
+values for that group. For example, consider the following table:
+
+| A                          | B |
+|----------------------------|---|
+| 2023-01-01 00:00:00 +00:00 | 1 |
+| 2023-01-01 01:00:00 +01:00 | 1 |
+| 2023-01-01 00:00:00 +01:00 | 1 |
+| 2023-01-01 01:00:00 +00:00 | 1 |
+| 2023-01-02 00:00:00 +00:00 | 1 |
+| 2023-01-02 01:00:00 +01:00 | 1 |
+
+Where `A` is a `TIMESTAMP_TZ` and `B` is a `NUMBER`. Note that rows `0` and `1`
+have equal values for `A`. Similarly rows `2` and `3` are equal in terms of `A`,
+and same for rows `4` and `5`. Then, both of the following are valid results for
+`SELECT A, sum(B) FROM table GROUP BY A`:
+
+| A                          | B |
+|----------------------------|---|
+| 2023-01-01 00:00:00 +00:00 | 2 |
+| 2023-01-01 00:00:00 +01:00 | 2 |
+| 2023-01-02 00:00:00 +00:00 | 2 |
+
+| A                          | B |
+|----------------------------|---|
+| 2023-01-01 01:00:00 +01:00 | 2 |
+| 2023-01-01 00:00:00 +01:00 | 2 |
+| 2023-01-02 01:00:00 +01:00 | 2 |
+
+Note that these aren't the only two possibilities - for the query above there
+are `8` possible results.
+
+If you need to compare values by their local timestamp instead of their UTC
+timestamp, consider casting to `timestampntz`. For the same input table above,
+here's what the result of `SELECT A::timestampntz FROM table` would look like:
+
+| A::timestampntz     |
+|---------------------|
+| 2023-01-01 00:00:00 |
+| 2023-01-01 01:00:00 |
+| 2023-01-01 00:00:00 |
+| 2023-01-01 01:00:00 |
+| 2023-01-02 00:00:00 |
+| 2023-01-02 01:00:00 |
+
+
+Note that this model of equality also holds during `JOIN`s:
+
+Table 1:
+| A                          | B |
+|----------------------------|---|
+| 2023-01-01 00:00:00 +00:00 | 1 |
+| 2024-02-02 00:00:00 +00:00 | 2 |
+
+Table 2:
+| A                          |
+|----------------------------|
+| 2023-01-01 00:00:00 +01:00 |
+| 2023-01-01 00:00:00 +02:00 |
+| 2023-01-01 00:00:00 +03:00 |
+| 2024-02-02 00:00:00 +01:00 |
+| 2024-02-02 00:00:00 +02:00 |
+| 2024-02-02 00:00:00 +03:00 |
+
+The result of `SELECT TABLE1.A, TABLE2.A, B FROM TABLE1 JOIN TABLE2 ON TABLE1.A=TABLE2.A` would be:
+
+| TABLE1.A                   | TABLE2.A                   | B |
+|----------------------------|----------------------------|---|
+| 2023-01-01 00:00:00 +00:00 | 2023-01-01 00:00:00 +01:00 | 1 |
+| 2023-01-01 00:00:00 +00:00 | 2023-01-01 00:00:00 +02:00 | 1 |
+| 2023-01-01 00:00:00 +00:00 | 2023-01-01 00:00:00 +03:00 | 1 |
+| 2024-02-02 00:00:00 +00:00 | 2024-02-02 00:00:00 +01:00 | 2 |
+| 2024-02-02 00:00:00 +00:00 | 2024-02-02 00:00:00 +02:00 | 2 |
+| 2024-02-02 00:00:00 +00:00 | 2024-02-02 00:00:00 +03:00 | 2 |
+
+
+Aside from comparison most other operations will treat `TIMESTAMP_TZ` as it's
+local timestamp, for example `SELECT EXTRACT(HOUR from '2024-01-02 03:04:05 +06:07'::timestamptz)`
+should return `3` (even though the `UTC` timestamp would have an hour of `21`).
+
+#### TIMESTAMP\_TZ interaction with Snowflake
+
+Note that reading `TIMESTAMP_TZ` values to or from Snowflake may change the
+session parameter `TIMESTAMP_TZ_OUTPUT_FORMAT`. If your query relies on custom
+values for `TIMESTAMP_TZ_OUTPUT_FORMAT` you may experience unexpected behavior.
+
+#### TIMESTAMP\_TZ limitations
+
+Currently only the following aggregation functions are supported with
+`TIMESTAMP_TZ`. Future releases will expand this list.
+
++ min/max
++ first/last/any\_value
++ count
++ mode
+
+Additionally, `TIMESTAMP_TZ` is *not* supported in semi-structured data (arrays,
+ and objects).
+
+
 ## Supported Literals
 
 BodoSQL supports the following literal types:

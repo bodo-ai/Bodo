@@ -18,7 +18,7 @@ then it is convrted to a corresponding timestamp. If the string represents an in
 - `#!sql TO_TIMESTAMP(string_expr, format_expr)` uses the format string to specify how to parse the
 string expression as a timestamp. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
 - `#!sql TO_TIMESTAMP(timestamp_exr)` returns a timestamp expression representing the same moment in time,
-but changing the timezone if necessary to be timezone-naive.
+but changing the timezone or offset if necessary to be timezone-naive.
 - If the input is `NULL`, outputs `NULL`
 
 Raises an error if the input expression does not match one of these formats.

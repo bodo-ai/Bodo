@@ -7,6 +7,7 @@ Converts an input expression to a `DATE` type. The input can be one of
 the following:
 
 - `#!sql TO_DATE(timestamp_expr)` truncates the timestamp to its date value.
+- `#!sql TO_DATE(timestamptz_expr)` truncates the TIMESTAMPTZ to its date value based on it's local timestamp (not UTC).
 - `#!sql TO_DATE(string_expr)` if the string is in date format (e.g. `"1999-01-01"`)
 then it is convrted to a corresponding date. If the string represents an integer
 (e.g. `"123456"`) then it is interpreted as the number of seconds/milliseconds/microseconds/nanoseconds
