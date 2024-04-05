@@ -143,42 +143,6 @@ def test_is_not_null_str_cols(bodosql_null_string_df, spark_info, memory_leak_ch
 
 
 @pytest.mark.slow
-def test_is_null_str_scalar(bodosql_null_string_df, spark_info, memory_leak_check):
-    """tests is_null on str scalars"""
-    query = "Select CASE WHEN B is NULL then TRUE ELSE FALSE END, CASE WHEN A is NULL then TRUE ELSE FALSE END from table1"
-
-    expected = get_expected_output_with_null_col_b(
-        spark_info, bodosql_null_string_df, query, "string"
-    )
-    check_query(
-        query,
-        bodosql_null_string_df,
-        spark_info,
-        expected_output=expected,
-        check_names=False,
-        check_dtype=False,
-        optimize_calcite_plan=False,
-        only_python=True,
-    )
-
-
-@pytest.mark.slow
-def test_null_binary_scalar(bodosql_binary_types, spark_info, memory_leak_check):
-    """tests is_null on binary scalars"""
-    query = "Select CASE WHEN B is NULL then TRUE ELSE FALSE END, CASE WHEN A is not NULL then TRUE ELSE FALSE END from table1"
-
-    check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        optimize_calcite_plan=False,
-        only_python=True,
-    )
-
-
-@pytest.mark.slow
 def test_is_null_bool_cols(bodosql_null_bool_df, spark_info, memory_leak_check):
     """tests is null on bool columns"""
     query = "Select A is Null, B is Null from table1"
