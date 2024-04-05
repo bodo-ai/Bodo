@@ -10,7 +10,7 @@ on:
       regions:
         description: comma-separated list of regions
         required: false
-        default: 'us-east-1,us-east-2,us-west-1,us-west-2'
+        default: 'us-east-1,us-east-2,us-west-1,us-west-2,eu-west-1'
 
 jobs:
 
