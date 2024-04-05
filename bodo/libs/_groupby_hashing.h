@@ -126,6 +126,8 @@ struct HashEqualComputeCategoricalIndex {
  */
 struct HashNuniqueComputationNumpyOrNullableIntBool {
     uint32_t operator()(const int64_t i) const {
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+               arr->arr_type == bodo_array_type::NUMPY);
         uint32_t retval = 0;
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
             arr->dtype == Bodo_CTypes::_BOOL) {
@@ -134,7 +136,8 @@ struct HashNuniqueComputationNumpyOrNullableIntBool {
                 (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(), i);
             hash_inner_32<bool>(&bit, seed, &retval);
         } else {
-            assert(arr->arr_type == bodo_array_type::NUMPY);
+            // The implementation of data1 is the same for both numpy and
+            // nullable
             char* ptr = arr->data1<bodo_array_type::NUMPY>() + i * siztype;
             hash_string_32(ptr, siztype, seed, &retval);
         }

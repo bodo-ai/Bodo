@@ -47,3 +47,6 @@ rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
 # --------- Run Tests -----------
 cd e2e-tests
 pytest -s -v --durations=0 --ignore=deep_learning
+cd ..
+pytest -s -v --durations=0 bodo/tests/test_javascript*
+

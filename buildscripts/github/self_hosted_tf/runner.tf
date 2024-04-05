@@ -42,5 +42,10 @@ locals {
       "arn:aws:iam::427443013497:policy/AssumeEngineCIRole", # Assume the EngineCIRole
       "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess" # DynamoDB Read Access for Credstash
     ]
+
+    # Give the runners a 50 GB EBS Volume
+    block_device_mappings = [{
+      volume_size = 50
+    }]
   }
 }

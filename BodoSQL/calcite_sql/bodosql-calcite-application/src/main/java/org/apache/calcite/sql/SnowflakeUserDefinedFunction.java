@@ -16,7 +16,7 @@ import static com.bodosql.calcite.catalog.SnowflakeCatalog.snowflakeTypeNameToTy
  */
 public class SnowflakeUserDefinedFunction extends SnowflakeUserDefinedBaseFunction implements ScalarFunction {
     // Temporary field to enable testing JavaScript UDFs.
-    public static boolean enableJavaScript = false;
+    public static boolean enableJavaScript = true;
 
 
     // -- Fields --
