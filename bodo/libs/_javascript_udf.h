@@ -5,8 +5,10 @@
 #include "_bodo_common.h"
 #include "_dict_builder.h"
 #include "_table_builder.h"
+#include "include/libplatform/libplatform.h"
 #include "include/v8-context.h"
 #include "include/v8-exception.h"
+#include "include/v8-isolate.h"
 #include "include/v8-persistent-handle.h"
 #include "include/v8-script.h"
 #include "include/v8-typed-array.h"
@@ -34,6 +36,19 @@
         }                                                                     \
     }
 #endif
+
+// Keep the global platform and isolate together so we can clean up properly
+// the isolate must be destroyed before the platform
+struct v8_platform_isolate {
+    v8::Isolate *isolate;
+    std::unique_ptr<v8::Platform> platform;
+    ~v8_platform_isolate() {
+        v8::platform::NotifyIsolateShutdown(this->platform.get(),
+                                            this->isolate);
+        this->isolate->Dispose();
+    }
+};
+static std::shared_ptr<v8_platform_isolate> v8_platform_isolate_instance;
 
 struct JavaScriptFunction {
     // The type of the return array

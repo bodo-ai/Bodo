@@ -203,12 +203,12 @@ void bodo::tests::check(bool b, const char *msg, std::source_location loc) {
 void bodo::tests::check_exception(std::function<void()> f,
                                   const char *expected_msg_start) {
     bool caught = false;
-    const char *msg = nullptr;
+    std::string msg;
 
     try {
         f();
     } catch (std::runtime_error &e) {
-        msg = e.what();
+        msg = std::string(e.what());
         caught = true;
     }
 
