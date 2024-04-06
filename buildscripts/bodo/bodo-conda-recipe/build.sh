@@ -2,7 +2,7 @@
 # CC="mpicxx -cxx=$GXX -std=c++11" GXX="mpicxx -cxx=$GXX -std=c++11" \
 # OPENCV_DIR="${PREFIX}" DAALROOT="${PREFIX}"
 
-if  [[-z ${DISABLE_SCCACHE_IN_BUILD+x}]]; then
+if  [[ -z ${DISABLE_SCCACHE_IN_BUILD+x} ]]; then
     # Enable SCCache
     export SCCACHE_BUCKET=engine-codebuild-cache
     export SCCACHE_REGION=us-east-2

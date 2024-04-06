@@ -802,13 +802,31 @@ def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
     return tup_def.args[0].name
 
 
-def sync_and_reraise_error(err, _is_parallel=False):  # pragma: no cover
-    """If `err` is an Exception on any rank, broadcast and re-raise it on all ranks.
+def sync_and_reraise_error(
+    err,
+    _is_parallel=False,
+    bcast_lowest_err: bool = True,
+    default_generic_err_msg: str | None = None,
+):  # pragma: no cover
+    """
+    If `err` is an Exception on any rank, raise an error on all ranks.
+    If 'bcast_lowest_err' is True, we will broadcast the error from the
+    "lowest" rank that has an error and raise it on all the ranks without
+    their own error. If 'bcast_lowest_err' is False, we will raise a
+    generic error on ranks without their own error. This is useful in
+    cases where the error could be something that's not safe to broadcast
+    (e.g. not pickle-able).
     This is a no-op if all ranks are exception-free.
 
     Args:
         err (Exception or None): Could be None or an exception
         _is_parallel (bool): Whether this is being called from many ranks
+        bcast_lowest_err (bool): Whether to broadcast the error from the
+            lowest rank. Only applicable in the _is_parallel case.
+        default_generic_err_msg (str, optional): If bcast_lowest_err = False,
+            this message will be used for the exception raised on
+            ranks without their own error. Only applicable in the
+            _is_parallel case.
     """
     comm = MPI.COMM_WORLD
 
@@ -826,7 +844,15 @@ def sync_and_reraise_error(err, _is_parallel=False):  # pragma: no cover
                 lowest_err = err
             else:
                 lowest_err = None
-            lowest_err = comm.bcast(lowest_err, root=failing_rank)
+            if bcast_lowest_err:
+                lowest_err = comm.bcast(lowest_err, root=failing_rank)
+            else:
+                err_msg = (
+                    default_generic_err_msg
+                    if (default_generic_err_msg is not None)
+                    else "Exception on some ranks. See other ranks for error."
+                )
+                lowest_err = Exception(err_msg)
 
             # Each rank that already has an error will re-raise their own error, and
             # any rank that doesn't have an error will re-raise the lowest rank's error.
