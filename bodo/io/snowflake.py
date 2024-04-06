@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -21,6 +23,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.timestamptz_ext import ArrowTimestampTZType
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
+    sync_and_reraise_error,
     update_env_vars,
     update_file_contents,
 )
@@ -34,7 +37,11 @@ from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type, raise_bod
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector import SnowflakeConnection
     from snowflake.connector.cursor import ResultMetadata, SnowflakeCursor
-    from snowflake.connector.result_batch import JSONResultBatch, ResultBatch
+    from snowflake.connector.result_batch import (
+        ArrowResultBatch,
+        JSONResultBatch,
+        ResultBatch,
+    )
 
 # How long the schema / typeof probe query should run for in the worst case.
 # This is to guard against increasing compilation time prohibitively in case there are
@@ -1771,9 +1778,9 @@ def get_schema(
     # is used from Python. This is used for comparing with
     # _bodo_read_as_dict which will use Python's convention.
     snowflake_case_map = {
-        name.lower()
-        if convert_snowflake_column_names and name.isupper()
-        else name: name
+        (
+            name.lower() if convert_snowflake_column_names and name.isupper() else name
+        ): name
         for name in str_col_name_to_ind.keys()
     }
 
@@ -1958,6 +1965,130 @@ def set_timestamptz_format_connection_parameter_if_required(
         )
 
 
+def execute_length_query_helper(conn: "SnowflakeConnection", query: str) -> int:
+    """
+    Helper function for the 'get_dataset' function. This
+    executes the given query that is expected to return the
+    number of rows in a table or output of a query.
+    NOTE: The function must acts "independently", i.e. it will
+    be executed on all ranks that it's called on and will do
+    no error synchronization. The caller must handle those.
+
+    Args:
+        conn (SnowflakeConnection): Snowflake connection to use for
+            executing the query.
+        query (str): The query to execute.
+
+    Returns:
+        int: The number of rows returned by Snowflake.
+    """
+    cur = conn.cursor()
+    ev_query = tracing.Event("execute_length_query", is_parallel=False)
+    ev_query.add_attribute("query", query)
+    t0 = time.time()
+    cur.execute(query)
+    sf_exec_time = time.time() - t0
+    if bodo.user_logging.get_verbose_level() >= 2:
+        bodo.user_logging.log_message(
+            "Snowflake Query Submission (Read)",
+            "/* execute_length_query */ Snowflake Query ID: "
+            + cur.sfqid
+            + "\nSQL Text:\n"
+            + query
+            + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
+        )
+    # We are just loading a single row of data so we can just load
+    # all of the data.
+    arrow_data = cur.fetch_arrow_all()
+    num_rows = arrow_data[0][0].as_py()  # type: ignore
+    assert isinstance(
+        num_rows, int
+    ), f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    cur.close()
+    ev_query.finalize()
+    return num_rows
+
+
+def execute_query_helper(
+    conn: "SnowflakeConnection",
+    query: str,
+    is_select_query: bool,
+    schema: pa.Schema,
+) -> tuple[int, list["ArrowResultBatch" | FakeArrowJSONResultBatch]]:
+    """
+    Helper function for 'get_dataset' to execute a query in Snowflake
+    and return the Arrow batches of the result set and number of rows
+    that are in the result set.
+    NOTE: The function must acts "independently", i.e. it will
+    be executed on all ranks that it's called on and will do
+    no error synchronization. The caller must handle those.
+
+    Returns:
+        num_rows (int), batches (list):
+            - Number of rows in the result set.
+            - The result set in the form of list of either ArrowResultBatches
+              or FakeArrowJSONResultBatch-es.
+    """
+    from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
+
+    ev_query = tracing.Event("execute_query", is_parallel=False)
+    ev_query.add_attribute("query", query)
+    cur = conn.cursor()
+    t0 = time.time()
+    cur.execute(query)
+    sf_exec_time = time.time() - t0
+    # Fetch the total number of rows that will be loaded globally
+    num_rows: int = cur.rowcount  # type: ignore
+    assert isinstance(
+        num_rows, int
+    ), f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
+    if bodo.user_logging.get_verbose_level() >= 2:
+        bodo.user_logging.log_message(
+            "Snowflake Query Submission (Read)",
+            "/* execute_query */ Snowflake Query ID: "
+            + cur.sfqid
+            + "\nSQL Text:\n"
+            + query
+            + f"\nApproximate Execution Time: {sf_exec_time:.3f}s"
+            + f"\nNumber of rows produced: {num_rows:,}",
+        )
+    ev_query.finalize()
+
+    # Get the list of result batches (this doesn't load data).
+    batches: "list[ResultBatch]" = cur.get_result_batches()  # type: ignore
+    assert isinstance(
+        batches, list
+    ), f"Expected 'batches' to be a list, but got {type(batches)} instead."
+
+    if len(batches) > 0 and not isinstance(batches[0], ArrowResultBatch):
+        if (
+            not is_select_query
+            and len(batches) == 1
+            and isinstance(batches[0], JSONResultBatch)
+        ):
+            # When executing a non-select query (e.g. DELETE), we may not obtain
+            # the result in Arrow format and instead get a JSONResultBatch. If so
+            # we convert the JSONResultBatch to a fake arrow that supports the same
+            # APIs.
+            #
+            # To be conservative against possible performance issues during development, we
+            # only allow a single batch. Every query that is currently supported only returns
+            # a single row.
+            batches = [FakeArrowJSONResultBatch(x, schema) for x in batches]  # type: ignore
+        else:
+            raise BodoError(
+                f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
+            )
+    elif not all([isinstance(batch, ArrowResultBatch) for batch in batches]):
+        batches_types = [type(batch) for batch in batches]
+        raise BodoError(
+            f"Not all batch objects are ArrowResultBatches! batches types: {batches_types}"
+        )
+
+    cur.close()
+    return num_rows, batches
+
+
 def get_dataset(
     query: str,
     conn_str: str,
@@ -2002,10 +2133,6 @@ def get_dataset(
     # Snowflake import
     try:
         import snowflake.connector  # noqa
-        from snowflake.connector.result_batch import (
-            ArrowResultBatch,
-            JSONResultBatch,
-        )
     except ImportError:
         raise BodoError(
             "Snowflake Python connector packages not found. "
@@ -2018,17 +2145,35 @@ def get_dataset(
 
     comm = MPI.COMM_WORLD
 
-    # connect to Snowflake. This is the same connection that will be used
+    # Connect to Snowflake. This is the same connection that will be used
     # to read data.
     # We only trace on rank 0 (is_parallel=False) because we want 0 to start
     # executing the queries as soon as possible (don't sync event)
-    conn = snowflake_connect(conn_str)
-    # Set the TIMESTAMP_TZ_OUTPUT_FORMAT parameter if required
-    set_timestamptz_format_connection_parameter_if_required(conn, schema)
+    err_connecting: Exception | None = None
+    try:
+        conn = snowflake_connect(conn_str, is_parallel=False)
+        # Set the TIMESTAMP_TZ_OUTPUT_FORMAT parameter if required
+        set_timestamptz_format_connection_parameter_if_required(conn, schema)
+    except Exception as e:
+        err_connecting = e
+
+    # Check if this failed on any rank.
+    sync_and_reraise_error(
+        err_connecting,
+        _is_parallel=(not is_independent),
+        # We don't broadcast the errors in case they are not pickle-able.
+        bcast_lowest_err=False,
+        default_generic_err_msg=(
+            "Snowflake get_dataset: One or more ranks failed to connect to "
+            "Snowflake. See error(s) on the other ranks."
+        ),
+    )
+
     # Number of rows loaded. This is only used if we are loading
     # 0 columns
-    num_rows = -1
-    batches = []
+    num_rows: int = -1
+    batches: list[ArrowResultBatch | FakeArrowJSONResultBatch] = []
+    error: Exception | None = None
 
     # The control flow for the below if-conditional clause:
     #   1. If the rank is 0 or the ranks are independent from each other, i.e. each rank is executing the function independently, execute the query
@@ -2041,82 +2186,34 @@ def get_dataset(
         # NOTE: it'll be unnecessary in case replicated case
         # and read is called by all ranks but we opted for that to simplify compiler work.
         if bodo.get_rank() == 0 or is_independent:
-            cur = conn.cursor()
-            ev_query = tracing.Event("execute_length_query", is_parallel=False)
-            ev_query.add_attribute("query", query)
-            t0 = time.time()
-            cur.execute(query)
-            sf_exec_time = time.time() - t0
-            if bodo.user_logging.get_verbose_level() >= 2:
-                bodo.user_logging.log_message(
-                    "Snowflake Query Submission (Read)",
-                    "/* execute_length_query */ Snowflake Query ID: "
-                    + cur.sfqid
-                    + "\nSQL Text:\n"
-                    + query
-                    + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
-                )
-            # We are just loading a single row of data so we can just load
-            # all of the data.
-            arrow_data = cur.fetch_arrow_all()
-            num_rows = arrow_data[0][0].as_py()  # type: ignore
-            cur.close()
-            ev_query.finalize()
-
-        # If the ranks are not independent from each other, broadcast num_rows
-        if not is_independent:
-            num_rows = comm.bcast(num_rows)
+            try:
+                num_rows = execute_length_query_helper(conn, query)
+            except Exception as e:
+                error = e
     else:
         # We need to actually submit a Snowflake query
         if bodo.get_rank() == 0 or is_independent:
-            # Execute query
-            ev_query = tracing.Event("execute_query", is_parallel=False)
-            ev_query.add_attribute("query", query)
-            cur = conn.cursor()
-            t0 = time.time()
-            cur.execute(query)
-            sf_exec_time = time.time() - t0
-            if bodo.user_logging.get_verbose_level() >= 2:
-                bodo.user_logging.log_message(
-                    "Snowflake Query Submission (Read)",
-                    "/* execute_query */ Snowflake Query ID: "
-                    + cur.sfqid
-                    + "\nSQL Text:\n"
-                    + query
-                    + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
+            try:
+                # Execute query
+                num_rows, batches = execute_query_helper(
+                    conn, query, is_select_query, schema
                 )
-            ev_query.finalize()
+            except Exception as e:
+                error = e
 
-            # Fetch the total number of rows that will be loaded globally
-            num_rows: int = cur.rowcount  # type: ignore
+    sync_and_reraise_error(
+        error,
+        (not is_independent),
+        # In case the error is not pickle-able, we only raise it on rank 0.
+        bcast_lowest_err=False,
+        # On all other ranks, we will raise a generic exception.
+        default_generic_err_msg="Exception encountered while reading from Snowflake. See rank 0 for more details.",
+    )
 
-            # Get the list of result batches (this doesn't load data).
-            batches: "list[ResultBatch]" = cur.get_result_batches()  # type: ignore
-            if len(batches) > 0 and not isinstance(batches[0], ArrowResultBatch):
-                if (
-                    not is_select_query
-                    and len(batches) == 1
-                    and isinstance(batches[0], JSONResultBatch)
-                ):
-                    # When executing a non-select query (e.g. DELETE), we may not obtain
-                    # the result in Arrow format and instead get a JSONResultBatch. If so
-                    # we convert the JSONResultBatch to a fake arrow that supports the same
-                    # APIs.
-                    #
-                    # To be conservative against possible performance issues during development, we
-                    # only allow a single batch. Every query that is currently supported only returns
-                    # a single row.
-                    batches = [FakeArrowJSONResultBatch(x, schema) for x in batches]  # type: ignore
-                else:
-                    raise BodoError(
-                        f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
-                    )
-
-            cur.close()
-
-        # If the ranks are not independent from each other, broadcast the data
-        if not is_independent:
-            num_rows, batches, schema = comm.bcast((num_rows, batches, schema))
+    # If the ranks are not independent from each other, broadcast num_rows
+    if not is_independent:
+        num_rows = comm.bcast(num_rows)
+        batches = comm.bcast(batches)  # NOP in the 'only_fetch_length' case.
 
     # Fix for a Memory Leak in Streaming with CREATE TABLE LIKE or LIMIT 0
     # TODO: Using HPy in C++ should make this unnecessary
@@ -2434,9 +2531,11 @@ def gen_flatten_sql(
     # Figure out where each column comes from
     column_get = (
         [
-            f"{c}_bodo_flattened.{c}"
-            if map_needs_flattened(column_datatypes[c])
-            else f"{flatten[0]}_bodo_flattened.{c}"
+            (
+                f"{c}_bodo_flattened.{c}"
+                if map_needs_flattened(column_datatypes[c])
+                else f"{flatten[0]}_bodo_flattened.{c}"
+            )
             for c in column_datatypes.keys()
         ]
         if needs_flatten

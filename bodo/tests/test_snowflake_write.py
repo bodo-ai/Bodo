@@ -20,7 +20,6 @@ from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
-from bodo.hiframes.table import get_table_data
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.snowflake_write import (
     snowflake_writer_append_table,
@@ -1660,17 +1659,15 @@ def test_batched_write_agg(
                 "",
             )
             total0 = 0
-
             all_is_last = False
             iter_val = 0
             while not all_is_last:
                 table, is_last = read_arrow_next(reader0, True)
-                total0 += get_table_data(table, 1).sum()
+                total0 += bodo.hiframes.table.local_len(table)
                 all_is_last = snowflake_writer_append_table(
                     writer, table, col_meta, is_last, iter_val, None, ctas_meta
                 )
                 iter_val += 1
-
             arrow_reader_del(reader0)
             return total0
 
@@ -1686,19 +1683,17 @@ def test_batched_write_agg(
             while not all_is_last:
                 table, is_last = read_arrow_next(reader1, True)
                 all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
-
-                total1 += get_table_data(table, 1).sum()  # column 1: "l_partkey"
-
+                total1 += bodo.hiframes.table.local_len(table)
             arrow_reader_del(reader1)
             return total1
 
         if is_distributed:
             # Not specifying anything will run it in a distributed fashion
             # by default.
-            impl_write_dist = bodo.jit(cache=False)(impl_write)
-            total0 = impl_write_dist(conn_r, conn_w)
-            bodo.barrier()
+            total0 = bodo.jit(cache=False)(impl_write)(conn_r, conn_w)
+            total0 = reduce_sum(total0)
             total1 = impl_check(conn_w)
+            total1 = reduce_sum(total1)
             assert total0 == total1, (
                 f"Distributed streaming write failed: "
                 f"wrote {total0} but read back {total1}"
