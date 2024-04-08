@@ -312,7 +312,8 @@ class SnowflakeReader : public ArrowReader {
             for (auto status = reader.ReadNext(&next_recordbatch);
                  status.ok() && next_recordbatch;
                  status = reader.ReadNext(&next_recordbatch)) {
-                auto bodo_table = arrow_recordbatch_to_bodo(next_recordbatch);
+                auto bodo_table = arrow_recordbatch_to_bodo(
+                    next_recordbatch, next_recordbatch->num_rows());
                 out_batches->UnifyDictionariesAndAppend(bodo_table,
                                                         this->dict_builders);
             }
@@ -370,10 +371,6 @@ class SnowflakeReader : public ArrowReader {
     // Batches that this process is going to read
     // A batch is a snowflake.connector.result_batch.ArrowResultBatch
     std::queue<PyObject*> result_batches;
-
-    // Prepared output batches (Bodo tables) ready to emit
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    std::shared_ptr<ChunkedTableBuilder> out_batches;
 
     // If we still need to return the first batch for streaming
     bool is_first_piece = true;

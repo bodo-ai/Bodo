@@ -6,6 +6,7 @@
 
 #include <fmt/format.h>
 #include <numeric>
+#include "../libs/_bodo_to_arrow.h"
 #include "arrow_reader.h"
 #include "iceberg_helpers.h"
 
@@ -361,7 +362,7 @@ class IcebergParquetReader : public ArrowReader {
 
     void init_iceberg_reader(std::span<int32_t> str_as_dict_cols) {
         ArrowReader::init_arrow_reader(str_as_dict_cols, false);
-
+        // Initialize the scanners.
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
             // increase the number of threads of the Arrow batch reader
@@ -373,11 +374,43 @@ class IcebergParquetReader : public ArrowReader {
                           MPI_COMM_WORLD);
             this->avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
         }
-
         // Initialize the Arrow Dataset Scanners for reading the file segments
         // assigned to this rank. This will create as many scanners as the
         // number of unique SchemaGroups that these files belong to.
         this->init_scanners();
+        // Construct ChunkedTableBuilder for output in the streaming case.
+        if (this->batch_size != -1) {
+            this->dict_builders =
+                std::vector<std::shared_ptr<DictionaryBuilder>>(
+                    selected_fields.size());
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                const std::shared_ptr<arrow::Field>& field =
+                    schema->field(selected_fields[i]);
+                this->dict_builders[i] = create_dict_builder_for_array(
+                    arrow_type_to_bodo_data_type(field->type()), false);
+            }
+
+            // Generate a mapping from schema index to selected fields for the
+            // str_as_dict_cols.
+            std::vector<int32_t> str_as_dict_cols_map(schema->num_fields(), -1);
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                str_as_dict_cols_map[selected_fields[i]] = i;
+            }
+
+            // TODO: Remove. This step is unnecessary if we can guarantee that
+            // the arrow schema always specifies if the fields should be
+            // dictionary.
+            for (int str_as_dict_col : str_as_dict_cols) {
+                int32_t index = str_as_dict_cols_map[str_as_dict_col];
+                this->dict_builders[index] = create_dict_builder_for_array(
+                    std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                     Bodo_CTypes::STRING),
+                    false);
+            }
+            auto empty_table = get_empty_out_table();
+            this->out_batches = std::make_shared<ChunkedTableBuilder>(
+                empty_table->schema(), this->dict_builders, (size_t)batch_size);
+        }
     }
 
     // Return and incref the file list.
@@ -493,61 +526,79 @@ class IcebergParquetReader : public ArrowReader {
         // If batch_size is set, then we need to iteratively read a
         // batch at a time.
         if (this->batch_size != -1) {
-            // TODO: Consolidate behavior with SnowflakeReader
-            // Specifically, what does SnowflakeReader do in zero-col case?
-            if (this->rows_left_to_emit <= 0) {
-                return std::make_tuple(new table_info(*get_empty_out_table()),
-                                       true, 0);
-            }
+            // TODO: Match SnowflakeReader for the zero-col case.
+            // Fetch a new batch if we don't have a full batch yet and have more
+            // rows to read.
+            while (this->rows_left_to_read > 0 &&
+                   this->out_batches->total_remaining <
+                       static_cast<size_t>(this->batch_size)) {
+                // Get the next batch.
+                PyObject* batch_py = NULL;
+                do {
+                    batch_py = this->get_next_py_batch();
+                } while (batch_py == NULL);
 
-            // Get the next batch.
-            PyObject* batch_py = NULL;
-            do {
-                batch_py = this->get_next_py_batch();
-            } while (batch_py == NULL);
+                ::arrow::Result<std::shared_ptr<::arrow::RecordBatch>>
+                    batch_res = arrow::py::unwrap_batch(batch_py);
+                if (!batch_res.ok()) {
+                    throw std::runtime_error(
+                        "IcebergParquetReader::read_batch(): Error unwrapping "
+                        "batch: " +
+                        batch_res.status().ToString());
+                }
+                std::shared_ptr<::arrow::RecordBatch> batch =
+                    batch_res.ValueOrDie();
+                if (batch == nullptr) {
+                    throw std::runtime_error(
+                        "IcebergParquetReader::read_batch(): The next batch is "
+                        "null");
+                }
+                Py_DECREF(batch_py);
 
-            ::arrow::Result<std::shared_ptr<::arrow::RecordBatch>> batch_res =
-                arrow::py::unwrap_batch(batch_py);
-            if (!batch_res.ok()) {
-                throw std::runtime_error(
-                    "IcebergParquetReader::read_batch(): Error unwrapping "
-                    "batch: " +
-                    batch_res.status().ToString());
-            }
-            std::shared_ptr<::arrow::RecordBatch> batch =
-                batch_res.ValueOrDie();
-            if (batch == nullptr) {
-                throw std::runtime_error(
-                    "IcebergParquetReader::read_batch(): The next batch is "
-                    "null");
-            }
-
-            // Transform the batch to the required target schema.
-            batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
+                // Transform the batch to the required target schema.
+                batch =
+                    EvolveRecordBatch(std::move(batch), this->curr_read_schema,
                                       this->schema, this->selected_fields);
 
-            int64_t batch_offset =
-                std::min(this->rows_to_skip, batch->num_rows());
-            int64_t length =
-                std::min(rows_left_to_read, batch->num_rows() - batch_offset);
-            // This is zero-copy slice.
-            std::shared_ptr<::arrow::Table> table = arrow::Table::Make(
-                this->schema, batch->Slice(batch_offset, length)->columns());
-            this->rows_left_to_read -= length;
-            this->rows_to_skip -= batch_offset;
-
-            // TODO This needs to be modified to use ChunkedTableBuilder.
-            // TODO: Replace with arrow_table_to_bodo once available
-            TableBuilder builder(this->schema, this->selected_fields, length,
-                                 this->is_nullable, this->str_as_dict_colnames,
-                                 this->create_dict_encoding_from_strings);
-            builder.append(table);
-            table_info* out_table = builder.get_table();
-
-            this->rows_left_to_emit -= length;
-            bool is_last = (this->rows_left_to_emit <= 0);
-            Py_DECREF(batch_py);
-            return std::make_tuple(out_table, is_last, length);
+                int64_t batch_offset =
+                    std::min(this->rows_to_skip, batch->num_rows());
+                int64_t length = std::min(this->rows_left_to_read,
+                                          batch->num_rows() - batch_offset);
+                // Update stats
+                this->rows_left_to_read -= length;
+                this->rows_to_skip -= batch_offset;
+                // This is zero-copy slice.
+                batch = batch->Slice(batch_offset, length);
+                std::shared_ptr<table_info> bodo_table =
+                    arrow_recordbatch_to_bodo(batch, length);
+                if (length == this->batch_size) {
+                    // We have read a batch of the exact size. Just reuse this
+                    // batch for the next read and unify the dictionaries.
+                    // Unify the dictionaries.
+                    table_info* out_table =
+                        unify_table_with_dictionary_builders(
+                            std::move(bodo_table));
+                    this->rows_left_to_emit -= length;
+                    bool is_last = (this->rows_left_to_emit <= 0) &&
+                                   (this->out_batches->total_remaining <= 0);
+                    return std::make_tuple(out_table, is_last, length);
+                } else {
+                    // We are reading less than a full batch. We need to append
+                    // to the chunked table builder. Assuming we are prefetching
+                    // then its likely more efficient to read the next full
+                    // batch then to output a partial batch that could be
+                    // extremely small.
+                    this->out_batches->UnifyDictionariesAndAppend(
+                        bodo_table, dict_builders);
+                }
+            }
+            // Emit from the chunked table builder.
+            auto [next_batch, out_batch_size] = out_batches->PopChunk(true);
+            rows_left_to_emit -= out_batch_size;
+            bool is_last = (this->rows_left_to_emit <= 0) &&
+                           (this->out_batches->total_remaining <= 0);
+            return std::make_tuple(new table_info(*next_batch), is_last,
+                                   out_batch_size);
         }
 
         TableBuilder builder(this->schema, this->selected_fields, this->count,
@@ -987,6 +1038,7 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
 
         // Initialize reader
         reader->init_iceberg_reader(str_as_dict_cols);
+
         return reinterpret_cast<ArrowReader*>(reader);
 
     } catch (const std::exception& e) {

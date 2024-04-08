@@ -858,7 +858,6 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
-
         bool is_categorical = arrow::is_dictionary(type);
         if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
             is_categorical) {
@@ -872,7 +871,7 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 columns.push_back(std::make_unique<PrimitiveBuilder>(
                     field->type(), num_rows, nullable_field, is_categorical));
             }
-        } else if (arrow::is_binary_like(type) &&
+        } else if (arrow::is_string(type) &&
                    (str_as_dict_cols.count(field->name()) > 0)) {
             if (create_dict_from_string) {
                 columns.push_back(
@@ -1441,6 +1440,28 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
     }
 
     return arrow::Table::Make(schema, new_cols, table->num_rows());
+}
+
+/**
+ * @brief Unify the given table with the dictionary builders
+ * for its dictionary columns. This should only be used in the streaming case.
+ *
+ * @param table Input table.
+ * @return table_info* New combined table with unified dictionary columns.
+ */
+table_info* ArrowReader::unify_table_with_dictionary_builders(
+    std::shared_ptr<table_info> table) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(table->ncols());
+    for (uint64_t i = 0; i < table->ncols(); i++) {
+        if (this->dict_builders[i] != nullptr) {
+            out_arrs.emplace_back(this->dict_builders[i]->UnifyDictionaryArray(
+                table->columns[i]));
+        } else {
+            out_arrs.emplace_back(table->columns[i]);
+        }
+    }
+    return new table_info(out_arrs, table->nrows());
 }
 
 std::shared_ptr<arrow::Schema> unwrap_schema(PyObject* pyarrow_schema) {

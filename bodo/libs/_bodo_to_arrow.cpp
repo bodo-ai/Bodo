@@ -1310,10 +1310,27 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::Date32Array>(
                 std::static_pointer_cast<arrow::Date32Array>(arrow_arr),
                 Bodo_CTypes::DATE);
-        case arrow::Type::TIMESTAMP:
+        case arrow::Type::TIMESTAMP: {
+            std::shared_ptr<arrow::TimestampArray> ts_arr =
+                std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
+            std::shared_ptr<arrow::TimestampType> type =
+                std::static_pointer_cast<arrow::TimestampType>(ts_arr->type());
+            // Ensure we are always working with Naive/UTC timestamps and
+            // nanosecond precision.
+            if (type->unit() != arrow::TimeUnit::NANO ||
+                (type->timezone() != "" && type->timezone() != "UTC")) {
+                auto res = arrow::compute::Cast(
+                    *ts_arr, arrow::timestamp(arrow::TimeUnit::NANO, "UTC"),
+                    arrow::compute::CastOptions::Safe(),
+                    bodo::default_buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                ts_arr =
+                    std::static_pointer_cast<arrow::TimestampArray>(casted_arr);
+            }
             return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
-                std::static_pointer_cast<arrow::TimestampArray>(arrow_arr),
-                Bodo_CTypes::DATETIME);
+                ts_arr, Bodo_CTypes::DATETIME);
+        }
         case arrow::Type::INT32:
             return arrow_numeric_array_to_bodo<arrow::Int32Array>(
                 std::static_pointer_cast<arrow::Int32Array>(arrow_arr),
@@ -1457,7 +1474,7 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
 }
 
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
-    std::shared_ptr<arrow::RecordBatch> arrow_rb) {
+    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length) {
     std::vector<std::shared_ptr<array_info>> cols;
     cols.reserve(arrow_rb->num_columns());
 
@@ -1465,5 +1482,5 @@ std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
         cols.push_back(arrow_array_to_bodo(col));
     }
 
-    return std::make_shared<table_info>(cols);
+    return std::make_shared<table_info>(cols, length);
 }

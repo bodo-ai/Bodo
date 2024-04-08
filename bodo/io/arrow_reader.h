@@ -18,6 +18,8 @@
 #include <arrow/type.h>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_dict_builder.h"
+#include "../libs/_table_builder.h"
 
 /**
  * @brief Unwrap PyArrow Schema PyObject and return the C++ value
@@ -93,7 +95,7 @@ class TableBuilder {
         for (auto& col : columns) {
             arrays.push_back(col->get_output());
         }
-        return new table_info(arrays);
+        return new table_info(arrays, get_total_rows());
     }
 
     inline int64_t get_total_rows() const { return this->total_rows; }
@@ -312,6 +314,13 @@ class ArrowReader {
     /// Output batch size of streaming tables
     int64_t batch_size;
 
+    /// Prepared streaming output batches (Bodo tables) ready to emit. There is
+    /// one dictionary builder per column in the output table, with nullptr for
+    /// columns that cannot contain a dictionary.
+    /// NOTE: This is only used/initialized in the streaming case.
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    std::shared_ptr<ChunkedTableBuilder> out_batches;
+
     /// initialize reader
     void init_arrow_reader(std::span<int32_t> str_as_dict_cols = {},
                            bool create_dict_from_string = false);
@@ -355,6 +364,18 @@ class ArrowReader {
      * @return table_info* Output table with correct format
      */
     virtual std::shared_ptr<table_info> get_empty_out_table() = 0;
+
+   protected:
+    /**
+     * @brief Unify the given table with the dictionary builders
+     * for its dictionary columns. This should only be used in the streaming
+     * case.
+     *
+     * @param table Input table.
+     * @return table_info* New combined table with unified dictionary columns.
+     */
+    table_info* unify_table_with_dictionary_builders(
+        std::shared_ptr<table_info> table);
 
    private:
     // XXX needed to call into Python?

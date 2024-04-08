@@ -3,6 +3,7 @@
 // Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
+#include "../libs/_bodo_to_arrow.h"
 #include "arrow_reader.h"
 
 class ParquetReader : public ArrowReader {
@@ -24,8 +25,9 @@ class ParquetReader : public ArrowReader {
           storage_options(_storage_options),
           input_file_name_col(_input_file_name_col),
           use_hive(_use_hive) {
-        if (storage_options == Py_None)
+        if (storage_options == Py_None) {
             throw std::runtime_error("ParquetReader: storage_options is None");
+        }
     }
 
     /**
@@ -38,7 +40,8 @@ class ParquetReader : public ArrowReader {
                         int32_t num_partition_cols) {
         // initialize reader
         ArrowReader::init_arrow_reader(str_as_dict_cols, false);
-
+        this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
+            schema->num_fields());
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
             // increase the number of threads of the Arrow batch reader
@@ -63,6 +66,44 @@ class ParquetReader : public ArrowReader {
         part_cols_offset.resize(num_partition_cols, 0);
 
         this->init_pq_scanner();
+        // Construct ChunkedTableBuilder for output in the streaming case.
+        if (this->batch_size != -1) {
+            this->dict_builders =
+                std::vector<std::shared_ptr<DictionaryBuilder>>(
+                    selected_fields.size() + num_partition_cols);
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                const std::shared_ptr<arrow::Field>& field =
+                    schema->field(selected_fields[i]);
+                this->dict_builders[i] = create_dict_builder_for_array(
+                    arrow_type_to_bodo_data_type(field->type()), false);
+            }
+            for (int i = 0; i < num_partition_cols; i++) {
+                auto partition_col = part_cols[i];
+                this->dict_builders[selected_fields.size() + i] =
+                    create_dict_builder_for_array(partition_col, false);
+            }
+
+            // Generate a mapping from schema index to selected fields for the
+            // str_as_dict_cols.
+            std::vector<int32_t> str_as_dict_cols_map(schema->num_fields(), -1);
+            for (size_t i = 0; i < selected_fields.size(); i++) {
+                str_as_dict_cols_map[selected_fields[i]] = i;
+            }
+
+            // TODO: Remove. This step is unnecessary if we can guarantee that
+            // the arrow schema always specifies if the fields should be
+            // dictionary.
+            for (int str_as_dict_col : str_as_dict_cols) {
+                int32_t index = str_as_dict_cols_map[str_as_dict_col];
+                this->dict_builders[index] = create_dict_builder_for_array(
+                    std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                     Bodo_CTypes::STRING),
+                    false);
+            }
+            auto empty_table = get_empty_out_table();
+            this->out_batches = std::make_shared<ChunkedTableBuilder>(
+                empty_table->schema(), this->dict_builders, (size_t)batch_size);
+        }
     }
 
     virtual ~ParquetReader() {
