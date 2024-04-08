@@ -250,77 +250,67 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     // If batch_size is set, then we need to iteratively read a
     // batch at a time. For now, ignore partitioning
     if (batch_size != -1) {
-        // TODO: Consolidate behavior with SnowflakeReader
-        // Specifically, what does SnowflakeReader do in zero-col case?
-        if (rows_left_to_emit == 0) {
-            return std::make_tuple(new table_info(*get_empty_out_table()), true,
-                                   0);
-        }
-
-        PyObject* batch_py =
-            PyObject_CallMethod(this->reader, "read_next_batch", NULL);
-        if (batch_py == NULL && PyErr_Occurred() &&
-            PyErr_ExceptionMatches(PyExc_StopIteration)) {
-            // StopIteration is raised at the end of iteration.
-            // An iterator would clear this automatically, but we are
-            // not using an interator, so we have to clear it manually
-            PyErr_Clear();
-            // NOTE: We should never reach this because of the
-            // rows_left_to_emit == 0 check above.
-            throw std::runtime_error(
-                "ParquetReader::read_batch: Out of batches before reading the "
-                "expected number of rows!");
-        } else if (batch_py == NULL && PyErr_Occurred()) {
-            throw std::runtime_error("python");
-        }
-
-        auto batch_res = arrow::py::unwrap_batch(batch_py);
-        if (!batch_res.ok()) {
-            throw std::runtime_error(
-                "ParquetReader::read_batch(): Error unwrapping batch: " +
-                batch_res.status().ToString());
-        }
-        auto batch = batch_res.ValueOrDie();
-        if (batch == nullptr) {
-            throw std::runtime_error(
-                "ParquetReader::read_batch(): The next batch is null");
-        }
-
-        int64_t batch_offset = std::min(this->rows_to_skip, batch->num_rows());
-        int64_t length =
-            std::min(this->rows_left_to_read, batch->num_rows() - batch_offset);
-        auto table = arrow::Table::Make(
-            out_schema, batch->Slice(batch_offset, length)->columns());
-        rows_left_to_read -= length;
-        this->rows_to_skip -= batch_offset;
-
-        // TODO: Replace with arrow_table_to_bodo once available
-        TableBuilder builder(schema, selected_fields, length, is_nullable,
-                             str_as_dict_colnames,
-                             create_dict_encoding_from_strings);
-        builder.append(table);
-        table_info* out_table = builder.get_table();
-
-        if (part_cols.size() > 0) {
-            std::vector<std::shared_ptr<array_info>> batch_part_cols;
-            for (size_t i = 0; i < part_cols.size(); i++) {
-                batch_part_cols.push_back(alloc_array_top_level(
-                    length, -1, -1, bodo_array_type::NUMPY,
-                    Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0,
-                    -1));
+        // TODO: Match SnowflakeReader for the zero-col case.
+        // Fetch a new batch if we don't have a full batch yet and have more
+        // rows to read.
+        while (this->rows_left_to_read > 0 &&
+               this->out_batches->total_remaining <
+                   static_cast<size_t>(this->batch_size)) {
+            PyObject* batch_py =
+                PyObject_CallMethod(this->reader, "read_next_batch", NULL);
+            if (batch_py == NULL && PyErr_Occurred() &&
+                PyErr_ExceptionMatches(PyExc_StopIteration)) {
+                // StopIteration is raised at the end of iteration.
+                // An iterator would clear this automatically, but we are
+                // not using an interator, so we have to clear it manually
+                PyErr_Clear();
+                // NOTE: We should never reach this because of the
+                // rows_left_to_emit == 0 check above.
+                throw std::runtime_error(
+                    "ParquetReader::read_batch: Out of batches before reading "
+                    "the expected number of rows!");
+            } else if (batch_py == NULL && PyErr_Occurred()) {
+                throw std::runtime_error("python");
             }
 
-            // TODO: I believe the reader already makes sure
-            // every chunk belongs to 1 file. Can simplify
-            // or use the tagged RecordBatchReader
-            std::vector<int64_t> batch_offsets(part_cols.size(), 0);
-            int64_t unfilled_rows_left = length;
-            while (unfilled_rows_left > 0) {
-                int64_t rows_read_from_piece =
-                    std::min(rows_left_cur_piece, unfilled_rows_left);
-                rows_left_cur_piece -= rows_read_from_piece;
-                unfilled_rows_left -= rows_read_from_piece;
+            auto batch_res = arrow::py::unwrap_batch(batch_py);
+            if (!batch_res.ok()) {
+                throw std::runtime_error(
+                    "ParquetReader::read_batch(): Error unwrapping batch: " +
+                    batch_res.status().ToString());
+            }
+            auto batch = batch_res.ValueOrDie();
+            if (batch == nullptr) {
+                throw std::runtime_error(
+                    "ParquetReader::read_batch(): The next batch is null");
+            }
+            Py_DECREF(batch_py);
+            int64_t batch_offset =
+                std::min(this->rows_to_skip, batch->num_rows());
+            int64_t length = std::min(this->rows_left_to_read,
+                                      batch->num_rows() - batch_offset);
+            // Update stats
+            this->rows_left_to_read -= length;
+            this->rows_to_skip -= batch_offset;
+            // This is zero-copy slice.
+            batch = batch->Slice(batch_offset, length);
+            std::shared_ptr<table_info> bodo_table =
+                arrow_recordbatch_to_bodo(batch, length);
+            // Append the partition columns to the final output table
+            if (part_cols.size() > 0) {
+                std::vector<std::shared_ptr<array_info>> batch_part_cols;
+                for (size_t i = 0; i < part_cols.size(); i++) {
+                    batch_part_cols.push_back(alloc_array_top_level(
+                        length, -1, -1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0,
+                        -1));
+                }
 
+                // The reader already ensures this chunk is always from
+                // the same file.
+                std::vector<int64_t> batch_offsets(part_cols.size(), 0);
+                int64_t rows_read_from_piece = rows_left_cur_piece;
+                rows_left_cur_piece -= length;
                 // fill partition cols
                 for (size_t i = 0; i < part_cols.size(); i++) {
                     int64_t part_val =
@@ -330,21 +320,38 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
                         rows_read_from_piece, part_cols[i]->dtype);
                     batch_offsets[i] += rows_read_from_piece;
                 }
-                if (rows_left_cur_piece == 0 &&
-                    cur_piece < get_num_pieces() - 1) {
-                    rows_left_cur_piece = pieces_nrows[++cur_piece];
-                }
+                // Insert Partition Columns
+                bodo_table->columns.insert(bodo_table->columns.end(),
+                                           batch_part_cols.begin(),
+                                           batch_part_cols.end());
             }
-
-            // Insert Partition Columns
-            out_table->columns.insert(out_table->columns.end(),
-                                      batch_part_cols.begin(),
-                                      batch_part_cols.end());
+            if (length == this->batch_size) {
+                // We have read a batch of the exact size. Just reuse this
+                // batch for the next read and unify the dictionaries.
+                // Unify the dictionaries.
+                table_info* out_table =
+                    unify_table_with_dictionary_builders(std::move(bodo_table));
+                this->rows_left_to_emit -= length;
+                bool is_last = (this->rows_left_to_emit <= 0) &&
+                               (this->out_batches->total_remaining <= 0);
+                return std::make_tuple(out_table, is_last, length);
+            } else {
+                // We are reading less than a full batch. We need to append
+                // to the chunked table builder. Assuming we are prefetching
+                // then its likely more efficient to read the next full
+                // batch then to output a partial batch that could be
+                // extremely small.
+                this->out_batches->UnifyDictionariesAndAppend(bodo_table,
+                                                              dict_builders);
+            }
         }
-        rows_left_to_emit -= length;
-        bool is_last = rows_left_to_emit <= 0;
-        Py_DECREF(batch_py);
-        return std::make_tuple(out_table, is_last, length);
+        // Emit from the chunked table builder.
+        auto [next_batch, out_batch_size] = out_batches->PopChunk(true);
+        rows_left_to_emit -= out_batch_size;
+        bool is_last = (this->rows_left_to_emit <= 0) &&
+                       (this->out_batches->total_remaining <= 0);
+        return std::make_tuple(new table_info(*next_batch), is_last,
+                               out_batch_size);
     }
 
     TableBuilder builder(schema, selected_fields, count, is_nullable,
