@@ -1,5 +1,4 @@
 #include "_chunked_table_builder.h"
-
 #include <numeric>
 
 #include "_dict_builder.h"
@@ -1723,7 +1722,8 @@ void ChunkedTableBuilder::UnifyDictionariesAndAppend(
             out_arrs.emplace_back(in_table->columns[i]);
         }
     }
-    this->AppendBatch(std::make_shared<table_info>(out_arrs));
+    this->AppendBatch(
+        std::make_shared<table_info>(out_arrs, in_table->nrows()));
 }
 /* ------------------------------------------------------------------------
  */

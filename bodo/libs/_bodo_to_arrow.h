@@ -119,7 +119,8 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
  * - If each piece can be handled separately, use this function
  *
  * @param arrow_rb Input Arrow RecordBatch
+ * @param length Number of rows in the output table.
  * @return std::shared_ptr<table_into> Output Bodo table
  */
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
-    std::shared_ptr<arrow::RecordBatch> arrow_rb);
+    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length);

@@ -1542,12 +1542,17 @@ struct table_info {
     std::shared_ptr<mpi_comm_info> comm_info;
     std::shared_ptr<uint32_t[]> hashes;
     int id;
+    uint64_t _nrows = 0;
     table_info() {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns)
         : columns(_columns) {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
+                        uint64_t nrows)
+        : columns(_columns), _nrows(nrows) {}
     uint64_t ncols() const { return columns.size(); }
     uint64_t nrows() const {
-        return this->ncols() == 0 ? 0 : columns[0]->length;
+        // TODO: Replace with _nrows always.
+        return this->ncols() == 0 ? _nrows : columns[0]->length;
     }
     std::shared_ptr<array_info> operator[](size_t idx) { return columns[idx]; }
     const std::shared_ptr<array_info> operator[](size_t idx) const {
