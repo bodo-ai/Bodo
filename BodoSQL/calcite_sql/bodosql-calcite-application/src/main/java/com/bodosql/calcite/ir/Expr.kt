@@ -354,7 +354,7 @@ abstract class Expr {
      * @param arg The body of the binary.
      */
     class BinaryLiteral(val arg: String) : Expr() {
-        override fun emit(): String = "b\"$arg\""
+        override fun emit(): String = "bytes.fromhex(\"$arg\")"
     }
 
     /**

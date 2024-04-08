@@ -776,6 +776,23 @@ def overload_coerce_to_array(
 
         return impl_str
 
+    if not is_overload_none(scalar_to_arr_len) and data == bodo.bytes_type:
+
+        def impl_bytes(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+            dict_encode=True,
+        ):  # pragma: no cover
+            n = scalar_to_arr_len
+            A = bodo.libs.binary_arr_ext.pre_alloc_binary_array(n, len(data) * n)
+            for i in range(n):
+                A[i] = data
+            return A
+
+        return impl_bytes
+
     # Convert list of Timestamps to dt64 array
     if isinstance(data, types.List) and isinstance(
         data.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
