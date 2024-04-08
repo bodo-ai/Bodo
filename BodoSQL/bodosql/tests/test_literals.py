@@ -383,7 +383,6 @@ def test_string_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BE-957] Support Bytes.fromhex")
 def test_binary_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that binary literals are correctly parsed by BodoSQL
@@ -391,7 +390,7 @@ def test_binary_literals(basic_df, spark_info, memory_leak_check):
 
     query = """
     SELECT
-        A, X'412412', X'STRING'
+        A, X'412412', X'A0F32C'
     FROM
         table1
     """
@@ -401,6 +400,8 @@ def test_binary_literals(basic_df, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        # Avoid sorting because bytes are unhashable right now and all rows are the same.
+        sort_output=False,
     )
 
 
