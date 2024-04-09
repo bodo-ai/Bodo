@@ -41,22 +41,6 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     private val icebergUUIDPrecision = 16
 
     /**
-     * Convert a BodoSQL representation for a table, which is an immutable list of strings
-     * for the schema and a string for the table name into a TableIdentifier, which is the
-     * Iceberg representation.
-     * @param schemaPath The schema path to the table.
-     * @param tableName The name of the table.
-     * @return An Iceberg usable table identifier.
-     */
-    private fun tablePathToTableIdentifier(
-        schemaPath: ImmutableList<String>,
-        tableName: String,
-    ): TableIdentifier {
-        val namespace = Namespace.of(*schemaPath.toTypedArray())
-        return TableIdentifier.of(namespace, tableName)
-    }
-
-    /**
      * Load an Iceberg table from the connector via its path information.
      * @param schemaPath The schema path to the table.
      * @param tableName The name of the table.
@@ -205,5 +189,28 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
 
     override fun getAccountName(): String? {
         return null
+    }
+
+    fun getIcebergConnection(): BaseMetastoreCatalog {
+        return icebergConnection
+    }
+
+    companion object {
+        /**
+         * Convert a BodoSQL representation for a table, which is an immutable list of strings
+         * for the schema and a string for the table name into a TableIdentifier, which is the
+         * Iceberg representation.
+         * @param schemaPath The schema path to the table.
+         * @param tableName The name of the table.
+         * @return An Iceberg usable table identifier.
+         */
+        @JvmStatic
+        fun tablePathToTableIdentifier(
+            schemaPath: ImmutableList<String>,
+            tableName: String,
+        ): TableIdentifier {
+            val namespace = Namespace.of(*schemaPath.toTypedArray())
+            return TableIdentifier.of(namespace, tableName)
+        }
     }
 }

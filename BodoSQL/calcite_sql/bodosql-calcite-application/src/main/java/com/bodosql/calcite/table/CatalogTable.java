@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ddl.DDLExecutor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
@@ -235,5 +236,10 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    */
   public WriteTarget getInsertIntoWriteTarget(Variable columnNamesGlobal) {
     throw new UnsupportedOperationException("Insert into is not supported for this table");
+  }
+
+  /** Get the DDL Executor for the table. This is used to execute DDL commands on the table. */
+  public DDLExecutor getDDLExecutor() {
+    throw new UnsupportedOperationException("DDL operations are not supported for this table");
   }
 }
