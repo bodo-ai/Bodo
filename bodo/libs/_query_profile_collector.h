@@ -1,4 +1,5 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
+#pragma once
 #include <memory>
 #include <string>
 #include <unordered_map>

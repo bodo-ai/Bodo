@@ -16,9 +16,9 @@ class ParquetReader : public ArrowReader {
                   PyObject* _storage_options, PyObject* _pyarrow_schema,
                   int64_t _tot_rows_to_read, std::vector<int> _selected_fields,
                   std::vector<bool> is_nullable, bool _input_file_name_col,
-                  int64_t batch_size, bool _use_hive = true)
+                  int64_t batch_size, bool _use_hive = true, int64_t op_id = -1)
         : ArrowReader(_parallel, _pyarrow_schema, _tot_rows_to_read,
-                      _selected_fields, is_nullable, batch_size),
+                      _selected_fields, is_nullable, batch_size, op_id),
           empty_out_table(nullptr),
           expr_filters(_expr_filters),
           path(_path),

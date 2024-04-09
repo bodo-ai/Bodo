@@ -3,8 +3,10 @@ import tempfile
 
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.libs.stream_groupby import (
     delete_groupby_state,
     groupby_build_consume_batch,
@@ -17,10 +19,16 @@ from bodo.libs.stream_join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.tests.utils import _get_dist_arg, reduce_sum, temp_env_override
+from bodo.tests.utils import (
+    _get_dist_arg,
+    get_snowflake_connection_string,
+    pytest_mark_snowflake,
+    reduce_sum,
+    temp_env_override,
+)
 
 
-def test_query_profile_collection_compiles():
+def test_query_profile_collection_compiles(memory_leak_check):
     """Check that all query profile collector functions compile"""
 
     @bodo.jit
@@ -34,7 +42,7 @@ def test_query_profile_collection_compiles():
     impl()
 
 
-def test_query_profile_join_row_count_collection():
+def test_join_row_count_collection(memory_leak_check):
     """
     Check that Join submits its row counts to the QueryProfileCollector
     as expected.
@@ -169,7 +177,7 @@ def test_query_profile_join_row_count_collection():
     ), f"Expected probe_output_row_count to be 18750000 but it was {probe_output_row_count} instead"
 
 
-def test_query_profile_groupby_row_count_collection():
+def test_groupby_row_count_collection(memory_leak_check):
     """
     Check that Groupby submits its row counts to the QueryProfileCollector
     as expected.
@@ -258,6 +266,7 @@ def test_query_profile_groupby_row_count_collection():
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (out_table,), index_var, out_col_meta
         )
+        bodo.libs.query_profile_collector.finalize()
         return df
 
     _ = impl(_get_dist_arg(df))
@@ -289,6 +298,178 @@ def test_query_profile_groupby_row_count_collection():
     assert (
         produce_output_output_row_count == 1000
     ), f"Expected produce_output_output_row_count to be 1000 but it was {produce_output_output_row_count} instead"
+
+
+@pytest_mark_snowflake
+def test_snowflake_read_row_count_collection(memory_leak_check):
+    """
+    Check that Snowflake Reader submits its row counts to the QueryProfileCollector
+    as expected.
+    """
+
+    @bodo.jit()
+    def impl(conn):
+        bodo.libs.query_profile_collector.init()
+        total_max = 0
+
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM",
+            conn,
+            _bodo_chunksize=4000,
+            _bodo_read_as_table=True,
+            _bodo_sql_op_id=0,
+        )
+        is_last_global = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            # Perform more compute in between to see caching speedup
+            local_max = pd.Series(bodo.hiframes.table.get_table_data(table, 1)).max()
+            total_max = max(total_max, local_max)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        arrow_reader_del(reader)
+        bodo.libs.query_profile_collector.finalize()
+        return total_max
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    _ = impl(conn)
+    reader_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
+    )
+    reader_output_row_count = (
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+    )
+    reader_input_row_count = reduce_sum(reader_input_row_count)
+    reader_output_row_count = reduce_sum(reader_output_row_count)
+    assert (
+        reader_input_row_count == 0
+    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
+    assert (
+        reader_output_row_count == 6001215
+    ), f"Expected reader_output_row_count to be 6001215, but it was {reader_output_row_count} instead."
+
+
+@pytest.mark.iceberg
+def test_iceberg_read_row_count_collection(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Check that Iceberg Reader submits its row counts to the QueryProfileCollector
+    as expected.
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
+
+    @bodo.jit()
+    def impl(table_name, conn, db_schema):
+        bodo.libs.query_profile_collector.init()
+        total_max = pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
+        is_last_global = False
+        reader = pd.read_sql_table(
+            table_name,
+            conn,
+            db_schema,
+            _bodo_chunksize=4096,
+            _bodo_sql_op_id=0,
+        )
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            local_max = df["A"].max()
+            total_max = max(local_max, total_max)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+        arrow_reader_del(reader)
+        bodo.libs.query_profile_collector.finalize()
+        return total_max
+
+    table_name = "SIMPLE_PRIMITIVES_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    _ = impl(table_name, conn, db_schema)
+    reader_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
+    )
+    reader_output_row_count = (
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+    )
+    reader_input_row_count = reduce_sum(reader_input_row_count)
+    reader_output_row_count = reduce_sum(reader_output_row_count)
+    assert (
+        reader_input_row_count == 0
+    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
+    assert (
+        reader_output_row_count == 200
+    ), f"Expected reader_output_row_count to be 200, but it was {reader_output_row_count} instead."
+
+
+@pytest.mark.parquet
+def test_parquet_read_row_count_collection(datapath, memory_leak_check):
+    """
+    Check that Parquet Reader submits its row counts to the QueryProfileCollector
+    as expected.
+    """
+
+    @bodo.jit()
+    def impl(path):
+        bodo.libs.query_profile_collector.init()
+        total_max = 0
+        is_last_global = False
+        reader = pd.read_parquet(
+            path, _bodo_use_index=False, _bodo_chunksize=4096, _bodo_sql_op_id=0
+        )
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last_global:
+            T1, is_last = read_arrow_next(reader, True)
+            local_max = pd.Series(bodo.hiframes.table.get_table_data(T1, 1)).max()
+            total_max = max(total_max, local_max)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+        arrow_reader_del(reader)
+        bodo.libs.query_profile_collector.finalize()
+        return total_max
+
+    _ = impl(datapath("tpch-test_data/parquet/lineitem.parquet"))
+    reader_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
+    )
+    reader_output_row_count = (
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+    )
+    reader_input_row_count = reduce_sum(reader_input_row_count)
+    reader_output_row_count = reduce_sum(reader_output_row_count)
+    assert (
+        reader_input_row_count == 0
+    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
+    assert (
+        reader_output_row_count == 120515
+    ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
 
 
 def test_output_directory_can_be_set():

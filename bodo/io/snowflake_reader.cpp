@@ -26,9 +26,9 @@ class SnowflakeReader : public ArrowReader {
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols, bool _only_length_query,
                     bool _is_select_query, bool _downcast_decimal_to_double,
-                    int64_t batch_size = -1)
+                    int64_t batch_size = -1, int64_t op_id = -1)
         : ArrowReader(_parallel, _pyarrow_schema, -1, selected_fields,
-                      is_nullable, batch_size),
+                      is_nullable, batch_size, op_id),
           query(_query),
           conn(_conn),
           only_length_query(_only_length_query),
@@ -407,6 +407,8 @@ class SnowflakeReader : public ArrowReader {
  * @param downcast_decimal_to_double Always unsafely downcast double columns
  * to decimal.
  * @param batch_size Size of batches for the ArrowReader to produce
+ * @param op_id Operator ID for query profile. Can be set to -1 if not
+ * known/relevant.
  * @return ArrowReader* Output streaming entity
  */
 ArrowReader* snowflake_reader_init_py_entry(
@@ -414,7 +416,7 @@ ArrowReader* snowflake_reader_init_py_entry(
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t num_str_as_dict_cols, int32_t* _str_as_dict_cols,
     int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
-    bool downcast_decimal_to_double, int64_t batch_size) {
+    bool downcast_decimal_to_double, int64_t batch_size, int64_t op_id) {
     try {
         std::vector<int> selected_fields;
         for (auto i = 0; i < n_fields; i++) {
@@ -427,7 +429,7 @@ ArrowReader* snowflake_reader_init_py_entry(
         SnowflakeReader* snowflake = new SnowflakeReader(
             query, conn, parallel, is_independent, arrow_schema,
             selected_fields, is_nullable, str_as_dict_cols, _only_length_query,
-            _is_select_query, downcast_decimal_to_double, batch_size);
+            _is_select_query, downcast_decimal_to_double, batch_size, op_id);
         return static_cast<ArrowReader*>(snowflake);
 
     } catch (const std::exception& e) {
