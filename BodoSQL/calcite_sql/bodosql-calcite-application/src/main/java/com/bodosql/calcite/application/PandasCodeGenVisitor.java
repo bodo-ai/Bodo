@@ -2431,24 +2431,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void generateDDLCode(SqlNode ddlNode, GenerateDDLTypes typeGenerator) {
     // Generate the output type.
     RelDataType outputType = typeGenerator.generateType(ddlNode);
+    // The BodoSQL context is always in the function signature as bodo_sql_context.
+    Variable bodosqlContext = new Variable("bodo_sql_context");
     // TODO: Eventually we want to remove this from the constructor and pass it in as a
     // parameter to this function.
     Expr.StringLiteral query = new Expr.StringLiteral(originalSQLQuery);
-    List<Expr.StringLiteral> columnNames = new ArrayList<>();
-    List<Variable> columnTypes = new ArrayList<>();
+    List<Expr> columnTypes = new ArrayList<>();
     for (RelDataTypeField field : outputType.getFieldList()) {
-      columnNames.add(new Expr.StringLiteral(field.getName()));
       Expr typeString =
           sqlTypeToBodoArrayType(field.getType(), false, genDefaultTZ().getZoneExpr());
-      Variable typeVar = lowerAsGlobal(typeString);
-      columnTypes.add(typeVar);
+      columnTypes.add(typeString);
     }
-    Expr.Tuple columnNamesTuple = new Expr.Tuple(columnNames);
-    Variable columnNamesGlobal = lowerAsColNamesMetaType(columnNamesTuple);
     Expr.Tuple columnTypesTuple = new Expr.Tuple(columnTypes);
     Variable columnTypesGlobal = lowerAsMetaType(columnTypesTuple);
     Expr.Call call =
-        new Expr.Call("bodosql.execute_ddl", List.of(query, columnNamesGlobal, columnTypesGlobal));
+        new Expr.Call(
+            "bodosql.ddl_ext.execute_ddl", List.of(bodosqlContext, query, columnTypesGlobal));
     Variable outVar = this.genDfVar();
     this.generatedCode.add(new Op.Assign(outVar, call));
     // Update for return.

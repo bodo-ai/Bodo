@@ -589,4 +589,16 @@ public class RelationalAlgebraGenerator {
       }
     }
   }
+
+  /**
+   * Determine if the active query is a DDL query that is not treated like compute (not CTAS).
+   *
+   * @return Is the query DDL?
+   */
+  public boolean isDDLProcessedQuery() {
+    if (this.parseNode == null) {
+      throw new RuntimeException("No SQL query has been parsed yet. Cannot determine query type");
+    }
+    return !isComputeKind(this.parseNode.getKind());
+  }
 }
