@@ -725,11 +725,23 @@ class BodoSQLContext:
         if params_dict is None:
             params_dict = dict()
 
-        func_text, lowered_globals = self._convert_to_pandas(
+        self._setup_named_params(params_dict)
+        generator = self._create_planner_and_parse_query(
             sql,
             params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
+        is_dll = generator.isDDLProcessedQuery()
+        if is_dll:
+            warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
+            warnings.warn(BodoSQLWarning(warning_msg))
+        func_text, lowered_globals = self._convert_to_pandas(
+            sql,
+            params_dict,
+            generator,
+            is_dll,
+        )
+        self._remove_named_params()
 
         glbls = {
             "np": np,
@@ -790,11 +802,26 @@ class BodoSQLContext:
 
     def convert_to_pandas(self, sql, params_dict=None, hide_credentials=True):
         """converts SQL code to Pandas"""
-        pd_code, lowered_globals = self._convert_to_pandas(
+        if params_dict is None:
+            params_dict = dict()
+
+        self._setup_named_params(params_dict)
+        generator = self._create_planner_and_parse_query(
             sql,
             params_dict,
             hide_credentials,
         )
+        is_dll = generator.isDDLProcessedQuery()
+        if is_dll:
+            warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
+            warnings.warn(BodoSQLWarning(warning_msg))
+        pd_code, lowered_globals = self._convert_to_pandas(
+            sql,
+            params_dict,
+            generator,
+            is_dll,
+        )
+        self._remove_named_params()
         # add the imports so someone can directly run the code.
         imports = [
             "import numpy as np",
@@ -833,19 +860,65 @@ class BodoSQLContext:
             params_dict = dict()
 
         # Create the named params table
-        param_values = [bodo.typeof(x) for x in params_dict.values()]
-        add_param_table(
-            NAMED_PARAM_TABLE_NAME, self.schema, tuple(params_dict.keys()), param_values
-        )
+        if bodo.get_rank() == 0:
+            param_values = [bodo.typeof(x) for x in params_dict.values()]
+            add_param_table(
+                NAMED_PARAM_TABLE_NAME,
+                self.schema,
+                tuple(params_dict.keys()),
+                param_values,
+            )
 
     def _remove_named_params(self):
-        self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
+        if bodo.get_rank() == 0:
+            self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
+
+    def _create_planner_and_parse_query(
+        self, sql: str, params_dict: Dict[str, Any], hide_credentials: bool
+    ):
+        from mpi4py import MPI
+
+        comm = MPI.COMM_WORLD
+
+        plan_generator = None
+        error_message = None
+        if bodo.get_rank() == 0:
+            if sql.strip() == "":
+                bodo.utils.typing.raise_bodo_error(
+                    "BodoSQLContext passed empty query string"
+                )
+
+            plan_generator = self._create_generator(hide_credentials)
+            try:
+                plan_generator.parseQuery(sql)
+                # Write type is used for the current Merge Into code path decisions.
+                # This should be removed when we revisit Merge Into
+                write_type = plan_generator.getWriteType(sql)
+                update_schema(
+                    self.schema,
+                    self.names,
+                    self.df_types,
+                    self.estimated_row_counts,
+                    self.orig_bodo_types,
+                    False,
+                    write_type,
+                )
+            except Exception as e:
+                error_message = error_to_string(e)
+
+            error_message = comm.bcast(error_message)
+            if error_message is not None:
+                raise BodoError(
+                    f"Unable to parse SQL Query. Error message:\n{error_message}"
+                )
+            return plan_generator
 
     def _convert_to_pandas(
         self,
         sql: str,
         params_dict: Dict[str, Any],
-        hide_credentials: bool,
+        generator: RelationalAlgebraGeneratorClass,
+        is_ddl: bool,
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate the func_text for the Python code generated for the given SQL query.
         This is always computed entirely on rank 0 to avoid parallelism errors.
@@ -875,24 +948,18 @@ class BodoSQLContext:
             # but it's nice to have for debugging purposes so things don't hang
             # if we make any changes that could lead to a runtime error.
             try:
-                if params_dict is None:
-                    params_dict = dict()
-
-                # Add named params to the schema
-                self._setup_named_params(params_dict)
-
                 # Generate the code
-                pd_code, globalsToLower = self._get_pandas_code(sql, hide_credentials)
+                pd_code, globalsToLower = self._get_pandas_code(sql, generator)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [(str(k), str(v)) for k, v in globalsToLower.items()]
                 )
-
-                # Remove the named Params table
-                self._remove_named_params()
+                # Hard code the context name for DDL execution. This is used
+                # for compilation testing and JIT code generation.
+                context_names = ["bodo_sql_context"] if is_ddl else []
                 table_names = [TABLE_ARG_PREFIX + x for x in self.tables.keys()]
                 params_names = [PARAM_ARG_PREFIX + x for x in params_dict.keys()]
-                args = ", ".join(table_names + params_names)
+                args = ", ".join(context_names + table_names + params_names)
                 func_text_or_err_msg += f"def impl({args}):\n"
                 func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
@@ -932,86 +999,90 @@ class BodoSQLContext:
         if params_dict is None:
             params_dict = dict()
 
-        func_text, lowered_globals = self._convert_to_pandas(
+        self._setup_named_params(params_dict)
+        generator = self._create_planner_and_parse_query(
             sql,
             params_dict,
-            False,  # We need to execute the code so don't hide credentials.
+            True,  # We need to execute the code so don't hide credentials.
         )
+        is_dll = generator.isDDLProcessedQuery()
+        try:
+            if is_dll:
+                # Just execute DDL operations directly and return the DataFrame.
+                return self.execute_ddl(sql, generator)
+            else:
+                func_text, lowered_globals = self._convert_to_pandas(
+                    sql,
+                    params_dict,
+                    generator,
+                    False,  # This path is never DDL.s
+                )
+                glbls = {
+                    "np": np,
+                    "pd": pd,
+                    "bodosql": bodosql,
+                    "re": re,
+                    "bodo": bodo,
+                    "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
+                    "MetaType": bodo.utils.typing.MetaType,
+                    "numba": numba,
+                    "time": time,
+                    "datetime": datetime,
+                    "pd": pd,
+                    "bif": bodo.ir.filter,
+                }
 
-        glbls = {
-            "np": np,
-            "pd": pd,
-            "bodosql": bodosql,
-            "re": re,
-            "bodo": bodo,
-            "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
-            "MetaType": bodo.utils.typing.MetaType,
-            "numba": numba,
-            "time": time,
-            "datetime": datetime,
-            "pd": pd,
-            "bif": bodo.ir.filter,
-        }
+                glbls.update(lowered_globals)
+                loc_vars = {}
+                exec(
+                    func_text,
+                    glbls,
+                    loc_vars,
+                )
+                impl = loc_vars["impl"]
 
-        glbls.update(lowered_globals)
-        loc_vars = {}
-        exec(
-            func_text,
-            glbls,
-            loc_vars,
-        )
-        impl = loc_vars["impl"]
+                # Add table argument name prefix to user provided distributed flags to match
+                # stored names
+                if "distributed" in jit_options and isinstance(
+                    jit_options["distributed"], (list, set)
+                ):
+                    jit_options["distributed"] = [
+                        TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
+                    ]
+                if "replicated" in jit_options and isinstance(
+                    jit_options["replicated"], (list, set)
+                ):
+                    jit_options["replicated"] = [
+                        TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
+                    ]
 
-        # Add table argument name prefix to user provided distributed flags to match
-        # stored names
-        if "distributed" in jit_options and isinstance(
-            jit_options["distributed"], (list, set)
-        ):
-            jit_options["distributed"] = [
-                TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
-            ]
-        if "replicated" in jit_options and isinstance(
-            jit_options["replicated"], (list, set)
-        ):
-            jit_options["replicated"] = [
-                TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
-            ]
-
-        return bodo.jit(impl, **jit_options)(
-            *(list(self.tables.values()) + list(params_dict.values()))
-        )
+                return bodo.jit(impl, **jit_options)(
+                    *(list(self.tables.values()) + list(params_dict.values()))
+                )
+        finally:
+            self._remove_named_params()
 
     def generate_plan(self, sql, params_dict=None, show_cost=False):
         """
         Return the optimized plan for the SQL code as
         as a Python string.
         """
+        if params_dict is None:
+            params_dict = dict()
+
+        self._setup_named_params(params_dict)
+        generator = self._create_planner_and_parse_query(sql, params_dict, True)
         failed = False
         plan_or_err_msg = ""
         if bodo.get_rank() == 0:
             try:
-                self._setup_named_params(params_dict)
-                generator = self._create_generator(False)
-                # Handle the parsing step.
-                generator.parseQuery(sql)
-                # Determine the write type
-                write_type = generator.getWriteType(sql)
-                # Update the schema with types.
-                update_schema(
-                    self.schema,
-                    self.names,
-                    self.df_types,
-                    self.estimated_row_counts,
-                    self.orig_bodo_types,
-                    False,
-                    write_type,
-                )
                 plan_or_err_msg = str(generator.getOptimizedPlanString(sql, show_cost))
                 # Remove the named Params table
-                self._remove_named_params()
             except Exception as e:
                 failed = True
                 plan_or_err_msg = error_to_string(e)
+            finally:
+                self._remove_named_params()
         failed = bcast_scalar(failed)
         plan_or_err_msg = bcast_scalar(plan_or_err_msg)
         if failed:
@@ -1019,16 +1090,16 @@ class BodoSQLContext:
         return plan_or_err_msg
 
     def _get_pandas_code(
-        self, sql: str, hide_credentials: bool
+        self,
+        sql: str,
+        generator: RelationalAlgebraGeneratorClass,
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate the Pandas code for the given SQL string.
 
         Args:
             sql (str): The SQL query text.
-            optimized (bool): Should the plan be optimized for the generated code.
-            hide_credentials (bool): Should credentials be hidden in the
-                generated code. This is true when we want to just inspect code,
-                not run it.
+            generator (RelationalAlgebraGeneratorClass): The relational algebra generator
+                used to generate the code.
 
         Raises:
             bodo.utils.typing.BodoError: The SQL text is not supported.
@@ -1041,27 +1112,6 @@ class BodoSQLContext:
         debugDeltaTable = bool(
             os.environ.get("__BODO_TESTING_DEBUG_DELTA_TABLE", False)
         )
-        if sql.strip() == "":
-            bodo.utils.typing.raise_bodo_error(
-                "BodoSQLContext passed empty query string"
-            )
-
-        generator = self._create_generator(hide_credentials)
-        # Handle the parsing step.
-        generator.parseQuery(sql)
-        # Determine the write type
-        write_type = generator.getWriteType(sql)
-        # Update the schema with types.
-        update_schema(
-            self.schema,
-            self.names,
-            self.df_types,
-            self.estimated_row_counts,
-            self.orig_bodo_types,
-            False,
-            write_type,
-        )
-
         try:
             pd_code = str(generator.getPandasString(sql, debugDeltaTable))
             failed = False
@@ -1071,12 +1121,7 @@ class BodoSQLContext:
         if failed:
             # Raise BodoError outside except to avoid stack trace
             raise bodo.utils.typing.BodoError(
-                f"Unable to parse SQL Query. Error message:\n{message}"
-            )
-        if failed:
-            # Raise BodoError outside except to avoid stack trace
-            raise bodo.utils.typing.BodoError(
-                f"Unable to parse SQL Query. Error message:\n{message}"
+                f"Unable to compile SQL Query. Error message:\n{message}"
             )
         return pd_code, generator.getLoweredGlobalVariables()
 
@@ -1243,6 +1288,57 @@ class BodoSQLContext:
                         return False
                 return self.catalog == bc.catalog
         return False  # pragma: no cover
+
+    def execute_ddl(
+        self, sql: str, generator: Optional[RelationalAlgebraGeneratorClass] = None
+    ) -> pd.DataFrame:
+        """API to directly execute DDL queries. This is used by the JIT
+        path to execute DDL queries and can be used as a fast path when you
+        statically know the query you want to execute is a DDL query to avoid the
+        control flow/cleanup code.
+
+        This will execute any DDL query on rank 0 and then broadcast the result
+        to all ranks.
+
+        Args:
+            sql (str): The DDL query to execute.
+            generator (Optional[RelationalAlgebraGeneratorClass]): The prepared planner
+                information used for executing the query. If None we need to create
+                the planner.
+
+        Returns:
+            pd.DataFrame: The result of the DDL query as a Pandas DataFrame.
+        """
+        from mpi4py import MPI
+
+        comm = MPI.COMM_WORLD
+        result = None
+        error = None
+
+        if bodo.get_rank() == 0:
+            if generator is None:
+                # Prepare the relational algebra generator on rank 0.
+                # The assumption is this code is called directly as the
+                # external API so we need to parse the query.
+                generator = self._create_planner_and_parse_query(
+                    sql,
+                    {},
+                    False,  # We need to execute the code so don't hide credentials.
+                )
+            try:
+                result = generator.executeDDL(sql)
+                # Convert the output to a DataFrame.
+                column_names = [x for x in result.getColumnNames()]
+                data = [pd.array(column) for column in result.getColumnValues()]
+                result = pd.DataFrame(data=data, columns=column_names)
+            except Exception as e:
+                error = error_to_string(e)
+        result = comm.bcast(result)
+        error = comm.bcast(error)
+        # Throw the error on all ranks.
+        if error is not None:
+            raise BodoError(error)
+        return result
 
 
 def initialize_schema(
