@@ -239,31 +239,100 @@ void QueryProfileCollector::Finalize() {
 // Python Interface
 
 static void init_query_profile_collector_py_entry() {
-    QueryProfileCollector::Default().Init();
+    try {
+        QueryProfileCollector::Default().Init();
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 static void start_pipeline_query_profile_collector_py_entry(
     int64_t pipeline_id) {
-    QueryProfileCollector::Default().StartPipeline(pipeline_id);
+    try {
+        QueryProfileCollector::Default().StartPipeline(pipeline_id);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 static void end_pipeline_query_profile_collector_py_entry(
     int64_t pipeline_id, int64_t num_iterations) {
-    QueryProfileCollector::Default().EndPipeline(pipeline_id, num_iterations);
+    try {
+        QueryProfileCollector::Default().EndPipeline(pipeline_id,
+                                                     num_iterations);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 static void submit_operator_stage_row_counts_query_profile_collector_py_entry(
-    int64_t operator_id, int64_t pipeline_id, int64_t input_row_count,
+    int64_t operator_id, int64_t stage_id, int64_t input_row_count,
     int64_t output_row_count) {
-    auto op_stage =
-        QueryProfileCollector::MakeOperatorStageID(operator_id, pipeline_id);
-    QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-        op_stage, input_row_count, output_row_count);
+    try {
+        auto op_stage =
+            QueryProfileCollector::MakeOperatorStageID(operator_id, stage_id);
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            op_stage, input_row_count, output_row_count);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 static void finalize_query_profile_collector_py_entry() {
-    QueryProfileCollector::Default().Finalize();
+    try {
+        QueryProfileCollector::Default().Finalize();
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
+
+/// The following are only used for unit testing purposes:
+
+static int64_t get_input_row_counts_for_op_stage_py_entry(int64_t operator_id,
+                                                          int64_t stage_id) {
+    try {
+        auto op_stage =
+            QueryProfileCollector::MakeOperatorStageID(operator_id, stage_id);
+        const auto& input_row_counts =
+            QueryProfileCollector::Default().GetOperatorStageInputRowCounts();
+        auto iter = input_row_counts.find(op_stage);
+        if (iter == input_row_counts.end()) {
+            throw std::runtime_error(
+                fmt::format("get_input_row_counts_for_op_stage_py_entry: No "
+                            "entry for operator id {} and stage id {}.",
+                            operator_id, stage_id));
+        } else {
+            return iter->second;
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
+    }
+}
+
+static int64_t get_output_row_counts_for_op_stage_py_entry(int64_t operator_id,
+                                                           int64_t stage_id) {
+    try {
+        auto op_stage =
+            QueryProfileCollector::MakeOperatorStageID(operator_id, stage_id);
+        const auto& output_row_counts =
+            QueryProfileCollector::Default().GetOperatorStageOutputRowCounts();
+        auto iter = output_row_counts.find(op_stage);
+        if (iter == output_row_counts.end()) {
+            throw std::runtime_error(
+                fmt::format("get_output_row_counts_for_op_stage_py_entry: No "
+                            "entry for operator id {} and stage id {}.",
+                            operator_id, stage_id));
+        } else {
+            return iter->second;
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
+    }
+}
+
+/// PyMod
 
 PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void) {
     PyObject* m;
@@ -281,5 +350,7 @@ PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void) {
     SetAttrStringFromVoidPtr(
         m, submit_operator_stage_row_counts_query_profile_collector_py_entry);
     SetAttrStringFromVoidPtr(m, finalize_query_profile_collector_py_entry);
+    SetAttrStringFromVoidPtr(m, get_input_row_counts_for_op_stage_py_entry);
+    SetAttrStringFromVoidPtr(m, get_output_row_counts_for_op_stage_py_entry);
     return m;
 }

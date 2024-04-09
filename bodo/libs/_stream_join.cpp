@@ -942,7 +942,8 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                      uint64_t n_keys_, bool build_table_outer_,
                      bool probe_table_outer_, cond_expr_fn_t cond_func_,
                      bool build_parallel_, bool probe_parallel_,
-                     int64_t output_batch_size_, int64_t sync_iter_)
+                     int64_t output_batch_size_, int64_t sync_iter_,
+                     int64_t op_id_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       n_keys(n_keys_),
@@ -953,7 +954,8 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
       sync_iter(sync_iter_),
-      dummy_probe_table(alloc_table(probe_table_schema_)) {
+      dummy_probe_table(alloc_table(probe_table_schema_)),
+      op_id(op_id_) {
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
@@ -1114,7 +1116,7 @@ HashJoinState::HashJoinState(
     : JoinState(build_table_schema_, probe_table_schema_, n_keys_,
                 build_table_outer_, probe_table_outer_, cond_func_,
                 build_parallel_, probe_parallel_, output_batch_size_,
-                sync_iter_),
+                sync_iter_, op_id_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2744,7 +2746,7 @@ JoinState* join_state_init_py_entry(
                 std::vector<int8_t>(probe_arr_c_types,
                                     probe_arr_c_types + n_probe_arrs)),
             build_table_outer, probe_table_outer, cond_func, build_parallel,
-            probe_parallel, output_batch_size, sync_iter);
+            probe_parallel, output_batch_size, sync_iter, operator_id);
     }
 
     return new HashJoinState(
@@ -2774,23 +2776,36 @@ JoinState* join_state_init_py_entry(
  */
 bool join_build_consume_batch_py_entry(JoinState* join_state_,
                                        table_info* in_table, bool is_last) {
+    join_state_->metrics.build_input_row_count += in_table->nrows();
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
-        return nested_loop_join_build_consume_batch_py_entry(
+        is_last = nested_loop_join_build_consume_batch_py_entry(
             (NestedLoopJoinState*)join_state_, in_table, is_last);
+    } else {
+        HashJoinState* join_state = (HashJoinState*)join_state_;
+        try {
+            bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
+            is_last = join_build_consume_batch(
+                join_state, std::unique_ptr<table_info>(in_table),
+                has_bloom_filter, is_last);
+        } catch (const std::exception& e) {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+            return false;
+        }
     }
-
-    HashJoinState* join_state = (HashJoinState*)join_state_;
-
-    try {
-        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
-        return join_build_consume_batch(join_state,
-                                        std::unique_ptr<table_info>(in_table),
-                                        has_bloom_filter, is_last);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
+    if (is_last && (join_state_->op_id != -1)) {
+        try {
+            // Build is stage 0. Build doesn't output anything, so it's output
+            // row count is 0.
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(join_state_->op_id,
+                                                           0),
+                join_state_->metrics.build_input_row_count, 0);
+        } catch (const std::exception& e) {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        }
     }
-    return false;
+    return is_last;
 }
 
 /**
@@ -2829,6 +2844,7 @@ table_info* join_probe_consume_batch_py_entry(
 
         std::unique_ptr<table_info> input_table =
             std::unique_ptr<table_info>(in_table);
+        join_state_->metrics.probe_input_row_count += input_table->nrows();
 
         // nested loop join is required if there are no equality keys
         if (join_state_->n_keys == 0) {
@@ -2946,11 +2962,23 @@ table_info* join_probe_consume_batch_py_entry(
                     /*force_return*/ is_last);
             *total_rows = chunk_size;
             out_table = new table_info(*out_table_shared);
+            join_state_->metrics.probe_output_row_count += chunk_size;
         }
         // This is the last output if we've already seen all input (i.e.
         // is_last) and there's no more output remaining in the output_buffer:
         *out_is_last =
             is_last && join_state_->output_buffer->total_remaining == 0;
+
+        // If this is the last output, submit the row count stats for the query
+        // profile.
+        if (*out_is_last && (join_state_->op_id != -1)) {
+            // Probe is stage 1.
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(join_state_->op_id,
+                                                           1),
+                join_state_->metrics.probe_input_row_count,
+                join_state_->metrics.probe_output_row_count);
+        }
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
