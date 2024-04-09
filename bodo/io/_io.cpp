@@ -27,16 +27,17 @@ PyObject* f_mod = nullptr;       // imported python module:
 
 extern "C" {
 
-uint64_t get_file_size(char* file_name);
-void file_read(char* file_name, void* buff, int64_t size, int64_t offset);
-void file_write(char* file_name, void* buff, int64_t size);
-void file_write_py_entrypt(char* file_name, void* buff, int64_t size);
-void file_read_parallel(char* file_name, char* buff, int64_t start,
+uint64_t get_file_size(const char* file_name);
+void file_read(const char* file_name, void* buff, int64_t size, int64_t offset);
+void file_write(const char* file_name, void* buff, int64_t size);
+void file_write_py_entrypt(const char* file_name, void* buff, int64_t size);
+void file_read_parallel(const char* file_name, char* buff, int64_t start,
                         int64_t count);
-void file_write_parallel(char* file_name, char* buff, int64_t start,
+void file_write_parallel(const char* file_name, char* buff, int64_t start,
                          int64_t count, int64_t elem_size);
-void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
-                                    int64_t count, int64_t elem_size);
+void file_write_parallel_py_entrypt(const char* file_name, char* buff,
+                                    int64_t start, int64_t count,
+                                    int64_t elem_size);
 
 #define ROOT 0
 #define LARGE_DTYPE_SIZE 1024
@@ -57,7 +58,7 @@ PyMODINIT_FUNC PyInit_hio(void) {
     return m;
 }
 
-uint64_t get_file_size(char* file_name) {
+uint64_t get_file_size(const char* file_name) {
     try {
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -119,7 +120,8 @@ uint64_t get_file_size(char* file_name) {
     }
 }
 
-void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
+void file_read(const char* file_name, void* buff, int64_t size,
+               int64_t offset) {
     try {
         if (strncmp("s3://", file_name, 5) == 0 ||
             strncmp("hdfs://", file_name, 7) == 0) {
@@ -152,7 +154,7 @@ void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
     }
 }
 
-void file_write(char* file_name, void* buff, int64_t size) {
+void file_write(const char* file_name, void* buff, int64_t size) {
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     PyObject* func_obj = nullptr;
     int rank;
@@ -217,7 +219,7 @@ void file_write(char* file_name, void* buff, int64_t size) {
     }
 }
 
-void file_write_py_entrypt(char* file_name, void* buff, int64_t size) {
+void file_write_py_entrypt(const char* file_name, void* buff, int64_t size) {
     try {
         file_write(file_name, buff, size);
     } catch (const std::exception& e) {
@@ -226,7 +228,7 @@ void file_write_py_entrypt(char* file_name, void* buff, int64_t size) {
     }
 }
 
-void file_read_parallel(char* file_name, char* buff, int64_t start,
+void file_read_parallel(const char* file_name, char* buff, int64_t start,
                         int64_t count) {
     try {
         // printf("MPI READ %lld %lld\n", start, count);
@@ -304,7 +306,7 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
     }
 }
 
-void file_write_parallel(char* file_name, char* buff, int64_t start,
+void file_write_parallel(const char* file_name, char* buff, int64_t start,
                          int64_t count, int64_t elem_size) {
     // std::cout << "file_write_parallel: " << file_name << "\n";
     // printf(" MPI WRITE %lld %lld %lld\n", start, count, elem_size);
@@ -434,8 +436,9 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
     }
 }
 
-void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
-                                    int64_t count, int64_t elem_size) {
+void file_write_parallel_py_entrypt(const char* file_name, char* buff,
+                                    int64_t start, int64_t count,
+                                    int64_t elem_size) {
     try {
         file_write_parallel(file_name, buff, start, count, elem_size);
     } catch (const std::exception& e) {
