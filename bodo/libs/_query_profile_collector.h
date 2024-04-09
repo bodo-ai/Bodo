@@ -167,6 +167,9 @@ class QueryProfileCollector {
 
     std::vector<int64_t> initial_operator_budget;
 
+    // Location to write output profiles
+    std::string output_dir;
+
     int getTracingLevel() {
         char* tracing_level_env_ = std::getenv("BODO_TRACING_LEVEL");
         if (tracing_level_env_) {
