@@ -1,8 +1,11 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "./_query_profile_collector.h"
+#include <fmt/core.h>
 #include <mpi.h>
+#include <sys/stat.h>
 #include <boost/json/src.hpp>
 #include <chrono>
+#include <iostream>
 #include <unordered_set>
 #include "../io/_io.h"
 #include "_bodo_common.h"
@@ -20,6 +23,54 @@ void QueryProfileCollector::Init() {
         auto budget = operator_comptroller->GetOperatorBudget(i);
         initial_operator_budget.push_back(budget);
     }
+
+    // End of initialization when tracing is disabled
+    if (tracing_level == 0) {
+        return;
+    }
+
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Set the output directory - this must be synchronized across all ranks
+    if (rank == 0) {
+        // Create the output directory only on rank 0
+        char* template_ = std::getenv("BODO_TRACING_OUTPUT_DIR");
+        // X will be replaced by mkdtemp
+        output_dir = template_ ? template_ : "query_profile.XXXXX";
+        // Check if the directory already exists
+        struct stat info;
+        bool exists = false;
+        if (stat(output_dir.c_str(), &info) == 0) {
+            exists = true;
+            // Raise a warning if the directory already exists
+            std::cerr << "Warning: Output directory already exists, "
+                         "overwritting profiles\n";
+        }
+        if (!exists) {
+            // Create the output directory using mkdtemp
+            char* res = mkdtemp(output_dir.data());
+            if (res == nullptr) {
+                throw std::runtime_error(
+                    fmt::format("Failed to create output directory {}: {}",
+                                output_dir, strerror(errno)));
+            }
+            output_dir = res;
+        }
+    }
+    // Broadcast the output_dir length to all ranks
+    int output_dir_len = output_dir.size();
+    MPI_Bcast(&output_dir_len, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Reserve space for the output directory
+    if (rank != 0) {
+        // add 1 for the null terminator
+        output_dir.resize(output_dir_len + 1);
+    }
+
+    // Broadcast the output directory to all ranks
+    MPI_Bcast((void*)output_dir.c_str(), output_dir.size(), MPI_CHAR, 0,
+              MPI_COMM_WORLD);
 }
 
 static uint64_t us_since_epoch() {
@@ -178,12 +229,11 @@ void QueryProfileCollector::Finalize() {
 
     auto s = boost::json::serialize(profile);
 
-    char filename[100];
-    snprintf(filename, 100, "query_profile_%d.json", rank);
-
+    std::string filename =
+        fmt::format("{}/query_profile_{}.json", output_dir, rank);
     // Note that this write is not parallel because every rank should write to
     // it's own location.
-    file_write(filename, (void*)s.c_str(), s.size());
+    file_write(filename.c_str(), (void*)s.c_str(), s.size());
 }
 
 // Python Interface
