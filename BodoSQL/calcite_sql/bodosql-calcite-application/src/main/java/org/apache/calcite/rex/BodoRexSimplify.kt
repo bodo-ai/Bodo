@@ -1039,9 +1039,9 @@ class BodoRexSimplify(
                     if (asString == null) {
                         errorValue
                     } else {
-                        // Cast to Binary converts to hex.
+                        // Cast to Binary fetches the UTF-8 encoding bytes.
                         try {
-                            val bytesString = ByteString.of(asString, 16)
+                            val bytesString = ByteString(asString.encodeToByteArray())
                             rexBuilder.makeLiteral(bytesString, call.type)
                         } catch (e: IllegalArgumentException) {
                             // hex parsing is straightforward, so if we have an illicit cast convert

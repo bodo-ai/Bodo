@@ -83,7 +83,7 @@ def test_literal_project(basic_df, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": [b"1313"]}),
+        expected_output=pd.DataFrame({"A": [bytes.fromhex("1313")]}),
     )
 
 
