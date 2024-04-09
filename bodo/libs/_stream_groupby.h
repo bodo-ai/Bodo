@@ -6,6 +6,7 @@
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
 #include "_operator_pool.h"
+#include "_query_profile_collector.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
 
@@ -489,6 +490,18 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     const bool mrnf_only = false;
 };
 
+/**
+ * @brief Struct for storing the Groupby metrics.
+ *
+ */
+struct GroupbyMetrics {
+    // Required Metrics
+    MetricBase::StatValue build_input_row_count = 0;
+    MetricBase::StatValue output_row_count = 0;
+
+    // TODO Optional Metrics
+};
+
 class GroupbyState {
    private:
     // NOTE: These need to be declared first so that they are
@@ -615,6 +628,8 @@ class GroupbyState {
     bool partitioning_enabled = true;
 
     tracing::ResumableEvent groupby_event;
+    GroupbyMetrics metrics;
+    const int64_t op_id;
 
     GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                  std::vector<int32_t> ftypes_,
