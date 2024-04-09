@@ -5,6 +5,12 @@ import numpy as np
 import pandas as pd
 
 import bodo
+from bodo.libs.stream_groupby import (
+    delete_groupby_state,
+    groupby_build_consume_batch,
+    groupby_produce_output_batch,
+    init_groupby_state,
+)
 from bodo.libs.stream_join import (
     delete_join_state,
     init_join_state,
@@ -28,7 +34,7 @@ def test_query_profile_collection_compiles():
     impl()
 
 
-def test_query_profile_join_row_count_collection(tmp_path):
+def test_query_profile_join_row_count_collection():
     """
     Check that Join submits its row counts to the QueryProfileCollector
     as expected.
@@ -161,6 +167,128 @@ def test_query_profile_join_row_count_collection(tmp_path):
     assert (
         probe_output_row_count == 18750000
     ), f"Expected probe_output_row_count to be 18750000 but it was {probe_output_row_count} instead"
+
+
+def test_query_profile_groupby_row_count_collection():
+    """
+    Check that Groupby submits its row counts to the QueryProfileCollector
+    as expected.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    func_names = ["median", "sum", "nunique"]
+    f_in_offsets = [0, 1, 2, 3]
+    f_in_cols = [
+        1,
+        1,
+        2,
+    ]
+
+    keys_inds = bodo.utils.typing.MetaType(tuple([0]))
+    out_col_meta_l = ["key"] + [f"out_{i}" for i in range(len(func_names))]
+    out_col_meta = bodo.utils.typing.ColNamesMetaType(tuple(out_col_meta_l))
+    len_kept_cols = len(df.columns)
+    kept_cols = bodo.utils.typing.MetaType(tuple(range(len_kept_cols)))
+    batch_size = 4000
+    fnames = bodo.utils.typing.MetaType(tuple(func_names))
+    f_in_offsets = bodo.utils.typing.MetaType(tuple(f_in_offsets))
+    f_in_cols = bodo.utils.typing.MetaType(tuple(f_in_cols))
+
+    @bodo.jit(distributed=["df"])
+    def impl(df):
+        bodo.libs.query_profile_collector.init()
+
+        groupby_state = init_groupby_state(
+            0, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            kept_cols,
+            len_kept_cols,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+        is_last2 = False
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        _iter_2 = 0
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+            _iter_2 = _iter_2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter_2)
+        delete_groupby_state(groupby_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, out_col_meta
+        )
+        return df
+
+    _ = impl(_get_dist_arg(df))
+    build_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 0)
+    )
+    produce_output_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
+    )
+    build_output_row_count = (
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 0)
+    )
+    produce_output_output_row_count = (
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+    )
+    build_input_row_count = reduce_sum(build_input_row_count)
+    produce_output_input_row_count = reduce_sum(produce_output_input_row_count)
+    build_output_row_count = reduce_sum(build_output_row_count)
+    produce_output_output_row_count = reduce_sum(produce_output_output_row_count)
+    assert (
+        build_input_row_count == 32000
+    ), f"Expected build_input_row_count to be 32000 but it was {build_input_row_count} instead"
+    assert (
+        produce_output_input_row_count == 0
+    ), f"Expected produce_output_input_row_count to be 0 but it was {produce_output_input_row_count} instead"
+    assert (
+        build_output_row_count == 0
+    ), f"Expected build_output_row_count to be 0 but it was {build_output_row_count} instead"
+    assert (
+        produce_output_output_row_count == 1000
+    ), f"Expected produce_output_output_row_count to be 1000 but it was {produce_output_output_row_count} instead"
 
 
 def test_output_directory_can_be_set():
