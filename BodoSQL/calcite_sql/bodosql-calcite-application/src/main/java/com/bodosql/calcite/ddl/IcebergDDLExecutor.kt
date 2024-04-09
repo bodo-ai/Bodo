@@ -17,8 +17,9 @@ class IcebergDDLExecutor(private val icebergConnection: BaseMetastoreCatalog) : 
         tablePath: ImmutableList<String>,
         cascade: Boolean,
     ): DDLExecutionResult {
-        val tableName = tablePath.joinToString(separator = ".")
+        val tableName = tablePath[tablePath.size - 1]
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
+        // TOOD: Should we set purge=True. This will delete the data/metadata files but prevents time travel.
         val result = icebergConnection.dropTable(tableIdentifier)
         if (!result) {
             throw RuntimeException("Unable to drop table $tableName. Please check that you have sufficient permissions.")

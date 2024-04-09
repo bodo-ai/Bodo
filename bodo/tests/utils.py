@@ -2562,7 +2562,7 @@ def drop_snowflake_table(
         try:
             iceberg_prefix = "iceberg" if iceberg_volume else ""
             conn_str = get_snowflake_connection_string(db, schema)
-            pd.read_sql(f"drop {iceberg_prefix} table {table_name}", conn_str)
+            pd.read_sql(f"drop {iceberg_prefix} table IF EXISTS {table_name}", conn_str)
         except Exception as e:
             drop_err = e
     drop_err = comm.bcast(drop_err)
@@ -2572,7 +2572,7 @@ def drop_snowflake_table(
 
 @contextmanager
 def create_snowflake_table_from_select_query(
-    query: str, base_table_name: str, db: str, schema: str
+    query: str, base_table_name: str, db: str, schema: str, case_sensitive: bool = False
 ) -> Generator[str, None, None]:
     """Creates a new table in Snowflake derived from the base table name
     and using the given select query. The name from the base name is modified to help
@@ -2586,6 +2586,8 @@ def create_snowflake_table_from_select_query(
         base_table_name (str): Base string for generating the table name.
         db (str): Name of the snowflake db.
         schema (str): Name of the snowflake schema
+        case_sensitive (bool): Whether the table name should be case sensitive or not.
+            If case sensitive, the table name will be wrapped in double quotes.
 
     Returns:
         str: The final table name.
@@ -2595,6 +2597,8 @@ def create_snowflake_table_from_select_query(
     try:
         if bodo.get_rank() == 0:
             table_name = gen_unique_table_id(base_table_name)
+            if case_sensitive:
+                table_name = f'"{table_name}"'
             conn_str = get_snowflake_connection_string(db, schema)
             pd.read_sql(f"CREATE or REPLACE TABLE {table_name} as ({query})", conn_str)
         table_name = comm.bcast(table_name)
