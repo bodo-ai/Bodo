@@ -1,5 +1,5 @@
 
-### Timestamp Functions
+# Timestamp Functions
 
 BodoSQL currently supports the following Timestamp functions:
 
