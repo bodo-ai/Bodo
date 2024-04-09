@@ -50,6 +50,7 @@ class Metric : public MetricBase {
 
     Metric() = delete;
     Metric(ValueType val) { set(val); }
+    Metric(std::string name, ValueType val) : Metric(val) { this->name = name; }
 
     // getter and setter for the metric value
     ValueType get() { return std::get<type_>(value); }
@@ -80,18 +81,18 @@ class QueryProfileCollector {
     using pipeline_id_t = uint32_t;
 
     /**
-     * @brief Create an operator stage ID from an operator ID and pipeline ID
+     * @brief Create an operator stage ID from an operator ID and stage ID
      *
      * This method packs two 32 bit ids into a single 64 bit id
      *
      * @param operator_id The operator ID
-     * @param pipeline_id The pipeline ID
+     * @param stage_id The stage ID
      * @return operator_stage_t The operator stage ID
      */
     static operator_stage_t MakeOperatorStageID(operator_id_t operator_id,
-                                                pipeline_id_t pipeline_id) {
+                                                pipeline_id_t stage_id) {
         return (static_cast<operator_stage_t>(operator_id) << 32) |
-               static_cast<operator_stage_t>(pipeline_id);
+               static_cast<operator_stage_t>(stage_id);
     }
 
     void Init();
@@ -109,7 +110,6 @@ class QueryProfileCollector {
 
     void Finalize();
 
-#ifdef IS_TESTING
     // Getters for testing
     std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
     GetPipelineStartEndTimestamps() {
@@ -138,7 +138,6 @@ class QueryProfileCollector {
     GetMetrics() {
         return operator_stage_metrics;
     }
-#endif
 
    private:
     int tracing_level = 1;

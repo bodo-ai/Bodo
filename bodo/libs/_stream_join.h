@@ -9,6 +9,7 @@
 #include "_nested_loop_join.h"
 #include "_operator_pool.h"
 #include "_pinnable.h"
+#include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
@@ -490,6 +491,19 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     uint64_t n_keys, bool only_transpose_existing_on_key_cols = false);
 
+/**
+ * @brief Struct for storing the Join metrics.
+ *
+ */
+struct JoinMetrics {
+    // Required Metrics
+    MetricBase::StatValue build_input_row_count = 0;
+    MetricBase::StatValue probe_input_row_count = 0;
+    MetricBase::StatValue probe_output_row_count = 0;
+
+    // TODO Optional Metrics
+};
+
 class JoinState {
    public:
     // The types of the columns in the build table and probe tables.
@@ -540,12 +554,15 @@ class JoinState {
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
 
+    // Metrics for join execution.
+    JoinMetrics metrics;
+
     JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
               const std::shared_ptr<bodo::Schema> probe_table_schema_,
               uint64_t n_keys_, bool build_table_outer_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, int64_t sync_iter_);
+              int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_);
 
     virtual ~JoinState() {}
 
@@ -587,6 +604,9 @@ class JoinState {
     std::shared_ptr<table_info> UnifyProbeTableDictionaryArrays(
         const std::shared_ptr<table_info>& in_table,
         bool only_transpose_existing_on_key_cols = false);
+
+    // Operator ID.
+    const int64_t op_id;
 };
 
 class HashJoinState : public JoinState {
@@ -918,12 +938,13 @@ class NestedLoopJoinState : public JoinState {
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
                         bool probe_parallel_, int64_t output_batch_size_,
-                        int64_t sync_iter_)
-        : JoinState(build_table_schema_, probe_table_schema_, 0,
-                    build_table_outer_, probe_table_outer_, cond_func_,
-                    build_parallel_, probe_parallel_, output_batch_size_,
-                    sync_iter_),  // NestedLoopJoin is only used when
-                                  // n_keys is 0
+                        int64_t sync_iter_, int64_t op_id_)
+        : JoinState(
+              build_table_schema_, probe_table_schema_,
+              /*n_keys_*/ 0,  // NestedLoopJoin is only used when n_keys is 0
+              build_table_outer_, probe_table_outer_, cond_func_,
+              build_parallel_, probe_parallel_, output_batch_size_, sync_iter_,
+              op_id_),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
         this->sync_iter =
