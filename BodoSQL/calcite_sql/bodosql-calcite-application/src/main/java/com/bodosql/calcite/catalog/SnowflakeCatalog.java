@@ -20,6 +20,8 @@ import com.bodosql.calcite.application.write.SnowflakeIcebergWriteTarget;
 import com.bodosql.calcite.application.write.SnowflakeNativeWriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.ddl.DDLExecutionResult;
+import com.bodosql.calcite.ddl.DDLExecutor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
@@ -53,6 +55,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
@@ -126,6 +129,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   private @Nullable Integer weekOfYearPolicy;
   private @Nullable String currentDatabase;
 
+  private SnowflakeJDBCExecutor ddlExecutor;
+
   /**
    * Create the catalog and store the relevant account information.
    *
@@ -177,6 +182,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         parseIntegerProperty(accountInfo, "WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
 
     this.currentDatabase = defaultDatabaseName;
+    this.ddlExecutor = new SnowflakeJDBCExecutor();
   }
 
   /**
@@ -432,7 +438,12 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String databaseName, String schemaName, String tableName, boolean shouldRetry) {
     try {
       String dotSeparatedTableName =
-          String.format(Locale.ROOT, "%s.%s.%s", databaseName, schemaName, tableName);
+          String.format(
+              Locale.ROOT,
+              "%s.%s.%s",
+              makeObjectNameQuoted(databaseName),
+              makeObjectNameQuoted(schemaName),
+              makeObjectNameQuoted(tableName));
       VERBOSE_LEVEL_THREE_LOGGER.info(
           String.format(Locale.ROOT, "Validating table: %s", dotSeparatedTableName));
       // Fetch the timezone info.
@@ -944,8 +955,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               Locale.ROOT,
               "show user functions like '%s' in schema %s.%s",
               functionName,
-              databaseName,
-              schemaName);
+              makeObjectNameQuoted(databaseName),
+              makeObjectNameQuoted(schemaName));
       ResultSet results = executeSnowflakeQuery(query, 5);
       while (results.next()) {
         // See the return values here:
@@ -1033,15 +1044,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   private DescribeFunctionOutput describeFunctionImpl(
       ImmutableList<String> functionPath, String showFunctionArguments) {
     kotlin.Pair<String, Integer> parsedInput =
-        parseSnowflakeShowFunctionsArguments(showFunctionArguments);
+        parseSnowflakeShowFunctionsArguments(
+            showFunctionArguments, makeObjectNameQuoted(functionPath.get(2)));
     String describeFunctionInput = parsedInput.getFirst();
     int numOptional = parsedInput.getSecond();
     String describeQuery =
         String.format(
             Locale.ROOT,
             "describe function %s.%s.%s",
-            functionPath.get(0),
-            functionPath.get(1),
+            makeObjectNameQuoted(functionPath.get(0)),
+            makeObjectNameQuoted(functionPath.get(1)),
             describeFunctionInput);
     try {
       ResultSet describeResults = executeSnowflakeQuery(describeQuery, 5);
@@ -1536,7 +1548,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     // sampling.
     boolean isView = tryGetViewMetadataFn.apply(tableName) != null;
     if (isView) {
-      String dotTableName = String.join(".", tableName);
+      String dotTableName =
+          String.join(
+              ".",
+              tableName.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
       String loggingMessage =
           String.format(
               Locale.ROOT, "Skipping attempt to sample from %s as it is a view", dotTableName);
@@ -1844,8 +1859,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               Locale.ROOT,
               "Show views like '%s' in schema %s.%s starts with '%s'",
               names.get(2),
-              names.get(0),
-              names.get(1),
+              makeObjectNameQuoted(names.get(0)),
+              makeObjectNameQuoted(names.get(1)),
               names.get(2));
       ResultSet paramInfo = executeSnowflakeQuery(query);
       if (paramInfo.next()) {
@@ -1886,7 +1901,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * of indirection to ensure this function is cached.
    */
   private @NotNull boolean canReadTableImpl(List<String> names) {
-    String dotTableName = String.join(".", names);
+    String dotTableName =
+        String.join(
+            ".", names.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
     try {
       final String query = String.format(Locale.ROOT, "Select * from %s limit 0", dotTableName);
       executeSnowflakeQuery(query, 5);
@@ -1915,7 +1932,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * layer of indirection to ensure this function is cached.
    */
   private @NotNull boolean isIcebergTableImpl(List<String> names) {
-    String qualifiedName = String.join(".", names);
+    String qualifiedName =
+        String.join(
+            ".", names.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
     try {
       final String query = String.format(Locale.ROOT, "DESCRIBE ICEBERG TABLE %s;", qualifiedName);
       executeSnowflakeQuery(query, 5);
@@ -1964,5 +1983,49 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   public @Nullable String getAccountName() {
     return accountName;
+  }
+
+  public SnowflakeJDBCExecutor getDdlExecutor() {
+    return ddlExecutor;
+  }
+
+  /**
+   * Interface for executing DDL commands on Snowflake via the JDBC connection. This is meant to
+   * give a cleaner abstraction for DDL commands.
+   */
+  public class SnowflakeJDBCExecutor implements DDLExecutor {
+    private SnowflakeJDBCExecutor() {}
+
+    @NotNull
+    @Override
+    public DDLExecutionResult dropTable(@NotNull ImmutableList<String> tablePath, boolean cascade) {
+      String tableName =
+          String.join(
+              ".",
+              tablePath.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+      String query =
+          String.format(
+              Locale.ROOT, "DROP TABLE %s %s", tableName, cascade ? " CASCADE" : "RESTRICT");
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        List<List<String>> columnValues = new ArrayList();
+        while (output.next()) {
+          columnValues.add(List.of(output.getString(1)));
+        }
+        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to drop Snowflake table %s. Error: %s",
+                tableName,
+                e.getMessage()));
+      }
+    }
+  }
+
+  // HELPER FUNCTIONS
+  private String makeObjectNameQuoted(String name) {
+    return "\"" + name + "\"";
   }
 }

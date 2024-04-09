@@ -8,6 +8,7 @@ import com.bodosql.calcite.application.utils.CheckTablePermissions.Companion.can
 import com.bodosql.calcite.application.write.SnowflakeNativeWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.SnowflakeCatalog
+import com.bodosql.calcite.ddl.DDLExecutor
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
 import com.bodosql.calcite.schema.ExpandViewInput
@@ -405,6 +406,10 @@ open class SnowflakeCatalogTable(
             columnNamesGlobal,
             generatePythonConnStr(parentFullPath),
         )
+    }
+
+    override fun getDDLExecutor(): DDLExecutor {
+        return catalog.ddlExecutor
     }
 
     private inner class StatisticImpl : Statistic {

@@ -5,7 +5,9 @@ import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
+import com.bodosql.calcite.prepare.AbstractPlannerImpl;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -31,7 +33,6 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.tools.Planner;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -69,7 +70,7 @@ public class RelationalAlgebraGenerator {
   static final Logger LOGGER = LoggerFactory.getLogger(RelationalAlgebraGenerator.class);
 
   /** Planner that converts sql to relational algebra. */
-  private Planner planner;
+  private AbstractPlannerImpl planner;
 
   /**
    * Stores the output of parsing the given SQL query. This is done to allow separating parsing from
@@ -570,6 +571,22 @@ public class RelationalAlgebraGenerator {
       // If there is no write then the return value
       // doesn't matter.
       return "INSERT";
+    }
+  }
+
+  public DDLExecutionResult executeDDL(String sql) throws Exception {
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql);
+      if (!SqlKind.DDL.contains(validatedSqlNode.getKind())) {
+        throw new RuntimeException("Only DDL statements are supported by executeDDL");
+      }
+      return planner.executeDDL(validatedSqlNode);
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
     }
   }
 }
