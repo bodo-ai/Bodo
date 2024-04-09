@@ -1,8 +1,8 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Interface to C++ memory_budget utilities"""
 
-
 import llvmlite.binding as ll
+import numba
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic
@@ -29,6 +29,14 @@ ll.add_symbol(
 ll.add_symbol(
     "finalize_query_profile_collector_py_entry",
     query_profile_collector_cpp.finalize_query_profile_collector_py_entry,
+)
+ll.add_symbol(
+    "get_input_row_counts_for_op_stage_py_entry",
+    query_profile_collector_cpp.get_input_row_counts_for_op_stage_py_entry,
+)
+ll.add_symbol(
+    "get_output_row_counts_for_op_stage_py_entry",
+    query_profile_collector_cpp.get_output_row_counts_for_op_stage_py_entry,
 )
 
 
@@ -136,3 +144,26 @@ def finalize(typingctx):
 
     sig = types.none()
     return sig, codegen
+
+
+## Only used for unit testing purposes
+
+get_input_row_counts_for_op_stage_f = types.ExternalFunction(
+    "get_input_row_counts_for_op_stage_py_entry",
+    types.int64(types.int64, types.int64),
+)
+
+get_output_row_counts_for_op_stage_f = types.ExternalFunction(
+    "get_output_row_counts_for_op_stage_py_entry",
+    types.int64(types.int64, types.int64),
+)
+
+
+@numba.njit
+def get_input_row_counts_for_op_stage(op_id, stage_id):  # pragma: no cover
+    return get_input_row_counts_for_op_stage_f(op_id, stage_id)
+
+
+@numba.njit
+def get_output_row_counts_for_op_stage(op_id, stage_id):  # pragma: no cover
+    return get_output_row_counts_for_op_stage_f(op_id, stage_id)

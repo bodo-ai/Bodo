@@ -75,6 +75,11 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
                                           bool is_last) {
     // just add batch to build table buffer
     if (join_state->build_input_finalized) {
+        if (in_table->nrows() != 0) {
+            throw std::runtime_error(
+                "nested_loop_join_build_consume_batch: Received non-empty "
+                "in_table after the build was already finalized!");
+        }
         // Nothing left to do for build
         return true;
     }
