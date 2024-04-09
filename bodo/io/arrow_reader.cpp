@@ -1501,6 +1501,14 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
 
         *total_rows_out = total_rows_out_;
         *is_last_out = is_last_out_;
+        reader->metrics.output_row_count += total_rows_out_;
+        if (is_last_out_ && (reader->op_id != -1)) {
+            // We treat the initialization step as stage 0 and the actual reads
+            // (this) as stage 1.
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(reader->op_id, 1), 0,
+                reader->metrics.output_row_count);
+        }
         return table;
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is
