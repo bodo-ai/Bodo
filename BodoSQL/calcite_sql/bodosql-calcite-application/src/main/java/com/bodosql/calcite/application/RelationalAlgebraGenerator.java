@@ -5,6 +5,7 @@ import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -24,9 +25,11 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.Planner;
 import org.apache.calcite.tools.RelConversionException;
@@ -318,6 +321,16 @@ public class RelationalAlgebraGenerator {
   }
 
   /**
+   * Return if a SQLKind generates compute. This includes CREATE_TABLE because of CTAS right now.
+   *
+   * @param kind The SQLKind to check
+   * @return True if the SQLKind generates compute.
+   */
+  private boolean isComputeKind(SqlKind kind) {
+    return !SqlKind.DDL.contains(kind) || (kind == SqlKind.CREATE_TABLE);
+  }
+
+  /**
    * Parses the SQL query into a SQLNode and updates the relational Algebra Generator's state
    *
    * @param sql Query to parse
@@ -341,16 +354,36 @@ public class RelationalAlgebraGenerator {
     // Clear the parseNode because we will advance the planner
     this.parseNode = null;
     try {
-      return planner.validate(parseNode);
+      if (isComputeKind(parseNode.getKind())) {
+        return planner.validate(parseNode);
+      } else {
+        // No need to validate DDL statements. We handle
+        // them separately in execution.
+        return parseNode;
+      }
     } catch (ValidationException e) {
-      planner.close();
       throw new SqlValidationException(sql, e);
     }
   }
 
+  private RelRoot sqlToRel(SqlNode validatedSqlNode) throws RelConversionException {
+    if (!isComputeKind(validatedSqlNode.getKind())) {
+      throw new RelConversionException(
+          "DDL statements are not supported by the Relational Algebra Generator");
+    }
+    RelRoot baseResult = planner.rel(validatedSqlNode);
+    RelRoot unoptimizedPlan =
+        baseResult.withRel(planner.transform(0, planner.getEmptyTraitSet(), baseResult.rel));
+    RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
+    RelRoot optimizedPlan =
+        unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
+    return optimizedPlan;
+  }
+
   /**
    * Takes a sql statement and converts it into an optimized relational algebra node. The result of
-   * this function is a logical plan that has been optimized using a rule based optimizer.
+   * this function is a logical plan that has been optimized using a rule based optimizer. This is
+   * used when we just want to get the optimized plan and not the pandas code.
    *
    * @param sql a string sql query that is to be parsed, converted into relational algebra, then
    *     optimized
@@ -363,13 +396,7 @@ public class RelationalAlgebraGenerator {
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
     try {
       SqlNode validatedSqlNode = validateQuery(sql);
-      RelRoot baseResult = planner.rel(validatedSqlNode);
-      RelRoot unoptimizedPlan =
-          baseResult.withRel(planner.transform(0, planner.getEmptyTraitSet(), baseResult.rel));
-      RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-      RelRoot optimizedPlan =
-          unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
-      return optimizedPlan;
+      return sqlToRel(validatedSqlNode);
     } finally {
       planner.close();
       // Close any open connections from catalogs
@@ -379,8 +406,7 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts)
-      throws Exception {
+  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts) {
     RelNode newRoot = PandasUtilKt.pandasProject(root);
     if (includeCosts) {
       StringWriter sw = new StringWriter();
@@ -393,9 +419,37 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  /**
+   * Generate the DDL representation. Here we just unparse to SQL filling in any default values.
+   *
+   * @param ddlNode The DDLNode to represent.
+   * @return The DDL representation as a string.
+   */
+  private String getDDLPlanString(SqlNode ddlNode) {
+    StringBuilder sb = new StringBuilder();
+    SqlPrettyWriter writer =
+        new SqlPrettyWriter(SqlPrettyWriter.config().withAlwaysUseParentheses(true), sb);
+    ddlNode.unparse(writer, 0, 0);
+    return sb.toString();
+  }
+
   // Default debugDeltaTable to false
   public String getPandasString(String sql) throws Exception {
     return getPandasString(sql, false);
+  }
+
+  private String getDDLPandasString(SqlNode ddlNode, String originalSQL) {
+    this.loweredGlobalVariables = new HashMap<>();
+    PandasCodeGenVisitor codegen =
+        new PandasCodeGenVisitor(
+            this.loweredGlobalVariables,
+            originalSQL,
+            this.typeSystem,
+            false,
+            this.verboseLevel,
+            this.streamingBatchSize);
+    codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
+    return codegen.getGeneratedCode();
   }
 
   private String getPandasStringFromPlan(
@@ -436,21 +490,62 @@ public class RelationalAlgebraGenerator {
 
   // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
   public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
-    RelRoot root = getRelationalAlgebra(sql);
-    return getOptimizedPlanStringFromRoot(root, includeCosts);
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        RelRoot root = sqlToRel(validatedSqlNode);
+        return getOptimizedPlanStringFromRoot(root, includeCosts);
+      } else {
+        return getDDLPlanString(validatedSqlNode);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
   }
 
   public PandasCodeSqlPlanPair getPandasAndPlanString(
       String sql, boolean debugDeltaTable, boolean includeCosts) throws Exception {
-    RelRoot optimizedPlan = getRelationalAlgebra(sql);
-    String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
-    String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
-    return new PandasCodeSqlPlanPair(pandasString, planString);
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        RelRoot optimizedPlan = sqlToRel(validatedSqlNode);
+        String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+        String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
+        return new PandasCodeSqlPlanPair(pandasString, planString);
+      } else {
+        String pandasString = getDDLPandasString(validatedSqlNode, sql);
+        String planString = getDDLPlanString(validatedSqlNode);
+        return new PandasCodeSqlPlanPair(pandasString, planString);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
   }
 
   public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    RelRoot optimizedPlan = getRelationalAlgebra(sql);
-    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+    try {
+      SqlNode validatedSqlNode = validateQuery(sql);
+      if (isComputeKind(validatedSqlNode.getKind())) {
+        RelRoot optimizedPlan = sqlToRel(validatedSqlNode);
+        return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+      } else {
+        return getDDLPandasString(validatedSqlNode, sql);
+      }
+    } finally {
+      planner.close();
+      // Close any open connections from catalogs
+      if (catalog != null) {
+        catalog.closeConnections();
+      }
+    }
   }
 
   /**

@@ -21,6 +21,7 @@ import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKe
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
 import static com.bodosql.calcite.application.utils.AggHelpers.aggContainsFilter;
+import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.Utils.concatenateLiteralAggValue;
 import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
@@ -55,6 +56,7 @@ import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
@@ -97,6 +99,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -2423,6 +2426,34 @@ public class PandasCodeGenVisitor extends RelVisitor {
           BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
           tableGenStack.push(outTable);
         });
+  }
+
+  public void generateDDLCode(SqlNode ddlNode, GenerateDDLTypes typeGenerator) {
+    // Generate the output type.
+    RelDataType outputType = typeGenerator.generateType(ddlNode);
+    // TODO: Eventually we want to remove this from the constructor and pass it in as a
+    // parameter to this function.
+    Expr.StringLiteral query = new Expr.StringLiteral(originalSQLQuery);
+    List<Expr.StringLiteral> columnNames = new ArrayList<>();
+    List<Variable> columnTypes = new ArrayList<>();
+    for (RelDataTypeField field : outputType.getFieldList()) {
+      columnNames.add(new Expr.StringLiteral(field.getName()));
+      Expr typeString =
+          sqlTypeToBodoArrayType(field.getType(), false, genDefaultTZ().getZoneExpr());
+      Variable typeVar = lowerAsGlobal(typeString);
+      columnTypes.add(typeVar);
+    }
+    Expr.Tuple columnNamesTuple = new Expr.Tuple(columnNames);
+    Variable columnNamesGlobal = lowerAsColNamesMetaType(columnNamesTuple);
+    Expr.Tuple columnTypesTuple = new Expr.Tuple(columnTypes);
+    Variable columnTypesGlobal = lowerAsMetaType(columnTypesTuple);
+    Expr.Call call =
+        new Expr.Call("bodosql.execute_ddl", List.of(query, columnNamesGlobal, columnTypesGlobal));
+    Variable outVar = this.genDfVar();
+    this.generatedCode.add(new Op.Assign(outVar, call));
+    // Update for return.
+    BodoEngineTable outTable = new BodoEngineTable(outVar.emit(), outputType);
+    tableGenStack.add(outTable);
   }
 
   private void singleBatchTimer(PandasRel node, Runnable fn) {
