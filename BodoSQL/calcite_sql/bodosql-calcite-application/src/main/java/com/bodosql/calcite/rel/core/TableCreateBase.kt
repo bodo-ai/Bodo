@@ -21,7 +21,7 @@ open class TableCreateBase(
     val path: List<String>,
     val meta: SnowflakeCreateTableMetadata,
 ) : TableCreate(cluster, traitSet, input) {
-    override fun explainTerms(pw: RelWriter?): RelWriter? {
+    override fun explainTerms(pw: RelWriter): RelWriter {
         var result =
             super.explainTerms(pw)
                 .item("TableName", tableName)

@@ -113,7 +113,7 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         val types =
             rel.rowType.fieldList.map {
                 val outString = StringBuilder(it.type.toString())
-                if (!it.type.isNullable()) {
+                if (!it.type.isNullable) {
                     outString.append(" NOT NULL")
                 }
                 outString
