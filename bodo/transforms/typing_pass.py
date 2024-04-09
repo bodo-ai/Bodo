@@ -3972,6 +3972,24 @@ class TypingTransforms:
             else None
         )
 
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_sql_op_id",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_sql_op_id', if provided, must be a constant integer."
+        _bodo_sql_op_id_const = (
+            self._get_const_value(_bodo_sql_op_id_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_sql_op_id_var
+            else -1
+        )
+
         (
             orig_col_names,
             orig_arr_types,
@@ -4101,6 +4119,7 @@ class TypingTransforms:
                 initial_limit=limit_obj,
                 orig_col_names=orig_col_names,
                 orig_col_types=orig_arr_types,
+                sql_op_id=_bodo_sql_op_id_const,
             )
         ]
 

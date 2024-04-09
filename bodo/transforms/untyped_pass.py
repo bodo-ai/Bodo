@@ -883,7 +883,10 @@ class UntypedPass:
         """transform pd.read_sql calls"""
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
-        # columns=None, chunksize=None, _bodo_read_as_dict)
+        # columns=None, chunksize=None, _bodo_read_as_dict,
+        # _bodo_is_table_input, _bodo_downcast_decimal_to_double,
+        # _bodo_read_as_table, _bodo_orig_table_name,
+        # _bodo_orig_table_indices, _bodo_sql_op_id)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -991,6 +994,20 @@ class UntypedPass:
             use_default=True,
         )
 
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_const: int = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_sql_op_id",
+            rhs.loc,
+            default=-1,
+            use_default=True,
+            typ="int",
+        )
+
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
         # )
@@ -1007,6 +1024,7 @@ class UntypedPass:
         # con is supported since it is fundamental but only as a string
         # index_col is supported since setting the index is something useful.
         # _bodo_chunksize is supported to enable batched reads for Snowflake
+        # _bodo_sql_op_id is supported to enable query profile for batched Snowflake reads.
         # UNSUPPORTED:
         # chunksize is unsupported but can easily be extended from _bodo_chunksize
         # columns   is unsupported because selecting columns could actually be done in SQL.
@@ -1025,6 +1043,7 @@ class UntypedPass:
             "_bodo_read_as_table",
             "_bodo_orig_table_name",
             "_bodo_orig_table_indices",
+            "_bodo_sql_op_id",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -1062,6 +1081,11 @@ class UntypedPass:
         if chunksize is not None and db_type != "snowflake":  # pragma: no cover
             raise BodoError(
                 "pd.read_sql(): The `chunksize` argument is only supported for Snowflake table reads"
+            )
+
+        if (_bodo_sql_op_id_const != -1) and (db_type != "snowflake"):
+            raise BodoError(
+                "pd.read_sql(): The `_bodo_sql_op_id` argument is only supported for Snowflake table reads"
             )
 
         index_ind = None
@@ -1128,6 +1152,7 @@ class UntypedPass:
                 pyarrow_table_schema,
                 _bodo_downcast_decimal_to_double,
                 chunksize,
+                _bodo_sql_op_id_const,
             )
         ]
 
@@ -2430,6 +2455,7 @@ class UntypedPass:
         _bodo_read_as_table=False,
         chunksize: Optional[int] = None,
         use_index: bool = True,
+        sql_op_id: int = -1,
     ):
         (
             columns,
@@ -2448,6 +2474,7 @@ class UntypedPass:
             use_hive=use_hive,
             chunksize=chunksize,
             use_index=use_index,
+            sql_op_id=sql_op_id,
         )
         n_cols = len(columns)
 
@@ -2597,6 +2624,20 @@ class UntypedPass:
                 "pd.read_parquet() '_bodo_chunksize' must be a constant integer >= 1."
             )
 
+        # Operator ID assigned by the planner for query profile purposes.
+        # Only applicable in the streaming case.
+        _bodo_sql_op_id_const: int = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_sql_op_id",
+            rhs.loc,
+            use_default=True,
+            default=-1,
+            typ="int",
+        )
+
         # check unsupported arguments
         supported_args = (
             "path",
@@ -2609,6 +2650,7 @@ class UntypedPass:
             "_bodo_use_hive",
             "_bodo_read_as_table",
             "_bodo_use_index",
+            "_bodo_sql_op_id",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -2634,6 +2676,7 @@ class UntypedPass:
             _bodo_read_as_table=_bodo_read_as_table,
             chunksize=chunksize,
             use_index=use_index,
+            sql_op_id=_bodo_sql_op_id_const,
         )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):
