@@ -1,5 +1,5 @@
 
-###   Control Flow Functions
+#  Control Flow Functions
 
 Control flow functions are used to control the flow of execution in a SQL query. BodoSQL currently supports the following control flow functions:
 

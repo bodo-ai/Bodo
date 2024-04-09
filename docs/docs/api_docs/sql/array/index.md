@@ -1,4 +1,4 @@
-### Array Functions
+# Array Functions
 
 Array functions are used to manipulate arrays. BodoSQL supports the following array functions:
 
