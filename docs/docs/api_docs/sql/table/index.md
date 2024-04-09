@@ -1,4 +1,4 @@
-### Table Functions
+# Table Functions
 Bodo currently supports the following functions that produce tables:
 
 [`#!sql EXTERNAL_TABLE_FILES`][external_table_files]

@@ -1,5 +1,5 @@
 
-###  Object Functions
+# Object Functions
 
 
 BodoSQL currently supports the following Object functions:

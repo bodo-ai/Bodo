@@ -1,4 +1,4 @@
-###  Data Generation Functions
+#  Data Generation Functions
 
 BodoSQL Currently supports the following data generation functions:
 

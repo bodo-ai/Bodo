@@ -1,4 +1,4 @@
-###  Numeric Functions
+#  Numeric Functions
 
 Except where otherwise specified, the inputs to each of these
 functions can be any numeric type, column or scalar. 

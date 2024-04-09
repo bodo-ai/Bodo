@@ -1,5 +1,5 @@
 
-### Casting / Conversion Functions
+# Casting / Conversion Functions
 
 BodoSQL currently supports the following casting/conversion functions:
 
