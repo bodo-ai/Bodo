@@ -1445,7 +1445,8 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
       mrnf_part_cols_to_keep(std::move(mrnf_part_cols_to_keep_)),
       mrnf_sort_cols_to_keep(std::move(mrnf_sort_cols_to_keep_)),
       sync_iter(sync_iter_),
-      groupby_event("Groupby") {
+      groupby_event("Groupby"),
+      op_id(op_id_) {
     // Partitioning is enabled by default:
     bool enable_partitioning = true;
 
@@ -2772,15 +2773,28 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                                           table_info* in_table, bool is_last,
                                           const bool is_final_pipeline) {
     try {
+        std::unique_ptr<table_info> input_table(in_table);
+        groupby_state->metrics.build_input_row_count += input_table->nrows();
         if (groupby_state->accumulate_before_update) {
-            return groupby_acc_build_consume_batch(
-                groupby_state, std::unique_ptr<table_info>(in_table), is_last,
+            is_last = groupby_acc_build_consume_batch(
+                groupby_state, std::move(input_table), is_last,
                 is_final_pipeline);
         } else {
-            return groupby_agg_build_consume_batch(
-                groupby_state, std::unique_ptr<table_info>(in_table), is_last,
+            is_last = groupby_agg_build_consume_batch(
+                groupby_state, std::move(input_table), is_last,
                 is_final_pipeline);
         }
+
+        if (is_last && (groupby_state->op_id != -1)) {
+            // Build is stage 0. Build doesn't output anything, so it's output
+            // row count is 0.
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(groupby_state->op_id,
+                                                           0),
+                groupby_state->metrics.build_input_row_count, 0);
+        }
+
+        return is_last;
 
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -2806,6 +2820,14 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
         std::tie(out, is_last) =
             groupby_produce_output_batch(groupby_state, produce_output);
         *out_is_last = is_last;
+        groupby_state->metrics.output_row_count += out->nrows();
+        if (is_last && (groupby_state->op_id != -1)) {
+            // Output production is stage 1.
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(groupby_state->op_id,
+                                                           1),
+                0, groupby_state->metrics.output_row_count);
+        }
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
