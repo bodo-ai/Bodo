@@ -20,9 +20,11 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule;
+import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
+import com.bodosql.calcite.sql.validate.DDLResolver;
 import com.bodosql.calcite.sql2rel.BodoRelDecorrelator;
 import com.bodosql.calcite.sql2rel.BodoSqlToRelConverter;
 import com.google.common.collect.ImmutableList;
@@ -71,6 +73,7 @@ import org.apache.calcite.sql.ddl.SqlCreateView;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.util.SqlOperatorTables;
+import org.apache.calcite.sql.validate.DDLResolverImpl;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql2rel.SqlRexConvertletTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
@@ -112,8 +115,10 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
   private @Nullable RexExecutor executor;
 
   // set in STATE_4_VALIDATE
-  private @Nullable SqlValidator validator;
+  private @Nullable BodoSqlValidator validator;
   private @Nullable SqlNode validatedSqlNode;
+
+  private @Nullable DDLResolver ddlResolver;
 
   // Set of functions that are currently in progress (for nested inlining).
   // This is defensive programming to protect against recursive functions.
@@ -261,6 +266,23 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     }
     state = State.STATE_4_VALIDATED;
     return validatedSqlNode;
+  }
+
+  @EnsuresNonNull("validator")
+  @EnsuresNonNull("ddlResolver")
+  public DDLExecutionResult executeDDL(SqlNode sqlNode) throws ValidationException {
+    ensure(State.STATE_3_PARSED);
+    CalciteCatalogReader catalogReader = createCatalogReader();
+    this.validator = createSqlValidator(catalogReader);
+    this.ddlResolver = createDDLResolver(catalogReader, this.validator);
+    final DDLExecutionResult result;
+    try {
+      result = ddlResolver.executeDDL(sqlNode);
+    } catch (RuntimeException e) {
+      throw new ValidationException(e);
+    }
+    state = State.STATE_4_VALIDATED;
+    return result;
   }
 
   @Override
@@ -731,7 +753,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
   protected abstract CalciteCatalogReader createCatalogReaderWithDefaultPath(
       List<String> defaultPath);
 
-  private SqlValidator createSqlValidator(CalciteCatalogReader catalogReader) {
+  private BodoSqlValidator createSqlValidator(CalciteCatalogReader catalogReader) {
     final SqlOperatorTable opTab = SqlOperatorTables.chain(operatorTable, catalogReader);
     return new BodoSqlValidator(
         opTab,
@@ -741,6 +763,11 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
             .withLenientOperatorLookup(connectionConfig.lenientOperatorLookup())
             .withConformance(connectionConfig.conformance())
             .withIdentifierExpansion(true));
+  }
+
+  private DDLResolver createDDLResolver(
+      CalciteCatalogReader catalogReader, BodoSqlValidator validator) {
+    return new DDLResolverImpl(catalogReader, validator);
   }
 
   private static SchemaPlus rootSchema(SchemaPlus schema) {

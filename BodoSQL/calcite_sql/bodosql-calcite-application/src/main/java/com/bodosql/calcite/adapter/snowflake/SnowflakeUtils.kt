@@ -38,12 +38,16 @@ class SnowflakeUtils {
          * UDFs.
          *
          * @param arguments The output of the arguments column for show functions.
+         * @param functionName The name of the function in a case-sensitive format.
          * @return A pair of values containing the signature to pass to describe function
          * and the number of optional arguments (because optional arguments must always come
          * at the end).
          */
         @JvmStatic
-        fun parseSnowflakeShowFunctionsArguments(arguments: String): Pair<String, Int> {
+        fun parseSnowflakeShowFunctionsArguments(
+            arguments: String,
+            functionName: String,
+        ): Pair<String, Int> {
             // Remove the return
             val callParts = arguments.split(" RETURN ")
             if (callParts.size != 2) {
@@ -62,7 +66,6 @@ class SnowflakeUtils {
                         "unexpected special characters",
                 )
             }
-            val prefix = argParts[0]
             val argString = argParts[1].trim()
             val (argList, numOptional) =
                 if (argString.isEmpty()) {
@@ -88,7 +91,7 @@ class SnowflakeUtils {
                         }
                     Pair(args, numOptional)
                 }
-            val newSignature = "$prefix(${argList.joinToString()})"
+            val newSignature = "$functionName(${argList.joinToString()})"
             return Pair(newSignature, numOptional)
         }
     }

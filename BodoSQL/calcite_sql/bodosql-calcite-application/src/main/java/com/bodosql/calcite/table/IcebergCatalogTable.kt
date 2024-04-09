@@ -4,6 +4,8 @@ import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
 import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.IcebergCatalog
+import com.bodosql.calcite.ddl.DDLExecutor
+import com.bodosql.calcite.ddl.IcebergDDLExecutor
 import com.bodosql.calcite.ir.Variable
 import com.google.common.base.Supplier
 import com.google.common.base.Suppliers
@@ -57,6 +59,10 @@ class IcebergCatalogTable(
             columnNamesGlobal,
             generatePythonConnStr(parentFullPath),
         )
+    }
+
+    override fun getDDLExecutor(): DDLExecutor {
+        return IcebergDDLExecutor(catalog.getIcebergConnection())
     }
 
     private inner class StatisticImpl : Statistic {
