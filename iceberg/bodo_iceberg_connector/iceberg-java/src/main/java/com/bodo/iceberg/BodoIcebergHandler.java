@@ -15,6 +15,9 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
@@ -29,6 +32,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
 
 public class BodoIcebergHandler {
@@ -119,6 +123,58 @@ public class BodoIcebergHandler {
     }
 
     return parquetPaths;
+  }
+
+  /**
+   * Helper function that returns the total number of files present in the given Iceberg table.
+   * Currently only used for logging purposes.
+   */
+  public int getNumParquetFiles() throws IOException {
+
+    // First, check if we can get the information from the summary
+    Table table = catalog.loadTable(id);
+    Snapshot currentSnapshot = catalog.loadTable(id).currentSnapshot();
+
+    if (currentSnapshot.summary().containsKey("total-data-files")) {
+      return Integer.parseInt(currentSnapshot.summary().get("total-data-files"));
+    }
+
+    // If it doesn't exist in the summary, check the manifestList
+    // TODO: is this doable? I can get the manifestList location, but I don't see a way
+    // to get any metadata from this list.
+    // A manifest list includes summary metadata that can be used to avoid scanning all of the
+    // manifests
+    // in a snapshot when planning a table scan. This includes the number of added, existing, and
+    // deleted files,
+    // and a summary of values for each field of the partition spec used to write the manifest.
+
+    // If it doesn't exit in the manifestList, calculate it by iterating over each manifest file
+    FileIO io = table.io();
+    List<ManifestFile> manifestFilesList = currentSnapshot.allManifests(io);
+    int totalFiles = 0;
+    for (ManifestFile manifestFile : manifestFilesList) {
+      // content = 0 means the manifest file is for a data file
+      if (0 != manifestFile.content().id()) {
+        continue;
+      }
+      Integer existingFiles = manifestFile.existingFilesCount();
+      Integer addedFiles = manifestFile.addedFilesCount();
+      Integer deletedFiles = manifestFile.deletedFilesCount();
+
+      if (existingFiles == null || addedFiles == null || deletedFiles == null) {
+        // If any of the option fields are null, we have to manually read the file
+        ManifestReader<DataFile> manifestContents = ManifestFiles.read(manifestFile, io);
+        if (!manifestContents.isDeleteManifestReader()) {
+          for (DataFile _manifestContent : manifestContents) {
+            totalFiles += 1;
+          }
+        }
+      } else {
+        totalFiles += existingFiles + addedFiles - deletedFiles;
+      }
+    }
+
+    return totalFiles;
   }
 
   /**

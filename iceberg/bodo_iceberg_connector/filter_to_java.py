@@ -100,6 +100,10 @@ def convert_scalar(val):
     Converts a Python scalar into its Java Iceberg Literal
     representation.
     """
+
+    # Need to import Bodo here in order to check for bodo.Time
+    import bodo
+
     if isinstance(val, pd.Timestamp):
         # Note timestamp is subclass of datetime.date,
         # so this must be visited first.
@@ -132,10 +136,34 @@ def convert_scalar(val):
     elif isinstance(val, bytes):
         temp = convert_bytes(val)
         return temp
+    elif isinstance(val, bodo.Time):
+        return convert_time(val)
     else:
         raise NotImplementedError(
             f"Unsupported scalar type in iceberg filter pushdown: {type(val)}"
         )
+
+
+def convert_time(val):
+    """
+    Convert a Bodo Time into an Iceberg Java
+    Time Literal.
+    """
+    import bodo
+
+    assert isinstance(val, bodo.Time)
+    converter = get_literal_converter_class()
+    # All Iceberg times are in microseconds according to
+    # https://iceberg.apache.org/spec/#primitive-types.
+    # Looking at the constructor for out time type in time_ext,
+    # it seems like we
+    # always use nanosecond precision, even if we explicitly set
+    # the precision to something other than 9. I think this is
+    # an separate issue, so I'm going to assume the precision
+    # in the type  is correct and convert it to microseconds
+    # accordingly.
+    val_as_microseconds = val.value * 10 ** (6 - val.precision)
+    return converter.asTimeLiteral(int(val_as_microseconds))
 
 
 def convert_bytes(val):
