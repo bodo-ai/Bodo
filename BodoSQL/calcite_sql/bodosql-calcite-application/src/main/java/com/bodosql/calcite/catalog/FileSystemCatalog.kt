@@ -473,10 +473,7 @@ class FileSystemCatalog(
             conf.set(
                 "fs.s3a.aws.credentials.provider",
                 "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider," +
-                    "com.amazonaws.auth.EnvironmentVariableCredentialsProvider," +
-                    "com.amazonaws.auth.profile.ProfileCredentialsProvider," +
-                    "com.amazonaws.auth.InstanceProfileCredentialsProvider," +
-                    "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider",
+                    "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
             )
             return conf
         }
