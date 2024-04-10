@@ -106,6 +106,33 @@ def get_java_parquet_info(bodo_iceberg_table_reader, filter_expr):
     return bodo_iceberg_table_reader.getParquetInfo(filter_expr)
 
 
+def bodo_connector_get_total_num_pq_files_in_table(
+    conn_str: str, db_name: str, table: str
+):
+    """
+    Returns the number of parquet files in the given Iceberg table.
+    Throws a IcebergJavaError if an error occurs.
+    """
+    try:
+        catalog_type, _ = parse_conn_str(conn_str)
+
+        bodo_iceberg_table_reader = get_java_table_handler(
+            conn_str,
+            catalog_type,
+            db_name,
+            table,
+        )
+
+        return get_java_total_num_pq_files_in_table(bodo_iceberg_table_reader)
+
+    except Py4JError as e:
+        raise IcebergJavaError.from_java_error(e)
+
+
+def get_java_total_num_pq_files_in_table(bodo_iceberg_table_reader):
+    return bodo_iceberg_table_reader.getNumParquetFiles()
+
+
 def java_to_python(java_parquet_infos) -> List[BodoIcebergParquetInfo]:
     """
     Converts an Iterable of Java BodoParquetInfo objects

@@ -10,6 +10,7 @@ from bodo_iceberg_connector.filter_to_java import (
 from bodo_iceberg_connector.parquet_info import (
     bodo_connector_get_parquet_file_list,
     bodo_connector_get_parquet_info,
+    bodo_connector_get_total_num_pq_files_in_table,
 )
 from bodo_iceberg_connector.py4j_support import launch_jvm
 from bodo_iceberg_connector.schema import (

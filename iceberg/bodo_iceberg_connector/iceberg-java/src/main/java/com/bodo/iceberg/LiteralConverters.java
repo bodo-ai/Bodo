@@ -12,6 +12,10 @@ public class LiteralConverters {
    * vs long, etc.). This literal converter class helps to get around that by creating the literals
    * in Java, and returning them to python *
    */
+  public static Const asTimeLiteral(long val) {
+    return new Const(Literal.of(val).to(Types.TimeType.get()));
+  }
+
   public static Const asIntLiteral(int val) {
     return new Const(Literal.of(val));
   }

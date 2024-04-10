@@ -1165,12 +1165,32 @@ def get_iceberg_file_list_parallel(
         if bodo.user_logging.get_verbose_level() >= 1 and isinstance(
             pq_abs_path_file_list_or_e, list
         ):
+            import bodo_iceberg_connector as bic
+
+            """This should never fail given that pq_abs_path_file_list_or_e is not an error, but just to be safe..."""
+            try:
+                total_num_files = bic.bodo_connector_get_total_num_pq_files_in_table(
+                    conn, database_schema, table_name
+                )
+            except bic.errors.IcebergJavaError as e:
+                total_num_files = (
+                    "unknown (error getting total number of files: " + str(e) + ")"
+                )
+
             num_files_read = len(pq_abs_path_file_list_or_e)
-            if len(pq_abs_path_file_list_or_e) <= 10:
-                log_msg = f"Files selected for read: {pq_abs_path_file_list_or_e}"
+
+            if bodo.user_logging.get_verbose_level() >= 2:
+                # Constant to limit the number of files to list in the log message
+                # May want to increase this for higher verbosity levels
+                num_files_to_list = 10
+
+                file_list = ", ".join(pq_abs_path_file_list_or_e[:num_files_to_list])
+                log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
+
+                if num_files_read > num_files_to_list:
+                    log_msg += f", ... and {num_files_read-num_files_to_list} more."
             else:
-                file_list = ", ".join(pq_abs_path_file_list_or_e[:10])
-                log_msg = f"Reading {num_files_read} files: {file_list} ... and {num_files_read-10} more."
+                log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files."
 
             bodo.user_logging.log_message(
                 "Iceberg File Pruning:",
