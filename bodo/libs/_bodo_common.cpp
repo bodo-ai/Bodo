@@ -1177,7 +1177,7 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
         " not covered in array_memory_size()");
 }
 
-int64_t table_local_memory_size(std::shared_ptr<table_info> table,
+int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
                                 bool include_dict_size) {
     int64_t local_size = 0;
     for (auto& arr : table->columns) {
@@ -1186,7 +1186,7 @@ int64_t table_local_memory_size(std::shared_ptr<table_info> table,
     return local_size;
 }
 
-int64_t table_global_memory_size(std::shared_ptr<table_info> table) {
+int64_t table_global_memory_size(const std::shared_ptr<table_info>& table) {
     int64_t local_size = table_local_memory_size(table, false);
     int64_t global_size;
     MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
@@ -1593,9 +1593,9 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, fft_cpp);
     SetAttrStringFromPyInit(m, query_profile_collector_cpp);
     SetAttrStringFromPyInit(m, uuid_cpp);
-    #ifdef BUILD_WITH_V8
+#ifdef BUILD_WITH_V8
     SetAttrStringFromPyInit(m, javascript_udf_cpp);
-    #endif
+#endif
 
 #ifdef IS_TESTING
     SetAttrStringFromPyInit(m, test_cpp);

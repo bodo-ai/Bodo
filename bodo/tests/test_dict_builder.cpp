@@ -29,17 +29,17 @@ bodo::tests::suite dict_builder_tests([] {
         arr_dict->array_id = 1;
 
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 1);
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 1);
         arr_dict->array_id = 2;
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 2);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 2);
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 2);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 2);
         arr_dict->array_id = 1;
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 2);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 2);
     });
     bodo::tests::test("test_dict_builder_transpose_lru_cache", [] {
         // Test that the transpose cache evicts the least recently used
@@ -61,17 +61,17 @@ bodo::tests::suite dict_builder_tests([] {
         dict_builder.UnifyDictionaryArray(arr);
         arr_dict->array_id = third_id;
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 3);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 3);
 
         // Ensure the second array was cached and the first was evicted.
         arr_dict->array_id = second_id;
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 3);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 3);
         arr_dict->array_id = first_id;
         dict_builder.UnifyDictionaryArray(arr);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 4);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 4);
 
-        bodo::tests::check(dict_builder.unify_cache_length_misses == 0);
+        bodo::tests::check(dict_builder.metrics.unify_cache_length_misses == 0);
     });
 
     bodo::tests::test("test_dict_builder_id_replacement", [] {
@@ -88,12 +88,12 @@ bodo::tests::suite dict_builder_tests([] {
         auto table = strVecToTable(column_name, input_column);
 
         dict_builder.UnifyDictionaryArray(table->columns[0]);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 1);
         auto curr_id = dict_builder.dict_buff->data_array->array_id;
         bodo::tests::check(curr_id > 0);
 
         dict_builder.UnifyDictionaryArray(table->columns[0]);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 1);
         // assert that the id does not change on append with previously appended
         // data
         bodo::tests::check(dict_builder.dict_buff->data_array->array_id ==
@@ -104,12 +104,12 @@ bodo::tests::suite dict_builder_tests([] {
         };
         auto table_1 = strVecToTable(column_name, input_column_1);
         dict_builder.UnifyDictionaryArray(table_1->columns[0]);
-        bodo::tests::check(dict_builder.unify_cache_id_misses == 2);
+        bodo::tests::check(dict_builder.metrics.unify_cache_id_misses == 2);
         auto new_id = dict_builder.dict_buff->data_array->array_id;
         // assert that the id does not change on append with new data
         bodo::tests::check(new_id == curr_id);
 
-        bodo::tests::check(dict_builder.unify_cache_length_misses == 0);
+        bodo::tests::check(dict_builder.metrics.unify_cache_length_misses == 0);
     });
     bodo::tests::test("test_dict_builder_same_input_different_length", [] {
         /*
@@ -148,8 +148,9 @@ bodo::tests::suite dict_builder_tests([] {
         dict_builder_src.UnifyDictionaryArray(table->columns[0]);
         // We've never seen this dictionary before, cache id miss
         dict_builder_dst.UnifyDictionaryArray(dict_encoded_src);
-        bodo::tests::check(dict_builder_dst.unify_cache_length_misses == 0);
-        bodo::tests::check(dict_builder_dst.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_length_misses ==
+                           0);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_id_misses == 1);
 
         // Add completely new data to src (changing the length) and redo unify
         auto table_1 = strVecToTable("A", std::vector<std::string>{
@@ -160,8 +161,9 @@ bodo::tests::suite dict_builder_tests([] {
         // We've seen this dictionary before - but the length has changed,
         // cache length miss
         dict_builder_dst.UnifyDictionaryArray(dict_encoded_src);
-        bodo::tests::check(dict_builder_dst.unify_cache_length_misses == 1);
-        bodo::tests::check(dict_builder_dst.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_length_misses ==
+                           1);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_id_misses == 1);
 
         // Add data that shouldn't change the length of src
         auto table_2 = strVecToTable("A", std::vector<std::string>{
@@ -172,8 +174,9 @@ bodo::tests::suite dict_builder_tests([] {
         // We've seen this dictionary before - and the length has not
         // changed, cache hit
         dict_builder_dst.UnifyDictionaryArray(dict_encoded_src);
-        bodo::tests::check(dict_builder_dst.unify_cache_length_misses == 1);
-        bodo::tests::check(dict_builder_dst.unify_cache_id_misses == 1);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_length_misses ==
+                           1);
+        bodo::tests::check(dict_builder_dst.metrics.unify_cache_id_misses == 1);
 
         // Assert that all strings are already in dst
         bodo::tests::check(dict_builder_dst.dict_buff->data_array->length == 4);

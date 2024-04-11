@@ -2,6 +2,7 @@
 #include <numeric>
 
 #include "_dict_builder.h"
+#include "_query_profile_collector.h"
 #include "_table_builder.h"
 #include "arrow/util/bit_util.h"
 
@@ -751,6 +752,7 @@ void ChunkedTableBuilder::AppendBatch(
 #endif
 
     // See comment in AppendJoinOutput for a description of the procedure.
+    time_pt start = start_timer();
     size_t curr_row = 0;
     size_t n_rows = idxs.size();
     while (curr_row < n_rows) {
@@ -1209,6 +1211,7 @@ void ChunkedTableBuilder::AppendBatch(
             this->FinalizeActiveChunk();
         }
     }
+    this->append_time += end_timer(start);
 #undef NUM_ROWS_CAN_APPEND_COL
 #undef APPEND_ROWS_COL
 }
@@ -1249,6 +1252,7 @@ void ChunkedTableBuilder::AppendJoinOutput(
                                                       batch_length)
 #endif
 
+    time_pt start = start_timer();
     size_t probe_ncols = probe_kept_cols.size();
 
     // We want to append rows in a columnar process. To do this we split an
@@ -1642,6 +1646,8 @@ void ChunkedTableBuilder::AppendJoinOutput(
             this->FinalizeActiveChunk();
         }
     }
+
+    this->append_time += end_timer(start);
 
 #undef NUM_ROWS_CAN_APPEND_COL
 #undef APPEND_ROWS_COL

@@ -1,10 +1,88 @@
+#include "_bodo_common.h"
 #include "_distributed.h"
 #include "_join.h"
 #include "_nested_loop_join_impl.h"
+#include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_stream_join.h"
 
+void NestedLoopJoinState::ReportBuildStageMetrics() {
+    assert(this->build_input_finalized);
+    if (this->op_id == -1) {
+        return;
+    }
+
+    std::vector<MetricBase> metrics;
+    metrics.reserve(32);
+
+    metrics.emplace_back(
+        StatMetric("block_size_bytes", this->metrics.block_size_bytes, true));
+    metrics.emplace_back(
+        StatMetric("chunk_size_nrows", this->metrics.chunk_size_nrows, true));
+    metrics.emplace_back(
+        TimerMetric("finalize_time", this->metrics.build_finalize_time));
+    metrics.emplace_back(
+        StatMetric("bcast_join", this->metrics.is_build_bcast_join, true));
+    metrics.emplace_back(
+        TimerMetric("bcast_time", this->metrics.build_bcast_time));
+    NestedLoopJoinMetrics::stat_t build_table_num_chunks =
+        this->build_table_buffer->chunks.size();
+    metrics.emplace_back(StatMetric("num_chunks", build_table_num_chunks));
+    metrics.emplace_back(
+        TimerMetric("append_time", this->build_table_buffer->append_time));
+
+    // Get and combine dict-builder stats
+    DictBuilderMetrics dict_builder_metrics;
+    NestedLoopJoinMetrics::stat_t n_dict_builders = 0;
+    for (const auto& dict_builder : this->build_table_dict_builders) {
+        if (dict_builder == nullptr) {
+            continue;
+        }
+        dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
+        n_dict_builders++;
+    }
+    metrics.emplace_back(StatMetric("n_dict_builders", n_dict_builders, true));
+    metrics.emplace_back(
+        StatMetric("dict_builders_unify_cache_id_misses",
+                   dict_builder_metrics.unify_cache_id_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_unify_cache_length_misses",
+                   dict_builder_metrics.unify_cache_length_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_transpose_filter_cache_id_misses",
+                   dict_builder_metrics.transpose_filter_cache_id_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_transpose_filter_cache_length_misses",
+                   dict_builder_metrics.transpose_filter_cache_length_misses));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_build_transpose_map_time",
+                    dict_builder_metrics.unify_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_transpose_time",
+                    dict_builder_metrics.unify_transpose_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_string_arr_time",
+                    dict_builder_metrics.unify_string_arr_time));
+    metrics.emplace_back(TimerMetric(
+        "dict_builders_transpose_filter_build_transpose_map_time",
+        dict_builder_metrics.transpose_filter_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_transpose_filter_transpose_time",
+                    dict_builder_metrics.transpose_filter_transpose_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_transpose_filter_string_arr_time",
+                    dict_builder_metrics.transpose_filter_string_arr_time));
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(
+            this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
+        std::move(metrics));
+
+    JoinState::ReportBuildStageMetrics();
+}
+
 void NestedLoopJoinState::FinalizeBuild() {
+    time_pt start = start_timer();
     // Finalize any active chunk
     this->build_table_buffer->Finalize();
 
@@ -25,6 +103,8 @@ void NestedLoopJoinState::FinalizeBuild() {
                       MPI_COMM_WORLD);
         if (table_size < get_bcast_join_threshold()) {
             this->build_parallel = false;
+            this->metrics.is_build_bcast_join = 1;
+            time_pt start_bcast = start_timer();
             // calculate the max number of chunks for all partitions
             int64_t n_chunks = this->build_table_buffer->chunks.size();
             MPI_Allreduce(MPI_IN_PLACE, &n_chunks, 1, MPI_INT64_T, MPI_MAX,
@@ -47,6 +127,7 @@ void NestedLoopJoinState::FinalizeBuild() {
             }
             this->build_table_buffer = std::move(new_build_table_buffer);
             this->build_table_buffer->Finalize();
+            this->metrics.build_bcast_time += end_timer(start_bcast);
         }
     }
 
@@ -57,6 +138,8 @@ void NestedLoopJoinState::FinalizeBuild() {
                 this->build_table_buffer->total_remaining),
             0);
     }
+
+    this->metrics.build_finalize_time += end_timer(start);
 
     JoinState::FinalizeBuild();
 }
@@ -119,7 +202,10 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  * @param[in, out] probe_table_matched Bitmask to trace the probe table matches.
  * This will be updated in place.
  * @param build_table_offset the number of bits from the start of
- * build_table_matched that belongs to previous chunks of the build table buffer
+ * build_table_matched that belongs to previous chunks of the build table
+ * buffer.
+ * @param[in, out] append_time -- -- Increment this with the time spent in
+ * AppendJoinOutput.
  */
 void nested_loop_join_local_chunk(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> build_table,
@@ -128,7 +214,8 @@ void nested_loop_join_local_chunk(
     const std::vector<uint64_t>& probe_kept_cols,
     bodo::pin_guard<decltype(NestedLoopJoinState::build_table_matched)>&
         build_table_matched_guard,
-    bodo::vector<uint8_t>& probe_table_matched, int64_t build_table_offset) {
+    bodo::vector<uint8_t>& probe_table_matched, int64_t build_table_offset,
+    NestedLoopJoinMetrics::time_t& append_time) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -180,9 +267,11 @@ void nested_loop_join_local_chunk(
                      join_state->probe_table_outer, non_equi_condition, false,
                      false, false)
 
+    time_pt start_append = start_timer();
     join_state->output_buffer->AppendJoinOutput(
         build_table, probe_table, build_idxs, probe_idxs, build_kept_cols,
         probe_kept_cols);
+    append_time += end_timer(start_append);
 #undef JOIN_TABLE_LOCAL
 }
 
@@ -194,6 +283,8 @@ void NestedLoopJoinState::ProcessProbeChunk(
     // comparison using indices.
     probe_table = this->UnifyProbeTableDictionaryArrays(probe_table);
 
+    time_pt start = start_timer();
+    NestedLoopJoinMetrics::time_t append_time = 0;
     // Bitmask to track matched rows from this probe chunk.
     bodo::vector<uint8_t> probe_table_matched(0, 0);
     if (this->probe_table_outer) {
@@ -209,7 +300,8 @@ void NestedLoopJoinState::ProcessProbeChunk(
     for (const auto& build_table : *(this->build_table_buffer)) {
         nested_loop_join_local_chunk(
             this, build_table, probe_table, build_kept_cols, probe_kept_cols,
-            build_table_matched_guard, probe_table_matched, build_table_offset);
+            build_table_matched_guard, probe_table_matched, build_table_offset,
+            append_time);
         build_table_offset += build_table->nrows();
     }
 
@@ -226,10 +318,85 @@ void NestedLoopJoinState::ProcessProbeChunk(
         // We can use a dummy chunk from the build table since all build
         // indices are guaranteed to be -1 and hence the actual content
         // of the chunk doesn't matter.
+        time_pt start_append = start_timer();
         this->output_buffer->AppendJoinOutput(
             this->build_table_buffer->dummy_output_chunk, probe_table,
             build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+        append_time += end_timer(start_append);
     }
+    this->metrics.probe_compute_matches_time += end_timer(start) - append_time;
+}
+
+void NestedLoopJoinState::ReportProbeStageMetrics() {
+    assert(this->probe_input_finalized);
+    if (this->op_id == -1) {
+        return;
+    }
+
+    std::vector<MetricBase> metrics;
+    metrics.reserve(16);
+
+    metrics.emplace_back(
+        TimerMetric("global_dict_unification_time",
+                    this->metrics.probe_global_dict_unification_time));
+    metrics.emplace_back(
+        StatMetric("bcast_size_bytes", this->metrics.probe_bcast_size_bytes));
+    metrics.emplace_back(
+        TimerMetric("bcast_table_time", this->metrics.probe_bcast_table_time));
+    metrics.emplace_back(TimerMetric("compute_matches_time",
+                                     this->metrics.probe_compute_matches_time));
+    metrics.emplace_back(
+        TimerMetric("add_unmatched_build_rows_time",
+                    this->metrics.probe_add_unmatched_build_rows_time));
+
+    // Get and combine metrics from dict-builders
+    DictBuilderMetrics dict_builder_metrics;
+    MetricBase::StatValue n_dict_builders = 0;
+    for (const auto& dict_builder : this->probe_table_dict_builders) {
+        if (dict_builder == nullptr) {
+            continue;
+        }
+        dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
+        n_dict_builders++;
+    }
+    metrics.emplace_back(StatMetric("n_dict_builders", n_dict_builders, true));
+    metrics.emplace_back(
+        StatMetric("dict_builders_unify_cache_id_misses",
+                   dict_builder_metrics.unify_cache_id_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_unify_cache_length_misses",
+                   dict_builder_metrics.unify_cache_length_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_transpose_filter_cache_id_misses",
+                   dict_builder_metrics.transpose_filter_cache_id_misses));
+    metrics.emplace_back(
+        StatMetric("dict_builders_transpose_filter_cache_length_misses",
+                   dict_builder_metrics.transpose_filter_cache_length_misses));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_build_transpose_map_time",
+                    dict_builder_metrics.unify_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_transpose_time",
+                    dict_builder_metrics.unify_transpose_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_unify_string_arr_time",
+                    dict_builder_metrics.unify_string_arr_time));
+    metrics.emplace_back(TimerMetric(
+        "dict_builders_transpose_filter_build_transpose_map_time",
+        dict_builder_metrics.transpose_filter_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_transpose_filter_transpose_time",
+                    dict_builder_metrics.transpose_filter_transpose_time));
+    metrics.emplace_back(
+        TimerMetric("dict_builders_transpose_filter_string_arr_time",
+                    dict_builder_metrics.transpose_filter_string_arr_time));
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(
+            this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
+        std::move(metrics));
+
+    JoinState::ReportProbeStageMetrics();
 }
 
 bool nested_loop_join_probe_consume_batch(
@@ -261,17 +428,32 @@ bool nested_loop_join_probe_consume_batch(
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-        // make dictionaries global for broadcast
+        // Make dictionaries global for broadcast.
+        // TODO [BSE-2131] Replace with:
+        // 1. Unify locally with Dict-Builder
+        // 2. Unify Dict-Builders globally
+        // 3. Transpose local to global using known transpose map
+        // 4. Broadcast
+        // 5. Transpose back from global to local using known transpose map
+        time_pt start_dict_unif = start_timer();
         for (size_t i = 0; i < in_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = in_table->columns[i];
             if (arr->arr_type == bodo_array_type::DICT) {
                 make_dictionary_global_and_unique(arr, parallel);
             }
         }
+        join_state->metrics.probe_global_dict_unification_time +=
+            end_timer(start_dict_unif);
 
+        time_pt start_bcast;
+        join_state->metrics.probe_bcast_size_bytes +=
+            table_local_memory_size(in_table, false);
         for (int p = 0; p < n_pes; p++) {
+            start_bcast = start_timer();
             std::shared_ptr<table_info> bcast_probe_chunk = broadcast_table(
                 in_table, in_table, in_table->ncols(), parallel, p);
+            join_state->metrics.probe_bcast_table_time +=
+                end_timer(start_bcast);
             join_state->ProcessProbeChunk(std::move(bcast_probe_chunk),
                                           build_kept_cols, probe_kept_cols);
         }
@@ -282,6 +464,8 @@ bool nested_loop_join_probe_consume_batch(
     if (join_state->build_table_outer && is_last) {
         // Add unmatched rows from build table
         // for outer join
+        time_pt start_add_unmatched = start_timer();
+        NestedLoopJoinMetrics::time_t append_time = 0;
 
         // define the number of rows already processed as 0
         int64_t build_table_offset = 0;
@@ -290,19 +474,24 @@ bool nested_loop_join_probe_consume_batch(
         auto build_table_matched_pin(
             bodo::pin(join_state->build_table_matched));
 
+        time_pt start_append;
         for (const auto& build_table : *join_state->build_table_buffer) {
             add_unmatched_rows(
                 *build_table_matched_pin, build_table->nrows(), build_idxs,
                 probe_idxs,
                 !join_state->build_parallel && join_state->probe_parallel,
                 build_table_offset);
+            start_append = start_timer();
             join_state->output_buffer->AppendJoinOutput(
                 build_table, join_state->dummy_probe_table, build_idxs,
                 probe_idxs, build_kept_cols, probe_kept_cols);
+            append_time += end_timer(start_append);
             build_table_offset += build_table->nrows();
             build_idxs.clear();
             probe_idxs.clear();
         }
+        join_state->metrics.probe_add_unmatched_build_rows_time +=
+            end_timer(start_add_unmatched) - append_time;
     }
     if (is_last) {
         // Free the build table

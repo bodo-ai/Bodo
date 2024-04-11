@@ -3,6 +3,7 @@
 
 #include "_array_utils.h"
 #include "_dict_builder.h"
+#include "_query_profile_collector.h"
 #include "_table_builder_utils.h"
 
 // Pre-allocate 32 bytes per string for now.
@@ -1228,6 +1229,8 @@ struct ChunkedTableBuilder {
     size_t total_remaining = 0;
     // Max number of rows after any append
     size_t max_reached_size = 0;
+    // Total append time
+    MetricBase::TimerValue append_time = 0;
 
     // XXX In the future, we could keep track of the
     // allocated memory as well. This might be useful
