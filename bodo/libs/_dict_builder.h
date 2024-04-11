@@ -4,9 +4,66 @@
 #include <vector>
 
 #include "_bodo_common.h"
+#include "_query_profile_collector.h"
 #include "_stl.h"
 
 struct ArrayBuildBuffer;
+
+/**
+ * @brief Metrics for a DictionaryBuilder. This tracks statistics such as cache
+ * misses, time spent unifying, time spent transposing, etc.
+ *
+ */
+struct DictBuilderMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    // Track the number of times we can't cache the dictionary
+    // unification because we've never seen the input dictionary before
+    stat_t unify_cache_id_misses = 0;
+    // Track the number of times we can't cache the dictionary unification
+    // because the input dictionary is longer than when we last saw it
+    stat_t unify_cache_length_misses = 0;
+
+    // Same, but for TransposeExisting:
+    stat_t transpose_filter_cache_id_misses = 0;
+    stat_t transpose_filter_cache_length_misses = 0;
+
+    /// Timers for UnifyDictionaryArray
+    time_t unify_build_transpose_map_time = 0;
+    time_t unify_transpose_time = 0;
+    // Time spent transposing STRING arrays (instead of the regular DICT case)
+    time_t unify_string_arr_time = 0;
+
+    /// Timers for TransposeExisting
+    time_t transpose_filter_build_transpose_map_time = 0;
+    time_t transpose_filter_transpose_time = 0;
+    // Time spent transposing STRING arrays (instead of the regular DICT case)
+    time_t transpose_filter_string_arr_time = 0;
+
+    /**
+     * @brief Add metrics from another set of dictionary-builder metrics. This
+     * is useful in two situations:
+     * 1. Combining metrics from children dict builders.
+     * 2. Combining metrics from multiple columns to get metrics across all
+     * columns of a table.
+     *
+     * @param src_metrics The metrics to add.
+     */
+    void add_metrics(const DictBuilderMetrics& src_metrics);
+
+    /**
+     * @brief Subtract 'src_metrics' from our metrics. All src_metrics must be
+     * smaller or equal to our corresponding metrics. This is useful when we may
+     * want to get a "diff" of metrics at two points in time. e.g. In case of
+     * join, we take a snapshot of metrics for key columns at the end of the
+     * build stage and then subtract that from the metrics at the end of the
+     * probe stage. This gives us the "true" metrics for the probe phase.
+     *
+     * @param src_metrics The metrics to subtract.
+     */
+    void subtract_metrics(const DictBuilderMetrics& src_metrics);
+};
 
 /**
  * @brief Similar to ArrayBuildBuffer, but for incrementally building a
@@ -43,17 +100,7 @@ struct DictionaryBuilder {
     // dictionary-encoded string arrays
     std::vector<std::shared_ptr<DictionaryBuilder>> child_dict_builders;
 
-    /// @brief Tracing event for this dictionary builder.
-    tracing::ResumableEvent dict_builder_event;
-
-    // Track the number of times we can't cache the dictionary
-    // unification because we've never seen the input dictionary before
-    int64_t unify_cache_id_misses = 0;
-
-    // Track the number of times we can't cache the dictionary
-    // unification because the input dictionary is longer than when we last saw
-    // it
-    int64_t unify_cache_length_misses = 0;
+    DictBuilderMetrics metrics;
 
     /**
      * @brief Construct a new Dictionary Builder.
@@ -83,12 +130,7 @@ struct DictionaryBuilder {
                       size_t transpose_cache_size = 2,
                       size_t filter_transpose_cache_size = 3);
 
-    ~DictionaryBuilder() {
-        dict_builder_event.add_attribute("Unify_Cache_ID_Misses",
-                                         this->unify_cache_id_misses);
-        dict_builder_event.add_attribute("Unify_Cache_Length_Misses",
-                                         this->unify_cache_length_misses);
-    }
+    ~DictionaryBuilder() {}
 
     /**
      * @brief Unify dictionary of input array with buffer by appending its new
@@ -157,6 +199,15 @@ struct DictionaryBuilder {
      * created entry for it.
      */
     dict_indices_t InsertIfNotExists(const std::string_view& value);
+
+    /**
+     * @brief Get the Metrics for this DictionaryBuilder. In case of nested
+     * types, this will combine metrics from all children dict builders and
+     * return a single set of metrics.
+     *
+     * @return DictBuilderMetrics
+     */
+    DictBuilderMetrics GetMetrics() const;
 
    private:
     /**
