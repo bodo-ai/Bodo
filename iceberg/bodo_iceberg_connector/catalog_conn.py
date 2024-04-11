@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
 
-CatalogType = Literal["hadoop", "hive", "nessie", "glue", "snowflake"]
+CatalogType = Literal["hadoop", "hive", "nessie", "glue", "snowflake", "rest"]
 
 
 def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
@@ -54,10 +54,20 @@ def parse_conn_str(
             warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
         elif parsed_conn.scheme == "snowflake":
             catalog_type = "snowflake"
+        elif parsed_conn.scheme == "rest":
+            catalog_type = "rest"
 
         else:
             types = ", ".join(
-                ["hadoop-s3", "hadoop", "hive", "nessie", "glue", "snowflake"]
+                [
+                    "hadoop-s3",
+                    "hadoop",
+                    "hive",
+                    "nessie",
+                    "glue",
+                    "snowflake",
+                    "rest",
+                ]
             )
             raise IcebergError(
                 f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}\nIn the connection string, set the URL parameter `type` to one of the following:\n  {types}"
@@ -70,6 +80,7 @@ def parse_conn_str(
         "nessie",
         "glue",
         "snowflake",
+        "rest",
     ]
 
     # Get Warehouse Location
