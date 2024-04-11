@@ -48,7 +48,7 @@ SELECT A from __BODOLOCAL__.table1
 
 Currently, BodoSQL supports catalogs for Snowflake and a user's FileSystem. Support for other data storage systems will be added in future releases.
 
-## SnowflakeCatalog
+## SnowflakeCatalog {#snowflake-catalog-api}
 
 With a Snowflake Catalog, users only have to specify their Snowflake connection once.
 They can then access any tables of interest in their Snowflake account.
@@ -137,7 +137,7 @@ The `SnowflakeCatalog` currently supports the following types of SQL queries:
   * `#!sql DELETE`
   * `#!sql CREATE TABLE AS`
 
-## FileSystemCatalog
+## FileSystemCatalog {#fs-catalog-api}
 
 The `FileSystemCatalog` allows users to read and write tables using their local file system or S3 storage
 without needing access to a proper database. To use this catalog, you will have to select a root directory.
