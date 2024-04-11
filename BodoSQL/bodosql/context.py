@@ -731,7 +731,11 @@ class BodoSQLContext:
             params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
-        is_dll = generator.isDDLProcessedQuery()
+        if bodo.get_rank() == 0:
+            is_dll = generator.isDDLProcessedQuery()
+        else:
+            is_dll = None
+        is_dll = bcast_scalar(is_dll)
         if is_dll:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
             warnings.warn(BodoSQLWarning(warning_msg))
@@ -811,7 +815,11 @@ class BodoSQLContext:
             params_dict,
             hide_credentials,
         )
-        is_dll = generator.isDDLProcessedQuery()
+        if bodo.get_rank() == 0:
+            is_dll = generator.isDDLProcessedQuery()
+        else:
+            is_dll = None
+        is_dll = bcast_scalar(is_dll)
         if is_dll:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
             warnings.warn(BodoSQLWarning(warning_msg))
@@ -853,9 +861,6 @@ class BodoSQLContext:
         )
 
     def _setup_named_params(self, params_dict):
-        assert (
-            bodo.get_rank() == 0
-        ), "_setup_named_params should only be called on rank 0."
         if params_dict is None:
             params_dict = dict()
 
@@ -906,12 +911,12 @@ class BodoSQLContext:
             except Exception as e:
                 error_message = error_to_string(e)
 
-            error_message = comm.bcast(error_message)
-            if error_message is not None:
-                raise BodoError(
-                    f"Unable to parse SQL Query. Error message:\n{error_message}"
-                )
-            return plan_generator
+        error_message = comm.bcast(error_message)
+        if error_message is not None:
+            raise BodoError(
+                f"Unable to parse SQL Query. Error message:\n{error_message}"
+            )
+        return plan_generator
 
     def _convert_to_pandas(
         self,
@@ -1005,7 +1010,11 @@ class BodoSQLContext:
             params_dict,
             True,  # We need to execute the code so don't hide credentials.
         )
-        is_dll = generator.isDDLProcessedQuery()
+        if bodo.get_rank() == 0:
+            is_dll = generator.isDDLProcessedQuery()
+        else:
+            is_dll = False
+        is_dll = bcast_scalar(is_dll)
         try:
             if is_dll:
                 # Just execute DDL operations directly and return the DataFrame.
