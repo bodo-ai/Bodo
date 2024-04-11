@@ -45,12 +45,13 @@ void QueryProfileCollector::Init() {
             exists = true;
             // Raise a warning if the directory already exists
             std::cerr << "Warning: Output directory already exists, "
-                         "overwritting profiles\n";
+                         "overwriting profiles\n";
         }
         if (!exists) {
             // Create the output directory using mkdtemp
             char* res = mkdtemp(output_dir.data());
             if (res == nullptr) {
+                // TODO XXX Needs error synchronization!
                 throw std::runtime_error(
                     fmt::format("Failed to create output directory {}: {}",
                                 output_dir, strerror(errno)));
@@ -64,8 +65,7 @@ void QueryProfileCollector::Init() {
 
     // Reserve space for the output directory
     if (rank != 0) {
-        // add 1 for the null terminator
-        output_dir.resize(output_dir_len + 1);
+        output_dir.resize(output_dir_len);
     }
 
     // Broadcast the output directory to all ranks
@@ -118,10 +118,9 @@ void QueryProfileCollector::RegisterOperatorStageMetrics(
 }
 
 template <MetricTypes::TypeEnum metric_type>
-static boost::json::object metric_to_json_helper(Metric<metric_type>& metric) {
-    boost::json::object info;
-    info["start"] = metric.get();
-    return info;
+static void metric_to_json_helper(boost::json::object& metric_json,
+                                  Metric<metric_type>& metric) {
+    metric_json["stat"] = metric.get();
 }
 
 static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
@@ -133,21 +132,20 @@ static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
     }
     boost::json::object metric_json;
     metric_json["name"] = metric.name;
-    metric_json["type"] = metric.type;
+    metric_json["type"] = MetricTypes::ToString(metric.type);
 
-    boost::json::object info;
     switch (metric.type) {
         case MetricTypes::TIMER:
-            info = metric_to_json_helper<MetricTypes::TIMER>(
-                static_cast<TimerMetric&>(metric));
+            metric_to_json_helper<MetricTypes::TIMER>(
+                metric_json, static_cast<TimerMetric&>(metric));
             break;
         case MetricTypes::STAT:
-            info = metric_to_json_helper<MetricTypes::STAT>(
-                static_cast<StatMetric&>(metric));
+            metric_to_json_helper<MetricTypes::STAT>(
+                metric_json, static_cast<StatMetric&>(metric));
             break;
         case MetricTypes::BLOB:
-            info = metric_to_json_helper<MetricTypes::BLOB>(
-                static_cast<BlobMetric&>(metric));
+            metric_to_json_helper<MetricTypes::BLOB>(
+                metric_json, static_cast<BlobMetric&>(metric));
     }
     return metric_json;
 }

@@ -3,10 +3,13 @@
 #include <iostream>
 #include <numeric>
 
+#include <arrow/util/bit_util.h>
 #include <mpi.h>
 
 #include "_array_hash.h"
+#include "_bodo_common.h"
 #include "_memory_budget.h"
+#include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_utils.h"
 
@@ -152,11 +155,14 @@ void IncrementalShuffleState::Initialize(
 void IncrementalShuffleState::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows) {
+    time_pt start = start_timer();
     this->table_buffer->ReserveTable(in_table);
     uint64_t append_rows_sum =
         std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
     this->table_buffer->UnsafeAppendBatch(in_table, append_rows,
                                           append_rows_sum);
+    this->metrics.append_time += end_timer(start);
+    this->metrics.total_appended_nrows += append_rows_sum;
     // Update max_input_batch_size_since_prev_shuffle and
     // max_shuffle_batch_size_since_prev_shuffle
     this->UpdateAppendBatchSize(in_table->nrows(), append_rows_sum);
@@ -355,10 +361,15 @@ void IncrementalShuffleState::ResetAfterShuffle() {
     // If the build shuffle buffer is too large and utilization is below
     // SHUFFLE_BUFFER_MIN_UTILIZATION, it will be freed and reallocated.
     size_t capacity = this->table_buffer->EstimatedSize();
+    this->metrics.peak_capacity_bytes = std::max(
+        this->metrics.peak_capacity_bytes, static_cast<int64_t>(capacity));
+    int64_t buffer_used_size =
+        table_local_memory_size(this->table_buffer->data_table, false);
+    this->metrics.peak_utilization_bytes =
+        std::max(this->metrics.peak_utilization_bytes, buffer_used_size);
     if (capacity >
             (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * this->shuffle_threshold) &&
-        (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) >
-            table_local_memory_size(this->table_buffer->data_table, false)) {
+        (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) > buffer_used_size) {
         this->table_buffer.reset(
             new TableBuildBuffer(this->schema, this->dict_builders));
     } else {
@@ -381,9 +392,11 @@ IncrementalShuffleState::GetShuffleTableAndHashes() {
     // NOTE: shuffle hashes need to be consistent with partition hashes
     // above. Since we're using dict_hashes, global dictionaries are not
     // required.
+    time_pt start = start_timer();
     std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
         shuffle_table, this->n_keys, SEED_HASH_PARTITION, /*is_parallel*/ true,
         /*global_dict_needed*/ false, dict_hashes);
+    this->metrics.hash_time += end_timer(start);
 
     return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
                            std::unique_ptr<uint8_t[]>(nullptr));
@@ -427,23 +440,43 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         this->GetShuffleTableAndHashes();
     dict_hashes.reset();
 
-    // make dictionaries global for shuffle
+    // Make dictionaries global for shuffle
+    time_pt start = start_timer();
     for (size_t i = 0; i < shuffle_table->ncols(); i++) {
         std::shared_ptr<array_info> arr = shuffle_table->columns[i];
         if (arr->arr_type == bodo_array_type::DICT) {
             make_dictionary_global_and_unique(arr, /*is_parallel*/ true);
         }
     }
+    this->metrics.dict_unification_time += end_timer(start);
 
     // Shuffle the data
+    start = start_timer();
     mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
                                   /*is_parallel*/ true, /*filter*/ nullptr,
-                                  keep_row_bitmask.get());
+                                  keep_row_bitmask.get(),
+                                  /*keep_filter_misses*/ false);
+    this->metrics.total_sent_nrows += comm_info_table.n_rows_send;
+    // TODO Make this exact by getting the size of the send_arr from the
+    // intermediate arrays created during shuffle_table_kernel.
+    int64_t shuffle_table_size = table_local_memory_size(shuffle_table, false);
+    if ((shuffle_table_size > 0) && (comm_info_table.n_rows_send > 0) &&
+        (shuffle_table->nrows() > 0)) {
+        this->metrics.total_approx_sent_size_bytes +=
+            ((((double)comm_info_table.n_rows_send) /
+              ((double)shuffle_table->nrows())) *
+             shuffle_table_size);
+    }
 
     std::shared_ptr<table_info> new_data =
         shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                              comm_info_table, /*is_parallel*/ true);
+    this->metrics.shuffle_time += end_timer(start);
     shuffle_hashes.reset();
+
+    this->metrics.total_recv_nrows += comm_info_table.n_rows_recv;
+    this->metrics.total_recv_size_bytes +=
+        table_local_memory_size(new_data, false);
 
     this->ResetAfterShuffle();
     this->prev_shuffle_iter = this->curr_iter;

@@ -157,8 +157,6 @@ void file_read(const char* file_name, void* buff, int64_t size,
 void file_write(const char* file_name, void* buff, int64_t size) {
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     PyObject* func_obj = nullptr;
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (strncmp("s3://", file_name, 5) == 0) {
         std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
@@ -208,8 +206,9 @@ void file_write(const char* file_name, void* buff, int64_t size) {
     } else {
         // posix
         FILE* fp = fopen(file_name, "wb");
-        if (fp == NULL)
+        if (fp == NULL) {
             return;
+        }
         size_t ret_code = fwrite(buff, 1, (size_t)size, fp);
         fclose(fp);
         if (ret_code != (size_t)size) {

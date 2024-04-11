@@ -6,7 +6,69 @@
 
 #include "_array_hash.h"
 #include "_bodo_common.h"
+#include "_query_profile_collector.h"
 #include "_table_builder.h"
+
+/* -------------------------- DictBuilderMetrics -------------------------- */
+
+void DictBuilderMetrics::add_metrics(const DictBuilderMetrics& src_metrics) {
+    this->unify_cache_id_misses += src_metrics.unify_cache_id_misses;
+    this->unify_cache_length_misses += src_metrics.unify_cache_length_misses;
+    this->transpose_filter_cache_id_misses +=
+        src_metrics.transpose_filter_cache_id_misses;
+    this->transpose_filter_cache_length_misses +=
+        src_metrics.transpose_filter_cache_length_misses;
+    this->unify_build_transpose_map_time +=
+        src_metrics.unify_build_transpose_map_time;
+    this->unify_transpose_time += src_metrics.unify_transpose_time;
+    this->unify_string_arr_time += src_metrics.unify_string_arr_time;
+    this->transpose_filter_build_transpose_map_time +=
+        src_metrics.transpose_filter_build_transpose_map_time;
+    this->transpose_filter_transpose_time +=
+        src_metrics.transpose_filter_transpose_time;
+    this->transpose_filter_string_arr_time +=
+        src_metrics.transpose_filter_string_arr_time;
+}
+
+void DictBuilderMetrics::subtract_metrics(
+    const DictBuilderMetrics& src_metrics) {
+    assert(this->unify_cache_id_misses >= src_metrics.unify_cache_id_misses);
+    assert(this->unify_cache_length_misses >=
+           src_metrics.unify_cache_length_misses);
+    assert(this->transpose_filter_cache_id_misses >=
+           src_metrics.transpose_filter_cache_id_misses);
+    assert(this->transpose_filter_cache_length_misses >=
+           src_metrics.transpose_filter_cache_length_misses);
+    assert(this->unify_build_transpose_map_time >=
+           src_metrics.unify_build_transpose_map_time);
+    assert(this->unify_transpose_time >= src_metrics.unify_transpose_time);
+    assert(this->unify_string_arr_time >= src_metrics.unify_string_arr_time);
+    assert(this->transpose_filter_build_transpose_map_time >=
+           src_metrics.transpose_filter_build_transpose_map_time);
+    assert(this->transpose_filter_transpose_time >=
+           src_metrics.transpose_filter_transpose_time);
+    assert(this->transpose_filter_string_arr_time >=
+           src_metrics.transpose_filter_string_arr_time);
+
+    this->unify_cache_id_misses -= src_metrics.unify_cache_id_misses;
+    this->unify_cache_length_misses -= src_metrics.unify_cache_length_misses;
+    this->transpose_filter_cache_id_misses -=
+        src_metrics.transpose_filter_cache_id_misses;
+    this->transpose_filter_cache_length_misses -=
+        src_metrics.transpose_filter_cache_length_misses;
+    this->unify_build_transpose_map_time -=
+        src_metrics.unify_build_transpose_map_time;
+    this->unify_transpose_time -= src_metrics.unify_transpose_time;
+    this->unify_string_arr_time -= src_metrics.unify_string_arr_time;
+    this->transpose_filter_build_transpose_map_time -=
+        src_metrics.transpose_filter_build_transpose_map_time;
+    this->transpose_filter_transpose_time -=
+        src_metrics.transpose_filter_transpose_time;
+    this->transpose_filter_string_arr_time -=
+        src_metrics.transpose_filter_string_arr_time;
+}
+
+/* ------------------------------------------------------------------------ */
 
 /* -------------------------- DictionaryBuilder --------------------------- */
 
@@ -110,6 +172,7 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
 
     assert(this->dict_buff != nullptr);
     if (in_arr->arr_type == bodo_array_type::STRING) {
+        time_pt start = start_timer();
         // TODO Move this out into it's own function
         std::shared_ptr<array_info> out_indices_arr =
             alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
@@ -137,11 +200,14 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
         // dictionary/array id of the dictionary-builder's dictionary since we
         // haven't modified it (by design).
 
-        return create_dict_string_array(this->dict_buff->data_array,
-                                        out_indices_arr);
+        std::unique_ptr<array_info> out = create_dict_string_array(
+            this->dict_buff->data_array, std::move(out_indices_arr));
+        this->metrics.transpose_filter_string_arr_time += end_timer(start);
+        return out;
     }
 
     assert(in_arr->arr_type == bodo_array_type::DICT);
+    time_pt start = start_timer();
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
     bool valid_arr_id = batch_dict->array_id >= 0;
     bool empty_arr = batch_dict->array_id == 0;
@@ -178,6 +244,7 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
     // Compute the cached_transpose_map if it is not already cached.
     if (!valid_arr_id ||
         (cache_entry == this->cached_filter_array_transposes.end())) {
+        this->metrics.transpose_filter_cache_id_misses++;
         // Create transpose map
         update_transpose_map(new_transpose_map);
 
@@ -192,16 +259,22 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
         }
     } else {
         if (cache_entry->first.length < batch_dict->length) {
+            this->metrics.transpose_filter_cache_length_misses++;
             auto& new_transpose_map = cache_entry->second;
             update_transpose_map(new_transpose_map);
             cache_entry->first.length = batch_dict->length;
         }
         active_transpose_map = &this->_MoveToFrontOfFilterCache(cache_entry);
     }
+    this->metrics.transpose_filter_build_transpose_map_time += end_timer(start);
 
     // Create output batch array with common dictionary and new transposed
     // indices
-    return this->transpose_input_helper(in_arr, *active_transpose_map);
+    time_pt start_transpose = start_timer();
+    std::shared_ptr<array_info> out =
+        this->transpose_input_helper(in_arr, *active_transpose_map);
+    this->metrics.transpose_filter_transpose_time += end_timer(start_transpose);
+    return out;
 }
 
 inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
@@ -280,10 +353,6 @@ DictionaryBuilder::DictionaryBuilder(
     size_t transpose_cache_size, size_t filter_transpose_cache_size)
     : is_key(is_key_),
       child_dict_builders(child_dict_builders_),
-      // Note: We cannot guarantee all DictionaryBuilders are created
-      // the same number of times on each rank. Right now we do, but
-      // in the future this could change.
-      dict_builder_event("DictionaryBuilder::UnifyDictionaryArray", false),
       cached_array_transposes(
           transpose_cache_size,
           std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())),
@@ -358,6 +427,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
 
     bool empty_builder = this->dict_buff->data_array->array_id <= 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {
+        time_pt start = start_timer();
         // TODO(aneesh) move this out into it's own function
         std::shared_ptr<array_info> out_indices_arr =
             alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
@@ -389,12 +459,13 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 generate_array_id(this->dict_buff->data_array->length);
         }
 
-        return create_dict_string_array(this->dict_buff->data_array,
-                                        out_indices_arr);
+        std::unique_ptr<array_info> out = create_dict_string_array(
+            this->dict_buff->data_array, std::move(out_indices_arr));
+        this->metrics.unify_string_arr_time += end_timer(start);
+        return out;
     }
 
-    auto iterationEvent(this->dict_builder_event.iteration());
-
+    time_pt start = start_timer();
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
     bool valid_arr_id = batch_dict->array_id >= 0;
     bool empty_arr = batch_dict->array_id == 0;
@@ -438,7 +509,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
 
     // Compute the cached_transpose_map if it is not already cached.
     if (!valid_arr_id || (cache_entry == this->cached_array_transposes.end())) {
-        this->unify_cache_id_misses++;
+        this->metrics.unify_cache_id_misses++;
         // Create new transpose map
         do_unify(new_transpose_map);
 
@@ -461,22 +532,45 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         }
     } else {
         if (cache_entry->first.length < batch_dict->length) {
-            this->unify_cache_length_misses++;
+            this->metrics.unify_cache_length_misses++;
             auto& new_transpose_map = cache_entry->second;
             do_unify(new_transpose_map);
             cache_entry->first.length = batch_dict->length;
         }
         active_transpose_map = &this->_MoveToFrontOfCache(cache_entry);
     }
+    this->metrics.unify_build_transpose_map_time += end_timer(start);
 
     // Create output batch array with common dictionary and new transposed
     // indices
-    return this->transpose_input_helper(in_arr, *active_transpose_map);
+    time_pt start_transpose = start_timer();
+    std::shared_ptr<array_info> out =
+        this->transpose_input_helper(in_arr, *active_transpose_map);
+    this->metrics.unify_transpose_time += end_timer(start_transpose);
+    return out;
 }
 
 std::shared_ptr<bodo::vector<uint32_t>>
 DictionaryBuilder::GetDictionaryHashes() {
     return this->dict_hashes;
+}
+
+DictBuilderMetrics DictionaryBuilder::GetMetrics() const {
+    if (this->child_dict_builders.size() > 0) {
+        // Combine metrics from all children dict-builders recursively.
+        DictBuilderMetrics combined_metrics;
+        for (size_t i = 0; i < this->child_dict_builders.size(); i++) {
+            std::shared_ptr<DictionaryBuilder> child_builder =
+                this->child_dict_builders[i];
+            if (child_builder == nullptr) {
+                continue;
+            }
+            combined_metrics.add_metrics(child_builder->GetMetrics());
+        }
+        return combined_metrics;
+    }
+    assert(this->dict_buff != nullptr);
+    return this->metrics;
 }
 
 const std::vector<int>& DictionaryBuilder::_AddToCache(

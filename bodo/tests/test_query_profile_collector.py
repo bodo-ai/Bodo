@@ -1,9 +1,12 @@
+import json
 import os
 import tempfile
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
@@ -492,3 +495,316 @@ def test_output_directory_can_be_set():
             for f in os.listdir(test_dir):
                 assert f.startswith("query_profile")
                 assert f.endswith(".json")
+
+
+def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by hash join.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+    build_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    kept_cols = bodo.utils.typing.MetaType((0, 1, 2, 3))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(("E", "F", "G", "H"))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        ("E", "F", "G", "H", "A", "B", "C", "D")
+    )
+
+    @bodo.jit(distributed=["df1", "df2"])
+    def impl(df1, df2):
+        bodo.libs.query_profile_collector.init()
+
+        join_state = init_join_state(
+            0,  # op_id
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 4
+        )
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            _temp1 = _temp1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _temp1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 4
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+            _temp2 = _temp2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _temp2)
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        bodo.libs.query_profile_collector.finalize()
+        return df
+
+    build_df = pd.DataFrame(
+        {
+            # Non-dict key column
+            "A": pd.array([1, 2, 3, 4, 5] * 7500, dtype="Int64"),
+            # Dict key column
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["A", "bc", "De", "FGh", "Ij"] * 7500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            # Non-key non-dict column
+            "C": pd.array([1, 2, 3, 4, 5] * 7500, dtype="Int64"),
+            # Non-key dict column
+            "D": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["pizza", "potatoes", "cilantro", "cucumber", "jalapeno"] * 7500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+
+    probe_df = pd.DataFrame(
+        {
+            # Non-dict key column
+            "E": pd.array([2, 6] * 2500, dtype="Int64"),
+            # Dict key column
+            "F": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["bc", "Ij"] * 2500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            # Non-key non-dict column
+            "G": pd.array([2, 6] * 2500, dtype="Int64"),
+            # Non-key dict column
+            "H": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["cilantro", "cucumber"] * 2500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+
+    # Verify build metrics
+    assert "0" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["0"]
+    build_metrics: list = profile_json["operator_stages"]["0"]["metrics"]
+    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    if rank == 0:
+        assert "bcast_join" in build_metrics_names
+        assert "bloom_filter_enabled" in build_metrics_names
+        assert "n_key_dict_builders" in build_metrics_names
+        assert "n_non_key_dict_builders" in build_metrics_names
+    assert "shuffle_buffer_append_time" in build_metrics_names
+    assert "ht_hashing_time" in build_metrics_names
+    assert "repartitioning_time_total" in build_metrics_names
+
+    # Verify probe metrics
+    assert "1" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["1"]
+    probe_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
+    if rank == 0:
+        assert "n_key_dict_builders" in probe_metrics_names
+        assert "n_non_key_dict_builders" in probe_metrics_names
+    assert "output_append_time" in probe_metrics_names
+    assert "output_total_nrows" in probe_metrics_names
+    assert "output_total_nrows_rem_at_finalize" in probe_metrics_names
+    assert "output_peak_nrows" in probe_metrics_names
+    assert "shuffle_buffer_append_time" in probe_metrics_names
+    assert "ht_probe_time" in probe_metrics_names
+    assert "finalize_inactive_partitions_total_time" in probe_metrics_names
+    assert "join_filter_materialization_time" in probe_metrics_names
+
+
+def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by nested loop join.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B"))
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(("C", "D"))
+    col_meta = bodo.utils.typing.ColNamesMetaType(("C", "D", "A", "B"))
+    non_equi_condition = "right.A >= left.C"
+
+    @bodo.jit(distributed=["df1", "df2"])
+    def impl(df1, df2):
+        bodo.libs.query_profile_collector.init()
+
+        join_state = init_join_state(
+            0,  # op_id
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+            non_equi_condition=non_equi_condition,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 4
+        )
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            _temp1 = _temp1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _temp1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 4
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+            _temp2 = _temp2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _temp2)
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        bodo.libs.query_profile_collector.finalize()
+        return df
+
+    build_df = pd.DataFrame(
+        {
+            # Non-dict column
+            "A": pd.array([1, 2, 3, 4, 5] * 2000, dtype="Int64"),
+            # Dict column
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["A", "bc", "De", "FGh", "Ij"] * 2000,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+
+    probe_df = pd.DataFrame(
+        {
+            # Non-dict column
+            "C": pd.array([2, 6] * 2500, dtype="Int64"),
+            # Dict column
+            "D": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["bc", "Ij"] * 2500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+
+    with temp_env_override(
+        {
+            "BODO_TRACING_LEVEL": "1",
+            "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0,
+        }
+    ):
+        _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+
+    # Verify build metrics
+    assert "0" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["0"]
+    build_metrics: list = profile_json["operator_stages"]["0"]["metrics"]
+    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    if rank == 0:
+        assert "bcast_join" in build_metrics_names
+        assert "block_size_bytes" in build_metrics_names
+        assert "chunk_size_nrows" in build_metrics_names
+        assert "n_dict_builders" in build_metrics_names
+    assert "append_time" in build_metrics_names
+    assert "num_chunks" in build_metrics_names
+
+    # Verify probe metrics
+    assert "1" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["1"]
+    probe_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
+    if rank == 0:
+        assert "n_dict_builders" in probe_metrics_names
+    assert "output_append_time" in probe_metrics_names
+    assert "output_total_nrows" in probe_metrics_names
+    assert "output_total_nrows_rem_at_finalize" in probe_metrics_names
+    assert "output_peak_nrows" in probe_metrics_names
+    assert "global_dict_unification_time" in probe_metrics_names
+    assert "bcast_size_bytes" in probe_metrics_names
+    assert "bcast_table_time" in probe_metrics_names
+    assert "compute_matches_time" in probe_metrics_names

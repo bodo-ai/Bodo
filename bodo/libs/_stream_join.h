@@ -4,6 +4,7 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
+#include "_dict_builder.h"
 #include "_distributed.h"
 #include "_join.h"
 #include "_nested_loop_join.h"
@@ -28,6 +29,10 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 // Chunk size of build_table_buffer_chunked and probe_table_buffer_chunked in
 // JoinPartition
 #define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
+
+// Stage IDs for build and probe for the QueryProfileCollector
+#define QUERY_PROFILE_BUILD_STAGE_ID 0
+#define QUERY_PROFILE_PROBE_STAGE_ID 1
 
 class JoinPartition;
 struct HashHashJoinTable {
@@ -71,6 +76,147 @@ struct KeyEqualHashJoinTable {
 };
 
 /**
+ * @brief Struct for storing the Join metrics.
+ *
+ */
+struct JoinMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+    // Required Metrics for all Joins
+    stat_t build_input_row_count = 0;
+    stat_t probe_input_row_count = 0;
+    stat_t probe_output_row_count = 0;
+};
+
+/**
+ * @brief Struct for storing HashJoin metrics.
+ *
+ */
+struct HashJoinMetrics : public JoinMetrics {
+    ///// Build
+
+    // Global: Did we do a Broadcast hash join (0: false, 1: true)
+    stat_t is_build_bcast_join = 0;
+    //  If so, time spent in allgather, etc.
+    time_t build_bcast_time = 0;
+    // Global: Did we use a bloom filter (0: false, 1: true)
+    stat_t bloom_filter_enabled = 0;
+
+    /// Time spent in appends to TBBs and CTBs of the partitions.
+    time_t build_appends_active_time = 0;
+    time_t build_appends_inactive_time = 0;
+
+    // Time spent finding the partition for each row in the
+    // multi-partition case.
+    time_t build_input_partition_check_time = 0;
+
+    /// Time spent in BuildHashTable
+    time_t build_ht_hashing_time = 0;  // Hashing
+    time_t build_ht_insert_time = 0;   // Inserting into hashmap
+
+    /// Partition stats
+    stat_t n_partitions = 1;    // Number of partitions
+    stat_t build_nrows = 0;     // Number of rows across all partitions
+    stat_t build_n_groups = 0;  // Number of "groups" across all partitions
+
+    /// Number of partition splits
+    stat_t n_repartitions_in_appends = 0;
+    stat_t n_repartitions_in_finalize = 0;
+
+    /// Time spent repartitioning
+    time_t repartitioning_time = 0;  // Overall
+    time_t repartitioning_part_hashing_time = 0;
+    time_t repartitioning_active_part1_append_time = 0;
+    time_t repartitioning_active_part2_append_time = 0;
+    time_t repartitioning_inactive_append_time = 0;
+    // Most of the cost of PopChunk is expected to be from disk IO.
+    time_t repartitioning_inactive_pop_chunk_time = 0;
+
+    // Time spent finalizing
+    time_t build_finalize_time = 0;           // Overall
+    time_t build_finalize_groups_time = 0;    // Time spent in FinalizeGroups
+    time_t build_finalize_activate_time = 0;  // Time spent in ActivatePartition
+    // NOTE: We don't measure the time spent in BuildHashTable since it's
+    // already measured separately ('build_ht_hashing_time' and
+    // 'build_ht_insert_time')
+
+    // Time spent computing partition hashes in the main loop
+    time_t build_input_part_hashing_time = 0;
+    // Time spent adding to the bloom filter.
+    time_t bloom_filter_add_time = 0;
+    // Time spent in bloom filter union reduction
+    time_t bloom_filter_union_reduction_time = 0;
+
+    // (Estimated) Size of the largest partition
+    stat_t max_partition_size_bytes = 0;
+    // Total size (estimated) of all partitions
+    stat_t total_partitions_size_bytes = 0;
+    // Final op budget (local)
+    stat_t final_op_pool_size_bytes = 0;
+
+    // Time spent in filter_na_values
+    time_t build_filter_na_time = 0;
+
+    // Partitioning state
+    blob_t final_partitioning_state;
+
+    // Snapshot of the combined metrics from the key columns.
+    // We will "subtract" these from the final key dict-builder metrics
+    // to get the metrics for the probe stage.
+    DictBuilderMetrics key_dict_builder_metrics_build_stage_snapshot;
+
+    ///// Probe
+
+    // Track the total probe table rows processed on this rank.
+    stat_t num_processed_probe_table_rows = 0;
+
+    // Time spent in appends (AppendInactiveProbeBatch)
+    time_t append_probe_inactive_partitions_time = 0;
+    // Time spent finding the partitions in the multi partition case
+    // (AppendProbeBatchToInactivePartition)
+    time_t probe_inactive_partition_check_time = 0;
+    // Time spent probing the hash table / finding group-id for the rows.
+    time_t ht_probe_time = 0;
+
+    // Time spent in produce_probe_output, except the time spent appending
+    // output to the output buffer. In the non-equi condition case, this
+    // includes the time to evaluate the cond_func.
+    time_t produce_probe_out_idxs_time = 0;
+    // Time spent in generate_build_table_outer_rows_for_partition
+    time_t build_outer_output_idx_time = 0;
+
+    // Time spent computing join hashes
+    time_t probe_join_hashing_time = 0;
+    // Time spent computing partition hashes
+    time_t probe_part_hashing_time = 0;
+
+    /// Time spent in finalizing the inactive partitions.
+    time_t finalize_probe_inactive_partitions_time = 0;  // Overall
+    // Time spent "pinning" the partitions for finalization
+    time_t finalize_probe_inactive_partitions_pin_partition_time = 0;
+    // Time spent in reading back inactive probe chunks during
+    // FinalizeProbeForInactivePartition
+    time_t probe_inactive_pop_chunk_time = 0;
+
+    // Time spent in filter_na_values
+    time_t probe_filter_na_time = 0;
+
+    ///// JoinFilter
+
+    // Track the number of misses pruned by the runtime filter.
+    // This can either be from the bloom filter, or dictionary-builder
+    // based pruning in RuntimeFilter.
+    stat_t num_runtime_filter_misses = 0;
+    // Materialization time
+    time_t join_filter_materialization_time = 0;
+    // Time spent hashing for bloom filter
+    time_t join_filter_bloom_filter_hashing_time = 0;
+    // Time spent probing bloom filter
+    time_t join_filter_bloom_filter_probe_time = 0;
+};
+
+/**
  * @brief Holds the state of a single partition during
  * a join execution. This includes the build table buffer,
  * the hashtable (unord_map_container), bitmap of the matches
@@ -95,7 +241,8 @@ class JoinPartition {
             build_table_dict_builders_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             probe_table_dict_builders_,
-        bool is_active_, bodo::OperatorBufferPool* op_pool_,
+        bool is_active_, HashJoinMetrics& metrics_,
+        bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
@@ -464,6 +611,10 @@ class JoinPartition {
     // populated and finalized. This is used in FinalizeGroups to make it
     // idempotent.
     bool finalized_groups = false;
+
+    // Reference to the metrics (shared with parent HashJoinState and all other
+    // partitions).
+    HashJoinMetrics& metrics;
 };
 
 /**
@@ -490,19 +641,6 @@ std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     uint64_t n_keys, bool only_transpose_existing_on_key_cols = false);
-
-/**
- * @brief Struct for storing the Join metrics.
- *
- */
-struct JoinMetrics {
-    // Required Metrics
-    MetricBase::StatValue build_input_row_count = 0;
-    MetricBase::StatValue probe_input_row_count = 0;
-    MetricBase::StatValue probe_output_row_count = 0;
-
-    // TODO Optional Metrics
-};
 
 class JoinState {
    public:
@@ -566,11 +704,17 @@ class JoinState {
 
     virtual ~JoinState() {}
 
-    virtual void FinalizeBuild() { this->build_input_finalized = true; }
+    virtual void FinalizeBuild() {
+        this->build_input_finalized = true;
+        // Report metrics to the QueryProfileCollector
+        this->ReportBuildStageMetrics();
+    }
 
     virtual void FinalizeProbe() {
         this->output_buffer->Finalize(/*shrink_to_fit*/ true);
         this->probe_input_finalized = true;
+        // Report metrics to the QueryProfileCollector
+        this->ReportProbeStageMetrics();
     }
 
     virtual void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
@@ -607,6 +751,24 @@ class JoinState {
 
     // Operator ID.
     const int64_t op_id;
+
+   protected:
+    /**
+     * @brief Helper function to report metrics from the build stage to the
+     * QueryProfileCollector. This called in FinalizeBuild. At this point, this
+     * is a NOP. Children classes are expected to override this.
+     *
+     */
+    virtual void ReportBuildStageMetrics();
+
+    /**
+     * @brief Helper function to report metrics from the probe stage to the
+     * QueryProfileCollector. This is called in FinalizeBuild. Currently, this
+     * just reports some metrics from the output buffer. Children classes are
+     * expected to override and extend this.
+     *
+     */
+    virtual void ReportProbeStageMetrics();
 };
 
 class HashJoinState : public JoinState {
@@ -640,15 +802,6 @@ class HashJoinState : public JoinState {
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
     std::unique_ptr<BloomFilter> global_bloom_filter;
-    // Track the number of misses pruned by the runtime filter.
-    // This can either be from the bloom filter, or dictionary-builder
-    // based pruning in RuntimeFilter.
-    size_t num_runtime_filter_misses = 0;
-    // Track the total probe table rows processed on this rank.
-    size_t num_processed_probe_table_rows = 0;
-    // Track the number of probe rows received from the input operator.
-    // These may or may not be processed on this rank.
-    size_t num_input_probe_table_rows = 0;
 
     // Keep a table of NA keys for bypassing the hash table
     // if we have an outer join and any keys can contain NAs.
@@ -749,6 +902,14 @@ class HashJoinState : public JoinState {
     void InitOutputBuffer(
         const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols) override;
+
+    /**
+     * @brief Get a string representation of the partitioning state.
+     * This is used for Query Profile.
+     *
+     * @return std::string
+     */
+    std::string GetPartitionStateString() const;
 
     /**
      * @brief Finalize build step for all partitions.
@@ -896,9 +1057,8 @@ class HashJoinState : public JoinState {
     /// Join operator's OperatorBufferPool.
     uint64_t op_pool_bytes_allocated() const;
 
-    // Join events used to track build and probe
-    tracing::ResumableEvent build_event;
-    tracing::ResumableEvent probe_event;
+    // Metrics for the query profile
+    HashJoinMetrics metrics;
 
    private:
     /**
@@ -922,6 +1082,47 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
+
+   protected:
+    /// Override the metric reporting helpers to report the detailed metrics
+    /// collected during the build and probe stages.
+    void ReportBuildStageMetrics() override;
+    void ReportProbeStageMetrics() override;
+};
+
+/**
+ * @brief Struct for storing the NestedLoopJoin metrics.
+ *
+ */
+struct NestedLoopJoinMetrics : public JoinMetrics {
+    ///// Build
+
+    // Block size used for cross join.
+    stat_t block_size_bytes = 0;
+    // Number of rows in each chunk of the build table.
+    stat_t chunk_size_nrows = 0;
+    // Time spent finalizing
+    time_t build_finalize_time = 0;
+    // Global: Whether we did a build allgather (0: false, 1: true)
+    stat_t is_build_bcast_join = 0;
+    // If so, time spent in bcast
+    time_t build_bcast_time = 0;
+
+    ///// Probe
+
+    // Time spent making dicts global
+    time_t probe_global_dict_unification_time = 0;
+    // Total (approximate) bytes that were broadcasted by this rank to all other
+    // ranks. In the parallel case, this is essentially the total size of all
+    // the input batches. In the non-parallel case, we don't need to broadcast,
+    // so this will be 0.
+    stat_t probe_bcast_size_bytes = 0;
+    // Time spent in bcast
+    time_t probe_bcast_table_time = 0;
+    // Time spent in ProcessProbeChunk
+    time_t probe_compute_matches_time = 0;
+    // Time spent adding unmatched rows from build in last iter
+    time_t probe_add_unmatched_build_rows_time = 0;
 };
 
 class NestedLoopJoinState : public JoinState {
@@ -944,8 +1145,7 @@ class NestedLoopJoinState : public JoinState {
               /*n_keys_*/ 0,  // NestedLoopJoin is only used when n_keys is 0
               build_table_outer_, probe_table_outer_, cond_func_,
               build_parallel_, probe_parallel_, output_batch_size_, sync_iter_,
-              op_id_),
-          join_event("NestedLoopJoin") {
+              op_id_) {
         // TODO: Integrate dict_builders for nested loop join.
         this->sync_iter =
             this->sync_iter == -1 ? DEFAULT_SYNC_ITERS : this->sync_iter;
@@ -972,9 +1172,14 @@ class NestedLoopJoinState : public JoinState {
         this->build_table_buffer = std::make_unique<ChunkedTableBuilder>(
             this->build_table_schema, this->build_table_dict_builders,
             chunk_size, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+
+        // Update metrics
+        this->metrics.block_size_bytes = block_size_bytes;
+        this->metrics.chunk_size_nrows = chunk_size;
     }
 
-    tracing::ResumableEvent join_event;
+    // Metrics for the query profile.
+    NestedLoopJoinMetrics metrics;
 
     /**
      * @brief Finalize build step for nested loop join.
@@ -999,6 +1204,12 @@ class NestedLoopJoinState : public JoinState {
     void ProcessProbeChunk(std::shared_ptr<table_info> probe_table,
                            const std::vector<uint64_t>& build_kept_cols,
                            const std::vector<uint64_t>& probe_kept_cols);
+
+   protected:
+    /// Override the metric reporting helpers to report the detailed metrics
+    /// collected during the build and probe stages.
+    void ReportBuildStageMetrics() override;
+    void ReportProbeStageMetrics() override;
 };
 
 /**
