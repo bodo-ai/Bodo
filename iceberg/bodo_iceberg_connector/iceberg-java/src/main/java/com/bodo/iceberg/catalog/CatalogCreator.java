@@ -37,7 +37,7 @@ public class CatalogCreator {
     // Create Catalog
     final Catalog catalog;
 
-    switch (catalogType) {
+    switch (catalogType.toLowerCase()) {
       case "nessie":
         catalog = NessieBuilder.create(conf, params);
         break;
@@ -57,6 +57,9 @@ public class CatalogCreator {
         break;
       case "snowflake":
         catalog = SnowflakeBuilder.create(conf, params);
+        break;
+      case "rest":
+        catalog = RESTBuilder.create(conf, params);
         break;
       default:
         throw new UnsupportedOperationException("Should never occur. Captured in Python");
