@@ -1,4 +1,4 @@
-# TablePath API
+# TablePath API {#table-path-api}
 
 The `TablePath` API is a general purpose IO interface to specify IO sources. This API is meant
 as an alternative to natively loading tables in Python inside JIT functions.

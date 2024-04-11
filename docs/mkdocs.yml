@@ -157,6 +157,10 @@ nav:
           - Advanced Parallelism Topics: bodo_parallelism/advanced.md
           - Typing Considerations: bodo_parallelism/typing_considerations.md
           - Unsupported Programs: bodo_parallelism/not_supported.md
+      - Iceberg:
+          - Introduction: iceberg/intro.md
+          - Reading and Writing: iceberg/read_write.md
+          - Supported Data Types: iceberg/data_types.md
       - Scalable Data I/O with Bodo: file_io.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Measuring Performance: performance/performance.md
