@@ -734,7 +734,7 @@ class BodoSQLContext:
         if bodo.get_rank() == 0:
             is_dll = generator.isDDLProcessedQuery()
         else:
-            is_dll = None
+            is_dll = False
         is_dll = bcast_scalar(is_dll)
         if is_dll:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly test compilation."
@@ -818,7 +818,7 @@ class BodoSQLContext:
         if bodo.get_rank() == 0:
             is_dll = generator.isDDLProcessedQuery()
         else:
-            is_dll = None
+            is_dll = False
         is_dll = bcast_scalar(is_dll)
         if is_dll:
             warning_msg = "Encountered a DDL query. These queries are executed directly by bc.sql() so this wont't properly represent generated code."
@@ -1092,6 +1092,7 @@ class BodoSQLContext:
                 plan_or_err_msg = error_to_string(e)
             finally:
                 self._remove_named_params()
+
         failed = bcast_scalar(failed)
         plan_or_err_msg = bcast_scalar(plan_or_err_msg)
         if failed:
