@@ -7,6 +7,7 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -47,7 +48,7 @@ class PandasRuntimeJoinFilter private constructor(
      * @return the expected batching property of this node.
      */
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return inputBatchingProperty
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
     }
 
     /**
