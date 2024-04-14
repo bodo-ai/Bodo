@@ -1324,17 +1324,18 @@ class BodoSQLContext:
         comm = MPI.COMM_WORLD
         result = None
         error = None
+        create_generator = comm.bcast(generator is None)
+        if create_generator:
+            # Prepare the relational algebra generator on rank 0.
+            # The assumption is this code is called directly as the
+            # external API so we need to parse the query.
+            generator = self._create_planner_and_parse_query(
+                sql,
+                {},
+                False,  # We need to execute the code so don't hide credentials.
+            )
 
         if bodo.get_rank() == 0:
-            if generator is None:
-                # Prepare the relational algebra generator on rank 0.
-                # The assumption is this code is called directly as the
-                # external API so we need to parse the query.
-                generator = self._create_planner_and_parse_query(
-                    sql,
-                    {},
-                    False,  # We need to execute the code so don't hide credentials.
-                )
             try:
                 result = generator.executeDDL(sql)
                 # Convert the output to a DataFrame.

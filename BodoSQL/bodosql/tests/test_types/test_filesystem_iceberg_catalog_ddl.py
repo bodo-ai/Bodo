@@ -169,6 +169,8 @@ def test_drop_table_not_found(
         return bc.sql(query)
 
     spark = get_spark()
+    # Create an unused table to ensure the database is created
+    create_simple_ddl_table(spark)
     # Create a garbage table name.
     table_name = "FEJWIOPFE13_9029J03C32"
     db_schema, _ = iceberg_database(table_name)
@@ -195,6 +197,8 @@ def test_drop_table_not_found_if_exists(
         return bc.sql(query)
 
     spark = get_spark()
+    # Create an unused table to ensure the database is created
+    create_simple_ddl_table(spark)
     # Create a garbage table name.
     table_name = "FEJWIOPFE13_9029J03C32"
     db_schema, _ = iceberg_database(table_name)
