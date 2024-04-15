@@ -336,6 +336,33 @@ class PandasProject(
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         RelMdCollation.project(mq, input, projects)
                     }
+            return create(cluster, traitSet, input, projects, rowType)
+        }
+
+        fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            projects: List<RexNode>,
+            fieldNames: List<String?>?,
+        ): PandasProject {
+            val rowType =
+                RexUtil.createStructType(
+                    cluster.typeFactory,
+                    projects,
+                    fieldNames,
+                    SqlValidatorUtil.F_SUGGESTER,
+                )
+            return create(cluster, traitSet, input, projects, rowType)
+        }
+
+        fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            projects: List<RexNode>,
+            rowType: RelDataType,
+        ): PandasProject {
             return PandasProject(cluster, traitSet, input, projects, rowType)
         }
     }
