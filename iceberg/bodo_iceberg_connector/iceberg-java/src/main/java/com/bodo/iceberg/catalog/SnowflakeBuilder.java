@@ -21,7 +21,9 @@ class SnowflakeBuilder {
     if (properties.containsKey("role")) {
       properties.put(JdbcCatalog.PROPERTY_PREFIX + "role", properties.get("role"));
     }
-
+    // Provide our own File IO that converts wasb:// to abfs:/
+    String fileIOImpl = "org.apache.iceberg.io.BodoResolvingFileIO";
+    properties.put(CatalogProperties.FILE_IO_IMPL, fileIOImpl);
     catalog.initialize("snowflake_catalog", properties);
     return catalog;
   }

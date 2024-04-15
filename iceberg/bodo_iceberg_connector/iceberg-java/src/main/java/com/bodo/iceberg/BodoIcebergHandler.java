@@ -44,9 +44,10 @@ public class BodoIcebergHandler {
 
   private final TableIdentifier id;
 
-  public BodoIcebergHandler(String connStr, String catalogType, String dbName, String tableName)
+  public BodoIcebergHandler(
+      String connStr, String catalogType, String dbName, String tableName, String coreSitePath)
       throws URISyntaxException {
-    this.catalog = CatalogCreator.create(connStr, catalogType);
+    this.catalog = CatalogCreator.create(connStr, catalogType, coreSitePath);
 
     // Snowflake uses dot separated strings for DB and schema names
     // Iceberg uses Namespaces with multiple levels to represent this

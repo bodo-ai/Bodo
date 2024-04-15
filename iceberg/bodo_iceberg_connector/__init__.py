@@ -12,7 +12,7 @@ from bodo_iceberg_connector.parquet_info import (
     bodo_connector_get_parquet_info,
     bodo_connector_get_total_num_pq_files_in_table,
 )
-from bodo_iceberg_connector.py4j_support import launch_jvm
+from bodo_iceberg_connector.py4j_support import launch_jvm, set_core_site_path
 from bodo_iceberg_connector.schema import (
     get_iceberg_runtime_schema,
     get_iceberg_typing_schema,

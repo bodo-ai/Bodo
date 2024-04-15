@@ -27,7 +27,6 @@ def parse_conn_str(
     # Determine Catalog Type
     catalog_type = _get_first(conn_query, "type")
     warehouse = _get_first(conn_query, "warehouse")
-
     if catalog_type is None:
         if parsed_conn.scheme == "thrift":
             catalog_type = "hive"
@@ -43,6 +42,15 @@ def parse_conn_str(
                     IcebergWarning,
                 )
             warehouse = f"s3://{parsed_conn.netloc}{parsed_conn.path}"
+
+        elif parsed_conn.scheme in ("abfs", "abfss"):
+            catalog_type = "hadoop-abfs"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a Hadoop ABFS catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"{parsed_conn.scheme}://{parsed_conn.netloc}{parsed_conn.path}"
 
         elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
             catalog_type = "hadoop"
@@ -75,6 +83,7 @@ def parse_conn_str(
 
     assert catalog_type in [
         "hadoop-s3",
+        "hadoop-abfs",
         "hadoop",
         "hive",
         "nessie",
@@ -107,7 +116,6 @@ def gen_table_loc(
 
     TODO: Replace once we add PyIceberg
     """
-
     inner_name = (
         db_name + ".db" if catalog_type == "glue" or catalog_type == "hive" else db_name
     )
@@ -117,9 +125,13 @@ def gen_table_loc(
 
 def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) -> str:
     """Construct Valid Paths for Files Written to Iceberg"""
-
     # S3 warehouse requires absolute file paths
-    if table_loc.startswith("s3a://") or table_loc.startswith("s3://"):
+    if (
+        table_loc.startswith("s3a://")
+        or table_loc.startswith("s3://")
+        or table_loc.startswith("abfs://")
+        or table_loc.startswith("abfss://")
+    ):
         return os.path.join(table_loc, file_name)
     else:
         # TODO: Not sure if this is the best approach

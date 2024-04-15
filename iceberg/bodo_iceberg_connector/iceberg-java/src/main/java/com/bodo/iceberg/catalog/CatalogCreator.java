@@ -4,6 +4,7 @@ import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.net.URIBuilder;
 import org.apache.iceberg.CachingCatalog;
@@ -12,7 +13,8 @@ import org.apache.iceberg.catalog.Catalog;
 
 /** Iceberg Catalog Connector and Communicator */
 public class CatalogCreator {
-  public static Catalog create(String connStr, String catalogType) throws URISyntaxException {
+  public static Catalog create(String connStr, String catalogType, String coreSitePath)
+      throws URISyntaxException {
     // Extract Parameters from URI
     // TODO: Just get from Python
     URIBuilder uriBuilder = new URIBuilder(connStr);
@@ -25,7 +27,12 @@ public class CatalogCreator {
     // Additional parameters like Iceberg-specific ones should be ignored
     // Since the conf is reused by multiple objects, like Hive and Hadoop ones
     // TODO: Spark does something similar, but I believe they do some filtering. What is it?
-    Configuration conf = new Configuration();
+    boolean loadDefaults = coreSitePath == "";
+    Configuration conf = new Configuration(loadDefaults);
+    // Core site path is specified
+    if (!loadDefaults) {
+      conf.addResource(new Path(coreSitePath));
+    }
     for (Map.Entry<String, String> entry : params.entrySet()) {
       conf.set(entry.getKey(), entry.getValue());
     }
@@ -53,6 +60,7 @@ public class CatalogCreator {
                 uriBuilder.removeQuery().setScheme("").build().toString(), conf, params);
         break;
       case "hadoop-s3":
+      case "hadoop-abfs":
         catalog = HadoopBuilder.create(uriBuilder.removeQuery().build().toString(), conf, params);
         break;
       case "snowflake":
