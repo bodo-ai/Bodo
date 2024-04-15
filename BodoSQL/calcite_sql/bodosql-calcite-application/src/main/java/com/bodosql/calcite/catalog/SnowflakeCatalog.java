@@ -36,6 +36,8 @@ import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -1308,6 +1310,19 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     } catch (Exception e) {
       VERBOSE_LEVEL_TWO_LOGGER.warning(
           "Getting Snowflake Iceberg volume base URL failed: " + e.getMessage());
+    }
+    if (storage_base_url.startsWith("azure://")) {
+      try {
+        URI uri = new URI(storage_base_url);
+        // The path should be: /CONTAINER_NAME/EVERTHING_ELSE
+        String[] paths = uri.getPath().split("/", 3);
+        String host = uri.getHost().replace(".blob.core.windows.net", ".dfs.core.windows.net");
+        storage_base_url = String.format(Locale.ROOT, "abfss://%s@%s/%s", paths[1], host, paths[2]);
+      } catch (URISyntaxException e) {
+        VERBOSE_LEVEL_TWO_LOGGER.warning(
+            "Getting Snowflake Iceberg volume base URL failed: " + e.getMessage());
+        return null;
+      }
     }
     return storage_base_url;
   }

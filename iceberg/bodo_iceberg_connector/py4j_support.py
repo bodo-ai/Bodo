@@ -25,6 +25,18 @@ CLASSES: pt.Dict[str, "JavaClass"] = {}
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
 
+# Core site location.
+_CORE_SITE_PATH = ""
+
+
+def set_core_site_path(path: str):
+    global _CORE_SITE_PATH
+    _CORE_SITE_PATH = path
+
+
+def get_core_site_path() -> str:
+    return _CORE_SITE_PATH
+
 
 def get_java_path() -> str:
     """
@@ -208,5 +220,10 @@ def get_java_table_handler(conn_str: str, catalog_type: str, db_name: str, table
     reader_class = get_bodo_iceberg_handler_class()
     key = (conn_str, db_name, table)
     if key not in table_dict:
-        table_dict[key] = reader_class(conn_str, catalog_type, db_name, table)
+        created_core_site = get_core_site_path()
+        # Use the defaults if the user didn't override the core site.
+        core_site = created_core_site if os.path.exists(created_core_site) else ""
+        table_dict[key] = reader_class(
+            conn_str, catalog_type, db_name, table, core_site
+        )
     return table_dict[key]

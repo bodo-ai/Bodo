@@ -69,6 +69,7 @@
       <artifactId>iceberg-aws</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
+
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-bundled-guava -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
@@ -167,6 +168,14 @@
         </exclusion>
       </exclusions>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-azure</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+
     <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-core -->
     <dependency>
       <groupId>com.amazonaws</groupId>

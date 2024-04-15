@@ -63,8 +63,8 @@ ll.add_symbol("csv_write", csv_cpp.csv_write)
 bodo_error_msg = """
     Some possible causes:
         (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.
-        (2) Missing credentials: You haven't provided S3 credentials, neither through 
-            environment variables, nor through a local AWS setup 
+        (2) Missing credentials: You haven't provided S3 credentials, neither through
+            environment variables, nor through a local AWS setup
             that makes the credentials available at ~/.aws/credentials.
         (3) Incorrect credentials: Your S3 credentials are incorrect or do not have
             the correct permissions.
@@ -202,15 +202,14 @@ def get_hdfs_fs(path):  # pragma: no cover
     if options.scheme in ("abfs", "abfss"):
         # need to pass the full URI as host to libhdfs
         host = path
-        if options.port is None:
-            port = 0
-        else:
-            port = options.port
         user = None
     else:
         host = options.hostname
-        port = options.port
         user = options.username
+    if options.port is None:
+        port = 0
+    else:
+        port = options.port
     # creates a new Hadoop file system from uri
     try:
         fs = HdFS(host=host, port=port, user=user)

@@ -2546,7 +2546,11 @@ def gen_unique_table_id(base_table_name):
 
 
 def drop_snowflake_table(
-    table_name: str, db: str, schema: str, iceberg_volume: Optional[str] = None
+    table_name: str,
+    db: str,
+    schema: str,
+    iceberg_volume: Optional[str] = None,
+    user: int = 1,
 ) -> None:
     """Drops a table from snowflake with the given table_name.
     The db and schema are also provided to connect to Snowflake.
@@ -2561,7 +2565,7 @@ def drop_snowflake_table(
     if bodo.get_rank() == 0:
         try:
             iceberg_prefix = "iceberg" if iceberg_volume else ""
-            conn_str = get_snowflake_connection_string(db, schema)
+            conn_str = get_snowflake_connection_string(db, schema, user=user)
             pd.read_sql(f"drop {iceberg_prefix} table IF EXISTS {table_name}", conn_str)
         except Exception as e:
             drop_err = e

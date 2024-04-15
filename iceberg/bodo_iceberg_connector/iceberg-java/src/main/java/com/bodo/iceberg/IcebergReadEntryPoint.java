@@ -1,6 +1,5 @@
 package com.bodo.iceberg;
 
-import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
@@ -11,7 +10,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
 
 public class IcebergReadEntryPoint {
-  public static void main(String[] args) throws URISyntaxException {
+  public static void main(String[] args) {
     //    GatewayServer gatewayServer = new GatewayServer(new IcebergReadEntryPoint());
     //    gatewayServer.start();
     System.out.println("Here?");
