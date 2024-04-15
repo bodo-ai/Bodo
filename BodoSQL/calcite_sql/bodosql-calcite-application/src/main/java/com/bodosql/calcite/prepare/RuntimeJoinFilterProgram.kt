@@ -12,6 +12,7 @@ import com.bodosql.calcite.adapter.pandas.PandasRuntimeJoinFilter
 import com.bodosql.calcite.adapter.pandas.PandasSort
 import com.bodosql.calcite.adapter.pandas.PandasUnion
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
+import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
@@ -24,6 +25,7 @@ import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.tools.Program
+import org.apache.calcite.util.ImmutableBitSet
 import java.util.function.Predicate
 
 object RuntimeJoinFilterProgram : Program {
@@ -162,28 +164,39 @@ object RuntimeJoinFilterProgram : Program {
         }
 
         private fun visit(project: Project): RelNode {
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
+            // If the project contains an OVER clause we can only push filters
+            // that are shared by all partition by columns.
+            val numCols = project.getRowType().fieldCount
+            var pushableColumns =
                 if (project.containsOver()) {
-                    // If the project contains an OVER clause we can't push
-                    // any filters into the project.
-                    listOf<LiveJoinInfo>() to liveJoins
+                    WindowFilterTranspose.getFilterableColumnIndices(project.projects, numCols)
                 } else {
-                    splitFilterSections(
-                        canPushPredicate = { project.projects[it] is RexInputRef },
-                        columnTransformFunction = { (project.projects[it] as RexInputRef).index },
-                    )
+                    ImmutableBitSet.range(numCols)
                 }
+
+            val (pushLiveJoinInfo, outputLiveJoinInfo) =
+                splitFilterSections(
+                    canPushPredicate = { pushableColumns.get(it) && (project.projects[it] is RexInputRef) },
+                    columnTransformFunction = { (project.projects[it] as RexInputRef).index },
+                )
             return processSingleRel(project, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(filter: PandasFilter): RelNode {
-            // If the filter contains an OVER, we can't push anything, otherwise we can push everything.
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
+            // If the filter contains an OVER clause we can only push filters
+            // that are shared by all partition by columns.
+            val numCols = filter.getRowType().fieldCount
+            var pushableColumns =
                 if (filter.containsOver()) {
-                    listOf<LiveJoinInfo>() to liveJoins
+                    WindowFilterTranspose.getFilterableColumnIndices(listOf(filter.condition), numCols)
                 } else {
-                    liveJoins to listOf()
+                    ImmutableBitSet.range(numCols)
                 }
+            val (pushLiveJoinInfo, outputLiveJoinInfo) =
+                splitFilterSections(
+                    canPushPredicate = { pushableColumns.get(it) },
+                    columnTransformFunction = { it },
+                )
             return processSingleRel(filter, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
