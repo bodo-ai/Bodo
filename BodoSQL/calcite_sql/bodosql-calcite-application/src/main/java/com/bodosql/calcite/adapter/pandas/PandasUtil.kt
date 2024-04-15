@@ -4,12 +4,26 @@ import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelRoot
 import org.apache.calcite.rel.core.TableCreate
+import org.apache.calcite.rel.core.TableModify
 import org.apache.calcite.rel.logical.LogicalProject
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlKind
-import java.lang.AssertionError
+
+/**
+ * Determine if the fields of a DML operation's input
+ * match the expected fields.
+ */
+private fun insertFieldMatch(rel: TableModify): Boolean {
+    val input = rel.getInput(0)
+    val inputRowType = input.getRowType()
+    val targetRowType = rel.table!!.getRowType()
+    return targetRowType.fieldNames == inputRowType.fieldNames
+}
 
 /**
  * Create a Pandas Project Node at the top of the tree for the given input.
+ * @param input The input node to project
+ * @return A PandasProject node that projects the input node
  */
 private fun RelRoot.createPandasProjectNode(input: RelNode): RelNode {
     if (!input.traitSet.contains(PandasRel.CONVENTION)) {
@@ -20,7 +34,35 @@ private fun RelRoot.createPandasProjectNode(input: RelNode): RelNode {
         fields.map { (i, _) ->
             rexBuilder.makeInputRef(input, i)
         }
-    return PandasProject(input.cluster, input.traitSet, input, projects, validatedRowType)
+    // Note: We must pass the trait set to ensure we forward streaming information.
+    return PandasProject.create(input.cluster, input.traitSet, input, projects, validatedRowType)
+}
+
+/**
+ * Create the projection for an insert which may not match the fields because
+ * it uses the actual table type information. Note: We assume insert into already
+ * enforces column ordering in SqlToRelConverter.convertColumnList.
+ * @param input The input that needs its columns renamed.
+ * @param targetType The target type that the input should match.
+ * @return A new projection with the correct names.
+ */
+private fun createInsertPandasProjectNode(
+    input: RelNode,
+    targetType: RelDataType,
+): RelNode {
+    if (!input.traitSet.contains(PandasRel.CONVENTION)) {
+        throw AssertionError("input rel must have pandas convention")
+    }
+    val rexBuilder = input.cluster.rexBuilder
+    // Note: We just use the names because is not required that type nullability match
+    // for insert.
+    val projects =
+        List(targetType.fieldNames.size) { i ->
+            val inputRef = rexBuilder.makeInputRef(input, i)
+            inputRef
+        }
+    // Note: We must pass the trait set to ensure we forward streaming information.
+    return PandasProject.create(input.cluster, input.traitSet, input, projects, targetType.fieldNames)
 }
 
 /**
@@ -37,10 +79,18 @@ private fun RelRoot.createPandasProjectNode(input: RelNode): RelNode {
  * @return [RelNode] that corresponds to the final node of this [RelRoot]
  */
 fun RelRoot.pandasProject(): RelNode =
-    if (isRefTrivial && (kind.belongsTo(SqlKind.DML) || isNameTrivial)) {
-        // No transformation is needed.
+    if (kind.belongsTo(SqlKind.DML)) {
         // DML operations are special in that the validated node type
         // is for the inner SELECT and is not related to the output.
+        if (this.kind != SqlKind.INSERT || insertFieldMatch(this.rel as TableModify)) {
+            this.rel
+        } else {
+            val tableModify = this.rel as TableModify
+            val newInput = createInsertPandasProjectNode(tableModify.getInput(0), tableModify.table!!.getRowType())
+            this.rel.copy(this.rel.traitSet, listOf(newInput))
+        }
+    } else if (isRefTrivial && isNameTrivial) {
+        // No transformation is needed.
         this.rel
     } else if (kind == SqlKind.CREATE_TABLE) {
         // Create table is special because the validated type is for the actual
@@ -59,7 +109,33 @@ fun RelRoot.pandasProject(): RelNode =
     }
 
 /**
+ * Create the projection for an insert which may not match the fields because
+ * it uses the actual table type information. Note: We assume insert into already
+ * enforces column ordering in SqlToRelConverter.convertColumnList.
+ * @param input The input that needs its columns renamed.
+ * @param targetType The target type that the input should match.
+ * @return A new projection with the correct names.
+ */
+private fun createInsertLogicalProjectNode(
+    input: RelNode,
+    targetType: RelDataType,
+): RelNode {
+    val rexBuilder = input.cluster.rexBuilder
+    // Note: We just use the names because is not required that type nullability match
+    // for insert.
+    val projects =
+        List(targetType.fieldNames.size) { i ->
+            val inputRef = rexBuilder.makeInputRef(input, i)
+            inputRef
+        }
+    // Note: We must pass the trait set to ensure we forward streaming information.
+    return BodoLogicalProject.create(input, listOf(), projects, targetType.fieldNames)
+}
+
+/**
  * Create a BodoLogicalProject Node at the top of the tree for the given input.
+ * @param input The input node to project
+ * @return A BodoLogicalProject node that projects the input node.
  */
 private fun RelRoot.createLogicalProjectNode(input: RelNode): RelNode {
     val rexBuilder = input.cluster.rexBuilder
@@ -70,6 +146,11 @@ private fun RelRoot.createLogicalProjectNode(input: RelNode): RelNode {
     return BodoLogicalProject.create(input, listOf(), projects, validatedRowType)
 }
 
+/**
+ * Create a LogicalProject Node at the top of the tree for the given input.
+ * @param input The input node to project
+ * @return A BodoLogicalProject node that projects the input node.
+ */
 private fun RelRoot.createCalciteLogicalProjectNode(input: RelNode): RelNode {
     val rexBuilder = input.cluster.rexBuilder
     val projects =
@@ -105,10 +186,18 @@ private fun RelRoot.createCalciteLogicalProjectNode(input: RelNode): RelNode {
  * @return [RelNode] that corresponds to the final node of this [RelRoot]
  */
 fun RelRoot.logicalProject(): RelNode =
-    if (isRefTrivial && (kind.belongsTo(SqlKind.DML) || isNameTrivial)) {
-        // No transformation is needed.
+    if (kind.belongsTo(SqlKind.DML)) {
         // DML operations are special in that the validated node type
         // is for the inner SELECT and is not related to the output.
+        if (this.kind != SqlKind.INSERT || insertFieldMatch(this.rel as TableModify)) {
+            this.rel
+        } else {
+            val tableModify = this.rel as TableModify
+            val newInput = createInsertLogicalProjectNode(tableModify.getInput(0), tableModify.table!!.getRowType())
+            this.rel.copy(this.rel.traitSet, listOf(newInput))
+        }
+    } else if (isRefTrivial && isNameTrivial) {
+        // No transformation is needed.
         this.rel
     } else if (kind == SqlKind.CREATE_TABLE) {
         // Create table is special because the validated type is for the actual
@@ -132,11 +221,16 @@ fun RelRoot.logicalProject(): RelNode =
  * if the generated type doesn't match the validated type.
  */
 fun RelRoot.calciteLogicalProject(): RelNode =
-    if (isRefTrivial && kind.belongsTo(SqlKind.DML)) {
-        // No transformation is needed.
-        // DML operations are special in that the validated node type
-        // is for the inner SELECT and is not related to the output.
-        this.rel
+    if (kind.belongsTo(SqlKind.DML)) {
+        if (this.kind != SqlKind.INSERT || insertFieldMatch(this.rel as TableModify)) {
+            this.rel
+        } else {
+            // Note we don't need types to match exactly for nullability. Also, this code shouldn't
+            // be reached most likely.
+            val tableModify = this.rel as TableModify
+            val newInput = createInsertLogicalProjectNode(tableModify.getInput(0), tableModify.table!!.getRowType())
+            this.rel.copy(this.rel.traitSet, listOf(newInput))
+        }
     } else if (isRefTrivial && isNameTrivial && this.rel.getRowType() == validatedRowType) {
         // No transformation is needed because types match exactly.
         this.rel
