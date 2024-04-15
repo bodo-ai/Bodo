@@ -49,7 +49,13 @@ def bodo_connector_get_parquet_file_list(
     sanitized_paths = []
     for path in file_paths:
         if _has_uri_scheme(path):
-            res = path.replace("s3a://", "s3://").removeprefix("file:")
+            res = (
+                path.replace("s3a://", "s3://")
+                .replace("wasbs://", "abfss://")
+                .replace("wasb://", "abfs://")
+                .replace("blob.core.windows.net", "dfs.core.windows.net")
+                .removeprefix("file:")
+            )
         elif warehouse_loc is not None:
             res = os.path.join(warehouse_loc, path)
         else:

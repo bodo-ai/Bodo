@@ -85,9 +85,8 @@ void bodo_common_init() {
 }
 
 void Bodo_PyErr_SetString(PyObject* type, const char* message) {
-    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
-              << "\n";
     PyErr_SetString(type, message);
+    throw std::runtime_error(message);
 }
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {

@@ -38,7 +38,7 @@ open class IcebergWriteTarget(
             operatorID,
             Expr.StringLiteral(icebergConnectionString),
             Expr.StringLiteral(tableName),
-            Expr.StringLiteral(schema.joinToString(separator = ".")),
+            Expr.StringLiteral(schema.joinToString(separator = "/")),
             columnNamesGlobal,
             Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
         )

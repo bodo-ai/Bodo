@@ -96,11 +96,14 @@ def format_iceberg_conn(conn_str: str) -> str:
         "iceberg+http",
         "iceberg+https",
         "iceberg+snowflake",
+        "iceberg+abfs",
+        "iceberg+abfss",
         "iceberg+rest",
     ):
         raise BodoError(
             "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
-            "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', 'iceberg+rest://'"
+            "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue', 'iceberg+snowflake://', "
+            "'iceberg+abfs://', 'iceberg+abfss://', 'iceberg+rest://'"
         )
 
     # Remove Iceberg Prefix when using Internally
@@ -2611,10 +2614,9 @@ def get_table_details_before_write(
 ):
     """
     Wrapper around bodo_iceberg_connector.get_typing_info to perform
-    dataframe typechecking, collect typing-related information for
+    DataFrame typechecking, collect typing-related information for
     Iceberg writes, fill in nulls, and project across all ranks.
     """
-
     ev = tracing.Event("iceberg_get_table_details_before_write")
 
     import bodo_iceberg_connector as connector

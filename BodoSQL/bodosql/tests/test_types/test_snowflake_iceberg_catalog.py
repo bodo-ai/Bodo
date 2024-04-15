@@ -1,6 +1,8 @@
 import os
+import platform
 from io import StringIO
 
+import numpy as np
 import pandas as pd
 import pytest
 from mpi4py import MPI
@@ -14,12 +16,14 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _get_dist_arg,
     check_func,
     create_snowflake_iceberg_table,
     drop_snowflake_table,
     gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_snowflake,
+    run_rank0,
     temp_env_override,
 )
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
@@ -33,8 +37,8 @@ def test_basic_read(memory_leak_check):
     Test reading an entire Iceberg table from Snowflake in SQL
     """
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -72,8 +76,8 @@ def test_column_pruning(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -113,8 +117,8 @@ def test_filter_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -161,8 +165,8 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -205,8 +209,8 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
 
     # Create a catalog with iceberg_volume specified
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "E2E_TESTS_DB",
@@ -237,7 +241,14 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
     exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, success_query), only_1D=True, py_output=5)
+        check_func(
+            impl,
+            (bc, success_query),
+            only_1D=True,
+            py_output=5,
+            use_dict_encoded_strings=True,
+            use_table_format=True,
+        )
 
         output_df = None
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
@@ -292,8 +303,8 @@ def test_limit_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -335,8 +346,8 @@ def test_limit_filter_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -381,8 +392,8 @@ def test_multi_limit_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -425,8 +436,8 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -475,8 +486,8 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
     """
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -520,8 +531,8 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
     schema = "PUBLIC"
     iceberg_volume = "exvol"
     catalog = bodosql.SnowflakeCatalog(
-        os.environ.get("SF_USERNAME", ""),
-        os.environ.get("SF_PASSWORD", ""),
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         database,
@@ -558,3 +569,153 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
                 stream,
                 "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
             )
+
+
+@pytest.fixture(scope="session")
+def create_core_site():
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+    storage_account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
+    access_key = os.environ["AZURE_ICEBERG_ACCESS_KEY"]
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = f"""
+    <configuration>
+        <property>
+            <name>fs.abfs.impl</name>
+            <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+        </property>
+        <property>
+            <name>fs.abfss.impl</name>
+            <value>org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem</value>
+        </property>
+        <property>
+            <name>fs.azure.account.auth.type.{storage_account_name}.dfs.core.windows.net</name>
+            <value>SharedKey</value>
+        </property>
+        <property>
+            <name>fs.azure.account.key.{storage_account_name}.dfs.core.windows.net</name>
+            <value>{access_key}</value>
+            <description> The ADLS storage account access key itself.</description>
+        </property>
+        <property>
+            <name>hadoop.tmp.dir</name>
+            <value>/tmp</value>
+        </property>
+        </configuration>
+    """
+
+    # Write it to the temporary core-site file
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, "w") as f:
+            f.write(CORE_SITE_SPEC)
+
+
+@pytest.mark.skipif(
+    platform.system() != "Linux", reason="HDFS is only supported on Linux"
+)
+def test_azure_basic_read(create_core_site, memory_leak_check):
+    """
+    Test reading an Iceberg table from Snowflake in SQL with
+    Azure. ICEBERG_TPCH_REGION is created by converting the Snowflake
+    TPCH_SF1.REGION table to Iceberg manually.
+    """
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_AZURE_USER"],
+        os.environ["SF_AZURE_PASSWORD"],
+        "kl02615.east-us-2.azure",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    py_out = pd.DataFrame(
+        {
+            "R_REGIONKEY": np.arange(5, dtype=np.int64),
+            "R_NAME": ["AFRICA", "AMERICA", "ASIA", "EUROPE", "MIDDLE EAST"],
+        }
+    )
+
+    query = "SELECT R_REGIONKEY, R_NAME FROM ICEBERG_TPCH_REGION"
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.skipif(
+    platform.system() != "Linux", reason="HDFS is only supported on Linux"
+)
+def test_azure_basic_write(create_core_site, memory_leak_check):
+    """
+    Test writing an Iceberg table from Snowflake in SQL with
+    Azure.
+    """
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_AZURE_USER"],
+        os.environ["SF_AZURE_PASSWORD"],
+        "kl02615.east-us-2.azure",
+        "DEMO_WH",
+        db,
+        connection_params={"schema": schema, "role": "ACCOUNTADMIN"},
+        iceberg_volume="exvol",
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    in_df = pd.DataFrame({"A": ["abc", "df"] * 100})
+    bc = bc.add_or_replace_view("TABLE1", in_df)
+    bc = _get_dist_arg(bc, True, True, True)
+
+    @bodo.jit(distributed=["bc"])
+    def impl(bc, query):
+        bc.sql(query)
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id("bodosql_catalog_azure_write_iceberg_table")
+    table_name = comm.bcast(table_name)
+
+    success_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select A from __bodolocal__.table1"
+    try:
+        impl(bc, success_query)
+
+        @run_rank0
+        def get_output():
+            conn_str = get_snowflake_connection_string(db, schema, user=3)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            output_df.columns = output_df.columns.str.upper()
+            return output_df
+
+        @run_rank0
+        def check_table_type():
+            conn_str = get_snowflake_connection_string(db, schema, user=3)
+            return pd.read_sql(
+                f"SHOW ICEBERG TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
+                conn_str,  # type: ignore
+            )["iceberg_table_type"][0]
+
+        output_df = get_output()
+        assert_tables_equal(output_df, in_df)
+
+        # Make sure the table is a managed Iceberg table
+        output_table_type = check_table_type()
+        assert (
+            output_table_type == "MANAGED"
+        ), f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
+    finally:
+        drop_snowflake_table(table_name, db, schema, user=3)

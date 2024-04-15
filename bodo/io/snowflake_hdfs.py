@@ -47,3 +47,12 @@ try:
     import bodo_azurefs_sas_token_provider  # noqa: F401  isort:skip
 except:
     pass
+
+# Try set the core site path for the iceberg connector.
+# Note: This assumes importing the connector doesn't start the JVM
+try:
+    import bodo_iceberg_connector
+
+    bodo_iceberg_connector.set_core_site_path(HDFS_CORE_SITE_LOC)
+except:
+    pass
