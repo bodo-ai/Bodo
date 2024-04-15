@@ -1008,7 +1008,7 @@ class BodoSQLContext:
         generator = self._create_planner_and_parse_query(
             sql,
             params_dict,
-            True,  # We need to execute the code so don't hide credentials.
+            False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
             is_dll = generator.isDDLProcessedQuery()
