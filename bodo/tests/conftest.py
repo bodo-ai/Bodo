@@ -869,3 +869,17 @@ pytest_mark_javascript = pytest.mark.skipif(
     not bodo.libs.bodosql_javascript_udf_array_kernels.javascript_udf_enabled,
     reason="JavaScript UDFs are not enabled",
 )
+
+
+@pytest.fixture
+def tabular_connection():
+    """
+    Fixture to create a connection to the tabular warehouse.
+    Returns the catalog url, warehouse name, and credential.
+    """
+    assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
+    return (
+        "https://api.tabular.io/ws",
+        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
+        os.getenv("TABULAR_CREDENTIAL"),
+    )

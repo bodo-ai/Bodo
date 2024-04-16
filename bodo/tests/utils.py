@@ -10,7 +10,6 @@ import re
 import string
 import subprocess
 import time
-import traceback
 import types as pytypes
 import typing as pt
 import warnings
@@ -40,6 +39,7 @@ from bodo.utils.utils import (
     is_distributable_tuple_typ,
     is_distributable_typ,
     is_expr,
+    run_rank0,  # noqa
 )
 
 # TODO: Include testing DBs for other systems: MSSQL, SQLite, ...
@@ -2833,6 +2833,28 @@ pytest_one_rank = [
     ),
 ]
 
+
+# Decorate
+pytest_mark_tabular = compose_decos(
+    (
+        pytest.mark.tabular,
+        pytest.mark.iceberg,
+        pytest.mark.skipif(
+            "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
+        ),
+    )
+)
+
+
+# This is for using a "mark" or marking a whole file.
+pytest_tabular = [
+    pytest.mark.tabular,
+    pytest.mark.iceberg,
+    pytest.mark.skipif(
+        "TABULAR_CREDENTIAL" not in os.environ, reason="requires tabular credentials"
+    ),
+]
+
 # Flag to ignore the mass slowing of tests unless specific files are changed
 ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
 
@@ -3033,47 +3055,6 @@ def _nullable_float_arr_maker(L, to_null, to_nan):
         else:
             A[i] = L[i]
     return pd.Series(A)
-
-
-def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
-    """
-    Utility function decorator to run a function on just rank 0
-    but re-raise any Exceptions safely on all ranks.
-    NOTE: 'func' must be a simple python function that doesn't require
-    any synchronization.
-    e.g. Using a bodo.jit function might be unsafe in this situation.
-    Similarly, a function that uses any MPI collective
-    operation would be unsafe and could result in a hang.
-
-    Args:
-        func: Function to run.
-        bcast_result (bool, optional): Whether the function should be
-            broadcasted to all ranks. Defaults to True.
-        result_default (optional): Default for result. This is only
-            useful in the bcase_result=False case. Defaults to None.
-    """
-
-    def inner(*args, **kwargs):
-        comm = MPI.COMM_WORLD
-        result = result_default
-        err = None
-        # Run on rank 0 and catch any exceptions.
-        if comm.Get_rank() == 0:
-            try:
-                result = func(*args, **kwargs)
-            except Exception as e:
-                print("".join(traceback.format_exception(None, e, e.__traceback__)))
-                err = e
-        # Synchronize and re-raise any exception on all ranks.
-        err = comm.bcast(err)
-        if isinstance(err, Exception):
-            raise err
-        # Broadcast the result to all ranks.
-        if bcast_result:
-            result = comm.bcast(result)
-        return result
-
-    return inner
 
 
 def cast_dt64_to_ns(df):
