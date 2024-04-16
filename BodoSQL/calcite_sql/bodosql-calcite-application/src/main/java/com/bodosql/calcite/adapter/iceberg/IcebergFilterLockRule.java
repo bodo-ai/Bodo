@@ -20,11 +20,7 @@ public class IcebergFilterLockRule extends AbstractIcebergFilterRule {
             .withOperandSupplier(
                 b0 ->
                     b0.operand(BodoLogicalFilter.class)
-                        .oneInput(
-                            b1 ->
-                                b1.operand(IcebergRel.class)
-                                    .predicate(x -> !x.containsIcebergSort())
-                                    .anyInputs()))
+                        .oneInput(b1 -> b1.operand(IcebergRel.class).anyInputs()))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(IcebergFilterLockRule.Config.class);
 

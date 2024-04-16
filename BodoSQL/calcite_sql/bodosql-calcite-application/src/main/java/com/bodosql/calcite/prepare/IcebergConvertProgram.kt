@@ -172,10 +172,9 @@ object IcebergConvertProgram : Program {
                 }
 
                 else -> {
-                    val canPush = !(newInput as IcebergRel).containsIcebergSort()
                     // Try and push this node.
                     val (icebergCondition, pandasCondition) = splitFilterConditions(node, rexBuilder, simplify)
-                    if (!canPush || icebergCondition == null) {
+                    if (icebergCondition == null) {
                         // Nothing can be pushed to Iceberg
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
                         PandasFilter.create(node.cluster, converter, node.condition)
@@ -219,21 +218,15 @@ object IcebergConvertProgram : Program {
                 }
 
                 else -> {
-                    val canPush = !(newInput as IcebergRel).containsIcebergSort()
-                    if (canPush) {
-                        IcebergSort.create(
-                            node.cluster,
-                            node.traitSet,
-                            newInput,
-                            node.collation,
-                            node.offset,
-                            node.fetch,
-                            node.getCatalogTable(),
-                        )
-                    } else {
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        PandasSort.create(converter, node.collation, node.offset, node.fetch)
-                    }
+                    IcebergSort.create(
+                        node.cluster,
+                        node.traitSet,
+                        newInput,
+                        node.collation,
+                        node.offset,
+                        node.fetch,
+                        node.getCatalogTable(),
+                    )
                 }
             }
         }

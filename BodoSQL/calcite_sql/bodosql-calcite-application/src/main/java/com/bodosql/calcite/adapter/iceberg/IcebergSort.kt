@@ -34,8 +34,6 @@ class IcebergSort private constructor(
 
         override fun getCatalogTable(): CatalogTable = catalogTable
 
-        override fun containsIcebergSort(): Boolean = true
-
         override fun computeSelfCost(
             planner: RelOptPlanner,
             mq: RelMetadataQuery,
