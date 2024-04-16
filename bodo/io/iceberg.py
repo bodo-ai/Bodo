@@ -16,7 +16,7 @@ import typing as pt
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import numba
 import numpy as np
@@ -25,6 +25,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+import requests
 from mpi4py import MPI
 from numba.core import types
 from numba.extending import intrinsic
@@ -56,6 +57,7 @@ from bodo.libs.array import (
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.utils import AWSCredentials, run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyarrow._dataset import Scanner
@@ -77,6 +79,7 @@ ICEBERG_FIELD_ID_MD_KEY = "PARQUET:field_id"
 # metadata in fields.
 b_ICEBERG_FIELD_ID_MD_KEY = str.encode(ICEBERG_FIELD_ID_MD_KEY)
 # ===================================================================
+
 
 # ----------------------------- Helper Funcs ---------------------------- #
 
@@ -1636,6 +1639,108 @@ def warn_if_non_ideal_io_parallelism(
         )
 
 
+@run_rank0
+def get_temp_aws_credentials_for_rest_catalog_wh(
+    conn: str, database_schema: str, table_name: str
+) -> AWSCredentials | None:
+    """
+    Get aws credentials from a rest catalog useing credentials from the connection string.
+    Only runs on rank 0, so the credentials are only fetched once. After they are fetched
+    they are broadcasted to all ranks.
+    https://github.com/apache/iceberg/blob/e6a1a45624b8bd8246c6ef5601cae046015f4532/open-api/rest-catalog-open-api.yaml#L625
+    Args:
+        conn (str): Iceberg connection string.
+        database_schema (str): Schema of the database.
+        table_name (str): Name of the table.
+    Returns:
+        dict[str, str]: aws credentials.
+    """
+    parsed_conn = urlparse(conn)
+    if parsed_conn.scheme.lower() != "rest":
+        return None
+    parsed_conn = parsed_conn._replace(scheme="https")
+    parsed_params = parse_qs(parsed_conn.query)
+    # Clear the params
+    parsed_conn = parsed_conn._replace(query="")
+    uri = parsed_conn.geturl()
+
+    user_token, credential, warehouse = (
+        parsed_params.get("token"),
+        parsed_params.get("credential"),
+        parsed_params.get("warehouse"),
+    )
+    if user_token is not None:
+        user_token = user_token[0]
+    if warehouse is not None:
+        warehouse = warehouse[0]
+    # If we have a credential, we need to use it to get a user_token
+    if credential is not None:
+        credential = credential[0]
+        client_id, client_secret = credential.split(":")
+        user_token_request = requests.post(
+            f"{uri}/v1/oauth/tokens",
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "client_credentials",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if user_token_request.status_code != 200:
+            raise BodoError(
+                f"Unable to authenticate with {uri}. Please check your connection string."
+            )
+        user_token = user_token_request.json().get("access_token")
+
+    if user_token is None:
+        raise BodoError(
+            f"Unable to authenticate with {uri}. Please check your connection string."
+        )
+    # Get the catalog config
+    warehouse_config_resp = requests.get(
+        f"{uri}/v1/config?warehouse={warehouse}",
+        headers={"Authorization": "Bearer " + user_token},
+    )
+    if warehouse_config_resp.status_code != 200:
+        raise BodoError(
+            f"Unable to get config for {warehouse} from {uri}. Please check your connection string."
+        )
+    warehouse_config = warehouse_config_resp.json()
+    warehouse_overrides = warehouse_config.get("overrides", {})
+    warehouse_prefix = warehouse_overrides.get("prefix", None)
+    warehouse_token = warehouse_overrides.get("token", None)
+    if warehouse_prefix is None or warehouse_token is None:
+        raise BodoError(
+            f"Unable to get config for {warehouse} from {uri}. Please check your connection string."
+        )
+
+    # Use the rest catalog to get the aws credentials.
+    table_response = requests.get(
+        f"{uri}/v1/{warehouse_prefix}/namespaces/{database_schema}/tables/{table_name}",
+        headers={
+            "Authorization": f"Bearer {warehouse_token}",
+            # This header is required to get the credentials, by default it only returns a table access token
+            # which is used to get requests signed by a signing service
+            "X-Iceberg-Access-Delegation": "vended_credentials",
+        },
+    )
+    if table_response.status_code != 200:
+        raise BodoError(
+            f"Unable to get aws credentials for {table_name} from {uri}. Please check your connection string."
+        )
+    table_response_json = table_response.json()
+    table_config = table_response_json.get("config", {})
+    access_key = table_config.get("s3.access-key-id", None)
+    secret_key = table_config.get("s3.secret-access-key", None)
+    session_token = table_config.get("s3.session-token", None)
+    region = table_config.get("s3.region", None)
+    if access_key is None or secret_key is None:
+        return None
+
+    aws_credentials = AWSCredentials(access_key, secret_key, session_token, region)
+    return aws_credentials
+
+
 def get_iceberg_pq_dataset(
     conn: str,
     database_schema: str,
@@ -1683,6 +1788,10 @@ def get_iceberg_pq_dataset(
 
     comm = MPI.COMM_WORLD
 
+    aws_credentials = get_temp_aws_credentials_for_rest_catalog_wh(
+        conn, database_schema, table_name
+    )
+
     # Get list of files. This is the list after
     # applying the iceberg_filter (metadata-level).
     (
@@ -1716,7 +1825,12 @@ def get_iceberg_pq_dataset(
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
     fs: "PyFileSystem" | pa.fs.FileSystem = getfs(
-        pq_abs_path_file_list, protocol, storage_options=None, parallel=True
+        pq_abs_path_file_list,
+        protocol,
+        storage_options=None,
+        parallel=True,
+        aws_credentials=aws_credentials,
+        region=aws_credentials.region if aws_credentials is not None else None,
     )
     pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
         pq_abs_path_file_list, protocol, parse_result
@@ -2173,8 +2287,16 @@ def determine_str_as_dict_columns(
     pq_abs_path_file_list, parse_result, protocol = parse_fpath(pq_abs_path_file_list)
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
+
+    aws_credentials = get_temp_aws_credentials_for_rest_catalog_wh(
+        conn, database_schema, table_name
+    )
     fs: "PyFileSystem" | pa.fs.FileSystem = getfs(
-        pq_abs_path_file_list, protocol, storage_options=None, parallel=True
+        pq_abs_path_file_list,
+        protocol,
+        storage_options=None,
+        parallel=True,
+        aws_credentials=aws_credentials,
     )
     pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
         pq_abs_path_file_list, protocol, parse_result
