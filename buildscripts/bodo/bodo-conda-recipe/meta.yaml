@@ -67,6 +67,7 @@ requirements:
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
     # See comment on build libstdcxx-ng above
     - libstdcxx-ng
+    - requests
 
   run:
     - python
@@ -81,6 +82,7 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+    - requests
 
 
 
