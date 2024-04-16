@@ -60,38 +60,38 @@ which will create the necessary resources to support the Cloud Configuration in 
     - [`AmazonDynamoDBFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonDynamoDBFullAccess.html){target="blank"}
     - [`AWSIAMFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/IAMFullAccess.html){target="blank"}
 
-
 Once you have ensured that you have all permissions necessary to create the resources, follow the steps below to create a Cloud Configuration:
 
-1. Access the *Cloud Configuration* page from the left sidebar. Then, click on *Create Cloud Configuration* at the top right corner of the page as shown in the picture below:
+1. Access the *Cloud Configuration* page from the left sidebar. Then, click on *Create Cloud Configuration* in the top right corner of the page as shown in the picture below:
 
     ![Dashboard](../platform_onboarding_screenshots/dashboard.gif#center)
 
-2. Select "AWS" as the cloud provider, and click on "Manual" to enter the required information manually.
+2. Select "AWS" as the cloud provider, and click on "Cloud Formation Template".
 
     !!! tip "Important"
         Do not close the form until you have completed all the steps following this one.
 
-3. Note the external id generated in the form. You will need this value in the next step.
-    
-    ![Dashboard view](../platform_onboarding_screenshots/external_id.png#center)
-
-4. Fill in the following values :
+3. Fill in the following values :
     - **Cloud Configuration Name**: A name for your Cloud Configuration.
-    - **S3 Bucket**: Fill this with the value `bodo-default-s3-bucket-<external_ID>`, where `<external_ID>` is the external ID generated in the form right above this field.
-    - **Dynamo DB Table**: Fill this with the value `bodo-default-dynamodb-<external_ID>`. 
-    - **Role ARN**: Fill this with the value `arn:aws:iam::<aws_account_id>:role/BodoPlatformUser`, where `<aws_account_id>` is your AWS account ID.
     - **Metadata Storage Region**: Fill this with the region where you want to store the metadata.
    
-5. Now navigate to this link: [Bodo Platform AWS Setup](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate?templateURL=https://platform-quickstart.s3.amazonaws.com/bodo_platform_default_quickstart.yml&stackName=bodo-default-stack&param_MetadataRegion=enter_your_metadata_region_here&param_BodoExternalId=enter_your_external_id_here){target=blank}. Fill in the required parameter values as indicated in the screenshot below.
+4. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
 
-    ![CloudFormation](../platform_onboarding_screenshots/cloudformation.png#center)
+    
+    !!! note "Important"
+        All the values are pre-filled in the CloudFormation template. Please do not change any values.
 
-    !!! tip "Important" 
-        - The `MetadataRegion` parameter should be the same as the `Metadata Storage Region` you entered in the previous step. 
-        - The `BodoExternalId` parameter should be the same as the `External ID` generated in the form in the previous step.
+5. Click on "Create Stack" to create the stack. This will create the necessary resources in your AWS account.
+    ![CloudFormation Page](../platform_onboarding_screenshots/cloudformation.png#center)
 
-6. After the stack is finished creating, navigate back to your Cloud Configuration creation form on the Bodo Platform and click on "Validate" the Cloud Configuration. If the validation is successful, you can click on "Create" to create the Cloud Configuration.
+
+    !!! note "Important"
+        The stack creation process may take a few minutes to complete. Please wait until the stack is created successfully.
+
+6. You can check the status of the stack from Bodo Platform as shown below. Once the stack is created successfully, Cloud Configuration will be created.
+
+    ![CloudFormation Status](../platform_onboarding_screenshots/cloudformation-status.gif#center)
+
 
 
 ## Bodo Workspace Creation
