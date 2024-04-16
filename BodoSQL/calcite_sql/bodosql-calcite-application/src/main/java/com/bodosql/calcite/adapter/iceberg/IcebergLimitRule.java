@@ -24,11 +24,7 @@ public class IcebergLimitRule extends AbstractIcebergLimitRule {
                         .oneInput(
                             b1 ->
                                 b1.operand(IcebergToPandasConverter.class)
-                                    .oneInput(
-                                        b2 ->
-                                            b2.operand(IcebergRel.class)
-                                                .predicate(x -> !x.containsIcebergSort())
-                                                .anyInputs())))
+                                    .oneInput(b2 -> b2.operand(IcebergRel.class).anyInputs())))
             .as(IcebergLimitRule.Config.class);
 
     @Override

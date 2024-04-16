@@ -166,7 +166,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
                 var filters: MutableList<RexNode> = mutableListOf()
                 var baseScan: IcebergTableScan? = null
-                var limit: Expr = Expr.None
+                var limit: BigDecimal? = null
 
                 override fun visit(
                     node: RelNode,
@@ -180,7 +180,16 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                             node.childrenAccept(this)
                         }
                         is IcebergSort -> {
-                            limit = Expr.DecimalLiteral((node.fetch!! as RexLiteral).getValueAs(BigDecimal::class.java)!!)
+                            val nodeVal: BigDecimal = (node.fetch!! as RexLiteral).getValueAs(BigDecimal::class.java)!!
+                            if (this.limit == null) {
+                                this.limit = nodeVal
+                            } else {
+                                this.limit =
+                                    minOf(
+                                        this.limit!!,
+                                        nodeVal,
+                                    )
+                            }
                             node.childrenAccept(this)
                         }
                         is IcebergProject -> {
@@ -204,15 +213,20 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                     }
                 }
             }
-
         visitor.go(node)
+        val actualLimit =
+            if (visitor.limit == null) {
+                Expr.None
+            } else {
+                Expr.DecimalLiteral(visitor.limit!!)
+            }
         val baseScan = visitor.baseScan!!
         val origColNames = baseScan.deriveRowType().fieldNames
         return FlattenedIcebergInfo(
             visitor.colMap.mapIndexed { _, v -> origColNames[v] }.toList(),
             visitor.filters,
             baseScan,
-            visitor.limit,
+            actualLimit,
         )
     }
 
