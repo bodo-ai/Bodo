@@ -36,9 +36,46 @@ This can be done using the *Cloud Configuration* page in the left sidebar and fo
 
 To be able to use the Bodo Platform to launch clusters and notebooks,
 you must grant it permission to access your AWS account and provision
-the required resources in it. This can be done through two ways:
+the required resources in it. This can be done through three ways:
 
-### 1. With Access Keys {#with Access Keys}
+### 1. AWS CloudFormation Quick Start {#cloud_formation_stack}
+
+
+!!! tip Important
+You need the following set of permissions to successfully create the resources defined in the CloudFormation stack:
+
+    - [`AWSCloudFormationFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSCloudFormationFullAccess.html){target="blank"}
+    - [`AmazonS3FullAccess`](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-iam-awsmanpol.html#security-iam-awsmanpol-amazons3fullaccess){target="blank"}
+    - [`AmazonDynamoDBFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonDynamoDBFullAccess.html){target="blank"}
+    - [`AWSIAMFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/IAMFullAccess.html){target="blank"}
+
+Once you have ensured that you have all permissions necessary to create the resources, follow the steps below to create a Cloud Configuration:
+
+1. Fill in the following values :
+    - **Cloud Configuration Name**: A name for your Cloud Configuration.
+    - **Metadata Storage Region**: Fill this with the region where you want to store the metadata.
+
+   ![CloudFormation Form](../platform_onboarding_screenshots/cloudformation-form.png#center)
+
+2. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
+
+    
+    !!! note "Important"
+        All the values are pre-filled in the CloudFormation template. Please do not change any values.
+
+3. Click on "Create Stack" to create the stack. This will create the necessary resources in your AWS account.
+
+   ![CloudFormation Page](../platform_onboarding_screenshots/cloudformation.png#center)
+
+
+    !!! note
+        The stack creation process may take a few minutes to complete. Please wait until the stack is created successfully.
+
+4. You can check the status of the stack from Bodo Platform as shown below. Once the stack is created successfully, Cloud Configuration will be created.
+   ![CloudFormation Status](../platform_onboarding_screenshots/cloudformation-status.gif#center)
+
+
+### 2. With Access Keys {#with Access Keys}
 
 1.  Follow the instructions from [AWS Account and Access Keys
     guide](https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html)
@@ -61,10 +98,7 @@ the required resources in it. This can be done through two ways:
         reasons.
 
 
-
-
-
-### 2. Manual Process {#create_manually}
+### 3. Manual Process {#create_manually}
 
 Open the *Cloud Configuration Form* and note down the `External ID`.
 
