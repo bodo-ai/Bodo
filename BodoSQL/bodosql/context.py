@@ -888,13 +888,12 @@ class BodoSQLContext:
         plan_generator = None
         error_message = None
         if bodo.get_rank() == 0:
-            if sql.strip() == "":
-                bodo.utils.typing.raise_bodo_error(
-                    "BodoSQLContext passed empty query string"
-                )
-
             plan_generator = self._create_generator(hide_credentials)
             try:
+                if sql.strip() == "":
+                    bodo.utils.typing.raise_bodo_error(
+                        "BodoSQLContext passed empty query string"
+                    )
                 plan_generator.parseQuery(sql)
                 # Write type is used for the current Merge Into code path decisions.
                 # This should be removed when we revisit Merge Into
