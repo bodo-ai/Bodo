@@ -23,7 +23,7 @@ from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
-from bodo.utils.utils import check_java_installation
+from bodo.utils.utils import AWSCredentials, check_java_installation
 
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
@@ -120,7 +120,9 @@ def validate_gcsfs_installed():
         )
 
 
-def get_s3_fs(region=None, storage_options=None):
+def get_s3_fs(
+    region=None, storage_options=None, aws_credentials: AWSCredentials | None = None
+):
     """
     initialize S3FileSystem with credentials
     """
@@ -140,6 +142,9 @@ def get_s3_fs(region=None, storage_options=None):
         region=region,
         endpoint_override=custom_endpoint,
         proxy_options=proxy_options,
+        access_key=aws_credentials.access_key if aws_credentials else None,
+        secret_key=aws_credentials.secret_key if aws_credentials else None,
+        session_token=aws_credentials.session_token if aws_credentials else None,
     )
 
 
@@ -174,7 +179,13 @@ def get_s3_subtree_fs(bucket_name, region=None, storage_options=None):
     return SubTreeFileSystem(bucket_name, fs)
 
 
-def get_s3_fs_from_path(path, parallel=False, storage_options=None):
+def get_s3_fs_from_path(
+    path,
+    parallel=False,
+    storage_options=None,
+    aws_credentials: AWSCredentials | None = None,
+    region=None,
+):
     """
     Get a pyarrow.fs.S3FileSystem object from an S3
     path, i.e. determine the region and
@@ -183,10 +194,11 @@ def get_s3_fs_from_path(path, parallel=False, storage_options=None):
     This function is usually called on just rank 0 during compilation,
     hence parallel=False by default.
     """
-    region = get_s3_bucket_region_njit(path, parallel=parallel)
-    if region == "":
-        region = None
-    return get_s3_fs(region, storage_options)
+    if region is None:
+        region = get_s3_bucket_region_njit(path, parallel=parallel)
+        if region == "":
+            region = None
+    return get_s3_fs(region, storage_options, aws_credentials)
 
 
 # hdfs related functions(hdfs_list_dir_fnames) should be included in

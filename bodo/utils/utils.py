@@ -7,8 +7,9 @@ import inspect
 import keyword
 import re
 import warnings
+from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, TypeGuard
+from typing import Callable, Iterable, TypeGuard
 
 import numba
 import numpy as np
@@ -1714,3 +1715,52 @@ def set_wrapper(a):
     Numba compiling it every time.
     """
     return set(a)
+
+
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
+    """
+    Utility function decorator to run a function on just rank 0
+    but re-raise any Exceptions safely on all ranks.
+    NOTE: 'func' must be a simple python function that doesn't require
+    any synchronization.
+    e.g. Using a bodo.jit function might be unsafe in this situation.
+    Similarly, a function that uses any MPI collective
+    operation would be unsafe and could result in a hang.
+
+    Args:
+        func: Function to run.
+        bcast_result (bool, optional): Whether the function should be
+            broadcasted to all ranks. Defaults to True.
+        result_default (optional): Default for result. This is only
+            useful in the bcase_result=False case. Defaults to None.
+    """
+
+    def inner(*args, **kwargs):
+        comm = MPI.COMM_WORLD
+        result = result_default
+        err = None
+        # Run on rank 0 and catch any exceptions.
+        if comm.Get_rank() == 0:
+            try:
+                result = func(*args, **kwargs)
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                err = e
+        # Synchronize and re-raise any exception on all ranks.
+        err = comm.bcast(err)
+        if isinstance(err, Exception):
+            raise err
+        # Broadcast the result to all ranks.
+        if bcast_result:
+            result = comm.bcast(result)
+        return result
+
+    return inner
+
+
+@dataclass
+class AWSCredentials:
+    access_key: str
+    secret_key: str
+    session_token: str | None = None
+    region: str | None = None

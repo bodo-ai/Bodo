@@ -68,3 +68,6 @@ dependencies:
 
   # IPython
   - ipython==8.16.1
+
+  # Neworking
+  - requests 

@@ -24,6 +24,7 @@ jobs:
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
+    - group: TabularCredentials
     - name: CONDA_ENV
       value: 'bodo'
   pool: ScalingVMSet
@@ -222,6 +223,7 @@ jobs:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST }}
+      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
     displayName: 'Test Bodo'
 
   - script: |

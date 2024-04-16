@@ -20,6 +20,7 @@ jobs:
   variables:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
+    - group: TabularCredentials
   timeoutInMinutes: 360
   pool: ScalingVMSet
   strategy:
@@ -174,6 +175,7 @@ jobs:
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
       AZURE_ICEBERG_STORAGE_ACCOUNT: $(AZURE_ICEBERG_STORAGE_ACCOUNT)
       AZURE_ICEBERG_ACCESS_KEY: $(AZURE_ICEBERG_ACCESS_KEY)
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
