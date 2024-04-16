@@ -20,7 +20,7 @@ from pyspark.sql.types import (
 
 import bodo
 import bodo.utils.allocation_tracking
-from bodo.tests.conftest import memory_leak_check  # noqa
+from bodo.tests.conftest import iceberg_database, memory_leak_check  # noqa
 from bodo.tests.utils import gen_nonascii_list
 
 # Patch to avoid PySpark's Py4j exception handler in testing.

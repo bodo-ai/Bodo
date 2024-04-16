@@ -134,8 +134,7 @@ def convert_scalar(val):
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
         return array_const_class(convert_list_to_java(converted_val))
     elif isinstance(val, bytes):
-        temp = convert_bytes(val)
-        return temp
+        return convert_bytes(val)
     elif isinstance(val, bodo.Time):
         return convert_time(val)
     else:

@@ -48,8 +48,4 @@ class IcebergFilter private constructor(
     }
 
     override fun getCatalogTable(): CatalogTable = catalogTable
-
-    override fun containsIcebergSort(): Boolean {
-        return (input as IcebergRel).containsIcebergSort()
-    }
 }
