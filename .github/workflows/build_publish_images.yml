@@ -126,7 +126,7 @@ jobs:
           echo "SHA=${git_sha}" >> $GITHUB_ENV
 
       - name: Configure Azure Credentials
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{  secrets.AZURE_CREDENTIALS  }}
 
@@ -143,9 +143,15 @@ jobs:
       - name: Get Bodo Version from setup
         env:
           BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
+        working-directory: ./bodo-platform-image
         run: |
           # Replace the version in the file with the user provided input
-          echo "$BODO_VERSION" > bodo-platform-image/bodo_versions.txt
+          echo "$BODO_VERSION" > bodo_versions.txt
+
+      - name: tar platform packages
+        working-directory: ./bodo-platform-image
+        run: |
+          tar -czvf bodo-platform-utils.tar.gz bodo-platform-utils/
 
       - name: Create Azure Image definition
         # For event that is not workflow, we skip the image creation in the build step,
@@ -163,7 +169,7 @@ jobs:
               --image-sha ${GIT_SHA} \
               --node-role worker
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12' 
 
@@ -204,9 +210,8 @@ jobs:
           BUILD_NAME: ${{ needs.setup.outputs.buildName }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        working-directory: ./bodo-platform-image/packer
         run: |
-          cd bodo-platform-image
-          cd packer
           arguments=$(if [ "$SKIP_CREATE_IMAGES" == 'true' ]; then echo "--skip-create-images"; fi)
           bash build_images_and_gen_manifests.sh \
             $arguments \
@@ -236,15 +241,15 @@ jobs:
           path: bodo-platform-image/
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
       - name: Combine manifests and create AMI Add and Share JSON
         env:
           GIT_SHA: ${{ github.sha }}
+        working-directory: bodo-platform-image
         run: |
-          cd bodo-platform-image
           python gen_images_entries_from_manifests.py
 
       - name: Upload Image Entries Request JSON
@@ -265,7 +270,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -290,9 +295,9 @@ jobs:
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
           ORGANIZATION_UUID: ${{ secrets.TESTING_ORGANIZATION_UUID }}
+        working-directory: bodo-platform-image
         run: |
           sleep 120
-          cd bodo-platform-image
           python manage_images.py
 
   # DEVELOPMENT
@@ -307,7 +312,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -332,9 +337,9 @@ jobs:
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
           ORGANIZATION_UUID: ${{ secrets.DEV_ORGANIZATION_UUID }}
+        working-directory: bodo-platform-image
         run: |
           sleep 120
-          cd bodo-platform-image
           python manage_images.py
 
   # STAGING
@@ -349,7 +354,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -374,9 +379,9 @@ jobs:
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
           ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
+        working-directory: bodo-platform-image
         run: |
           sleep 120
-          cd bodo-platform-image
           python manage_images.py
 
   # PRODUCTION
@@ -391,7 +396,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -416,7 +421,7 @@ jobs:
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api.bodo.ai"
           ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
+        working-directory: bodo-platform-image
         run: |
           sleep 120
-          cd bodo-platform-image
           python manage_images.py

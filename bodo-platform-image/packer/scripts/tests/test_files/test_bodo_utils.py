@@ -1,3 +1,3 @@
-from bodo_platform_utils import catalog, _version
+from bodo_platform_utils import catalog
 
-print(_version.get_versions()["version"])
+print(catalog.display_version())
