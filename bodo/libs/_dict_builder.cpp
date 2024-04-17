@@ -68,6 +68,40 @@ void DictBuilderMetrics::subtract_metrics(
         src_metrics.transpose_filter_string_arr_time;
 }
 
+void DictBuilderMetrics::add_to_metrics(std::vector<MetricBase>& metrics,
+                                        const std::string& prefix) {
+    metrics.emplace_back(
+        StatMetric(fmt::format("{}unify_cache_id_misses", prefix),
+                   this->unify_cache_id_misses));
+    metrics.emplace_back(
+        StatMetric(fmt::format("{}unify_cache_length_misses", prefix),
+                   this->unify_cache_length_misses));
+    metrics.emplace_back(
+        StatMetric(fmt::format("{}transpose_filter_cache_id_misses", prefix),
+                   this->transpose_filter_cache_id_misses));
+    metrics.emplace_back(StatMetric(
+        fmt::format("{}transpose_filter_cache_length_misses", prefix),
+        this->transpose_filter_cache_length_misses));
+    metrics.emplace_back(
+        TimerMetric(fmt::format("{}unify_build_transpose_map_time", prefix),
+                    this->unify_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric(fmt::format("{}unify_transpose_time", prefix),
+                    this->unify_transpose_time));
+    metrics.emplace_back(
+        TimerMetric(fmt::format("{}unify_string_arr_time", prefix),
+                    this->unify_string_arr_time));
+    metrics.emplace_back(TimerMetric(
+        fmt::format("{}transpose_filter_build_transpose_map_time", prefix),
+        this->transpose_filter_build_transpose_map_time));
+    metrics.emplace_back(
+        TimerMetric(fmt::format("{}transpose_filter_transpose_time", prefix),
+                    this->transpose_filter_transpose_time));
+    metrics.emplace_back(
+        TimerMetric(fmt::format("{}transpose_filter_string_arr_time", prefix),
+                    this->transpose_filter_string_arr_time));
+}
+
 /* ------------------------------------------------------------------------ */
 
 /* -------------------------- DictionaryBuilder --------------------------- */

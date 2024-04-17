@@ -13,6 +13,33 @@
 #include "_shuffle.h"
 #include "_utils.h"
 
+void IncrementalShuffleMetrics::add_to_metrics(
+    std::vector<MetricBase>& metrics) {
+    metrics.emplace_back(
+        TimerMetric("shuffle_buffer_append_time", this->append_time));
+    metrics.emplace_back(TimerMetric("shuffle_time", this->shuffle_time));
+    metrics.emplace_back(StatMetric("n_shuffles", this->n_shuffles, true));
+    metrics.emplace_back(TimerMetric("shuffle_hash_time", this->hash_time));
+    metrics.emplace_back(TimerMetric("shuffle_dict_unification_time",
+                                     this->dict_unification_time));
+    metrics.emplace_back(
+        StatMetric("shuffle_total_appended_nrows", this->total_appended_nrows));
+    metrics.emplace_back(
+        StatMetric("shuffle_total_sent_nrows", this->total_sent_nrows));
+    metrics.emplace_back(
+        StatMetric("shuffle_total_recv_nrows", this->total_recv_nrows));
+    metrics.emplace_back(StatMetric("shuffle_total_approx_sent_size_bytes",
+                                    this->total_approx_sent_size_bytes));
+    metrics.emplace_back(StatMetric("shuffle_total_recv_size_bytes",
+                                    this->total_recv_size_bytes));
+    metrics.emplace_back(StatMetric("shuffle_buffer_peak_capacity_bytes",
+                                    this->peak_capacity_bytes));
+    metrics.emplace_back(StatMetric("shuffle_buffer_peak_utilization_bytes",
+                                    this->peak_utilization_bytes));
+    metrics.emplace_back(
+        StatMetric("shuffle_n_buffer_resets", this->n_buffer_resets));
+}
+
 static int64_t get_shuffle_threshold() {
     // Get shuffle threshold from an env var if provided.
     if (char* threshold_env_ = std::getenv("BODO_SHUFFLE_THRESHOLD")) {
@@ -372,6 +399,7 @@ void IncrementalShuffleState::ResetAfterShuffle() {
         (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) > buffer_used_size) {
         this->table_buffer.reset(
             new TableBuildBuffer(this->schema, this->dict_builders));
+        this->metrics.n_buffer_resets++;
     } else {
         this->table_buffer->Reset();
     }
@@ -472,6 +500,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                              comm_info_table, /*is_parallel*/ true);
     this->metrics.shuffle_time += end_timer(start);
+    this->metrics.n_shuffles++;
     shuffle_hashes.reset();
 
     this->metrics.total_recv_nrows += comm_info_table.n_rows_recv;

@@ -63,6 +63,16 @@ struct DictBuilderMetrics {
      * @param src_metrics The metrics to subtract.
      */
     void subtract_metrics(const DictBuilderMetrics& src_metrics);
+
+    /**
+     * @brief Helper function for exporting metrics during reporting steps in
+     * Join/GroupBy/Readers.
+     *
+     * @param metrics Vector of metrics to append to.
+     * @param prefix Prefix to add to the names of the metrics while reporting.
+     */
+    void add_to_metrics(std::vector<MetricBase>& metrics,
+                        const std::string& prefix);
 };
 
 /**

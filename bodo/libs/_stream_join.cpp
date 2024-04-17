@@ -229,6 +229,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
             hash_keys_table(this->build_table_buffer->data_table, this->n_keys,
                             SEED_HASH_PARTITION, false, false, dict_hashes);
         this->metrics.repartitioning_part_hashing_time += end_timer(start);
+        this->metrics.repartitioning_part_hashing_nrows +=
+            this->build_table_buffer->data_table->nrows();
 
         // Put the build data in the new partitions.
         append_partition1.resize(this->build_table_buffer->data_table->nrows(),
@@ -253,6 +255,7 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         // Reserve space in hashes vector. This doesn't inhibit
         // exponential growth since we're only doing it at the start.
         // Future appends will still allow for regular exponential growth.
+        start = start_timer();
         new_part1->build_table_join_hashes_guard.value()->reserve(
             append_partition1_sum);
 
@@ -261,7 +264,6 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         // Subsequent BuildHashTable steps will compute the rest.
         // We drop the hashes that would go to the new inactive partition
         // for now and will re-compute them later when needed.
-        start = start_timer();
         size_t n_hashes_to_copy_over =
             std::min(this->build_safely_appended_nrows,
                      this->build_table_join_hashes_guard.value()->size());
@@ -282,6 +284,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
             append_partition1_sum);
         this->metrics.repartitioning_active_part1_append_time +=
             end_timer(start);
+        this->metrics.repartitioning_active_part1_append_nrows +=
+            append_partition1_sum;
 
         // Update safely appended row count for the new active partition:
         new_part1->build_safely_appended_nrows = append_partition1_sum;
@@ -301,6 +305,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
             this->build_table_buffer->data_table, append_partition2);
         this->metrics.repartitioning_active_part2_append_time +=
             end_timer(start);
+        this->metrics.repartitioning_active_part2_append_nrows +=
+            (this->build_safely_appended_nrows - append_partition1_sum);
 
         // We do not rebuild the hash table here (for new_part1 which is the new
         // active partition). That needs to be handled by the caller.
@@ -314,6 +320,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->build_table_buffer.reset();
 
         time_pt start;
+        this->metrics.repartitioning_inactive_n_pop_chunks +=
+            this->build_table_buffer_chunked->chunks.size();
         while (!this->build_table_buffer_chunked->chunks.empty()) {
             start = start_timer();
             auto [build_table_chunk, build_table_nrows_chunk] =
@@ -327,6 +335,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
                 hash_keys_table(build_table_chunk, this->n_keys,
                                 SEED_HASH_PARTITION, false, false, dict_hashes);
             this->metrics.repartitioning_part_hashing_time += end_timer(start);
+            this->metrics.repartitioning_part_hashing_nrows +=
+                build_table_chunk->nrows();
 
             // Put the build data in the sub partitions.
             append_partition1.resize(build_table_nrows_chunk, false);
@@ -366,9 +376,9 @@ inline void JoinPartition::BuildHashTable() {
     // TODO: Do this processing in batches of 4K rows (for handling inactive
     // partition case where we will do this for the entire table)!!
 
-    ScopedTimer ht_hashing_timer(this->metrics.build_ht_hashing_time);
     size_t n_unhashed_rows = build_table_nrows - join_hashes_cur_len;
     if (n_unhashed_rows > 0) {
+        ScopedTimer ht_hashing_timer(this->metrics.build_ht_hashing_time);
         // Compute hashes for the batch:
         std::unique_ptr<uint32_t[]> join_hashes = hash_keys_table(
             this->build_table_buffer->data_table, this->n_keys, SEED_HASH_JOIN,
@@ -379,8 +389,9 @@ inline void JoinPartition::BuildHashTable() {
         build_table_join_hashes_->insert(build_table_join_hashes_->end(),
                                          join_hashes.get(),
                                          join_hashes.get() + n_unhashed_rows);
+        ht_hashing_timer.finalize();
+        this->metrics.build_ht_hashing_nrows += n_unhashed_rows;
     }
-    ht_hashing_timer.finalize();
 
     // Create reference variables for easier usage.
     auto& num_rows_in_group_ = this->num_rows_in_group_guard.value();
@@ -408,6 +419,7 @@ inline void JoinPartition::BuildHashTable() {
         // expensive hashmap lookup during 'FinalizeGroups'.
         build_row_to_group_map_->emplace_back(group_id);
         this->curr_build_size++;
+        this->metrics.build_ht_insert_nrows++;
     }
     ht_insert_timer.finalize();
 }
@@ -493,6 +505,7 @@ void JoinPartition::AppendBuildBatch(
         // reserved space upfront.
         this->build_table_buffer->UnsafeAppendBatch(in_table);
         append_timer.finalize();
+        this->metrics.build_appends_active_nrows += in_table->nrows();
         // Compute the hashes and add rows to the hash table now.
         this->BuildHashTable();
 
@@ -505,6 +518,7 @@ void JoinPartition::AppendBuildBatch(
         time_pt start = start_timer();
         this->build_table_buffer_chunked->AppendBatch(in_table);
         this->metrics.build_appends_inactive_time += end_timer(start);
+        this->metrics.build_appends_inactive_nrows += in_table->nrows();
     }
 }
 
@@ -525,8 +539,12 @@ void JoinPartition::AppendBuildBatch(
         this->build_table_buffer->ReserveTable(in_table);
         // Now append the rows. This will always succeed since we've
         // reserved space upfront.
-        this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows);
+        uint64_t append_rows_sum = std::accumulate(
+            append_rows.begin(), append_rows.end(), (uint64_t)0);
+        this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows,
+                                                    append_rows_sum);
         append_timer.finalize();
+        this->metrics.build_appends_active_nrows += append_rows_sum;
         // Compute the hashes and add rows to the hash table now.
         this->BuildHashTable();
 
@@ -537,8 +555,12 @@ void JoinPartition::AppendBuildBatch(
     } else {
         // Append into the ChunkedTableBuilder
         time_pt start = start_timer();
-        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows);
+        uint64_t append_rows_sum = std::accumulate(
+            append_rows.begin(), append_rows.end(), (uint64_t)0);
+        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows,
+                                                      append_rows_sum, 0);
         this->metrics.build_appends_inactive_time += end_timer(start);
+        this->metrics.build_appends_inactive_nrows += append_rows_sum;
     }
 }
 
@@ -615,22 +637,18 @@ void JoinPartition::AppendInactiveProbeBatch(
  * NOTE: Assumes that the row is in the partition.
  * NOTE: Inlined since it's called inside loops.
  *
- * @param partition Partition that this row belongs to.
+ * @param ht Partition's hash table to probe.
  *  NOTE: This function assumes that the partition is already pinned.
  * @param i_row Row index in partition->probe_table to probe.
- * @param[in, out] group_ids Vector of group ids to fill after each probe.
- * Similar to build table convention, 0 means not in build table (ids start from
- * 1).
+ * @return group_id for the row. Similar to build table convention, 0 means not
+ * in build table (ids start from 1).
  */
-inline void handle_probe_input_for_partition(JoinPartition* partition,
-                                             size_t i_row,
-                                             bodo::vector<int64_t>& group_ids) {
-    auto iter = partition->build_hash_table_guard.value()->find(-i_row - 1);
-    const size_t group_id =
-        (iter == partition->build_hash_table_guard.value()->end())
-            ? 0
-            : iter->second;
-    group_ids.emplace_back(group_id);
+inline size_t handle_probe_input_for_partition(
+    const bodo::pin_guard<bodo::pinnable<JoinPartition::hash_table_t>>& ht,
+    size_t i_row) {
+    auto iter = ht->find(-i_row - 1);
+    const size_t group_id = (iter == ht->end()) ? 0 : iter->second;
+    return group_id;
 }
 
 /**
@@ -854,12 +872,16 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     this->probe_table_buffer_chunked->Finalize();
     time_pt start_pop, start_ht_probe, start_produce_probe;
     HashJoinMetrics::time_t append_time = 0;
+    this->metrics.probe_inactive_pop_chunk_n_chunks +=
+        this->probe_table_buffer_chunked->chunks.size();
+    // For ease of reference
+    const auto& ht = this->build_hash_table_guard.value();
     while (!this->probe_table_buffer_chunked->chunks.empty()) {
         start_pop = start_timer();
         auto [probe_table_chunk, probe_table_nrows] =
             this->probe_table_buffer_chunked->PopChunk();
         this->metrics.probe_inactive_pop_chunk_time += end_timer(start_pop);
-        this->probe_table = probe_table_chunk;
+        this->probe_table = std::move(probe_table_chunk);
 
         if (non_equi_condition) {
             get_gen_cond_data_ptrs(this->probe_table, &probe_table_info_ptrs,
@@ -867,11 +889,11 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         }
 
         start_ht_probe = start_timer();
+        group_ids.resize(this->probe_table->nrows());
         for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
-            handle_probe_input_for_partition(this, i_row, group_ids);
+            group_ids[i_row] = handle_probe_input_for_partition(ht, i_row);
         }
         this->metrics.ht_probe_time += end_timer(start_ht_probe);
-        assert(group_ids.size() == this->probe_table->nrows());
         append_time = 0;
         start_produce_probe = start_timer();
         for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
@@ -895,6 +917,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         probe_idxs.clear();
 
         this->probe_table_hashes += probe_table_nrows;
+        this->probe_table.reset();
     }
 
     // Add unmatched rows from build table to output table
@@ -1391,6 +1414,7 @@ void HashJoinState::AppendBuildBatchHelper(
     }
     this->metrics.build_input_partition_check_time +=
         end_timer(start_part_check);
+    this->metrics.build_input_partition_check_nrows += in_table->nrows();
 
     this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
@@ -1443,8 +1467,10 @@ void HashJoinState::AppendBuildBatchHelper(
         append_rows_by_partition[i_part] = std::vector<bool>(in_table->nrows());
     }
 
+    size_t append_rows_sum = 0;
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (append_rows[i_row]) {
+            append_rows_sum++;
             bool found_partition = false;
 
             // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize
@@ -1468,6 +1494,7 @@ void HashJoinState::AppendBuildBatchHelper(
     }
     this->metrics.build_input_partition_check_time +=
         end_timer(start_part_check);
+    this->metrics.build_input_partition_check_nrows += append_rows_sum;
     this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
@@ -1583,15 +1610,26 @@ void HashJoinState::ReportBuildStageMetrics() {
                                     this->metrics.bloom_filter_enabled, true));
     metrics.emplace_back(TimerMetric("appends_active_time",
                                      this->metrics.build_appends_active_time));
+    metrics.emplace_back(StatMetric("appends_active_nrows",
+                                    this->metrics.build_appends_active_nrows));
     metrics.emplace_back(TimerMetric(
         "appends_inactive_time", this->metrics.build_appends_inactive_time));
+    metrics.emplace_back(StatMetric(
+        "appends_inactive_nrows", this->metrics.build_appends_inactive_nrows));
     metrics.emplace_back(
         TimerMetric("input_partition_check_time",
                     this->metrics.build_input_partition_check_time));
     metrics.emplace_back(
+        StatMetric("input_partition_check_nrows",
+                   this->metrics.build_input_partition_check_nrows));
+    metrics.emplace_back(
         TimerMetric("ht_hashing_time", this->metrics.build_ht_hashing_time));
     metrics.emplace_back(
+        StatMetric("ht_hashing_nrows", this->metrics.build_ht_hashing_nrows));
+    metrics.emplace_back(
         TimerMetric("ht_insert_time", this->metrics.build_ht_insert_time));
+    metrics.emplace_back(
+        StatMetric("ht_insert_nrows", this->metrics.build_ht_insert_nrows));
     metrics.emplace_back(
         StatMetric("n_partitions", this->metrics.n_partitions));
     metrics.emplace_back(
@@ -1608,17 +1646,29 @@ void HashJoinState::ReportBuildStageMetrics() {
         TimerMetric("repartitioning_part_hashing_time",
                     this->metrics.repartitioning_part_hashing_time));
     metrics.emplace_back(
+        StatMetric("repartitioning_part_hashing_nrows",
+                   this->metrics.repartitioning_part_hashing_nrows));
+    metrics.emplace_back(
         TimerMetric("repartitioning_active_part1_append_time",
                     this->metrics.repartitioning_active_part1_append_time));
     metrics.emplace_back(
+        StatMetric("repartitioning_active_part1_append_nrows",
+                   this->metrics.repartitioning_active_part1_append_nrows));
+    metrics.emplace_back(
         TimerMetric("repartitioning_active_part2_append_time",
                     this->metrics.repartitioning_active_part2_append_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_active_part2_append_nrows",
+                   this->metrics.repartitioning_active_part2_append_nrows));
     metrics.emplace_back(
         TimerMetric("repartitioning_inactive_append_time",
                     this->metrics.repartitioning_inactive_append_time));
     metrics.emplace_back(
         TimerMetric("repartitioning_inactive_pop_chunk_time",
                     this->metrics.repartitioning_inactive_pop_chunk_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_inactive_n_pop_chunks",
+                   this->metrics.repartitioning_inactive_n_pop_chunks));
     metrics.emplace_back(
         TimerMetric("finalize_time_total", this->metrics.build_finalize_time));
     metrics.emplace_back(TimerMetric("finalize_groups_time",
@@ -1644,42 +1694,14 @@ void HashJoinState::ReportBuildStageMetrics() {
                                     !this->build_parallel));
     metrics.emplace_back(
         TimerMetric("filter_na_time", this->metrics.build_filter_na_time));
+    metrics.emplace_back(StatMetric(
+        "filter_na_output_nrows", this->metrics.build_filter_na_output_nrows));
     metrics.emplace_back(BlobMetric("final_partitioning_state",
                                     this->metrics.final_partitioning_state,
                                     !this->build_parallel));
 
     // Get shuffle stats from build shuffle state
-    metrics.emplace_back(
-        TimerMetric("shuffle_buffer_append_time",
-                    this->build_shuffle_state.metrics.append_time));
-    metrics.emplace_back(TimerMetric(
-        "shuffle_time", this->build_shuffle_state.metrics.shuffle_time));
-    metrics.emplace_back(TimerMetric(
-        "shuffle_hash_time", this->build_shuffle_state.metrics.hash_time));
-    metrics.emplace_back(
-        TimerMetric("shuffle_dict_unification_time",
-                    this->build_shuffle_state.metrics.dict_unification_time));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_appended_nrows",
-                   this->build_shuffle_state.metrics.total_appended_nrows));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_sent_nrows",
-                   this->build_shuffle_state.metrics.total_sent_nrows));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_recv_nrows",
-                   this->build_shuffle_state.metrics.total_recv_nrows));
-    metrics.emplace_back(StatMetric(
-        "shuffle_total_approx_sent_size_bytes",
-        this->build_shuffle_state.metrics.total_approx_sent_size_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_recv_size_bytes",
-                   this->build_shuffle_state.metrics.total_recv_size_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_buffer_peak_capacity_bytes",
-                   this->build_shuffle_state.metrics.peak_capacity_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_buffer_peak_utilization_bytes",
-                   this->build_shuffle_state.metrics.peak_utilization_bytes));
+    this->build_shuffle_state.metrics.add_to_metrics(metrics);
 
     // Get time spent appending to and number of rows in build_na_key_buffer
     metrics.emplace_back(TimerMetric("na_buffer_append_time",
@@ -1709,69 +1731,11 @@ void HashJoinState::ReportBuildStageMetrics() {
     }
     metrics.emplace_back(
         StatMetric("n_key_dict_builders", n_key_dict_builders, true));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_unify_cache_id_misses",
-                   key_dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_unify_cache_length_misses",
-                   key_dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_transpose_filter_cache_id_misses",
-                   key_dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(StatMetric(
-        "key_dict_builders_transpose_filter_cache_length_misses",
-        key_dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_build_transpose_map_time",
-                    key_dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_transpose_time",
-                    key_dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_string_arr_time",
-                    key_dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
-        "key_dict_builders_transpose_filter_build_transpose_map_time",
-        key_dict_builder_metrics.transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_transpose_filter_transpose_time",
-                    key_dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_transpose_filter_string_arr_time",
-                    key_dict_builder_metrics.transpose_filter_string_arr_time));
+    key_dict_builder_metrics.add_to_metrics(metrics, "key_dict_builders_");
     metrics.emplace_back(
         StatMetric("n_non_key_dict_builders", n_non_key_dict_builders, true));
-    metrics.emplace_back(
-        StatMetric("non_key_dict_builders_unify_cache_id_misses",
-                   non_key_dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
-        StatMetric("non_key_dict_builders_unify_cache_length_misses",
-                   non_key_dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(StatMetric(
-        "non_key_dict_builders_transpose_filter_cache_id_misses",
-        non_key_dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(StatMetric(
-        "non_key_dict_builders_transpose_filter_cache_length_misses",
-        non_key_dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_unify_build_transpose_map_time",
-        non_key_dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("non_key_dict_builders_unify_transpose_time",
-                    non_key_dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("non_key_dict_builders_unify_string_arr_time",
-                    non_key_dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_build_transpose_map_time",
-        non_key_dict_builder_metrics
-            .transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_transpose_time",
-        non_key_dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_string_arr_time",
-        non_key_dict_builder_metrics.transpose_filter_string_arr_time));
+    non_key_dict_builder_metrics.add_to_metrics(metrics,
+                                                "non_key_dict_builders_");
 
     QueryProfileCollector::Default().RegisterOperatorStageMetrics(
         QueryProfileCollector::MakeOperatorStageID(
@@ -2087,6 +2051,8 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
                             SEED_HASH_PARTITION, false, true, dict_hashes);
         this->metrics.join_filter_bloom_filter_hashing_time +=
             end_timer(start_hash);
+        this->metrics.join_filter_bloom_filter_hashing_nrows +=
+            unified_in_table_only_keys->nrows();
         time_pt start_bloom = start_timer();
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             bool keep = arrow::bit_util::GetBit(bitmask.data(), i_row) &&
@@ -2096,6 +2062,7 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
         }
         this->metrics.join_filter_bloom_filter_probe_time +=
             end_timer(start_bloom);
+        this->metrics.join_filter_bloom_filter_probe_nrows += in_table->nrows();
         applied_any_filter = true;
     }
 
@@ -2115,8 +2082,10 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
             // Nothing was filtered out, so skip the copy.
             return in_table;
         }
+        this->metrics.num_runtime_filter_applied_rows += in_table->nrows();
         this->metrics.num_runtime_filter_misses +=
             (in_table->nrows() - rows_to_keep.size());
+        this->metrics.join_filter_materialization_nrows += rows_to_keep.size();
         time_pt start_mat = start_timer();
         std::shared_ptr<table_info> out =
             RetrieveTable(std::move(in_table), std::move(rows_to_keep));
@@ -2140,6 +2109,9 @@ void HashJoinState::ReportProbeStageMetrics() {
     metrics.emplace_back(
         TimerMetric("append_inactive_partitions_time",
                     this->metrics.append_probe_inactive_partitions_time));
+    metrics.emplace_back(
+        StatMetric("append_inactive_partitions_nrows",
+                   this->metrics.append_probe_inactive_partitions_nrows));
     metrics.emplace_back(
         TimerMetric("inactive_partition_check_time",
                     this->metrics.probe_inactive_partition_check_time));
@@ -2165,51 +2137,46 @@ void HashJoinState::ReportProbeStageMetrics() {
         TimerMetric("inactive_pop_chunk_time",
                     this->metrics.probe_inactive_pop_chunk_time));
     metrics.emplace_back(
+        StatMetric("inactive_pop_chunk_n_chunks",
+                   this->metrics.probe_inactive_pop_chunk_n_chunks));
+    metrics.emplace_back(
         TimerMetric("filter_na_time", this->metrics.probe_filter_na_time));
-    metrics.emplace_back(StatMetric("num_runtime_filter_misses",
-                                    this->metrics.num_runtime_filter_misses));
-    metrics.emplace_back(
-        TimerMetric("join_filter_materialization_time",
-                    this->metrics.join_filter_materialization_time));
-    metrics.emplace_back(
-        TimerMetric("join_filter_bloom_filter_hashing_time",
-                    this->metrics.join_filter_bloom_filter_hashing_time));
-    metrics.emplace_back(
-        TimerMetric("join_filter_bloom_filter_probe_time",
-                    this->metrics.join_filter_bloom_filter_probe_time));
+    metrics.emplace_back(StatMetric(
+        "filter_na_output_nrows", this->metrics.probe_filter_na_output_nrows));
+    if (this->probe_table_outer) {
+        metrics.emplace_back(
+            StatMetric("probe_outer_bloom_filter_misses",
+                       this->metrics.probe_outer_bloom_filter_misses));
+    } else {
+        metrics.emplace_back(
+            StatMetric("num_runtime_filter_misses",
+                       this->metrics.num_runtime_filter_misses));
+        metrics.emplace_back(
+            StatMetric("num_runtime_filter_applied_rows",
+                       this->metrics.num_runtime_filter_applied_rows));
+        metrics.emplace_back(
+            TimerMetric("join_filter_materialization_time",
+                        this->metrics.join_filter_materialization_time));
+        metrics.emplace_back(
+            StatMetric("join_filter_materialization_nrows",
+                       this->metrics.join_filter_materialization_nrows));
+        metrics.emplace_back(
+            TimerMetric("join_filter_bloom_filter_hashing_time",
+                        this->metrics.join_filter_bloom_filter_hashing_time));
+        metrics.emplace_back(
+            StatMetric("join_filter_bloom_filter_hashing_nrows",
+                       this->metrics.join_filter_bloom_filter_hashing_nrows));
+        metrics.emplace_back(
+            TimerMetric("join_filter_bloom_filter_probe_time",
+                        this->metrics.join_filter_bloom_filter_probe_time));
+        metrics.emplace_back(
+            StatMetric("join_filter_bloom_filter_probe_nrows",
+                       this->metrics.join_filter_bloom_filter_probe_nrows));
+    }
 
     // Get shuffle stats from probe shuffle state
-    metrics.emplace_back(
-        TimerMetric("shuffle_buffer_append_time",
-                    this->probe_shuffle_state.metrics.append_time));
-    metrics.emplace_back(TimerMetric(
-        "shuffle_time", this->probe_shuffle_state.metrics.shuffle_time));
-    metrics.emplace_back(TimerMetric(
-        "shuffle_hash_time", this->probe_shuffle_state.metrics.hash_time));
-    metrics.emplace_back(
-        TimerMetric("shuffle_dict_unification_time",
-                    this->probe_shuffle_state.metrics.dict_unification_time));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_appended_nrows",
-                   this->probe_shuffle_state.metrics.total_appended_nrows));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_sent_nrows",
-                   this->probe_shuffle_state.metrics.total_sent_nrows));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_recv_nrows",
-                   this->probe_shuffle_state.metrics.total_recv_nrows));
-    metrics.emplace_back(StatMetric(
-        "shuffle_total_approx_sent_size_bytes",
-        this->probe_shuffle_state.metrics.total_approx_sent_size_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_total_recv_size_bytes",
-                   this->probe_shuffle_state.metrics.total_recv_size_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_buffer_peak_capacity_bytes",
-                   this->probe_shuffle_state.metrics.peak_capacity_bytes));
-    metrics.emplace_back(
-        StatMetric("shuffle_buffer_peak_utilization_bytes",
-                   this->probe_shuffle_state.metrics.peak_utilization_bytes));
+    this->probe_shuffle_state.metrics.add_to_metrics(metrics);
+
     MetricBase::StatValue na_counter = this->probe_na_counter;
     metrics.emplace_back(StatMetric("na_counter", na_counter));
 
@@ -2239,72 +2206,13 @@ void HashJoinState::ReportProbeStageMetrics() {
     // between the metrics from the build stage and those from the probe stage.
     key_dict_builder_metrics.subtract_metrics(
         this->metrics.key_dict_builder_metrics_build_stage_snapshot);
-
     metrics.emplace_back(
         StatMetric("n_key_dict_builders", n_key_dict_builders, true));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_unify_cache_id_misses",
-                   key_dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_unify_cache_length_misses",
-                   key_dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(
-        StatMetric("key_dict_builders_transpose_filter_cache_id_misses",
-                   key_dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(StatMetric(
-        "key_dict_builders_transpose_filter_cache_length_misses",
-        key_dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_build_transpose_map_time",
-                    key_dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_transpose_time",
-                    key_dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_unify_string_arr_time",
-                    key_dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
-        "key_dict_builders_transpose_filter_build_transpose_map_time",
-        key_dict_builder_metrics.transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_transpose_filter_transpose_time",
-                    key_dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("key_dict_builders_transpose_filter_string_arr_time",
-                    key_dict_builder_metrics.transpose_filter_string_arr_time));
+    key_dict_builder_metrics.add_to_metrics(metrics, "key_dict_builders_");
     metrics.emplace_back(
         StatMetric("n_non_key_dict_builders", n_non_key_dict_builders, true));
-    metrics.emplace_back(
-        StatMetric("non_key_dict_builders_unify_cache_id_misses",
-                   non_key_dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
-        StatMetric("non_key_dict_builders_unify_cache_length_misses",
-                   non_key_dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(StatMetric(
-        "non_key_dict_builders_transpose_filter_cache_id_misses",
-        non_key_dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(StatMetric(
-        "non_key_dict_builders_transpose_filter_cache_length_misses",
-        non_key_dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_unify_build_transpose_map_time",
-        non_key_dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
-        TimerMetric("non_key_dict_builders_unify_transpose_time",
-                    non_key_dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
-        TimerMetric("non_key_dict_builders_unify_string_arr_time",
-                    non_key_dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_build_transpose_map_time",
-        non_key_dict_builder_metrics
-            .transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_transpose_time",
-        non_key_dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(TimerMetric(
-        "non_key_dict_builders_transpose_filter_string_arr_time",
-        non_key_dict_builder_metrics.transpose_filter_string_arr_time));
+    non_key_dict_builder_metrics.add_to_metrics(metrics,
+                                                "non_key_dict_builders_");
 
     QueryProfileCollector::Default().RegisterOperatorStageMetrics(
         QueryProfileCollector::MakeOperatorStageID(
@@ -2399,6 +2307,7 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
     }
     this->metrics.append_probe_inactive_partitions_time +=
         end_timer(start_append);
+    this->metrics.append_probe_inactive_partitions_nrows += table_nrows;
 }
 
 template <bool build_table_outer, bool probe_table_outer,
@@ -2653,6 +2562,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
             std::vector<uint64_t>());
     }
     join_state->metrics.build_filter_na_time += end_timer(start_filter);
+    join_state->metrics.build_filter_na_output_nrows += in_table->nrows();
 
     // Get hashes of the new batch (different hashes for partitioning and
     // hash table to reduce conflict)
@@ -2934,6 +2844,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             probe_kept_cols);
         join_state->metrics.probe_filter_na_time += end_timer(start_filter);
     }
+    join_state->metrics.probe_filter_na_output_nrows += in_table->nrows();
 
     active_partition->probe_table = in_table;
 
@@ -2983,6 +2894,9 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
                                                          false);
     time_pt start_ht_probe = start_timer();
+    group_ids.resize(in_table->nrows());
+    const auto& active_partition_ht =
+        active_partition.get()->build_hash_table_guard.value();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         // If just build_parallel = False then we have a broadcast join on
         // the build side. So process all rows.
@@ -3006,27 +2920,26 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             // across ranks for dict-encoded string arrays
             (!join_state->global_bloom_filter->Find(
                 batch_hashes_partition[i_row]))) {
-            join_state->metrics.num_runtime_filter_misses++;
-            group_ids.emplace_back(0);
+            join_state->metrics.probe_outer_bloom_filter_misses++;
+            group_ids[i_row] = 0;
         } else if (process_on_rank) {
             join_state->metrics.num_processed_probe_table_rows++;
             if (active_partition->is_in_partition(
                     batch_hashes_partition[i_row])) {
-                handle_probe_input_for_partition(active_partition.get(), i_row,
-                                                 group_ids);
+                group_ids[i_row] = handle_probe_input_for_partition(
+                    active_partition_ht, i_row);
             } else {
                 append_to_probe_inactive_partition[i_row] = true;
-                group_ids.emplace_back(-1);
+                group_ids[i_row] = -1;
             }
         } else if (shuffle_possible) {
             append_to_probe_shuffle_buffer[i_row] = true;
-            group_ids.emplace_back(-1);
+            group_ids[i_row] = -1;
         } else {
-            group_ids.emplace_back(-1);
+            group_ids[i_row] = -1;
         }
     }
     join_state->metrics.ht_probe_time += end_timer(start_ht_probe);
-    assert(group_ids.size() == in_table->nrows());
     HashJoinMetrics::time_t append_time = 0;
     time_pt start_produce_probe = start_timer();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -3138,22 +3051,22 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     // Initialize bit-vector to false.
                     append_to_probe_inactive_partition.resize(nrows, false);
                     start_ht_probe = start_timer();
+                    group_ids.resize(nrows);
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
                         if (active_partition->is_in_partition(
                                 batch_hashes_partition[i_row])) {
-                            handle_probe_input_for_partition(
-                                active_partition.get(),
-                                // Add offset to get the actual row index in the
-                                // full table:
-                                i_row + batch_start_row, group_ids);
+                            group_ids[i_row] = handle_probe_input_for_partition(
+                                active_partition_ht,
+                                // Add offset to get the actual row index in
+                                // the full table:
+                                i_row + batch_start_row);
                         } else {
                             append_to_probe_inactive_partition[i_row] = true;
-                            group_ids.emplace_back(-1);
+                            group_ids[i_row] = -1;
                         }
                     }
                     join_state->metrics.ht_probe_time +=
                         end_timer(start_ht_probe);
-                    assert(group_ids.size() == nrows);
                     append_time = 0;
                     start_produce_probe = start_timer();
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
@@ -3183,16 +3096,16 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 } else {
                     // Fast path for the single partition case:
                     start_ht_probe = start_timer();
+                    group_ids.resize(nrows);
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
-                        handle_probe_input_for_partition(
-                            active_partition.get(),
+                        group_ids[i_row] = handle_probe_input_for_partition(
+                            active_partition_ht,
                             // Add offset to get the actual row index in the
                             // full table:
-                            i_row + batch_start_row, group_ids);
+                            i_row + batch_start_row);
                     }
                     join_state->metrics.ht_probe_time +=
                         end_timer(start_ht_probe);
-                    assert(group_ids.size() == nrows);
                     append_time = 0;
                     start_produce_probe = start_timer();
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
