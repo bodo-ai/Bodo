@@ -172,9 +172,6 @@ bodo::tests::suite memory_budget_tests([] {
             (comptroller->GetOperatorBudget(1) < 1.66 * 1024 * 1024));
         bodo::tests::check((comptroller->GetOperatorBudget(7) > 354 * 1024) &&
                            (comptroller->GetOperatorBudget(7) < 355 * 1024));
-        // Operator 2 is a dummy operator that wasn't explicitly registered.
-        // It's memory allocation should be 0.
-        bodo::tests::check(comptroller->GetOperatorBudget(2) == 0);
         // Operator 12 (WRITE) doesn't share its memory with anything. But it's
         // an absolute estimate, so it should get what it asked for and no more.
         bodo::tests::check(comptroller->GetOperatorBudget(12) == 400 * 1024);

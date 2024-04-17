@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.commons.lang3.tuple.Pair;
 
 /** Class for locally testing codegen using a snowflake catalog */
 public class SnowflakeGenTest {
@@ -108,11 +109,11 @@ public class SnowflakeGenTest {
   private static String getRelationalAlgebraString(
       RelationalAlgebraGenerator generator, String sql) {
     try {
-      RelRoot root = generator.getRelationalAlgebra(sql);
-      RelNode newRoot = PandasUtilKt.pandasProject(root);
+      Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql);
+      RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
       StringWriter sw = new StringWriter();
       RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight());
       newRoot.explain(costWriter);
       return sw.toString();
     } catch (Exception e) {

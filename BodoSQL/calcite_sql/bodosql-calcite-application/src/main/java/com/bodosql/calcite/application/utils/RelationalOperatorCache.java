@@ -80,7 +80,7 @@ public class RelationalOperatorCache {
     StreamingPipelineFrame frame = tableAndFrame.getSecond();
     Variable tableBuilderState = builder.getSymbolTable().genStateVar();
 
-    int operatorID = this.builder.newOperatorID();
+    int operatorID = this.builder.newOperatorID(node);
 
     frame.initializeStreamingState(
         operatorID,

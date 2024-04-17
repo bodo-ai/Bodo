@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Supplier;
@@ -189,7 +190,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       RelDataTypeSystem typeSystem,
       boolean debuggingDeltaTable,
       int verboseLevel,
-      int batchSize) {
+      int batchSize,
+      Map<Integer, Integer> idMapping) {
     super();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
@@ -201,6 +203,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.verboseLevel = verboseLevel;
     this.generatedCode = new Module.Builder();
     this.streamingOptions = new StreamingOptions(batchSize);
+
+    this.generatedCode.setIDMapping(idMapping);
   }
 
   /**
@@ -485,7 +489,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(0), 0, node);
 
     Variable inputTableVar = tableGenStack.pop();
-    int operatorID = this.generatedCode.newOperatorID();
+    int operatorID = this.generatedCode.newOperatorID(node);
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
@@ -650,7 +654,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Create the state variables
     StateVariable stateVar = genStateVar();
     kotlin.Pair<String, Expr> isAll = new kotlin.Pair<>("all", new Expr.BooleanLiteral(node.all));
-    int operatorID = this.generatedCode.newOperatorID();
+    int operatorID = this.generatedCode.newOperatorID(node);
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_union.init_union_state",
@@ -1012,7 +1016,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
-    int operatorID = this.generatedCode.newOperatorID();
+    int operatorID = this.generatedCode.newOperatorID(node);
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections,
@@ -1293,7 +1297,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
-    int operatorID = this.generatedCode.newOperatorID();
+    int operatorID = this.generatedCode.newOperatorID(node);
 
     // Get column names for write append call
     Variable colNamesGlobal =
@@ -1701,7 +1705,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable buildTable = tableGenStack.pop();
 
     // Create the state var.
-    int operatorID = generatedCode.newOperatorID();
+    int operatorID = generatedCode.newOperatorID(node);
     StateVariable groupbyStateVar = genStateVar();
     List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());
     Variable keyIndices = this.lowerAsMetaType(new Expr.Tuple(keyIndiciesList));
@@ -1868,7 +1872,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable buildTable = tableGenStack.pop();
 
     // Create the state var.
-    int operatorID = generatedCode.newOperatorID();
+    int operatorID = generatedCode.newOperatorID(node);
     StateVariable groupbyStateVar = genStateVar();
 
     // Generate the global variables for the partition keys
@@ -2239,7 +2243,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // There may be a need to pass in several lambdas, so other changes may be
     // needed to avoid
     // constant rewriting.
-    int operatorID = this.generatedCode.newOperatorID();
+    int operatorID = this.generatedCode.newOperatorID(node);
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             this.generatedCode,
@@ -2543,7 +2547,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @Override
     public BodoEngineTable build(
         @NotNull final Function1<? super PandasRel.BuildContext, BodoEngineTable> fn) {
-      int operatorID = generatedCode.newOperatorID();
+      int operatorID = generatedCode.newOperatorID(node);
       return singleBatchTimer(
           node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node, genDefaultTZ())));
     }
@@ -2573,7 +2577,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               node.loggingTitle(),
               node.nodeDetails(),
               node.getTimerType());
-      int operatorID = generatedCode.newOperatorID();
+      int operatorID = generatedCode.newOperatorID(node);
       PandasCodeGenVisitor.BuildContext buildContext =
           new PandasCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ());
       timerInfo.initializeTimer();

@@ -196,16 +196,18 @@ class OperatorComptroller {
      */
     void PrintBudgetAllocations(std::ostream& os);
 
-    size_t GetNumOperators() const { return num_operators; }
+    std::unordered_map<int64_t, int64_t> GetOperatorBudgets() const {
+        return operator_allocated_budget;
+    }
 
    private:
     /// @brief Total budget for each pipeline. Set during `Initialize`.
     size_t total_budget = 0;
     std::vector<size_t> pipeline_remaining_budget;
     std::vector<std::set<int64_t>> pipeline_to_remaining_operator_ids;
-    std::vector<int64_t> operator_allocated_budget;
+    std::unordered_map<int64_t, int64_t> operator_allocated_budget;
 
-    std::vector<OperatorRequest> requests_per_operator;
+    std::unordered_map<int64_t, OperatorRequest> requests_per_operator;
 
     size_t num_pipelines = 0;
     size_t num_operators = 0;
