@@ -101,7 +101,7 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
         prefix_code = "true_vals = {'true', 't', 'yes', 'y', 'on', '1'}\n"
         prefix_code += "false_vals = {'false', 'f', 'no', 'n', 'off', '0'}"
     if is_string:
-        scalar_text = "s = arg0.lower()\n"
+        scalar_text = "s = arg0.strip().lower()\n"
         scalar_text += f"is_true_val = s in true_vals\n"
         scalar_text += f"res[i] = is_true_val\n"
         scalar_text += f"if not (is_true_val or s in false_vals):\n"
@@ -1195,9 +1195,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
             err_msg = "string must be a valid numeric expression"
         else:  # pragma: no cover
             err_msg = "value must be a valid numeric expression"
-        on_fail = (
-            f"""raise ValueError("invalid value for double conversion: {err_msg}")"""
-        )
+        on_fail = f'raise ValueError("invalid value for double conversion: {err_msg}")'
 
     # Format string not supported
     if not is_overload_none(optional_format_string):  # pragma: no cover
@@ -1205,9 +1203,10 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
             f"Internal error: Format string not supported for TO_DOUBLE / TRY_TO_DOUBLE"
         )
     elif is_string:
-        scalar_text = "if is_string_numeric(arg0):\n"
-        scalar_text += f"  res[i] = np.float64(arg0)\n"
-        scalar_text += f"else:\n"
+        scalar_text = "arg0 = arg0.strip()\n"
+        scalar_text += "if is_string_numeric(arg0):\n"
+        scalar_text += "  res[i] = np.float64(arg0)\n"
+        scalar_text += "else:\n"
         scalar_text += f"  {on_fail}\n"
     elif is_float:  # pragma: no cover
         scalar_text = f"res[i] = arg0\n"
