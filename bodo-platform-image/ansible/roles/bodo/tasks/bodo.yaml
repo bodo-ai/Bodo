@@ -56,13 +56,19 @@
   tags:
     - bodo
 
-# Note: if this is done as part of the worker enviornment, we get a nasty error whoose root cause is:
-# _configtest.c:2:10: fatal error: 'mpi.h' file not found
-# I'm not certain why, but doing the pip installation separately from the other installs in
-# the environment file resolves this issue
+- name: Extract Artifact
+  unarchive:
+    src: "/tmp/bodo-platform-utils.tar.gz"
+    dest: "/tmp"
+    remote_src: true
+
+## Note: if this is done as part of the worker enviornment, we get a nasty error whoose root cause is:
+## _configtest.c:2:10: fatal error: 'mpi.h' file not found
+## I'm not certain why, but doing the pip installation separately from the other installs in
+## the environment file resolves this issue
 - name: BODO | Install Bodo Platform Utils Package
   command:
-    cmd: "/opt/conda/bin/pip install bodo-platform-utils=={{ BODO_PLATFORM_UTILS_VERSION }}"
+    cmd: "/opt/conda/bin/pip install bodo-platform-utils /tmp/bodo-platform-utils"
   tags:
     - bodo
 

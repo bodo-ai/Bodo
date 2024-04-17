@@ -4,11 +4,11 @@
   gather_facts: true
   become: yes
   vars_files:
-    - ./vars/common.yaml
-    - ./vars/conda.yaml
-    - ./vars/efa.yaml
-    - ./vars/bodo.yaml
-    - ./vars/intelmpi.yaml
+    - vars/common.yaml
+    - vars/conda.yaml
+    - vars/efa.yaml
+    - vars/bodo.yaml
+    - vars/intelmpi.yaml
 
   roles:
     - common

@@ -307,6 +307,12 @@ build {
     scripts         = ["${var.scripts_dir}/vm_precondition.sh"]
   }
 
+  provisioner "file" {
+    destination = "/tmp/"
+    source      = "../bodo-platform-utils.tar.gz"
+  }
+
+
   provisioner "ansible-local" {
     clean_staging_directory = true
     extra_arguments = [
