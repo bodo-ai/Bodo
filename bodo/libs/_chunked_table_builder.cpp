@@ -671,11 +671,8 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
 
 void ChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::vector<bool>& append_rows, const int64_t in_table_start_offset) {
-    // Convert bool vector into indices vector
-    size_t num_append_rows =
-        std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
-
+    const std::vector<bool>& append_rows, const size_t num_append_rows,
+    const int64_t in_table_start_offset) {
     // Convert the bit-vector to a vector of indices. Offset the
     // entries by in_table_start_offset.
     // We do the "+1" since we need to have at least 1 element in the array for
@@ -695,17 +692,18 @@ void ChunkedTableBuilder::AppendBatch(
 
 void ChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::unique_ptr<uint8_t[]> append_rows,
+    const std::vector<bool>& append_rows, const int64_t in_table_start_offset) {
+    // Calculate number of rows to append
+    size_t num_append_rows =
+        std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
+    this->AppendBatch(in_table, append_rows, num_append_rows,
+                      in_table_start_offset);
+}
+
+void ChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::unique_ptr<uint8_t[]>& append_rows, const size_t num_append_rows,
     const int64_t in_table_start_offset) {
-    // Count the number of rows to append.
-    // This won't be exact for the last word, but that's fine, it will be within
-    // 63 and will always overestimate.
-    size_t num_append_rows = 0;
-    for (int64_t i = 0;
-         i < (arrow::bit_util::BytesForBits(in_table->nrows()) / 8); i++) {
-        num_append_rows +=
-            arrow::bit_util::PopCount(((uint64_t*)append_rows.get())[i]);
-    }
     std::vector<int64_t> idxs;
     idxs.reserve(num_append_rows);
 
@@ -718,6 +716,23 @@ void ChunkedTableBuilder::AppendBatch(
     }
 
     this->AppendBatch(in_table, idxs);
+}
+
+void ChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::unique_ptr<uint8_t[]>& append_rows,
+    const int64_t in_table_start_offset) {
+    // Count the number of rows to append.
+    // This won't be exact for the last word, but that's fine, it will be within
+    // 63 and will always overestimate.
+    size_t num_append_rows = 0;
+    for (int64_t i = 0;
+         i < (arrow::bit_util::BytesForBits(in_table->nrows()) / 8); i++) {
+        num_append_rows +=
+            arrow::bit_util::PopCount(((uint64_t*)append_rows.get())[i]);
+    }
+    this->AppendBatch(in_table, append_rows, num_append_rows,
+                      in_table_start_offset);
 }
 
 void ChunkedTableBuilder::AppendBatch(

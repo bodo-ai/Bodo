@@ -31,8 +31,8 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 #define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
 
 // Stage IDs for build and probe for the QueryProfileCollector
-#define QUERY_PROFILE_BUILD_STAGE_ID 0
-#define QUERY_PROFILE_PROBE_STAGE_ID 1
+#define QUERY_PROFILE_BUILD_STAGE_ID 1
+#define QUERY_PROFILE_PROBE_STAGE_ID 2
 
 class JoinPartition;
 struct HashHashJoinTable {
@@ -105,15 +105,20 @@ struct HashJoinMetrics : public JoinMetrics {
 
     /// Time spent in appends to TBBs and CTBs of the partitions.
     time_t build_appends_active_time = 0;
+    stat_t build_appends_active_nrows = 0;
     time_t build_appends_inactive_time = 0;
+    stat_t build_appends_inactive_nrows = 0;
 
     // Time spent finding the partition for each row in the
     // multi-partition case.
     time_t build_input_partition_check_time = 0;
+    stat_t build_input_partition_check_nrows = 0;
 
     /// Time spent in BuildHashTable
     time_t build_ht_hashing_time = 0;  // Hashing
-    time_t build_ht_insert_time = 0;   // Inserting into hashmap
+    stat_t build_ht_hashing_nrows = 0;
+    time_t build_ht_insert_time = 0;  // Inserting into hashmap
+    stat_t build_ht_insert_nrows = 0;
 
     /// Partition stats
     stat_t n_partitions = 1;    // Number of partitions
@@ -127,11 +132,16 @@ struct HashJoinMetrics : public JoinMetrics {
     /// Time spent repartitioning
     time_t repartitioning_time = 0;  // Overall
     time_t repartitioning_part_hashing_time = 0;
+    stat_t repartitioning_part_hashing_nrows = 0;
     time_t repartitioning_active_part1_append_time = 0;
+    stat_t repartitioning_active_part1_append_nrows = 0;
     time_t repartitioning_active_part2_append_time = 0;
+    stat_t repartitioning_active_part2_append_nrows = 0;
+    // nrows for this is the same as repartitioning_part_hashing_nrows:
     time_t repartitioning_inactive_append_time = 0;
     // Most of the cost of PopChunk is expected to be from disk IO.
     time_t repartitioning_inactive_pop_chunk_time = 0;
+    stat_t repartitioning_inactive_n_pop_chunks = 0;
 
     // Time spent finalizing
     time_t build_finalize_time = 0;           // Overall
@@ -141,9 +151,12 @@ struct HashJoinMetrics : public JoinMetrics {
     // already measured separately ('build_ht_hashing_time' and
     // 'build_ht_insert_time')
 
-    // Time spent computing partition hashes in the main loop
+    // Time spent computing partition hashes in the main loop. 'nrows' for this
+    // is build_filter_na_output_nrows + total number of build
+    // shuffle output rows.
     time_t build_input_part_hashing_time = 0;
-    // Time spent adding to the bloom filter.
+    // Time spent adding to the bloom filter. 'nrows' for this is
+    // build_filter_na_output_nrows
     time_t bloom_filter_add_time = 0;
     // Time spent in bloom filter union reduction
     time_t bloom_filter_union_reduction_time = 0;
@@ -157,6 +170,7 @@ struct HashJoinMetrics : public JoinMetrics {
 
     // Time spent in filter_na_values
     time_t build_filter_na_time = 0;
+    stat_t build_filter_na_output_nrows = 0;
 
     // Partitioning state
     blob_t final_partitioning_state;
@@ -173,22 +187,30 @@ struct HashJoinMetrics : public JoinMetrics {
 
     // Time spent in appends (AppendInactiveProbeBatch)
     time_t append_probe_inactive_partitions_time = 0;
+    stat_t append_probe_inactive_partitions_nrows = 0;
     // Time spent finding the partitions in the multi partition case
-    // (AppendProbeBatchToInactivePartition)
+    // (AppendProbeBatchToInactivePartition). 'nrows' for this is the same as
+    // append_probe_inactive_partitions_nrows.
     time_t probe_inactive_partition_check_time = 0;
     // Time spent probing the hash table / finding group-id for the rows.
+    // 'nrows' for this is num_processed_probe_table_rows.
     time_t ht_probe_time = 0;
 
     // Time spent in produce_probe_output, except the time spent appending
     // output to the output buffer. In the non-equi condition case, this
-    // includes the time to evaluate the cond_func.
+    // includes the time to evaluate the cond_func. 'nrows' for this is
+    // effectively num_processed_probe_table_rows.
     time_t produce_probe_out_idxs_time = 0;
-    // Time spent in generate_build_table_outer_rows_for_partition
+    // Time spent in generate_build_table_outer_rows_for_partition. 'nrows' for
+    // this is 'build_nrows'.
     time_t build_outer_output_idx_time = 0;
 
-    // Time spent computing join hashes
+    // Time spent computing join hashes. 'nrows' for this is
+    // probe_filter_na_output_nrows + total size of the shuffle outputs.
     time_t probe_join_hashing_time = 0;
-    // Time spent computing partition hashes
+    // Time spent computing partition hashes. 'nrows' for this is
+    // probe_filter_na_output_nrows + (total size of the shuffle outputs if >1
+    // partitions else 0).
     time_t probe_part_hashing_time = 0;
 
     /// Time spent in finalizing the inactive partitions.
@@ -198,22 +220,33 @@ struct HashJoinMetrics : public JoinMetrics {
     // Time spent in reading back inactive probe chunks during
     // FinalizeProbeForInactivePartition
     time_t probe_inactive_pop_chunk_time = 0;
+    stat_t probe_inactive_pop_chunk_n_chunks = 0;
 
-    // Time spent in filter_na_values
+    // Time spent in filter_na_values. The input count is the total number of
+    // local input rows.
     time_t probe_filter_na_time = 0;
+    stat_t probe_filter_na_output_nrows = 0;
 
-    ///// JoinFilter
+    // Number of rows pruned out by the bloom filter in the probe outer case.
+    // 'nrows' for this is probe_filter_na_output_nrows.
+    stat_t probe_outer_bloom_filter_misses = 0;
+
+    ///// JoinFilter (only relevant in the probe-inner case)
 
     // Track the number of misses pruned by the runtime filter.
-    // This can either be from the bloom filter, or dictionary-builder
+    // This can either be from the bloom filter or dictionary-builder
     // based pruning in RuntimeFilter.
     stat_t num_runtime_filter_misses = 0;
+    stat_t num_runtime_filter_applied_rows = 0;
     // Materialization time
     time_t join_filter_materialization_time = 0;
+    stat_t join_filter_materialization_nrows = 0;
     // Time spent hashing for bloom filter
     time_t join_filter_bloom_filter_hashing_time = 0;
+    stat_t join_filter_bloom_filter_hashing_nrows = 0;
     // Time spent probing bloom filter
     time_t join_filter_bloom_filter_probe_time = 0;
+    stat_t join_filter_bloom_filter_probe_nrows = 0;
 };
 
 /**

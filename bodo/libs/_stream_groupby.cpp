@@ -8,7 +8,9 @@
 #include "_groupby_col_set.h"
 #include "_groupby_common.h"
 #include "_memory_budget.h"
+#include "_query_profile_collector.h"
 #include "_shuffle.h"
+#include "_stream_shuffle.h"
 #include "_window_compute.h"
 #include "arrow/util/bit_util.h"
 
@@ -80,6 +82,7 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
  * @param n_keys Number of key columns for this groupby operation.
  * @param req_extended_group_info Whether we need to collect extended group
  * information.
+ * @param[in, out] metrics Metrics to add to.
  * @param pool Memory pool to use for allocations during the execution of this
  * function. See description of 'get_update_table' for a more detailed
  * explanation.
@@ -90,13 +93,19 @@ template <bool is_acc_case>
 std::vector<grouping_info> get_grouping_infos_for_update_table(
     std::shared_ptr<table_info> in_table, const uint64_t n_keys,
     const bool req_extended_group_info,
+    GroupbyMetrics::GetGroupInfoMetrics& metrics,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     // Allocate the memory for hashes through the pool.
+    // We don't need a ScopedTimer since the allocation will either fail
+    // instantly or not at all.
+    time_pt start = start_timer();
     std::shared_ptr<uint32_t[]> batch_hashes_groupby =
         bodo::make_shared_arr<uint32_t>(in_table->nrows(), pool);
     // Compute and fill hashes into allocated memory.
     hash_keys_table(batch_hashes_groupby, in_table, n_keys,
                     SEED_HASH_GROUPBY_SHUFFLE, false);
+    metrics.hashing_time += end_timer(start);
+    metrics.hashing_nrows += in_table->nrows();
 
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
 
@@ -106,8 +115,11 @@ std::vector<grouping_info> get_grouping_infos_for_update_table(
         // it's better to get an actual estimate using HLL.
         // The HLL only uses ~1MiB of memory, so we don't really need it to
         // go through the pool.
+        start = start_timer();
         nunique_hashes = get_nunique_hashes(
             batch_hashes_groupby, in_table->nrows(), /*is_parallel*/ false);
+        metrics.hll_time += end_timer(start);
+        metrics.hll_nrows += in_table->nrows();
     } else {
         // In the case of streaming groupby, we don't need to estimate the
         // number of unique hashes. We can just use the number of rows in the
@@ -119,6 +131,7 @@ std::vector<grouping_info> get_grouping_infos_for_update_table(
 
     std::vector<grouping_info> grp_infos;
 
+    ScopedTimer grouping_timer(metrics.grouping_time);
     if (req_extended_group_info) {
         // TODO[BSE-578]: set to true when handling cumulative operations that
         // need the list of NA row indexes.
@@ -131,6 +144,8 @@ std::vector<grouping_info> get_grouping_infos_for_update_table(
                        n_keys, /*check_for_null_keys*/ true,
                        /*key_dropna*/ false, /*is_parallel*/ false, pool);
     }
+    grouping_timer.finalize();
+    metrics.grouping_nrows += in_table->nrows();
 
     // get_group_info_iterate / get_group_info always reset the pointer,
     // so this should be a NOP, but we're adding it just to be safe.
@@ -157,6 +172,7 @@ std::vector<grouping_info> get_grouping_infos_for_update_table(
  * aggregation functions.
  * @param req_extended_group_info Whether we need to collect extended group
  * information.
+ * @param[in, out] metrics Metrics to add to.
  * @param pool Memory pool to use for allocations during the execution of this
  * function. In the accumulate code path case, this is the operator buffer pool.
  * In the agg case, this is the default BufferPool. This is because in the
@@ -177,6 +193,7 @@ std::shared_ptr<table_info> get_update_table(
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
     const std::vector<int32_t>& f_in_offsets,
     const std::vector<int32_t>& f_in_cols, const bool req_extended_group_info,
+    GroupbyMetrics::AggUpdateMetrics& metrics,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
@@ -184,6 +201,8 @@ std::shared_ptr<table_info> get_update_table(
     // update. Drop-duplicates only goes through the agg path, so this is safe.
     if (col_sets.size() == 0) {
         assert(!is_acc_case);
+        // XXX Because of re-partitioning, we might still want to drop the
+        // duplicates to avoid storing too much data.
         return in_table;
     }
 
@@ -193,7 +212,8 @@ std::shared_ptr<table_info> get_update_table(
     // Get the grouping_info:
     std::vector<grouping_info> grp_infos =
         get_grouping_infos_for_update_table<is_acc_case>(
-            in_table, n_keys, req_extended_group_info, pool);
+            in_table, n_keys, req_extended_group_info, metrics.grouping_metrics,
+            pool);
     grouping_info& grp_info = grp_infos[0];
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
 
@@ -227,7 +247,10 @@ std::shared_ptr<table_info> get_update_table(
         for (auto& e_arr : list_arr) {
             update_table->columns.push_back(e_arr);
         }
+        ScopedTimer update_timer(metrics.colset_update_time);
         col_set->update(grp_infos, pool, mm);
+        update_timer.finalize();
+        metrics.colset_update_nrows += in_table->nrows();
         col_set->clear();
     }
     return update_table;
@@ -527,20 +550,23 @@ std::vector<bool> get_mrnf_cols_to_keep_bitmask(
 }
 
 /**
- * @ brief Helper function to compute the output bitmask for the Min Row-Number
+ * @brief Helper function to compute the output bitmask for the Min Row-Number
  * Filter (MRNF) case.
  * @param in_table The input table to compute the MRNF bitmask for.
  * @param colset The colset to use for computing the output bitmask.
  * @param n_sort_cols The number of columns that will be used for the sort.
  * @param n_keys The number of keys in the input table.
+ * @param[in, out] metrics Metrics to add to.
  * @param pool The buffer ppol to use for allocations.
  * @param mm The memory manager to use for
- * allocations.
+ * @return std::tuple<std::unique_ptr<uint8_t[]>, size_t> Bitmask of rows to
+ * keep, Number of rows in the output (i.e. number of set bits in the output
+ * bitmask)
  */
-std::unique_ptr<uint8_t[]> compute_local_mrnf(
+std::tuple<std::unique_ptr<uint8_t[]>, size_t> compute_local_mrnf(
     std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<BasicColSet>& colset, size_t n_sort_cols,
-    size_t n_keys,
+    size_t n_keys, GroupbyMetrics::AggUpdateMetrics& metrics,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
@@ -548,7 +574,7 @@ std::unique_ptr<uint8_t[]> compute_local_mrnf(
     std::vector<grouping_info> grp_infos =
         get_grouping_infos_for_update_table</*is_acc_case*/ true>(
             in_table, n_keys,
-            /*req_extended_group_info=*/false, pool);
+            /*req_extended_group_info=*/false, metrics.grouping_metrics, pool);
     grouping_info& grp_info = grp_infos[0];
     // Construct a vector with the order-by columns.
     std::vector<std::shared_ptr<array_info>> orderby_arrs(
@@ -560,7 +586,10 @@ std::unique_ptr<uint8_t[]> compute_local_mrnf(
     colset->setInCol(orderby_arrs);
     colset->alloc_update_columns(grp_info.num_groups, list_arr,
                                  /*alloc_out_if_no_combine*/ false, pool, mm);
+    ScopedTimer update_timer(metrics.colset_update_time);
     colset->update(grp_infos, pool, mm);
+    update_timer.finalize();
+    metrics.colset_update_nrows += in_table->nrows();
     const std::vector<std::shared_ptr<array_info>> out_cols =
         colset->getOutputColumns();
     const std::shared_ptr<array_info>& idx_col = out_cols[0];
@@ -588,7 +617,8 @@ std::unique_ptr<uint8_t[]> compute_local_mrnf(
             arrow::bit_util::SetBit(out_bitmask.get(), row_one_idx);
         }
     }
-    return out_bitmask;
+    size_t num_groups = idx_col->length;
+    return std::make_tuple(std::move(out_bitmask), num_groups);
 }
 
 #pragma endregion  // Min Row-Number Filter Helpers
@@ -609,7 +639,7 @@ GroupbyPartition::GroupbyPartition(
     const std::vector<int32_t>& f_in_cols_,
     const std::vector<int32_t>& f_running_value_offsets_, bool is_active_,
     bool accumulate_before_update_, bool req_extended_group_info_,
-    bodo::OperatorBufferPool* op_pool_,
+    GroupbyMetrics& metrics_, bodo::OperatorBufferPool* op_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_mm_,
     bodo::OperatorScratchPool* op_scratch_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_)
@@ -625,6 +655,7 @@ GroupbyPartition::GroupbyPartition(
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
       f_running_value_offsets(f_running_value_offsets_),
+      metrics(metrics_),
       num_top_bits(num_top_bits_),
       top_bitmask(top_bitmask_),
       n_keys(n_keys_),
@@ -677,12 +708,15 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
         // TODO: Do this processing in batches of 4K/batch_size rows (for
         // handling inactive partition case where we will do this for the
         // entire table)!
+        time_pt start_hash = start_timer();
         std::unique_ptr<uint32_t[]> hashes = hash_keys_table(
             this->build_table_buffer->data_table, this->n_keys,
             SEED_HASH_GROUPBY_SHUFFLE,
             /*is_parallel*/ false,
             /*global_dict_needed*/ false, /*dict_hashes*/ nullptr,
             /*start_row_offset*/ hashes_cur_len);
+        this->metrics.rebuild_ht_hashing_time += end_timer(start_hash);
+        this->metrics.rebuild_ht_hashing_nrows += n_unhashed_rows;
         // Append the hashes:
         this->build_table_groupby_hashes.insert(
             this->build_table_groupby_hashes.end(), hashes.get(),
@@ -692,10 +726,14 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
     // Add entries to the hash table. All rows in the build_table_buffer
     // are guaranteed to be unique groups, so we can just map group ->
     // group.
+    ScopedTimer insert_timer(this->metrics.rebuild_ht_insert_time);
+    this->metrics.rebuild_ht_insert_nrows +=
+        (build_table_nrows - this->next_group);
     while (this->next_group < static_cast<int64_t>(build_table_nrows)) {
         (*(this->build_hash_table))[this->next_group] = this->next_group;
         this->next_group++;
     }
+    insert_timer.finalize();
 }
 
 template <bool is_active>
@@ -718,8 +756,10 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // keys/running values are strings, they always go through the
         // accumulate path.
         // TODO[BSE-616]: support variable size output like strings
+        ScopedTimer update_timer(this->metrics.update_logical_ht_time);
         this->build_table_buffer->ReserveTable(in_table);
         this->separate_out_cols->ReserveTableSize(in_table->nrows());
+        this->metrics.update_logical_ht_nrows += in_table->nrows();
 
         // Fill row group numbers in grouping_info to reuse existing
         // infrastructure.
@@ -744,20 +784,24 @@ void GroupbyPartition::UpdateGroupsAndCombine(
                 grp_info, in_table, batch_hashes_groupby, i_row);
         }
 
-        // Increment separate_out_cols size so aggfunc_out_initialize correctly
-        // initializes the columns
+        // Increment separate_out_cols size so aggfunc_out_initialize
+        // correctly initializes the columns
         this->separate_out_cols->IncrementSize(std::max<uint64_t>(
             this->next_group - this->separate_out_cols->data_table->nrows(),
             (uint64_t)0));
+        update_timer.finalize();
 
         // Combine existing (and new) keys using the input batch.
         // Since we're not passing in anything that can access the op-pool,
         // this shouldn't make any additional allocations that go through
         // the Operator Pool and hence cannot invoke the threshold
         // enforcement error.
+        time_pt start_combine = start_timer();
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
+        this->metrics.combine_input_time += end_timer(start_combine);
+        this->metrics.combine_input_nrows += in_table->nrows();
 
         /// Commit "transaction". Only update this after all the groups
         /// have been updated and combined and after the hash table,
@@ -769,7 +813,10 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table_hashes.reset();
     } else {
         // Append into the ChunkedTableBuilder
+        time_pt start = start_timer();
         this->build_table_buffer_chunked->AppendBatch(in_table);
+        this->metrics.appends_inactive_time += end_timer(start);
+        this->metrics.appends_inactive_nrows += in_table->nrows();
     }
 }
 
@@ -794,8 +841,12 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // keys/running values are strings, they always go through the
         // accumulate path.
         // TODO[BSE-616]: support variable size output like strings
+        ScopedTimer update_timer(this->metrics.update_logical_ht_time);
         this->build_table_buffer->ReserveTable(in_table);
-        this->separate_out_cols->ReserveTableSize(in_table->nrows());
+        size_t append_rows_sum =
+            std::count(append_rows.begin(), append_rows.end(), true);
+        this->separate_out_cols->ReserveTableSize(append_rows_sum);
+        this->metrics.update_logical_ht_nrows += append_rows_sum;
         // Fill row group numbers in grouping_info to reuse existing
         // infrastructure.
         // We set group=-1 for rows that don't belong to the current buffer
@@ -827,15 +878,19 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->separate_out_cols->IncrementSize(std::max<uint64_t>(
             this->next_group - this->separate_out_cols->data_table->nrows(),
             (uint64_t)0));
+        update_timer.finalize();
 
         // Combine existing (and new) keys using the input batch.
         // Since we're not passing in anything that can access the op-pool,
         // this shouldn't make any additional allocations that go through
         // the Operator Pool and hence cannot invoke the threshold
         // enforcement error.
+        time_pt start_combine = start_timer();
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
+        this->metrics.combine_input_time += end_timer(start_combine);
+        this->metrics.combine_input_nrows += append_rows_sum;
 
         /// Commit "transaction". Only update this after all the groups
         /// have been updated and combined and after the hash table,
@@ -847,7 +902,13 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table_hashes.reset();
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows);
+        time_pt start = start_timer();
+        size_t num_append_rows =
+            std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
+        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows,
+                                                      num_append_rows, 0);
+        this->metrics.appends_inactive_time += end_timer(start);
+        this->metrics.appends_inactive_nrows += num_append_rows;
     }
 }
 
@@ -855,16 +916,22 @@ template <bool is_active>
 void GroupbyPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table) {
     if (is_active) {
+        ScopedTimer append_timer(this->metrics.appends_active_time);
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
         this->build_table_buffer->ReserveTable(in_table);
+        this->metrics.appends_active_nrows += in_table->nrows();
         // Now append the rows. This will always
         // succeed since we've
         // reserved space upfront.
         this->build_table_buffer->UnsafeAppendBatch(in_table);
+        append_timer.finalize();
     } else {
         // Append into the ChunkedTableBuilder
+        time_pt start = start_timer();
         this->build_table_buffer_chunked->AppendBatch(in_table);
+        this->metrics.appends_inactive_time += end_timer(start);
+        this->metrics.appends_inactive_nrows += in_table->nrows();
     }
 }
 
@@ -873,16 +940,27 @@ void GroupbyPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows) {
     if (is_active) {
+        ScopedTimer append_timer(this->metrics.appends_active_time);
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
         this->build_table_buffer->ReserveTable(in_table);
+        uint64_t append_rows_sum = std::accumulate(
+            append_rows.begin(), append_rows.end(), (uint64_t)0);
+        this->metrics.appends_active_nrows += append_rows_sum;
         // Now append the rows. This will always
-        // succeed since we've
-        // reserved space upfront.
-        this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows);
+        // succeed since we've reserved space upfront.
+        this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows,
+                                                    append_rows_sum);
+        append_timer.finalize();
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows);
+        time_pt start = start_timer();
+        size_t num_append_rows =
+            std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
+        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows,
+                                                      num_append_rows, 0);
+        this->metrics.appends_inactive_time += end_timer(start);
+        this->metrics.appends_inactive_nrows += num_append_rows;
     }
 }
 
@@ -938,8 +1016,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->n_keys, this->build_table_dict_builders, this->col_sets,
             this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
             is_active, this->accumulate_before_update,
-            this->req_extended_group_info, this->op_pool, this->op_mm,
-            this->op_scratch_pool, this->op_scratch_mm);
+            this->req_extended_group_info, this->metrics, this->op_pool,
+            this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
@@ -948,17 +1026,21 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->n_keys, this->build_table_dict_builders, this->col_sets,
             this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
             false, this->accumulate_before_update,
-            this->req_extended_group_info, this->op_pool, this->op_mm,
-            this->op_scratch_pool, this->op_scratch_mm);
+            this->req_extended_group_info, this->metrics, this->op_pool,
+            this->op_mm, this->op_scratch_pool, this->op_scratch_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
         // In the active case, partition this->build_table_buffer directly
 
         // Compute partitioning hashes
+        time_pt start = start_timer();
         std::shared_ptr<uint32_t[]> build_table_partitioning_hashes =
             hash_keys_table(this->build_table_buffer->data_table, this->n_keys,
                             SEED_HASH_PARTITION, false, false, dict_hashes);
+        this->metrics.repartitioning_part_hashing_time += end_timer(start);
+        this->metrics.repartitioning_part_hashing_nrows +=
+            this->build_table_buffer->data_table->nrows();
 
         // Put the build data in the new partitions.
         append_partition1.resize(this->build_table_buffer->data_table->nrows(),
@@ -984,6 +1066,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         uint64_t append_partition1_sum = std::accumulate(
             append_partition1.begin(), append_partition1.end(), (uint64_t)0);
 
+        start = start_timer();
         if (!this->accumulate_before_update) {
             // In the AGG case, we also need to populate the hashes.
 
@@ -1024,6 +1107,10 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         // no separate out columns)
         new_part1->separate_out_cols->ReserveTableSize(append_partition1_sum);
         new_part1->separate_out_cols->IncrementSize(append_partition1_sum);
+        this->metrics.repartitioning_active_part1_append_time +=
+            end_timer(start);
+        this->metrics.repartitioning_active_part1_append_nrows +=
+            append_partition1_sum;
 
         if (!this->accumulate_before_update) {
             // Update safely appended group count for the new active
@@ -1042,6 +1129,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             // partitions).
         }
 
+        start = start_timer();
         append_partition1.flip();
         std::vector<bool>& append_partition2 = append_partition1;
 
@@ -1057,6 +1145,10 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
 
         new_part2->build_table_buffer_chunked->AppendBatch(
             this->build_table_buffer->data_table, append_partition2);
+        this->metrics.repartitioning_active_part2_append_time +=
+            end_timer(start);
+        this->metrics.repartitioning_active_part2_append_nrows +=
+            (rows_to_insert - append_partition1_sum);
 
         // We do not rebuild the hash table here (for new_part1 which is the
         // new active partition). That needs to be handled by the caller.
@@ -1069,16 +1161,25 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         this->build_table_buffer.reset();
         this->build_table_groupby_hashes.resize(0);
         this->build_table_groupby_hashes.shrink_to_fit();
+        this->metrics.repartitioning_inactive_pop_chunk_n_chunks +=
+            this->build_table_buffer_chunked->chunks.size();
 
         while (!this->build_table_buffer_chunked->chunks.empty()) {
+            time_pt start = start_timer();
             auto [build_table_chunk, build_table_nrows_chunk] =
                 this->build_table_buffer_chunked->PopChunk();
+            this->metrics.repartitioning_inactive_pop_chunk_time +=
+                end_timer(start);
             // Compute partitioning hashes.
             // TODO XXX Allocate the hashes buffer once (set size to CTB's
             // chunk-size) and reuse it across all chunks.
+            start = start_timer();
             std::shared_ptr<uint32_t[]> build_table_partitioning_hashes_chunk =
                 hash_keys_table(build_table_chunk, this->n_keys,
                                 SEED_HASH_PARTITION, false, false, dict_hashes);
+            this->metrics.repartitioning_part_hashing_time += end_timer(start);
+            this->metrics.repartitioning_part_hashing_nrows +=
+                build_table_chunk->nrows();
 
             append_partition1.resize(build_table_nrows_chunk, false);
             for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
@@ -1086,6 +1187,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
                     build_table_partitioning_hashes_chunk[i_row]);
             }
 
+            start = start_timer();
             new_part1->build_table_buffer_chunked->AppendBatch(
                 build_table_chunk, append_partition1);
 
@@ -1094,6 +1196,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
 
             new_part2->build_table_buffer_chunked->AppendBatch(
                 build_table_chunk, append_partition2);
+            this->metrics.repartitioning_inactive_append_time +=
+                end_timer(start);
         }
     }
 
@@ -1136,15 +1240,26 @@ void GroupbyPartition::ActivatePartition() {
 
         // Do a single ReserveTable call to allocate all required space in a
         // single call:
+        ScopedTimer append_timer(this->metrics.appends_active_time);
         this->build_table_buffer->ReserveTable(
             *(this->build_table_buffer_chunked));
+        append_timer.finalize();
 
+        time_pt start;
+        this->metrics.finalize_activate_pin_chunk_n_chunks +=
+            this->build_table_buffer_chunked->chunks.size();
         // This will work without error because we've already allocated
         // all the required space:
         while (!this->build_table_buffer_chunked->chunks.empty()) {
+            start = start_timer();
             auto [build_table_chunk, build_table_nrows_chunk] =
                 this->build_table_buffer_chunked->PopChunk();
+            this->metrics.finalize_activate_pin_chunk_time += end_timer(start);
+
+            start = start_timer();
             this->build_table_buffer->UnsafeAppendBatch(build_table_chunk);
+            this->metrics.appends_active_time += end_timer(start);
+            this->metrics.appends_active_nrows += build_table_nrows_chunk;
         }
 
         // Free the chunked buffer state entirely since it's not needed anymore.
@@ -1153,20 +1268,29 @@ void GroupbyPartition::ActivatePartition() {
         // Just call UpdateGroupsAndCombine on each chunk. Note that
         // we cannot pop the chunks since we need to keep them around
         // in case we need to re-partition and retry.
+        time_pt start_pin = start_timer();
+        time_pt start_hash;
         for (const auto& chunk : *(this->build_table_buffer_chunked)) {
+            this->metrics.finalize_activate_pin_chunk_time +=
+                end_timer(start_pin);
+            this->metrics.finalize_activate_pin_chunk_n_chunks++;
             // By definition, this is a small chunk, so we don't need to
             // track this allocation and can consider this scratch memory
             // usage.
             // TODO XXX Cache the allocation for these hashes by making
             // an allocation for the chunk size (active_chunk_capacity)
             // and reusing that buffer for all chunks.
+            start_hash = start_timer();
             std::shared_ptr<uint32_t[]> chunk_hashes_groupby = hash_keys_table(
                 chunk, this->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false, false);
+            this->metrics.finalize_activate_groupby_hashing_time +=
+                end_timer(start_hash);
             // Treat the partition as active temporarily.
             // This step can fail. If it does, we can repartition and retry
             // safely since the CTB still has all the original data.
             this->UpdateGroupsAndCombine</*is_active*/ true>(
                 chunk, chunk_hashes_groupby);
+            start_pin = start_timer();
         }
 
         // If we were able to insert all chunks, we have successfully
@@ -1191,11 +1315,13 @@ void GroupbyPartition::FinalizeMrnf(
 
     // MRNF only supports a single colset.
     assert(this->col_sets.size() == 1);
-
-    std::unique_ptr<uint8_t[]> out_bitmask = compute_local_mrnf(
-        this->build_table_buffer->data_table, this->col_sets[0],
-        mrnf_sort_cols_to_keep.size(), this->n_keys, this->op_scratch_pool,
-        this->op_scratch_mm);
+    ScopedTimer mrnf_timer(this->metrics.finalize_compute_mrnf_time);
+    auto [out_bitmask, n_bits_set] =
+        compute_local_mrnf(this->build_table_buffer->data_table,
+                           this->col_sets[0], mrnf_sort_cols_to_keep.size(),
+                           this->n_keys, this->metrics.finalize_update_metrics,
+                           this->op_scratch_pool, this->op_scratch_mm);
+    mrnf_timer.finalize();
 
     // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
@@ -1215,7 +1341,7 @@ void GroupbyPartition::FinalizeMrnf(
 
     // Append this "pruned" table to the output buffer using the bitmask.
     output_buffer->AppendBatch(data_table_w_cols_to_keep,
-                               std::move(out_bitmask));
+                               std::move(out_bitmask), n_bits_set, 0);
 
     // Since we have added the output to the output buffer, we don't need the
     // build state anymore and can release that memory.
@@ -1225,7 +1351,9 @@ void GroupbyPartition::FinalizeMrnf(
 std::shared_ptr<table_info> GroupbyPartition::Finalize() {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
+    ScopedTimer activate_timer(this->metrics.finalize_activate_partition_time);
     this->ActivatePartition();
+    activate_timer.finalize();
 
     std::shared_ptr<table_info> out_table;
     if (accumulate_before_update) {
@@ -1234,17 +1362,23 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // the scratch portion of the pool for them.
 
         // Get update table with the running values:
+        ScopedTimer update_timer(this->metrics.finalize_get_update_table_time);
         std::shared_ptr<table_info> update_table =
             get_update_table</*is_acc_case*/ true>(
                 this->build_table_buffer->data_table, this->n_keys,
                 this->col_sets, this->f_in_offsets, this->f_in_cols,
-                this->req_extended_group_info, this->op_scratch_pool,
+                this->req_extended_group_info,
+                this->metrics.finalize_update_metrics, this->op_scratch_pool,
                 this->op_scratch_mm);
+        update_timer.finalize();
         // Call eval on these running values to get the final output.
+        this->metrics.finalize_eval_nrows += update_table->nrows();
+        ScopedTimer eval_timer(this->metrics.finalize_eval_time);
         out_table = eval_groupby_funcs_helper</*is_acc_case*/ true>(
             this->f_running_value_offsets, this->col_sets, update_table,
             this->n_keys, this->separate_out_cols->data_table,
             this->op_scratch_pool, this->op_scratch_mm);
+        eval_timer.finalize();
     } else {
         // Note that we don't need to call RebuildHashTableFromBuildBuffer
         // here. If the partition was inactive, ActivatePartition could've
@@ -1269,9 +1403,12 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // enforcement error.
         std::shared_ptr<table_info> combine_data =
             this->build_table_buffer->data_table;
+        this->metrics.finalize_eval_nrows += combine_data->nrows();
+        time_pt start_eval = start_timer();
         out_table = eval_groupby_funcs_helper</*is_acc_case*/ false>(
             this->f_running_value_offsets, this->col_sets, combine_data,
             this->n_keys, this->separate_out_cols->data_table);
+        this->metrics.finalize_eval_time += end_timer(start_eval);
     }
 
     // Since we have generated the output, we don't need the build state
@@ -1282,6 +1419,47 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 }
 
 #pragma endregion  // GroupbyPartition
+/* ------------------------------------------------------------------------ */
+
+/* ------------------- GroupbyIncrementalShuffleMetrics ------------------- */
+#pragma region  // GroupbyIncrementalShuffleMetrics
+
+void GroupbyIncrementalShuffleMetrics::add_to_metrics(
+    std::vector<MetricBase>& metrics) {
+    IncrementalShuffleMetrics::add_to_metrics(metrics);
+    metrics.emplace_back(StatMetric("shuffle_n_ht_resets", this->n_ht_reset));
+    metrics.emplace_back(
+        StatMetric("shuffle_peak_ht_size_bytes", this->peak_ht_size_bytes));
+    metrics.emplace_back(
+        StatMetric("shuffle_n_hashes_reset", this->n_hashes_reset));
+    metrics.emplace_back(StatMetric("shuffle_peak_hashes_size_bytes",
+                                    this->peak_hashes_size_bytes));
+    metrics.emplace_back(TimerMetric("shuffle_nunique_hll_hashing_time",
+                                     this->nunique_hll_hashing_time));
+    metrics.emplace_back(TimerMetric("shuffle_hll_time", this->hll_time));
+    metrics.emplace_back(
+        StatMetric("shuffle_n_local_reductions", this->n_local_reductions));
+    metrics.emplace_back(StatMetric("shuffle_local_reduction_input_nrows",
+                                    this->local_reduction_input_nrows));
+    metrics.emplace_back(StatMetric("shuffle_local_reduction_output_nrows",
+                                    this->local_reduction_output_nrows));
+    metrics.emplace_back(TimerMetric("shuffle_local_reduction_time",
+                                     this->local_reduction_time));
+    metrics.emplace_back(
+        TimerMetric("shuffle_local_reduction_mrnf_colset_update_time",
+                    this->local_reduction_mrnf_metrics.colset_update_time));
+    metrics.emplace_back(TimerMetric(
+        "shuffle_local_reduction_mrnf_hashing_time",
+        this->local_reduction_mrnf_metrics.grouping_metrics.hashing_time));
+    metrics.emplace_back(TimerMetric(
+        "shuffle_local_reduction_mrnf_grouping_time",
+        this->local_reduction_mrnf_metrics.grouping_metrics.grouping_time));
+    metrics.emplace_back(TimerMetric(
+        "shuffle_local_reduction_mrnf_hll_time",
+        this->local_reduction_mrnf_metrics.grouping_metrics.hll_time));
+}
+
+#pragma endregion  // GroupbyIncrementalShuffleMetrics
 /* ------------------------------------------------------------------------ */
 
 /* -------------------- GroupbyIncrementalShuffleState -------------------- */
@@ -1323,10 +1501,10 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
     // only possible for nunique-only cases
     if (this->nunique_only || this->mrnf_only) {
         int64_t shuffle_nrows = shuffle_table->nrows();
-
         std::shared_ptr<uint32_t[]> hashes;
         if (this->nunique_only) {
             // estimate number of uniques using key/value hashes
+            time_pt start_hash = start_timer();
             std::shared_ptr<uint32_t[]> key_value_hashes =
                 std::make_unique<uint32_t[]>(shuffle_nrows);
             // reusing shuffle_hashes for keys to make the initial check cheaper
@@ -1341,20 +1519,28 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
                                    /*global_dict_needed=*/false,
                                    /*is_parallel*/ true);
             }
+            this->metrics.nunique_hll_hashing_time += end_timer(start_hash);
             hashes = key_value_hashes;
         } else {
             hashes = shuffle_hashes;
         }
+
+        time_pt start_hll = start_timer();
         size_t nunique_keyval_hashes =
             get_nunique_hashes(hashes, shuffle_nrows, /*is_parallel*/ true);
+        this->metrics.hll_time += end_timer(start_hll);
 
         // local reduction if output will be less than half the size of
         // input (rough heuristic, TODO: tune)
         if ((2 * nunique_keyval_hashes) < static_cast<size_t>(shuffle_nrows)) {
+            this->metrics.n_local_reductions++;
+            this->metrics.local_reduction_input_nrows += shuffle_nrows;
+            time_pt start_loc_red = start_timer();
             std::unique_ptr<uint8_t[]> row_inclusion_bitmask;
+            size_t n_groups = 0;
             if (this->nunique_only) {
                 // drop duplicates
-                auto ListIdx = drop_duplicates_table_helper(
+                bodo::vector<int64_t> ListIdx = drop_duplicates_table_helper(
                     shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
                     /*drop_duplicates_dict=*/false, hashes);
                 row_inclusion_bitmask = std::make_unique<uint8_t[]>(
@@ -1364,12 +1550,15 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
                 for (auto idx : ListIdx) {
                     arrow::bit_util::SetBit(row_inclusion_bitmask.get(), idx);
                 }
+                n_groups = ListIdx.size();
             } else {
                 // MRNF
-                row_inclusion_bitmask =
-                    compute_local_mrnf(shuffle_table, this->col_sets[0],
-                                       this->mrnf_n_sort_cols, this->n_keys);
+                std::tie(row_inclusion_bitmask, n_groups) = compute_local_mrnf(
+                    shuffle_table, this->col_sets[0], this->mrnf_n_sort_cols,
+                    this->n_keys, this->metrics.local_reduction_mrnf_metrics);
             }
+            this->metrics.local_reduction_time += end_timer(start_loc_red);
+            this->metrics.local_reduction_output_nrows += n_groups;
             return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes,
                                    std::move(row_inclusion_bitmask));
         }
@@ -1378,19 +1567,29 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
 }
 
 void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
-    if (this->hash_table->get_allocator().size() > MAX_SHUFFLE_HASHTABLE_SIZE) {
+    size_t ht_size = this->hash_table->get_allocator().size();
+    this->metrics.peak_ht_size_bytes =
+        std::max(static_cast<MetricBase::StatValue>(ht_size),
+                 this->metrics.peak_ht_size_bytes);
+    if (ht_size > MAX_SHUFFLE_HASHTABLE_SIZE) {
         // If the shuffle hash table is too large, reset it.
         // This shouldn't happen often in practice, but is a safeguard.
         this->hash_table.reset();
         this->hash_table = std::make_unique<shuffle_hash_table_t>(
             0, HashGroupbyTable<false>(nullptr, this),
             KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
+        this->metrics.n_ht_reset++;
     }
-    if (this->groupby_hashes.get_allocator().size() > MAX_SHUFFLE_TABLE_SIZE) {
+    size_t hashes_size = this->groupby_hashes.get_allocator().size();
+    this->metrics.peak_hashes_size_bytes =
+        std::max(static_cast<MetricBase::StatValue>(hashes_size),
+                 this->metrics.peak_hashes_size_bytes);
+    if (hashes_size > MAX_SHUFFLE_TABLE_SIZE) {
         // If the shuffle hashes vector is too large, reallocate it to the
         // maximum size
         this->groupby_hashes.resize(MAX_SHUFFLE_TABLE_SIZE / sizeof(uint32_t));
         this->groupby_hashes.shrink_to_fit();
+        this->metrics.n_hashes_reset++;
     }
     this->next_group = 0;
     this->hash_table->clear();
@@ -1445,7 +1644,6 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
       mrnf_part_cols_to_keep(std::move(mrnf_part_cols_to_keep_)),
       mrnf_sort_cols_to_keep(std::move(mrnf_sort_cols_to_keep_)),
       sync_iter(sync_iter_),
-      groupby_event("Groupby"),
       op_id(op_id_) {
     // Partitioning is enabled by default:
     bool enable_partitioning = true;
@@ -1665,7 +1863,7 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
 
     // See if all ColSet functions are nunique, which enables optimization of
     // dropping duplicate shuffle table rows before shuffle
-    this->nunique_only = true;
+    this->nunique_only = (ftypes.size() > 0);
     for (size_t i = 0; i < ftypes.size(); i++) {
         if (ftypes[i] != Bodo_FTypes::nunique) {
             this->nunique_only = false;
@@ -1714,13 +1912,31 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
         this->n_keys, this->build_table_dict_builders, this->col_sets,
         this->f_in_offsets, this->f_in_cols, this->f_running_value_offsets,
         /*is_active*/ true, this->accumulate_before_update,
-        this->req_extended_group_info, this->op_pool.get(), this->op_mm,
-        this->op_scratch_pool.get(), this->op_scratch_mm));
+        this->req_extended_group_info, this->metrics, this->op_pool.get(),
+        this->op_mm, this->op_scratch_pool.get(), this->op_scratch_mm));
     this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));
 
     // Reserve space upfront. The output-batch-size is typically the same
     // as the input batch size.
     this->append_row_to_build_table.reserve(output_batch_size_);
+
+    if (this->op_id != -1) {
+        std::vector<MetricBase> metrics;
+        metrics.reserve(4);
+        MetricBase::StatValue is_mrnf_only = this->mrnf_only ? 1 : 0;
+        metrics.emplace_back(StatMetric("is_mrnf_only", is_mrnf_only, true));
+        MetricBase::StatValue is_nunique_only = this->nunique_only ? 1 : 0;
+        metrics.emplace_back(
+            StatMetric("is_nunique_only", is_nunique_only, true));
+        MetricBase::BlobValue acc_or_agg =
+            this->accumulate_before_update ? "ACC" : "AGG";
+        metrics.emplace_back(BlobMetric("acc_or_agg", acc_or_agg, true));
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                       this->curr_stage_id),
+            std::move(metrics));
+    }
+    this->curr_stage_id++;
 }
 
 std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
@@ -1820,11 +2036,13 @@ void GroupbyState::SplitPartition(size_t idx) {
 
     // Call SplitPartition on the idx'th partition:
     std::vector<std::shared_ptr<GroupbyPartition>> new_partitions;
+    time_pt start_split = start_timer();
     if (this->partitions[idx]->is_active_partition()) {
         new_partitions = this->partitions[idx]->SplitPartition<true>();
     } else {
         new_partitions = this->partitions[idx]->SplitPartition<false>();
     }
+    this->metrics.repartitioning_time += end_timer(start_split);
     // Remove the current partition (this should release its memory)
     this->partitions.erase(this->partitions.begin() + idx);
     this->partition_state.erase(this->partition_state.begin() + idx);
@@ -1850,6 +2068,18 @@ void GroupbyState::SplitPartition(size_t idx) {
     // aggregation for this partition).
 }
 
+std::string GroupbyState::GetPartitionStateString() const {
+    std::string partition_state = "[";
+    for (size_t i = 0; i < this->partition_state.size(); i++) {
+        size_t num_top_bits = this->partition_state[i].first;
+        uint32_t top_bitmask = this->partition_state[i].second;
+        partition_state +=
+            fmt::format("({0}, {1:#b}),", num_top_bits, top_bitmask);
+    }
+    partition_state += "]";
+    return partition_state;
+}
+
 void GroupbyState::UpdateGroupsAndCombineHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
@@ -1860,6 +2090,7 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
                                                           batch_hashes_groupby);
         return;
     }
+    time_pt start_part_check = start_timer();
     std::vector<std::vector<bool>> append_rows_by_partition(
         this->partitions.size());
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
@@ -1885,6 +2116,8 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
                 "any matching partition for row!");
         }
     }
+    this->metrics.input_partition_check_time += end_timer(start_part_check);
+    this->metrics.input_partition_check_nrows += in_table->nrows();
     this->partitions[0]->UpdateGroupsAndCombine<true>(
         in_table, batch_hashes_groupby, append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
@@ -1919,6 +2152,7 @@ void GroupbyState::UpdateGroupsAndCombine(
             // Note that we don't need to call ClearColSetsState here since
             // the ColSets are only used in the combine step which shouldn't
             // raise a threshold enforcement error.
+            this->metrics.n_repartitions_in_append++;
             this->SplitPartition(0);
         }
     }
@@ -1936,6 +2170,7 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
         return;
     }
 
+    time_pt start_part_check = start_timer();
     std::vector<std::vector<bool>> append_rows_by_partition;
     append_rows_by_partition.resize(this->partitions.size());
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
@@ -1966,6 +2201,8 @@ void GroupbyState::UpdateGroupsAndCombineHelper(
             }
         }
     }
+    this->metrics.input_partition_check_time += end_timer(start_part_check);
+    this->metrics.input_partition_check_nrows += in_table->nrows();
 
     this->partitions[0]->UpdateGroupsAndCombine<true>(
         in_table, batch_hashes_groupby, append_rows_by_partition[0]);
@@ -2003,6 +2240,7 @@ void GroupbyState::UpdateGroupsAndCombine(
             // Note that we don't need to call ClearColSetsState here since
             // the ColSets are only used in the combine step which shouldn't
             // raise a threshold enforcement error.
+            this->metrics.n_repartitions_in_append++;
             this->SplitPartition(0);
         }
     }
@@ -2016,8 +2254,9 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     // set state batch input
     this->shuffle_state->in_table = in_table;
     this->shuffle_state->in_table_hashes = batch_hashes_groupby;
+    time_pt start = start_timer();
     // Reserve space in buffers for potential new groups.
-    // Note that if any of the keys/running values are strings, they always
+    // Note that if any of the running values are strings, they always
     // go through the accumulate path.
     this->shuffle_state->table_buffer->ReserveTable(in_table);
 
@@ -2036,6 +2275,7 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     int64_t shuffle_init_start_row = this->shuffle_state->next_group;
 
     // Add new groups and get group mappings for input batch
+    size_t row_count = 0;
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (!not_append_rows[i_row]) {  // double-negative to avoid
                                         // recomputation
@@ -2045,13 +2285,18 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
                                  this->shuffle_state->next_group, this->n_keys,
                                  shuffle_grp_info, in_table,
                                  batch_hashes_groupby, i_row);
+            row_count++;
         }
     }
+    this->metrics.shuffle_update_logical_ht_time += end_timer(start);
+    start = start_timer();
     // Combine existing (and new) keys using the input batch
     combine_input_table_helper(in_table, shuffle_grp_info,
                                this->shuffle_state->table_buffer->data_table,
                                this->f_running_value_offsets, this->col_sets,
                                shuffle_init_start_row);
+    this->metrics.shuffle_combine_input_time += end_timer(start);
+    this->metrics.shuffle_update_logical_ht_and_combine_nrows += row_count;
 
     int64_t new_groups =
         this->shuffle_state->next_group - shuffle_init_start_row;
@@ -2070,6 +2315,8 @@ void GroupbyState::AppendBuildBatchHelper(
         this->partitions[0]->AppendBuildBatch<true>(in_table);
         return;
     }
+
+    time_pt start_part_check = start_timer();
     std::vector<std::vector<bool>> append_rows_by_partition(
         this->partitions.size());
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
@@ -2095,6 +2342,9 @@ void GroupbyState::AppendBuildBatchHelper(
                 "any matching partition for row!");
         }
     }
+    this->metrics.input_partition_check_time += end_timer(start_part_check);
+    this->metrics.input_partition_check_nrows += in_table->nrows();
+
     this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
@@ -2123,7 +2373,7 @@ void GroupbyState::AppendBuildBatch(
                              "Encountered OperatorPoolThresholdExceededError."
                           << std::endl;
             }
-
+            this->metrics.n_repartitions_in_append++;
             this->SplitPartition(0);
         }
     }
@@ -2139,6 +2389,7 @@ void GroupbyState::AppendBuildBatchHelper(
         return;
     }
 
+    time_pt start_part_check = start_timer();
     std::vector<std::vector<bool>> append_rows_by_partition;
     append_rows_by_partition.resize(this->partitions.size());
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
@@ -2167,6 +2418,9 @@ void GroupbyState::AppendBuildBatchHelper(
             }
         }
     }
+    this->metrics.input_partition_check_time += end_timer(start_part_check);
+    this->metrics.input_partition_check_nrows += in_table->nrows();
+
     this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
@@ -2197,7 +2451,7 @@ void GroupbyState::AppendBuildBatch(
                              "Encountered OperatorPoolThresholdExceededError."
                           << std::endl;
             }
-
+            this->metrics.n_repartitions_in_append++;
             this->SplitPartition(0);
         }
     }
@@ -2339,7 +2593,285 @@ void GroupbyState::ClearBuildState() {
     this->append_row_to_build_table.shrink_to_fit();
 }
 
+void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
+    if (this->op_id == -1) {
+        return;
+    }
+    std::vector<MetricBase> metrics;
+    metrics.reserve(128);
+
+    metrics.emplace_back(StatMetric("n_repartitions_in_append",
+                                    this->metrics.n_repartitions_in_append));
+    metrics.emplace_back(StatMetric("n_repartitions_in_finalize",
+                                    this->metrics.n_repartitions_in_finalize));
+    metrics.emplace_back(TimerMetric("repartitioning_time_total",
+                                     this->metrics.repartitioning_time));
+    metrics.emplace_back(
+        TimerMetric("repartitioning_part_hashing_time",
+                    this->metrics.repartitioning_part_hashing_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_part_hashing_nrows",
+                   this->metrics.repartitioning_part_hashing_nrows));
+    metrics.emplace_back(
+        TimerMetric("repartitioning_active_part1_append_time",
+                    this->metrics.repartitioning_active_part1_append_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_active_part1_append_nrows",
+                   this->metrics.repartitioning_active_part1_append_nrows));
+    metrics.emplace_back(
+        TimerMetric("repartitioning_active_part2_append_time",
+                    this->metrics.repartitioning_active_part2_append_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_active_part2_append_nrows",
+                   this->metrics.repartitioning_active_part2_append_nrows));
+    metrics.emplace_back(
+        TimerMetric("repartitioning_inactive_pop_chunk_time",
+                    this->metrics.repartitioning_inactive_pop_chunk_time));
+    metrics.emplace_back(
+        StatMetric("repartitioning_inactive_pop_chunk_n_chunks",
+                   this->metrics.repartitioning_inactive_pop_chunk_n_chunks));
+    metrics.emplace_back(
+        TimerMetric("repartitioning_inactive_append_time",
+                    this->metrics.repartitioning_inactive_append_time));
+
+    if (!this->accumulate_before_update) {
+        // In the pre-agg case, the number of input rows is the same as the
+        // total number of local input rows.
+        metrics.emplace_back(TimerMetric("pre_agg_total_time",
+                                         this->metrics.pre_agg_total_time));
+        metrics.emplace_back(
+            TimerMetric("pre_agg_colset_update_time",
+                        this->metrics.pre_agg_metrics.colset_update_time));
+        metrics.emplace_back(TimerMetric(
+            "pre_agg_hashing_time",
+            this->metrics.pre_agg_metrics.grouping_metrics.hashing_time));
+        metrics.emplace_back(TimerMetric(
+            "pre_agg_grouping_time",
+            this->metrics.pre_agg_metrics.grouping_metrics.grouping_time));
+        metrics.emplace_back(TimerMetric(
+            "pre_agg_hll_time",
+            this->metrics.pre_agg_metrics.grouping_metrics.hll_time));
+        metrics.emplace_back(StatMetric("pre_agg_output_nrows",
+                                        this->metrics.pre_agg_output_nrows));
+        metrics.emplace_back(
+            TimerMetric("input_groupby_hashing_time",
+                        this->metrics.input_groupby_hashing_time));
+        metrics.emplace_back(TimerMetric(
+            "rebuild_ht_hashing_time", this->metrics.rebuild_ht_hashing_time));
+        metrics.emplace_back(
+            StatMetric("rebuild_ht_hashing_nrows",
+                       this->metrics.rebuild_ht_hashing_nrows));
+        metrics.emplace_back(TimerMetric("rebuild_ht_insert_time",
+                                         this->metrics.rebuild_ht_insert_time));
+        metrics.emplace_back(StatMetric("rebuild_ht_insert_nrows",
+                                        this->metrics.rebuild_ht_insert_nrows));
+        metrics.emplace_back(TimerMetric("update_logical_ht_time",
+                                         this->metrics.update_logical_ht_time));
+        metrics.emplace_back(StatMetric("update_logical_ht_nrows",
+                                        this->metrics.update_logical_ht_nrows));
+        metrics.emplace_back(TimerMetric("combine_input_time",
+                                         this->metrics.combine_input_time));
+        metrics.emplace_back(StatMetric("combine_input_nrows",
+                                        this->metrics.combine_input_nrows));
+        metrics.emplace_back(
+            TimerMetric("shuffle_update_logical_ht_time",
+                        this->metrics.shuffle_update_logical_ht_time));
+        metrics.emplace_back(
+            TimerMetric("shuffle_combine_input_time",
+                        this->metrics.shuffle_combine_input_time));
+        metrics.emplace_back(StatMetric(
+            "shuffle_update_logical_ht_and_combine_nrows",
+            this->metrics.shuffle_update_logical_ht_and_combine_nrows));
+
+    } else {
+        metrics.emplace_back(TimerMetric("appends_active_time",
+                                         this->metrics.appends_active_time));
+        metrics.emplace_back(StatMetric("appends_active_nrows",
+                                        this->metrics.appends_active_nrows));
+    }
+
+    metrics.emplace_back(TimerMetric("input_part_hashing_time",
+                                     this->metrics.input_part_hashing_time));
+    metrics.emplace_back(
+        StatMetric("input_hashing_nrows", this->metrics.input_hashing_nrows));
+    metrics.emplace_back(TimerMetric("input_partition_check_time",
+                                     this->metrics.input_partition_check_time));
+    metrics.emplace_back(StatMetric("input_partition_check_nrows",
+                                    this->metrics.input_partition_check_nrows));
+    metrics.emplace_back(TimerMetric("appends_inactive_time",
+                                     this->metrics.appends_inactive_time));
+    metrics.emplace_back(StatMetric("appends_inactive_nrows",
+                                    this->metrics.appends_inactive_nrows));
+
+    if (is_final) {
+        // Final number of partitions
+        metrics.emplace_back(
+            StatMetric("n_partitions", this->metrics.n_partitions));
+        MetricBase::BlobValue final_partitioning_state =
+            this->GetPartitionStateString();
+        metrics.emplace_back(
+            BlobMetric("final_partitioning_state", final_partitioning_state));
+        metrics.emplace_back(
+            TimerMetric("finalize_time_total", this->metrics.finalize_time));
+        if (!this->accumulate_before_update) {
+            metrics.emplace_back(TimerMetric(
+                "finalize_activate_groupby_hashing_time",
+                this->metrics.finalize_activate_groupby_hashing_time));
+        } else {
+            if (this->mrnf_only) {
+                metrics.emplace_back(
+                    TimerMetric("finalize_compute_mrnf_time",
+                                this->metrics.finalize_compute_mrnf_time));
+            } else {
+                metrics.emplace_back(
+                    TimerMetric("finalize_get_update_table_time",
+                                this->metrics.finalize_get_update_table_time));
+            }
+            metrics.emplace_back(TimerMetric(
+                "finalize_colset_update_time",
+                this->metrics.finalize_update_metrics.colset_update_time));
+            metrics.emplace_back(StatMetric(
+                "finalize_colset_update_nrows",
+                this->metrics.finalize_update_metrics.colset_update_nrows));
+            metrics.emplace_back(TimerMetric(
+                "finalize_hashing_time", this->metrics.finalize_update_metrics
+                                             .grouping_metrics.hashing_time));
+            metrics.emplace_back(StatMetric(
+                "finalize_hashing_nrows", this->metrics.finalize_update_metrics
+                                              .grouping_metrics.hashing_nrows));
+            metrics.emplace_back(TimerMetric(
+                "finalize_grouping_time", this->metrics.finalize_update_metrics
+                                              .grouping_metrics.grouping_time));
+            metrics.emplace_back(
+                StatMetric("finalize_grouping_nrows",
+                           this->metrics.finalize_update_metrics
+                               .grouping_metrics.grouping_nrows));
+            metrics.emplace_back(TimerMetric(
+                "finalize_hll_time", this->metrics.finalize_update_metrics
+                                         .grouping_metrics.hll_time));
+            metrics.emplace_back(StatMetric(
+                "finalize_hll_nrows", this->metrics.finalize_update_metrics
+                                          .grouping_metrics.hll_nrows));
+        }
+
+        metrics.emplace_back(TimerMetric("finalize_eval_time",
+                                         this->metrics.finalize_eval_time));
+        metrics.emplace_back(StatMetric("finalize_eval_nrows",
+                                        this->metrics.finalize_eval_nrows));
+        metrics.emplace_back(
+            TimerMetric("finalize_activate_partition_time",
+                        this->metrics.finalize_activate_partition_time));
+        metrics.emplace_back(
+            TimerMetric("finalize_activate_pin_chunk_time",
+                        this->metrics.finalize_activate_pin_chunk_time));
+        metrics.emplace_back(
+            StatMetric("finalize_activate_pin_chunk_n_chunks",
+                       this->metrics.finalize_activate_pin_chunk_n_chunks));
+    }
+
+    // Shuffle metrics
+    this->shuffle_state->metrics.add_to_metrics(metrics);
+
+    // Dict Builders Stats
+    if (this->mrnf_only) {
+        // All dict builders are shared between the build buffer and output
+        // buffer.
+        assert(is_final);
+        DictBuilderMetrics dict_builder_metrics;
+        MetricBase::StatValue n_dict_builders = 0;
+        for (size_t i = 0; i < this->build_table_dict_builders.size(); i++) {
+            const auto& dict_builder = this->build_table_dict_builders[i];
+            if (dict_builder != nullptr) {
+                dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
+                n_dict_builders++;
+            }
+        }
+        metrics.emplace_back(
+            StatMetric("n_dict_builders", n_dict_builders, true));
+        dict_builder_metrics.add_to_metrics(metrics, "dict_builders_");
+    } else {
+        DictBuilderMetrics key_dict_builder_metrics;
+        DictBuilderMetrics non_key_build_dict_builder_metrics;
+        MetricBase::StatValue n_key_dict_builders = 0;
+        MetricBase::StatValue n_non_key_build_dict_builders = 0;
+        for (size_t i = 0; i < this->build_table_dict_builders.size(); i++) {
+            const auto& dict_builder = this->build_table_dict_builders[i];
+            if (dict_builder != nullptr) {
+                if (i < this->n_keys) {
+                    key_dict_builder_metrics.add_metrics(
+                        dict_builder->GetMetrics());
+                    n_key_dict_builders++;
+                } else {
+                    non_key_build_dict_builder_metrics.add_metrics(
+                        dict_builder->GetMetrics());
+                    n_non_key_build_dict_builders++;
+                }
+            }
+        }
+
+        // Create a copy before we modify it.
+        DictBuilderMetrics key_dict_builder_metrics_copy =
+            key_dict_builder_metrics;
+        // Subtract metrics from previous stage to get the delta for this stage.
+        key_dict_builder_metrics.subtract_metrics(
+            this->key_dict_builder_metrics_prev_stage_snapshot);
+        // Set the snapshot to the new values.
+        this->key_dict_builder_metrics_prev_stage_snapshot =
+            key_dict_builder_metrics_copy;
+        key_dict_builder_metrics.add_to_metrics(metrics, "key_dict_builders_");
+        non_key_build_dict_builder_metrics.add_to_metrics(
+            metrics, "non_key_build_dict_builders_");
+
+        if (is_final) {
+            metrics.emplace_back(
+                StatMetric("n_key_dict_builders", n_key_dict_builders, true));
+            metrics.emplace_back(StatMetric("n_non_key_build_dict_builders",
+                                            n_non_key_build_dict_builders,
+                                            true));
+            DictBuilderMetrics non_key_output_dict_builder_metrics;
+            MetricBase::StatValue n_non_key_output_dict_builders = 0;
+            for (size_t i = this->n_keys; i < this->out_dict_builders.size();
+                 i++) {
+                const auto& dict_builder = this->out_dict_builders[i];
+                if (dict_builder != nullptr) {
+                    non_key_output_dict_builder_metrics.add_metrics(
+                        dict_builder->GetMetrics());
+                    n_non_key_output_dict_builders++;
+                }
+            }
+            metrics.emplace_back(StatMetric("n_non_key_output_dict_builders",
+                                            n_non_key_output_dict_builders,
+                                            true));
+            non_key_output_dict_builder_metrics.add_to_metrics(
+                metrics, "non_key_output_dict_builders_");
+        }
+    }
+
+    if (is_final) {
+        // Output buffer append time and total size.
+        metrics.emplace_back(TimerMetric("output_append_time",
+                                         this->output_buffer->append_time));
+        MetricBase::StatValue output_total_size =
+            this->output_buffer->total_size;
+        metrics.emplace_back(
+            StatMetric("output_total_nrows", output_total_size));
+        MetricBase::StatValue output_n_chunks =
+            this->output_buffer->chunks.size();
+        metrics.emplace_back(StatMetric("output_n_chunks", output_n_chunks));
+    }
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                   this->curr_stage_id),
+        std::move(metrics));
+
+    // Reset metrics
+    this->metrics = GroupbyMetrics();
+    this->shuffle_state->metrics = GroupbyIncrementalShuffleMetrics();
+}
+
 void GroupbyState::FinalizeBuild() {
+    time_pt start_finalize = start_timer();
     // Clear the shuffle state since it is longer required.
     this->shuffle_state->Finalize();
 
@@ -2421,6 +2953,7 @@ void GroupbyState::FinalizeBuild() {
                 // In case the error happened during a ColSet operation, we
                 // want to clear their states before retrying.
                 this->ClearColSetsStates();
+                this->metrics.n_repartitions_in_finalize++;
                 this->SplitPartition(i_part);
             }
 
@@ -2471,11 +3004,13 @@ void GroupbyState::FinalizeBuild() {
                      "partitions: "
                   << this->partitions.size() << "." << std::endl;
     }
+    this->metrics.n_partitions = this->partitions.size();
 
     this->output_buffer->Finalize();
     // Release the ColSets, etc.
     this->ClearBuildState();
     this->build_input_finalized = true;
+    this->metrics.finalize_time += end_timer(start_finalize);
 }
 
 uint64_t GroupbyState::op_pool_bytes_pinned() const {
@@ -2524,8 +3059,6 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // 3. Combine update values with local and shuffle build tables.
 
     int n_pes, myrank;
-    // trace performance
-    auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
@@ -2534,10 +3067,14 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
     // We don't pass the op-pool here since this is operation on a small
     // batch and we consider this "scratch" usage essentially.
+    time_pt start_pre_agg = start_timer();
     in_table = get_update_table</*is_acc_case*/ false>(
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
-        groupby_state->req_extended_group_info);
+        groupby_state->req_extended_group_info,
+        groupby_state->metrics.pre_agg_metrics);
+    groupby_state->metrics.pre_agg_total_time += end_timer(start_pre_agg);
+    groupby_state->metrics.pre_agg_output_nrows += in_table->nrows();
 
     if (groupby_state->build_iter == 0) {
         groupby_state->shuffle_state->Initialize(in_table,
@@ -2553,12 +3090,17 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = groupby_state->GetDictionaryHashesForKeys();
 
+    time_pt start_hash = start_timer();
     std::shared_ptr<uint32_t[]> batch_hashes_groupby =
         hash_keys_table(in_table, groupby_state->n_keys,
                         SEED_HASH_GROUPBY_SHUFFLE, false, false);
+    groupby_state->metrics.input_groupby_hashing_time += end_timer(start_hash);
+    start_hash = start_timer();
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
                         groupby_state->parallel, false, dict_hashes);
+    groupby_state->metrics.input_part_hashing_time += end_timer(start_hash);
+    groupby_state->metrics.input_hashing_nrows += in_table->nrows();
 
     // Use the cached allocation:
     std::vector<bool>& append_row_to_build_table =
@@ -2592,13 +3134,20 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+            start_hash = start_timer();
             batch_hashes_groupby = hash_keys_table(
                 new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
                 groupby_state->parallel, /*global_dict_needed*/ false);
+            groupby_state->metrics.input_groupby_hashing_time +=
+                end_timer(start_hash);
+            start_hash = start_timer();
             batch_hashes_partition =
                 hash_keys_table(new_data, groupby_state->n_keys,
                                 SEED_HASH_PARTITION, groupby_state->parallel,
                                 /*global_dict_needed*/ false, dict_hashes);
+            groupby_state->metrics.input_part_hashing_time +=
+                end_timer(start_hash);
+            groupby_state->metrics.input_hashing_nrows += new_data->nrows();
 
             groupby_state->UpdateGroupsAndCombine(
                 new_data, batch_hashes_partition, batch_hashes_groupby);
@@ -2642,8 +3191,6 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      const bool is_final_pipeline) {
     assert(is_final_pipeline);
     int n_pes, myrank;
-    // trace performance
-    auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
@@ -2785,13 +3332,17 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                 is_final_pipeline);
         }
 
-        if (is_last && (groupby_state->op_id != -1)) {
-            // Build is stage 0. Build doesn't output anything, so it's output
-            // row count is 0.
-            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-                QueryProfileCollector::MakeOperatorStageID(groupby_state->op_id,
-                                                           0),
-                groupby_state->metrics.build_input_row_count, 0);
+        if (is_last) {
+            if (groupby_state->op_id != -1) {
+                // Build doesn't output anything, so it's output row count is 0.
+                QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                    QueryProfileCollector::MakeOperatorStageID(
+                        groupby_state->op_id, groupby_state->curr_stage_id),
+                    groupby_state->metrics.build_input_row_count, 0);
+            }
+            // Report and reset metrics
+            groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
+            groupby_state->curr_stage_id++;
         }
 
         return is_last;
@@ -2822,10 +3373,9 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
         *out_is_last = is_last;
         groupby_state->metrics.output_row_count += out->nrows();
         if (is_last && (groupby_state->op_id != -1)) {
-            // Output production is stage 1.
             QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-                QueryProfileCollector::MakeOperatorStageID(groupby_state->op_id,
-                                                           1),
+                QueryProfileCollector::MakeOperatorStageID(
+                    groupby_state->op_id, groupby_state->curr_stage_id),
                 0, groupby_state->metrics.output_row_count);
         }
         return new table_info(*out);

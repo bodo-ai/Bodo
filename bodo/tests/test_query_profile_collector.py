@@ -151,16 +151,16 @@ def test_join_row_count_collection(memory_leak_check):
 
     _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
     build_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 0)
-    )
-    probe_input_row_count = (
         bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
     )
+    probe_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 2)
+    )
     build_output_row_count = (
-        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 0)
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     probe_output_row_count = (
-        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 2)
     )
     build_input_row_count = reduce_sum(build_input_row_count)
     probe_input_row_count = reduce_sum(probe_input_row_count)
@@ -274,16 +274,16 @@ def test_groupby_row_count_collection(memory_leak_check):
 
     _ = impl(_get_dist_arg(df))
     build_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 0)
-    )
-    produce_output_input_row_count = (
         bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
     )
+    produce_output_input_row_count = (
+        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 2)
+    )
     build_output_row_count = (
-        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 0)
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     produce_output_output_row_count = (
-        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
+        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 2)
     )
     build_input_row_count = reduce_sum(build_input_row_count)
     produce_output_input_row_count = reduce_sum(produce_output_input_row_count)
@@ -631,9 +631,9 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     assert "operator_stages" in profile_json
 
     # Verify build metrics
-    assert "0" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["0"]
-    build_metrics: list = profile_json["operator_stages"]["0"]["metrics"]
+    assert "1" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["1"]
+    build_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     if rank == 0:
         assert "bcast_join" in build_metrics_names
@@ -645,9 +645,9 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     assert "repartitioning_time_total" in build_metrics_names
 
     # Verify probe metrics
-    assert "1" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["1"]
-    probe_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    assert "2" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["2"]
+    probe_metrics: list = profile_json["operator_stages"]["2"]["metrics"]
     probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
     if rank == 0:
         assert "n_key_dict_builders" in probe_metrics_names
@@ -781,9 +781,9 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     assert "operator_stages" in profile_json
 
     # Verify build metrics
-    assert "0" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["0"]
-    build_metrics: list = profile_json["operator_stages"]["0"]["metrics"]
+    assert "1" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["1"]
+    build_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     if rank == 0:
         assert "bcast_join" in build_metrics_names
@@ -794,9 +794,9 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     assert "num_chunks" in build_metrics_names
 
     # Verify probe metrics
-    assert "1" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["1"]
-    probe_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    assert "2" in profile_json["operator_stages"]
+    assert "metrics" in profile_json["operator_stages"]["2"]
+    probe_metrics: list = profile_json["operator_stages"]["2"]["metrics"]
     probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
     if rank == 0:
         assert "n_dict_builders" in probe_metrics_names
@@ -808,3 +808,588 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     assert "bcast_size_bytes" in probe_metrics_names
     assert "bcast_table_time" in probe_metrics_names
     assert "compute_matches_time" in probe_metrics_names
+
+
+def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by groupby in the incremental aggregation case.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    in_kept_cols = bodo.utils.typing.ColNamesMetaType((0, 1))
+    fnames = bodo.utils.typing.MetaType(("max",))
+    f_in_cols = bodo.utils.typing.MetaType((1,))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1))
+    batch_size = 1000
+    out_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B_max"))
+
+    @bodo.jit(distributed=["df"])
+    def impl(df):
+        bodo.libs.query_profile_collector.init()
+        groupby_state = init_groupby_state(
+            0, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            in_kept_cols,
+            2,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        is_last2 = False
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        _iter_2 = 0
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+            _iter_2 = _iter_2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter_2)
+        delete_groupby_state(groupby_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, out_col_meta
+        )
+        bodo.libs.query_profile_collector.finalize()
+        return out_df
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+        }
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(_get_dist_arg(df))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+    assert "0" in profile_json["operator_stages"]
+    assert "1" in profile_json["operator_stages"]
+    assert "2" in profile_json["operator_stages"]
+    if rank == 0:
+        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics_names: list[str] = [
+            x["name"] for x in initialization_metrics
+        ]
+        assert "acc_or_agg" in initialization_metrics_names
+        assert (
+            initialization_metrics[initialization_metrics_names.index("acc_or_agg")][
+                "stat"
+            ]
+            == "AGG"
+        )
+    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    assert "pre_agg_total_time" in build_metrics_names
+    assert "n_repartitions_in_append" in build_metrics_names
+    assert "input_groupby_hashing_time" in build_metrics_names
+    assert "update_logical_ht_time" in build_metrics_names
+    assert "combine_input_time" in build_metrics_names
+    assert "shuffle_update_logical_ht_time" in build_metrics_names
+    assert "finalize_time_total" in build_metrics_names
+    assert "shuffle_time" in build_metrics_names
+    assert "shuffle_n_local_reductions" in build_metrics_names
+    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "output_append_time" in build_metrics_names
+    assert "final_partitioning_state" in build_metrics_names
+
+
+def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by groupby in the accumulate input case.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    in_kept_cols = bodo.utils.typing.MetaType((0, 1))
+    fnames = bodo.utils.typing.MetaType(("median",))
+    f_in_cols = bodo.utils.typing.MetaType((1,))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1))
+    batch_size = 1000
+    out_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B_median"))
+
+    @bodo.jit(distributed=["df"])
+    def impl(df):
+        bodo.libs.query_profile_collector.init()
+        groupby_state = init_groupby_state(
+            0, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            in_kept_cols,
+            2,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        is_last2 = False
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        _iter_2 = 0
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+            _iter_2 = _iter_2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter_2)
+        delete_groupby_state(groupby_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, out_col_meta
+        )
+        bodo.libs.query_profile_collector.finalize()
+        return out_df
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+        }
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(_get_dist_arg(df))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+    assert "0" in profile_json["operator_stages"]
+    assert "1" in profile_json["operator_stages"]
+    assert "2" in profile_json["operator_stages"]
+    if rank == 0:
+        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics_names: list[str] = [
+            x["name"] for x in initialization_metrics
+        ]
+        assert "acc_or_agg" in initialization_metrics_names
+        assert (
+            initialization_metrics[initialization_metrics_names.index("acc_or_agg")][
+                "stat"
+            ]
+            == "ACC"
+        )
+    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    assert "pre_agg_total_time" not in build_metrics_names
+    assert "n_repartitions_in_append" in build_metrics_names
+    assert "input_groupby_hashing_time" not in build_metrics_names
+    assert "input_part_hashing_time" in build_metrics_names
+    assert "finalize_time_total" in build_metrics_names
+    assert "shuffle_time" in build_metrics_names
+    assert "shuffle_n_local_reductions" in build_metrics_names
+    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "output_append_time" in build_metrics_names
+    assert "final_partitioning_state" in build_metrics_names
+
+
+def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by MRNF.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    fnames = bodo.utils.typing.MetaType(("min_row_number_filter",))
+    n_cols = 3
+    f_in_cols = bodo.utils.typing.MetaType((1, 2))
+    f_in_offsets = bodo.utils.typing.MetaType((0, n_cols - 1))
+    mrnf_sort_col_inds = bodo.utils.typing.MetaType((1,))
+    mrnf_sort_col_asc = bodo.utils.typing.MetaType((False,))
+    mrnf_sort_col_na = bodo.utils.typing.MetaType((True,))
+    mrnf_col_inds_keep = bodo.utils.typing.MetaType((0, 1, 2))
+    input_table_kept_cols = bodo.utils.typing.MetaType(tuple(range(n_cols)))
+    output_table_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
+    batch_size = 1000
+
+    @bodo.jit(distributed=["df"])
+    def impl(df):
+        bodo.libs.query_profile_collector.init()
+        mrnf_state = init_groupby_state(
+            0,
+            keys_inds,
+            fnames,
+            f_in_offsets,
+            f_in_cols,
+            mrnf_sort_col_inds,
+            mrnf_sort_col_asc,
+            mrnf_sort_col_na,
+            mrnf_col_inds_keep,
+        )
+
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            input_table_kept_cols,
+            n_cols,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, input_table_kept_cols, False)
+            _iter_1 = _iter_1 + 1
+            is_last1 = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+        out_dfs = []
+        is_last2 = False
+        _iter_2 = 0
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(mrnf_state, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, output_table_col_meta
+            )
+            out_dfs.append(df_final)
+            _iter_2 = _iter_2 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter_2)
+        delete_groupby_state(mrnf_state)
+        out_df = pd.concat(out_dfs)
+        bodo.libs.query_profile_collector.finalize()
+        return out_df
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(200)) * 160, dtype="Int64"),
+            "B": pd.Series(
+                [pd.NA, "apple", "pie", "egg", "salad", "banana", "kiwi", "pudding"]
+                * 4000
+            ),
+            "C": pd.array(list(np.arange(100)) * 320, dtype="Int64"),
+        }
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(_get_dist_arg(df))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+    assert "0" in profile_json["operator_stages"]
+    assert "1" in profile_json["operator_stages"]
+    assert "2" in profile_json["operator_stages"]
+    if rank == 0:
+        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics_names: list[str] = [
+            x["name"] for x in initialization_metrics
+        ]
+        assert "acc_or_agg" in initialization_metrics_names
+        assert (
+            initialization_metrics[initialization_metrics_names.index("acc_or_agg")][
+                "stat"
+            ]
+            == "ACC"
+        )
+        assert "is_mrnf_only" in initialization_metrics_names
+        assert (
+            initialization_metrics[initialization_metrics_names.index("is_mrnf_only")][
+                "stat"
+            ]
+            == 1
+        )
+    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    assert "pre_agg_total_time" not in build_metrics_names
+    assert "n_repartitions_in_append" in build_metrics_names
+    assert "appends_active_time" in build_metrics_names
+    assert "input_part_hashing_time" in build_metrics_names
+    assert "finalize_time_total" in build_metrics_names
+    assert "finalize_compute_mrnf_time" in build_metrics_names
+    assert "finalize_colset_update_time" in build_metrics_names
+    assert "shuffle_time" in build_metrics_names
+    assert "shuffle_local_reduction_mrnf_colset_update_time" in build_metrics_names
+    assert "dict_builders_unify_cache_id_misses" in build_metrics_names
+    assert "output_append_time" in build_metrics_names
+    assert "final_partitioning_state" in build_metrics_names
+
+
+def test_union_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by Union.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    in_kept_cols = bodo.utils.typing.MetaType((0, 1))
+    batch_size = 1000
+    out_col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B "))
+
+    @bodo.jit(distributed=["df1", "df2", "df3"])
+    def impl(df1, df2, df3):
+        bodo.libs.query_profile_collector.init()
+        union_state = bodo.libs.stream_union.init_union_state(0, all=False)
+
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (),
+            in_kept_cols,
+            2,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        is_last1 = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                union_state, T3, is_last1, False
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2),
+            (),
+            in_kept_cols,
+            2,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        is_last1 = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                union_state, T3, is_last1, False
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter_1)
+
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df3),
+            (),
+            in_kept_cols,
+            2,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        is_last1 = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(2)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                union_state, T3, is_last1, True
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(2, _iter_1)
+
+        is_last3 = False
+        _iter_3 = 0
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.query_profile_collector.start_pipeline(3)
+        while not is_last3:
+            T5, is_last3 = bodo.libs.stream_union.union_produce_batch(union_state, True)
+            bodo.libs.table_builder.table_builder_append(table_builder, T5)
+            _iter_3 = _iter_3 + 1
+        bodo.libs.query_profile_collector.end_pipeline(3, _iter_3)
+
+        bodo.libs.stream_union.delete_union_state(union_state)
+        T6 = bodo.libs.table_builder.table_builder_finalize(table_builder)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (T6,), index_1, out_col_meta
+        )
+        bodo.libs.query_profile_collector.finalize()
+        return out_df
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(90)) * 100, dtype="Int64"),
+            "B": pd.Series(
+                [
+                    pd.NA,
+                    "apple",
+                    "pie",
+                    "egg",
+                    "salad",
+                    "banana",
+                    "kiwi",
+                    "pudding",
+                    "caramel",
+                ]
+                * 1000
+            ),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(900)) * 20, dtype="Int64"),
+            "B": pd.Series(
+                [
+                    "apple",
+                    "kiwi",
+                    "pudding",
+                    pd.NA,
+                    "caramel",
+                ]
+                * 3600
+            ),
+        }
+    )
+    df3 = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(10000, 10010)) * 10, dtype="Int64"),
+            "B": pd.Series(
+                [
+                    "apple",
+                    "pie",
+                ]
+                * 50
+            ),
+        }
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(_get_dist_arg(df1), _get_dist_arg(df2), _get_dist_arg(df3))
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+    assert "0" in profile_json["operator_stages"]
+    assert "1" in profile_json["operator_stages"]
+    assert "2" in profile_json["operator_stages"]
+    assert "3" in profile_json["operator_stages"]
+    assert "4" in profile_json["operator_stages"]
+    if rank == 0:
+        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics_names: list[str] = [
+            x["name"] for x in initialization_metrics
+        ]
+        assert "acc_or_agg" in initialization_metrics_names
+        assert (
+            initialization_metrics[initialization_metrics_names.index("acc_or_agg")][
+                "stat"
+            ]
+            == "AGG"
+        )
+
+    # Produce output doesn't have any additional metrics
+    assert "metrics" not in profile_json["operator_stages"]["4"]
+
+    build_stage1_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_stage1_metrics_names: set[str] = set(
+        [x["name"] for x in build_stage1_metrics]
+    )
+    build_stage2_metrics = profile_json["operator_stages"]["2"]["metrics"]
+    build_stage2_metrics_names: set[str] = set(
+        [x["name"] for x in build_stage2_metrics]
+    )
+    build_stage3_metrics = profile_json["operator_stages"]["3"]["metrics"]
+    build_stage3_metrics_names: set[str] = set(
+        [x["name"] for x in build_stage3_metrics]
+    )
+
+    # Some metrics should be reported in all stages
+    for k in [
+        "pre_agg_total_time",
+        "repartitioning_time_total",
+        "update_logical_ht_time",
+        "key_dict_builders_unify_cache_id_misses",
+    ]:
+        assert k in build_stage1_metrics_names, k
+        assert k in build_stage2_metrics_names, k
+        assert k in build_stage3_metrics_names, k
+
+    # Some metrics should only be reported in the final stage
+    for k in [
+        "finalize_time_total",
+        "non_key_output_dict_builders_unify_cache_id_misses",
+        "output_append_time",
+        "final_partitioning_state",
+    ]:
+        assert k not in build_stage1_metrics_names, k
+        assert k not in build_stage2_metrics_names, k
+        assert k in build_stage3_metrics_names, k

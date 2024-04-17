@@ -83,6 +83,136 @@ struct KeyEqualGroupbyTable {
     const uint64_t n_keys;
 };
 
+/**
+ * @brief Struct for storing the Groupby metrics.
+ *
+ */
+struct GroupbyMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+
+    /**
+     * @brief Struct for metrics collected while executing
+     * get_grouping_infos_for_update_table.
+     *
+     */
+    struct GetGroupInfoMetrics {
+        time_t hashing_time = 0;
+        stat_t hashing_nrows = 0;
+        time_t grouping_time = 0;
+        stat_t grouping_nrows = 0;
+        time_t hll_time = 0;
+        stat_t hll_nrows = 0;
+    };
+
+    /**
+     * @brief Struct for metrics collected while executing get_update_table or
+     * compute_local_mrnf.
+     *
+     */
+    struct AggUpdateMetrics {
+        GetGroupInfoMetrics grouping_metrics;
+        time_t colset_update_time = 0;
+        stat_t colset_update_nrows = 0;
+    };
+
+    ///// Required Metrics
+    stat_t build_input_row_count = 0;
+    stat_t output_row_count = 0;
+
+    ///// Optional Metrics
+
+    /// Partition stats
+    stat_t n_partitions = 1;
+    stat_t n_repartitions_in_append = 0;
+    stat_t n_repartitions_in_finalize = 0;
+
+    /// Time spent repartitioning
+    time_t repartitioning_time = 0;  // Overall
+    time_t repartitioning_part_hashing_time = 0;
+    stat_t repartitioning_part_hashing_nrows = 0;
+    // Active case
+    time_t repartitioning_active_part1_append_time = 0;
+    stat_t repartitioning_active_part1_append_nrows = 0;
+    time_t repartitioning_active_part2_append_time = 0;
+    stat_t repartitioning_active_part2_append_nrows = 0;
+    // Inactive case
+    // Most of the cost of PopChunk is expected to be from disk IO.
+    time_t repartitioning_inactive_pop_chunk_time = 0;
+    stat_t repartitioning_inactive_pop_chunk_n_chunks = 0;
+    // nrows for this is repartitioning_part_hashing_nrows
+    time_t repartitioning_inactive_append_time = 0;
+
+    /// Agg
+    // - Time in get_update_table
+    time_t pre_agg_total_time = 0;
+    AggUpdateMetrics pre_agg_metrics;
+    // NOTE: Input nrows is the same as overall local input rows.
+    stat_t pre_agg_output_nrows = 0;
+    // - Time spent groupby hashing (both local input and shuffle output)
+    time_t input_groupby_hashing_time = 0;
+
+    // - UpdateGroupsAndCombine (including from ActivatePartition)
+    time_t rebuild_ht_hashing_time = 0;
+    stat_t rebuild_ht_hashing_nrows = 0;
+    time_t rebuild_ht_insert_time = 0;
+    stat_t rebuild_ht_insert_nrows = 0;
+    // This is the time spent in UpdateGroupsAndCombine doing the ReserveTable
+    // and the update_groups_helper loop.
+    time_t update_logical_ht_time = 0;
+    stat_t update_logical_ht_nrows = 0;
+    time_t combine_input_time = 0;
+    stat_t combine_input_nrows = 0;
+
+    /// Acc (both AppendBuildBatch and ActivatePartition)
+    time_t appends_active_time = 0;
+    stat_t appends_active_nrows = 0;
+
+    /// Common for both agg and acc cases
+    // - Time spent partition hashing (both local input and shuffle output)
+    time_t input_part_hashing_time = 0;
+    stat_t input_hashing_nrows = 0;  // For both part and groupby hashes
+    time_t input_partition_check_time = 0;
+    stat_t input_partition_check_nrows = 0;
+    time_t appends_inactive_time = 0;
+    stat_t appends_inactive_nrows = 0;
+
+    /// FinalizeBuild
+    time_t finalize_time = 0;  // Overall
+
+    // Only relevant for the Agg case
+    time_t finalize_activate_groupby_hashing_time = 0;
+
+    // Only relevant for the acc and MRNF cases
+    time_t finalize_get_update_table_time = 0;  // Overall
+    time_t finalize_compute_mrnf_time = 0;      // Overall
+    // - get_update_table / compute_local_mrnf
+    AggUpdateMetrics finalize_update_metrics;
+
+    // Relevant for all cases
+    // - Eval time across all partitions
+    time_t finalize_eval_time = 0;  // Not relevant in MRNF case
+    stat_t finalize_eval_nrows = 0;
+    // - ActivatePartition
+    time_t finalize_activate_partition_time = 0;  // Overall time
+    // -- Either through the iterator or PopChunk
+    time_t finalize_activate_pin_chunk_time = 0;
+    stat_t finalize_activate_pin_chunk_n_chunks = 0;
+
+    /// UpdateShuffleGroupsAndCombine
+
+    // This is the time spent in the ReserveTable and the update_groups_helper
+    // loop.
+    time_t shuffle_update_logical_ht_time = 0;
+    time_t shuffle_combine_input_time = 0;
+    stat_t shuffle_update_logical_ht_and_combine_nrows = 0;
+
+    /// NOTE: We don't track any metrics for the ProduceOutput stage.
+    /// Essentially all the time (already tracked by codegen) can be attributed
+    /// to disk IO during the PopChunk calls.
+};
+
 template <bool is_local>
 using grpby_hash_table_t =
     bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
@@ -117,7 +247,7 @@ class GroupbyPartition {
         const std::vector<int32_t>& f_in_cols_,
         const std::vector<int32_t>& f_running_value_offsets_, bool is_active_,
         bool accumulate_before_update_, bool req_extended_group_info_,
-        bodo::OperatorBufferPool* op_pool_,
+        GroupbyMetrics& metrics_, bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_,
         bodo::OperatorScratchPool* op_scratch_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm_);
@@ -170,6 +300,10 @@ class GroupbyPartition {
     const std::vector<int32_t>& f_in_offsets;
     const std::vector<int32_t>& f_in_cols;
     const std::vector<int32_t>& f_running_value_offsets;
+
+    // Reference to the metrics for this operator. Shared with the global state
+    // and all other partitions.
+    GroupbyMetrics& metrics;
 
     /// @brief Get number of bits in the 'top_bitmask'.
     size_t get_num_top_bits() const { return this->num_top_bits; }
@@ -378,6 +512,41 @@ class GroupbyPartition {
     void ClearBuildState();
 };
 
+struct GroupbyIncrementalShuffleMetrics : IncrementalShuffleMetrics {
+    // Number of times we reset the hash table because it grew too large.
+    stat_t n_ht_reset = 0;
+    stat_t peak_ht_size_bytes = 0;
+    // Number of times we reset the hashes buffer because it grew too large.
+    stat_t n_hashes_reset = 0;
+    stat_t peak_hashes_size_bytes = 0;
+
+    /// Local reduction stats
+
+    // Time spent in additional hashing in the nunique-only case
+    time_t nunique_hll_hashing_time = 0;
+    // Time spent getting the HLL estimate to determine whether or not to do a
+    // local reduction
+    time_t hll_time = 0;
+    // Num of times we ended up doing a local reduction
+    stat_t n_local_reductions = 0;
+    // Number of input/output rows from local reduction.
+    // Can be used to measure how effective the local reduction was.
+    stat_t local_reduction_input_nrows = 0;
+    stat_t local_reduction_output_nrows = 0;
+    time_t local_reduction_time = 0;  // Overall
+
+    // Local reduction time breakdown for the MRNF case:
+    GroupbyMetrics::AggUpdateMetrics local_reduction_mrnf_metrics;
+
+    /**
+     * @brief Helper function for exporting metrics during reporting steps in
+     * GroupBy.
+     *
+     * @param metrics Vector of metrics to append to.
+     */
+    void add_to_metrics(std::vector<MetricBase>& metrics) override;
+};
+
 /**
  * @brief Extend the general shuffle state for streaming groupby.
  * In particular, for the incremental aggregation case, we need
@@ -401,6 +570,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     // Temporary batch data (used by HashGroupbyTable and KeyEqualGroupbyTable)
     std::shared_ptr<table_info> in_table = nullptr;
     std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
+    GroupbyIncrementalShuffleMetrics metrics;
 
     /**
      * @brief Constructor. Same as the base class constructor.
@@ -490,18 +660,6 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     const bool mrnf_only = false;
 };
 
-/**
- * @brief Struct for storing the Groupby metrics.
- *
- */
-struct GroupbyMetrics {
-    // Required Metrics
-    MetricBase::StatValue build_input_row_count = 0;
-    MetricBase::StatValue output_row_count = 0;
-
-    // TODO Optional Metrics
-};
-
 class GroupbyState {
    private:
     // NOTE: These need to be declared first so that they are
@@ -519,6 +677,11 @@ class GroupbyState {
     const std::shared_ptr<::arrow::MemoryManager> op_scratch_mm;
 
    public:
+    // Current stage ID. 0 is for Initialization.
+    // For regular Groupby, build is stage 1 and produce_output is stage 2.
+    // For Union, there is one build stage per table, i.e. from 1 to
+    // num_union_tables. produce_output is stage 'num_union_tables + 1'.
+    uint32_t curr_stage_id = 0;
     // Partitioning information.
     std::vector<std::shared_ptr<GroupbyPartition>> partitions;
     // Partition state: Tuples of the form (num_top_bits, top_bitmask).
@@ -627,7 +790,6 @@ class GroupbyState {
     /// @brief Whether partitioning is currently enabled.
     bool partitioning_enabled = true;
 
-    tracing::ResumableEvent groupby_event;
     GroupbyMetrics metrics;
     const int64_t op_id;
 
@@ -801,6 +963,14 @@ class GroupbyState {
         const std::shared_ptr<table_info>& out_table);
 
     /**
+     * @brief Report the current set of build stage metrics and reset them in
+     * preparation for the next stage. The multiple stages are only relevant in
+     * the UNION case, but this serves as a nice generalization.
+     *
+     */
+    void ReportAndResetBuildMetrics(bool is_final);
+
+    /**
      * @brief Finalize the build step. This will finalize all the partitions,
      * append their outputs to the output buffer, clear the build state and set
      * build_input_finalized to prevent future repetitions of the build step.
@@ -839,6 +1009,14 @@ class GroupbyState {
     /// @brief Get the number of bytes that are currently allocated through this
     /// Groupby operator's OperatorBufferPool.
     uint64_t op_pool_bytes_allocated() const;
+
+    /**
+     * @brief Get a string representation of the partitioning state.
+     * This is used for Query Profile.
+     *
+     * @return std::string
+     */
+    std::string GetPartitionStateString() const;
 
    private:
     /**
@@ -917,4 +1095,11 @@ class GroupbyState {
      *
      */
     void ClearColSetsStates();
+
+    /// Snapshot of the combined metrics from the key columns.
+    /// We will "subtract" these from the key dict-builder metrics
+    /// to get the metrics for every subsequent stage. This is only required for
+    /// the UNION case where there may be multiple pipelines. UNION only has key
+    /// columns, so we only need to keep a snapshot of those metrics.
+    DictBuilderMetrics key_dict_builder_metrics_prev_stage_snapshot;
 };
