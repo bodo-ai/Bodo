@@ -10,8 +10,10 @@ import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
+import java.util.Map;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.commons.lang3.tuple.Pair;
 
 /** Class for locally testing codegen. */
 public class PandasGenTest {
@@ -130,8 +132,8 @@ public class PandasGenTest {
   private static String getRelationalAlgebraString(
       RelationalAlgebraGenerator generator, String sql) {
     try {
-      RelRoot root = generator.getRelationalAlgebra(sql);
-      return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
+      Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql);
+      return RelOptUtil.toString(PandasUtilKt.pandasProject(root.getLeft()));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }

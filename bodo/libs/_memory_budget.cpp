@@ -88,16 +88,10 @@ void OperatorComptroller::RegisterOperator(int64_t operator_id,
             "less than min_pipeline_id");
     }
 
-    if (this->num_operators < static_cast<size_t>(operator_id + 1)) {
-        // We have to do this resize here, because we are currently writing to
-        // the requests_per_operator map.
-        this->operator_allocated_budget.resize(operator_id + 1);
-        this->requests_per_operator.resize(operator_id + 1);
-        this->num_operators = operator_id + 1;
-    }
-
+    this->num_operators++;
     this->requests_per_operator[operator_id] = OperatorRequest(
         operator_type, min_pipeline_id, max_pipeline_id, estimate);
+    this->operator_allocated_budget[operator_id] = 0;
     this->num_pipelines =
         std::max(this->num_pipelines, static_cast<size_t>(max_pipeline_id + 1));
 }
@@ -106,7 +100,7 @@ int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) const {
     if (!this->budgets_enabled || operator_id < 0) {
         return -1;
     }
-    return this->operator_allocated_budget[operator_id];
+    return this->operator_allocated_budget.at(operator_id);
 }
 
 void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
@@ -266,14 +260,15 @@ void OperatorComptroller::assignAdditionalBudgetToOperator(
 }
 
 abs_rel_split_info splitOperatorsIntoAbsoluteAndRelativeHelper(
-    const std::vector</*const*/ OperatorRequest>& requests_per_operator,
+    const std::unordered_map<int64_t, /*const*/ OperatorRequest>&
+        requests_per_operator,
     const std::set<int64_t>& pipeline_operator_ids) {
     std::set<int64_t> abs_req_op_ids;
     std::set<int64_t> rel_req_op_ids;
     size_t abs_req_sum = 0;
     size_t rel_req_sum = 0;
     for (const int64_t op_id : pipeline_operator_ids) {
-        const auto& req = requests_per_operator[op_id];
+        const auto& req = requests_per_operator.at(op_id);
         if (!req.estimate_is_relative()) {
             abs_req_op_ids.insert(op_id);
             abs_req_sum += req.rem_estimate;
@@ -300,7 +295,7 @@ abs_rel_split_info OperatorComptroller::
     std::set<int64_t> single_pipeline_op_ids;
     for (const int64_t op_id :
          this->pipeline_to_remaining_operator_ids[pipeline_id]) {
-        const auto& req = this->requests_per_operator[op_id];
+        const auto& req = requests_per_operator.at(op_id);
         if (req.is_single_pipeline_op()) {
             assert(req.min_pipeline_id == pipeline_id);
             single_pipeline_op_ids.insert(op_id);
@@ -313,9 +308,7 @@ abs_rel_split_info OperatorComptroller::
 void OperatorComptroller::refreshPipelineToRemainingOperatorIds() {
     this->pipeline_to_remaining_operator_ids.clear();
     this->pipeline_to_remaining_operator_ids.resize(this->num_pipelines);
-    for (size_t op_id = 0; op_id < this->requests_per_operator.size();
-         op_id++) {
-        const auto& req = this->requests_per_operator[op_id];
+    for (auto& [op_id, req] : requests_per_operator) {
         if (req.rem_estimate > 0) {
             for (const int64_t pipeline_id : req.pipeline_ids) {
                 this->pipeline_to_remaining_operator_ids[pipeline_id].insert(
@@ -339,11 +332,8 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
     if (!this->budgets_enabled) {
         // Until more work is done to refine the memory estimates, disable
         // memory budgeting by default so that performance doesn't degrade.
-        for (int64_t op_id = 0;
-             op_id <
-             static_cast<int64_t>(this->operator_allocated_budget.size());
-             op_id++) {
-            this->operator_allocated_budget[op_id] = -1;
+        for (auto& [op_id, req] : this->operator_allocated_budget) {
+            req = -1;
         }
         return;
     }
@@ -478,12 +468,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         }
 
         // Calculate and assign available allocations to the operators.
-        for (int64_t op_id = 0;
-             op_id <
-             static_cast<int64_t>(this->operator_allocated_budget.size());
-             op_id++) {
-            auto& req = this->requests_per_operator[op_id];
-
+        for (auto& [op_id, req] : this->requests_per_operator) {
             // If already fulfilled, then skip updates.
             // (This can only happen for operators with absolute estimates).
             if (req.rem_estimate == 0) {
@@ -595,11 +580,8 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
            << BytesToHumanReadableString(
                   this->pipeline_remaining_budget[pipeline_id])
            << ")" << std::endl;
-        for (int64_t op_id = 0;
-             op_id <
-             static_cast<int64_t>(this->operator_allocated_budget.size());
-             op_id++) {
-            const auto& req = this->requests_per_operator[op_id];
+        for (auto& [op_id, avail_budget] : operator_allocated_budget) {
+            const auto& req = requests_per_operator[op_id];
             if ((static_cast<int64_t>(pipeline_id) < req.min_pipeline_id) ||
                 (req.max_pipeline_id < static_cast<int64_t>(pipeline_id))) {
                 // If not a part of this pipeline, then skip.
@@ -620,9 +602,7 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
                << BytesToHumanReadableString(req.original_estimate)
                << (req.estimate_is_relative() ? " (relative)" : "")
                << ", Allocated budget: "
-               << BytesToHumanReadableString(
-                      this->operator_allocated_budget[op_id])
-               << ")" << std::endl;
+               << BytesToHumanReadableString(avail_budget) << ")" << std::endl;
             if (req.min_pipeline_id != req.max_pipeline_id) {
                 if (req.operator_type == OperatorType::JOIN) {
                     os << "   - Build Pipeline ID: " << req.min_pipeline_id

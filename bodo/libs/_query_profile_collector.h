@@ -251,7 +251,7 @@ class QueryProfileCollector {
     std::unordered_map<operator_stage_t, std::vector<MetricBase>>
         operator_stage_metrics;
 
-    std::vector<int64_t> initial_operator_budget;
+    std::unordered_map<int64_t, int64_t> initial_operator_budget;
 
     // Location to write output profiles
     std::string output_dir;
