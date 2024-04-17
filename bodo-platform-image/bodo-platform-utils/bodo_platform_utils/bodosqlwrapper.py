@@ -3,9 +3,11 @@
 
 import argparse
 import os
+import requests
 import time
 from urllib.parse import urlencode
 import logging
+from enum import Enum
 
 import bodo
 import bodosql
@@ -15,6 +17,14 @@ from bodo.sql_plan_cache import BodoSqlPlanCache
 import numba
 
 from .catalog import get_data
+
+# constants
+AUTH_URL_SUFFIX = "/v1/oauth/tokens"
+
+class CatalogType(Enum):
+    SNOWFLAKE = "SNOWFLAKE"
+    TABULAR = "TABULAR"
+
 
 # Turn verbose mode on
 bodo.set_verbose_level(2)
@@ -42,13 +52,11 @@ def run_sql_query(
 
 @bodo.jit(cache=True)
 def consume_query_result(
-    output, pq_out_filename, sf_out_table_name, sf_write_conn, print_output
+    output, pq_out_filename, print_output
 ):
     """Function to consume the query result.
     Args:
         pq_out_filename (str): When provided (i.e. not ''), the query output is written to this location as a parquet file.
-        sf_out_table_name (str): When provided (i.e. not ''), the query output is written to this table in Snowflake.
-        sf_write_conn (str): Snowflake connection string. Required for Snowflake write.
         print_output: Flag to print query result.
     """
     print("Output Shape: ", output.shape)
@@ -60,11 +68,6 @@ def consume_query_result(
         t0 = time.time()
         output.to_parquet(pq_out_filename)
         print(f"Finished parquet write. It took {time.time() - t0} seconds.")
-    if sf_out_table_name != "":
-        print("Saving output to Snowflake table: ", sf_out_table_name)
-        t0 = time.time()
-        output.to_sql(sf_out_table_name, sf_write_conn, if_exists="replace")
-        print(f"Finished snowflake write. It took {time.time() - t0} seconds.")
 
 
 def get_cache_loc_from_dispatcher(dispatcher) -> str:
@@ -92,8 +95,6 @@ def run_sql_query_wrapper(
     dispatcher,
     sql_text,
     bc,
-    sf_write_conn,
-    sf_out_table_name,
     print_output,
     write_metrics,
     args,
@@ -105,8 +106,6 @@ def run_sql_query_wrapper(
         dispatcher: Dispatcher function for the query.
         sql_text (str): Query text to execute
         bc (bodosql.BodoSQLContext): BodoSQLContext to use for query execution.
-        sf_write_conn (str): Snowflake connection string. Required for Snowflake write.
-        sf_out_table_name (str): When provided (i.e. not ''), the query output is written to this table in Snowflake.
         print_output(bool): Flag to print query result.
         write_metrics(bool): Flag to write metrics.
         args: Arguments passed to the script.
@@ -126,8 +125,6 @@ def run_sql_query_wrapper(
         consume_query_result(
             output,
             args.pq_out_filename if args.pq_out_filename else "",
-            sf_out_table_name,
-            sf_write_conn,
             print_output,
         )
 
@@ -139,6 +136,88 @@ def run_sql_query_wrapper(
             )
     if args.trace:
         tracing.dump(fname=args.trace)
+
+
+def create_snowflake_catalog(catalog, args):
+    """
+    Create the Snowflake catalog from the catalog data.
+    Args:
+        catalog: Catalog object from the secret store.
+    """
+    warehouse = args.warehouse if args.warehouse else catalog.get("warehouse")
+    if warehouse is None:
+        raise ValueError(
+            "No warehouse specified in either the catalog data or through the arguments."
+        )
+
+    database = args.database if args.database else catalog.get("database")
+    if database is None:
+        raise ValueError(
+            "No database specified in either the catalog data or through the arguments."
+        )
+
+    # Schema can be None for backwards compatibility
+    schema = args.schema if args.schema else catalog.get("schema")
+
+    # Create connection params
+    connection_params = {"role": catalog["role"]} if "role" in catalog else {}
+    if schema is not None:
+        connection_params["schema"] = schema
+
+    return bodosql.SnowflakeCatalog(
+        username=catalog["username"],
+        password=catalog["password"],
+        account=catalog["accountName"],
+        warehouse=warehouse,
+        database=database,
+        connection_params=connection_params,
+        iceberg_volume=args.iceberg_volume,
+    )
+
+
+def create_tabular_catalog(catalog, args):
+    """
+    Create the tabular catalog from the catalog data.
+    Args:
+        catalog: Catalog object from the secret store.
+    """
+    warehouse = args.warehouse if args.warehouse else catalog.get("warehouse")
+    if warehouse is None:
+        raise ValueError(
+            "No warehouse specified in either the catalog data or through the arguments."
+        )
+    
+    iceberg_rest_url = args.iceberg_rest_url if args.iceberg_rest_url else catalog.get("icebergRestUrl")
+    if iceberg_rest_url is None:
+        raise ValueError(
+            "No icebergRestUrl specified in either the catalog data or through the arguments."
+        )
+
+    client_id = catalog.get("clientId")
+    if client_id is None:
+        raise ValueError(
+            "No clientId specified in the catalog data."
+        )
+    
+    client_secret = catalog.get("clientSecret")
+    if client_secret is None:
+        raise ValueError(
+            "No clientSecret specified in the catalog data."
+        )
+
+    # Gets a user access token
+    auth_url = iceberg_rest_url + AUTH_URL_SUFFIX
+    oauth_response = requests.post(
+        auth_url,
+        data={'client_id': client_id, 'client_secret': client_secret, 'grant_type': 'client_credentials'},
+        headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    user_session_token = oauth_response.json()['access_token']
+
+    return bodosql.TabularCatalog(
+        warehouse=warehouse,
+        iceberg_rest_url=iceberg_rest_url,
+        user_session_token=user_session_token,
+    )
 
 
 def main(args):
@@ -153,37 +232,20 @@ def main(args):
 
     # Fetch and create catalog
     catalog = get_data(args.catalog)
+    if catalog is None:
+        raise ValueError("Catalog not found in the secret store.")
+    
+    catalog_type_str = catalog.get("catalogType")
+    if catalog_type_str is None:
+        catalog_type = CatalogType.SNOWFLAKE
+    else:
+        catalog_type = CatalogType(catalog_type_str)
 
-    warehouse = args.warehouse if args.warehouse else catalog.get("warehouse")
-    if warehouse is None:
-        raise ValueError(
-            "No warehouse specified in either the credentials file or through the arguments."
-        )
-
-    database = args.database if args.database else catalog.get("database")
-    if database is None:
-        raise ValueError(
-            "No database specified in either the credentials file or through the arguments."
-        )
-
-    # Schema can be None for backwards compatibility
-    schema = args.schema if args.schema else catalog.get("schema")
-
-    # Create connection params
-    connection_params = {"role": catalog["role"]} if "role" in catalog else {}
-    if schema is not None:
-        connection_params["schema"] = schema
-
-    # Create catalog from credentials and args
-    bsql_catalog = bodosql.SnowflakeCatalog(
-        username=catalog["username"],
-        password=catalog["password"],
-        account=catalog["accountName"],
-        warehouse=warehouse,
-        database=database,
-        connection_params=connection_params,
-        iceberg_volume=args.iceberg_volume,
-    )
+    if catalog_type == CatalogType.TABULAR:
+        bsql_catalog = create_tabular_catalog(catalog, args)
+    else:
+        # default to Snowflake for backward compatibility
+        bsql_catalog = create_snowflake_catalog(catalog, args)
 
     # Create context
     bc = bodosql.BodoSQLContext(catalog=bsql_catalog)
@@ -204,14 +266,6 @@ def main(args):
                 f.write(pandas_text)
             print("[INFO] Saved Pandas Version to: ", args.pandas_out_filename)
 
-    sf_write_conn = ""
-    sf_out_table_name = ""
-    if args.sf_out_table_loc:
-        params = {"warehouse": bsql_catalog.warehouse}
-        db, schema, sf_out_table_name = (
-            args.sf_out_table_loc.split(".") if args.sf_out_table_loc else ("", "", "")
-        )
-        sf_write_conn = f"snowflake://{bsql_catalog.username}:{bsql_catalog.password}@{bsql_catalog.account}/{db}/{schema}?{urlencode(params)}"
     print_output = False
     if args.print_output:
         print_output = True
@@ -260,8 +314,6 @@ def main(args):
             dispatcher,
             sql_text,
             bc,
-            sf_write_conn,
-            sf_out_table_name,
             print_output,
             write_metrics,
             args,
@@ -317,12 +369,6 @@ if __name__ == "__main__":
         help="Optional: Write the query output as a parquet dataset to this location.",
     )
     parser.add_argument(
-        "-s",
-        "--sf_out_table_loc",
-        required=False,
-        help="Optional: Write the query output as a Snowflake table. Please provide a full table path of the form <database>.<schema>.<table_name>",
-    )
-    parser.add_argument(
         "-p",
         "--pandas_out_filename",
         required=False,
@@ -371,6 +417,12 @@ if __name__ == "__main__":
         required=False,
         default=None,
         help="Optional: Iceberg volume to use for writing as an iceberg table",
+    )
+    parser.add_argument(
+        "--iceberg_rest_url",
+        required=False,
+        default=None,
+        help="Optional: url for iceberg rest API server",
     )
 
     args = parser.parse_args()
