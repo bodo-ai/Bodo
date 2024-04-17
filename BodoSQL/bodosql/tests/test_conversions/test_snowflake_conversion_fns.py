@@ -38,6 +38,9 @@ valid_bool_params = [
                     "false",
                     "off",
                     "0",
+                    # Extra Padding
+                    "\n\t   n",
+                    " \t\t  true\n  ",
                 ]
                 * 3
             }
@@ -80,6 +83,10 @@ valid_bool_params = [
 invalid_bool_params = [
     pytest.param(
         pd.DataFrame({"A": pd.Series(["t", "a", "b", "y", None, "f"] * 3)}),
+        id="invalid_to_boolean_strings",
+    ),
+    pytest.param(
+        pd.DataFrame({"A": pd.Series(["\t\tt", None, "\nf\talse"] * 3)}),
         id="invalid_to_boolean_strings",
     ),
     pytest.param(
@@ -636,6 +643,10 @@ valid_double_params = [
                     "-Inf",
                     "-InFiNiTy",
                     "+Infinity",
+                    # Extra Left and Right Padding
+                    "     12.4",
+                    "  -0.5\t\n",
+                    "\r\n\r\n0.\r\n",
                 ]
             }
         ),
@@ -669,6 +680,8 @@ invalid_double_params = [
                         "4-7",
                         "12-",
                         "",
+                        # Internal Padding
+                        " - 0.73 ",
                     ]
                 )
             }

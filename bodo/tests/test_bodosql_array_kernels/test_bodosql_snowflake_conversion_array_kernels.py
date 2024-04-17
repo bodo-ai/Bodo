@@ -20,7 +20,7 @@ false_vals = {"n", "no", "f", "false", "off", "0"}
 
 
 def str_to_bool(s):
-    s = s.lower() if s else s
+    s = s.strip().lower() if s else s
     if s in true_vals or s in false_vals:
         return s in true_vals
     else:
