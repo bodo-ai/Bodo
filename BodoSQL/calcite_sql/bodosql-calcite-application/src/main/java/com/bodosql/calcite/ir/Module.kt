@@ -3,6 +3,7 @@ package com.bodosql.calcite.ir
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.utils.JoinStateCache
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
+import org.apache.calcite.rel.RelNode
 import java.util.Stack
 
 /**
@@ -33,9 +34,32 @@ class Module(private val frame: Frame) {
         private var assignedVariables: Set<Variable> = emptySet()
 
         private var currentPipeline: Int = 0
-        private var operatorCounter: Int = 0
+        private var nodeToOperatorCounters: MutableMap<Int, Int> = mutableMapOf()
 
-        fun newOperatorID() = operatorCounter++
+        private var idMapping: Map<Int, Int> = mapOf()
+
+        fun setIDMapping(minId: Map<Int, Int>) {
+            idMapping = minId
+        }
+
+        /**
+         * Generate a new operator ID based on the relnode ID. This makes it possible to determine which relnodes correspond to operators by reading the generated code later.
+         */
+        fun newOperatorID(n: RelNode): Int {
+            val opID = idMapping[n.id]!!
+            if (!nodeToOperatorCounters.contains(opID)) {
+                nodeToOperatorCounters[opID] = 0
+            }
+
+            val newId = nodeToOperatorCounters[opID]!! + 1
+            nodeToOperatorCounters[opID] = newId
+
+            val multiplier = 1000
+            // If this assert ever fails in practice, we can increase the multiplier by factors of 10 here.
+            assert(newId < multiplier)
+
+            return opID * multiplier + newId
+        }
 
         // relationalOperatorCache handles caching intermediate outputs of Relation Operators (RelNodes)
         // When possible

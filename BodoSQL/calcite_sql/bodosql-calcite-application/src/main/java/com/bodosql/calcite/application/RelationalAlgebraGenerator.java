@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
@@ -35,6 +36,7 @@ import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
+import org.apache.commons.lang3.tuple.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -367,7 +369,8 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  private RelRoot sqlToRel(SqlNode validatedSqlNode) throws RelConversionException {
+  private Pair<RelRoot, Map<Integer, Integer>> sqlToRel(SqlNode validatedSqlNode)
+      throws RelConversionException {
     if (!isComputeKind(validatedSqlNode.getKind())) {
       throw new RelConversionException(
           "DDL statements are not supported by the Relational Algebra Generator");
@@ -378,7 +381,10 @@ public class RelationalAlgebraGenerator {
     RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
     RelRoot optimizedPlan =
         unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
-    return optimizedPlan;
+    RelIDToOperatorIDVisitor s = new RelIDToOperatorIDVisitor();
+    s.visit(optimizedPlan.rel, 0, null);
+    Map<Integer, Integer> idMapping = s.getIDMapping();
+    return Pair.of(optimizedPlan, idMapping);
   }
 
   /**
@@ -393,7 +399,7 @@ public class RelationalAlgebraGenerator {
    * @throws SqlSyntaxException, SqlValidationException, RelConversionException
    */
   @VisibleForTesting
-  public RelRoot getRelationalAlgebra(String sql)
+  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(String sql)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
     try {
       SqlNode validatedSqlNode = validateQuery(sql);
@@ -407,12 +413,13 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  private String getOptimizedPlanStringFromRoot(RelRoot root, Boolean includeCosts) {
-    RelNode newRoot = PandasUtilKt.pandasProject(root);
+  private String getOptimizedPlanStringFromRoot(
+      Pair<RelRoot, Map<Integer, Integer>> root, Boolean includeCosts) {
+    RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
     if (includeCosts) {
       StringWriter sw = new StringWriter();
       com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight());
       newRoot.explain(costWriter);
       return sw.toString();
     } else {
@@ -448,19 +455,24 @@ public class RelationalAlgebraGenerator {
             this.typeSystem,
             false,
             this.verboseLevel,
-            this.streamingBatchSize);
+            this.streamingBatchSize,
+            Map.of());
     codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
     return codegen.getGeneratedCode();
   }
 
   private String getPandasStringFromPlan(
-      RelRoot plan, String originalSQL, boolean debugDeltaTable) {
+      Pair<RelRoot, Map<Integer, Integer>> plan, String originalSQL, boolean debugDeltaTable) {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
      */
-    RelNode rel = PandasUtilKt.pandasProject(plan);
+    RelNode rel = PandasUtilKt.pandasProject(plan.getLeft());
+    // Create a mapping for the new root - this is a bit of a hack, and long term we probably want
+    // something that's part of the RelNode itself instead of an auxillary map to make this safer.
+    int newKey = plan.getRight().values().stream().reduce(Integer::max).get();
+    plan.getRight().put(rel.getId(), newKey + 1);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
         new PandasCodeGenVisitor(
@@ -469,7 +481,8 @@ public class RelationalAlgebraGenerator {
             this.typeSystem,
             debugDeltaTable,
             this.verboseLevel,
-            this.streamingBatchSize);
+            this.streamingBatchSize,
+            plan.getRight());
     codegen.go(rel);
     return codegen.getGeneratedCode();
   }
@@ -494,7 +507,7 @@ public class RelationalAlgebraGenerator {
     try {
       SqlNode validatedSqlNode = validateQuery(sql);
       if (isComputeKind(validatedSqlNode.getKind())) {
-        RelRoot root = sqlToRel(validatedSqlNode);
+        Pair<RelRoot, Map<Integer, Integer>> root = sqlToRel(validatedSqlNode);
         return getOptimizedPlanStringFromRoot(root, includeCosts);
       } else {
         return getDDLPlanString(validatedSqlNode);
@@ -513,7 +526,7 @@ public class RelationalAlgebraGenerator {
     try {
       SqlNode validatedSqlNode = validateQuery(sql);
       if (isComputeKind(validatedSqlNode.getKind())) {
-        RelRoot optimizedPlan = sqlToRel(validatedSqlNode);
+        Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
         String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
         String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
         return new PandasCodeSqlPlanPair(pandasString, planString);
@@ -535,7 +548,7 @@ public class RelationalAlgebraGenerator {
     try {
       SqlNode validatedSqlNode = validateQuery(sql);
       if (isComputeKind(validatedSqlNode.getKind())) {
-        RelRoot optimizedPlan = sqlToRel(validatedSqlNode);
+        Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
         return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
       } else {
         return getDDLPandasString(validatedSqlNode, sql);

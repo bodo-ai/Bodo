@@ -18,11 +18,7 @@ void QueryProfileCollector::Init() {
 
     // Get the initial memory budget
     auto operator_comptroller = OperatorComptroller::Default();
-    size_t num_operators = operator_comptroller->GetNumOperators();
-    for (size_t i = 0; i < num_operators; i++) {
-        auto budget = operator_comptroller->GetOperatorBudget(i);
-        initial_operator_budget.push_back(budget);
-    }
+    initial_operator_budget = operator_comptroller->GetOperatorBudgets();
 
     // End of initialization when tracing is disabled
     if (tracing_level == 0) {
@@ -175,9 +171,11 @@ void QueryProfileCollector::Finalize() {
     profile["pipelines"] = pipelines;
 
     boost::json::object initial_operator_budgets;
-    for (size_t i = 0; i < initial_operator_budget.size(); i++) {
-        initial_operator_budgets[std::to_string(i)] =
-            initial_operator_budget[i];
+    for (const auto& [op_id, budget] : initial_operator_budget) {
+        int64_t relnode_id = op_id / 1000;
+        int64_t operator_id = op_id % 1000;
+        std::string key = fmt::format("{}.{}", relnode_id, operator_id);
+        initial_operator_budgets[key] = budget;
     }
     profile["initial_operator_budgets"] = initial_operator_budgets;
 

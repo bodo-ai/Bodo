@@ -40,7 +40,7 @@ import java.text.DecimalFormat
  * it normalizes the RelNode ids and outputs the cost for
  * each relational operation.
  */
-class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
+class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode, private val minRelID: Map<Int, Int>) : RelWriterImpl(pw) {
     // Holds a mapping of RelNode ids to their rewritten normalized
     // versions.
     private val normalizedIdMap: Map<Int, Int> = normalizeDuplicates(countRelIds(rel))
@@ -68,6 +68,9 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         val mq = uncastedMq as BodoRelMetadataQuery
 
         val s = StringBuilder()
+
+        newSection(s, "operator id")
+        s.append("${minRelID[rel.id]}\n")
 
         // Display cost information.
         val cost = mq.getNonCumulativeCost(rel) as Cost
