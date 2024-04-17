@@ -47,6 +47,8 @@ struct IncrementalShuffleMetrics {
     time_t append_time = 0;
     // Time spent in shuffling data.
     time_t shuffle_time = 0;
+    // Total number of shuffles
+    stat_t n_shuffles = 0;
     // Time spent hashing rows for shuffle.
     time_t hash_time = 0;
     // Time spent unifying the dictionaries globally before the shuffle.
@@ -65,6 +67,16 @@ struct IncrementalShuffleMetrics {
     stat_t peak_capacity_bytes = 0;
     // Peak utilized size of the shuffle buffer.
     stat_t peak_utilization_bytes = 0;
+    // Total number of times we reset the buffer since it grew too large.
+    stat_t n_buffer_resets = 0;
+
+    /**
+     * @brief Helper function for exporting metrics during reporting steps in
+     * Join/GroupBy.
+     *
+     * @param metrics Vector of metrics to append to.
+     */
+    virtual void add_to_metrics(std::vector<MetricBase>& metrics);
 };
 
 /**
