@@ -55,7 +55,7 @@ requirements:
     - pyarrow =15.0.0
     - boost-cpp =1.84
     - fmt =10.1
-    - libcurl <=8.5
+    - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_* # [not win]
     - h5py
     - mpich 4.1.2=h* # [not win]
