@@ -10,7 +10,7 @@ platforms:
 dependencies:
   - python=3.12.*
   - pip
-  - libcurl <=8.5
+  - libcurl ~=8.0
 
   # Core
   - numba =0.59.1
@@ -26,7 +26,7 @@ dependencies:
   # Restricting to 4.1.2 as new changes happened starting
   # 4.2 that has conflict with Intel MPI version the platform uses
   - mpich 4.1.2=h*
-  - mpi4py =3.1
+  - mpi4py
 
   # Java
   - openjdk =11
