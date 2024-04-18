@@ -11,7 +11,6 @@ import bodo
 import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
-    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -426,13 +425,11 @@ def test_multi_limit_pushdown(memory_leak_check):
 @temp_env_override({"AWS_REGION": "us-east-1"})
 def test_limit_filter_limit_pushdown(memory_leak_check):
     """
-    Test reading an Iceberg from Snowflake with limit pushdown the first limit
-    is pushed down, but an additional limit + filter after the first isn't pushed down.
-    Since the planner has access to length statistics, we need to actually
-    reduce the amount of data being read to test limit pushdown.
+    Test reading an Iceberg table from Snowflake with limit pushdown. We can push down
+    both limits and filters in a way that meets the requirements of this query
+    (pushes the smallest limit and ensures the filter is applied).
 
-    As a result, since this is no longer order we will instead compute summary
-    statistics and check that the number of rows read is identical
+    This may not result in a correct result since the ordering is not defined.
     """
 
     catalog = bodosql.SnowflakeCatalog(
@@ -464,25 +461,20 @@ def test_limit_filter_limit_pushdown(memory_leak_check):
             # We have a scalar output.
             is_out_distributed=False,
         )
-        check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
-        # Verify no limit pushdown as its after the limit
+        check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
         check_logger_msg(
-            stream, "Iceberg Filter Pushed Down:\nbic.FilterExpr('ALWAYS_TRUE', [])"
+            stream,
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
         )
-        # Verify we don't push down the second limit
-        check_logger_no_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})
 def test_filter_limit_filter_pushdown(memory_leak_check):
     """
-    Test reading an Iceberg from Snowflake with filter + limit pushdown, any
-    filter before the limit is pushed down with the limit, but not after.
-    Since the planner has access to length statistics, we need to actually
-    reduce the amount of data being read to test limit pushdown.
-
-    As a result, since this is no longer order we will instead compute summary
-    statistics and check that the number of rows read is identical
+    Test reading an Iceberg table from Snowflake with filters after the limit
+    computes a valid result (enforcing the limit and the filters). This query
+    doesn't have a strict ordering since limit can return any result and we opt
+    to apply the filter then limit (which is always correct but may be suboptimal).
     """
 
     catalog = bodosql.SnowflakeCatalog(
@@ -515,10 +507,9 @@ def test_filter_limit_filter_pushdown(memory_leak_check):
             is_out_distributed=False,
         )
         check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
-        # Verify no additional filter pushdown as its after the limit
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\nbic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f0)])",
+            "Iceberg Filter Pushed Down:\nbic.FilterExpr('AND', [bic.FilterExpr('!=', [bic.ColumnRef('A'), bic.Scalar(f0)]), bic.FilterExpr('>', [bic.ColumnRef('B'), bic.Scalar(f1)])])",
         )
 
 
