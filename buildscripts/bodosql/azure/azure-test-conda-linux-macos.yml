@@ -119,7 +119,7 @@ jobs:
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
       cd azurefs-sas-token-provider
       python setup.py develop
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
