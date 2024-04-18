@@ -62,4 +62,7 @@ public interface BodoSQLResource {
 
    @Resources.BaseMessage("Encountered a table without read permissions when attempting to expand {0}.")
    Resources.ExInst<SqlValidatorException> noReadPermissionExpandingView(String viewQualifiedName);
+
+   @Resources.BaseMessage("Dynamic parameter provided but type information is not available. Please cast the dynamic parameter to ensure proper typing.")
+   Resources.ExInst<SqlValidatorException> dynamicParamIllegal();
 }

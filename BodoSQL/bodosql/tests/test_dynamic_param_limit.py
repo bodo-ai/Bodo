@@ -1,8 +1,8 @@
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-Test that Named Parameters can be used for the limit and offset values in
+Test that Dynamic Parameters can be used for the limit and offset values in
 a SQL LIMIT expression.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import re
 
 import pandas as pd
@@ -14,7 +14,7 @@ from bodosql.tests.named_params_common import int_named_params  # noqa
 from bodosql.tests.utils import check_query
 
 
-def test_limit_unsigned(basic_df, int_named_params, memory_leak_check):
+def test_named_param_limit_unsigned(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside a limit clause.
@@ -31,7 +31,26 @@ def test_limit_unsigned(basic_df, int_named_params, memory_leak_check):
     )
 
 
-def test_limit_offset(basic_df, spark_info, int_named_params, memory_leak_check):
+def test_bind_variable_limit_unsigned(basic_df, int_named_params, memory_leak_check):
+    """
+    Checks using a named parameter
+    inside a limit clause.
+    """
+    query = "select a from table1 limit ?"
+    bind_variables = (int_named_params["a"], int_named_params["b"])
+
+    check_query(
+        query,
+        basic_df,
+        None,
+        bind_variables=bind_variables,
+        expected_output=pd.DataFrame(
+            {"A": basic_df["TABLE1"].A.head(bind_variables[0])}
+        ),
+    )
+
+
+def test_named_param_limit_offset(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside limit and offset clauses.
@@ -44,20 +63,38 @@ def test_limit_offset(basic_df, spark_info, int_named_params, memory_leak_check)
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         named_params=int_named_params,
         expected_output=expected_output,
     )
 
 
-def test_limit_offset_keyword(
-    basic_df, spark_info, int_named_params, memory_leak_check
-):
+def test_bind_variable_limit_offset(basic_df, int_named_params, memory_leak_check):
+    """
+    Checks using a bind variable
+    inside limit and offset clauses.
+    """
+    query = "select A from table1 limit ?, ?"
+    # Spark doesn't support offset so use an expected output
+    bind_variables = (int_named_params["a"], int_named_params["b"])
+    a = bind_variables[0]
+    b = bind_variables[1]
+    expected_output = basic_df["TABLE1"].iloc[a : a + b, [0]]
+    check_query(
+        query,
+        basic_df,
+        None,
+        bind_variables=bind_variables,
+        expected_output=expected_output,
+    )
+
+
+def test_limit_offset_keyword(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside limit and offset clauses.
     """
-    query = "select A from table1 limit @b offset @b"
+    query = "select A from table1 limit @b offset @a"
     # Spark doesn't support offset so use an expected output
     a = int_named_params["a"]
     b = int_named_params["b"]
@@ -65,8 +102,30 @@ def test_limit_offset_keyword(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         named_params=int_named_params,
+        expected_output=expected_output,
+    )
+
+
+def test_bind_variable_limit_offset_keyword(
+    basic_df, int_named_params, memory_leak_check
+):
+    """
+    Checks using a bind variable
+    inside limit and offset clauses.
+    """
+    query = "select A from table1 limit ? offset ?"
+    # Spark doesn't support offset so use an expected output
+    bind_variables = (int_named_params["b"], int_named_params["a"])
+    a = bind_variables[1]
+    b = bind_variables[0]
+    expected_output = basic_df["TABLE1"].iloc[a : a + b, [0]]
+    check_query(
+        query,
+        basic_df,
+        None,
+        bind_variables=bind_variables,
         expected_output=expected_output,
     )
 

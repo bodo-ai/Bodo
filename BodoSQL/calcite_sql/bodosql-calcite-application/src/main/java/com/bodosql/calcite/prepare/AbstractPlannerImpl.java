@@ -27,6 +27,7 @@ import com.bodosql.calcite.sql.validate.BodoSqlValidator;
 import com.bodosql.calcite.sql.validate.DDLResolver;
 import com.bodosql.calcite.sql2rel.BodoRelDecorrelator;
 import com.bodosql.calcite.sql2rel.BodoSqlToRelConverter;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.google.common.collect.ImmutableList;
 import java.io.Reader;
 import java.util.HashMap;
@@ -257,8 +258,14 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
   @EnsuresNonNull("validator")
   @Override
   public SqlNode validate(SqlNode sqlNode) throws ValidationException {
+    return validate(sqlNode, List.of());
+  }
+
+  @EnsuresNonNull("validator")
+  public SqlNode validate(SqlNode sqlNode, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws ValidationException {
     ensure(State.STATE_3_PARSED);
-    this.validator = createSqlValidator(createCatalogReader());
+    this.validator = createSqlValidator(createCatalogReader(), dynamicParamTypes);
     try {
       validatedSqlNode = validator.validate(sqlNode);
     } catch (RuntimeException e) {
@@ -754,6 +761,11 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       List<String> defaultPath);
 
   private BodoSqlValidator createSqlValidator(CalciteCatalogReader catalogReader) {
+    return createSqlValidator(catalogReader, List.of());
+  }
+
+  private BodoSqlValidator createSqlValidator(
+      CalciteCatalogReader catalogReader, List<ColumnDataTypeInfo> dynamicParamTypes) {
     final SqlOperatorTable opTab = SqlOperatorTables.chain(operatorTable, catalogReader);
     return new BodoSqlValidator(
         opTab,
@@ -762,7 +774,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
         sqlValidatorConfig
             .withLenientOperatorLookup(connectionConfig.lenientOperatorLookup())
             .withConformance(connectionConfig.conformance())
-            .withIdentifierExpansion(true));
+            .withIdentifierExpansion(true),
+        dynamicParamTypes);
   }
 
   private DDLResolver createDDLResolver(

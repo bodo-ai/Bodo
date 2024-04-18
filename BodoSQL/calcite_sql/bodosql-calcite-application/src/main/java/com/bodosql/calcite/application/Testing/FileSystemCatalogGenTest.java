@@ -36,7 +36,7 @@ public class FileSystemCatalogGenTest {
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    PandasCodeSqlPlanPair pair = generator.getPandasAndPlanString(sql, false, true);
+    PandasCodeSqlPlanPair pair = generator.getPandasAndPlanString(sql, true);
     System.out.println("Optimized plan:");
     System.out.println(pair.getSqlPlan() + "\n");
     System.out.println("Generated code:");

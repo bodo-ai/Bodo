@@ -10,6 +10,7 @@ import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelRoot;
@@ -20,12 +21,12 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select CURRENT_DATE()";
+    String sql = "select CONCAT(A, ?) as OUTPUT from table1";
     int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
     ArrayList arr = new ArrayList();
-    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
+    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.STRING;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
     ColumnDataTypeInfo dataTypeInfo = new ColumnDataTypeInfo(dataType, true);
     ColumnDataTypeInfo paramTypeInfo = new ColumnDataTypeInfo(paramType, true);
@@ -113,16 +114,18 @@ public class PandasGenTest {
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Enable Iceberg for testing
-            true, // Enable TIMESTMAP_TZ for testing
+            true, // Enable TIMESTAMP_TZ for testing
             true // Enable Join Runtime filters for Testing
             );
+    List<ColumnDataTypeInfo> paramTypes =
+        List.of(new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false));
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String optimizedPlanStr = getRelationalAlgebraString(generator, sql);
+    String optimizedPlanStr = getRelationalAlgebraString(generator, sql, paramTypes);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
 
-    String pandasStr = generator.getPandasString(sql);
+    String pandasStr = generator.getPandasString(sql, paramTypes);
     System.out.println("Generated code:");
     System.out.println(pandasStr + "\n");
     System.out.println("Lowered globals:");
@@ -130,9 +133,9 @@ public class PandasGenTest {
   }
 
   private static String getRelationalAlgebraString(
-      RelationalAlgebraGenerator generator, String sql) {
+      RelationalAlgebraGenerator generator, String sql, List<ColumnDataTypeInfo> paramTypes) {
     try {
-      Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql);
+      Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql, paramTypes);
       return RelOptUtil.toString(PandasUtilKt.pandasProject(root.getLeft()));
     } catch (Exception e) {
       throw new RuntimeException(e);

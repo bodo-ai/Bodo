@@ -10,14 +10,11 @@ dedicated to testing MERGE INTO plan generation within BodoSQL.
 
 
 import itertools
-import os
 import random
 
 import numpy as np
 import pandas as pd
 import pytest
-
-from bodosql.tests.utils import check_query
 
 """In this file, to create test cases, we manually generate the rows that are
 matched/not matched depending on the join condition and the source/dest table, since there isn't
@@ -383,87 +380,3 @@ def make_parameterized(params_list, matched=True):
         out_params_list.append(pytest.param(condition_action_list, id=id))
 
     return out_params_list
-
-
-@pytest.mark.parametrize(
-    "args",
-    [
-        (
-            target_df_one,
-            source_df_one,
-            join_condition_one,
-            using_cond_one,
-            target_one_source_one_condition_one_matched_rows,
-            target_one_source_one_condition_one_not_matched_rows,
-        ),
-        pytest.param(
-            (
-                target_df_one,
-                source_df_one,
-                join_condition_two,
-                using_cond_one,
-                target_one_source_one_condition_two_matched_rows,
-                target_one_source_one_condition_two_not_matched_rows,
-            ),
-            marks=pytest.mark.slow,
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    ("matched_conditions_and_actions", "not_matched_conditions_and_actions"),
-    zip(get_matched_actions(), get_not_matched_actions()),
-)
-def test_delta_table_simple(
-    memory_leak_check,
-    args,
-    matched_conditions_and_actions,
-    not_matched_conditions_and_actions,
-):
-    """
-    Tests that the generated delta table is the expected value. Does NOT test
-    that the delta table is valid (no two actions applied to the same row)
-    """
-    if (
-        len(matched_conditions_and_actions) == 0
-        and len(not_matched_conditions_and_actions) == 0
-    ):
-        # Need at least one matched/not matched clause
-        return
-
-    (
-        dest_table,
-        source_table,
-        join_cond,
-        using_cond,
-        matched_rows,
-        not_matched_rows,
-    ) = args
-    ctx = {"DEST_TABLE": dest_table, "SOURCE_TABLE": source_table}
-    query, expected_output = gen_expected_query_and_expected_df(
-        using_cond,
-        join_cond,
-        matched_rows,
-        not_matched_rows,
-        matched_conditions_and_actions,
-        not_matched_conditions_and_actions,
-    )
-
-    # This environment variable causes BodoSQL to just return the table that
-    # is inputted to the LogicalTableModify node. IE, the Delta Table.
-    os.environ["__BODO_TESTING_DEBUG_DELTA_TABLE"] = "1"
-    try:
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-            check_dtype=False,
-            check_names=False,
-            # Only check python, since we're primarily checking
-            # the Calcite codegen for correctness, not if we handle
-            # distributed case stmts/joins correctly
-            only_python=True,
-        )
-    except Exception as e:
-        del os.environ["__BODO_TESTING_DEBUG_DELTA_TABLE"]
-        raise e

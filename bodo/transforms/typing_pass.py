@@ -20,6 +20,7 @@ from numba.core.extending import register_jitable
 from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
     GuardException,
+    build_definitions,
     compute_cfg_from_blocks,
     dprint_func_ir,
     find_callname,
@@ -448,6 +449,9 @@ class TypingTransforms:
                     out_nodes = self._run_assign(inst, label)
 
                 if isinstance(out_nodes, ReplaceFunc):
+                    if out_nodes.pre_nodes is not None:
+                        self._working_body.extend(out_nodes.pre_nodes)
+                        self._update_definitions(out_nodes.pre_nodes)
                     self._handle_inline_func(out_nodes, inst, i, block)
                     # We use block labels in this pass (rhs_labels for finding df definition dominators)
                     # so need to start over when block structure changes.
@@ -479,6 +483,13 @@ class TypingTransforms:
         mini_dce(self.func_ir)
 
         return self.changed, self.needs_transform, self.tried_unrolling
+
+    def _update_definitions(self, node_list):
+        loc = ir.Loc("", 0)
+        dumm_block = ir.Block(ir.Scope(None, loc), loc)
+        dumm_block.body = node_list
+        build_definitions({0: dumm_block}, self.func_ir._definitions)
+        return
 
     def _handle_inline_func(
         self, replacement_func, orig_inst, orig_inst_idx, cur_block
@@ -5570,17 +5581,25 @@ class TypingTransforms:
         sql_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}", rhs.args, kws, 0, "sql"
         )
-        params_var = get_call_expr_arg(
+        params_dict_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}",
             rhs.args,
             kws,
             1,
-            "param_dict",
+            "params_dict",
+            default=types.none,
+        )
+        dynamic_params_var = get_call_expr_arg(
+            f"BodoSQLContextType.{func_name}",
+            rhs.args,
+            kws,
+            2,
+            "dynamic_params_list",
             default=types.none,
         )
         # Make sure JIT options are not used inside JIT functions
         for k in kws.keys():
-            if k not in ("sql", "param_dict"):
+            if k not in ("sql", "params_dict", "dynamic_params_list"):
                 raise BodoError(
                     f"Argument '{k}' is not supported for BodoSQLContextType.{func_name}() inside JIT functions."
                 )
@@ -5592,22 +5611,86 @@ class TypingTransforms:
         except (GuardException, BodoConstUpdatedError):
             needs_transform = True
 
-        # TODO: Handle the none case
-        if is_overload_none(params_var):
-            keys, values = [], []
+        if is_overload_none(params_dict_var):
+            named_param_keys, named_param_values = [], []
         else:
-            try:
-                keys, values = bodo.utils.transform.dict_to_const_keys_var_values_lists(
-                    params_var,
-                    self.func_ir,
-                    self.arg_types,
-                    self.typemap,
-                    self._updated_containers,
-                    self._require_const,
-                    label,
-                )
-            except GuardException:
-                needs_transform = True
+            arg_name = params_dict_var.name
+            if (arg_name in self.typemap) and is_overload_none(self.typemap[arg_name]):
+                named_param_keys, named_param_values = [], []
+            else:
+                try:
+                    (
+                        named_param_keys,
+                        named_param_values,
+                    ) = bodo.utils.transform.dict_to_const_keys_var_values_lists(
+                        params_dict_var,
+                        self.func_ir,
+                        self.arg_types,
+                        self.typemap,
+                        self._updated_containers,
+                        self._require_const,
+                        label,
+                    )
+                except GuardException:
+                    needs_transform = True
+
+        pre_nodes = []
+        if is_overload_none(dynamic_params_var):
+            dynamic_param_values = []
+        else:
+            arg_name = dynamic_params_var.name
+            if (arg_name in self.typemap) and is_overload_none(self.typemap[arg_name]):
+                dynamic_param_values = []
+            elif arg_name in self.typemap and isinstance(
+                self.typemap[arg_name], types.BaseTuple
+            ):
+                try:
+                    # Try to fetch the original variables if we have a constant tuple to avoid generating
+                    # extra IR.
+                    dynamic_param_values = (
+                        bodo.utils.transform.tuples_to_vars_value_list(
+                            dynamic_params_var, self.func_ir
+                        )
+                    )
+                except GuardException:
+                    # If we failed to fetch a constant tuple we can generate valid code by introducing a new variable
+                    # for each tuple getitem.
+                    dynamic_param_values = []
+                    tuple_type = self.typemap[arg_name]
+                    for i in range(len(tuple_type.types)):
+                        # Create the index variable.
+                        index_var = ir.Var(
+                            dynamic_params_var.scope,
+                            mk_unique_var("$index_var"),
+                            dynamic_params_var.loc,
+                        )
+                        self.typemap[index_var.name] = types.intp
+                        assign = ir.Assign(
+                            ir.Const(i, dynamic_params_var.loc),
+                            index_var,
+                            dynamic_params_var.loc,
+                        )
+                        pre_nodes.append(assign)
+                        # Get the variable for the tuple element.
+                        var = ir.Var(
+                            dynamic_params_var.scope,
+                            mk_unique_var("$tuple_var"),
+                            dynamic_params_var.loc,
+                        )
+                        self.typemap[var.name] = tuple_type.types[i]
+                        getitem = ir.Expr.getitem(
+                            dynamic_params_var, index_var, var.loc
+                        )
+                        assign = ir.Assign(getitem, var, var.loc)
+                        pre_nodes.append(assign)
+                        dynamic_param_values.append(var)
+            else:
+                try:
+                    dynamic_param_values = bodo.utils.transform.list_to_vars_value_list(
+                        dynamic_params_var, self.func_ir
+                    )
+                except GuardException:
+                    needs_transform = True
 
         # If any variable needs to be a constant, try and
         # transform the code
@@ -5615,21 +5698,37 @@ class TypingTransforms:
             self.needs_transform = True
             return [assign]
 
-        keys = tuple(keys)
+        named_param_keys = tuple(named_param_keys)
 
-        for value in values:
+        for value in named_param_values:
             if value.name not in self.typemap:
                 self.needs_transform = True
                 return [assign]
 
-        value_typs = tuple([self.typemap[value.name] for value in values])
+        named_param_value_types = tuple(
+            [self.typemap[value.name] for value in named_param_values]
+        )
+
+        for value in dynamic_param_values:
+            if value.name not in self.typemap:
+                self.needs_transform = True
+                return [assign]
+
+        dynamic_param_value_types = tuple(
+            [self.typemap[value.name] for value in dynamic_param_values]
+        )
+
         if func_name == "sql":
             (
                 impl,
                 additional_globals_to_lower,
                 sql_plan,
             ) = bodosql.context_ext._gen_sql_plan_pd_func_and_glbls_for_query(
-                sql_context_type, sql_str, keys, value_typs
+                sql_context_type,
+                sql_str,
+                dynamic_param_value_types,
+                named_param_keys,
+                named_param_value_types,
             )
             # Save the plan if a cache location is set up.
             BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
@@ -5638,7 +5737,11 @@ class TypingTransforms:
                 impl,
                 additional_globals_to_lower,
             ) = bodosql.context_ext._gen_pd_func_str_for_query(
-                sql_context_type, sql_str, keys, value_typs
+                sql_context_type,
+                sql_str,
+                dynamic_param_value_types,
+                named_param_keys,
+                named_param_value_types,
             )
 
         self.changed = True
@@ -5661,8 +5764,9 @@ class TypingTransforms:
         return replace_func(
             self,
             impl,
-            [sql_context_var] + values,
+            [sql_context_var] + dynamic_param_values + named_param_values,
             extra_globals=additional_globals_to_lower,
+            pre_nodes=pre_nodes,
         )
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):

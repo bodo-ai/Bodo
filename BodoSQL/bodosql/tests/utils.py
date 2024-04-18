@@ -6,7 +6,7 @@ import os
 import re
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numba
 import numpy as np
@@ -56,6 +56,7 @@ def check_query(
     dataframe_dict: Dict[str, pd.DataFrame],
     spark: Optional["SparkSession"],
     named_params: Optional[Dict[str, Any]] = None,
+    bind_variables: Optional[Tuple[Any]] = None,
     check_names: bool = True,
     check_dtype: bool = True,
     sort_output: bool = True,
@@ -121,6 +122,9 @@ def check_query(
             names used in query. These are used to support caching variable
             changes in Bodo. Spark queries need to replace these variables
             with the constant values if they exist.
+
+        bind_variables: Tuple of Python variables used as bind variables in the
+        query. These queries do not support Spark.
 
         check_names: Compare BodoSQL and SparkSQL names for equality.
             This is useful for checking aliases.
@@ -307,9 +311,9 @@ def check_query(
         print(query)
         bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
         print("Plan:")
-        print(bc.generate_plan(query, named_params))
+        print(bc.generate_plan(query, named_params, bind_variables))
         print("Pandas Code:")
-        print(bc.convert_to_pandas(query, named_params))
+        print(bc.convert_to_pandas(query, named_params, bind_variables))
 
     if expected_output is None and spark is None:
         raise ValueError(
@@ -407,6 +411,7 @@ def check_query(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
@@ -425,6 +430,7 @@ def check_query(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         check_names,
         check_dtype,
         sort_output,
@@ -449,11 +455,13 @@ def check_query(
 
     # Return Pandas code if requested
     if return_codegen:
-        result["pandas_code"] = bc.convert_to_pandas(query, named_params)
+        result["pandas_code"] = bc.convert_to_pandas(
+            query, named_params, bind_variables
+        )
 
     # Return sequential output if requested
     if return_seq_dataframe:
-        result["output_df"] = bc.sql(query, named_params)
+        result["output_df"] = bc.sql(query, named_params, bind_variables)
     return result
 
 
@@ -464,6 +472,7 @@ def check_query_jit(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
@@ -501,6 +510,8 @@ def check_query_jit(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -512,7 +523,7 @@ def check_query_jit(
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
-        use_table_format: flag for loading dataframes in table format for testing.
+        use_table_format: flag for loading DataFrames in table format for testing.
             If None, tests both formats.
 
         use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
@@ -561,6 +572,7 @@ def check_query_jit(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
@@ -577,6 +589,7 @@ def check_query_jit(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
@@ -594,6 +607,7 @@ def check_query_jit(
                 query,
                 dataframe_dict,
                 named_params,
+                bind_variables,
                 check_names,
                 check_dtype,
                 sort_output,
@@ -621,6 +635,7 @@ def check_query_jit(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
@@ -650,6 +665,7 @@ def check_query_jit(
             query,
             dataframe_dict,
             named_params,
+            bind_variables,
             check_names,
             check_dtype,
             sort_output,
@@ -674,6 +690,7 @@ def check_query_python(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
@@ -698,6 +715,8 @@ def check_query_python(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -720,7 +739,7 @@ def check_query_python(
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
     bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
-    bodosql_output = bc.sql(query, named_params)
+    bodosql_output = bc.sql(query, named_params, bind_variables)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -740,6 +759,7 @@ def check_query_jit_seq(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
@@ -765,6 +785,8 @@ def check_query_jit_seq(
 
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
+
+        bind_variables: Tuple of Python values used as bind variables in a query.
 
         check_names: Compare BodoSQL and expected_output names for equality.
 
@@ -794,6 +816,7 @@ def check_query_jit_seq(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         InputDist.REP,
         False,
         session_tz,
@@ -818,6 +841,7 @@ def check_query_jit_1D(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
@@ -845,6 +869,8 @@ def check_query_jit_1D(
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
 
+        bind_variables: Tuple of Python values used as bind variables in a query.
+
         check_names: Compare BodoSQL and expected_output names for equality.
 
         check_dtype: Compare BodoSQL and expected_output types for equality.
@@ -873,6 +899,7 @@ def check_query_jit_1D(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         InputDist.OneD,
         is_out_distributed,
         session_tz,
@@ -908,6 +935,7 @@ def check_query_jit_1DVar(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     check_names,
     check_dtype,
     sort_output,
@@ -934,6 +962,8 @@ def check_query_jit_1DVar(
 
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
+
+        bind_variables: Tuple of Python values used as bind variables in a query.
 
         check_names: Compare BodoSQL and expected_output names for equality.
 
@@ -963,6 +993,7 @@ def check_query_jit_1DVar(
         query,
         dataframe_dict,
         named_params,
+        bind_variables,
         InputDist.OneDVar,
         is_out_distributed,
         session_tz,
@@ -998,6 +1029,7 @@ def _run_jit_query(
     query,
     dataframe_dict,
     named_params,
+    bind_variables,
     input_dist,
     is_out_distributed,
     session_tz,
@@ -1017,6 +1049,8 @@ def _run_jit_query(
 
         named_params: Dictionary of mapping constant values to Bodo variable
             names used in query.
+
+        bind_variables: Tuple of Python values used as bind variables in a query.
 
         input_dist: How the input data should be distributed. Either REP,
             1D or 1DVar. All input DataFrames are presumed to have the same
@@ -1038,8 +1072,15 @@ def _run_jit_query(
         keys_list = []
         values_list = []
 
+    if bind_variables is None:
+        bind_variables = ()
+
     # Generate the BodoSQLContext with func_text so we can use jit code
-    params = ",".join([f"e{i}" for i in range(len(dataframe_dict))] + keys_list)
+    params = ",".join(
+        [f"e{i}" for i in range(len(dataframe_dict))]
+        + keys_list
+        + [f"f{i}" for i in range(len(bind_variables))]
+    )
     func_text = f"def test_impl(query, {params}):\n"
     func_text += "    bc = bodosql.BodoSQLContext(\n"
     func_text += "        {\n"
@@ -1062,17 +1103,26 @@ def _run_jit_query(
         else:
             args.append(dataframe_dict[key])
         func_text += f"            '{key}': e{i},\n"
-    args = args + values_list
+    args = args + values_list + list(bind_variables)
     func_text += "        }\n"
     if session_tz is not None:
         func_text += f"        , default_tz={repr(session_tz)}\n"
     func_text += "    )\n"
-    func_text += f"    result = bc.sql(query"
+    func_text += f"    result = bc.sql(query, "
     if keys_list:
-        func_text += ", {"
+        func_text += "{"
         for key in keys_list:
             func_text += f"'{key}': {key}, "
-        func_text += "}"
+        func_text += "}, "
+    else:
+        func_text += "None, "
+    if bind_variables:
+        func_text += "( "
+        for j in range(len(bind_variables)):
+            func_text += f"f{j}, "
+        func_text += "), "
+    else:
+        func_text += "None, "
     func_text += ")\n"
     func_text += "    return result\n"
     locs = {}

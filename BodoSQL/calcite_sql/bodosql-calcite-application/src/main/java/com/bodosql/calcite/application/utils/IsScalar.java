@@ -59,7 +59,7 @@ public class IsScalar implements RexVisitor<Boolean> {
 
   @Override
   public Boolean visitDynamicParam(RexDynamicParam dynamicParam) {
-    throw unsupportedNode();
+    return true;
   }
 
   @Override

@@ -40,11 +40,13 @@ from bodo.utils.typing import (
 from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
 from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
+    DYNAMIC_PARAM_ARG_PREFIX,
+    NAMED_PARAM_ARG_PREFIX,
     NAMED_PARAM_TABLE_NAME,
-    PARAM_ARG_PREFIX,
     BodoSQLContext,
     _PlannerType,
     compute_df_types,
+    create_java_dynamic_parameter_type_list,
     initialize_schema,
     update_schema,
 )
@@ -366,8 +368,9 @@ def overload_remove_catalog(bc):
 def _gen_sql_plan_pd_func_text_and_lowered_globals(
     bodo_sql_context_type: BodoSQLContextType,
     sql_str: str,
-    param_keys: Tuple[str],
-    param_values: Tuple[Any],
+    dynamic_param_values: Tuple[types.Type],
+    named_param_keys: Tuple[str],
+    named_param_values: Tuple[types.Type],
     hide_credentials: bool,
 ) -> Tuple[str, Dict[str, Any], str]:
     """
@@ -378,9 +381,11 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type (BodoSQLContextType): The BodoSQL context type used to derive
             the necessary configuration for generating the query.
         sql_str (str): The SQL text to parse and execute.
-        param_keys (Tuple[str]): An N-Tuple of keys used to access Python variables in SQL.
-        param_values (Tuple[Any]): An N-Tuple of values containing the data for Python variables
-            used in SQL.
+        dynamic_param_values (Tuple[Any]): An N-Tuple of values containing the data for Python variables
+            used in SQL passed as bind variables.
+        named_param_keys (Tuple[str]): An N-Tuple of keys used to access Python variables in SQL via named parameters.
+        named_param_values (Tuple[Any]): An N-Tuple of values containing the data for Python variables
+            used in SQL via named parameters.
         hide_credentials (bool): Should credentials be hidden in the generated
             code. This is used when we generate code/plans we want to inspect but
             not run to avoid exposing credentials.
@@ -422,7 +427,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
         try:
             table_names = bodo_sql_context_type.names
-            schema = initialize_schema((param_keys, param_values))
+            schema = initialize_schema((named_param_keys, named_param_values))
             verbose_level = bodo.user_logging.get_verbose_level()
             if bodo.bodosql_use_streaming_plan:
                 planner_type = _PlannerType.Streaming.value
@@ -486,8 +491,11 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     True,
                     write_type,
                 )
+                java_params_array = create_java_dynamic_parameter_type_list(
+                    dynamic_param_values
+                )
                 pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                    sql_str, False, True
+                    sql_str, True, java_params_array
                 )
                 pd_code = str(pd_code_sql_plan_pair.getPdCode())
                 sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())
@@ -503,8 +511,16 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 func_text_or_error_msg = f"Failure in compiling or validating SQL Query. Error message: {error_to_string(e)}"
                 failed = True
             if not failed:
-                params_names = [PARAM_ARG_PREFIX + x for x in param_keys]
-                args = ",".join(["bodo_sql_context"] + params_names)
+                dynamic_param_names = [
+                    DYNAMIC_PARAM_ARG_PREFIX + str(i)
+                    for i in range(len(dynamic_param_values))
+                ]
+                named_param_names = [
+                    NAMED_PARAM_ARG_PREFIX + x for x in named_param_keys
+                ]
+                args = ",".join(
+                    ["bodo_sql_context"] + dynamic_param_names + named_param_names
+                )
                 func_text_or_error_msg = f"def impl({args}):\n"
                 func_text_or_error_msg += f"{pd_code}\n"
 
@@ -539,7 +555,11 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
 
 
 def _gen_sql_plan_pd_func_and_glbls_for_query(
-    bodo_sql_context_type, sql_str, param_keys, param_values
+    bodo_sql_context_type,
+    sql_str,
+    dynamic_param_values,
+    named_param_keys,
+    named_param_values,
 ):
     """Generate a Pandas function for query given the data type of SQL context.
     Used in Bodo typing pass to handle BodoSQLContext.sql() calls
@@ -549,8 +569,9 @@ def _gen_sql_plan_pd_func_and_glbls_for_query(
     func_text, glblsToLower, sql_plan = _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type,
         sql_str,
-        param_keys,
-        param_values,
+        dynamic_param_values,
+        named_param_keys,
+        named_param_values,
         False,  # Don't hide credentials because we need to execute this code.
     )
 
@@ -578,7 +599,7 @@ def _gen_sql_plan_pd_func_and_glbls_for_query(
 
 
 @overload_method(BodoSQLContextType, "sql", inline="always", no_unliteral=True)
-def overload_sql(bodo_sql_context, sql_str, param_dict=None):
+def overload_sql(bodo_sql_context, sql_str, params_dict=None, dynamic_params_list=None):
     """BodoSQLContextType.sql() should be handled in bodo typing pass since the
     generated code cannot be handled in regular overloads
     (requires Bodo's untyped pass and typing pass)
@@ -587,7 +608,11 @@ def overload_sql(bodo_sql_context, sql_str, param_dict=None):
 
 
 def _gen_pd_func_str_for_query(
-    bodo_sql_context_type, sql_str, param_keys, param_values
+    bodo_sql_context_type,
+    sql_str,
+    dynamic_param_values,
+    named_param_keys,
+    named_param_values,
 ):
     """Generate a function that returns the string of code that would be generated
     for the query given the data type of SQL context.
@@ -602,8 +627,9 @@ def _gen_pd_func_str_for_query(
     ) = _gen_sql_plan_pd_func_text_and_lowered_globals(
         bodo_sql_context_type,
         sql_str,
-        param_keys,
-        param_values,
+        dynamic_param_values,
+        named_param_keys,
+        named_param_values,
         True,  # Hide credentials because we want to inspect the code, not run it.
     )
 
@@ -630,7 +656,9 @@ def _gen_pd_func_str_for_query(
 @overload_method(
     BodoSQLContextType, "convert_to_pandas", inline="always", no_unliteral=True
 )
-def overload_convert_to_pandas(bodo_sql_context, sql_str, param_dict=None):
+def overload_convert_to_pandas(
+    bodo_sql_context, sql_str, params_dict=None, dynamic_params_list=None
+):
     """BodoSQLContextType.convert_to_pandas() should be handled in bodo typing pass since the
     generated code cannot be handled in regular overloads
     (requires Bodo's untyped pass and typing pass)

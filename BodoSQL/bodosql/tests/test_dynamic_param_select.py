@@ -1,7 +1,7 @@
-"""
-Test that Named Parameters can be used in select expressions.
-"""
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+"""
+Test that Dynamic Parameters can be used in select expressions.
+"""
 
 
 import numpy as np
@@ -47,11 +47,11 @@ def test_select_named_param(
     )
 
 
-def test_mixed_column_scalar(
+def test_named_param_mixed_column_scalar(
     basic_df, spark_info, named_params_all_column_types, memory_leak_check
 ):
     """
-    Tests that a mix of scalar and columns in result work
+    Tests that a mix of named parameters and columns work as expected.
     """
     query = f"""
         SELECT
@@ -78,4 +78,64 @@ def test_mixed_column_scalar(
         check_dtype=False,
         check_names=False,
         convert_columns_timedelta=timedelta_columns,
+    )
+
+
+def test_select_bind_variables(
+    basic_df, named_params_all_column_types, memory_leak_check
+):
+    """
+    Tests that selects works with bind variables.
+    """
+    query = f"""
+        SELECT
+            ? as COL1, ? as COL2
+        FROM
+            table1
+        """
+    bind_variables = (
+        named_params_all_column_types["a"],
+        named_params_all_column_types["b"],
+    )
+    num_rows = len(basic_df["TABLE1"])
+    expected_output = pd.DataFrame(
+        {"COL1": [bind_variables[0]] * num_rows, "COL2": [bind_variables[1]] * num_rows}
+    )
+    check_query(
+        query,
+        basic_df,
+        None,
+        bind_variables=bind_variables,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+def test_bind_variables_mixed_column_scalar(
+    basic_df, named_params_all_column_types, memory_leak_check
+):
+    """
+    Tests that a mix of bind variables and columns work as expected.
+    """
+    query = f"""
+        SELECT
+            ? as COL1, B as col2
+        FROM
+            table1
+        """
+    bind_variables = (
+        named_params_all_column_types["a"],
+        named_params_all_column_types["b"],
+    )
+    num_rows = len(basic_df["TABLE1"])
+    expected_output = pd.DataFrame(
+        {"COL1": [bind_variables[0]] * num_rows, "COL2": basic_df["TABLE1"]["B"]}
+    )
+    check_query(
+        query,
+        basic_df,
+        None,
+        bind_variables=bind_variables,
+        check_dtype=False,
+        expected_output=expected_output,
     )

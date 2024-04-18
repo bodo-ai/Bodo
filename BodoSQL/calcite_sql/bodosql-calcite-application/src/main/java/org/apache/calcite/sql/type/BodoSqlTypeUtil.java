@@ -131,6 +131,22 @@ public class BodoSqlTypeUtil {
   }
 
   /**
+   * Bodo extension to SqlTypeUtil.equalSansNullability with special behavior
+   * when comparing two literals.
+   */
+  public static boolean literalEqualSansNullability(
+          RelDataType type1,
+          RelDataType type2) {
+    if (SqlTypeFamily.CHARACTER.contains(type1) && SqlTypeFamily.CHARACTER.contains(type2)) {
+      return true;
+    } else if (SqlTypeFamily.INTEGER.contains(type1) && SqlTypeFamily.INTEGER.contains(type2)) {
+      return true;
+    } else {
+      return SqlTypeUtil.equalSansNullability(type1, type2);
+    }
+  }
+
+  /**
    * Expansion of SqlTypeUtil.isValidDecimalValue to also consider scale differences.
    */
   public static boolean isValidDecimalValue(@Nullable BigDecimal value, RelDataType toType) {
