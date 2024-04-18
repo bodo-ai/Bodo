@@ -572,9 +572,8 @@ class IcebergParquetReader : public ArrowReader {
                 if (length == this->batch_size) {
                     // We have read a batch of the exact size. Just reuse this
                     // batch for the next read and unify the dictionaries.
-                    // Unify the dictionaries.
                     table_info* out_table =
-                        unify_table_with_dictionary_builders(
+                        this->unify_table_with_dictionary_builders(
                             std::move(bodo_table));
                     this->rows_left_to_emit -= length;
                     bool is_last = (this->rows_left_to_emit <= 0) &&

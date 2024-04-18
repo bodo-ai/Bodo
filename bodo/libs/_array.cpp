@@ -343,9 +343,12 @@ void info_to_string_array(array_info* info, int64_t* length,
                           NRT_MemInfo** offsets_arr,
                           NRT_MemInfo** null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "_array.cpp::info_to_string_array: "
-                        "info_to_string_array requires string input.");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            ("_array.cpp::info_to_string_array: "
+             "info_to_string_array requires string input. Got input " +
+             GetArrType_as_string(info->arr_type))
+                .c_str());
         return;
     }
     *length = info->length;

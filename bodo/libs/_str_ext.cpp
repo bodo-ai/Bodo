@@ -302,8 +302,9 @@ double str_to_float64(std::string* str) {
     try {
         return std::stod(*str);
     } catch (const std::invalid_argument&) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "invalid string to float conversion");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            ("invalid string to float conversion: " + *str).c_str());
     } catch (const std::out_of_range&) {
         PyErr_SetString(PyExc_RuntimeError,
                         "out of range string to float conversion");

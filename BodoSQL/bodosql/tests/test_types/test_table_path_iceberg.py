@@ -188,12 +188,13 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
 
 
 @pytest.mark.slow
-def test_tablepath_dict_encoding(
+def test_explicit_dict_encoding(
     memory_leak_check, iceberg_database, iceberg_table_conn
 ):
     """
     Test simple read operation on test table SIMPLE_STRING_TABLE
-    with column pruning and multiple columns being dictionary encoded.
+    with column pruning and multiple columns explicitly chosem
+    for dictionary encoding.
     """
 
     table_name = "SIMPLE_STRING_TABLE"
@@ -230,6 +231,59 @@ def test_tablepath_dict_encoding(
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
+
+
+def test_implicit_dict_encoding(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test that reading dictionary encoding string columns from
+    Iceberg tables in Snowflake works.
+    """
+
+    table_name = "SIMPLE_STRING_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        bc = bodosql.BodoSQLContext(
+            {
+                "ICEBERG_TBL": bodosql.TablePath(
+                    table_name,
+                    "sql",
+                    conn_str=conn,
+                    db_schema=db_schema,
+                )
+            }
+        )
+        df = bc.sql("select C, B FROM iceberg_tbl")
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = py_out[["C", "B"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        saved_read_as_dict_threshold = bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD
+        try:
+            bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = 10.0
+            check_func(
+                impl,
+                (table_name, conn, db_schema),
+                py_output=py_out,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify dictionary encoding
+            check_logger_msg(
+                stream,
+                "Columns ['B', 'C'] using dictionary encoding to reduce memory usage.",
+            )
+        finally:
+            bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = (
+                saved_read_as_dict_threshold
+            )
 
 
 @pytest.mark.slow
@@ -373,9 +427,6 @@ def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_
 
     py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
     py_out = py_out[["A"]][(py_out["A"] == "A") | (py_out["A"] == "C")]
-
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
 
     # make sure filter pushdown worked
     stream = io.StringIO()
