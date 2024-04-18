@@ -56,12 +56,14 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol"
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
       "com.bodosql.calcite.sql.func.SqlBodoOperatorTable"
+      "com.bodosql.calcite.sql.parser.SqlBodoParserUtil"
       "org.apache.calcite.sql.SqlCreate"
       "org.apache.calcite.sql.SqlDrop"
       "org.apache.calcite.sql.SqlDdl"
       "org.apache.calcite.sql.SqlTruncate"
       "org.apache.calcite.sql.ddl.SqlDdlNodes"
       "org.apache.calcite.sql.fun.SqlAggOperatorTable"
+      "org.apache.calcite.sql.parser.SqlAbstractParserImpl"
     ]
 
     # List of new keywords. Example: "DATABASES", "TABLES". If the keyword is

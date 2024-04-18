@@ -42,11 +42,11 @@ from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     DYNAMIC_PARAM_ARG_PREFIX,
     NAMED_PARAM_ARG_PREFIX,
-    NAMED_PARAM_TABLE_NAME,
     BodoSQLContext,
     _PlannerType,
     compute_df_types,
     create_java_dynamic_parameter_type_list,
+    create_java_named_parameter_type_map,
     initialize_schema,
     update_schema,
 )
@@ -427,7 +427,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
         try:
             table_names = bodo_sql_context_type.names
-            schema = initialize_schema((named_param_keys, named_param_values))
+            schema = initialize_schema()
             verbose_level = bodo.user_logging.get_verbose_level()
             if bodo.bodosql_use_streaming_plan:
                 planner_type = _PlannerType.Streaming.value
@@ -437,7 +437,6 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 generator = RelationalAlgebraGeneratorClass(
                     bodo_sql_context_type.catalog_type.get_java_object(),
                     schema,
-                    NAMED_PARAM_TABLE_NAME,
                     planner_type,
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
@@ -455,7 +454,6 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 )
                 generator = RelationalAlgebraGeneratorClass(
                     schema,
-                    NAMED_PARAM_TABLE_NAME,
                     planner_type,
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
@@ -494,8 +492,12 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 java_params_array = create_java_dynamic_parameter_type_list(
                     dynamic_param_values
                 )
+                named_params_dict = dict(zip(named_param_keys, named_param_values))
+                java_named_params_map = create_java_named_parameter_type_map(
+                    named_params_dict
+                )
                 pd_code_sql_plan_pair = generator.getPandasAndPlanString(
-                    sql_str, True, java_params_array
+                    sql_str, True, java_params_array, java_named_params_map
                 )
                 pd_code = str(pd_code_sql_plan_pair.getPdCode())
                 sql_plan = str(pd_code_sql_plan_pair.getSqlPlan())

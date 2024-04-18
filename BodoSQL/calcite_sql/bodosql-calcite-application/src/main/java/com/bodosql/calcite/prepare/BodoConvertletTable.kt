@@ -6,16 +6,13 @@ import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
-import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
-import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
@@ -34,7 +31,6 @@ import org.apache.calcite.sql2rel.StandardConvertletTableConfig
  */
 class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
     init {
-        registerOp(SqlNamedParameterOperator.INSTANCE, this::convertNamedParam)
         /**
          * The default Item implementation has this convertlet, so we also use this convertlet for our
          * extended implementation.
@@ -97,17 +93,6 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
-
-    private fun convertNamedParam(
-        cx: SqlRexContext,
-        call: SqlCall,
-    ): RexNode {
-        val name =
-            call.operand<SqlLiteral>(0).getValueAs(String::class.java)
-                .trimStart('$', '@')
-        val returnType = cx.validator.getValidatedNodeType(call)
-        return RexNamedParam(returnType, name)
-    }
 
     /**
      * Convert an operator from Sql To Rex directly. This is used in case our convertlet

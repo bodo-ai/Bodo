@@ -97,6 +97,7 @@ open class RexToPandasTranslator(
     private val nodeId: Int,
     private val input: BodoEngineTable?,
     private val dynamicParamTypes: List<RelDataType>,
+    private val namedParamTypeMap: Map<String, RelDataType>,
     private val localRefs: List<Expr>,
 ) :
     RexVisitor<Expr> {
@@ -107,7 +108,8 @@ open class RexToPandasTranslator(
         nodeId: Int,
         input: BodoEngineTable?,
         dynamicParamTypes: List<RelDataType>,
-    ) : this(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, listOf())
+        namedParamTypeMap: Map<String, RelDataType>,
+    ) : this(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, listOf())
 
     private val ctx: BodoCtx = BodoCtx()
     private var weekStart: Int? = null
@@ -151,9 +153,7 @@ open class RexToPandasTranslator(
     override fun visitCall(call: RexCall): Expr {
         // TODO(jsternberg): Using instanceof here is problematic.
         // It would be better to use getKind(). Revisit this later.
-        if (call is RexNamedParam) {
-            return visitNamedParam(call)
-        } else if (call.operator is SqlNullTreatmentOperator) {
+        if (call.operator is SqlNullTreatmentOperator) {
             return visitNullTreatmentOp(call)
         } else if (call.operator is SqlBinaryOperator ||
             call.operator is SqlDatetimePlusOperator ||
@@ -418,6 +418,7 @@ open class RexToPandasTranslator(
                 // Note: This is not a usage of the input so we access the raw value.
                 input,
                 dynamicParamTypes,
+                namedParamTypeMap,
                 localRefs,
                 closureVars,
             )
@@ -437,7 +438,7 @@ open class RexToPandasTranslator(
 
         // Organize any named parameters if they exist.
         val namedArgs: MutableList<Pair<String, Expr>> = java.util.ArrayList()
-        for (param in inputFinder.getNamedParams()) {
+        for (param in inputFinder.getDynamicParams()) {
             namedArgs.add(Pair<String, Expr>(param, Expr.Raw(param)))
         }
 
@@ -481,14 +482,14 @@ open class RexToPandasTranslator(
     /** Utility to find variable uses inside a case statement.  */
     private class CaseInputFinder : RexShuttle() {
         private val refs: MutableList<RexSlot> = java.util.ArrayList()
-        private val namedParams: MutableSet<String> = HashSet()
+        private val dynamicParams: MutableSet<String> = HashSet()
 
         fun getRefs(): List<RexSlot> {
             return ImmutableList.copyOf(refs)
         }
 
-        fun getNamedParams(): List<String> {
-            return ImmutableList.copyOf(namedParams)
+        fun getDynamicParams(): List<String> {
+            return ImmutableList.copyOf(dynamicParams)
         }
 
         fun size(): Int {
@@ -504,17 +505,19 @@ open class RexToPandasTranslator(
         }
 
         override fun visitCall(call: RexCall): RexNode {
-            if (call is RexNamedParam) {
-                namedParams.add(call.name)
-                return call
-            }
             return super.visitCall(call)
         }
 
         override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode {
-            val paramBase = "_DYNAMIC_PARAM_"
-            val paramName = "$paramBase${dynamicParam.index}"
-            namedParams.add(paramName)
+            val paramName =
+                if (dynamicParam is RexNamedParam) {
+                    val paramBase = "_NAMED_PARAM_"
+                    "$paramBase${dynamicParam.paramName}"
+                } else {
+                    val paramBase = "_DYNAMIC_PARAM_"
+                    "$paramBase${dynamicParam.index}"
+                }
+            dynamicParams.add(paramName)
             return dynamicParam
         }
 
@@ -2174,30 +2177,43 @@ open class RexToPandasTranslator(
     }
 
     override fun visitDynamicParam(dynamicParam: RexDynamicParam): Expr {
-        val index = dynamicParam.index
-        if (index >= dynamicParamTypes.size) {
-            throw RuntimeException(
-                "Internal Error: At least ${index + 1} dynamic parameters are referenced in the query, " +
-                    "but only ${dynamicParamTypes.size} were provided.",
-            )
-        }
-        val paramBase = "_DYNAMIC_PARAM_"
-        val paramName = "$paramBase$index"
-        ctx.namedParams.add(paramName)
+        val (paramName, actualType) =
+            if (dynamicParam is RexNamedParam) {
+                val name = dynamicParam.paramName
+                val actualType =
+                    if (namedParamTypeMap.contains(name)) {
+                        namedParamTypeMap[name]!!
+                    } else {
+                        throw RuntimeException(
+                            "Internal Error: Named parameter ${dynamicParam.paramName} is referenced in a query but not provided.",
+                        )
+                    }
+                val paramBase = "_NAMED_PARAM_"
+                val paramName = "$paramBase$name"
+                Pair(paramName, actualType)
+            } else {
+                val index = dynamicParam.index
+                val actualType =
+                    if (index >= dynamicParamTypes.size) {
+                        throw RuntimeException(
+                            "Internal Error: At least ${index + 1} dynamic parameters are referenced in the query, " +
+                                "but only ${dynamicParamTypes.size} were provided.",
+                        )
+                    } else {
+                        dynamicParamTypes[index]
+                    }
+                val paramBase = "_DYNAMIC_PARAM_"
+                val paramName = "$paramBase$index"
+                Pair(paramName, actualType)
+            }
+        ctx.dynamicParams.add(paramName)
         val paramVariable = Variable(paramName)
         // Generate a cast if necessary
-        return if (BodoSqlTypeUtil.literalEqualSansNullability(dynamicParam.type, dynamicParamTypes[index])) {
+        return if (BodoSqlTypeUtil.literalEqualSansNullability(dynamicParam.type, actualType)) {
             paramVariable
         } else {
-            visitDynamicCast(paramVariable, dynamicParamTypes[index], dynamicParam.type, true)
+            visitDynamicCast(paramVariable, actualType, dynamicParam.type, true)
         }
-    }
-
-    private fun visitNamedParam(namedParam: RexNamedParam): Expr {
-        val paramName = namedParam.name
-        // We just return the node name because that should match the input variable name
-        ctx.namedParams.add(paramName)
-        return Variable(paramName)
     }
 
     override fun visitRangeRef(rangeRef: RexRangeRef): Expr {
@@ -2237,11 +2253,12 @@ open class RexToPandasTranslator(
         nodeId: Int,
         input: BodoEngineTable?,
         dynamicParamTypes: List<RelDataType>,
+        namedParamTypeMap: Map<String, RelDataType>,
         localRefs: List<Expr>,
         /** Variable names used in generated closures.  */
         private val closureVars: List<Variable>,
     ) :
-        RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, localRefs) {
+        RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
         /**
          * List of functions generated by this scalar context. This is needed for nested case statements
          * to maintain control flow.

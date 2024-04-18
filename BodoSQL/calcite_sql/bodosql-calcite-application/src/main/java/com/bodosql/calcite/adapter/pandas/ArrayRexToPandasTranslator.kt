@@ -17,8 +17,9 @@ class ArrayRexToPandasTranslator(
     nodeId: Int,
     input: BodoEngineTable,
     dynamicParamTypes: List<RelDataType>,
+    namedParamTypeMap: Map<String, RelDataType>,
     localRefs: List<Expr>,
-) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, localRefs) {
+) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
     constructor(
         visitor: PandasCodeGenVisitor,
         builder: Module.Builder,
@@ -26,8 +27,9 @@ class ArrayRexToPandasTranslator(
         nodeId: Int,
         input: BodoEngineTable,
         dynamicParamTypes: List<RelDataType>,
+        namedParamTypeMap: Map<String, RelDataType>,
     ) :
-        this(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, listOf())
+        this(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, listOf())
 
     /**
      * Call node.accept on the given RexNode. Is the RexNode is a scalar then it wraps

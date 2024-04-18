@@ -28,17 +28,6 @@ public interface BodoSQLResource {
     @Resources.BaseMessage("Create Table statements cannot contain both ''OR REPLACE'' and ''IF NOT EXISTS''")
     Resources.ExInst<SqlValidatorException> createTableInvalidSyntax();
 
-   @Resources.BaseMessage("Named Parameter table is not registered. To use named parameters in a query "
-           + "please  register a table name in the configuration.")
-   Resources.ExInst<SqlValidatorException> namedParamTableNotRegistered();
-
-   @Resources.BaseMessage("Named Parameter table is registered with the name ''{0}'' but no table exists "
-           + "with that name. To use namedParameters you must supply a namedParameters table.")
-   Resources.ExInst<SqlValidatorException> namedParamTableNotFound(String tableName);
-
-   @Resources.BaseMessage("SQL query contains a unregistered parameter: ''@{0}''")
-   Resources.ExInst<SqlValidatorException> namedParamParameterNotFound(String paramName);
-
    @Resources.BaseMessage("Duplicate LIMIT: {0}")
    Resources.ExInst<CalciteException> duplicateLimit(String kind);
 
@@ -63,6 +52,9 @@ public interface BodoSQLResource {
    @Resources.BaseMessage("Encountered a table without read permissions when attempting to expand {0}.")
    Resources.ExInst<SqlValidatorException> noReadPermissionExpandingView(String viewQualifiedName);
 
-   @Resources.BaseMessage("Dynamic parameter provided but type information is not available. Please cast the dynamic parameter to ensure proper typing.")
+   @Resources.BaseMessage("Dynamic parameter specified in query, but type information is not available. Please cast the dynamic parameter to ensure proper typing.")
    Resources.ExInst<SqlValidatorException> dynamicParamIllegal();
+
+   @Resources.BaseMessage("Named parameter \"{0}\" specified in query, but type information is not available. Please cast the named parameter to ensure proper typing.")
+   Resources.ExInst<SqlValidatorException> namedParamIllegal(String paramName);
 }

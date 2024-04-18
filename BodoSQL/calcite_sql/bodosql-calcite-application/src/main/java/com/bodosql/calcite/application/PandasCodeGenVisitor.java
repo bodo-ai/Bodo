@@ -173,6 +173,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   // Types of any dynamic parameters in the query.
   private final List<RelDataType> dynamicParamTypes;
+  // Type of any named parameters in the query
+  private final Map<String, RelDataType> namedParamTypeMap;
 
   // TODO(aneesh) consider moving this to the C++ code, or derive the
   // chunksize for writing from the allocated budget.
@@ -187,6 +189,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       int verboseLevel,
       int batchSize,
       List<RelDataType> dynamicParamTypes,
+      Map<String, RelDataType> namedParamTypeMap,
       Map<Integer, Integer> idMapping) {
     super();
     this.loweredGlobals = loweredGlobalVariablesMap;
@@ -199,6 +202,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.generatedCode = new Module.Builder();
     this.streamingOptions = new StreamingOptions(batchSize);
     this.dynamicParamTypes = dynamicParamTypes;
+    this.namedParamTypeMap = namedParamTypeMap;
     this.generatedCode.setIDMapping(idMapping);
   }
 
@@ -2459,7 +2463,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private RexToPandasTranslator getRexTranslator(int nodeId, BodoEngineTable input) {
     return new RexToPandasTranslator(
-        this, this.generatedCode, this.typeSystem, nodeId, input, this.dynamicParamTypes);
+        this,
+        this.generatedCode,
+        this.typeSystem,
+        nodeId,
+        input,
+        this.dynamicParamTypes,
+        this.namedParamTypeMap);
   }
 
   private RexToPandasTranslator getRexTranslator(
@@ -2471,17 +2481,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
         nodeId,
         input,
         this.dynamicParamTypes,
+        this.namedParamTypeMap,
         localRefs);
   }
 
   private ArrayRexToPandasTranslator getArrayRexTranslator(int nodeId, BodoEngineTable input) {
     return new ArrayRexToPandasTranslator(
-        this, this.generatedCode, this.typeSystem, nodeId, input, this.dynamicParamTypes);
+        this,
+        this.generatedCode,
+        this.typeSystem,
+        nodeId,
+        input,
+        this.dynamicParamTypes,
+        this.namedParamTypeMap);
   }
 
   private ScalarRexToPandasTranslator getScalarRexTranslator(int nodeId) {
     return new ScalarRexToPandasTranslator(
-        this, this.generatedCode, this.typeSystem, nodeId, this.dynamicParamTypes);
+        this,
+        this.generatedCode,
+        this.typeSystem,
+        nodeId,
+        this.dynamicParamTypes,
+        this.namedParamTypeMap);
   }
 
   private StreamingRexToPandasTranslator getStreamingRexTranslator(
@@ -2496,6 +2518,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         nodeId,
         input,
         this.dynamicParamTypes,
+        this.namedParamTypeMap,
         localRefs,
         stateVar);
   }

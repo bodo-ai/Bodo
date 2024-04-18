@@ -7,9 +7,11 @@ import com.bodosql.calcite.application.operatorTables.SnowflakeNativeUDF;
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
 import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
+import com.bodosql.calcite.rex.RexNamedParam;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
+import com.bodosql.calcite.sql.func.SqlNamedParam;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
@@ -32,6 +34,7 @@ import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
@@ -44,6 +47,7 @@ import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
@@ -79,6 +83,8 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   // Map used to pass to all blackboards so parameters when
   // inlining UDFs can be globally referenced.
   private final Map<String, RexNode> paramNameToNodeMap;
+
+  private final Map<String, SqlNamedParam> namedParamSqlNodes = new HashMap<>();
 
   public BodoSqlToRelConverter(
       final RelOptTable.ViewExpander viewExpander,
@@ -497,6 +503,30 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
       }
     }
     super.convertCollectionTable(bb, call);
+  }
+
+  @Override
+  public RexDynamicParam convertDynamicParam(final SqlDynamicParam dynamicParam) {
+    if (dynamicParam instanceof SqlNamedParam) {
+      SqlNamedParam namedParam = (SqlNamedParam) dynamicParam;
+      String paramName = namedParam.getParamName();
+      namedParamSqlNodes.put(paramName, namedParam);
+      RelDataType type = getNamedParamType(paramName);
+      // TODO: Update our RexBuilder to have a makeNamedParam method.
+      return new RexNamedParam(type, paramName);
+    } else {
+      return super.convertDynamicParam(dynamicParam);
+    }
+  }
+
+  /**
+   * Returns the type inferred for a named parameter.
+   *
+   * @param paramName The named parameter.
+   * @return inferred type, never null
+   */
+  public RelDataType getNamedParamType(String paramName) {
+    return this.validator.getValidatedNodeType(namedParamSqlNodes.get(paramName));
   }
 
   /**

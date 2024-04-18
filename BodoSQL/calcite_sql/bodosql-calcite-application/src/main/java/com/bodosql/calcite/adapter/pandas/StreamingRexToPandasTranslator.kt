@@ -21,12 +21,13 @@ class StreamingRexToPandasTranslator(
     nodeId: Int,
     input: BodoEngineTable,
     dynamicParamTypes: List<RelDataType>,
+    namedParamTypeMap: Map<String, RelDataType>,
     localRefs: List<Expr>,
     // State information for the streaming operator that uses
     // this translator. This is used for optimizations with
     // dictionary encoding.
     private var stateVar: StateVariable,
-) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, localRefs) {
+) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
     /**
      * Generate the additional keyword arguments that are passed to functions that support
      * dictionary encoding caching in a streaming context. This is the state variable for the
