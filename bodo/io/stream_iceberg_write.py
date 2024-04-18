@@ -2,7 +2,6 @@ import operator
 import os
 import traceback
 
-import bodo_iceberg_connector as bic
 import numba
 import pandas as pd
 from mpi4py import MPI
@@ -36,6 +35,7 @@ from bodo.io.iceberg import (
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,
     register_table_write,
+    wrap_start_write,
 )
 from bodo.libs.array import array_to_info, py_table_to_cpp_table
 from bodo.libs.table_builder import TableBuilderStateType
@@ -50,7 +50,6 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import run_rank0
 
 # Maximum Parquet file size for streaming Iceberg write
 # TODO[BSE-2609] get max file size from Iceberg metadata
@@ -289,7 +288,7 @@ def overload_start_write_wrapper(
         mode,
     ):  # pragma: no cover
         with numba.objmode(txn_id="i8", table_loc="unicode_type"):
-            (txn_id, table_loc) = run_rank0(bic.start_write)(
+            (txn_id, table_loc) = wrap_start_write(
                 conn,
                 schema,
                 table_name,
