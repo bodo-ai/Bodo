@@ -200,6 +200,22 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                          int64_t n_cols, bool all_gather,
                                          bool is_parallel, int mpi_root = 0);
 
+/**
+ * @brief Gather an array_info
+ *
+ * @param in_arr : the input table. Passing a nullptr will cause a segfault.
+ * error.
+ * @param all_gather : whether to do all_gather
+ * @param is_parallel : whether tracing should be parallel
+ * @param mpi_root : root rank for gathering (where data is gathered to)
+ * @param int n_pes: the number of ranks
+ * @param int myrank: the current rank
+ * @return the table obtained by concatenating the tables on the node mpi_root
+ */
+std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
+                                         bool all_gather, bool is_parallel,
+                                         int mpi_root, int n_pes, int myrank);
+
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemma is following:
     ---If the workload is not well partitioned then the code becomes serialized
