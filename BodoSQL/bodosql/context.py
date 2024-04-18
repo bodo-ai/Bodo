@@ -40,7 +40,7 @@ NAMED_PARAM_ARG_PREFIX = "_NAMED_PARAM_"
 
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
 class SqlTypeEnum(Enum):
-    Empty = 0
+    Null = 0
     Int8 = 1
     Int16 = 2
     Int32 = 3
@@ -57,7 +57,7 @@ class SqlTypeEnum(Enum):
     Bool = 12
     Date = 13
     Time = 14
-    Datetime = 15
+    Timestamp_Ntz = 15
     Timestamp_Ltz = 16
     Timestamp_Tz = 17
     Timedelta = 18
@@ -81,6 +81,7 @@ class SqlTypeEnum(Enum):
 
 # Scalar dtypes for supported Bodo Arrays
 _numba_to_sql_column_type_map = {
+    bodo.null_dtype: SqlTypeEnum.Null.value,
     types.int8: SqlTypeEnum.Int8.value,
     types.uint8: SqlTypeEnum.UInt8.value,
     types.int16: SqlTypeEnum.Int16.value,
@@ -91,7 +92,7 @@ _numba_to_sql_column_type_map = {
     types.uint64: SqlTypeEnum.UInt64.value,
     types.float32: SqlTypeEnum.Float32.value,
     types.float64: SqlTypeEnum.Float64.value,
-    types.NPDatetime("ns"): SqlTypeEnum.Datetime.value,
+    types.NPDatetime("ns"): SqlTypeEnum.Timestamp_Ntz.value,
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.string_type: SqlTypeEnum.String.value,
@@ -104,6 +105,7 @@ _numba_to_sql_column_type_map = {
 
 # Scalar dtypes for supported parameters
 _numba_to_sql_param_type_map = {
+    types.none: SqlTypeEnum.Null.value,
     types.int8: SqlTypeEnum.Int8.value,
     types.uint8: SqlTypeEnum.UInt8.value,
     types.int16: SqlTypeEnum.Int16.value,
@@ -118,7 +120,7 @@ _numba_to_sql_param_type_map = {
     bodo.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
-    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Datetime.value,
+    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Timestamp_Ntz.value,
     bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
@@ -149,7 +151,7 @@ def construct_tz_aware_array_type(typ, nullable):
     precision = 9
     if typ.tz is None:
         # TZ = None is a timezone naive timestamp
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Datetime.value)
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ntz.value)
         return ColumnDataTypeClass(type_enum, nullable, precision)
     else:
         type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Timestamp_Ltz.value)
