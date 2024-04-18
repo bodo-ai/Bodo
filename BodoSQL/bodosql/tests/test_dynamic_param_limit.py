@@ -3,10 +3,8 @@
 Test that Dynamic Parameters can be used for the limit and offset values in
 a SQL LIMIT expression.
 """
-import re
 
 import pandas as pd
-import pytest
 
 import bodo
 import bodosql
@@ -142,14 +140,5 @@ def test_limit_named_param_constant(basic_df, spark_info, memory_leak_check):
 
     df = basic_df["TABLE1"]
     py_output = pd.DataFrame({"A": df.A.head(10)})
-    if bodo.get_rank() == 0:
-        # The warning is only produced on rank 0
-        warning_prefix = re.escape(
-            "The following named parameters: ['a'] were typed as literals"
-        )
-        with pytest.warns(bodosql.utils.BodoSQLWarning, match=warning_prefix):
-            sql_output = f(df)
-    else:
-        sql_output = f(df)
-
+    sql_output = f(df)
     pd.testing.assert_frame_equal(sql_output, py_output, check_column_type=False)

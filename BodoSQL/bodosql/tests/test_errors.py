@@ -695,7 +695,7 @@ def test_invalid_named_param(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"SQL query contains a unregistered parameter: '@a'",
+        match=r"Named parameter \"a\" specified in query, but type information is not available",
     ):
         impl(df)
 
@@ -714,7 +714,7 @@ def test_invalid_named_param_jit(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"SQL query contains a unregistered parameter: '@a'",
+        match=r"Named parameter \"a\" specified in query, but type information is not available",
     ):
         impl(df)
 

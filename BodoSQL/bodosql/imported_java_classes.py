@@ -18,6 +18,7 @@ gateway = get_gateway()
 if bodo.get_rank() == 0:
     try:
         ArrayListClass = gateway.jvm.java.util.ArrayList
+        HashMapClass = gateway.jvm.java.util.HashMap
         ColumnDataEnum = (
             gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
         )
@@ -50,6 +51,7 @@ if bodo.get_rank() == 0:
         msg = str(e)
 else:
     ArrayListClass = None
+    HashMapClass = None
     ColumnDataEnum = None
     ColumnClass = None
     ColumnDataTypeClass = None

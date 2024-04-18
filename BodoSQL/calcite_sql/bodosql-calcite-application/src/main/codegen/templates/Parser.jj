@@ -35,7 +35,7 @@ import ${importStr};
 
 import org.apache.calcite.sql.VariantTypeNameSpec;
 import com.bodosql.calcite.sql.BodoSqlUtil;
-import com.bodosql.calcite.sql.func.SqlNamedParameterOperator;
+import com.bodosql.calcite.sql.func.SqlNamedParam;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
@@ -5932,17 +5932,16 @@ SqlDynamicParam DynamicParam() :
  */
 SqlNode NamedParam() :
 {
-    final Span s;
-    final SqlLiteral name;
-    final SqlLiteral prefix;
+    final String name;
 }
 {
 
     (<AT_PARAM_IDENTIFIER> | <DOLLAR_PARAM_IDENTIFIER>) {
-        name = SqlLiteral.createCharString(token.image, getPos());
+        // TODO: Unify with our other identifier parsing
+        name = SqlParserUtil.toCase(getToken(0).image, Casing.UNCHANGED);
     }
     {
-      return SqlNamedParameterOperator.INSTANCE.createCall(getPos(), name);
+      return new SqlNamedParam(name, getPos());
     }
 }
 

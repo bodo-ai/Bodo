@@ -121,9 +121,6 @@ import java.util.function.UnaryOperator;
 @Value.Enclosing
 public interface SqlValidator {
 
-  /** Table Name that indicates no named Parameter table was provided. */
-  String NAMED_PARAM_TABLE_NAME_EMPTY = "";
-
   //~ Methods ----------------------------------------------------------------
 
   /**
@@ -980,17 +977,6 @@ public interface SqlValidator {
      *              see its documentation for how to customize the rules
      */
     Config withTypeCoercionRules(@Nullable SqlTypeCoercionRule rules);
-
-    /** Returns the name of the table used to determine
-     * named parameters' types. Default is
-     * "". */
-
-    @Value.Default default String namedParamTableName() {
-      return NAMED_PARAM_TABLE_NAME_EMPTY;
-    }
-
-    /** Sets {@link #namedParamTableName()}. */
-    Config withNamedParamTableName(String namedParamTable);
 
     /** Returns the dialect of SQL (SQL:2003, etc.) this validator recognizes.
      * Default is {@link SqlConformanceEnum#DEFAULT}. */

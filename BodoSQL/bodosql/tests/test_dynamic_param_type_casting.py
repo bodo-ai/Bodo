@@ -7,9 +7,6 @@ the actual type doesn't match the inferred type.
 import pandas as pd
 import pytest
 
-import bodo
-import bodosql
-from bodo.utils.typing import BodoError
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 
@@ -17,24 +14,25 @@ from bodosql.tests.utils import check_query
 @pytest.mark.slow
 def test_named_param_string_limit(basic_df, memory_leak_check):
     """
-    Check that limit enforces the integer requirement.
+    Test that named parameters with a string limit cast the
+    string to an integer.
     """
-
-    @bodo.jit
-    def impl(df, a):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        return bc.sql("select A from table1 limit @a", {"a": a})
-
-    with pytest.raises(
-        BodoError, match=r"Failure in compiling or validating SQL Query"
-    ):
-        impl(basic_df["TABLE1"], "1")
+    query = "Select A from table1 limit @a"
+    expected_output = pd.DataFrame({"A": basic_df["TABLE1"]["A"].head(1)})
+    check_query(
+        query,
+        basic_df,
+        None,
+        named_params={"a": "1"},
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
 @pytest.mark.slow
 def test_bind_variable_string_limit(basic_df, memory_leak_check):
     """
-    Test that bind variables with a string limit casts the
+    Test that bind variables with a string limit cast the
     string to an integer.
     """
     query = "Select A from table1 limit ?"
@@ -52,24 +50,25 @@ def test_bind_variable_string_limit(basic_df, memory_leak_check):
 @pytest.mark.slow
 def test_named_param_string_offset(basic_df, memory_leak_check):
     """
-    Check that offset enforces the integer requirement.
+    Test that named parameters with a string offset cast the
+    string to an integer.
     """
-
-    @bodo.jit
-    def impl(df, a):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        return bc.sql("select A from table1 limit @a, 4", {"a": a})
-
-    with pytest.raises(
-        BodoError, match=r"Failure in compiling or validating SQL Query"
-    ):
-        impl(basic_df["TABLE1"], "1")
+    query = "select A from table1 limit @a, 4"
+    expected_output = pd.DataFrame({"A": basic_df["TABLE1"]["A"].iloc[1:5]})
+    check_query(
+        query,
+        basic_df,
+        None,
+        named_params={"a": "1"},
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
 @pytest.mark.slow
 def test_bind_variable_string_offset(basic_df, memory_leak_check):
     """
-    Test that bind variables with a string offset casts the
+    Test that bind variables with a string offset cast the
     string to an integer.
     """
     query = "Select A from table1 limit ?, 4"

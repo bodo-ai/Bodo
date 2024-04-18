@@ -23,14 +23,12 @@ from bodosql.imported_java_classes import (
     ColumnClass,
     ColumnDataEnum,
     ColumnDataTypeClass,
+    HashMapClass,
     LocalSchemaClass,
     LocalTableClass,
     RelationalAlgebraGeneratorClass,
 )
 from bodosql.utils import BodoSQLWarning, error_to_string
-
-# Name for parameter table
-NAMED_PARAM_TABLE_NAME = "__$BODO_NAMED_PARAM_TABLE__"
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
 TABLE_ARG_PREFIX = "_ARG_"
@@ -101,6 +99,7 @@ _numba_to_sql_column_type_map = {
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
     bodo.datetime_date_type: SqlTypeEnum.Date.value,
+    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
 }
 
 # Scalar dtypes for supported parameters
@@ -120,11 +119,7 @@ _numba_to_sql_param_type_map = {
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
     bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Datetime.value,
-    bodo.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
-    bodo.timestamptz_array_type: SqlTypeEnum.Timestamp_Tz.value,
-    # date_offset_type represents Timedelta year/month
-    # and is support only for scalars
-    bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
+    bodo.timestamptz_type: SqlTypeEnum.Timestamp_Tz.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
 
@@ -292,6 +287,24 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: List[Any]):
     return output_list
 
 
+def create_java_named_parameter_type_map(named_params: Dict[str, Any]):
+    """Convert a list of keys and list of values into a Java
+    Map from key to ColumnDataType values.
+
+    Args:
+        dynamic_params_list (List[Any]): The input list, either a Bodo type
+        or a Python value to convert to a java type.
+
+    Returns:
+        JavaObject: A java map to pass to code generation.
+    """
+    output_map = HashMapClass()
+    for key, val in named_params.items():
+        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
+        output_map.put(key, get_sql_param_column_type_info(typ))
+    return output_map
+
+
 def get_sql_param_column_type_info(param_type: types.Type):
     """Get the SQL type information for a given Dynamic
     parameter type.
@@ -321,43 +334,6 @@ def get_sql_param_column_type_info(param_type: types.Type):
         return ColumnDataTypeClass(type_enum, nullable)
     raise TypeError(
         f"Dynamic Parameter with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    )
-
-
-def get_sql_param_type(param_type, param_name):
-    """get SQL type from a Bodo scalar type. Also returns
-    if there was a literal type used for outputting a warning."""
-    unliteral_type = types.unliteral(param_type)
-    # The named parameters are always scalars. We don't support
-    # Optional types or None types yet. As a result this is always
-    # non-null.
-    nullable = False
-    is_literal: bool = unliteral_type != param_type
-    if (
-        isinstance(unliteral_type, bodo.PandasTimestampType)
-        and unliteral_type.tz != None
-    ):
-        # Timezone-aware Timestamps have their own special handling.
-        return (
-            ColumnClass(
-                param_name, construct_tz_aware_array_type(param_type, nullable)
-            ),
-            is_literal,
-        )
-    elif isinstance(unliteral_type, bodo.TimeType):
-        # Time array types have their own special handling for precision
-        return (
-            ColumnClass(param_name, construct_time_array_type(param_type, nullable)),
-            is_literal,
-        )
-    elif unliteral_type in _numba_to_sql_param_type_map:
-        type_enum = ColumnDataEnum.fromTypeId(
-            _numba_to_sql_param_type_map[unliteral_type]
-        )
-        data_type = ColumnDataTypeClass(type_enum, nullable)
-        return ColumnClass(param_name, data_type), is_literal
-    raise TypeError(
-        f"Scalar value: '{param_name}' with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     )
 
 
@@ -649,48 +625,6 @@ def _generate_table_read(
     return read_line
 
 
-def add_param_table(table_name, schema, param_keys, param_values):
-    """get SQL Table type in Java for Numba DataFrame type"""
-    assert bodo.get_rank() == 0, "add_param_table should only be called on rank 0."
-    param_arr = ArrayListClass()
-    literal_params = []
-    for i in range(len(param_keys)):
-        param_name = param_keys[i]
-        param_type = param_values[i]
-        param_java_type, is_literal = get_sql_param_type(param_type, param_name)
-        if is_literal:
-            literal_params.append(param_name)
-        param_arr.add(param_java_type)
-
-    if literal_params:
-        warning_msg = (
-            f"\nThe following named parameters: {literal_params} were typed as literals.\n"
-            + "If these values are changed BodoSQL will be forced to recompile the code.\n"
-            + "If you are passing JITs literals, you should consider passing these values"
-            + " as arguments to your Python function.\n"
-            + "For more information please refer to:\n"
-            + "https://docs.bodo.ai/latest/api_docs/BodoSQL/#bodosql_named_params"
-        )
-        warnings.warn(BodoSQLWarning(warning_msg))
-
-    # The readCode is unused for named Parameters as they will never reach
-    # a table scan. Instead the original Python variable names will always
-    # be used.
-    schema.addTable(
-        LocalTableClass(
-            table_name,
-            schema.getFullPath(),
-            param_arr,
-            False,
-            "",
-            "",
-            False,
-            "MEMORY",
-            -1,
-        )
-    )
-
-
 class BodoSQLContext:
     def __init__(self, tables=None, catalog=None, default_tz=None):
         # We only need to initialize the tables values on all ranks, since that is needed for
@@ -735,7 +669,7 @@ class BodoSQLContext:
                 dfs.append(v)
                 estimated_row_counts.append(_get_estimated_row_count(v))
             orig_bodo_types, df_types = compute_df_types(dfs, False)
-            schema = initialize_schema(None)
+            schema = initialize_schema()
             self.schema = schema
             self.names = names
             self.df_types = df_types
@@ -781,7 +715,6 @@ class BodoSQLContext:
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
-        self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
             False,  # We need to execute the code so don't hide credentials.
@@ -801,7 +734,6 @@ class BodoSQLContext:
             generator,
             is_dll,
         )
-        self._remove_named_params()
 
         glbls = {
             "np": np,
@@ -872,7 +804,6 @@ class BodoSQLContext:
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
-        self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
             hide_credentials,
@@ -892,7 +823,6 @@ class BodoSQLContext:
             generator,
             is_dll,
         )
-        self._remove_named_params()
         # add the imports so someone can directly run the code.
         imports = [
             "import numpy as np",
@@ -922,24 +852,6 @@ class BodoSQLContext:
             + decorator
             + pd_code
         )
-
-    def _setup_named_params(self, params_dict):
-        if params_dict is None:
-            params_dict = dict()
-
-        # Create the named params table
-        if bodo.get_rank() == 0:
-            param_values = [bodo.typeof(x) for x in params_dict.values()]
-            add_param_table(
-                NAMED_PARAM_TABLE_NAME,
-                self.schema,
-                tuple(params_dict.keys()),
-                param_values,
-            )
-
-    def _remove_named_params(self):
-        if bodo.get_rank() == 0:
-            self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
 
     def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
         from mpi4py import MPI
@@ -982,7 +894,7 @@ class BodoSQLContext:
         self,
         sql: str,
         dynamic_params_list: List[Any],
-        params_dict: Dict[str, Any],
+        named_params_dict: Dict[str, Any],
         generator: RelationalAlgebraGeneratorClass,
         is_ddl: bool,
     ) -> Tuple[str, Dict[str, Any]]:
@@ -1016,7 +928,7 @@ class BodoSQLContext:
             try:
                 # Generate the code
                 pd_code, globalsToLower = self._get_pandas_code(
-                    sql, generator, dynamic_params_list
+                    sql, generator, dynamic_params_list, named_params_dict
                 )
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
@@ -1031,7 +943,7 @@ class BodoSQLContext:
                     for i in range(len(dynamic_params_list))
                 ]
                 named_param_names = [
-                    NAMED_PARAM_ARG_PREFIX + x for x in params_dict.keys()
+                    NAMED_PARAM_ARG_PREFIX + x for x in named_params_dict.keys()
                 ]
                 args = ", ".join(
                     context_names
@@ -1080,7 +992,6 @@ class BodoSQLContext:
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
-        self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
             False,  # We need to execute the code so don't hide credentials.
@@ -1090,66 +1001,63 @@ class BodoSQLContext:
         else:
             is_dll = False
         is_dll = bcast_scalar(is_dll)
-        try:
-            if is_dll:
-                # Just execute DDL operations directly and return the DataFrame.
-                return self.execute_ddl(sql, generator)
-            else:
-                func_text, lowered_globals = self._convert_to_pandas(
-                    sql,
-                    dynamic_params_list,
-                    params_dict,
-                    generator,
-                    False,  # This path is never DDL.s
-                )
-                glbls = {
-                    "np": np,
-                    "pd": pd,
-                    "bodosql": bodosql,
-                    "re": re,
-                    "bodo": bodo,
-                    "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
-                    "MetaType": bodo.utils.typing.MetaType,
-                    "numba": numba,
-                    "time": time,
-                    "datetime": datetime,
-                    "pd": pd,
-                    "bif": bodo.ir.filter,
-                }
+        if is_dll:
+            # Just execute DDL operations directly and return the DataFrame.
+            return self.execute_ddl(sql, generator)
+        else:
+            func_text, lowered_globals = self._convert_to_pandas(
+                sql,
+                dynamic_params_list,
+                params_dict,
+                generator,
+                False,  # This path is never DDL.s
+            )
+            glbls = {
+                "np": np,
+                "pd": pd,
+                "bodosql": bodosql,
+                "re": re,
+                "bodo": bodo,
+                "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
+                "MetaType": bodo.utils.typing.MetaType,
+                "numba": numba,
+                "time": time,
+                "datetime": datetime,
+                "pd": pd,
+                "bif": bodo.ir.filter,
+            }
 
-                glbls.update(lowered_globals)
-                loc_vars = {}
-                exec(
-                    func_text,
-                    glbls,
-                    loc_vars,
-                )
-                impl = loc_vars["impl"]
+            glbls.update(lowered_globals)
+            loc_vars = {}
+            exec(
+                func_text,
+                glbls,
+                loc_vars,
+            )
+            impl = loc_vars["impl"]
 
-                # Add table argument name prefix to user provided distributed flags to match
-                # stored names
-                if "distributed" in jit_options and isinstance(
-                    jit_options["distributed"], (list, set)
-                ):
-                    jit_options["distributed"] = [
-                        TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
-                    ]
-                if "replicated" in jit_options and isinstance(
-                    jit_options["replicated"], (list, set)
-                ):
-                    jit_options["replicated"] = [
-                        TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
-                    ]
+            # Add table argument name prefix to user provided distributed flags to match
+            # stored names
+            if "distributed" in jit_options and isinstance(
+                jit_options["distributed"], (list, set)
+            ):
+                jit_options["distributed"] = [
+                    TABLE_ARG_PREFIX + x for x in jit_options["distributed"]
+                ]
+            if "replicated" in jit_options and isinstance(
+                jit_options["replicated"], (list, set)
+            ):
+                jit_options["replicated"] = [
+                    TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
+                ]
 
-                return bodo.jit(impl, **jit_options)(
-                    *(
-                        list(self.tables.values())
-                        + dynamic_params_list
-                        + list(params_dict.values())
-                    )
+            return bodo.jit(impl, **jit_options)(
+                *(
+                    list(self.tables.values())
+                    + dynamic_params_list
+                    + list(params_dict.values())
                 )
-        finally:
-            self._remove_named_params()
+            )
 
     def generate_plan(
         self, sql, params_dict=None, dynamic_params_list=None, show_cost=False
@@ -1163,7 +1071,6 @@ class BodoSQLContext:
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
-        self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(sql, True)
         failed = False
         plan_or_err_msg = ""
@@ -1172,15 +1079,17 @@ class BodoSQLContext:
                 java_params_array = create_java_dynamic_parameter_type_list(
                     dynamic_params_list
                 )
-                plan_or_err_msg = str(
-                    generator.getOptimizedPlanString(sql, show_cost, java_params_array)
+                java_named_params_map = create_java_named_parameter_type_map(
+                    params_dict
                 )
-                # Remove the named Params table
+                plan_or_err_msg = str(
+                    generator.getOptimizedPlanString(
+                        sql, show_cost, java_params_array, java_named_params_map
+                    )
+                )
             except Exception as e:
                 failed = True
                 plan_or_err_msg = error_to_string(e)
-            finally:
-                self._remove_named_params()
 
         failed = bcast_scalar(failed)
         plan_or_err_msg = bcast_scalar(plan_or_err_msg)
@@ -1193,6 +1102,7 @@ class BodoSQLContext:
         sql: str,
         generator: RelationalAlgebraGeneratorClass,
         dynamic_params_list: List[Any],
+        named_params_dict: Dict[str, Any],
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate the Pandas code for the given SQL string.
 
@@ -1212,7 +1122,12 @@ class BodoSQLContext:
             java_params_array = create_java_dynamic_parameter_type_list(
                 dynamic_params_list
             )
-            pd_code = str(generator.getPandasString(sql, java_params_array))
+            java_named_params_map = create_java_named_parameter_type_map(
+                named_params_dict
+            )
+            pd_code = str(
+                generator.getPandasString(sql, java_params_array, java_named_params_map)
+            )
             failed = False
         except Exception as e:
             message = error_to_string(e)
@@ -1244,7 +1159,6 @@ class BodoSQLContext:
             return RelationalAlgebraGeneratorClass(
                 self.catalog.get_java_object(),
                 self.schema,
-                NAMED_PARAM_TABLE_NAME,
                 planner_type,
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
@@ -1256,7 +1170,6 @@ class BodoSQLContext:
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
-            NAMED_PARAM_TABLE_NAME,
             planner_type,
             verbose_level,
             bodo.bodosql_streaming_batch_size,
@@ -1440,28 +1353,15 @@ class BodoSQLContext:
         return result
 
 
-def initialize_schema(
-    param_key_values: Optional[Tuple[List[str], List[str]]] = None,
-):
-    """Create the BodoSQL Schema used to store all local DataFrames
-    and update the named parameters.
-
-    Args:
-        param_key_values (Optional[Tuple[List[str], List[str]]]): Tuple of
-            lists of named_parameter key value pairs. Defaults to None.
+def initialize_schema():
+    """Create the BodoSQL Schema used to store all local DataFrames.
 
     Returns:
         LocalSchemaClass: Java type for the BodoSQL schema.
     """
-
-    assert param_key_values is None or isinstance(param_key_values, tuple)
-
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
         schema = LocalSchemaClass("__BODOLOCAL__")
-        if param_key_values is not None:
-            (param_keys, param_values) = param_key_values
-            add_param_table(NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values)
     else:
         schema = None
     return schema

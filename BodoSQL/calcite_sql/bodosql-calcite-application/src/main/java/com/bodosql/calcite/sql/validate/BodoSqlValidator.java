@@ -22,13 +22,16 @@ import static org.apache.calcite.util.Static.RESOURCE;
 
 import com.bodosql.calcite.application.operatorTables.SelectOperatorTable;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
+import com.bodosql.calcite.sql.func.SqlNamedParam;
 import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.sql.JoinConditionType;
 import org.apache.calcite.sql.JoinType;
 import org.apache.calcite.sql.SqlBasicCall;
@@ -47,29 +50,42 @@ import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoSqlTypeCoercionRule;
 import org.apache.calcite.sql.type.SqlTypeMappingRule;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorException;
 import org.apache.calcite.sql.validate.SqlValidatorImpl;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Duplication of the CalciteSqlValidator class from Calcite. */
 public class BodoSqlValidator extends SqlValidatorImpl {
 
   List<RelDataType> runtimeDynamicParamTypes;
+  Map<String, RelDataType> runtimeNamedParamTypeMap;
 
   public BodoSqlValidator(
       SqlOperatorTable opTab,
       CalciteCatalogReader catalogReader,
       JavaTypeFactory typeFactory,
       SqlValidator.Config config,
-      List<ColumnDataTypeInfo> dynamicParamTypes) {
+      List<ColumnDataTypeInfo> dynamicParamTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypeMap) {
     super(opTab, catalogReader, typeFactory, config);
     this.runtimeDynamicParamTypes =
         dynamicParamTypes.stream()
             // Note: Dynamic parameters are currently always nullable within Calcite.
             .map(x -> typeFactory.createTypeWithNullability(x.convertToSqlType(typeFactory), true))
             .collect(Collectors.toList());
+    this.runtimeNamedParamTypeMap =
+        namedParamTypeMap.entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    Map.Entry::getKey,
+                    x ->
+                        typeFactory.createTypeWithNullability(
+                            x.getValue().convertToSqlType(typeFactory), true)));
   }
 
   @Override
@@ -336,20 +352,78 @@ public class BodoSqlValidator extends SqlValidatorImpl {
     }
     if ((node instanceof SqlDynamicParam) && inferredType.equals(unknownType)) {
       if (this.config().typeCoercionEnabled()) {
-        // Attempt to cast the dynamic parameter based on the runtime type.
-        SqlDynamicParam dynamicParam = (SqlDynamicParam) node;
-        int index = dynamicParam.getIndex();
-        if (index < runtimeDynamicParamTypes.size()) {
-          RelDataType runtimeType = runtimeDynamicParamTypes.get(index);
-          setValidatedNodeType(node, runtimeType);
-          return;
+        if (node instanceof SqlNamedParam) {
+          // Attempt to cast the named parameter based on the runtime type.
+          RelDataType runtimeType = getDynamicParamType((SqlNamedParam) node);
+          if (runtimeType != null) {
+            setValidatedNodeType(node, runtimeType);
+            return;
+          } else {
+            throw newValidationError(
+                node, BODO_SQL_RESOURCE.namedParamIllegal(((SqlNamedParam) node).getParamName()));
+          }
         } else {
-          throw newValidationError(node, BODO_SQL_RESOURCE.dynamicParamIllegal());
+          // Attempt to cast the dynamic parameter based on the runtime type.
+          RelDataType runtimeType = getDynamicParamType((SqlDynamicParam) node);
+          if (runtimeType != null) {
+            setValidatedNodeType(node, runtimeType);
+            return;
+          } else {
+            throw newValidationError(node, BODO_SQL_RESOURCE.dynamicParamIllegal());
+          }
         }
       } else {
-        throw newValidationError(node, BODO_SQL_RESOURCE.dynamicParamIllegal());
+        Resources.ExInst<SqlValidatorException> error =
+            node instanceof SqlNamedParam
+                ? BODO_SQL_RESOURCE.namedParamIllegal(((SqlNamedParam) node).getParamName())
+                : BODO_SQL_RESOURCE.dynamicParamIllegal();
+        throw newValidationError(node, error);
       }
     }
     super.inferUnknownTypes(inferredType, scope, node);
+  }
+
+  private RelDataType getDynamicParamType(SqlDynamicParam dynamicParam) {
+    if (dynamicParam instanceof SqlNamedParam) {
+      SqlNamedParam namedParam = (SqlNamedParam) dynamicParam;
+      String paramName = namedParam.getParamName();
+      if (runtimeNamedParamTypeMap.containsKey(paramName)) {
+        return runtimeNamedParamTypeMap.get(paramName);
+      } else {
+        return null;
+      }
+    } else {
+      int index = dynamicParam.getIndex();
+      if (index < runtimeDynamicParamTypes.size()) {
+        return runtimeDynamicParamTypes.get(index);
+      } else {
+        return null;
+      }
+    }
+  }
+
+  @Override
+  public @Nullable RelDataType getValidatedNodeTypeIfKnown(SqlNode node) {
+    RelDataType type = super.getValidatedNodeTypeIfKnown(node);
+    // If we have a named parameter fetch the type.
+    if (type == null && node instanceof SqlDynamicParam) {
+      type = getDynamicParamType((SqlDynamicParam) node);
+      if (type != null) {
+        setValidatedNodeType(node, type);
+      }
+    }
+    return type;
+  }
+
+  @Override
+  public RelDataType deriveType(SqlValidatorScope scope, SqlNode expr) {
+    RelDataType type = super.deriveType(scope, expr);
+    if (type.getSqlTypeName() == SqlTypeName.UNKNOWN && expr instanceof SqlDynamicParam) {
+      RelDataType paramType = getDynamicParamType((SqlDynamicParam) expr);
+      if (paramType != null) {
+        return paramType;
+      }
+    }
+    return type;
   }
 }
