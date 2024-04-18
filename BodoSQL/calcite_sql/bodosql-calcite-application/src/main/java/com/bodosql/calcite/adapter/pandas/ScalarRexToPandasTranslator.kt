@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Module
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.rex.RexNode
 
@@ -16,7 +17,8 @@ class ScalarRexToPandasTranslator(
     builder: Module.Builder,
     typeSystem: RelDataTypeSystem,
     nodeId: Int,
-) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, null) {
+    dynamicParamTypes: List<RelDataType>,
+) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, null, dynamicParamTypes) {
     override fun isOperandScalar(operand: RexNode): Boolean {
         return true
     }

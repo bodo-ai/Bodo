@@ -34,8 +34,10 @@ NAMED_PARAM_TABLE_NAME = "__$BODO_NAMED_PARAM_TABLE__"
 
 # Prefix to add to table argument names when passed to JIT to avoid variable name conflicts
 TABLE_ARG_PREFIX = "_ARG_"
-# Prefix to add to parameter argument names when passed to JIT to avoid variable name conflicts
-PARAM_ARG_PREFIX = "_PARAM_"
+# Prefix to add to bind variable argument names when passed to JIT to avoid variable name conflicts
+DYNAMIC_PARAM_ARG_PREFIX = "_DYNAMIC_PARAM_"
+# Prefix to add to named parameter argument names when passed to JIT to avoid variable name conflicts
+NAMED_PARAM_ARG_PREFIX = "_NAMED_PARAM_"
 
 
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
@@ -270,6 +272,56 @@ def get_sql_data_type(arr_type):
         warnings.warn(BodoSQLWarning(warning_msg))
         type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Unsupported.value)
         return ColumnDataTypeClass(type_enum, nullable)
+
+
+def create_java_dynamic_parameter_type_list(dynamic_params_list: List[Any]):
+    """Convert a list of dynamic parameters or dynamic parameter types
+    into a Java List of ColumnDataType values.
+
+    Args:
+        dynamic_params_list (List[Any]): The input list, either a Bodo type
+        or a Python value to convert to a java type.
+
+    Returns:
+        JavaObject: A java array to pass to code generation.
+    """
+    output_list = ArrayListClass()
+    for val in dynamic_params_list:
+        typ = val if isinstance(val, types.Type) else bodo.typeof(val)
+        output_list.add(get_sql_param_column_type_info(typ))
+    return output_list
+
+
+def get_sql_param_column_type_info(param_type: types.Type):
+    """Get the SQL type information for a given Dynamic
+    parameter type.
+
+    Args:
+        param_type (types.Type): The bodo type to lower as a parameter.
+    Return:
+        JavaObject: The ColumnDataTypeClass for the parameter type.
+    """
+    unliteral_type = types.unliteral(param_type)
+    # The named parameters are always scalars. We don't support
+    # Optional types or None types yet. As a result this is always
+    # non-null.
+    nullable = False
+    if (
+        isinstance(unliteral_type, bodo.PandasTimestampType)
+        and unliteral_type.tz != None
+    ):
+        return construct_tz_aware_array_type(param_type, nullable)
+    elif isinstance(unliteral_type, bodo.TimeType):
+        # Time array types have their own special handling for precision
+        return construct_time_array_type(param_type, nullable)
+    elif unliteral_type in _numba_to_sql_param_type_map:
+        type_enum = ColumnDataEnum.fromTypeId(
+            _numba_to_sql_param_type_map[unliteral_type]
+        )
+        return ColumnDataTypeClass(type_enum, nullable)
+    raise TypeError(
+        f"Dynamic Parameter with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    )
 
 
 def get_sql_param_type(param_type, param_name):
@@ -698,13 +750,15 @@ class BodoSQLContext:
         if failed:
             raise BodoError(msg)
 
-    def validate_query_compiles(self, sql, params_dict=None):
+    def validate_query_compiles(self, sql, params_dict=None, dynamic_params_list=None):
         """
         Verifies BodoSQL can fully compile the query in Bodo.
         """
         try:
             t1 = time.time()
-            compiled_cpu_dispatcher = self._compile(sql, params_dict)
+            compiled_cpu_dispatcher = self._compile(
+                sql, params_dict, dynamic_params_list
+            )
             compile_time = time.time() - t1
             compiles_flag = True
             error_message = "No error"
@@ -718,17 +772,18 @@ class BodoSQLContext:
 
         return compiles_flag, compile_time, error_message
 
-    def _compile(self, sql, params_dict=None):
+    def _compile(self, sql, params_dict=None, dynamic_params_list=None):
         """compiles the query in Bodo."""
         import bodosql
 
         if params_dict is None:
             params_dict = dict()
 
+        dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
+
         self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
-            params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
@@ -741,6 +796,7 @@ class BodoSQLContext:
             warnings.warn(BodoSQLWarning(warning_msg))
         func_text, lowered_globals = self._convert_to_pandas(
             sql,
+            dynamic_params_list,
             params_dict,
             generator,
             is_dll,
@@ -763,9 +819,11 @@ class BodoSQLContext:
         }
 
         glbls.update(lowered_globals)
-        return self._functext_compile(func_text, params_dict, glbls)
+        return self._functext_compile(
+            func_text, dynamic_params_list, params_dict, glbls
+        )
 
-    def _functext_compile(self, func_text, params_dict, glbls):
+    def _functext_compile(self, func_text, dynamic_params_list, params_dict, glbls):
         """
         Helper function for _compile, that compiles the function text.
         This is mostly separated out for testing purposes.
@@ -774,7 +832,8 @@ class BodoSQLContext:
         arg_types = []
         for table_arg in self.tables.values():
             arg_types.append(bodo.typeof(table_arg))
-
+        for dynamic_param_arg in dynamic_params_list:
+            arg_types.append(bodo.typeof(dynamic_param_arg))
         for param_arg in params_dict.values():
             arg_types.append(bodo.typeof(param_arg))
 
@@ -804,15 +863,18 @@ class BodoSQLContext:
 
         return executable_flag
 
-    def convert_to_pandas(self, sql, params_dict=None, hide_credentials=True):
+    def convert_to_pandas(
+        self, sql, params_dict=None, dynamic_params_list=None, hide_credentials=True
+    ):
         """converts SQL code to Pandas"""
         if params_dict is None:
             params_dict = dict()
 
+        dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
+
         self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
-            params_dict,
             hide_credentials,
         )
         if bodo.get_rank() == 0:
@@ -825,6 +887,7 @@ class BodoSQLContext:
             warnings.warn(BodoSQLWarning(warning_msg))
         pd_code, lowered_globals = self._convert_to_pandas(
             sql,
+            dynamic_params_list,
             params_dict,
             generator,
             is_dll,
@@ -878,9 +941,7 @@ class BodoSQLContext:
         if bodo.get_rank() == 0:
             self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
 
-    def _create_planner_and_parse_query(
-        self, sql: str, params_dict: Dict[str, Any], hide_credentials: bool
-    ):
+    def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
         from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
@@ -920,6 +981,7 @@ class BodoSQLContext:
     def _convert_to_pandas(
         self,
         sql: str,
+        dynamic_params_list: List[Any],
         params_dict: Dict[str, Any],
         generator: RelationalAlgebraGeneratorClass,
         is_ddl: bool,
@@ -953,7 +1015,9 @@ class BodoSQLContext:
             # if we make any changes that could lead to a runtime error.
             try:
                 # Generate the code
-                pd_code, globalsToLower = self._get_pandas_code(sql, generator)
+                pd_code, globalsToLower = self._get_pandas_code(
+                    sql, generator, dynamic_params_list
+                )
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [(str(k), str(v)) for k, v in globalsToLower.items()]
@@ -962,8 +1026,19 @@ class BodoSQLContext:
                 # for compilation testing and JIT code generation.
                 context_names = ["bodo_sql_context"] if is_ddl else []
                 table_names = [TABLE_ARG_PREFIX + x for x in self.tables.keys()]
-                params_names = [PARAM_ARG_PREFIX + x for x in params_dict.keys()]
-                args = ", ".join(context_names + table_names + params_names)
+                dynamic_param_names = [
+                    DYNAMIC_PARAM_ARG_PREFIX + str(i)
+                    for i in range(len(dynamic_params_list))
+                ]
+                named_param_names = [
+                    NAMED_PARAM_ARG_PREFIX + x for x in params_dict.keys()
+                ]
+                args = ", ".join(
+                    context_names
+                    + table_names
+                    + dynamic_param_names
+                    + named_param_names
+                )
                 func_text_or_err_msg += f"def impl({args}):\n"
                 func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
@@ -997,16 +1072,17 @@ class BodoSQLContext:
             globalsDict[varname] = locs["value"]
         return func_text_or_err_msg, globalsDict
 
-    def sql(self, sql, params_dict=None, **jit_options):
+    def sql(self, sql, params_dict=None, dynamic_params_list=None, **jit_options):
         import bodosql
 
         if params_dict is None:
             params_dict = dict()
 
+        dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
+
         self._setup_named_params(params_dict)
         generator = self._create_planner_and_parse_query(
             sql,
-            params_dict,
             False,  # We need to execute the code so don't hide credentials.
         )
         if bodo.get_rank() == 0:
@@ -1021,6 +1097,7 @@ class BodoSQLContext:
             else:
                 func_text, lowered_globals = self._convert_to_pandas(
                     sql,
+                    dynamic_params_list,
                     params_dict,
                     generator,
                     False,  # This path is never DDL.s
@@ -1065,12 +1142,18 @@ class BodoSQLContext:
                     ]
 
                 return bodo.jit(impl, **jit_options)(
-                    *(list(self.tables.values()) + list(params_dict.values()))
+                    *(
+                        list(self.tables.values())
+                        + dynamic_params_list
+                        + list(params_dict.values())
+                    )
                 )
         finally:
             self._remove_named_params()
 
-    def generate_plan(self, sql, params_dict=None, show_cost=False):
+    def generate_plan(
+        self, sql, params_dict=None, dynamic_params_list=None, show_cost=False
+    ):
         """
         Return the optimized plan for the SQL code as
         as a Python string.
@@ -1078,13 +1161,20 @@ class BodoSQLContext:
         if params_dict is None:
             params_dict = dict()
 
+        dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
+
         self._setup_named_params(params_dict)
-        generator = self._create_planner_and_parse_query(sql, params_dict, True)
+        generator = self._create_planner_and_parse_query(sql, True)
         failed = False
         plan_or_err_msg = ""
         if bodo.get_rank() == 0:
             try:
-                plan_or_err_msg = str(generator.getOptimizedPlanString(sql, show_cost))
+                java_params_array = create_java_dynamic_parameter_type_list(
+                    dynamic_params_list
+                )
+                plan_or_err_msg = str(
+                    generator.getOptimizedPlanString(sql, show_cost, java_params_array)
+                )
                 # Remove the named Params table
             except Exception as e:
                 failed = True
@@ -1102,6 +1192,7 @@ class BodoSQLContext:
         self,
         sql: str,
         generator: RelationalAlgebraGeneratorClass,
+        dynamic_params_list: List[Any],
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate the Pandas code for the given SQL string.
 
@@ -1117,12 +1208,11 @@ class BodoSQLContext:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
         # Construct the relational algebra generator
-
-        debugDeltaTable = bool(
-            os.environ.get("__BODO_TESTING_DEBUG_DELTA_TABLE", False)
-        )
         try:
-            pd_code = str(generator.getPandasString(sql, debugDeltaTable))
+            java_params_array = create_java_dynamic_parameter_type_list(
+                dynamic_params_list
+            )
+            pd_code = str(generator.getPandasString(sql, java_params_array))
             failed = False
         except Exception as e:
             message = error_to_string(e)
@@ -1330,7 +1420,6 @@ class BodoSQLContext:
             # external API so we need to parse the query.
             generator = self._create_planner_and_parse_query(
                 sql,
-                {},
                 False,  # We need to execute the code so don't hide credentials.
             )
 
@@ -1415,3 +1504,27 @@ def update_schema(
                 from_jit,
                 write_type,
             )
+
+
+def _ensure_dynamic_params_list(dynamic_params_list: Any) -> List:
+    """Verify the supplied Dynamic params list is a supported type
+    and converts the result to a list.
+
+    Args:
+        dynamic_params_list (Any): A representation of the dynamic params list.
+
+    Returns:
+        List: The dynamic params list converted to a list equivalent.
+    """
+    if dynamic_params_list is None:
+        return []
+    elif isinstance(dynamic_params_list, tuple):
+        return list(dynamic_params_list)
+    elif isinstance(dynamic_params_list, list):
+        return dynamic_params_list
+    else:
+        # Only specify tuple in the error message because we may not be able
+        # to support lists in JIT.
+        raise BodoError(
+            "dynamic_params_list must be a tuple of Python variables if provided"
+        )

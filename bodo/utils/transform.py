@@ -1975,6 +1975,38 @@ def dict_to_const_keys_var_values_lists(
     return keys, values
 
 
+def list_to_vars_value_list(list_var, func_ir):
+    """
+    Takes a list variable, which should be created
+    via build_list and returns a list of values.
+
+    This is used for the case where the list must be a literal to
+    determine the variables, but the variables don't need to be constant.
+    """
+    # Influenced by numba.core.ir_utils.find_build_sequence
+    require(isinstance(list_var, ir.Var))
+    list_def = get_definition(func_ir, list_var)
+    require(isinstance(list_def, ir.Expr))
+    require(list_def.op == "build_list")
+    return list_def.items
+
+
+def tuples_to_vars_value_list(tuple_var, func_ir):
+    """
+    Takes a tuple variable, which should be created
+    via build_tuple and returns a list of values.
+
+    This is used for the case where the list must be a literal to
+    determine the variables, but the variables don't need to be constant.
+    """
+    # Influenced by numba.core.ir_utils.find_build_sequence
+    require(isinstance(tuple_var, ir.Var))
+    tuple_def = get_definition(func_ir, tuple_var)
+    require(isinstance(tuple_def, ir.Expr))
+    require(tuple_def.op == "build_tuple")
+    return tuple_def.items
+
+
 def _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc):
     # check keys to be string/int
     try:

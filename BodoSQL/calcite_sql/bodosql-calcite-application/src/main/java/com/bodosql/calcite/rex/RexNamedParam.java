@@ -20,7 +20,7 @@ public class RexNamedParam extends RexCall {
     // list is really only helpful during validation so just going with this.
     super(type, SqlNamedParameterOperator.INSTANCE, ImmutableList.of());
     // Append _PARAM_ to ensure the variable is unique from any that we generate.
-    this.name = "_PARAM_" + name;
+    this.name = "_NAMED_PARAM_" + name;
   }
 
   public String getName() {

@@ -23,7 +23,6 @@ import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiCondit
 import static com.bodosql.calcite.application.utils.AggHelpers.aggContainsFilter;
 import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.Utils.concatenateLiteralAggValue;
-import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.utils.Utils.isSnowflakeCatalogTable;
 import static com.bodosql.calcite.application.utils.Utils.literalAggPrunedAggList;
@@ -156,12 +155,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // pushed into a remote db (e.g. Snowflake)
   private final String originalSQLQuery;
 
-  // Debug flag set for certain tests in our test suite. Causes the codegen to
-  // return simply return
-  // the delta table
-  // when encountering a merge into operation
-  private final boolean debuggingDeltaTable;
-
   // The type system, used to access timezone info during codegen
   private final RelDataTypeSystem typeSystem;
 
@@ -178,6 +171,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
 
+  // Types of any dynamic parameters in the query.
+  private final List<RelDataType> dynamicParamTypes;
+
   // TODO(aneesh) consider moving this to the C++ code, or derive the
   // chunksize for writing from the allocated budget.
   // Writes only use a constant amount of memory of 256MB. We multiply
@@ -188,22 +184,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
       HashMap<String, String> loweredGlobalVariablesMap,
       String originalSQLQuery,
       RelDataTypeSystem typeSystem,
-      boolean debuggingDeltaTable,
       int verboseLevel,
       int batchSize,
+      List<RelDataType> dynamicParamTypes,
       Map<Integer, Integer> idMapping) {
     super();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.typeSystem = typeSystem;
-    this.debuggingDeltaTable = debuggingDeltaTable;
     this.mergeIntoTargetTable = null;
     this.mergeIntoTargetNode = null;
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.generatedCode = new Module.Builder();
     this.streamingOptions = new StreamingOptions(batchSize);
-
+    this.dynamicParamTypes = dynamicParamTypes;
     this.generatedCode.setIDMapping(idMapping);
   }
 
@@ -1145,113 +1140,79 @@ public class PandasCodeGenVisitor extends RelVisitor {
         node,
         () -> {
           BodoEngineTable deltaTableVar = tableGenStack.pop();
-          List<String> currentDeltaDfColNames = input.getRowType().getFieldNames();
 
-          if (this.debuggingDeltaTable) {
-            // If this environment variable is set, we're only testing the generation of the
-            // delta
-            // table.
-            // Just return the delta table.
-            // We drop no-ops from the delta table, as a few Calcite Optimizations can
-            // result in
-            // their
-            // being removed from the table, and their presence/lack thereof shouldn't
-            // impact
-            // anything in
-            // the
-            // final implementation, but it can cause issues when testing the delta table
-            Variable outputVar = this.genDfVar();
-            this.generatedCode.add(
-                new Op.Assign(
-                    outputVar,
-                    new Expr.Raw(
-                        new StringBuilder()
-                            .append(getBodoIndent())
-                            .append(outputVar.emit())
-                            .append(" = ")
-                            .append(deltaTableVar.emit())
-                            .append(".dropna(subset=[")
-                            .append(
-                                makeQuoted(
-                                    currentDeltaDfColNames.get(currentDeltaDfColNames.size() - 1)))
-                            .append("])")
-                            .toString())));
+          // Assert that we've encountered a PandasTargetTableScan in the codegen, and
+          // set the appropriate variables
+          assert mergeIntoTargetTable != null;
+          assert fileListAndSnapshotIdArgs != null;
 
-            this.generatedCode.add(new Op.ReturnStatement(outputVar));
-          } else {
-            // Assert that we've encountered a PandasTargetTableScan in the codegen, and
-            // set the appropriate variables
-            assert mergeIntoTargetTable != null;
-            assert fileListAndSnapshotIdArgs != null;
-
-            RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
-            BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
-            if (!(bodoSqlTable.isWriteable() && bodoSqlTable.getDBType().equals("ICEBERG"))) {
-              throw new BodoSQLCodegenException(
-                  "MERGE INTO is only supported with Iceberg table destinations provided via the"
-                      + " the SQL TablePath API");
-            }
-
-            // note table.getColumnNames does NOT include ROW_ID or
-            // MERGE_ACTION_ENUM_COL_NAME
-            // column names, because of the way they are added plan in calcite (extension
-            // fields)
-            // We know that the row ID and merge columns exist in the input table due to our
-            // code
-            // invariants
-            List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
-            List<String> deltaTableExpectedColumnNames;
-            deltaTableExpectedColumnNames = new ArrayList<>(targetTableFinalColumnNames);
-            deltaTableExpectedColumnNames.add(ROW_ID_COL_NAME);
-            deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
-
-            Variable writebackDf = genDfVar();
-            Variable targetDf = genDfVar();
-            Variable deltaDf = genDfVar();
-
-            List<Expr.StringLiteral> colNamesLiteral =
-                stringsToStringLiterals(this.mergeIntoTargetNode.getRowType().getFieldNames());
-            Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-            Variable targetColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-
-            colNamesLiteral = stringsToStringLiterals(deltaTableExpectedColumnNames);
-            colNamesTuple = new Expr.Tuple(colNamesLiteral);
-            Expr deltaColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-
-            this.generatedCode.add(
-                new Op.Assign(
-                    targetDf,
-                    new Expr.Call(
-                        "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
-                        this.mergeIntoTargetTable,
-                        targetColNamesMeta)));
-            this.generatedCode.add(
-                new Op.Assign(
-                    deltaDf,
-                    new Expr.Call(
-                        "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
-                        deltaTableVar,
-                        deltaColNamesMeta)));
-
-            this.generatedCode.add(
-                new Op.Assign(
-                    writebackDf,
-                    new Expr.Call(
-                        "bodosql.libs.iceberg_merge_into.do_delta_merge_with_target",
-                        targetDf,
-                        deltaDf)));
-
-            // TODO: this can just be cast, since we handled rename
-            Expr renamedWriteBackDfExpr =
-                handleRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable);
-            Variable castedAndRenamedWriteBackDfVar = this.genDfVar();
-            this.generatedCode.add(
-                new Op.Assign(castedAndRenamedWriteBackDfVar, renamedWriteBackDfExpr));
-            this.generatedCode.add(
-                new Op.Stmt(
-                    bodoSqlTable.generateWriteCode(
-                        this, castedAndRenamedWriteBackDfVar, this.fileListAndSnapshotIdArgs)));
+          RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
+          BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
+          if (!(bodoSqlTable.isWriteable() && bodoSqlTable.getDBType().equals("ICEBERG"))) {
+            throw new BodoSQLCodegenException(
+                "MERGE INTO is only supported with Iceberg table destinations provided via the"
+                    + " the SQL TablePath API");
           }
+
+          // note table.getColumnNames does NOT include ROW_ID or
+          // MERGE_ACTION_ENUM_COL_NAME
+          // column names, because of the way they are added plan in calcite (extension
+          // fields)
+          // We know that the row ID and merge columns exist in the input table due to our
+          // code
+          // invariants
+          List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
+          List<String> deltaTableExpectedColumnNames;
+          deltaTableExpectedColumnNames = new ArrayList<>(targetTableFinalColumnNames);
+          deltaTableExpectedColumnNames.add(ROW_ID_COL_NAME);
+          deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
+
+          Variable writebackDf = genDfVar();
+          Variable targetDf = genDfVar();
+          Variable deltaDf = genDfVar();
+
+          List<Expr.StringLiteral> colNamesLiteral =
+              stringsToStringLiterals(this.mergeIntoTargetNode.getRowType().getFieldNames());
+          Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+          Variable targetColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+
+          colNamesLiteral = stringsToStringLiterals(deltaTableExpectedColumnNames);
+          colNamesTuple = new Expr.Tuple(colNamesLiteral);
+          Expr deltaColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+
+          this.generatedCode.add(
+              new Op.Assign(
+                  targetDf,
+                  new Expr.Call(
+                      "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
+                      this.mergeIntoTargetTable,
+                      targetColNamesMeta)));
+          this.generatedCode.add(
+              new Op.Assign(
+                  deltaDf,
+                  new Expr.Call(
+                      "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
+                      deltaTableVar,
+                      deltaColNamesMeta)));
+
+          this.generatedCode.add(
+              new Op.Assign(
+                  writebackDf,
+                  new Expr.Call(
+                      "bodosql.libs.iceberg_merge_into.do_delta_merge_with_target",
+                      targetDf,
+                      deltaDf)));
+
+          // TODO: this can just be cast, since we handled rename
+          Expr renamedWriteBackDfExpr =
+              handleRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable);
+          Variable castedAndRenamedWriteBackDfVar = this.genDfVar();
+          this.generatedCode.add(
+              new Op.Assign(castedAndRenamedWriteBackDfVar, renamedWriteBackDfExpr));
+          this.generatedCode.add(
+              new Op.Stmt(
+                  bodoSqlTable.generateWriteCode(
+                      this, castedAndRenamedWriteBackDfVar, this.fileListAndSnapshotIdArgs)));
         });
   }
 
@@ -2497,21 +2458,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   private RexToPandasTranslator getRexTranslator(int nodeId, BodoEngineTable input) {
-    return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
+    return new RexToPandasTranslator(
+        this, this.generatedCode, this.typeSystem, nodeId, input, this.dynamicParamTypes);
   }
 
   private RexToPandasTranslator getRexTranslator(
       int nodeId, BodoEngineTable input, List<? extends Expr> localRefs) {
     return new RexToPandasTranslator(
-        this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
+        this,
+        this.generatedCode,
+        this.typeSystem,
+        nodeId,
+        input,
+        this.dynamicParamTypes,
+        localRefs);
   }
 
   private ArrayRexToPandasTranslator getArrayRexTranslator(int nodeId, BodoEngineTable input) {
-    return new ArrayRexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
+    return new ArrayRexToPandasTranslator(
+        this, this.generatedCode, this.typeSystem, nodeId, input, this.dynamicParamTypes);
   }
 
   private ScalarRexToPandasTranslator getScalarRexTranslator(int nodeId) {
-    return new ScalarRexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId);
+    return new ScalarRexToPandasTranslator(
+        this, this.generatedCode, this.typeSystem, nodeId, this.dynamicParamTypes);
   }
 
   private StreamingRexToPandasTranslator getStreamingRexTranslator(
@@ -2520,7 +2490,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<? extends Expr> localRefs,
       @NotNull StateVariable stateVar) {
     return new StreamingRexToPandasTranslator(
-        this, this.generatedCode, this.typeSystem, nodeId, input, localRefs, stateVar);
+        this,
+        this.generatedCode,
+        this.typeSystem,
+        nodeId,
+        input,
+        this.dynamicParamTypes,
+        localRefs,
+        stateVar);
   }
 
   private class Implementor implements PandasRel.Implementor {
