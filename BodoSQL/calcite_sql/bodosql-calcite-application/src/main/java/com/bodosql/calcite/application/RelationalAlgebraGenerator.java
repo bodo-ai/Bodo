@@ -505,10 +505,12 @@ public class RelationalAlgebraGenerator {
                     Map.Entry::getKey,
                     x -> x.getValue().convertToSqlType(planner.getTypeFactory())));
     RelNode rel = PandasUtilKt.pandasProject(plan.getLeft());
-    // Create a mapping for the new root - this is a bit of a hack, and long term we probably want
+    // Create a mapping for the new root/newly created nodes - this is a bit of a hack, and long
+    // term we probably want
     // something that's part of the RelNode itself instead of an auxillary map to make this safer.
-    int newKey = plan.getRight().values().stream().reduce(Integer::max).get();
-    plan.getRight().put(rel.getId(), newKey + 1);
+    RelIDToOperatorIDVisitor v = new RelIDToOperatorIDVisitor(new HashMap<>(plan.getRight()));
+    v.visit(rel, 0, null);
+
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
         new PandasCodeGenVisitor(
@@ -519,7 +521,7 @@ public class RelationalAlgebraGenerator {
             this.streamingBatchSize,
             dynamicTypes,
             namedParamTypes,
-            plan.getRight());
+            v.getIDMapping());
     codegen.go(rel);
     return codegen.getGeneratedCode();
   }
