@@ -1319,9 +1319,10 @@ def test_basic_write_new_append(
 
         if not_hashable:
             bodo_out = convert_non_pandas_columns(bodo_out)
+
         passed = _test_equal_guard(
-            expected_df,
             bodo_out,
+            expected_df,
             sort_output=True,
             check_dtype=False,
             reset_index=True,

@@ -2,6 +2,7 @@ import operator
 import os
 import traceback
 
+import bodo_iceberg_connector as bic
 import numba
 import pandas as pd
 from mpi4py import MPI
@@ -49,6 +50,7 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
+from bodo.utils.utils import run_rank0
 
 # Maximum Parquet file size for streaming Iceberg write
 # TODO[BSE-2609] get max file size from Iceberg metadata
@@ -104,6 +106,8 @@ iceberg_writer_payload_members = (
     ("finished", types.boolean),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
+    # Transaction ID for the write
+    ("txn_id", types.int64),
 )
 iceberg_writer_payload_members_dict = dict(iceberg_writer_payload_members)
 
@@ -241,6 +245,67 @@ def unbox_iceberg_writer(typ, val, c):
     )  # pragma: no cover
 
 
+def start_write_wrapper(
+    conn,
+    schema,
+    table_name,
+    table_loc,
+    iceberg_schema_id,
+    already_exists,
+    output_pyarrow_schema,
+    partition_spec,
+    sort_order,
+    mode,
+):
+    pass
+
+
+@overload(start_write_wrapper)
+def overload_start_write_wrapper(
+    conn,
+    schema,
+    table_name,
+    table_loc,
+    iceberg_schema_id,
+    already_exists,
+    output_pyarrow_schema,
+    partition_spec,
+    sort_order,
+    mode,
+):
+    """Wrapper around objmode call to connector.start_write() to avoid Numba
+    compiler errors"""
+
+    def impl(
+        conn,
+        schema,
+        table_name,
+        table_loc,
+        iceberg_schema_id,
+        already_exists,
+        output_pyarrow_schema,
+        partition_spec,
+        sort_order,
+        mode,
+    ):  # pragma: no cover
+        with numba.objmode(txn_id="i8", table_loc="unicode_type"):
+            (txn_id, table_loc) = run_rank0(bic.start_write)(
+                conn,
+                schema,
+                table_name,
+                table_loc,
+                iceberg_schema_id,
+                already_exists,
+                output_pyarrow_schema,
+                partition_spec,
+                sort_order,
+                mode,
+            )
+        return txn_id, table_loc
+
+    return impl
+
+
 def get_table_details_before_write_wrapper(
     table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
 ):  # pragma: no cover
@@ -259,24 +324,26 @@ def overload_get_table_details_before_write_wrapper(
         table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
     ):  # pragma: no cover
         with numba.objmode(
-            already_exists="bool_",
             table_loc="unicode_type",
             iceberg_schema_id="i8",
             partition_spec="python_list_of_heterogeneous_tuples_type",
             sort_order="python_list_of_heterogeneous_tuples_type",
             iceberg_schema_str="unicode_type",
             output_pyarrow_schema="pyarrow_schema_type",
+            mode="unicode_type",
+            already_exists="boolean",
         ):
             (
-                already_exists,
                 table_loc,
+                already_exists,
                 iceberg_schema_id,
                 partition_spec,
                 sort_order,
                 iceberg_schema_str,
-                # This has the Iceberg Field IDs
-                # in the fields' metadata.
+                # This has the Iceberg field IDs in the metadata of every field
+                # which is required for correctness.
                 output_pyarrow_schema,
+                mode,
             ) = get_table_details_before_write(
                 table_name,
                 conn,
@@ -286,13 +353,14 @@ def overload_get_table_details_before_write_wrapper(
                 allow_downcasting,
             )
         return (
-            already_exists,
             table_loc,
+            already_exists,
             iceberg_schema_id,
             partition_spec,
             sort_order,
             iceberg_schema_str,
             output_pyarrow_schema,
+            mode,
         )
 
     return impl
@@ -378,8 +446,8 @@ def gen_iceberg_writer_init_impl(
         con_str = bodo.io.iceberg.format_iceberg_conn_njit(conn)
 
         (
-            already_exists,
             table_loc,
+            already_exists,
             iceberg_schema_id,
             partition_spec,
             sort_order,
@@ -387,6 +455,7 @@ def gen_iceberg_writer_init_impl(
             # This has the Iceberg Field IDs
             # in the fields' metadata.
             output_pyarrow_schema,
+            mode,
         ) = get_table_details_before_write_wrapper(
             table_name,
             con_str,
@@ -396,14 +465,21 @@ def gen_iceberg_writer_init_impl(
             # allow_downcasting
             False,
         )
-
-        if already_exists and if_exists == "fail":
-            raise ValueError(f"Table already exists.")
-
-        if already_exists:
-            mode = if_exists
-        else:
-            mode = "create"
+        (
+            txn_id,
+            table_loc,
+        ) = start_write_wrapper(
+            con_str,
+            schema,
+            table_name,
+            table_loc,
+            iceberg_schema_id,
+            already_exists,
+            output_pyarrow_schema,
+            partition_spec,
+            sort_order,
+            mode,
+        )
 
         # Initialize writer
         writer = iceberg_writer_alloc(expected_state_type)
@@ -425,6 +501,7 @@ def gen_iceberg_writer_init_impl(
             table_builder_state_type,
             input_dicts_unified=input_dicts_unified,
         )
+        writer["txn_id"] = txn_id
 
         # Barrier ensures that internal stage exists before we upload files to it
         bodo.barrier()
@@ -586,11 +663,9 @@ def gen_iceberg_writer_append_table_impl_inner(
             table_name = writer["table_name"]
             table_loc = writer["table_loc"]
             iceberg_schema_id = writer["iceberg_schema_id"]
-            partition_spec = writer["partition_spec"]
-            sort_order = writer["sort_order"]
             if_exists = writer["if_exists"]
             all_iceberg_files_infos = writer["iceberg_files_info"]
-            output_pyarrow_schema = writer["output_pyarrow_schema"]
+            txn_id = writer["txn_id"]
             with numba.objmode(success="bool_"):
                 (
                     fnames,
@@ -600,6 +675,7 @@ def gen_iceberg_writer_append_table_impl_inner(
 
                 # Send file names, metrics and schema to Iceberg connector
                 success = register_table_write(
+                    txn_id,
                     conn,
                     db_schema,
                     table_name,
@@ -608,9 +684,6 @@ def gen_iceberg_writer_append_table_impl_inner(
                     file_size_bytes,
                     metrics,
                     iceberg_schema_id,
-                    output_pyarrow_schema,
-                    partition_spec,
-                    sort_order,
                     if_exists,
                 )
 

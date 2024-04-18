@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional
 import pyarrow as pa
 from py4j.protocol import Py4JError
 
-from bodo_iceberg_connector.catalog_conn import gen_file_loc, parse_conn_str
+from bodo_iceberg_connector.catalog_conn import (
+    gen_file_loc,
+    normalize_loc,
+    parse_conn_str,
+)
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
@@ -103,7 +107,86 @@ def get_schema_with_init_field_ids(schema: pa.Schema) -> pa.Schema:
     return convert_arrow_schema_to_large_types(pyarrow_schema)
 
 
+def start_write(
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+    table_loc: str,
+    iceberg_schema_id: int,
+    already_exists: bool,
+    pa_schema: pa.Schema,
+    partition_spec: Optional[str],
+    sort_order: Optional[str],
+    mode: str,
+):
+    """
+    Start a write action in an Iceberg catalog
+        conn_str: Connection string to catalog
+        db_name: Namespace containing the table written to
+        table_name: Name of table written to
+        table_loc: Warehouse location of data/ path (and files)
+        iceberg_schema_id: Known Schema ID when files were written
+        already_exists: Whether the table already exists in the catalog
+        pa_schema: Arrow Schema of written data. In the create/replace
+            case, make sure to use 'get_schema_with_init_field_ids'
+            to generate the correct field IDs for the fields before
+            writing the parquet files.
+        partition_spec: Iceberg-based partitioning schema of data
+        sort_order: Iceberg-based sorting of data
+        mode: Method of Iceberg write (`create`, `replace`, `append`)
+    returns:
+    txn_id: Transaction ID of the write action
+    table_loc: Updated warehouse location of data/ path (and files)
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+
+    if mode == "create":
+        assert (
+            iceberg_schema_id == -1
+        ), "bodo_iceberg_connector Internal Error: Should never create existing table"
+        try:
+            txn_id = handler.startCreateOrReplaceTable(
+                arrow_to_iceberg_schema(pa_schema),
+                False,
+            )
+        except Py4JError as e:
+            print("Error during Iceberg table creation: ", e)
+            return None
+
+    elif mode == "replace":
+        try:
+            txn_id = handler.startCreateOrReplaceTable(
+                arrow_to_iceberg_schema(pa_schema),
+                True,
+            )
+        except Py4JError as e:
+            print("Error during Iceberg table replace: ", e)
+            return None
+    else:
+        assert (
+            mode == "append"
+        ), "bodo_iceberg_connector Internal Error: Unknown write mode. Supported modes: 'create', 'replace', 'append'."
+        assert iceberg_schema_id is not None
+
+        try:
+            txn_id = handler.startAppendTable()
+        except Py4JError as e:
+            print("Error during Iceberg table append: ", e)
+            return None
+
+    if not already_exists:
+        # Refetch the table_loc if the table did not exist
+        table_loc = normalize_loc(handler.getTransactionTableLocation(txn_id))
+
+    return (
+        txn_id,
+        table_loc,
+    )
+
+
 def commit_write(
+    txn_id: int,
     conn_str: str,
     db_name: str,
     table_name: str,
@@ -112,28 +195,21 @@ def commit_write(
     file_size_bytes: List[int],
     metrics: List[Dict[str, Any]],
     iceberg_schema_id: Optional[int],
-    pa_schema: pa.Schema,
-    partition_spec: Optional[str],
-    sort_order: Optional[str],
     mode: str,
 ):
     """
     Register a write action in an Iceberg catalog
 
     Args:
+        txn_id: Transaction ID of the write action
         conn_str: Connection string to catalog
         db_name: Namespace containing the table written to
         table_name: Name of table written to
+        table_loc: Warehouse location of data/ path (and files)
         fnames: Names of Parquet file that need to be committed in Iceberg
         file_size_bytes: Size of each file in bytes.
         metrics: Metrics about written data to include in commit
         iceberg_schema_id: Known Schema ID when files were written
-        pa_schema: Arrow Schema of written data. In the create/replace
-            case, make sure to use 'get_schema_with_init_field_ids'
-            to generate the correct field IDs for the fields before
-            writing the parquet files.
-        partition_spec: Iceberg-based partitioning schema of data
-        sort_order: Iceberg-based sorting of data
         mode: Method of Iceberg write (`create`, `replace`, `append`)
 
     Returns:
@@ -145,29 +221,14 @@ def commit_write(
         fnames, file_size_bytes, metrics, table_loc, db_name, table_name
     )
 
-    if mode == "create":
-        assert (
-            iceberg_schema_id is None
-        ), "bodo_iceberg_connector Internal Error: Should never create existing table"
+    if mode in ("create", "replace"):
         try:
-            handler.createOrReplaceTable(
+            handler.commitCreateOrReplaceTable(
+                txn_id,
                 file_info_str,
-                arrow_to_iceberg_schema(pa_schema),
-                False,
             )
         except Py4JError as e:
-            print("Error during Iceberg table creation: ", e)
-            return False
-
-    elif mode == "replace":
-        try:
-            handler.createOrReplaceTable(
-                file_info_str,
-                arrow_to_iceberg_schema(pa_schema),
-                True,
-            )
-        except Py4JError as e:
-            print("Error during Iceberg table replace: ", e)
+            print("Error during Iceberg table create/replace commit: ", e)
             return False
 
     else:
@@ -177,11 +238,10 @@ def commit_write(
         assert iceberg_schema_id is not None
 
         try:
-            handler.appendTable(file_info_str, iceberg_schema_id)
+            handler.commitAppendTable(txn_id, file_info_str, iceberg_schema_id)
         except Py4JError as e:
             print("Error during Iceberg table append: ", e)
             return False
-
     return True
 
 

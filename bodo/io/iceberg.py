@@ -2746,13 +2746,15 @@ def get_table_details_before_write(
 
     comm = MPI.COMM_WORLD
 
+    already_exists = None
     comm_exc = None
     iceberg_schema_id = None
-    table_loc = ""
     partition_spec = []
     sort_order = []
     iceberg_schema_str = ""
     output_pyarrow_schema = None
+    mode = ""
+    table_loc = ""
 
     # Map column name to index for efficient lookup
     col_name_to_idx_map = {col: i for (i, col) in enumerate(df_schema.names)}
@@ -2772,6 +2774,20 @@ def get_table_details_before_write(
                 partition_spec,
                 sort_order,
             ) = connector.get_typing_info(conn, database_schema, table_name)
+            already_exists = iceberg_schema_id is not None
+            iceberg_schema_id = iceberg_schema_id if already_exists else -1
+
+            if already_exists and if_exists == "fail":
+                # Ideally we'd like to throw the same error as pandas
+                # (https://github.com/pandas-dev/pandas/blob/4bfe3d07b4858144c219b9346329027024102ab6/pandas/io/sql.py#L833)
+                # but using values not known at compile time, in Exceptions
+                # doesn't seem to work with Numba
+                raise ValueError(f"Table already exists.")
+
+            if already_exists:
+                mode = if_exists
+            else:
+                mode = "create"
 
             if if_exists != "append":
                 # In the create/replace case, disregard some of the properties
@@ -2824,7 +2840,7 @@ def get_table_details_before_write(
                 df_schema, ref_schema=pa_schema
             )
 
-            if (if_exists != "append") or (iceberg_schema_id is None):
+            if (if_exists != "append") or (not already_exists):
                 # When the table doesn't exist, i.e. we're creating a new one,
                 # we need to create iceberg_schema_str from the PyArrow schema
                 # of the dataframe.
@@ -2842,28 +2858,25 @@ def get_table_details_before_write(
         raise comm_exc
 
     table_loc = comm.bcast(table_loc)
+    already_exists = comm.bcast(already_exists)
+    mode = comm.bcast(mode)
     iceberg_schema_id = comm.bcast(iceberg_schema_id)
     partition_spec = comm.bcast(partition_spec)
     sort_order = comm.bcast(sort_order)
     iceberg_schema_str = comm.bcast(iceberg_schema_str)
     output_pyarrow_schema = comm.bcast(output_pyarrow_schema)
 
-    if iceberg_schema_id is None:
-        already_exists = False
-        iceberg_schema_id = -1
-    else:
-        already_exists = True
-
     ev.finalize()
 
     return (
-        already_exists,
         table_loc,
+        already_exists,
         iceberg_schema_id,
         partition_spec,
         sort_order,
         iceberg_schema_str,
         output_pyarrow_schema,
+        mode,
     )
 
 
@@ -2935,6 +2948,7 @@ def generate_data_file_info(
 
 
 def register_table_write(
+    transaction_id: int,
     conn_str: str,
     db_name: str,
     table_name: str,
@@ -2943,9 +2957,6 @@ def register_table_write(
     file_size_bytes: list[int],
     all_metrics: dict[str, pt.Any],  # TODO: Explain?
     iceberg_schema_id: int,
-    pa_schema,
-    partition_spec,
-    sort_order,
     mode: str,
 ):
     """
@@ -2963,6 +2974,7 @@ def register_table_write(
         schema_id = None if iceberg_schema_id < 0 else iceberg_schema_id
 
         success = bodo_iceberg_connector.commit_write(
+            transaction_id,
             conn_str,
             db_name,
             table_name,
@@ -2971,9 +2983,6 @@ def register_table_write(
             file_size_bytes,
             all_metrics,
             schema_id,
-            pa_schema,
-            partition_spec,
-            sort_order,
             mode,
         )
 
@@ -3134,9 +3143,9 @@ def iceberg_pq_write(
 
 @numba.njit
 def iceberg_write(
-    table_name,
     conn,
     database_schema,
+    table_name,
     bodo_table,
     col_names,
     # Same semantics as pandas to_sql for now
@@ -3148,9 +3157,9 @@ def iceberg_write(
     """
     Iceberg Basic Write Implementation for parquet based tables.
     Args:
-        table_name (str): name of iceberg table
         conn (str): connection string
         database_schema (str): schema in iceberg database
+        table_name (str): name of iceberg table
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
         if_exists (str): behavior when table exists. must be one of ['fail', 'append', 'replace']
@@ -3168,17 +3177,18 @@ def iceberg_write(
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed dataframes"
     with numba.objmode(
-        already_exists="bool_",
+        txn_id="i8",
         table_loc="unicode_type",
         iceberg_schema_id="i8",
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
+        mode="unicode_type",
     ):
         (
-            already_exists,
             table_loc,
+            already_exists,
             iceberg_schema_id,
             partition_spec,
             sort_order,
@@ -3186,6 +3196,7 @@ def iceberg_write(
             # This has the Iceberg field IDs in the metadata of every field
             # which is required for correctness.
             output_pyarrow_schema,
+            mode,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -3194,18 +3205,21 @@ def iceberg_write(
             if_exists,
             allow_downcasting,
         )
-
-    if already_exists and if_exists == "fail":
-        # Ideally we'd like to throw the same error as pandas
-        # (https://github.com/pandas-dev/pandas/blob/4bfe3d07b4858144c219b9346329027024102ab6/pandas/io/sql.py#L833)
-        # but using values not known at compile time, in Exceptions
-        # doesn't seem to work with Numba
-        raise ValueError(f"Table already exists.")
-
-    if already_exists:
-        mode = if_exists
-    else:
-        mode = "create"
+        (
+            txn_id,
+            table_loc,
+        ) = wrap_start_write(
+            conn,
+            database_schema,
+            table_name,
+            table_loc,
+            iceberg_schema_id,
+            already_exists,
+            output_pyarrow_schema,
+            partition_spec,
+            sort_order,
+            mode,
+        )
 
     iceberg_files_info = iceberg_pq_write(
         table_loc,
@@ -3220,9 +3234,9 @@ def iceberg_write(
 
     with numba.objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
-
         # Send file names, metrics and schema to Iceberg connector
         success = register_table_write(
+            txn_id,
             conn,
             database_schema,
             table_name,
@@ -3231,9 +3245,6 @@ def iceberg_write(
             file_size_bytes,
             metrics,
             iceberg_schema_id,
-            output_pyarrow_schema,
-            partition_spec,
-            sort_order,
             mode,
         )
 
@@ -3361,13 +3372,14 @@ def iceberg_merge_cow(
         output_pyarrow_schema="pyarrow_schema_type",
     ):
         (
-            already_exists,
             table_loc,
+            already_exists,
             _,
             partition_spec,
             sort_order,
             iceberg_schema_str,
             output_pyarrow_schema,
+            mode,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -3486,4 +3498,49 @@ def iceberg_pq_write_table_cpp(
             pyarrow_schema_type,
         ),
         codegen,
+    )
+
+
+@run_rank0
+def wrap_start_write(
+    conn: str,
+    database_schema: str,
+    table_name: str,
+    table_loc: str,
+    iceberg_schema_id: int,
+    already_exists: bool,
+    output_pyarrow_schema: pa.Schema,
+    partition_spec: list,
+    sort_order: list,
+    mode: str,
+):
+    """
+    Wrapper around bodo_iceberg_connector.start_write to run on
+    a single rank and broadcast the result.
+    Necessary to not import bodo_iceberg_connector into the global context
+    args:
+    conn (str): connection string
+    database_schema (str): schema in iceberg database
+    table_name (str): name of iceberg table
+    table_loc (str): location of the data/ folder in the warehouse
+    iceberg_schema_id (int): iceberg schema id
+    already_exists (bool): whether the table already exists
+    output_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
+    partition_spec (list): partition spec
+    sort_order (list): sort order
+    mode (str): write mode
+    """
+    import bodo_iceberg_connector as connector
+
+    return connector.start_write(
+        conn,
+        database_schema,
+        table_name,
+        table_loc,
+        iceberg_schema_id,
+        already_exists,
+        output_pyarrow_schema,
+        partition_spec,
+        sort_order,
+        mode,
     )
