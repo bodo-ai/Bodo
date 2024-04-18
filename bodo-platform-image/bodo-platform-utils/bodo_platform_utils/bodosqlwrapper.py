@@ -159,6 +159,8 @@ def create_snowflake_catalog(catalog, args):
     # Schema can be None for backwards compatibility
     schema = args.schema if args.schema else catalog.get("schema")
 
+    iceberg_volume = args.iceberg_volume if args.iceberg_volume else catalog.get("icebergVolume")
+
     # Create connection params
     connection_params = {"role": catalog["role"]} if "role" in catalog else {}
     if schema is not None:
@@ -171,7 +173,7 @@ def create_snowflake_catalog(catalog, args):
         warehouse=warehouse,
         database=database,
         connection_params=connection_params,
-        iceberg_volume=args.iceberg_volume,
+        iceberg_volume=iceberg_volume,
     )
 
 
