@@ -68,7 +68,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 )
                 .sqlValidatorConfig(
                     SqlValidator.Config.DEFAULT
-                        .withNamedParamTableName(config.namedParamTableName)
                         // Note: We use NullCollation.HIGH to match Snowflake. In the future
                         // when we get Databricks customers we need to either allows users to configure
                         // null collation automatically based on the catalog or define Bodo rules (or both).
@@ -144,7 +143,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
     class Config(
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
-        val namedParamTableName: String,
         val plannerType: PlannerType,
     )
 }

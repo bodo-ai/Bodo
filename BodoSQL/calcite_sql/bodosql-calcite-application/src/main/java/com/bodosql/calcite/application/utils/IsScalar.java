@@ -3,7 +3,6 @@ package com.bodosql.calcite.application.utils;
 import static org.apache.calcite.rex.RexVisitorImpl.visitArrayAnd;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.rex.RexNamedParam;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -50,8 +49,6 @@ public class IsScalar implements RexVisitor<Boolean> {
   public Boolean visitCall(RexCall call) {
     if (call.getOperator().getName().equals("RANDOM")) {
       return false;
-    } else if (call instanceof RexNamedParam) {
-      return true;
     } else {
       return visitArrayAnd(this, call.operands);
     }

@@ -171,24 +171,3 @@ def test_bind_variables_datetime_func(
         check_dtype=False,
         expected_output=expected_output,
     )
-
-
-@pytest.mark.slow
-def test_named_param_interval_func(
-    bodosql_datetime_types, spark_info, timedelta_named_params, memory_leak_check
-):
-    """
-    Checks that named params can be used in a timestamp function
-    """
-    query = "select date_add(A, @a) from table1"
-    spark_query = "select A + @a from table1"
-    check_query(
-        query,
-        bodosql_datetime_types,
-        spark_info,
-        named_params=timedelta_named_params,
-        equivalent_spark_query=spark_query,
-        check_names=False,
-        check_dtype=False,
-        named_params_timedelta_interval=True,
-    )

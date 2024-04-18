@@ -21,15 +21,15 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select CONCAT(A, ?) as OUTPUT from table1";
+    String sql =
+        "select CASE WHEN A > 10 THEN @c + 1 WHEN A > 100 THEN @c + 2 WHEN A > 1000 THEN @c + 3"
+            + " ELSE @c + 4 END from table1";
     int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
     ArrayList arr = new ArrayList();
-    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.STRING;
-    BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
+    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
     ColumnDataTypeInfo dataTypeInfo = new ColumnDataTypeInfo(dataType, true);
-    ColumnDataTypeInfo paramTypeInfo = new ColumnDataTypeInfo(paramType, true);
     BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataTypeInfo);
     arr.add(column);
     BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataTypeInfo);
@@ -83,32 +83,9 @@ public class PandasGenTest {
 
     schema.addTable(table3);
 
-    // Define the Parameter table
-    String paramTableName = "PARAMTABLE";
-    arr = new ArrayList();
-    arr.add(column);
-    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramTypeInfo);
-    arr.add(param1);
-    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramTypeInfo);
-    arr.add(param2);
-    BodoSqlTable paramTable =
-        new LocalTable(
-            paramTableName,
-            schema.getFullPath(),
-            arr,
-            true,
-            paramTableName,
-            "PARAM_TABLE WRITE HERE (%s, %s)",
-            false,
-            "MEMORY",
-            null);
-
-    schema.addTable(paramTable);
-
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(
             schema,
-            paramTableName,
             plannerChoice,
             0,
             BatchingProperty.defaultBatchSize,
@@ -119,13 +96,20 @@ public class PandasGenTest {
             );
     List<ColumnDataTypeInfo> paramTypes =
         List.of(new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false));
+    Map<String, ColumnDataTypeInfo> namedParamTypes =
+        Map.of(
+            "a",
+            new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false),
+            "c",
+            new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false));
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String optimizedPlanStr = getRelationalAlgebraString(generator, sql, paramTypes);
+    String optimizedPlanStr =
+        getRelationalAlgebraString(generator, sql, paramTypes, namedParamTypes);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
 
-    String pandasStr = generator.getPandasString(sql, paramTypes);
+    String pandasStr = generator.getPandasString(sql, paramTypes, namedParamTypes);
     System.out.println("Generated code:");
     System.out.println(pandasStr + "\n");
     System.out.println("Lowered globals:");
@@ -133,9 +117,13 @@ public class PandasGenTest {
   }
 
   private static String getRelationalAlgebraString(
-      RelationalAlgebraGenerator generator, String sql, List<ColumnDataTypeInfo> paramTypes) {
+      RelationalAlgebraGenerator generator,
+      String sql,
+      List<ColumnDataTypeInfo> paramTypes,
+      Map<String, ColumnDataTypeInfo> namedParamTypes) {
     try {
-      Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql, paramTypes);
+      Pair<RelRoot, Map<Integer, Integer>> root =
+          generator.getRelationalAlgebra(sql, paramTypes, namedParamTypes);
       return RelOptUtil.toString(PandasUtilKt.pandasProject(root.getLeft()));
     } catch (Exception e) {
       throw new RuntimeException(e);

@@ -16,7 +16,38 @@
  */
 package org.apache.calcite.tools;
 
-import com.bodosql.calcite.rex.RexNamedParam;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedMultiset;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
+import java.math.BigDecimal;
+import java.util.AbstractList;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.function.Experimental;
 import org.apache.calcite.plan.Context;
@@ -119,52 +150,15 @@ import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.Mappings;
-
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedMultiset;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multiset;
-import com.google.common.collect.Sets;
-
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.immutables.value.Value;
 
-import java.math.BigDecimal;
-import java.util.AbstractList;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.UnaryOperator;
-import java.util.stream.Collectors;
-
 import static com.google.common.collect.ImmutableList.toImmutableList;
-
+import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.rel.rules.AggregateRemoveRule.canFlattenStatic;
 import static org.apache.calcite.sql.SqlKind.UNION;
 import static org.apache.calcite.util.Static.RESOURCE;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * Builder for relational expressions.
@@ -3408,16 +3402,14 @@ public class RelBuilder {
    */
   public RelBuilder sortLimit(@Nullable RexNode offsetNode, @Nullable RexNode fetchNode,
       Iterable<? extends RexNode> nodes) {
-    // Bodo Change: Include RexNamedParam as an option instead of RexDynamicParam
-    // TODO(njriasan): Remove RexNamedParam and convert the code to use RexDynamicParam
     if (offsetNode != null) {
-      if (!(offsetNode instanceof RexLiteral || offsetNode instanceof RexDynamicParam || offsetNode instanceof RexNamedParam)) {
-        throw new IllegalArgumentException("OFFSET node must be RexLiteral, RexDynamicParam, or RexNamedParam");
+      if (!(offsetNode instanceof RexLiteral || offsetNode instanceof RexDynamicParam)) {
+        throw new IllegalArgumentException("OFFSET node must be RexLiteral or RexDynamicParam");
       }
     }
     if (fetchNode != null) {
-      if (!(fetchNode instanceof RexLiteral || fetchNode instanceof RexDynamicParam || fetchNode instanceof RexNamedParam)) {
-        throw new IllegalArgumentException("FETCH node must be RexLiteral, RexDynamicParam, or RexNamedParam");
+      if (!(fetchNode instanceof RexLiteral || fetchNode instanceof RexDynamicParam)) {
+        throw new IllegalArgumentException("FETCH node must be RexLiteral or RexDynamicParam");
       }
     }
 

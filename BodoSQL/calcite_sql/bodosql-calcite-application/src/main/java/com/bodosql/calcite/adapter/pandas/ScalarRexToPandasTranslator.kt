@@ -18,7 +18,8 @@ class ScalarRexToPandasTranslator(
     typeSystem: RelDataTypeSystem,
     nodeId: Int,
     dynamicParamTypes: List<RelDataType>,
-) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, null, dynamicParamTypes) {
+    namedParamTypeMap: Map<String, RelDataType>,
+) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, null, dynamicParamTypes, namedParamTypeMap) {
     override fun isOperandScalar(operand: RexNode): Boolean {
         return true
     }

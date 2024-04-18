@@ -245,36 +245,3 @@ def test_bind_variables_datetime_having(
         check_dtype=False,
         expected_output=expected_output,
     )
-
-
-def test_named_param_interval_having(
-    bodosql_interval_types, timedelta_named_params, memory_leak_check
-):
-    """
-    Tests that having works with interval data and Timedelta named parameters
-    """
-    query = f"""
-        SELECT
-            COUNT(A)
-        FROM
-            table1
-        GROUP BY
-            B
-        HAVING
-            @a > B
-        """
-    expected_output = (
-        bodosql_interval_types["TABLE1"].groupby("B", as_index=False)["A"].count()
-    )
-    expected_output = expected_output[
-        expected_output.B < timedelta_named_params["a"]
-    ].drop(columns="B")
-    check_query(
-        query,
-        bodosql_interval_types,
-        None,
-        named_params=timedelta_named_params,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )

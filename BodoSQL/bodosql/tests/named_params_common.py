@@ -92,46 +92,10 @@ def tzaware_timestamp_named_params(request):
 
 @pytest.fixture(
     params=[
-        # Check positive values
-        (pd.Timedelta(days=1), pd.Timedelta(hours=5)),
-        pytest.param(
-            (pd.Timedelta(days=-2, hours=1), pd.Timedelta(minutes=-15)),
-            marks=pytest.mark.slow,
-        ),
-    ]
-)
-def timedelta_named_params(request):
-    """
-    Fixture for Timedelta named params. These always contain 2 values:
-    @a, and @b, which refer to elements 0 and 1 of the tuple.
-    """
-    params_tuple = request.param
-    return {"a": params_tuple[0], "b": params_tuple[1]}
-
-
-@pytest.fixture(
-    params=[
-        # Check positive values
-        (pd.DateOffset(years=1, months=2), pd.DateOffset(months=-3)),
-        (pd.DateOffset(years=-3, months=1), pd.DateOffset(years=4)),
-    ]
-)
-def dateoffset_named_params(request):
-    """
-    Fixture for Dateoffset named params. These always contain 2 values:
-    @a, and @b, which refer to elements 0 and 1 of the tuple.
-    """
-    params_tuple = request.param
-    return {"a": params_tuple[0], "b": params_tuple[1]}
-
-
-@pytest.fixture(
-    params=[
         (2, np.uint8(0)),
         (5.6, np.float32(17.7)),
         ("hello", "world"),
         (pd.Timestamp(2021, 8, 16), pd.Timestamp(year=2020, month=2, day=2, minute=4)),
-        (pd.Timedelta(days=-1), pd.Timedelta(hours=5)),
     ]
 )
 def named_params_all_column_types(request):

@@ -25,7 +25,6 @@ public class FileSystemCatalogGenTest {
         new RelationalAlgebraGenerator(
             catalog,
             schema,
-            "dummy_param_table_name",
             RelationalAlgebraGenerator.STREAMING_PLANNER,
             0,
             BatchingProperty.defaultBatchSize,
