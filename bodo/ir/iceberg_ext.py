@@ -951,7 +951,6 @@ def _gen_iceberg_reader_chunked_py(
     # Determine selected C++ columns (and thus nullable) from original Iceberg
     # table / schema, assuming that Iceberg and Parquet field ordering is the same
     # Note that this does not include any locally generated columns (row id, file list, ...)
-    # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
     out_selected_cols: list[int] = [
         out_pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
@@ -965,7 +964,9 @@ def _gen_iceberg_reader_chunked_py(
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
     str_as_dict_cols = [
-        i for i in out_selected_cols if col_typs[i] == bodo.dict_str_arr_type
+        src_idx
+        for src_idx, out_idx in zip(source_selected_cols, out_selected_cols)
+        if col_typs[out_idx] == bodo.dict_str_arr_type
     ]
     dict_str_cols_str = (
         f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"

@@ -40,7 +40,6 @@ from bodo.io.helpers import (
     sync_and_reraise_error,
 )
 from bodo.io.parquet_pio import (
-    READ_STR_AS_DICT_THRESHOLD,
     REMOTE_FILESYSTEMS,
     filter_row_groups_from_start_of_dataset,
     filter_row_groups_from_start_of_dataset_heuristic,
@@ -2365,7 +2364,9 @@ def determine_str_as_dict_columns(
     str_column_metrics = total_uncompressed_sizes_recv / total_rows
     str_as_dict: set[str] = set()
     for i, metric in enumerate(str_column_metrics):
-        if metric < READ_STR_AS_DICT_THRESHOLD:
+        # Don't import as `from ... import READ_STR_AS_DICT_THRESHOLD`
+        # because this will break a test
+        if metric < bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD:
             str_as_dict.add(str_col_names_to_check[i])
     return str_as_dict
 
