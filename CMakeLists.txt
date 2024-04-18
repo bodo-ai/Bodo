@@ -42,6 +42,28 @@ if (DEFINED ENV{BUILD_WITH_V8})
 endif()
 
 
+# ----------------------------- Download Apache Datasketches -------------------------
+include(ExternalProject)
+ExternalProject_Add(datasketches
+  GIT_REPOSITORY https://github.com/apache/datasketches-cpp.git
+  GIT_TAG 5.0.2
+  GIT_SHALLOW true
+  GIT_SUBMODULES ""
+  INSTALL_DIR /tmp/datasketches-prefix
+  CMAKE_ARGS -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/tmp/datasketches-prefix
+  # Override the install command to add DESTDIR
+  # This is necessary to work around an oddity in the RPM (but not other) package
+  # generation, as CMake otherwise picks up the Datasketch files when building
+  # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
+  # those files referenced in an "install" rule in the cmake file)
+  INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+)
+
+ExternalProject_Get_property(datasketches INSTALL_DIR)
+set(datasketches_INSTALL_DIR ${INSTALL_DIR})
+message("Source dir of datasketches = ${datasketches_INSTALL_DIR}")
+
+
 # ---------------------------- Set CMake Options -----------------------------
 # Use RelWithDebInfo Mode by Default
 cmake_print_variables(CMAKE_BUILD_TYPE)
@@ -83,6 +105,7 @@ add_compile_options(
   "-Wno-c99-designator"         # Check if still necessary?
   "-Wno-return-type-c-linkage"  # Check if still necessary?
   "-Wno-macro-redefined"        # Check if still necessary?
+  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches        
   "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
@@ -334,6 +357,8 @@ set(sources_list
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/gason/gason.cpp"
+  "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/_puffin.cpp"
 )
 
 if (DEFINED ENV{BUILD_WITH_V8})
@@ -361,6 +386,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_stream_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
+    "bodo/tests/test_theta_sketches.cpp"
+    "bodo/tests/test_puffin.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
       set(sources_list "${sources_list}"
@@ -460,6 +487,10 @@ if (DEFINED ENV{BUILD_WITH_V8})
   target_compile_definitions(ext PRIVATE "BUILD_WITH_V8=1")
 endif()
 add_dependencies(ext pyfs _hdfs tracing)
+
+
+target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
+add_dependencies(ext datasketches)
 
 
 install(TARGETS ext DESTINATION "bodo/")

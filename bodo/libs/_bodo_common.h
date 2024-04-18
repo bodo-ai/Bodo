@@ -1826,6 +1826,14 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
+// Retrieve the bodo version as a string.
+std::string get_bodo_version();
+
+// Use libzstd to decompress a blob string.
+// It is in this file for now because we don't have enough zstd functionality
+// to give it its own file.
+std::string decode_zstd(std::string blob);
+
 // C++20 magic to support "heterogeneous" access to unordered containers
 // makes the key "transparent", allowing std::string_view to be used similar to
 // std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
