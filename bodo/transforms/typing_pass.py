@@ -4043,7 +4043,9 @@ class TypingTransforms:
                 pyarrow_table_schema
             )
             # remove user provided dict-encoded columns
-            str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
+            str_columns = list(
+                set(str_columns).intersection(col_names) - set(_bodo_read_as_dict)
+            )
             # Sort the columns to ensure same order on all ranks
             str_columns = sorted(str_columns)
 
