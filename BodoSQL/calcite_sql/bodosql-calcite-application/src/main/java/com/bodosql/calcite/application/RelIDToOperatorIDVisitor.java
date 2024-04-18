@@ -14,8 +14,17 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * potentially have ill effects on caching.
  */
 public class RelIDToOperatorIDVisitor extends RelVisitor {
-  private final HashMap<Integer, Integer> relNodeIDToOperatorID = new HashMap<>();
+  private final HashMap<Integer, Integer> relNodeIDToOperatorID;
   private int counter = 0;
+
+  public RelIDToOperatorIDVisitor() {
+    relNodeIDToOperatorID = new HashMap<>();
+  }
+
+  public RelIDToOperatorIDVisitor(HashMap<Integer, Integer> existingMap) {
+    counter = existingMap.values().stream().reduce(Integer::max).get();
+    relNodeIDToOperatorID = existingMap;
+  }
 
   public Map<Integer, Integer> getIDMapping() {
     return relNodeIDToOperatorID;
