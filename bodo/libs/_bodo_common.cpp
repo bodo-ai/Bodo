@@ -8,6 +8,7 @@
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
 #include "_distributed.h"
+#include "zstd.h"
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
 // Order should match Bodo_CTypes::CTypeEnum
@@ -1554,6 +1555,40 @@ static int64_t generate_array_id_state(int64_t length) {
 
 int64_t generate_array_id(int64_t length) {
     return generate_array_id_state(length);
+}
+
+std::string get_bodo_version() {
+    // Load the module
+    PyObject* bodo_mod = PyImport_ImportModule("bodo");
+
+    // Get the version attribute
+    PyObject* version = PyObject_GetAttrString(bodo_mod, "__version__");
+    if (version == nullptr) {
+        throw std::runtime_error("Unable to retrieve bodo version");
+    }
+
+    // Convert to C++
+    const char* version_str = (char*)PyUnicode_DATA(version);
+    size_t version_length = PyUnicode_GET_LENGTH(version);
+    std::string result(version_str, version_length);
+
+    Py_DECREF(bodo_mod);
+    Py_DECREF(version);
+    return result;
+}
+
+std::string decode_zstd(std::string blob) {
+    auto const est_decomp_size =
+        ZSTD_getFrameContentSize(blob.data(), blob.size());
+    std::string decomp_buffer{};
+    decomp_buffer.resize(est_decomp_size);
+    size_t const decomp_size = ZSTD_decompress(
+        (void*)decomp_buffer.data(), est_decomp_size, blob.data(), blob.size());
+    if (decomp_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decomp_size == ZSTD_CONTENTSIZE_ERROR) {
+        throw std::runtime_error("Malformed ZSTD decompression");
+    }
+    return decomp_buffer;
 }
 
 extern "C" {

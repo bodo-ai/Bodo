@@ -61,7 +61,9 @@ reduce(uint32_t hash, uint32_t n) {
     return (uint32_t)(((uint64_t)hash * n) >> 32);
 }
 
-static inline uint64_t rotl64(uint64_t n, unsigned int c) {
+// Bodo change: Rename from rotl64 to __rotl64 to avoid ambiguity issues in the
+// compiler when importing the datasketches library.
+static inline uint64_t __rotl64(uint64_t n, unsigned int c) {
     // assumes width is a power of 2
     const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
     // assert ( (c<=mask) &&"rotate by type width or more");
@@ -198,7 +200,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline void SimdBlockFilterFixed<HashFamily>::Add(
     const uint64_t key) noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const __m256i mask = MakeMask(hash);
     __m256i* const bucket = &reinterpret_cast<__m256i*>(directory_)[bucket_idx];
     _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
@@ -230,7 +232,7 @@ void SimdBlockFilterFixed<HashFamily>::AddAll(
     for (size_t i = start; i < end; i++) {
         uint64_t key = keys[i];
         uint64_t hash = hasher_(key);
-        uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+        uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
         int block = bucket_idx >> blockShift;
         int len = tmpLen[block];
         tmp[(block << blockShift) + len] = hash;
@@ -258,7 +260,7 @@ void SimdBlockFilterFixed<HashFamily>::AddAll(
     for (size_t i = start; i < end; i++) {
         uint64_t key = static_cast<uint64_t>(keys[i]);
         uint64_t hash = hasher_(key);
-        uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+        uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
         int block = bucket_idx >> blockShift;
         int len = tmpLen[block];
         tmp[(block << blockShift) + len] = hash;
@@ -280,7 +282,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline bool SimdBlockFilterFixed<HashFamily>::Find(
     const uint64_t key) const noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const __m256i mask = MakeMask(hash);
     const __m256i bucket = reinterpret_cast<__m256i*>(directory_)[bucket_idx];
     // We should return true if 'bucket' has a one wherever 'mask' does.
@@ -371,7 +373,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline void SimdBlockFilterFixed64<HashFamily>::Add(
     const uint64_t key) noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     mask64bytes_t mask = MakeMask(hash);
     mask64bytes_t* const bucket =
         &reinterpret_cast<mask64bytes_t*>(directory_)[bucket_idx];
@@ -383,7 +385,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline bool SimdBlockFilterFixed64<HashFamily>::Find(
     const uint64_t key) const noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const mask64bytes_t mask = MakeMask(hash);
     const mask64bytes_t bucket =
         reinterpret_cast<mask64bytes_t*>(directory_)[bucket_idx];
@@ -501,7 +503,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline void SimdBlockFilterFixed<HashFamily>::Add(
     const uint64_t key) noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const uint16x8_t mask = MakeMask(hash);
     uint16x8_t bucket = directory_[bucket_idx];
     directory_[bucket_idx] = vorrq_u16(mask, bucket);
@@ -521,7 +523,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline bool SimdBlockFilterFixed<HashFamily>::Find(
     const uint64_t key) const noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const uint16x8_t mask = MakeMask(hash);
     const uint16x8_t bucket = directory_[bucket_idx];
     uint16x8_t an = vbicq_u16(mask, bucket);
@@ -600,7 +602,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline void SimdBlockFilterFixed16<HashFamily>::Add(
     const uint64_t key) noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     __m128i mask = MakeMask(hash);
     __m128i* const bucket = reinterpret_cast<__m128i*>(directory_) + bucket_idx;
     __m128i bucketvalue = _mm_loadu_si128(bucket);
@@ -612,7 +614,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline bool SimdBlockFilterFixed16<HashFamily>::Find(
     const uint64_t key) const noexcept {
     const auto hash = hasher_(key);
-    const uint32_t bucket_idx = reduce(rotl64(hash, 32), bucketCount);
+    const uint32_t bucket_idx = reduce(__rotl64(hash, 32), bucketCount);
     const __m128i mask = MakeMask(hash);
     __m128i* const bucket = reinterpret_cast<__m128i*>(directory_) + bucket_idx;
     __m128i bucketvalue = _mm_loadu_si128(bucket);
