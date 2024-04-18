@@ -72,7 +72,7 @@ struct DictBuilderMetrics {
      * @param prefix Prefix to add to the names of the metrics while reporting.
      */
     void add_to_metrics(std::vector<MetricBase>& metrics,
-                        const std::string& prefix);
+                        const std::string_view prefix);
 };
 
 /**

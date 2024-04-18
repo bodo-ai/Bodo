@@ -1393,3 +1393,90 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         assert k not in build_stage1_metrics_names, k
         assert k not in build_stage2_metrics_names, k
         assert k in build_stage3_metrics_names, k
+
+
+@pytest_mark_snowflake
+def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by Snowflake Reader.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    @bodo.jit()
+    def impl(conn):
+        bodo.libs.query_profile_collector.init()
+        total_max = 0
+
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM",
+            conn,
+            _bodo_chunksize=4000,
+            _bodo_read_as_table=True,
+            _bodo_sql_op_id=0,
+        )
+        is_last_global = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            local_max = pd.Series(bodo.hiframes.table.get_table_data(table, 1)).max()
+            total_max = max(total_max, local_max)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        arrow_reader_del(reader)
+        bodo.libs.query_profile_collector.finalize()
+        return total_max
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(conn)
+
+    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
+    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_stages" in profile_json
+    assert "0" in profile_json["operator_stages"]
+    assert "1" in profile_json["operator_stages"]
+    init_metrics = profile_json["operator_stages"]["0"]["metrics"]
+    init_metrics_names: set[str] = set([x["name"] for x in init_metrics])
+    read_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    read_metrics_names: set[str] = set([x["name"] for x in read_metrics])
+
+    if rank == 0:
+        assert "sf_data_prep_time" in init_metrics_names
+        assert "limit_nrows" in init_metrics_names
+        assert "get_ds_time" in init_metrics_names
+        assert "global_nrows_to_read" in init_metrics_names
+        assert "global_n_pieces" in init_metrics_names
+        assert "create_dict_encoding_from_strings" in init_metrics_names
+        assert "n_str_as_dict_cols" in init_metrics_names
+        assert "n_dict_builders" in read_metrics_names
+
+    assert "local_rows_to_read" in init_metrics_names
+    assert "local_n_pieces_to_read_from" in init_metrics_names
+
+    assert "to_arrow_time" in read_metrics_names
+    assert "cast_arrow_table_time" in read_metrics_names
+    assert "total_append_time" in read_metrics_names
+    assert "arrow_rb_to_bodo_time" in read_metrics_names
+    assert "ctb_pop_chunk_time" in read_metrics_names
+    assert "output_append_time" in read_metrics_names
+    assert "output_total_nrows" in read_metrics_names
+    assert "output_peak_nrows" in read_metrics_names
+    assert "dict_builders_unify_cache_id_misses" in read_metrics_names
+    assert "read_batch_total_time" in read_metrics_names

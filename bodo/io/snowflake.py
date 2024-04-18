@@ -1965,7 +1965,9 @@ def set_timestamptz_format_connection_parameter_if_required(
         )
 
 
-def execute_length_query_helper(conn: "SnowflakeConnection", query: str) -> int:
+def execute_length_query_helper(
+    conn: "SnowflakeConnection", query: str
+) -> tuple[int, int]:
     """
     Helper function for the 'get_dataset' function. This
     executes the given query that is expected to return the
@@ -1981,13 +1983,12 @@ def execute_length_query_helper(conn: "SnowflakeConnection", query: str) -> int:
 
     Returns:
         int: The number of rows returned by Snowflake.
+        int: Time (in microseconds) to execute the query in Snowflake.
     """
     cur = conn.cursor()
-    ev_query = tracing.Event("execute_length_query", is_parallel=False)
-    ev_query.add_attribute("query", query)
-    t0 = time.time()
+    t0 = time.monotonic()
     cur.execute(query)
-    sf_exec_time = time.time() - t0
+    sf_exec_time = time.monotonic() - t0
     if bodo.user_logging.get_verbose_level() >= 2:
         bodo.user_logging.log_message(
             "Snowflake Query Submission (Read)",
@@ -2005,8 +2006,7 @@ def execute_length_query_helper(conn: "SnowflakeConnection", query: str) -> int:
         num_rows, int
     ), f"Expected 'num_rows' to be an int, but got {type(num_rows)} instead."
     cur.close()
-    ev_query.finalize()
-    return num_rows
+    return num_rows, int(sf_exec_time * 1e6)
 
 
 def execute_query_helper(
@@ -2014,7 +2014,7 @@ def execute_query_helper(
     query: str,
     is_select_query: bool,
     schema: pa.Schema,
-) -> tuple[int, list["ArrowResultBatch" | FakeArrowJSONResultBatch]]:
+) -> tuple[int, list["ArrowResultBatch" | FakeArrowJSONResultBatch], int]:
     """
     Helper function for 'get_dataset' to execute a query in Snowflake
     and return the Arrow batches of the result set and number of rows
@@ -2024,19 +2024,18 @@ def execute_query_helper(
     no error synchronization. The caller must handle those.
 
     Returns:
-        num_rows (int), batches (list):
+        num_rows (int), batches (list), sf_exec_time (int):
             - Number of rows in the result set.
             - The result set in the form of list of either ArrowResultBatches
               or FakeArrowJSONResultBatch-es.
+            - Time (in microseconds) to execute the query in Snowflake.
     """
     from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 
-    ev_query = tracing.Event("execute_query", is_parallel=False)
-    ev_query.add_attribute("query", query)
     cur = conn.cursor()
-    t0 = time.time()
+    t0 = time.monotonic()
     cur.execute(query)
-    sf_exec_time = time.time() - t0
+    sf_exec_time = time.monotonic() - t0
     # Fetch the total number of rows that will be loaded globally
     num_rows: int = cur.rowcount  # type: ignore
     assert isinstance(
@@ -2052,7 +2051,6 @@ def execute_query_helper(
             + f"\nApproximate Execution Time: {sf_exec_time:.3f}s"
             + f"\nNumber of rows produced: {num_rows:,}",
         )
-    ev_query.finalize()
 
     # Get the list of result batches (this doesn't load data).
     batches: "list[ResultBatch]" = cur.get_result_batches()  # type: ignore
@@ -2086,7 +2084,7 @@ def execute_query_helper(
         )
 
     cur.close()
-    return num_rows, batches
+    return num_rows, batches, int(sf_exec_time * 1e6)
 
 
 def get_dataset(
@@ -2172,6 +2170,7 @@ def get_dataset(
     # Number of rows loaded. This is only used if we are loading
     # 0 columns
     num_rows: int = -1
+    sf_exec_time: int = 0
     batches: list[ArrowResultBatch | FakeArrowJSONResultBatch] = []
     error: Exception | None = None
 
@@ -2187,7 +2186,7 @@ def get_dataset(
         # and read is called by all ranks but we opted for that to simplify compiler work.
         if bodo.get_rank() == 0 or is_independent:
             try:
-                num_rows = execute_length_query_helper(conn, query)
+                num_rows, sf_exec_time = execute_length_query_helper(conn, query)
             except Exception as e:
                 error = e
     else:
@@ -2195,7 +2194,7 @@ def get_dataset(
         if bodo.get_rank() == 0 or is_independent:
             try:
                 # Execute query
-                num_rows, batches = execute_query_helper(
+                num_rows, batches, sf_exec_time = execute_query_helper(
                     conn, query, is_select_query, schema
                 )
             except Exception as e:
@@ -2222,7 +2221,7 @@ def get_dataset(
 
     ds = SnowflakeDataset(batches, schema, conn)
     ev.finalize()
-    return ds, num_rows
+    return ds, num_rows, sf_exec_time
 
 
 # --------------------------- snowflake_write helper functions ----------------------------

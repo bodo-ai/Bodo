@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Bodo Inc. All rights reserved.
+// Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 // Implementation of SnowflakeReader (subclass of ArrowReader) with
 // functionality that is specific to reading from Snowflake
@@ -11,6 +11,22 @@
 #include "../libs/_dict_builder.h"
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
+
+/**
+ * @brief Struct for storing SnowflakeReader metrics.
+ *
+ */
+struct SnowflakeReaderMetrics : public ArrowReaderMetrics {
+    /// Init stage
+    time_t sf_data_prep_time = 0;
+
+    /// Read stage
+    time_t to_arrow_time = 0;
+    time_t cast_arrow_table_time = 0;
+    time_t total_append_time = 0;
+    time_t arrow_rb_to_bodo_time = 0;
+    time_t ctb_pop_chunk_time = 0;
+};
 
 // -------- SnowflakeReader --------
 
@@ -57,7 +73,7 @@ class SnowflakeReader : public ArrowReader {
 
         auto empty_table = get_empty_out_table();
         this->out_batches = std::make_shared<ChunkedTableBuilder>(
-            empty_table->schema(), dict_builders, (size_t)batch_size);
+            empty_table->schema(), this->dict_builders, (size_t)batch_size);
     }
 
     ~SnowflakeReader() override { Py_XDECREF(sf_conn); }
@@ -75,6 +91,85 @@ class SnowflakeReader : public ArrowReader {
     }
 
     int64_t get_total_source_rows() const { return this->total_nrows; }
+
+    /// @brief Report SnowflakeReader specific metrics in addition to the
+    /// ArrowReader metrics.
+    void ReportInitStageMetrics() override {
+        if ((this->op_id == -1) || this->reported_init_stage_metrics) {
+            return;
+        }
+
+        std::vector<MetricBase> metrics;
+        metrics.reserve(2);
+
+        metrics.emplace_back(TimerMetric(
+            "sf_data_prep_time", this->metrics.sf_data_prep_time, true));
+
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                this->op_id, QUERY_PROFILE_INIT_STAGE_ID),
+            std::move(metrics));
+
+        ArrowReader::ReportInitStageMetrics();
+    }
+
+    /// @brief Report SnowflakeReader specific metrics in addition to the
+    /// ArrowReader metrics.
+    void ReportReadStageMetrics() override {
+        if ((this->op_id == -1) || this->reported_read_stage_metrics) {
+            return;
+        }
+
+        std::vector<MetricBase> metrics;
+        metrics.reserve(32);
+
+        metrics.emplace_back(
+            TimerMetric("to_arrow_time", this->metrics.to_arrow_time));
+        metrics.emplace_back(TimerMetric("cast_arrow_table_time",
+                                         this->metrics.cast_arrow_table_time));
+        metrics.emplace_back(
+            TimerMetric("total_append_time", this->metrics.total_append_time));
+        metrics.emplace_back(TimerMetric("arrow_rb_to_bodo_time",
+                                         this->metrics.arrow_rb_to_bodo_time));
+        metrics.emplace_back(TimerMetric("ctb_pop_chunk_time",
+                                         this->metrics.ctb_pop_chunk_time));
+
+        // Get time spent appending to, total number of rows appended to, and
+        // max reached size of the output buffer
+        if (this->out_batches != nullptr) {
+            metrics.emplace_back(TimerMetric("output_append_time",
+                                             this->out_batches->append_time));
+            MetricBase::StatValue output_total_size =
+                this->out_batches->total_size;
+            metrics.emplace_back(
+                StatMetric("output_total_nrows", output_total_size));
+            MetricBase::StatValue output_peak_nrows =
+                this->out_batches->max_reached_size;
+            metrics.emplace_back(
+                StatMetric("output_peak_nrows", output_peak_nrows));
+        }
+
+        // Dict builder metrics
+        DictBuilderMetrics dict_builder_metrics;
+        MetricBase::StatValue n_dict_builders = 0;
+        for (size_t i = 0; i < this->dict_builders.size(); i++) {
+            const auto& dict_builder = this->dict_builders[i];
+            if (dict_builder != nullptr) {
+                dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
+                n_dict_builders++;
+            }
+        }
+        metrics.emplace_back(
+            StatMetric("n_dict_builders", n_dict_builders, true));
+        dict_builder_metrics.add_to_metrics(metrics, "dict_builders_");
+
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                this->op_id, QUERY_PROFILE_READ_STAGE_ID),
+            std::move(metrics));
+
+        ArrowReader::ReportReadStageMetrics();
+    }
 
    protected:
     virtual void add_piece(PyObject* piece, int64_t num_rows,
@@ -116,6 +211,10 @@ class SnowflakeReader : public ArrowReader {
         // PyTuple_GetItem borrows a reference
         PyObject* total_len = PyTuple_GetItem(ds_tuple, 1);
         this->total_nrows = PyLong_AsLong(total_len);
+        // PyTuple_GetItem borrows a reference
+        PyObject* sf_exec_time_us_py = PyTuple_GetItem(ds_tuple, 2);
+        int64_t sf_exec_time_us = PyLong_AsLong(sf_exec_time_us_py);
+        this->metrics.sf_data_prep_time = sf_exec_time_us;
         Py_DECREF(ds_tuple);
         sf_conn = PyObject_GetAttrString(ds, "conn");
         if (sf_conn == NULL) {
@@ -153,12 +252,7 @@ class SnowflakeReader : public ArrowReader {
      */
     std::tuple<std::shared_ptr<arrow::Table>, int64_t, int64_t>
     process_result_batch(PyObject* next_piece, int64_t offset) {
-        using namespace std::chrono;
-
-        int64_t to_arrow_time = 0;
-        int64_t cast_arrow_table_time = 0;
-
-        auto start = steady_clock::now();
+        time_pt start = start_timer();
         PyObject* arrow_table_py =
             PyObject_CallMethod(next_piece, "to_arrow", "O", sf_conn);
         if (arrow_table_py == NULL && PyErr_Occurred()) {
@@ -166,10 +260,9 @@ class SnowflakeReader : public ArrowReader {
         }
 
         auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
-        auto end = steady_clock::now();
-        to_arrow_time = duration_cast<microseconds>((end - start)).count();
+        int64_t to_arrow_time = end_timer(start);
 
-        start = steady_clock::now();
+        start = start_timer();
         int64_t length =
             std::min(rows_left_to_read, table->num_rows() - offset);
         // TODO: Add check if length < 0, never possible
@@ -179,9 +272,7 @@ class SnowflakeReader : public ArrowReader {
         // TODO: Integrate within TableBuilder
         table = ArrowReader::cast_arrow_table(table, this->schema,
                                               downcast_decimal_to_double);
-        end = steady_clock::now();
-        cast_arrow_table_time =
-            duration_cast<microseconds>((end - start)).count();
+        int64_t cast_arrow_table_time = end_timer(start);
 
         Py_DECREF(next_piece);
         Py_DECREF(arrow_table_py);
@@ -193,14 +284,6 @@ class SnowflakeReader : public ArrowReader {
     // Non-Streaming Uses TableBuilder to Construct Output
     // Streaming Uses ChunkedTableBuilder to Construct Batches
     std::tuple<table_info*, bool, uint64_t> read_inner() override {
-        using namespace std::chrono;
-        // Note: These can be called in a loop by streaming.
-        // Set the parallel flag to False.
-        tracing::Event ev("reader::read_inner", false);
-        int64_t to_arrow_time = 0;
-        int64_t cast_arrow_table_time = 0;
-        int64_t append_time = 0;
-
         // In the case when we only need to perform a count(*)
         // We need to still return a table with 0 columns but
         // `this->total_nrows` rows We can return a nullptr for the table_info*,
@@ -241,6 +324,7 @@ class SnowflakeReader : public ArrowReader {
         // TODO: Handle when len(piece) < batch_size and remove this special
         // case
         if (batch_size == -1) {
+            tracing::Event ev("reader::read_inner", false);
             TableBuilder builder(this->schema, selected_fields, count,
                                  is_nullable, str_as_dict_colnames,
                                  create_dict_encoding_from_strings);
@@ -257,21 +341,22 @@ class SnowflakeReader : public ArrowReader {
 
                 auto [table, to_arrow_time_, cast_arrow_table_time_] =
                     process_result_batch(next_piece, offset);
-                to_arrow_time += to_arrow_time_;
-                cast_arrow_table_time += cast_arrow_table_time_;
+                this->metrics.to_arrow_time += to_arrow_time_;
+                this->metrics.cast_arrow_table_time += cast_arrow_table_time_;
 
-                auto start = steady_clock::now();
                 this->rows_left_to_read -= table->num_rows();
+
+                time_pt start = start_timer();
                 builder.append(table);
-                auto end = steady_clock::now();
-                append_time +=
-                    duration_cast<microseconds>((end - start)).count();
+                this->metrics.total_append_time += end_timer(start);
             }
 
-            ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
-            ev.add_attribute("total_append_time_micro", append_time);
+            ev.add_attribute("total_to_arrow_time_micro",
+                             this->metrics.to_arrow_time);
+            ev.add_attribute("total_append_time_micro",
+                             this->metrics.total_append_time);
             ev.add_attribute("total_cast_arrow_table_time_micro",
-                             cast_arrow_table_time);
+                             this->metrics.cast_arrow_table_time);
 
             auto out_table = builder.get_table();
             // TODO: This is a hack to get the correct number of rows
@@ -295,10 +380,11 @@ class SnowflakeReader : public ArrowReader {
 
             auto [table, to_arrow_time, cast_arrow_table_time] =
                 process_result_batch(next_piece, offset);
-
-            auto start = steady_clock::now();
+            this->metrics.to_arrow_time += to_arrow_time;
+            this->metrics.cast_arrow_table_time += cast_arrow_table_time;
             this->rows_left_to_read -= table->num_rows();
 
+            time_pt start = start_timer();
             // Arrow utility to zero-copy construct RecordBatches tables.
             // Tables consist of chunked arrays with inconsistent boundaries
             // Difficult to directly zero-copy
@@ -312,14 +398,15 @@ class SnowflakeReader : public ArrowReader {
             for (auto status = reader.ReadNext(&next_recordbatch);
                  status.ok() && next_recordbatch;
                  status = reader.ReadNext(&next_recordbatch)) {
+                time_pt start_arrow_to_bodo = start_timer();
                 auto bodo_table = arrow_recordbatch_to_bodo(
                     next_recordbatch, next_recordbatch->num_rows());
+                this->metrics.arrow_rb_to_bodo_time +=
+                    end_timer(start_arrow_to_bodo);
                 out_batches->UnifyDictionariesAndAppend(bodo_table,
                                                         this->dict_builders);
             }
-
-            auto end = steady_clock::now();
-            append_time = duration_cast<microseconds>((end - start)).count();
+            this->metrics.total_append_time += end_timer(start);
 
             // Explicitly Finalize ChunkedTableBuilder once all data
             // has been consumed
@@ -328,17 +415,11 @@ class SnowflakeReader : public ArrowReader {
             }
         }
 
-        ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
-        ev.add_attribute("total_append_time_micro", append_time);
-        ev.add_attribute("total_cast_arrow_table_time_micro",
-                         cast_arrow_table_time);
-
+        time_pt start_pop = start_timer();
         auto [next_batch, out_batch_size] = out_batches->PopChunk();
+        this->metrics.ctb_pop_chunk_time += end_timer(start_pop);
 
-        ev.add_attribute("out_batch_size", out_batch_size);
-        ev.finalize();
         rows_left_to_emit -= out_batch_size;
-
         bool is_last = result_batches.empty() && out_batches->empty();
         return std::make_tuple(new table_info(*next_batch), is_last,
                                out_batch_size);
@@ -377,6 +458,9 @@ class SnowflakeReader : public ArrowReader {
 
     // Empty Table for Mapping Datatypes
     std::shared_ptr<table_info> empty_out_table = nullptr;
+
+   public:
+    SnowflakeReaderMetrics metrics;
 };
 
 /**
@@ -430,6 +514,7 @@ ArrowReader* snowflake_reader_init_py_entry(
             query, conn, parallel, is_independent, arrow_schema,
             selected_fields, is_nullable, str_as_dict_cols, _only_length_query,
             _is_select_query, downcast_decimal_to_double, batch_size, op_id);
+        snowflake->ReportInitStageMetrics();
         return static_cast<ArrowReader*>(snowflake);
 
     } catch (const std::exception& e) {
