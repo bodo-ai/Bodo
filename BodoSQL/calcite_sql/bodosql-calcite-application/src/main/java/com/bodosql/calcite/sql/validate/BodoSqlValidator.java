@@ -16,12 +16,16 @@
  */
 package com.bodosql.calcite.sql.validate;
 
+import static java.util.Objects.requireNonNull;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 import com.bodosql.calcite.application.operatorTables.SelectOperatorTable;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
@@ -30,6 +34,7 @@ import org.apache.calcite.sql.JoinType;
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCharStringLiteral;
+import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlJoin;
@@ -50,12 +55,21 @@ import org.apache.calcite.sql.validate.SqlValidatorScope;
 
 /** Duplication of the CalciteSqlValidator class from Calcite. */
 public class BodoSqlValidator extends SqlValidatorImpl {
+
+  List<RelDataType> runtimeDynamicParamTypes;
+
   public BodoSqlValidator(
       SqlOperatorTable opTab,
       CalciteCatalogReader catalogReader,
       JavaTypeFactory typeFactory,
-      SqlValidator.Config config) {
+      SqlValidator.Config config,
+      List<ColumnDataTypeInfo> dynamicParamTypes) {
     super(opTab, catalogReader, typeFactory, config);
+    this.runtimeDynamicParamTypes =
+        dynamicParamTypes.stream()
+            // Note: Dynamic parameters are currently always nullable within Calcite.
+            .map(x -> typeFactory.createTypeWithNullability(x.convertToSqlType(typeFactory), true))
+            .collect(Collectors.toList());
   }
 
   @Override
@@ -304,5 +318,38 @@ public class BodoSqlValidator extends SqlValidatorImpl {
   @Override
   public SqlTypeMappingRule getTypeMappingRule() {
     return BodoSqlTypeCoercionRule.instance();
+  }
+
+  /**
+   * Override inferUnknownTypes to have dynamic parameters check use the runtime type if it is
+   * known, and it can be inferred.
+   */
+  @Override
+  protected void inferUnknownTypes(
+      RelDataType inferredType, SqlValidatorScope scope, SqlNode node) {
+    requireNonNull(inferredType, "inferredType");
+    requireNonNull(scope, "scope");
+    requireNonNull(node, "node");
+    final SqlValidatorScope newScope = scopes.get(node);
+    if (newScope != null) {
+      scope = newScope;
+    }
+    if ((node instanceof SqlDynamicParam) && inferredType.equals(unknownType)) {
+      if (this.config().typeCoercionEnabled()) {
+        // Attempt to cast the dynamic parameter based on the runtime type.
+        SqlDynamicParam dynamicParam = (SqlDynamicParam) node;
+        int index = dynamicParam.getIndex();
+        if (index < runtimeDynamicParamTypes.size()) {
+          RelDataType runtimeType = runtimeDynamicParamTypes.get(index);
+          setValidatedNodeType(node, runtimeType);
+          return;
+        } else {
+          throw newValidationError(node, BODO_SQL_RESOURCE.dynamicParamIllegal());
+        }
+      } else {
+        throw newValidationError(node, BODO_SQL_RESOURCE.dynamicParamIllegal());
+      }
+    }
+    super.inferUnknownTypes(inferredType, scope, node);
   }
 }

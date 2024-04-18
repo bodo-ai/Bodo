@@ -207,10 +207,7 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     }
 
     SqlNode operand = call.getOperandList().get(index);
-    if (operand instanceof SqlDynamicParam) {
-      // Do not support implicit type coercion for dynamic param.
-      return false;
-    }
+    // Bodo Change: We support implicit type coercion for dynamic param.
     requireNonNull(scope, "scope");
     // Check it early.
     if (!needToCast(scope, operand, targetType)) {

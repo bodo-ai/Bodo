@@ -12,6 +12,7 @@ import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.RootSchema;
+import com.bodosql.calcite.table.ColumnDataTypeInfo;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
@@ -22,10 +23,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlKind;
@@ -349,7 +352,8 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  private SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
+  private SqlNode validateQuery(String sql, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws SqlSyntaxException, SqlValidationException {
     if (this.parseNode == null) {
       parseQuery(sql);
     }
@@ -358,7 +362,7 @@ public class RelationalAlgebraGenerator {
     this.parseNode = null;
     try {
       if (isComputeKind(parseNode.getKind())) {
-        return planner.validate(parseNode);
+        return planner.validate(parseNode, dynamicParamTypes);
       } else {
         // No need to validate DDL statements. We handle
         // them separately in execution.
@@ -401,8 +405,15 @@ public class RelationalAlgebraGenerator {
   @VisibleForTesting
   public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(String sql)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
+    return getRelationalAlgebra(sql, List.of());
+  }
+
+  @VisibleForTesting
+  public Pair<RelRoot, Map<Integer, Integer>> getRelationalAlgebra(
+      String sql, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws SqlSyntaxException, SqlValidationException, RelConversionException {
     try {
-      SqlNode validatedSqlNode = validateQuery(sql);
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes);
       return sqlToRel(validatedSqlNode);
     } finally {
       planner.close();
@@ -441,33 +452,41 @@ public class RelationalAlgebraGenerator {
     return sb.toString();
   }
 
-  // Default debugDeltaTable to false
-  public String getPandasString(String sql) throws Exception {
-    return getPandasString(sql, false);
-  }
-
-  private String getDDLPandasString(SqlNode ddlNode, String originalSQL) {
+  private String getDDLPandasString(
+      SqlNode ddlNode, String originalSQL, List<ColumnDataTypeInfo> dynamicParamTypes) {
+    // Note: We can't use dynamic params in DDL yet, but we pass the types so we can generate a
+    // cleaner error message.
+    List<RelDataType> types =
+        dynamicParamTypes.stream()
+            .map(x -> x.convertToSqlType(planner.getTypeFactory()))
+            .collect(Collectors.toList());
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
         new PandasCodeGenVisitor(
             this.loweredGlobalVariables,
             originalSQL,
             this.typeSystem,
-            false,
             this.verboseLevel,
             this.streamingBatchSize,
+            types,
             Map.of());
     codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
     return codegen.getGeneratedCode();
   }
 
   private String getPandasStringFromPlan(
-      Pair<RelRoot, Map<Integer, Integer>> plan, String originalSQL, boolean debugDeltaTable) {
+      Pair<RelRoot, Map<Integer, Integer>> plan,
+      String originalSQL,
+      List<ColumnDataTypeInfo> dynamicParamTypes) {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
      */
+    List<RelDataType> types =
+        dynamicParamTypes.stream()
+            .map(x -> x.convertToSqlType(planner.getTypeFactory()))
+            .collect(Collectors.toList());
     RelNode rel = PandasUtilKt.pandasProject(plan.getLeft());
     // Create a mapping for the new root - this is a bit of a hack, and long term we probably want
     // something that's part of the RelNode itself instead of an auxillary map to make this safer.
@@ -479,9 +498,9 @@ public class RelationalAlgebraGenerator {
             this.loweredGlobalVariables,
             originalSQL,
             this.typeSystem,
-            debugDeltaTable,
             this.verboseLevel,
             this.streamingBatchSize,
+            types,
             plan.getRight());
     codegen.go(rel);
     return codegen.getGeneratedCode();
@@ -504,8 +523,14 @@ public class RelationalAlgebraGenerator {
 
   // ~~~~~~~~~~~~~PYTHON EXPOSED APIS~~~~~~~~~~~~~~
   public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
+    return getOptimizedPlanString(sql, includeCosts, List.of());
+  }
+
+  public String getOptimizedPlanString(
+      String sql, Boolean includeCosts, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws Exception {
     try {
-      SqlNode validatedSqlNode = validateQuery(sql);
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes);
       if (isComputeKind(validatedSqlNode.getKind())) {
         Pair<RelRoot, Map<Integer, Integer>> root = sqlToRel(validatedSqlNode);
         return getOptimizedPlanStringFromRoot(root, includeCosts);
@@ -521,17 +546,23 @@ public class RelationalAlgebraGenerator {
     }
   }
 
+  public PandasCodeSqlPlanPair getPandasAndPlanString(String sql, boolean includeCosts)
+      throws Exception {
+    return getPandasAndPlanString(sql, includeCosts, List.of());
+  }
+
   public PandasCodeSqlPlanPair getPandasAndPlanString(
-      String sql, boolean debugDeltaTable, boolean includeCosts) throws Exception {
+      String sql, boolean includeCosts, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws Exception {
     try {
-      SqlNode validatedSqlNode = validateQuery(sql);
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes);
       if (isComputeKind(validatedSqlNode.getKind())) {
         Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
-        String pandasString = getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+        String pandasString = getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes);
         String planString = getOptimizedPlanStringFromRoot(optimizedPlan, includeCosts);
         return new PandasCodeSqlPlanPair(pandasString, planString);
       } else {
-        String pandasString = getDDLPandasString(validatedSqlNode, sql);
+        String pandasString = getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes);
         String planString = getDDLPlanString(validatedSqlNode);
         return new PandasCodeSqlPlanPair(pandasString, planString);
       }
@@ -544,14 +575,19 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
+  public String getPandasString(String sql) throws Exception {
+    return getPandasString(sql, List.of());
+  }
+
+  public String getPandasString(String sql, List<ColumnDataTypeInfo> dynamicParamTypes)
+      throws Exception {
     try {
-      SqlNode validatedSqlNode = validateQuery(sql);
+      SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes);
       if (isComputeKind(validatedSqlNode.getKind())) {
         Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
-        return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+        return getPandasStringFromPlan(optimizedPlan, sql, dynamicParamTypes);
       } else {
-        return getDDLPandasString(validatedSqlNode, sql);
+        return getDDLPandasString(validatedSqlNode, sql, dynamicParamTypes);
       }
     } finally {
       planner.close();
@@ -589,7 +625,8 @@ public class RelationalAlgebraGenerator {
 
   public DDLExecutionResult executeDDL(String sql) throws Exception {
     try {
-      SqlNode validatedSqlNode = validateQuery(sql);
+      // DDL doesn't support dynamic parameters at this time.
+      SqlNode validatedSqlNode = validateQuery(sql, List.of());
       if (!SqlKind.DDL.contains(validatedSqlNode.getKind())) {
         throw new RuntimeException("Only DDL statements are supported by executeDDL");
       }
