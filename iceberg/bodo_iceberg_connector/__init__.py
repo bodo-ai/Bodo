@@ -25,6 +25,7 @@ from bodo_iceberg_connector.table_info import (
 from bodo_iceberg_connector.write import (
     commit_merge_cow,
     commit_write,
+    start_write,
     get_schema_with_init_field_ids,
 )
 
