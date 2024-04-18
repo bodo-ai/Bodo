@@ -44,6 +44,9 @@ public class BodoIcebergHandler {
 
   private final TableIdentifier id;
 
+  // Map of transaction hashcode to transaction instance
+  private final HashMap<Integer, Transaction> transactions;
+
   public BodoIcebergHandler(
       String connStr, String catalogType, String dbName, String tableName, String coreSitePath)
       throws URISyntaxException {
@@ -53,6 +56,8 @@ public class BodoIcebergHandler {
     // Iceberg uses Namespaces with multiple levels to represent this
     Namespace dbNamespace = Namespace.of(dbName.split("\\."));
     id = TableIdentifier.of(dbNamespace, tableName);
+
+    this.transactions = new HashMap<>();
   }
 
   /**
@@ -186,8 +191,25 @@ public class BodoIcebergHandler {
     op.set("app-id", "bodo");
   }
 
-  /** Create a new table in the DB. */
-  public void createOrReplaceTable(String fileInfoJson, Schema schema, boolean replace) {
+  /**
+   * Get the location of the table in the underlying storage
+   *
+   * @param txnID Transaction ID of transaction to get the table location
+   * @return Location of the table
+   */
+  public String getTransactionTableLocation(int txnID) {
+    Transaction txn = this.transactions.get(txnID);
+    return txn.table().location();
+  }
+
+  /**
+   * Create a transaction to create a new table in the DB.
+   *
+   * @param schema Schema of the table
+   * @param replace Whether to replace the table if it already exists
+   * @return Transaction ID
+   */
+  public Integer startCreateOrReplaceTable(Schema schema, boolean replace) {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
 
@@ -201,24 +223,36 @@ public class BodoIcebergHandler {
       txn =
           catalog.newCreateTableTransaction(id, schema, PartitionSpec.unpartitioned(), properties);
     }
+    this.transactions.put(txn.hashCode(), txn);
+    return txn.hashCode();
+  }
 
+  /** Commit a new table in the DB. */
+  public void commitCreateOrReplaceTable(int txnID, String fileInfoJson) {
+
+    Transaction txn = this.transactions.get(txnID);
     List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
     this.addData(txn.newAppend(), PartitionSpec.unpartitioned(), SortOrder.unsorted(), fileInfos);
     txn.commitTransaction();
+    this.transactions.remove(txnID);
   }
 
-  /** Appends Rows into a Pre-existing Table */
-  public void appendTable(String fileInfoJson, int schemaID) {
-    // Remove the Table instance associated with `id` from the cache
-    // So that the next load gets the current instance from the underlying catalog
-    catalog.invalidateTable(id);
-    Table table = catalog.loadTable(id);
-    if (table.schema().schemaId() != schemaID) {
-      throw new IllegalStateException("Iceberg Table has updated its schema");
-    }
+  /** Start a transaction to append data to a pre-existing table */
+  public Integer startAppendTable() {
+    Transaction txn = catalog.loadTable(id).newTransaction();
+    this.transactions.put(txn.hashCode(), txn);
+    return txn.hashCode();
+  }
+
+  /** Commit appending rows into a pre-existing table */
+  public void commitAppendTable(int txnID, String fileInfoJson, int schemaID) {
+    Transaction txn = this.transactions.get(txnID);
+    Table table = txn.table();
 
     List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
-    this.addData(table.newAppend(), table.spec(), table.sortOrder(), fileInfos);
+    this.addData(txn.table().newAppend(), table.spec(), table.sortOrder(), fileInfos);
+    txn.commitTransaction();
+    this.transactions.remove(txnID);
   }
 
   /** Merge Rows into Pre-existing Table by Copy-on-Write Rules */

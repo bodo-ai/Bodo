@@ -4437,7 +4437,7 @@ def to_sql_overload(
     func_text += (
         "        col_names = array_to_info(col_names_arr)\n"
         "        bodo.io.iceberg.iceberg_write(\n"
-        "            name, con_str, schema, table, col_names,\n"
+        "            con_str, schema, name, table, col_names,\n"
         "            if_exists, _is_parallel, pyarrow_table_schema,\n"
         "            _bodo_allow_downcasting,\n"
         "        )\n"
