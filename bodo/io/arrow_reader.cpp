@@ -1052,6 +1052,7 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
     gil_held = true;
 
     this->create_dict_encoding_from_strings = create_dict_from_string;
+    this->metrics.n_str_as_dict_cols = str_as_dict_cols.size();
 
     // 'this->str_as_dict_colnames' must be initialized before calling
     // 'get_dataset()' since it may depend on it.
@@ -1074,17 +1075,21 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
     }
 
+    time_pt start_get_ds = start_timer();
     PyObject* ds = get_dataset();
+    this->metrics.get_ds_time += end_timer(start_get_ds);
 
     // total_rows = ds.total_rows
     PyObject* total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
     this->total_rows = PyLong_AsLongLong(total_rows_py);
     Py_DECREF(total_rows_py);
+    this->metrics.global_nrows_to_read = this->total_rows;
 
     // all_pieces = ds.pieces
     PyObject* all_pieces = PyObject_GetAttrString(ds, "pieces");
+    this->metrics.global_n_pieces = PyObject_Length(all_pieces);
     ev.add_attribute("g_total_num_pieces",
-                     static_cast<size_t>(PyObject_Length(all_pieces)));
+                     static_cast<size_t>(this->metrics.global_n_pieces));
     Py_DECREF(ds);
 
     // iterate through pieces next
@@ -1121,6 +1126,7 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
                 Py_DECREF(num_rows_piece_py);
                 if (num_rows_piece > 0) {
                     this->add_piece(piece, num_rows_piece, this->count);
+                    this->metrics.local_n_pieces_to_read_from++;
                 }
                 Py_DECREF(piece);
                 count_rows += num_rows_piece;
@@ -1195,6 +1201,7 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
                     }
                     rows_added += rows_added_from_piece;
                     this->add_piece(piece, rows_added_from_piece, this->count);
+                    this->metrics.local_n_pieces_to_read_from++;
                 }
                 Py_DECREF(piece);
 
@@ -1206,6 +1213,7 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
         }
     }
     Py_DECREF(iterator);
+    this->metrics.local_rows_to_read = this->count;
 
     if (PyErr_Occurred()) {
         throw std::runtime_error("python");
@@ -1442,6 +1450,60 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
     return arrow::Table::Make(schema, new_cols, table->num_rows());
 }
 
+void ArrowReader::ReportInitStageMetrics() {
+    if ((this->op_id == -1) || this->reported_init_stage_metrics) {
+        return;
+    }
+
+    std::vector<MetricBase> metrics;
+    metrics.reserve(16);
+
+    metrics.emplace_back(
+        StatMetric("limit_nrows", this->metrics.limit_nrows, true));
+    metrics.emplace_back(
+        TimerMetric("get_ds_time", this->metrics.get_ds_time, true));
+    metrics.emplace_back(StatMetric("global_nrows_to_read",
+                                    this->metrics.global_nrows_to_read, true));
+    metrics.emplace_back(
+        StatMetric("global_n_pieces", this->metrics.global_n_pieces, true));
+    MetricBase::StatValue create_dict_from_str =
+        this->create_dict_encoding_from_strings ? 1 : 0;
+    metrics.emplace_back(StatMetric("create_dict_encoding_from_strings",
+                                    create_dict_from_str, true));
+    metrics.emplace_back(StatMetric("n_str_as_dict_cols",
+                                    this->metrics.n_str_as_dict_cols, true));
+
+    metrics.emplace_back(
+        StatMetric("local_rows_to_read", this->metrics.local_rows_to_read));
+    metrics.emplace_back(StatMetric("local_n_pieces_to_read_from",
+                                    this->metrics.local_n_pieces_to_read_from));
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                   QUERY_PROFILE_INIT_STAGE_ID),
+        std::move(metrics));
+    this->reported_init_stage_metrics = true;
+}
+
+void ArrowReader::ReportReadStageMetrics() {
+    if ((this->op_id == -1) || this->reported_read_stage_metrics) {
+        return;
+    }
+
+    std::vector<MetricBase> metrics;
+    metrics.reserve(2);
+
+    metrics.emplace_back(TimerMetric("read_batch_total_time",
+                                     this->metrics.read_batch_total_time));
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                   QUERY_PROFILE_READ_STAGE_ID),
+        std::move(metrics));
+
+    this->reported_read_stage_metrics = true;
+}
+
 /**
  * @brief Unify the given table with the dictionary builders
  * for its dictionary columns. This should only be used in the streaming case.
@@ -1502,12 +1564,14 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
         *total_rows_out = total_rows_out_;
         *is_last_out = is_last_out_;
         reader->metrics.output_row_count += total_rows_out_;
-        if (is_last_out_ && (reader->op_id != -1)) {
-            // We treat the initialization step as stage 0 and the actual reads
-            // (this) as stage 1.
-            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-                QueryProfileCollector::MakeOperatorStageID(reader->op_id, 1), 0,
-                reader->metrics.output_row_count);
+        if (is_last_out_) {
+            if (reader->op_id != -1) {
+                QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                    QueryProfileCollector::MakeOperatorStageID(
+                        reader->op_id, QUERY_PROFILE_READ_STAGE_ID),
+                    0, reader->metrics.output_row_count);
+            }
+            reader->ReportReadStageMetrics();
         }
         return table;
     } catch (const std::exception& e) {

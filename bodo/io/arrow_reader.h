@@ -22,6 +22,9 @@
 #include "../libs/_query_profile_collector.h"
 #include "../libs/_table_builder.h"
 
+#define QUERY_PROFILE_INIT_STAGE_ID 0
+#define QUERY_PROFILE_READ_STAGE_ID 1
+
 /**
  * @brief Unwrap PyArrow Schema PyObject and return the C++ value
  * NOTE: Not calling arrow::py::unwrap_schema() in ArrowReader constructor
@@ -133,7 +136,28 @@ class TableBuilder {
  *
  */
 struct ArrowReaderMetrics {
-    MetricBase::StatValue output_row_count = 0;
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+
+    /// Required
+    stat_t output_row_count = 0;
+
+    /// Init Stage
+
+    // Global
+    stat_t limit_nrows = 0;
+    time_t get_ds_time = 0;
+    stat_t global_nrows_to_read = 0;
+    stat_t global_n_pieces = 0;
+    stat_t n_str_as_dict_cols = 0;
+
+    // Local
+    stat_t local_rows_to_read = 0;
+    stat_t local_n_pieces_to_read_from = 0;
+
+    /// Read Stage
+    time_t read_batch_total_time = 0;
 };
 
 /**
@@ -170,6 +194,7 @@ class ArrowReader {
           batch_size(batch_size),
           op_id(op_id_) {
         this->set_arrow_schema(pyarrow_schema);
+        this->metrics.limit_nrows = tot_rows_to_read;
     }
 
     virtual ~ArrowReader() { release_gil(); }
@@ -208,10 +233,8 @@ class ArrowReader {
             throw std::runtime_error(
                 "ArrowReader::read_batch(): not initialized");
         }
+        ScopedTimer timer(this->metrics.read_batch_total_time);
 
-        // Note: These can be called in a loop by streaming.
-        // Set the parallel flag to False.
-        tracing::Event ev("reader::read_batch", false);
         // Handling for repeated extra calls to reader
         // TODO: Determine the general handling for the no-column case
         // (when selected_fields.empty() == true)
@@ -220,7 +243,6 @@ class ArrowReader {
         if (rows_left_to_emit == 0 && !selected_fields.empty()) {
             is_last = true;
             total_rows_out = 0;
-            ev.finalize();
 
             return new table_info(*this->get_empty_out_table());
         }
@@ -228,7 +250,6 @@ class ArrowReader {
         if (!produce_output) {
             is_last = rows_left_to_emit == 0;
             total_rows_out = 0;
-            ev.finalize();
 
             return new table_info(*this->get_empty_out_table());
         }
@@ -258,8 +279,7 @@ class ArrowReader {
         if (this->batch_size != -1) {
             throw std::runtime_error(
                 "ArrowReader::read_all(): Expected to read input all at once, "
-                "but "
-                "a batch-size is defined. Use ArrowReader::read_batch() to "
+                "but a batch-size is defined. Use ArrowReader::read_batch() to "
                 "read in batches");
         }
 
@@ -280,6 +300,22 @@ class ArrowReader {
 
         return out_table;
     }
+
+    /**
+     * @brief Report Init Stage metrics if they haven't already been reported.
+     * Note that this will only report the metrics to the QueryProfileCollector
+     * the first time it's called.
+     *
+     */
+    virtual void ReportInitStageMetrics();
+
+    /**
+     * @brief Report Read Stage metrics if they haven't already been reported.
+     * Note that this will only report the metrics to the QueryProfileCollector
+     * the first time it's called.
+     *
+     */
+    virtual void ReportReadStageMetrics();
 
    protected:
     const bool parallel;
@@ -333,7 +369,7 @@ class ArrowReader {
     /// columns that cannot contain a dictionary.
     /// NOTE: This is only used/initialized in the streaming case.
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    std::shared_ptr<ChunkedTableBuilder> out_batches;
+    std::shared_ptr<ChunkedTableBuilder> out_batches = nullptr;
 
     /// initialize reader
     void init_arrow_reader(std::span<int32_t> str_as_dict_cols = {},
@@ -390,6 +426,14 @@ class ArrowReader {
      */
     table_info* unify_table_with_dictionary_builders(
         std::shared_ptr<table_info> table);
+
+    /// Flags to check if we've already submitted the metrics for the init and
+    /// read stages to the QueryProfileCollector.
+    /// NOTE: Child classes should *not* modify this. They should instead call
+    /// ArrowReader::ReportInitStageMetrics and
+    /// ArrowReader::ReportReadStageMetrics *after* reporting their own metrics.
+    bool reported_init_stage_metrics = false;
+    bool reported_read_stage_metrics = false;
 
    private:
     // XXX needed to call into Python?

@@ -69,7 +69,7 @@ void DictBuilderMetrics::subtract_metrics(
 }
 
 void DictBuilderMetrics::add_to_metrics(std::vector<MetricBase>& metrics,
-                                        const std::string& prefix) {
+                                        const std::string_view prefix) {
     metrics.emplace_back(
         StatMetric(fmt::format("{}unify_cache_id_misses", prefix),
                    this->unify_cache_id_misses));
