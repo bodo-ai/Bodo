@@ -26,7 +26,7 @@ dependencies:
   # Restricting to 4.1.2 as new changes happened starting
   # 4.2 that has conflict with Intel MPI version the platform uses
   - mpich 4.1.2=h*
-  - mpi4py
+  - mpi4py ~= 3.1
 
   # Java
   - openjdk =11
@@ -50,6 +50,8 @@ dependencies:
   # Due to s3fs pinning aiobotocore and not regularly updating
   - s3fs>=2022.1
   - gcsfs>=2022.1
+  - aws-sdk-cpp
+  - zstd
 
   # Databases
   - pymysql

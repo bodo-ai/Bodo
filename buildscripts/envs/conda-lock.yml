@@ -15,18 +15,18 @@
 version: 1
 metadata:
   content_hash:
-    osx-arm64: 286907053d6d689e8d7b58cf1cdf21290bf7c5a4e220583e501101e553829d9e
-    osx-64: bb9cdd33efaff3d0dcfbeaa6b91acba0c18c44f5521ceb81bebf9072a5edff70
-    linux-64: 47ad3cc49b6a6842fbe0cdf17dca72ad88f6bebbfc6bd5cb35d39d2c68493644
+    osx-arm64: bee3e5332d461acac8ee614463ff5068b062817ba6ce83cf11894bdc8a779f49
+    osx-64: 8ef61507802a8b26d2b7973bb671d9ff428728a071883663be700fbf8258fe96
+    linux-64: 772e7d6e79ead4f5f7751713efb4ea92f78cd9ed0b452985dd93798c54cb06cc
   channels:
   - url: bodo.ai
     used_env_vars: []
   - url: conda-forge
     used_env_vars: []
   platforms:
-  - linux-64
-  - osx-64
   - osx-arm64
+  - osx-64
+  - linux-64
   sources:
   - main.yml
   - dev.yml
