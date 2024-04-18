@@ -505,9 +505,12 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     // Convert the type to all caps to simplify checking.
     typeName = typeName.toUpperCase(Locale.ROOT);
     final BodoSQLColumnDataType columnDataType;
-    BodoSQLColumnDataType elemType = BodoSQLColumnDataType.EMPTY;
     int precision = 0;
-    if (typeName.startsWith("NUMBER")) {
+    if (typeName.startsWith("NULL")) {
+      // This may not ever be reached but is added for completeness.
+      columnDataType = BodoSQLColumnDataType.NULL;
+      return new ColumnDataTypeInfo(columnDataType, true);
+    } else if (typeName.startsWith("NUMBER")) {
       // If we encounter a number type we need to parse it to determine the actual
       // type.
       // The type information is of the form NUMBER(PRECISION, SCALE).
@@ -572,11 +575,11 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       // TODO(njriasan): can DATETIME contain precision?
       // Most likely Snowflake should never return this type as
       // its a user alias
-      columnDataType = BodoSQLColumnDataType.DATETIME;
+      columnDataType = BodoSQLColumnDataType.TIMESTAMP_NTZ;
       precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("TIMESTAMP_NTZ")) {
-      columnDataType = BodoSQLColumnDataType.DATETIME;
+      columnDataType = BodoSQLColumnDataType.TIMESTAMP_NTZ;
       // Snowflake table types should contain precision, but UDFs may not.
       if (typeName.contains("(")) {
         // Determine the precision by parsing the type.

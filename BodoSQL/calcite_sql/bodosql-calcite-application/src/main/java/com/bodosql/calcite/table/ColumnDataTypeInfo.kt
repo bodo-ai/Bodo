@@ -115,6 +115,7 @@ data class ColumnDataTypeInfo(
                 return ColumnDataTypeInfo(BodoSQLColumnDataType.VARIANT, isNullable)
             } else {
                 return when (typeName) {
+                    SqlTypeName.NULL -> ColumnDataTypeInfo(BodoSQLColumnDataType.NULL, true)
                     SqlTypeName.TINYINT -> ColumnDataTypeInfo(BodoSQLColumnDataType.INT8, isNullable)
                     SqlTypeName.SMALLINT -> ColumnDataTypeInfo(BodoSQLColumnDataType.INT16, isNullable)
                     SqlTypeName.INTEGER -> ColumnDataTypeInfo(BodoSQLColumnDataType.INT32, isNullable)
@@ -137,7 +138,7 @@ data class ColumnDataTypeInfo(
 
                     SqlTypeName.TIMESTAMP ->
                         ColumnDataTypeInfo(
-                            BodoSQLColumnDataType.DATETIME,
+                            BodoSQLColumnDataType.TIMESTAMP_TZ,
                             isNullable,
                             relDataType.precision,
                         )

@@ -1,9 +1,11 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.application.PythonLoggers;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.sql.JDBCType;
 import java.util.List;
+import java.util.Locale;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -47,7 +49,7 @@ public interface BodoSQLColumn {
 
   enum BodoSQLColumnDataType {
     // See SqlTypeEnum in context.py
-    EMPTY(0, "EMPTY"), // / < Always null with no underlying data
+    NULL(0, "NULL"), // / < Always null with no underlying data
     INT8(1, "INT8"), // / < 1 byte signed integer
     INT16(2, "INT16"), // / < 2 byte signed integer
     INT32(3, "INT32"), // / < 4 byte signed integer
@@ -62,7 +64,7 @@ public interface BodoSQLColumn {
     BOOL8(12, "BOOL8"), // /< Boolean using one byte per value, 0 == false, else true
     DATE(13, "DATE"), // /< equivalent to datetime.date value
     TIME(14, "TIME"), // /< equivalent to bodo.Time value
-    DATETIME(15, "DATETIME"), // /< equivalent to datetime64[ns] value
+    TIMESTAMP_NTZ(15, "TIMESTAMP_NTZ"), // /< equivalent to datetime64[ns] value or pd.Timestamp
     TIMESTAMP_LTZ(16, "TIMESTAMP_LTZ"), // /< equivalent to a Timestamp with a timezone
     TIMESTAMP_TZ(17, "TIMESTAMP_TZ"), // /< equivalent to Timestamp with an offset
     TIMEDELTA(18, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
@@ -96,16 +98,20 @@ public interface BodoSQLColumn {
       return this.type_id_name;
     }
 
-    public static BodoSQLColumnDataType fromTypeId(int type_id) {
+    // Note: This is a Python facing API.
+    public static BodoSQLColumnDataType fromTypeId(int typeId) {
       for (BodoSQLColumnDataType verbosity : BodoSQLColumnDataType.values()) {
-        if (verbosity.getTypeId() == type_id) return verbosity;
+        if (verbosity.getTypeId() == typeId) return verbosity;
       }
-
-      return EMPTY;
+      throw new RuntimeException(String.format(Locale.ROOT, "Unknown type id: %d", typeId));
     }
 
-    public static BodoSQLColumnDataType fromJavaSqlType(final JDBCType typID) {
-      switch (typID) {
+    // Note: This isn't currently used but would be used if we get type information via
+    // a generic JDBC connection, so its here for completeness.
+    public static BodoSQLColumnDataType fromJavaSqlType(final JDBCType typeId) {
+      switch (typeId) {
+        case NULL:
+          return NULL;
         case BIGINT:
           return INT64;
         case BINARY:
@@ -133,17 +139,15 @@ public interface BodoSQLColumn {
         case SMALLINT:
           return INT16;
         case TIMESTAMP:
-          // TODO: Define a separate type for containing timezones
-          return DATETIME;
+          return TIMESTAMP_NTZ;
         case TIMESTAMP_WITH_TIMEZONE:
           return TIMESTAMP_LTZ;
         case TINYINT:
           return INT8;
         default:
           // We may be able to prune the column so we just output a warning.
-          // TODO: Ensure these warnings are visible to users. This probably
-          // needs a larger refactoring on the Java side.
-          LOGGER.warn(String.format("Unsupported Java SQL Type: %s", typID.getName()));
+          PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.warning(
+              String.format(Locale.ROOT, "Unsupported Java SQL Type: %s", typeId.getName()));
           return UNSUPPORTED;
       }
     }
@@ -157,6 +161,11 @@ public interface BodoSQLColumn {
         List<String> fieldNames) {
       RelDataType temp;
       switch (this) {
+        case NULL:
+          temp = typeFactory.createSqlType(SqlTypeName.NULL);
+          // Ensure NULL sets nullable to true.
+          nullable = true;
+          break;
         case INT8:
         case UINT8:
           temp = typeFactory.createSqlType(SqlTypeName.TINYINT);
@@ -191,7 +200,7 @@ public interface BodoSQLColumn {
         case TIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIME, precision);
           break;
-        case DATETIME:
+        case TIMESTAMP_NTZ:
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision);
           break;
         case TIMESTAMP_TZ:
@@ -259,6 +268,8 @@ public interface BodoSQLColumn {
     /** @return A string that represents a nullable version of this type. */
     public String getTypeString() {
       switch (this) {
+        case NULL:
+          return "None";
         case INT8:
           return "Int8";
         case INT16:
@@ -295,7 +306,7 @@ public interface BodoSQLColumn {
           return "Date";
         case TIME:
           return "Time";
-        case DATETIME:
+        case TIMESTAMP_NTZ:
           return "datetime64[ns]";
         case TIMEDELTA:
           return "timedelta64[ns]";
