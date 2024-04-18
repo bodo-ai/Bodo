@@ -3,6 +3,7 @@
 Test correctness of SQL projection queries on BodoSQL
 """
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
@@ -92,6 +93,23 @@ def test_project_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     query = "select B, C from table1"
     # TODO: Update check_dtype to be False only on differing numeric types
     check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
+
+
+def test_project_null(memory_leak_check):
+    """
+    Test select based on a simple null array.
+    """
+    expected_output = pd.DataFrame(
+        {"A": pd.array([None] * 5, dtype=pd.ArrowDtype(pa.null()))}
+    )
+    query = "select A from table1"
+    check_query(
+        query,
+        {"TABLE1": expected_output},
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
 
 
 def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):

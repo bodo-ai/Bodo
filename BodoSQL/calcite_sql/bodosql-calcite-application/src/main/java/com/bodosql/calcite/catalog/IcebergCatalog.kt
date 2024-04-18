@@ -67,7 +67,7 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
                 if ((type as TimestampType).shouldAdjustToUTC()) {
                     BodoSQLColumnDataType.TIMESTAMP_LTZ
                 } else {
-                    BodoSQLColumnDataType.DATETIME
+                    BodoSQLColumnDataType.TIMESTAMP_NTZ
                 }
             }
             Type.TypeID.STRING -> BodoSQLColumnDataType.STRING
