@@ -93,7 +93,7 @@ class GroupbyStateType(types.Type):
         self.key_inds = key_inds
         self.fnames = fnames
         self.f_in_offsets = f_in_offsets
-        self._f_in_cols = f_in_cols
+        self.f_in_cols = f_in_cols
         self.mrnf_sort_col_inds: tuple[int] = mrnf_sort_col_inds
         self.mrnf_sort_col_asc: tuple[int] = mrnf_sort_col_asc
         self.mrnf_sort_col_na: tuple[int] = mrnf_sort_col_na
@@ -139,21 +139,21 @@ class GroupbyStateType(types.Type):
         return {idx: i for i, idx in enumerate(self.build_indices)}
 
     @property
-    def f_in_cols(self) -> Tuple[int]:
+    def reordered_f_in_cols(self) -> Tuple[int]:
         """
         Because we reorder the columns to put the keys in the front, we need to
-        map the original column indices contained in _f_in_cols to the new column
+        map the original column indices contained in f_in_cols to the new column
         indices after reordering.
 
         In the case that the build_table_type hasn't been resolved yet, we just
-        return the original _f_in_cols.
+        return the original f_in_cols.
 
         Returns:
-            Tuple[int]: A tuple with the _f_in_cols after remapping
+            Tuple[int]: A tuple with the f_in_cols after remapping
         """
         if self.build_table_type == types.unknown:
-            return self._f_in_cols
-        return tuple([self._col_reorder_map[i] for i in self._f_in_cols])
+            return self.f_in_cols
+        return tuple([self._col_reorder_map[i] for i in self.f_in_cols])
 
     @cached_property
     def key_types(self) -> List[types.ArrayCompatible]:
@@ -410,10 +410,10 @@ class GroupbyStateType(types.Type):
                 assert (
                     self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
                 ), "only functions with single input column supported in streaming groupby currently"
-                # Note: Use _f_in_cols because we need the original column location before reordering
+                # Note: Use f_in_cols because we need the original column location before reordering
                 # for C++.
                 in_type = self.build_table_type.arr_types[
-                    self._f_in_cols[self.f_in_offsets[i]]
+                    self.f_in_cols[self.f_in_offsets[i]]
                 ]
                 (
                     out_type,
@@ -731,11 +731,11 @@ def init_groupby_state(
             raise BodoError(
                 "Streaming Groupby: Min Row-Number Filter cannot be combined with other aggregation functions."
             )
-        if len(output_type._f_in_cols) != (n_cols - output_type.n_keys):
+        if len(output_type.f_in_cols) != (n_cols - output_type.n_keys):
             raise BodoError(
                 "Groupby (Min Row-Number Filter): All columns except the partition columns must be in f_in_cols!"
             )
-        expected_f_in_offsets = [0, len(output_type._f_in_cols)]
+        expected_f_in_offsets = [0, len(output_type.f_in_cols)]
         if list(output_type.f_in_offsets) != expected_f_in_offsets:
             raise BodoError(
                 f"Groupby (Min Row-Number Filter): Expected f_in_offsets to be '{expected_f_in_offsets}', "
@@ -792,10 +792,10 @@ def init_groupby_state(
             # If there are any semi-structured arrays, we only support first, count and size:
             supported_nested_agg_funcs = ["first", "count", "size"]
             for idx in output_type.f_in_offsets[i : i + 1]:
-                # Note: Use _f_in_cols because we need the original column location before reordering
+                # Note: Use f_in_cols because we need the original column location before reordering
                 # for C++.
                 col_arr_type = output_type.build_table_type.arr_types[
-                    output_type._f_in_cols[output_type.f_in_offsets[idx]]
+                    output_type.f_in_cols[output_type.f_in_offsets[idx]]
                 ]
                 if (
                     isinstance(
@@ -813,7 +813,7 @@ def init_groupby_state(
                     )
     ftypes_arr = np.array(ftypes, np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
-    f_in_cols_arr = np.array(output_type.f_in_cols, np.int32)
+    f_in_cols_arr = np.array(output_type.reordered_f_in_cols, np.int32)
     n_funcs = len(output_type.fnames)
 
     mrnf_sort_asc_arr = np.array(output_type.mrnf_sort_col_asc, dtype=np.bool_)
