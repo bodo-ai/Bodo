@@ -9,8 +9,8 @@ hide:
 
 Bodo is a high performance SQL & Python compute engine that brings HPC and supercomputing techniques to data processing for the first time and combines them with database optimizations:
 
-![Image title](img/bodo-arch-light.svg#only-light){ align=right width=50% }
-![Image title](img/bodo-arch-dark.svg#only-dark){ align=right width=50% }
+![Image title](img/bodo-arch-light.svg#only-light){ align=right width=40% }
+![Image title](img/bodo-arch-dark.svg#only-dark){ align=right width=40% }
 
 - HPC compiler optimizes compute operations aggressively, leading to high efficiency for expensive compute-heavy queries.
 - HPC parallel architecture with MPI ensures maximum parallel execution efficiency and scalability.
