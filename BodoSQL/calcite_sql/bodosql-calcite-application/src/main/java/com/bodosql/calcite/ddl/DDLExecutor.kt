@@ -1,6 +1,7 @@
 package com.bodosql.calcite.ddl
 
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.rel.type.RelDataTypeFactory
 
 /**
  * General interface for executing DDL operations. Each distinct catalog table type
@@ -20,5 +21,17 @@ interface DDLExecutor {
     fun dropTable(
         tablePath: ImmutableList<String>,
         cascade: Boolean,
+    ): DDLExecutionResult
+
+    /**
+     * Describes a table in the catalog. We use a type factory to create the Bodo
+     * type consistently across all catalogs.
+     * @param tablePath The path to the table to describe.
+     * @param typeFactory The type factory to use for creating the Bodo Type.
+     * @return The result of the operation.
+     */
+    fun describeTable(
+        tablePath: ImmutableList<String>,
+        typeFactory: RelDataTypeFactory,
     ): DDLExecutionResult
 }

@@ -1600,7 +1600,7 @@ SqlNode SqlDescribe() :
    final SqlNode stmt;
 }
 {
-    <DESCRIBE> { s = span(); }
+    (<DESCRIBE> | <DESC>) { s = span(); }
     (
         LOOKAHEAD(2) (<DATABASE> | <CATALOG> | <SCHEMA>)
         id = CompoundIdentifier() {
