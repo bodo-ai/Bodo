@@ -28,7 +28,6 @@ from bodo.utils.typing import (
     raise_bodo_error,
     unwrap_typeref,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception
 
 ll.add_symbol("lateral_flatten", lateral.lateral_flatten_py_entrypt)
 
@@ -71,9 +70,7 @@ def _lateral_flatten(
             builder.module, fnty, name="lateral_flatten"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
