@@ -12,10 +12,10 @@
 
   roles:
     - common
-    - conda
-    - worker_deps
     - role: efa
       when: packer_build_name == 'aws-ebs-build'
+    - conda
+    - worker_deps
     - ipython
     - ipyparallel
     - bodo
