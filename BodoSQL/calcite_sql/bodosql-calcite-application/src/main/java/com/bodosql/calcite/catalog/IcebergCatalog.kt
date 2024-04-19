@@ -187,6 +187,38 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         }
     }
 
+    /**
+     * Estimate the number of distinct rows in a column of an Iceberg table.
+     * @param schemaPath The schema path to the table.
+     * @param tableName The name of the table.
+     * @param colIdx The column index whose NDV is being approximated.
+     * @return The approximate distinct count for the specified column of the table.
+     * If the metadata doesn't exist we return null.
+     */
+    fun estimateIcebergTableColumnDistinctCount(
+        schemaPath: ImmutableList<String>,
+        tableName: String,
+        colIdx: Int,
+    ): Double? {
+        val table = loadIcebergTable(schemaPath, tableName)
+        val currentSnapshot = table.currentSnapshot() ?: return null
+        // [BSE-3168] TODO: explore using the sequence number to check if
+        // a file is "fresh enough."
+        table.statisticsFiles().forEach { statFile ->
+            if (statFile.snapshotId() == currentSnapshot.snapshotId()) {
+                statFile.blobMetadata().forEach { blob ->
+                    if ((blob.type() == "apache-datasketches-theta-v1") &&
+                        (blob.fields().size == 1) &&
+                        (blob.fields()[0] - 1 == colIdx)
+                    ) {
+                        return blob.properties()["ndv"]?.let { ndvStr -> ndvStr.toDouble() }
+                    }
+                }
+            }
+        }
+        return null
+    }
+
     override fun getAccountName(): String? {
         return null
     }

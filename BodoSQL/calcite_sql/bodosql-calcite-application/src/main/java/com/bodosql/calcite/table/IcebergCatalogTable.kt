@@ -65,6 +65,32 @@ class IcebergCatalogTable(
         return IcebergDDLExecutor(catalog.getIcebergConnection())
     }
 
+    val columnDistinctCount =
+        com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
+            this.estimateColumnDistinctCount(
+                column,
+            )
+        }
+
+    private fun estimateColumnDistinctCount(column: Int): Double? {
+        // Currently, the metadata restriction scan does not explicitly ban requesting approximate
+        // NDV values via the metadata if they are available, but in future should be used to prevent
+        // unnecessary sampling as a fallback when NDV is not immediately available. If we do this,
+        // then such a check should be added in this location if estimateIcebergTableColumnDistinctCount
+        // fails to find an answer.
+        return catalog.estimateIcebergTableColumnDistinctCount(parentFullPath, name, column)
+    }
+
+    /**
+     * Determine the estimated approximate number of distinct values for the column. This value is
+     * memoized.
+     *
+     * @return Estimated distinct count for this table.
+     */
+    override fun getColumnDistinctCount(column: Int): Double? {
+        return columnDistinctCount.apply(column)
+    }
+
     private inner class StatisticImpl : Statistic {
         private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
 
