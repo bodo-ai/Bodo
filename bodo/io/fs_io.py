@@ -624,7 +624,7 @@ def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
     False when called on just one process independent of the others
     (usually compile-time).
     """
-    with numba.objmode(bucket_loc="unicode_type"):
+    with bodo.no_warning_objmode(bucket_loc="unicode_type"):
         bucket_loc = ""
         # The parquet read path might call this function with a list of files,
         # in which case we retrieve the region of the first one. We assume
@@ -694,9 +694,7 @@ def overload_get_storage_options_pyobject(storage_options):
     """generate a pyobject for the storage_options to pass to C++"""
     storage_options_val = get_overload_constant_dict(storage_options)
     func_text = "def impl(storage_options):\n"
-    func_text += (
-        "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
-    )
+    func_text += "  with bodo.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
     func_text += f"    storage_options_py = {str(storage_options_val)}\n"
     func_text += "  return storage_options_py\n"
     loc_vars = {}

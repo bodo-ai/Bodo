@@ -11,7 +11,6 @@ from numba.extending import intrinsic
 import bodo
 import bodo.ir.connector
 import bodo.user_logging
-from bodo import objmode
 from bodo.io import json_cpp
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
@@ -362,7 +361,7 @@ def _gen_json_reader_py(
             "bodo": bodo,
             "pd": pd,
             "np": np,
-            "objmode": objmode,
+            "objmode": bodo.no_warning_objmode,
             "check_java_installation": check_java_installation,
             "df_typeref": bodo.DataFrameType(
                 tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
