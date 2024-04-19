@@ -111,7 +111,7 @@ def convert_scalar(val):
     elif isinstance(val, datetime.date):
         return convert_date(val)
     elif isinstance(val, (bool, np.bool_)):
-        # This needs to go befor int because it may be a subclass
+        # This needs to go before int because it may be a subclass
         return convert_bool(val)
     elif isinstance(val, (np.int64, int, np.uint64, np.uint32)):
         return convert_long(val)
@@ -125,13 +125,26 @@ def convert_scalar(val):
         return convert_float64(val)
     elif isinstance(val, np.datetime64):
         return convert_dt64(val)
-    elif isinstance(val, list):
+    elif isinstance(val, list) or isinstance(val, np.ndarray):
         converted_val = [convert_scalar(v) for v in val]
         array_const_class = get_array_const_class()
-        # NOTE: Iceberg takes regular Java lists in this case, not Literal lists.
+        # NOTE: Iceberg takes regular Java lists in this case, not Literal lists
         # see predicate(Expression.Operation op, java.lang.String name,
         #               java.lang.Iterable<T> values)
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
+        return array_const_class(convert_list_to_java(converted_val))
+    elif isinstance(val, pd.core.arrays.ExtensionArray):
+        converted_val = []
+        null_vals = pd.isna(val)
+        for idx, scalar_val in enumerate(val):
+            if null_vals[idx]:
+                raise RuntimeError(
+                    "Impossible state in bodo_iceberg_connector/filter_to_java.py's convert_scalar(): null value in ExtensionArray."
+                )
+            else:
+                converted_val.append(convert_scalar(scalar_val))
+        array_const_class = get_array_const_class()
+        # NOTE: Iceberg takes regular Java lists in this case, not Literal lists. (see above note)
         return array_const_class(convert_list_to_java(converted_val))
     elif isinstance(val, bytes):
         return convert_bytes(val)
