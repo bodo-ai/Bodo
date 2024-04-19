@@ -43,13 +43,13 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
             // Right now we include false to avoid duplicating the code, but we
             // can't take the if path in general Iceberg because it can lead to
             // an infinite loop.
+            val rexBuilder: RexBuilder = builder.rexBuilder
+            val executor: RexExecutor = Util.first(call.planner.executor, RexUtil.EXECUTOR)
+            val simplify: RexSimplify = BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor)
             val partialFunction =
                 if (false) {
                     // Calculate the subset of the conjunction that is pushable versus the
                     // subset that is not.
-                    val rexBuilder: RexBuilder = builder.rexBuilder
-                    val executor: RexExecutor = Util.first(call.planner.executor, RexUtil.EXECUTOR)
-                    val simplify: RexSimplify = BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor)
                     generatePartialDerivationFunction(rexBuilder, simplify)
                 } else {
                     { x -> x }
@@ -61,14 +61,18 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                 return
             }
 
-            val (icebergConditions, pandasConditions) =
+            val (unSimplifiedIcebergConditions, pandasConditions) =
                 FilterUtils.extractPushableConditions(
                     filter.condition,
                     filter.cluster.rexBuilder,
                     ::isPushableCondition,
                     partialFunction,
                 )
-            assert(icebergConditions != null)
+            assert(unSimplifiedIcebergConditions != null)
+
+            // Simplify the conditions that can be pushed into Iceberg, because we won't handle this in
+            // later passes. The pandas conditions should be simplified in later passes.
+            val icebergConditions = simplify.simplifyUnknownAsFalse(unSimplifiedIcebergConditions)
 
             if (pandasConditions == null) {
                 // If none of the conditions cannot be pushed, then the entire filter can
@@ -78,7 +82,7 @@ abstract class AbstractIcebergFilterRule protected constructor(config: Config) :
                         filter.cluster,
                         filter.traitSet,
                         rel,
-                        filter.condition,
+                        icebergConditions!!,
                         catalogTable,
                     )
                 call.transformTo(newNode)

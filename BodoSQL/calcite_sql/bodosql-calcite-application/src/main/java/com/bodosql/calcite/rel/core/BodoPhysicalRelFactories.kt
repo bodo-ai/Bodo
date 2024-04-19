@@ -151,8 +151,14 @@ object BodoPhysicalRelFactories {
             if (input.convention == PandasRel.CONVENTION) {
                 PandasFilter.create(input.cluster, input, condition)
             } else if (input.convention == SnowflakeRel.CONVENTION) {
+                assert(
+                    input is SnowflakeRel,
+                ) { "Internal Error in Bodo Physical Builder's createFilter: input is not a SnowflakeRel. Input: $input" }
                 SnowflakeFilter.create(input.cluster, input.traitSet, input, condition, (input as SnowflakeRel).getCatalogTable())
             } else if (input.convention == IcebergRel.CONVENTION) {
+                assert(
+                    input is IcebergRel,
+                ) { "Internal Error in Bodo Physical Builder's createFilter: input is not a IcebergRel. Input: $input" }
                 IcebergFilter.create(input.cluster, input.traitSet, input, condition, (input as IcebergRel).getCatalogTable())
             } else {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
