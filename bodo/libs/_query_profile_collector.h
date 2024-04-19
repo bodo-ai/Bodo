@@ -8,6 +8,14 @@
 #include <variant>
 #include <vector>
 
+// Forward declare boost::json::object to avoid including the entire header and
+// increasing compile times
+namespace boost {
+namespace json {
+class object;
+}
+}  // namespace boost
+
 /**
  * @brief Types of operator metrics that can be collected
  */
@@ -149,6 +157,23 @@ class ScopedTimer {
     bool finalized = false;
 };
 
+struct operator_stage {
+    uint32_t operator_id;
+    uint32_t stage_id;
+
+    bool operator==(const operator_stage& other) const {
+        return operator_id == other.operator_id && stage_id == other.stage_id;
+    }
+};
+
+template <>
+struct std::hash<operator_stage> {
+    std::size_t operator()(const operator_stage& op_stage) const {
+        return std::hash<uint32_t>()(op_stage.operator_id) ^
+               std::hash<uint32_t>()(op_stage.stage_id);
+    }
+};
+
 /**
  * @brief Class to collect query profile information
  */
@@ -163,8 +188,9 @@ class QueryProfileCollector {
         return *collector_;
     }
 
-    using operator_id_t = int32_t;
-    using operator_stage_t = uint64_t;
+    using operator_id_t = uint32_t;
+    using stage_id_t = uint32_t;
+    using operator_stage_t = struct operator_stage;
     using pipeline_id_t = uint32_t;
 
     /**
@@ -177,9 +203,8 @@ class QueryProfileCollector {
      * @return operator_stage_t The operator stage ID
      */
     static operator_stage_t MakeOperatorStageID(operator_id_t operator_id,
-                                                pipeline_id_t stage_id) {
-        return (static_cast<operator_stage_t>(operator_id) << 32) |
-               static_cast<operator_stage_t>(stage_id);
+                                                stage_id_t stage_id) {
+        return (operator_stage_t){operator_id, stage_id};
     }
 
     void Init();
@@ -188,7 +213,8 @@ class QueryProfileCollector {
     void SubmitOperatorStageRowCounts(operator_stage_t op_stage,
                                       uint64_t input_row_count,
                                       uint64_t output_row_count);
-    void SubmitOperatorStageTime(operator_stage_t op_stage, uint64_t time_us);
+    void SubmitOperatorStageTime(operator_stage_t op_stage, int64_t time);
+    int64_t GetOperatorDuration(operator_id_t operator_id);
 
     // This is only required by C++ at this point since
     // only operators with states in C++ will use this.
@@ -205,10 +231,6 @@ class QueryProfileCollector {
 
     std::unordered_map<pipeline_id_t, uint64_t>& GetPipelineNumIterations() {
         return pipeline_num_iterations;
-    }
-
-    std::unordered_map<operator_stage_t, uint64_t>& GetOperatorStageTime() {
-        return operator_stage_time;
     }
 
     std::unordered_map<operator_stage_t, uint64_t>&
@@ -236,8 +258,8 @@ class QueryProfileCollector {
     // Map the pipeline ID to the number of iterations
     std::unordered_map<pipeline_id_t, uint64_t> pipeline_num_iterations;
 
-    // Timers (OperatorID, OperatorStageID (optional; default 0)) -> Time in us
-    std::unordered_map<operator_stage_t, uint64_t> operator_stage_time;
+    // Map the operator stage ID to its start and end timestamps
+    std::unordered_map<operator_stage_t, uint64_t> operator_stage_times;
 
     // Input Row Counts
     std::unordered_map<operator_stage_t, uint64_t>
@@ -250,6 +272,16 @@ class QueryProfileCollector {
     // Operator-Stage specific metrics
     std::unordered_map<operator_stage_t, std::vector<MetricBase>>
         operator_stage_metrics;
+
+    // Get a map from all seen operators ids to the largest observed stage
+    std::unordered_map<operator_id_t, stage_id_t> CollectSeenOperators();
+
+    // Generate report JSON for all pipelines
+    boost::json::object PipelinesToJson();
+    // Generate report JSON for a single operator stage
+    boost::json::object OperatorStageToJson(operator_stage_t op_stage);
+    // Generate report JSON for all stages of an operator
+    boost::json::object OperatorToJson(operator_id_t op, stage_id_t max_stage);
 
     std::unordered_map<int64_t, int64_t> initial_operator_budget;
 
