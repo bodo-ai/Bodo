@@ -3084,7 +3084,7 @@ def sklearn_linear_model_logistic_regression_overload(
 @register_jitable
 def _raise_SGD_warning(sgd_name):
     """raise a BodoWarning for distributed training with SGD instead of user algorithm."""
-    with numba.objmode:
+    with bodo.no_warning_objmode:
         warnings.warn(
             f"Data is distributed so Bodo will fit model with SGD solver optimization ({sgd_name})",
             BodoWarning,

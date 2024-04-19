@@ -7,8 +7,9 @@
 """
 import logging
 
-from numba import objmode
 from numba.extending import overload
+
+from bodo.ir.object_mode import no_warning_objmode
 
 # Create the default logger
 _default_logger = logging.getLogger("Bodo Default Logger")
@@ -55,7 +56,7 @@ def overload_get_verbose_level():
     """
 
     def impl():  # pragma: no cover
-        with objmode(verbose_level="int64"):
+        with no_warning_objmode(verbose_level="int64"):
             verbose_level = get_verbose_level()
         return verbose_level
 
@@ -143,7 +144,7 @@ def overload_log_message(header, msg):
     """
 
     def impl(header, msg):  # pragma: no cover
-        with objmode():
+        with no_warning_objmode():
             log_message(header, msg)
 
     return impl

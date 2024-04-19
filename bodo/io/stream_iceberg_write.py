@@ -287,7 +287,7 @@ def overload_start_write_wrapper(
         sort_order,
         mode,
     ):  # pragma: no cover
-        with numba.objmode(txn_id="i8", table_loc="unicode_type"):
+        with bodo.no_warning_objmode(txn_id="i8", table_loc="unicode_type"):
             (txn_id, table_loc) = wrap_start_write(
                 conn,
                 schema,
@@ -322,7 +322,7 @@ def overload_get_table_details_before_write_wrapper(
     def impl(
         table_name, conn, schema, df_pyarrow_schema, if_exists, allow_downcasting
     ):  # pragma: no cover
-        with numba.objmode(
+        with bodo.no_warning_objmode(
             table_loc="unicode_type",
             iceberg_schema_id="i8",
             partition_spec="python_list_of_heterogeneous_tuples_type",
@@ -374,7 +374,7 @@ def overload_get_empty_pylist():
     """Return an empty Python list object"""
 
     def impl():  # pragma: no cover
-        with numba.objmode(a="python_list_of_heterogeneous_tuples_type"):
+        with bodo.no_warning_objmode(a="python_list_of_heterogeneous_tuples_type"):
             a = []
         return a
 
@@ -554,7 +554,7 @@ def overload_append_py_list(pylist, to_append):
     """Append a Python list object to existing Python list object"""
 
     def impl(pylist, to_append):  # pragma: no cover
-        with numba.objmode:
+        with bodo.no_warning_objmode:
             pylist.extend(to_append)
 
     return impl
@@ -665,7 +665,7 @@ def gen_iceberg_writer_append_table_impl_inner(
             if_exists = writer["if_exists"]
             all_iceberg_files_infos = writer["iceberg_files_info"]
             txn_id = writer["txn_id"]
-            with numba.objmode(success="bool_"):
+            with bodo.no_warning_objmode(success="bool_"):
                 (
                     fnames,
                     file_size_bytes,
@@ -810,7 +810,7 @@ def overload_convert_to_snowflake_iceberg_table(
     def impl(
         snowflake_conn, iceberg_base, iceberg_volume, table_name
     ):  # pragma: no cover
-        with bodo.objmode:
+        with bodo.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
                 snowflake_conn, iceberg_base, iceberg_volume, table_name
             )

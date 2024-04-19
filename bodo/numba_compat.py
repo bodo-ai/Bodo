@@ -66,6 +66,7 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
+from bodo.ir.object_mode import warning_objmode
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
     peep_hole_fuse_dict_add_updates,
@@ -6367,3 +6368,38 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.base.BaseContext.compile_subroutine = compile_subroutine
+
+
+######### Add a warning if the objmode implementation changes since we subclass it. #########
+if _check_numba_change:  # pragma: no cover
+    # We need to check if any of the methods/functions our subclass uses have changed.
+    lines = inspect.getsource(
+        numba.core.withcontexts._ObjModeContextType.mutate_with_body
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "f8156e35de7a847fe24659297d6eb20bb9ba02bd16b6e91a1626e506063cba0f"
+    ):
+        warnings.warn(
+            "numba.core.withcontexts._ObjModeContextType.mutate_with_body has changed"
+        )
+
+    lines = inspect.getsource(numba.core.withcontexts._mutate_with_block_callee)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "7205965480743283b02bdf06f4ab397bd5d0e585f5587d51333ab87e43522bbe"
+    ):
+        warnings.warn("numba.core.withcontexts._mutate_with_block_callee has changed")
+
+    lines = inspect.getsource(numba.core.ir_utils.fill_callee_prologue)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "286d40f659b730fdef4414eb35c21da7311abeba516c348790999992941b29ca"
+    ):
+        warnings.warn("numba.core.ir_utils.fill_callee_prologue has changed")
+
+# Replace the objmode implementation
+numba.objmode = warning_objmode
+numba.core.withcontexts.objmode_context = warning_objmode
+
+######### End changes to enable adding an objmode warning #########

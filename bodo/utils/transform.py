@@ -325,6 +325,8 @@ no_side_effect_call_tuples = {
     (bodo.prange,),
     ("objmode", bodo),
     (bodo.objmode,),
+    ("no_warning_objmode", bodo),
+    (bodo.no_warning_objmode,),
     # Helper functions, inlined in astype
     ("get_label_dict_from_categories", "pd_categorial_ext", "hiframes", bodo),
     (

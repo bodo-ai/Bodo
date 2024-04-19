@@ -44,7 +44,7 @@ def overload_execute_ddl(bodo_sql_context, query, column_types):
     )
 
     def impl(bodo_sql_context, query, column_types):
-        with bodo.objmode(output=output_type):
+        with bodo.no_warning_objmode(output=output_type):
             output = execute_ddl_objmode(bodo_sql_context, query)
         return output
 
