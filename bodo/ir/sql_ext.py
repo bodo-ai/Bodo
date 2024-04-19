@@ -34,7 +34,6 @@ import bodo
 import bodo.ir.connector
 import bodo.ir.filter as bif
 import bodo.user_logging
-from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
@@ -904,25 +903,25 @@ def sql_remove_dead_column(sql_node: SqlReader, column_live_map, equiv_vars, typ
     )
 
 
-numba.parfors.array_analysis.array_analysis_extensions[SqlReader] = (
-    bodo.ir.connector.connector_array_analysis
-)
-distributed_analysis.distributed_analysis_extensions[SqlReader] = (
-    bodo.ir.connector.connector_distributed_analysis
-)
+numba.parfors.array_analysis.array_analysis_extensions[
+    SqlReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    SqlReader
+] = bodo.ir.connector.connector_distributed_analysis
 typeinfer.typeinfer_extensions[SqlReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[SqlReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[SqlReader] = remove_dead_sql
-numba.core.analysis.ir_extension_usedefs[SqlReader] = (
-    bodo.ir.connector.connector_usedefs
-)
+numba.core.analysis.ir_extension_usedefs[
+    SqlReader
+] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[SqlReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[SqlReader] = (
-    bodo.ir.connector.apply_copies_connector
-)
-ir_utils.build_defs_extensions[SqlReader] = (
-    bodo.ir.connector.build_connector_definitions
-)
+ir_utils.apply_copy_propagate_extensions[
+    SqlReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    SqlReader
+] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[SqlReader] = sql_distributed_run
 remove_dead_column_extensions[SqlReader] = sql_remove_dead_column
 ir_extension_table_column_use[SqlReader] = bodo.ir.connector.connector_table_column_use
@@ -936,7 +935,7 @@ compiled_funcs = []
 
 @numba.njit
 def sqlalchemy_check():  # pragma: no cover
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         sqlalchemy_check_()
 
 
@@ -955,7 +954,7 @@ def sqlalchemy_check_():  # pragma: no cover
 @numba.njit
 def pymysql_check():
     """MySQL Check that user has pymysql installed."""
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         pymysql_check_()
 
 
@@ -975,7 +974,7 @@ def pymysql_check_():  # pragma: no cover
 @numba.njit
 def cx_oracle_check():
     """Oracle Check that user has cx_oracle installed."""
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         cx_oracle_check_()
 
 
@@ -995,7 +994,7 @@ def cx_oracle_check_():  # pragma: no cover
 @numba.njit
 def psycopg2_check():  # pragma: no cover
     """PostgreSQL Check that user has psycopg2 installed."""
-    with numba.objmode():
+    with bodo.no_warning_objmode():
         psycopg2_check_()
 
 
@@ -1454,7 +1453,7 @@ def _gen_sql_reader_py(
             {
                 "sqlalchemy_check": sqlalchemy_check,
                 "pd": pd,
-                "objmode": objmode,
+                "objmode": bodo.no_warning_objmode,
                 "bcast_scalar": bcast_scalar,
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,

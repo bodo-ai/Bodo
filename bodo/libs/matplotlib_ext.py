@@ -679,7 +679,7 @@ def overload_savefig(
         pad_inches=0.1,
         metadata=None,
     ):  # pragma: no cover
-        with bodo.objmode():
+        with bodo.no_warning_objmode():
             plt.savefig(
                 fname=fname,
                 dpi=dpi,
@@ -731,7 +731,7 @@ def overload_subplots(
         subplot_kw=None,
         gridspec_kw=None,
     ):
-        with numba.objmode(axes="{type_name}"):
+        with bodo.no_warning_objmode(axes="{type_name}"):
             axes = fig.subplots(
                 nrows=nrows,
                 ncols=ncols,
@@ -746,7 +746,7 @@ def overload_subplots(
         return axes
     """
     loc_vars = {}
-    exec(func_text, {"numba": numba, "np": np}, loc_vars)
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 

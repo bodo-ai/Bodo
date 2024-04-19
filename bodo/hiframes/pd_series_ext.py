@@ -1199,7 +1199,7 @@ def to_csv_overload(
             _bodo_file_prefix="part-",
             _is_parallel=False,
         ):  # pragma: no cover
-            with numba.objmode(D="unicode_type"):
+            with bodo.no_warning_objmode(D="unicode_type"):
                 D = series.to_csv(
                     None,
                     sep,
@@ -1257,7 +1257,7 @@ def to_csv_overload(
             header &= (bodo.libs.distributed_api.get_rank() == 0) | _csv_output_is_dir(
                 unicode_to_utf8(path_or_buf)
             )
-        with numba.objmode(D="unicode_type"):
+        with bodo.no_warning_objmode(D="unicode_type"):
             D = series.to_csv(
                 None,
                 sep,

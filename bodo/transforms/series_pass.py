@@ -3332,7 +3332,7 @@ class SeriesPass:
             setattr(types, type_name, output_type)
 
         func_text = f"def helper_{func_name}({full_header}):\n"
-        func_text += f"    with numba.objmode(res='{type_name}'):\n"
+        func_text += f"    with bodo.no_warning_objmode(res='{type_name}'):\n"
         if method_var:
             func_text += f"        res = {method_var}.{func_name}({arg_names})\n"
         else:
@@ -3346,7 +3346,7 @@ class SeriesPass:
 
         func_text += f"    return res\n"
         loc_vars = {}
-        exec(func_text, {"matplotlib": matplotlib, "numba": numba, "np": np}, loc_vars)
+        exec(func_text, {"matplotlib": matplotlib, "bodo": bodo, "np": np}, loc_vars)
         helper_func = numba.njit(loc_vars[f"helper_{func_name}"])
         return helper_func
 
@@ -3371,7 +3371,9 @@ class SeriesPass:
             func_text += "    return format_func(string, {})\n".format(header_args)
 
             format_func_text = "def format_func(string, {}):\n".format(header_args)
-            format_func_text += "    with numba.objmode(res='unicode_type'):\n"
+            format_func_text += (
+                "    with bodo.no_warning_objmode(res='unicode_type'):\n"
+            )
             format_func_text += "        res = string.format({})\n".format(arg_names)
             format_func_text += "    return res\n"
 
@@ -3428,7 +3430,7 @@ class SeriesPass:
             func_text += "    return format_func(logger, {})\n".format(header_args)
 
             format_func_text = "def format_func(logger, {}):\n".format(header_args)
-            format_func_text += "    with numba.objmode():\n"
+            format_func_text += "    with bodo.no_warning_objmode():\n"
             format_func_text += "        logger.{}({})\n".format(func_name, arg_names)
 
             loc_vars = {}

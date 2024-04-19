@@ -2214,6 +2214,7 @@ def _gen_objmode_overload(
         extra_indent = "    "
     else:
         extra_indent = ""
+    # TODO: Should we add a parameter to avoid the objmode warning?
     func_text += f"        {extra_indent}with numba.objmode(res='{type_name}'):\n"
     if is_function:
         func_text += f"            {extra_indent}res = {call_str}({args})\n"
@@ -2888,7 +2889,7 @@ if PYVERSION >= (3, 12):
             message, category=None, stacklevel=1, source=None, skip_file_prefixes=None
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                with bodo.objmode:
+                with bodo.no_warning_objmode:
                     if skip_file_prefixes is None:
                         skip_file_prefixes = ()
                     warnings.warn(

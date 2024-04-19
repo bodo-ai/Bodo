@@ -158,7 +158,7 @@ def initialize_horovod(framework):  # pragma: no cover
 def start(framework):  # pragma: no cover
     """Called when user wants to begin DL. Will initialize Horovod if not
     done so already"""
-    with numba.objmode:
+    with bodo.no_warning_objmode:
         initialize_horovod(framework)
 
 
@@ -166,7 +166,7 @@ def start(framework):  # pragma: no cover
 def end():  # pragma: no cover
     """Called when user wants to end DL. This causes ranks that are not
     participanting in DL (e.g. non-gpu ranks to idle wait for the other workers)"""
-    with numba.objmode:
+    with bodo.no_warning_objmode:
         end_py()
 
 
@@ -211,7 +211,7 @@ def _prepare_data_get_gpu_ranks():  # pragma: no cover
 def prepare_data(data):  # pragma: no cover
     """This function is called by the user to redistribute the data to
     GPU ranks and initialize horovod"""
-    with numba.objmode(gpu_ranks="int32[:]"):
+    with bodo.no_warning_objmode(gpu_ranks="int32[:]"):
         gpu_ranks = _prepare_data_get_gpu_ranks()
 
     if len(gpu_ranks) > 0:

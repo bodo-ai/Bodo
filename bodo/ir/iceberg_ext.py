@@ -795,14 +795,14 @@ def overload_get_filters_pyobject(filters_str, var_tup):
     if len(var_tup):
         func_text += f"  {var_unpack}, = var_tup\n"
     func_text += (
-        "  with objmode(filters_py='parquet_predicate_type'):\n"
+        "  with bodo.no_warning_objmode(filters_py='parquet_predicate_type'):\n"
         f"    filters_py = {filter_str_val}\n"
         "  return filters_py\n"
     )
 
     loc_vars = {}
     glbs = globals().copy()
-    glbs["objmode"] = numba.objmode
+    glbs["bodo"] = bodo
     glbs["bic"] = bic
     exec(func_text, glbs, loc_vars)
 
@@ -1005,7 +1005,7 @@ def _gen_iceberg_reader_chunked_py(
     glbls = globals().copy()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
         {
-            "objmode": numba.objmode,
+            "objmode": bodo.no_warning_objmode,
             "unicode_to_utf8": unicode_to_utf8,
             "iceberg_pq_reader_init_py_entry": iceberg_pq_reader_init_py_entry,
             "get_filters_pyobject": get_filters_pyobject,
@@ -1264,7 +1264,7 @@ def _gen_iceberg_reader_py(
     glbls.update(
         {
             "bodo": bodo,
-            "objmode": numba.objmode,
+            "objmode": bodo.no_warning_objmode,
             f"py_table_type_{call_id}": py_table_type,
             "index_col_typ": index_column_type,
             f"table_idx_{call_id}": table_idx,
@@ -1296,29 +1296,29 @@ def _gen_iceberg_reader_py(
     return jit_func
 
 
-numba.parfors.array_analysis.array_analysis_extensions[IcebergReader] = (
-    bodo.ir.connector.connector_array_analysis
-)
-distributed_analysis.distributed_analysis_extensions[IcebergReader] = (
-    bodo.ir.connector.connector_distributed_analysis
-)
+numba.parfors.array_analysis.array_analysis_extensions[
+    IcebergReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    IcebergReader
+] = bodo.ir.connector.connector_distributed_analysis
 typeinfer.typeinfer_extensions[IcebergReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[IcebergReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[IcebergReader] = remove_dead_iceberg
-numba.core.analysis.ir_extension_usedefs[IcebergReader] = (
-    bodo.ir.connector.connector_usedefs
-)
-ir_utils.copy_propagate_extensions[IcebergReader] = (
-    bodo.ir.connector.get_copies_connector
-)
-ir_utils.apply_copy_propagate_extensions[IcebergReader] = (
-    bodo.ir.connector.apply_copies_connector
-)
-ir_utils.build_defs_extensions[IcebergReader] = (
-    bodo.ir.connector.build_connector_definitions
-)
+numba.core.analysis.ir_extension_usedefs[
+    IcebergReader
+] = bodo.ir.connector.connector_usedefs
+ir_utils.copy_propagate_extensions[
+    IcebergReader
+] = bodo.ir.connector.get_copies_connector
+ir_utils.apply_copy_propagate_extensions[
+    IcebergReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    IcebergReader
+] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[IcebergReader] = iceberg_distributed_run
 remove_dead_column_extensions[IcebergReader] = iceberg_remove_dead_column
-ir_extension_table_column_use[IcebergReader] = (
-    bodo.ir.connector.connector_table_column_use
-)
+ir_extension_table_column_use[
+    IcebergReader
+] = bodo.ir.connector.connector_table_column_use

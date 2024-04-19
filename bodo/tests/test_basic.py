@@ -1,6 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import fractions
 import random
+import warnings
 
 import numba
 import numpy as np
@@ -17,7 +18,7 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     dist_IR_contains,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_assign, is_expr
 
 
@@ -1366,3 +1367,50 @@ def test_parfor_empty_entry_block(memory_leak_check):
     np.testing.assert_array_equal(
         impl((A,), len(A), b, c, d, e, f, g), np.array([False, False, False])
     )
+
+
+def test_objmode_warning(memory_leak_check):
+    """Test that numba.objmode and bodo.objmode raise a warning when used
+    and that bodo.no_warning_objmode does not."""
+
+    def g():
+        return 1
+
+    @bodo.jit
+    def impl1():
+        with numba.objmode(a="int64"):
+            a = g()
+        return a
+
+    @bodo.jit
+    def impl2():
+        with bodo.objmode(a="int64"):
+            a = g()
+        return a
+
+    @bodo.jit
+    def impl3():
+        with bodo.no_warning_objmode(a="int64"):
+            a = g()
+        return a
+
+    old_developer_mode = numba.core.config.DEVELOPER_MODE
+    try:
+        numba.core.config.DEVELOPER_MODE = True
+        with pytest.warns(
+            BodoWarning,
+            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
+        ):
+            assert impl1() == 1, "Incorrect output with numba.objmode"
+
+        with pytest.warns(
+            BodoWarning,
+            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
+        ):
+            assert impl2() == 1, "Incorrect output with bodo.objmode"
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BodoWarning)
+            assert impl3() == 1, "Incorrect output with bodo.no_warning_objmode"
+    finally:
+        numba.core.config.DEVELOPER_MODE = old_developer_mode

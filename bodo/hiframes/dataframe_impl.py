@@ -5868,7 +5868,7 @@ def impl(
     storage_options=None,
     _bodo_df_type=None,
 ):
-    with numba.objmode(df="{t_name}"):
+    with bodo.no_warning_objmode(df="{t_name}"):
         df = pd.read_excel(
             io=io,
             sheet_name=sheet_name,

@@ -12,7 +12,6 @@ from typing import Any, Optional
 from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 import pyarrow  # noqa
 import pyarrow as pa  # noqa
@@ -176,13 +175,13 @@ def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
     if len(var_tup):
         func_text += f"  {var_unpack}, = var_tup\n"
-    func_text += "  with numba.objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
+    func_text += "  with bodo.no_warning_objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
     func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
     func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
     func_text += "  return (dnf_filters_py, expr_filters_py)\n"
     loc_vars = {}
     glbs = globals()
-    glbs["numba"] = numba
+    glbs["bodo"] = bodo
     exec(func_text, glbs, loc_vars)
     return loc_vars["impl"]
 
@@ -198,14 +197,12 @@ def overload_get_filter_scalars_pyobject(var_tup):
     a filter to pass to C++.
     """
     func_text = "def impl(var_tup):\n"
-    func_text += (
-        "  with numba.objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
-    )
+    func_text += "  with bodo.no_warning_objmode(filter_scalars_py='parquet_filter_scalars_list_type'):\n"
     func_text += f"    filter_scalars_py = [(f'f{{i}}', var_tup[i]) for i in range({len(var_tup)})]\n"
     func_text += "  return filter_scalars_py\n"
     loc_vars = {}
     glbs = globals()
-    glbs["numba"] = numba
+    glbs["bodo"] = bodo
     exec(func_text, glbs, loc_vars)
     return loc_vars["impl"]
 

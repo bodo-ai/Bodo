@@ -147,7 +147,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
 @numba.njit
 def get_join_cond_addr(name):
     """Resolve address of cfunc given by its symbol name"""
-    with numba.objmode(addr="int64"):
+    with bodo.no_warning_objmode(addr="int64"):
         # This loads the function pointer at runtime, preventing
         # hardcoding the address into the IR.
         addr = join_gen_cond_cfunc_addr[name]

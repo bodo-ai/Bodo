@@ -142,7 +142,7 @@ def format_iceberg_conn_njit(conn_str):  # pragma: no cover
     Returns:
         str: connection string without the iceberg(+*?) prefix
     """
-    with numba.objmode(conn_str="unicode_type"):
+    with bodo.no_warning_objmode(conn_str="unicode_type"):
         conn_str = format_iceberg_conn(conn_str)
     return conn_str
 
@@ -3176,7 +3176,7 @@ def iceberg_write(
     # Supporting REPL requires some refactor in the parquet write infrastructure,
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed dataframes"
-    with numba.objmode(
+    with bodo.no_warning_objmode(
         txn_id="i8",
         table_loc="unicode_type",
         iceberg_schema_id="i8",
@@ -3232,7 +3232,7 @@ def iceberg_write(
         output_pyarrow_schema,
     )
 
-    with numba.objmode(success="bool_"):
+    with bodo.no_warning_objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
         # Send file names, metrics and schema to Iceberg connector
         success = register_table_write(
@@ -3363,7 +3363,7 @@ def iceberg_merge_cow(
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed dataframes"
 
-    with numba.objmode(
+    with bodo.no_warning_objmode(
         already_exists="bool_",
         table_loc="unicode_type",
         partition_spec="python_list_of_heterogeneous_tuples_type",
@@ -3403,7 +3403,7 @@ def iceberg_merge_cow(
         output_pyarrow_schema,
     )
 
-    with numba.objmode(success="bool_"):
+    with bodo.no_warning_objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector
