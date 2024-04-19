@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -330,14 +331,19 @@ public class RelationalAlgebraGenerator {
     setupPlanner(defaultSchemas, typeSystem);
   }
 
+  // TODO: Determine a better location for this.
+  public static final EnumSet<SqlKind> DESCRIBE_SET =
+      EnumSet.of(SqlKind.DESCRIBE_TABLE, SqlKind.DESCRIBE_SCHEMA);
+
   /**
    * Return if a SQLKind generates compute. This includes CREATE_TABLE because of CTAS right now.
    *
    * @param kind The SQLKind to check
    * @return True if the SQLKind generates compute.
    */
-  private boolean isComputeKind(SqlKind kind) {
-    return !SqlKind.DDL.contains(kind) || (kind == SqlKind.CREATE_TABLE);
+  public static boolean isComputeKind(SqlKind kind) {
+    return (!DESCRIBE_SET.contains(kind) && !SqlKind.DDL.contains(kind))
+        || (kind == SqlKind.CREATE_TABLE);
   }
 
   /**
@@ -669,7 +675,7 @@ public class RelationalAlgebraGenerator {
     try {
       // DDL doesn't support dynamic or named parameters at this time.
       SqlNode validatedSqlNode = validateQuery(sql, List.of(), Map.of());
-      if (!SqlKind.DDL.contains(validatedSqlNode.getKind())) {
+      if (RelationalAlgebraGenerator.isComputeKind(validatedSqlNode.getKind())) {
         throw new RuntimeException("Only DDL statements are supported by executeDDL");
       }
       return planner.executeDDL(validatedSqlNode);

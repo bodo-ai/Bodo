@@ -1346,8 +1346,12 @@ class BodoSQLContext:
                 result = generator.executeDDL(sql)
                 # Convert the output to a DataFrame.
                 column_names = [x for x in result.getColumnNames()]
-                data = [pd.array(column) for column in result.getColumnValues()]
-                result = pd.DataFrame(data=data, columns=column_names)
+                data = [
+                    pd.array(column, dtype=object)
+                    for column in result.getColumnValues()
+                ]
+                df_dict = {column_names[i]: data[i] for i in range(len(column_names))}
+                result = pd.DataFrame(df_dict)
             except Exception as e:
                 error = error_to_string(e)
         result = comm.bcast(result)

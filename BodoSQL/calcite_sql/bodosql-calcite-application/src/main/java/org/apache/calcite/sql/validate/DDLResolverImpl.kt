@@ -1,5 +1,6 @@
 package org.apache.calcite.sql.validate
 
+import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.schema.BodoSqlSchema
 import com.bodosql.calcite.schema.CatalogSchema
@@ -12,6 +13,7 @@ import com.google.common.collect.ImmutableList
 import java.lang.Exception
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
+import org.apache.calcite.sql.SqlDescribeTable
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.util.Util
@@ -47,10 +49,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * Executes a DDL operation.
      */
     override fun executeDDL(node: SqlNode): DDLExecutionResult {
-        assert (SqlKind.DDL.contains(node.kind)) { "Node is not a DDL operation: $node" }
+        assert (!RelationalAlgebraGenerator.isComputeKind(node.kind)) { "Node is not a DDL operation: $node" }
         return when (node.kind) {
             SqlKind.DROP_TABLE -> {
-                return executeDropTable(node as SqlDropTable)
+                executeDropTable(node as SqlDropTable)
+            }
+            SqlKind.DESCRIBE_TABLE -> {
+                executeDescribeTable(node as SqlDescribeTable)
             }
             else -> {
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
@@ -82,6 +87,19 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             } else {
                 throw RuntimeException("Table $tableName does not exist or not authorized to drop.")
             }
+        }
+    }
+
+    private fun executeDescribeTable(node: SqlDescribeTable): DDLExecutionResult {
+        val tablePath = node.table.names
+        val tableName = tablePath.joinToString(separator = ".")
+        try {
+            val table = deriveTable(tablePath)
+            val catalogTable = validateTable(table, node.kind, tableName)
+            // Perform the actual drop table operation
+            return catalogTable.ddlExecutor.describeTable(catalogTable.fullPath, definitionValidator.typeFactory)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
         }
     }
 

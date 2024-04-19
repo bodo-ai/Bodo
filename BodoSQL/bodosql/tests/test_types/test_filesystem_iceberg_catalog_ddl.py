@@ -227,3 +227,49 @@ def test_drop_table_not_found_if_exists(
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_describe_table(
+    describe_keyword, iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can describe an iceberg
+    table.
+    """
+    spark = get_spark()
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+
+    query = f'{describe_keyword} TABLE "{db_schema}"."{table_name}"'
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    bodo_output = bc.execute_ddl(query)
+    expected_output = pd.DataFrame(
+        {
+            "NAME": ["A"],
+            "TYPE": ["BIGINT"],
+            "KIND": ["COLUMN"],
+            "NULL?": ["Y"],
+            "DEFAULT": [None],
+            "PRIMARY_KEY": ["N"],
+            "UNIQUE_KEY": ["N"],
+        }
+    )
+    passed = _test_equal_guard(bodo_output, expected_output)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Describe table test failed"
+
+
+def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
+    """
+    Verify that describe table compiles in JIT.
+    """
+    query = f"DESCRIBE TABLE ANY_TABLE"
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    bc.validate_query_compiles(query)

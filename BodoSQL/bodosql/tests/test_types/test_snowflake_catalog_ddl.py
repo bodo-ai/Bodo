@@ -240,3 +240,69 @@ def test_drop_table_not_found_if_exists(test_db_snowflake_catalog, memory_leak_c
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_describe_table(describe_keyword, test_db_snowflake_catalog, memory_leak_check):
+    """Tests that describe table works on a Snowflake table."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl(
+        f"{describe_keyword} TABLE SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM"
+    )
+    expected_output = pd.DataFrame(
+        {
+            "NAME": [
+                "L_ORDERKEY",
+                "L_PARTKEY",
+                "L_SUPPKEY",
+                "L_LINENUMBER",
+                "L_QUANTITY",
+                "L_EXTENDEDPRICE",
+                "L_DISCOUNT",
+                "L_TAX",
+                "L_RETURNFLAG",
+                "L_LINESTATUS",
+                "L_SHIPDATE",
+                "L_COMMITDATE",
+                "L_RECEIPTDATE",
+                "L_SHIPINSTRUCT",
+                "L_SHIPMODE",
+                "L_COMMENT",
+            ],
+            "TYPE": [
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "VARCHAR(1)",
+                "VARCHAR(1)",
+                "DATE",
+                "DATE",
+                "DATE",
+                "VARCHAR(25)",
+                "VARCHAR(10)",
+                "VARCHAR(44)",
+            ],
+            "KIND": ["COLUMN"] * 16,
+            "NULL?": ["N"] * 16,
+            "DEFAULT": [None] * 16,
+            "PRIMARY_KEY": ["N"] * 16,
+            "UNIQUE_KEY": ["N"] * 16,
+        }
+    )
+    passed = _test_equal_guard(bodo_output, expected_output)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Describe table test failed"
+
+
+def test_describe_table_compiles_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that describe table compiles in JIT."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query = "DESCRIBE TABLE SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM"
+    bc.validate_query_compiles(query)

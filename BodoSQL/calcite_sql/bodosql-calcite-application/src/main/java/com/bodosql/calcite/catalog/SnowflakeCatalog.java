@@ -59,6 +59,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -2014,21 +2015,24 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   public class SnowflakeJDBCExecutor implements DDLExecutor {
     private SnowflakeJDBCExecutor() {}
 
+    private @NotNull String generateSnowflakeObjectString(@NotNull ImmutableList<String> path) {
+      return String.join(
+          ".", path.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+    }
+
     @NotNull
     @Override
     public DDLExecutionResult dropTable(@NotNull ImmutableList<String> tablePath, boolean cascade) {
-      String tableName =
-          String.join(
-              ".",
-              tablePath.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+      String tableName = generateSnowflakeObjectString(tablePath);
       String query =
           String.format(
               Locale.ROOT, "DROP TABLE %s %s", tableName, cascade ? " CASCADE" : "RESTRICT");
       try {
         ResultSet output = executeSnowflakeQuery(query);
         List<List<String>> columnValues = new ArrayList();
+        columnValues.add(new ArrayList<>());
         while (output.next()) {
-          columnValues.add(List.of(output.getString(1)));
+          columnValues.get(0).add(output.getString(1));
         }
         return new DDLExecutionResult(List.of("STATUS"), columnValues);
       } catch (SQLException e) {
@@ -2036,6 +2040,45 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             String.format(
                 Locale.ROOT,
                 "Unable to drop Snowflake table %s. Error: %s",
+                tableName,
+                e.getMessage()));
+      }
+    }
+
+    @NotNull
+    @Override
+    public DDLExecutionResult describeTable(
+        @NotNull ImmutableList<String> tablePath, @NotNull RelDataTypeFactory typeFactory) {
+      String tableName = generateSnowflakeObjectString(tablePath);
+      String query = String.format(Locale.ROOT, "DESCRIBE TABLE %s", tableName);
+      List<List<String>> columnValues = new ArrayList();
+      List<String> columnNames =
+          List.of("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          // We keep the first 7 columns, but we do custom processing
+          // for types to unify our output.
+          String columnType = output.getString(2);
+          // Note We don't care about nullability
+          ColumnDataTypeInfo bodoColumnTypeInfo = snowflakeTypeNameToTypeInfo(columnType, true);
+          RelDataType type = bodoColumnTypeInfo.convertToSqlType(typeFactory);
+          columnValues.get(1).add(type.toString());
+          // Other columns are just copied over.
+          columnValues.get(0).add(output.getString(1));
+          for (int i = 2; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(i + 1));
+          }
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to describe Snowflake table %s. Error: %s",
                 tableName,
                 e.getMessage()));
       }

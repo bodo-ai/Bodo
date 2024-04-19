@@ -34,12 +34,6 @@ import org.apache.iceberg.types.Types.TimestampType
  * be explicitly calling the public Iceberg API during development.
  */
 abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalog) : BodoSQLCatalog {
-    // All Iceberg Timestamp columns have precision 6
-    private val icebergDatetimePrecision = 6
-
-    // Iceberg UUID is defined as 16 bytes
-    private val icebergUUIDPrecision = 16
-
     /**
      * Load an Iceberg table from the connector via its path information.
      * @param schemaPath The schema path to the table.
@@ -52,83 +46,6 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     ): Table {
         val tableIdentifier = tablePathToTableIdentifier(schemaPath, tableName)
         return icebergConnection.loadTable(tableIdentifier)
-    }
-
-    private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType {
-        return when (type.typeId()) {
-            Type.TypeID.BOOLEAN -> BodoSQLColumnDataType.BOOL8
-            Type.TypeID.INTEGER -> BodoSQLColumnDataType.INT32
-            Type.TypeID.LONG -> BodoSQLColumnDataType.INT64
-            Type.TypeID.FLOAT -> BodoSQLColumnDataType.FLOAT32
-            Type.TypeID.DOUBLE -> BodoSQLColumnDataType.FLOAT64
-            Type.TypeID.DATE -> BodoSQLColumnDataType.DATE
-            Type.TypeID.TIME -> BodoSQLColumnDataType.TIME
-            Type.TypeID.TIMESTAMP -> {
-                if ((type as TimestampType).shouldAdjustToUTC()) {
-                    BodoSQLColumnDataType.TIMESTAMP_LTZ
-                } else {
-                    BodoSQLColumnDataType.TIMESTAMP_NTZ
-                }
-            }
-            Type.TypeID.STRING -> BodoSQLColumnDataType.STRING
-            Type.TypeID.UUID -> BodoSQLColumnDataType.FIXED_SIZE_STRING
-            Type.TypeID.FIXED -> BodoSQLColumnDataType.FIXED_SIZE_BINARY
-            Type.TypeID.BINARY -> BodoSQLColumnDataType.BINARY
-            Type.TypeID.DECIMAL -> BodoSQLColumnDataType.DECIMAL
-            Type.TypeID.LIST -> BodoSQLColumnDataType.ARRAY
-            Type.TypeID.MAP -> BodoSQLColumnDataType.JSON_OBJECT
-            Type.TypeID.STRUCT -> BodoSQLColumnDataType.STRUCT
-            else -> throw RuntimeException("Unsupported Iceberg Type")
-        }
-    }
-
-    /**
-     * Convert an Iceberg File type to its corresponding ColumnDataTypeInfo
-     * used for BodoSQL types.
-     * @param type The Iceberg type.
-     * @param isNullable Is this nullable. This is needed for nested types.
-     * @return The BodoSQL ColumnDataTypeInfo
-     */
-    private fun icebergTypeToTypeInfo(
-        type: Type,
-        isNullable: Boolean,
-    ): ColumnDataTypeInfo {
-        val dataType = icebergTypeToBodoSQLColumnDataType(type)
-        val precision =
-            when (type.typeId()) {
-                Type.TypeID.DECIMAL -> (type as DecimalType).precision()
-                Type.TypeID.UUID -> icebergUUIDPrecision
-                Type.TypeID.FIXED -> (type as FixedType).length()
-                Type.TypeID.TIMESTAMP, Type.TypeID.TIME -> icebergDatetimePrecision
-                else -> RelDataType.PRECISION_NOT_SPECIFIED
-            }
-        val scale =
-            if (type is DecimalType) {
-                type.scale()
-            } else {
-                RelDataType.SCALE_NOT_SPECIFIED
-            }
-        val children =
-            if (type.isListType) {
-                listOf(icebergTypeToTypeInfo((type as ListType).elementType(), type.isElementOptional))
-            } else if (type.isMapType) {
-                val typeAsMap = type as MapType
-                listOf(
-                    icebergTypeToTypeInfo(typeAsMap.keyType(), false),
-                    icebergTypeToTypeInfo(typeAsMap.valueType(), type.isValueOptional),
-                )
-            } else if (type.isStructType) {
-                (type as StructType).fields().map { icebergTypeToTypeInfo(it.type(), it.isOptional) }
-            } else {
-                listOf()
-            }
-        val fieldNames =
-            if (type.isStructType) {
-                (type as StructType).fields().map { it.name() }
-            } else {
-                listOf()
-            }
-        return ColumnDataTypeInfo(dataType, isNullable, precision, scale, children, fieldNames)
     }
 
     /**
@@ -228,6 +145,12 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     }
 
     companion object {
+        // All Iceberg Timestamp columns have precision 6
+        private val icebergDatetimePrecision = 6
+
+        // Iceberg UUID is defined as 16 bytes
+        private val icebergUUIDPrecision = 16
+
         /**
          * Convert a BodoSQL representation for a table, which is an immutable list of strings
          * for the schema and a string for the table name into a TableIdentifier, which is the
@@ -243,6 +166,85 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         ): TableIdentifier {
             val namespace = Namespace.of(*schemaPath.toTypedArray())
             return TableIdentifier.of(namespace, tableName)
+        }
+
+        @JvmStatic
+        private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType {
+            return when (type.typeId()) {
+                Type.TypeID.BOOLEAN -> BodoSQLColumnDataType.BOOL8
+                Type.TypeID.INTEGER -> BodoSQLColumnDataType.INT32
+                Type.TypeID.LONG -> BodoSQLColumnDataType.INT64
+                Type.TypeID.FLOAT -> BodoSQLColumnDataType.FLOAT32
+                Type.TypeID.DOUBLE -> BodoSQLColumnDataType.FLOAT64
+                Type.TypeID.DATE -> BodoSQLColumnDataType.DATE
+                Type.TypeID.TIME -> BodoSQLColumnDataType.TIME
+                Type.TypeID.TIMESTAMP -> {
+                    if ((type as TimestampType).shouldAdjustToUTC()) {
+                        BodoSQLColumnDataType.TIMESTAMP_LTZ
+                    } else {
+                        BodoSQLColumnDataType.TIMESTAMP_NTZ
+                    }
+                }
+                Type.TypeID.STRING -> BodoSQLColumnDataType.STRING
+                Type.TypeID.UUID -> BodoSQLColumnDataType.FIXED_SIZE_STRING
+                Type.TypeID.FIXED -> BodoSQLColumnDataType.FIXED_SIZE_BINARY
+                Type.TypeID.BINARY -> BodoSQLColumnDataType.BINARY
+                Type.TypeID.DECIMAL -> BodoSQLColumnDataType.DECIMAL
+                Type.TypeID.LIST -> BodoSQLColumnDataType.ARRAY
+                Type.TypeID.MAP -> BodoSQLColumnDataType.JSON_OBJECT
+                Type.TypeID.STRUCT -> BodoSQLColumnDataType.STRUCT
+                else -> throw RuntimeException("Unsupported Iceberg Type")
+            }
+        }
+
+        /**
+         * Convert an Iceberg File type to its corresponding ColumnDataTypeInfo
+         * used for BodoSQL types.
+         * @param type The Iceberg type.
+         * @param isNullable Is this nullable. This is needed for nested types.
+         * @return The BodoSQL ColumnDataTypeInfo
+         */
+        @JvmStatic
+        fun icebergTypeToTypeInfo(
+            type: Type,
+            isNullable: Boolean,
+        ): ColumnDataTypeInfo {
+            val dataType = icebergTypeToBodoSQLColumnDataType(type)
+            val precision =
+                when (type.typeId()) {
+                    Type.TypeID.DECIMAL -> (type as DecimalType).precision()
+                    Type.TypeID.UUID -> icebergUUIDPrecision
+                    Type.TypeID.FIXED -> (type as FixedType).length()
+                    Type.TypeID.TIMESTAMP, Type.TypeID.TIME -> icebergDatetimePrecision
+                    else -> RelDataType.PRECISION_NOT_SPECIFIED
+                }
+            val scale =
+                if (type is DecimalType) {
+                    type.scale()
+                } else {
+                    RelDataType.SCALE_NOT_SPECIFIED
+                }
+            val children =
+                if (type.isListType) {
+                    listOf(icebergTypeToTypeInfo((type as ListType).elementType(), type.isElementOptional))
+                } else if (type.isMapType) {
+                    val typeAsMap = type as MapType
+                    listOf(
+                        icebergTypeToTypeInfo(typeAsMap.keyType(), false),
+                        icebergTypeToTypeInfo(typeAsMap.valueType(), type.isValueOptional),
+                    )
+                } else if (type.isStructType) {
+                    (type as StructType).fields().map { icebergTypeToTypeInfo(it.type(), it.isOptional) }
+                } else {
+                    listOf()
+                }
+            val fieldNames =
+                if (type.isStructType) {
+                    (type as StructType).fields().map { it.name() }
+                } else {
+                    listOf()
+                }
+            return ColumnDataTypeInfo(dataType, isNullable, precision, scale, children, fieldNames)
         }
     }
 }
