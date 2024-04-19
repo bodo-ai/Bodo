@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.timers
 
 import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Expr.DoubleLiteral
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Op.Assign
@@ -21,56 +20,29 @@ private const val REL_NODE_TIMING_VERBOSE_LEVEL = 2
  * because that class is scheduled to be removed when everything is ported to streaming.
  */
 class StreamingRelNodeTimer(
+    private val opID: Int,
     private val builder: Module.Builder,
-    private val isNoOp: Boolean,
+    private val isVerbose: Boolean,
+    private val tracingLevel: Int,
     private val operationDescriptor: String,
     private val loggingTitle: String,
     private val nodeDetails: String,
 ) {
-    // Avoid impacting tests when timers are disabled.
-    private var accumulatorVar =
-        if (isNoOp) {
-            noOpVar
-        } else {
-            builder.symbolTable.genGenericTempVar()
-        }
-    private var stateStartTimerVar =
-        if (isNoOp) {
-            noOpVar
-        } else {
-            builder.symbolTable.genGenericTempVar()
-        }
-    private var loopStartTimerVar =
-        if (isNoOp) {
-            noOpVar
-        } else {
-            builder.symbolTable.genGenericTempVar()
-        }
-
-    /**
-     * Initialize the accumulator state for a streaming operation. This must be
-     * called before any other operation.
-     */
-    fun initializeTimer() {
-        if (isNoOp) {
-            return
-        }
-        val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
-        frame.addInitialization(Assign(accumulatorVar, DoubleLiteral(0.0)))
-    }
+    // Only generate timers if BODO_TRACING_LEVEL >= 1
+    private val isNoOp = tracingLevel == 0
 
     /**
      * Insert the initial time.time() before the state for a streaming operator.
      * This should be used by operators where the state is potentially non-trivial
      * (e.g. Snowflake Read). This must be called before the state code is generated.
      */
-    fun insertStateStartTimer() {
-        if (isNoOp) {
+    fun insertStateStartTimer(stage: Int) {
+        if (isNoOp || !builder.isStreamingFrame()) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
         val timeCall = Expr.Call("time.time")
-        val stmt = Assign(stateStartTimerVar, timeCall)
+        val stmt = Assign(builder.symbolTable.genOperatorStageTimerStartVar(opID, stage), timeCall)
         frame.addInitialization(stmt)
     }
 
@@ -80,24 +52,30 @@ class StreamingRelNodeTimer(
      * potentially non-trivial (e.g. Snowflake Read). This requires insertStateStartTimer()
      * to have previously been called and must be called after the state code is generated.
      */
-    fun insertStateEndTimer() {
-        if (isNoOp) {
+    fun insertStateEndTimer(stage: Int) {
+        if (isNoOp || !builder.isStreamingFrame()) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
-        val stateTimerEndVar = builder.symbolTable.genGenericTempVar()
+        val stateTimerEndVar = builder.symbolTable.genOperatorStageTimerEndVar(opID, stage)
         val timeCall = Expr.Call("time.time")
         val endTimer = Assign(stateTimerEndVar, timeCall)
         frame.addInitialization(endTimer)
-        // Compute the difference
-        val subVar = builder.symbolTable.genGenericTempVar()
-        val subCall = Expr.Binary("-", stateTimerEndVar, stateStartTimerVar)
-        val subAssign = Assign(subVar, subCall)
+        // Compute the difference - no need to use the elapsed variable, just write directly to the timer variable since this isn't in a loop
+        val totalTime = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
+        val subCall = Expr.Binary("-", stateTimerEndVar, builder.symbolTable.genOperatorStageTimerStartVar(opID, stage))
+        val subAssign = Assign(totalTime, subCall)
         frame.addInitialization(subAssign)
-        // Update the accumulator
-        val addCall = Expr.Binary("+", accumulatorVar, subVar)
-        val addAssign = Assign(accumulatorVar, addCall)
-        frame.addInitialization(addAssign)
+        frame.addInitialization(
+            Stmt(
+                Expr.Call(
+                    "bodo.libs.query_profile_collector.submit_operator_stage_time",
+                    Expr.IntegerLiteral(opID),
+                    Expr.IntegerLiteral(stage),
+                    totalTime,
+                ),
+            ),
+        )
     }
 
     /**
@@ -105,13 +83,18 @@ class StreamingRelNodeTimer(
      * This must be called before the code is generated that occurs on each batch
      * of a streaming operator.
      */
-    fun insertLoopOperationStartTimer() {
-        if (isNoOp) {
+    fun insertLoopOperationStartTimer(stage: Int) {
+        if (isNoOp || !builder.isStreamingFrame()) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+
+        // set up accumulator for stage
+        val accumulator = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
+        frame.addInitialization(Assign(accumulator, Expr.Zero))
+
         val timeCall = Expr.Call("time.time")
-        val stmt = Assign(loopStartTimerVar, timeCall)
+        val stmt = Assign(builder.symbolTable.genOperatorStageTimerStartVar(opID, stage), timeCall)
         frame.add(stmt)
     }
 
@@ -121,24 +104,34 @@ class StreamingRelNodeTimer(
      * each batch of a streaming operator and requires insertLoopOperationStartTimer() to
      * have previously been called.
      */
-    fun insertLoopOperationEndTimer() {
-        if (isNoOp) {
+    fun insertLoopOperationEndTimer(stage: Int) {
+        if (isNoOp || !builder.isStreamingFrame()) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
-        val loopEndTimerVar = builder.symbolTable.genGenericTempVar()
+        val loopEndTimerVar = builder.symbolTable.genOperatorStageTimerEndVar(opID, stage)
         val timeCall = Expr.Call("time.time")
         val endTimer = Assign(loopEndTimerVar, timeCall)
         frame.add(endTimer)
         // Compute the difference
-        val subVar = builder.symbolTable.genGenericTempVar()
-        val subCall = Expr.Binary("-", loopEndTimerVar, loopStartTimerVar)
+        val subVar = builder.symbolTable.genOperatorStageTimerElapsedVar(opID, stage)
+        val subCall = Expr.Binary("-", loopEndTimerVar, builder.symbolTable.genOperatorStageTimerStartVar(opID, stage))
         val subAssign = Assign(subVar, subCall)
         frame.add(subAssign)
         // Update the accumulator
-        val addCall = Expr.Binary("+", accumulatorVar, subVar)
-        val addAssign = Assign(accumulatorVar, addCall)
+        val accumulator = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
+        val addCall = Expr.Binary("+", accumulator, subVar)
+        val addAssign = Assign(accumulator, addCall)
         frame.add(addAssign)
+
+        val updateProfiler =
+            Expr.Call(
+                "bodo.libs.query_profile_collector.submit_operator_stage_time",
+                Expr.IntegerLiteral(opID),
+                Expr.IntegerLiteral(stage),
+                accumulator,
+            )
+        frame.addTermination(Stmt(updateProfiler))
     }
 
     /**
@@ -151,7 +144,10 @@ class StreamingRelNodeTimer(
      * of the timing from the other calls using a description of the given node.
      */
     fun terminateTimer() {
-        if (isNoOp) {
+        if (isNoOp || !builder.isStreamingFrame()) {
+            return
+        }
+        if (isVerbose) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
@@ -160,12 +156,13 @@ class StreamingRelNodeTimer(
         val nodeDetailsVariable = builder.symbolTable.genGenericTempVar()
         frame.addTermination(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
 
+        val totalDurationCall = Expr.Call("bodo.libs.query_profile_collector.get_operator_duration", Expr.IntegerLiteral(opID))
         val printMessage =
             String.format(
                 "f'''Execution time for %s {%s}: {%s}'''",
                 operationDescriptor,
                 nodeDetailsVariable.emit(),
-                accumulatorVar.emit(),
+                totalDurationCall.emit(),
             )
         val logMessageCall: Op =
             Stmt(
@@ -182,8 +179,10 @@ class StreamingRelNodeTimer(
     companion object {
         @JvmStatic
         fun createStreamingTimer(
+            opID: Int,
             builder: Module.Builder,
             verboseLevel: Int,
+            tracingLevel: Int,
             operationDescriptor: String,
             loggingTitle: String,
             nodeDetails: String,
@@ -196,8 +195,10 @@ class StreamingRelNodeTimer(
                     IO_TIMING_VERBOSE_LEVEL
                 }
             return StreamingRelNodeTimer(
+                opID,
                 builder,
                 verboseLevel < verboseThreshold,
+                tracingLevel,
                 operationDescriptor,
                 loggingTitle,
                 nodeDetails,

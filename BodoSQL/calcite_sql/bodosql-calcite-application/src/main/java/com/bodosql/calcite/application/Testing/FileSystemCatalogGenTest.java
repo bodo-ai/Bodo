@@ -27,6 +27,7 @@ public class FileSystemCatalogGenTest {
             schema,
             RelationalAlgebraGenerator.STREAMING_PLANNER,
             0,
+            0,
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Enable Iceberg for testing

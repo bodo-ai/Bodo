@@ -11,6 +11,11 @@
 #include "_bodo_common.h"
 #include "_memory_budget.h"
 
+#define DISABLE_IF_TRACING_DISABLED \
+    if (tracing_level == 0) {       \
+        return;                     \
+    }
+
 void QueryProfileCollector::Init() {
     QueryProfileCollector new_query_profile_collector;
     *this = new_query_profile_collector;
@@ -77,12 +82,16 @@ static uint64_t us_since_epoch() {
 }
 
 void QueryProfileCollector::StartPipeline(pipeline_id_t pipeline_id) {
+    DISABLE_IF_TRACING_DISABLED;
+
     pipeline_start_end_timestamps[pipeline_id] =
         std::make_pair(us_since_epoch(), 0);
 }
 
 void QueryProfileCollector::EndPipeline(pipeline_id_t pipeline_id,
                                         size_t num_iterations) {
+    DISABLE_IF_TRACING_DISABLED;
+
     if (pipeline_start_end_timestamps.count(pipeline_id) == 0) {
         throw std::runtime_error("Pipeline ID not found in start timestamps");
     }
@@ -98,8 +107,20 @@ void QueryProfileCollector::SubmitOperatorStageRowCounts(
 }
 
 void QueryProfileCollector::SubmitOperatorStageTime(operator_stage_t op_stage,
-                                                    uint64_t time_us) {
-    operator_stage_time[op_stage] = time_us;
+                                                    int64_t time) {
+    DISABLE_IF_TRACING_DISABLED;
+    operator_stage_times[op_stage] = time;
+}
+
+int64_t QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
+    int64_t total_time = 0;
+    for (auto [op_stage, time] : operator_stage_times) {
+        if (op_stage.operator_id == operator_id) {
+            total_time += time;
+        }
+    }
+
+    return total_time;
 }
 
 void QueryProfileCollector::RegisterOperatorStageMetrics(
@@ -146,18 +167,40 @@ static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
     return metric_json;
 }
 
-void QueryProfileCollector::Finalize() {
-    if (tracing_level == 0) {
-        return;
+auto QueryProfileCollector::CollectSeenOperators()
+    -> std::unordered_map<operator_id_t, stage_id_t> {
+    // Map all seen operators to the max stage value seen
+    std::unordered_map<operator_id_t, stage_id_t> seen_operator_stages;
+    // Helper lambda to update the seen operator stages
+    auto UpdateSeenOperatorStages = [&](operator_stage_t op_stage) {
+        operator_id_t op_id = op_stage.operator_id;
+        stage_id_t stage_id = op_stage.stage_id;
+        if (seen_operator_stages.count(op_id) == 0) {
+            seen_operator_stages[op_id] = stage_id;
+        } else {
+            seen_operator_stages[op_id] =
+                std::max(seen_operator_stages[op_id], stage_id);
+        }
+    };
+    for (const auto& [op_stage, _] : operator_stage_times) {
+        UpdateSeenOperatorStages(op_stage);
     }
+    for (const auto& [op_stage, _] : operator_stage_metrics) {
+        UpdateSeenOperatorStages(op_stage);
+    }
+    for (const auto& [op_stage, _] : operator_stage_input_row_counts) {
+        UpdateSeenOperatorStages(op_stage);
+    }
+    for (const auto& [op_stage, _] : operator_stage_output_row_counts) {
+        UpdateSeenOperatorStages(op_stage);
+    }
+    for (const auto& [op_stage, _] : operator_stage_metrics) {
+        UpdateSeenOperatorStages(op_stage);
+    }
+    return seen_operator_stages;
+}
 
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    boost::json::object profile;
-    profile["rank"] = rank;
-    profile["trace_level"] = tracing_level;
-
+boost::json::object QueryProfileCollector::PipelinesToJson() {
     boost::json::object pipelines;
     for (const auto& [pipeline_id, timestamps] :
          pipeline_start_end_timestamps) {
@@ -168,7 +211,60 @@ void QueryProfileCollector::Finalize() {
         pipeline["num_iterations"] = pipeline_num_iterations[pipeline_id];
         pipelines[std::to_string(pipeline_id)] = pipeline;
     }
-    profile["pipelines"] = pipelines;
+    return pipelines;
+}
+
+boost::json::object QueryProfileCollector::OperatorStageToJson(
+    operator_stage_t op_stage) {
+    boost::json::object stage_report;
+    stage_report["time"] = operator_stage_times[op_stage];
+    if (operator_stage_input_row_counts.count(op_stage) > 0) {
+        stage_report["input_row_count"] =
+            operator_stage_input_row_counts[op_stage];
+    }
+    if (operator_stage_output_row_counts.count(op_stage) > 0) {
+        stage_report["output_row_count"] =
+            operator_stage_output_row_counts[op_stage];
+    }
+
+    if (operator_stage_metrics.count(op_stage) > 0) {
+        boost::json::array metrics;
+        for (auto& metric : operator_stage_metrics[op_stage]) {
+            auto metric_json = metric_to_json(metric);
+            if (metric_json.has_value()) {
+                metrics.push_back(metric_json.value());
+            }
+        }
+        stage_report["metrics"] = metrics;
+    }
+
+    return stage_report;
+}
+
+boost::json::object QueryProfileCollector::OperatorToJson(
+    operator_id_t op_id, stage_id_t max_stage) {
+    boost::json::object op_output;
+    for (stage_id_t stage_id = 0; stage_id <= max_stage; stage_id++) {
+        boost::json::object stage_report =
+            OperatorStageToJson(MakeOperatorStageID(op_id, stage_id));
+
+        auto stage_str = fmt::format("stage_{}", stage_id);
+        op_output[stage_str] = stage_report;
+    }
+    return op_output;
+}
+
+void QueryProfileCollector::Finalize() {
+    DISABLE_IF_TRACING_DISABLED;
+
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    boost::json::object profile;
+    profile["rank"] = rank;
+    profile["trace_level"] = tracing_level;
+
+    profile["pipelines"] = PipelinesToJson();
 
     boost::json::object initial_operator_budgets;
     for (const auto& [op_id, budget] : initial_operator_budget) {
@@ -179,49 +275,13 @@ void QueryProfileCollector::Finalize() {
     }
     profile["initial_operator_budgets"] = initial_operator_budgets;
 
-    std::unordered_set<operator_stage_t> seen_operator_stages;
-    for (const auto& [op_stage, _] : operator_stage_time) {
-        seen_operator_stages.insert(op_stage);
+    auto seen_operator_stages = CollectSeenOperators();
+    boost::json::object operator_reports;
+    for (const auto& [op_id, max_stage] : seen_operator_stages) {
+        operator_reports[std::to_string(op_id)] =
+            OperatorToJson(op_id, max_stage);
     }
-    for (const auto& [op_stage, _] : operator_stage_metrics) {
-        seen_operator_stages.insert(op_stage);
-    }
-    for (const auto& [op_stage, _] : operator_stage_input_row_counts) {
-        seen_operator_stages.insert(op_stage);
-    }
-    for (const auto& [op_stage, _] : operator_stage_output_row_counts) {
-        seen_operator_stages.insert(op_stage);
-    }
-    for (const auto& [op_stage, _] : operator_stage_metrics) {
-        seen_operator_stages.insert(op_stage);
-    }
-
-    boost::json::object operator_stages;
-    for (const auto& op_stage : seen_operator_stages) {
-        boost::json::object operator_stage;
-        operator_stage["time"] = operator_stage_time[op_stage];
-        if (operator_stage_input_row_counts.count(op_stage) > 0) {
-            operator_stage["input_row_count"] =
-                operator_stage_input_row_counts[op_stage];
-        }
-        if (operator_stage_output_row_counts.count(op_stage) > 0) {
-            operator_stage["output_row_count"] =
-                operator_stage_output_row_counts[op_stage];
-        }
-
-        if (operator_stage_metrics.count(op_stage) > 0) {
-            boost::json::array metrics;
-            for (auto& metric : operator_stage_metrics[op_stage]) {
-                auto metric_json = metric_to_json(metric);
-                if (metric_json.has_value()) {
-                    metrics.push_back(metric_json.value());
-                }
-            }
-            operator_stage["metrics"] = metrics;
-        }
-        operator_stages[std::to_string(op_stage)] = operator_stage;
-    }
-    profile["operator_stages"] = operator_stages;
+    profile["operator_reports"] = operator_reports;
 
     auto s = boost::json::serialize(profile);
 
@@ -272,6 +332,23 @@ static void submit_operator_stage_row_counts_query_profile_collector_py_entry(
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
+}
+
+static void submit_operator_stage_time_query_profile_collector_py_entry(
+    int64_t operator_id, int64_t pipeline_id, int64_t time) {
+    try {
+        auto op_stage = QueryProfileCollector::MakeOperatorStageID(operator_id,
+                                                                   pipeline_id);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(op_stage,
+                                                                 time);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
+
+static void get_operator_duration_query_profile_collector_py_entry(
+    int64_t operator_id) {
+    QueryProfileCollector::Default().GetOperatorDuration(operator_id);
 }
 
 static void finalize_query_profile_collector_py_entry() {
@@ -345,6 +422,10 @@ PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void) {
     SetAttrStringFromVoidPtr(m, end_pipeline_query_profile_collector_py_entry);
     SetAttrStringFromVoidPtr(
         m, submit_operator_stage_row_counts_query_profile_collector_py_entry);
+    SetAttrStringFromVoidPtr(
+        m, submit_operator_stage_time_query_profile_collector_py_entry);
+    SetAttrStringFromVoidPtr(
+        m, get_operator_duration_query_profile_collector_py_entry);
     SetAttrStringFromVoidPtr(m, finalize_query_profile_collector_py_entry);
     SetAttrStringFromVoidPtr(m, get_input_row_counts_for_op_stage_py_entry);
     SetAttrStringFromVoidPtr(m, get_output_row_counts_for_op_stage_py_entry);

@@ -88,6 +88,7 @@ public class PandasGenTest {
             schema,
             plannerChoice,
             0,
+            0,
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Enable Iceberg for testing

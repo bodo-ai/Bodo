@@ -1153,6 +1153,7 @@ class BodoSQLContext:
                 the relational algebra generator.
         """
         verbose_level = bodo.user_logging.get_verbose_level()
+        tracing_level = bodo.tracing_level
         if bodo.bodosql_use_streaming_plan:
             planner_type = _PlannerType.Streaming.value
         else:
@@ -1163,6 +1164,7 @@ class BodoSQLContext:
                 self.schema,
                 planner_type,
                 verbose_level,
+                tracing_level,
                 bodo.bodosql_streaming_batch_size,
                 hide_credentials,
                 bodo.enable_snowflake_iceberg,
@@ -1174,6 +1176,7 @@ class BodoSQLContext:
             self.schema,
             planner_type,
             verbose_level,
+            tracing_level,
             bodo.bodosql_streaming_batch_size,
             hide_credentials,
             bodo.enable_snowflake_iceberg,
