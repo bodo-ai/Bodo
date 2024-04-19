@@ -38,11 +38,36 @@ def test_query_profile_collection_compiles(memory_leak_check):
     def impl():
         bodo.libs.query_profile_collector.init()
         bodo.libs.query_profile_collector.start_pipeline(1)
+        bodo.libs.query_profile_collector.submit_operator_stage_row_counts(1, 0, 0, 0)
+        bodo.libs.query_profile_collector.submit_operator_stage_time(1, 0, 100)
+        bodo.libs.query_profile_collector.get_operator_duration(1)
         bodo.libs.query_profile_collector.end_pipeline(1, 10)
         bodo.libs.query_profile_collector.finalize()
         return
 
     impl()
+
+
+def test_output_directory_can_be_set():
+    """Check that the output directory can be set"""
+
+    with tempfile.TemporaryDirectory() as test_dir:
+        with temp_env_override(
+            {"BODO_TRACING_OUTPUT_DIR": test_dir, "BODO_TRACING_LEVEL": "1"}
+        ):
+
+            @bodo.jit
+            def impl():
+                bodo.libs.query_profile_collector.init()
+                bodo.libs.query_profile_collector.start_pipeline(1)
+                bodo.libs.query_profile_collector.end_pipeline(1, 10)
+                bodo.libs.query_profile_collector.finalize()
+                return
+
+            impl()
+            for f in os.listdir(test_dir):
+                assert f.startswith("query_profile")
+                assert f.endswith(".json")
 
 
 def test_join_row_count_collection(memory_leak_check):
@@ -628,12 +653,11 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
+    operator_report = profile_json["operator_reports"]["0"]
 
     # Verify build metrics
-    assert "1" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["1"]
-    build_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    stage_1_metrics = operator_report["stage_1"]["metrics"]
+    build_metrics: list = stage_1_metrics
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     if rank == 0:
         assert "bcast_join" in build_metrics_names
@@ -645,9 +669,8 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     assert "repartitioning_time_total" in build_metrics_names
 
     # Verify probe metrics
-    assert "2" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["2"]
-    probe_metrics: list = profile_json["operator_stages"]["2"]["metrics"]
+    stage_2_metrics = operator_report["stage_2"]["metrics"]
+    probe_metrics: list = stage_2_metrics
     probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
     if rank == 0:
         assert "n_key_dict_builders" in probe_metrics_names
@@ -778,12 +801,11 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
+    operator_report = profile_json["operator_reports"]["0"]
 
     # Verify build metrics
-    assert "1" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["1"]
-    build_metrics: list = profile_json["operator_stages"]["1"]["metrics"]
+    stage_1_metrics = operator_report["stage_1"]["metrics"]
+    build_metrics: list = stage_1_metrics
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     if rank == 0:
         assert "bcast_join" in build_metrics_names
@@ -794,9 +816,8 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     assert "num_chunks" in build_metrics_names
 
     # Verify probe metrics
-    assert "2" in profile_json["operator_stages"]
-    assert "metrics" in profile_json["operator_stages"]["2"]
-    probe_metrics: list = profile_json["operator_stages"]["2"]["metrics"]
+    stage_2_metrics = operator_report["stage_2"]["metrics"]
+    probe_metrics: list = stage_2_metrics
     probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
     if rank == 0:
         assert "n_dict_builders" in probe_metrics_names
@@ -893,12 +914,13 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
-    assert "0" in profile_json["operator_stages"]
-    assert "1" in profile_json["operator_stages"]
-    assert "2" in profile_json["operator_stages"]
+    operator_report = profile_json["operator_reports"]["0"]
+    stage_0 = operator_report["stage_0"]
+    stage_1 = operator_report["stage_1"]
+    assert "stage_2" in operator_report
+
     if rank == 0:
-        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
             x["name"] for x in initialization_metrics
         ]
@@ -909,7 +931,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "AGG"
         )
-    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics = stage_1["metrics"]
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     assert "pre_agg_total_time" in build_metrics_names
     assert "n_repartitions_in_append" in build_metrics_names
@@ -1010,12 +1032,12 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
-    assert "0" in profile_json["operator_stages"]
-    assert "1" in profile_json["operator_stages"]
-    assert "2" in profile_json["operator_stages"]
+    operator_report = profile_json["operator_reports"]["0"]
+    stage_0 = operator_report["stage_0"]
+    stage_1 = operator_report["stage_1"]
+    assert "stage_2" in operator_report
     if rank == 0:
-        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
             x["name"] for x in initialization_metrics
         ]
@@ -1026,7 +1048,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "ACC"
         )
-    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics = stage_1["metrics"]
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     assert "pre_agg_total_time" not in build_metrics_names
     assert "n_repartitions_in_append" in build_metrics_names
@@ -1138,12 +1160,12 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
-    assert "0" in profile_json["operator_stages"]
-    assert "1" in profile_json["operator_stages"]
-    assert "2" in profile_json["operator_stages"]
+    operator_report = profile_json["operator_reports"]["0"]
+    stage_0 = operator_report["stage_0"]
+    stage_1 = operator_report["stage_1"]
+    assert "stage_2" in operator_report
     if rank == 0:
-        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
             x["name"] for x in initialization_metrics
         ]
@@ -1161,7 +1183,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             ]
             == 1
         )
-    build_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_metrics = stage_1["metrics"]
     build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
     assert "pre_agg_total_time" not in build_metrics_names
     assert "n_repartitions_in_append" in build_metrics_names
@@ -1337,14 +1359,14 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
-    assert "0" in profile_json["operator_stages"]
-    assert "1" in profile_json["operator_stages"]
-    assert "2" in profile_json["operator_stages"]
-    assert "3" in profile_json["operator_stages"]
-    assert "4" in profile_json["operator_stages"]
+    operator_report = profile_json["operator_reports"]["0"]
+    stage_0 = operator_report["stage_0"]
+    stage_1 = operator_report["stage_1"]
+    stage_2 = operator_report["stage_2"]
+    stage_3 = operator_report["stage_3"]
+    stage_4 = operator_report["stage_4"]
     if rank == 0:
-        initialization_metrics = profile_json["operator_stages"]["0"]["metrics"]
+        initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
             x["name"] for x in initialization_metrics
         ]
@@ -1357,17 +1379,17 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         )
 
     # Produce output doesn't have any additional metrics
-    assert "metrics" not in profile_json["operator_stages"]["4"]
+    assert "metrics" not in stage_4
 
-    build_stage1_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    build_stage1_metrics = stage_1["metrics"]
     build_stage1_metrics_names: set[str] = set(
         [x["name"] for x in build_stage1_metrics]
     )
-    build_stage2_metrics = profile_json["operator_stages"]["2"]["metrics"]
+    build_stage2_metrics = stage_2["metrics"]
     build_stage2_metrics_names: set[str] = set(
         [x["name"] for x in build_stage2_metrics]
     )
-    build_stage3_metrics = profile_json["operator_stages"]["3"]["metrics"]
+    build_stage3_metrics = stage_3["metrics"]
     build_stage3_metrics_names: set[str] = set(
         [x["name"] for x in build_stage3_metrics]
     )

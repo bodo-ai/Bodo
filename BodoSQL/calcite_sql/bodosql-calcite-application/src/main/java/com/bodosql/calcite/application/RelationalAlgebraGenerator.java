@@ -101,6 +101,9 @@ public class RelationalAlgebraGenerator {
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
 
+  /** The Bodo tracing level. This is used to control code generated and/or compilation info. */
+  private final int tracingLevel;
+
   /** The batch size used for streaming. This is configurable for testing purposes. */
   private final int streamingBatchSize;
 
@@ -161,6 +164,7 @@ public class RelationalAlgebraGenerator {
       BodoSqlSchema localSchema,
       int plannerType,
       int verboseLevel,
+      int tracingLevel,
       int streamingBatchSize,
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
@@ -169,6 +173,7 @@ public class RelationalAlgebraGenerator {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<SchemaPlus> defaultSchemas =
@@ -190,6 +195,7 @@ public class RelationalAlgebraGenerator {
       BodoSqlSchema localSchema,
       int plannerType,
       int verboseLevel,
+      int tracingLevel,
       int streamingBatchSize,
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
@@ -199,6 +205,7 @@ public class RelationalAlgebraGenerator {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<SchemaPlus> defaultSchemas =
@@ -230,6 +237,7 @@ public class RelationalAlgebraGenerator {
       // Something like this can be replaced with a more formal API like GRPC and protobuf.
       int plannerType,
       int verboseLevel,
+      int tracingLevel,
       int streamingBatchSize,
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
@@ -238,6 +246,7 @@ public class RelationalAlgebraGenerator {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
+    this.tracingLevel = tracingLevel;
     this.streamingBatchSize = streamingBatchSize;
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
@@ -476,6 +485,7 @@ public class RelationalAlgebraGenerator {
             originalSQL,
             this.typeSystem,
             this.verboseLevel,
+            this.tracingLevel,
             this.streamingBatchSize,
             dynamicTypes,
             namedParamTypes,
@@ -518,6 +528,7 @@ public class RelationalAlgebraGenerator {
             originalSQL,
             this.typeSystem,
             this.verboseLevel,
+            this.tracingLevel,
             this.streamingBatchSize,
             dynamicTypes,
             namedParamTypes,

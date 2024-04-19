@@ -128,4 +128,19 @@ bodo::tests::suite query_profile_collector_tests([] {
                 .find(QueryProfileCollector::MakeOperatorStageID(0, 1))
                 ->second == 872194);
     });
+
+    bodo::tests::test("test_get_operator_duration", [] {
+        QueryProfileCollector collector;
+        collector.SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(1, 0), 100);
+        collector.SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(2, 0), 200);
+        collector.SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(1, 1), 300);
+        collector.SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(2, 3), 400);
+
+        bodo::tests::check(collector.GetOperatorDuration(1) == 400);
+        bodo::tests::check(collector.GetOperatorDuration(2) == 600);
+    });
 });

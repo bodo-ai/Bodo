@@ -147,6 +147,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 "_bodo_columns" to columnsArg,
                 "_bodo_filter" to filtersArg,
                 "_bodo_limit" to limit,
+                "_bodo_sql_op_id" to Expr.IntegerLiteral(ctx.operatorID()),
             )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)

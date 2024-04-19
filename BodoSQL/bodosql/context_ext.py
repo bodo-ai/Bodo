@@ -429,6 +429,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             table_names = bodo_sql_context_type.names
             schema = initialize_schema()
             verbose_level = bodo.user_logging.get_verbose_level()
+            tracing_level = bodo.tracing_level
             if bodo.bodosql_use_streaming_plan:
                 planner_type = _PlannerType.Streaming.value
             else:
@@ -439,6 +440,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     schema,
                     planner_type,
                     verbose_level,
+                    tracing_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
                     bodo.enable_snowflake_iceberg,
@@ -456,6 +458,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     schema,
                     planner_type,
                     verbose_level,
+                    tracing_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
                     bodo.enable_snowflake_iceberg,

@@ -31,7 +31,7 @@ class SymbolTable {
     private var closureVarId: Int = 1
 
     companion object {
-        private const val dummyColNameBase = "__bodo_dummy__"
+        private const val DUMMY_COL_NAME_BASE = "__bodo_dummy__"
     }
 
     fun genDfVar(): Variable {
@@ -74,6 +74,38 @@ class SymbolTable {
         return Variable("_temp${tempVarId++}")
     }
 
+    // Variable for an accumulator for elapsed time of a stage of an operator
+    fun genOperatorStageTimerVar(
+        opID: Int,
+        stageID: Int,
+    ): Variable {
+        return Variable("_op_stage_timer_${opID}_$stageID")
+    }
+
+    // Variable for start timestamp for an instance of an operator stage in a pipeline
+    fun genOperatorStageTimerStartVar(
+        opID: Int,
+        stageID: Int,
+    ): Variable {
+        return Variable("_start_op_stage_${opID}_$stageID")
+    }
+
+    // Variable for end timestamp for an instance of an operator stage in a pipeline
+    fun genOperatorStageTimerEndVar(
+        opID: Int,
+        stageID: Int,
+    ): Variable {
+        return Variable("_end_op_stage_${opID}_$stageID")
+    }
+
+    // Variable for time elapsed for an instance of an operator stage in a pipeline
+    fun genOperatorStageTimerElapsedVar(
+        opID: Int,
+        stageID: Int,
+    ): Variable {
+        return Variable("_elapsed_op_stage_${opID}_$stageID")
+    }
+
     fun genTempColumnVar(): Variable {
         return Variable("__bodo_generated_column__${colVarId++}")
     }
@@ -91,11 +123,11 @@ class SymbolTable {
     }
 
     fun genWindowedAggFnName(): Variable {
-        return Variable("${dummyColNameBase}_sql_windowed_apply_fn_${groupByApplyFnId++}")
+        return Variable("${DUMMY_COL_NAME_BASE}_sql_windowed_apply_fn_${groupByApplyFnId++}")
     }
 
     fun genGroupbyApplyAggFnName(): Variable {
-        return Variable("${dummyColNameBase}_sql_groupby_apply_fn_${groupByApplyFnId++}")
+        return Variable("${DUMMY_COL_NAME_BASE}_sql_groupby_apply_fn_${groupByApplyFnId++}")
     }
 
     fun genGlobalVar(): Variable {
