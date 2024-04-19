@@ -1,6 +1,5 @@
 ---
 hide:
-  - navigation
   - toc
   - footer
 ---
@@ -24,4 +23,4 @@ Bodo is delivered as a simple SaaS service and can be plugged into existing data
 - Use Bodo connectors for existing ETL tools to use Bodo immediately.
 - Bodo managed clusters stay in your own AWS/Azure account ensuring no data leaves your environment.
 
-[Contact us](https://bodo.ai/contact/) to learn more about Bodo and how it can help you with your data processing needs. 
+**[Contact us](https://bodo.ai/contact/) to learn more about Bodo and how it can help you with your data processing needs.** 

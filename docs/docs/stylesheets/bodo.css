@@ -273,11 +273,8 @@ img[src*='#center'] {
     top: -0.1rem;
 }
 
-
-.md-nav--primary .md-nav__title[for=__drawer] {
-    background-color: var(--md-default-fg-color--lightest);
-    color: var(--md-default-fg-color--light);
-    font-weight: 700;
+.md-nav__item {
+    overflow-wrap: anywhere;
 }
 
 /*add a border left only if the level of the unordered list is more than top level*/
@@ -289,3 +286,10 @@ img[src*='#center'] {
     border-left: 1px solid var(--md-default-fg-color--lightest);
 }
 
+.md-grid {
+  max-width: 70rem;
+}
+
+.md-typeset table:not([class]) {
+    font-size: 0.75rem;
+}

@@ -38,14 +38,14 @@
   <nav class="md-path" aria-label="{{ lang.t('nav') }}" {{ hidden }}>
     <ol class="md-path__list">
 
-      <!-- Render homepage first, if available -->
+    <!-- Render homepage first, if available -->
       {% if nav.homepage %}
         {{ item.render(nav.homepage) }}
       {% endif %}
 
-      <!-- Render ancestors in reverse -->
+      <!-- Render ancestors in reverse if the title is not NAV -->
       {% for nav_item in page.ancestors | reverse %}
-        {{ item.render(nav_item) }}
+        {{ item.render(nav_item)}}
       {% endfor %}
     </ol>
   </nav>
