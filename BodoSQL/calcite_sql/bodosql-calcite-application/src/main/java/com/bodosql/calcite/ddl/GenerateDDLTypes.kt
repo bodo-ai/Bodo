@@ -11,14 +11,24 @@ import org.apache.calcite.sql.type.SqlTypeName
  */
 class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
     fun generateType(ddlNode: SqlNode): RelDataType {
-        when (ddlNode.kind) {
-            SqlKind.DROP_TABLE -> {
-                val fieldNames = listOf("STATUS")
-                // Note this is non-null
-                val types = listOf(typeFactory.createSqlType(SqlTypeName.VARCHAR))
-                return typeFactory.createStructType(types, fieldNames)
+        // All DDL types likely use a string type.
+        val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
+        val (fieldsNames, columnTypes) =
+            when (ddlNode.kind) {
+                SqlKind.DROP_TABLE -> {
+                    val fieldNames = listOf("STATUS")
+                    // Note this is non-null
+                    val types = listOf(stringType)
+                    Pair(fieldNames, types)
+                }
+                SqlKind.DESCRIBE_TABLE -> {
+                    // We only return the first 7 arguments from Snowflake right now as other expressions may not generalize.
+                    val fieldNames = listOf("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY")
+                    val types = listOf(stringType, stringType, stringType, stringType, stringType, stringType, stringType)
+                    Pair(fieldNames, types)
+                }
+                else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")
             }
-            else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")
-        }
+        return typeFactory.createStructType(columnTypes, fieldsNames)
     }
 }
