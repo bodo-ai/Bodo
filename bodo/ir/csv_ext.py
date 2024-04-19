@@ -39,7 +39,6 @@ from bodo.transforms.table_column_del_pass import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import (
-    check_and_propagate_cpp_exception,
     check_java_installation,  # noqa
     sanitize_varname,
 )
@@ -241,9 +240,8 @@ def csv_file_chunk_reader(
             builder.module, fnty, name="csv_file_chunk_reader"
         )
         obj = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         # csv_file_chunk_reader returns a pyobject. We need to wrap the result in the
         # proper return type and create a meminfo.
         ret = cgutils.create_struct_proxy(types.stream_reader_type)(context, builder)

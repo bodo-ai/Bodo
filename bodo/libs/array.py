@@ -2609,9 +2609,7 @@ def shuffle_table(
             builder.module, fnty, name="shuffle_table_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return table_type(table_t, types.int64, types.boolean, types.int32), codegen
@@ -2745,9 +2743,7 @@ def hash_join_table(
             builder.module, fnty, name="hash_join_table"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -2971,9 +2967,7 @@ def sort_values_table_py_entry(
             builder.module, fnty, name="sort_values_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3020,9 +3014,7 @@ def sort_table_for_interval_join(
             builder.module, fnty, name="sort_table_for_interval_join_py_entrypoint"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3061,9 +3053,7 @@ def sample_table(
             builder.module, fnty, name="sample_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3100,9 +3090,7 @@ def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_para
             builder.module, fnty, name="shuffle_renormalization_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3136,9 +3124,7 @@ def shuffle_renormalization_group(
             builder.module, fnty, name="shuffle_renormalization_group_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3174,9 +3160,7 @@ def drop_duplicates_cpp_table(
             builder.module, fnty, name="drop_duplicates_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3275,9 +3259,7 @@ def groupby_and_aggregate(
             builder.module, fnty, name="groupby_and_aggregate"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     return (
@@ -3406,9 +3388,7 @@ def _get_replace_regex_dict_state(
             builder.module, fnty, name="get_replace_regex_dict_state_py_entry"
         )
         ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
     sig = array_info_type(
