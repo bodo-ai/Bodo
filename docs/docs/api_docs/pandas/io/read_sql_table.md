@@ -3,7 +3,7 @@
 `pandas.read_sql_table`
 
 -   This API only supports reading Iceberg tables at the moment.
--   See [Iceberg Section][iceberg-section] for example usage and more system specific instructions.
+-   See the [Iceberg Section][iceberg_read_write] for example usage and more system specific instructions.
 -   Argument `table_name` is supported and must be the name of an Iceberg Table.
 -   Argument `con` is supported but only as a string form in a URL format.
     SQLalchemy `connectable` is not supported.
