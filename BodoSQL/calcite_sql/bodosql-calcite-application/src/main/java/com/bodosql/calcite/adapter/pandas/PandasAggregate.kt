@@ -64,7 +64,7 @@ class PandasAggregate(
             val name = aggCall.aggregation.name
             // Should match accumulate function check in C++:
             // https://github.com/Bodo-inc/Bodo/blob/3c902f01b0aa0748793b00554304d8a051f511aa/bodo/libs/_stream_groupby.cpp#L1101
-            if (name == "LISTAGG" || kind == SqlKind.MEDIAN ||
+            if (name == "LISTAGG" || kind == SqlKind.MEDIAN || kind == SqlKind.MODE ||
                 (kind == SqlKind.COUNT && aggCall.argList.isNotEmpty() && aggCall.isDistinct)
             ) {
                 isStreamAccumulate = true

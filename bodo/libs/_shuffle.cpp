@@ -669,7 +669,10 @@ static void copy_gathered_null_bytes(
  */
 void update_local_dictionary_remove_duplicates(
     std::shared_ptr<array_info> dict_array, bool gather_global_dict,
-    bool sort_dictionary) {
+    bool sort_dictionary,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     std::shared_ptr<array_info> local_dictionary = dict_array->child_arrays[0];
     std::shared_ptr<array_info> global_dictionary;
     // If we don't have a global dictionary with unique values
@@ -690,13 +693,17 @@ void update_local_dictionary_remove_duplicates(
     // handle the indices pointing to the null during the re-assignment.
     std::shared_ptr<table_info> dist_dictionary_table =
         drop_duplicates_table(in_dictionary_table, gather_global_dict, 1, 0,
-                              /*dropna=*/true, false);
+                              /*dropna=*/true, false, pool, mm);
     in_dictionary_table.reset();
 
     // replicate the global dictionary on all ranks
     // allgather
     std::shared_ptr<table_info> global_dictionary_table;
     if (gather_global_dict) {
+        // TODO: add pool/mm support in gather_table
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, which doesn't run in parallel.
         global_dictionary_table =
             gather_table(dist_dictionary_table, 1, true, gather_global_dict);
         dist_dictionary_table.reset();
@@ -709,6 +716,10 @@ void update_local_dictionary_remove_duplicates(
     // Sort dictionary locally
     // XXX Should we always sort?
     if (sort_dictionary) {
+        // TODO: add pool/mm support in sort_values_array_local
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, which doesn't need sorting.
         // sort_values_array_local decrefs the input array_info (but doesn't
         // delete it). It returns a new array_info.
         global_dictionary =
@@ -733,6 +744,11 @@ void update_local_dictionary_remove_duplicates(
     const size_t local_dict_len = static_cast<size_t>(local_dictionary->length);
     const size_t global_dict_len =
         static_cast<size_t>(global_dictionary->length);
+    // TODO: add pool/mm support for hashes
+    // NOTE: pool/mm were added for streaming groupby mode
+    // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+    // duplicates, where the number of dict elements is small (limited by
+    // batch size). Therefore, tracking memory of hashes isn't necessary.
     std::unique_ptr<uint32_t[]> hashes_local_dict =
         std::make_unique<uint32_t[]>(local_dict_len);
     std::unique_ptr<uint32_t[]> hashes_global_dict =
@@ -760,7 +776,7 @@ void update_local_dictionary_remove_duplicates(
     // are mapped to get the hashes and to compare values
 
     bodo::unord_map_container<size_t, dict_indices_t, HashDict, KeyEqualDict>
-        dict_value_to_global_index({}, hash_fct, equal_fct);
+        dict_value_to_global_index({}, hash_fct, equal_fct, pool);
     dict_value_to_global_index.reserve(global_dict_len);
 
     dict_indices_t next_index = 1;
@@ -771,7 +787,7 @@ void update_local_dictionary_remove_duplicates(
         }
     }
 
-    bodo::vector<dict_indices_t> local_to_global_index(local_dict_len);
+    bodo::vector<dict_indices_t> local_to_global_index(local_dict_len, pool);
     for (size_t i = 0; i < local_dict_len; i++) {
         // if val is not in new_map, inserts it and returns next code
         dict_indices_t index = dict_value_to_global_index[i + global_dict_len];
@@ -792,6 +808,12 @@ void update_local_dictionary_remove_duplicates(
     bool inplace =
         (dict_array->child_arrays[1]->buffers[0]->getMeminfo()->refct == 1);
     if (!inplace) {
+        // TODO: add pool/mm support for copy_array
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, where the number of dict elements is small (limited by
+        // batch size). Therefore, tracking memory of indices in copy isn't
+        // necessary.
         std::shared_ptr<array_info> dict_indices =
             copy_array(dict_array->child_arrays[1]);
         dict_array->child_arrays[1] = dict_indices;
@@ -817,13 +839,15 @@ void update_local_dictionary_remove_duplicates(
     }
 }
 
-void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
-                                      bool sort_dictionary_if_modified) {
+void drop_duplicates_local_dictionary(
+    std::shared_ptr<array_info> dict_array, bool sort_dictionary_if_modified,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     if (dict_array->child_arrays[0]->is_locally_unique) {
         return;
     }
     update_local_dictionary_remove_duplicates(std::move(dict_array), false,
-                                              sort_dictionary_if_modified);
+                                              sort_dictionary_if_modified, pool,
+                                              std::move(mm));
 }
 
 array_info* drop_duplicates_local_dictionary_py_entry(

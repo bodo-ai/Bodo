@@ -166,10 +166,13 @@ void mode_operation_strings(
  * @param[in,out] out_arr: the array to write the result to.
  * @param[in] grp_info: information about the grouping.
  */
-void mode_operation_strings_dict(std::shared_ptr<array_info> arr,
-                                 std::shared_ptr<array_info> out_arr,
-                                 const grouping_info& grp_info) {
-    drop_duplicates_local_dictionary(arr);
+void mode_operation_strings_dict(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    drop_duplicates_local_dictionary(arr, false, pool, mm);
     // after make_dictionary_global_and_unique has already been called, we can
     // find the mode of the strings by finding the mode of the indices, then
     // extracting the corresponding string for each of them.
@@ -177,10 +180,10 @@ void mode_operation_strings_dict(std::shared_ptr<array_info> arr,
     size_t num_groups = out_arr->length;
     // Create an array of nullable integers that will store the mode
     // of the indices within each group
-    std::shared_ptr<array_info> out_indices =
-        alloc_nullable_array_all_nulls(num_groups, Bodo_CTypes::INT32, 0);
+    std::shared_ptr<array_info> out_indices = alloc_nullable_array_all_nulls(
+        num_groups, Bodo_CTypes::INT32, 0, pool, std::move(mm));
     mode_operation<bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
-        indices, out_indices, grp_info);
+        indices, out_indices, grp_info, pool);
     // Create a new dictionary encoded array using the indices derived
     // from the mode computation
     std::shared_ptr<array_info> new_out_arr =
@@ -389,10 +392,8 @@ void mode_computation(std::shared_ptr<array_info> arr,
             break;
         }
         case bodo_array_type::DICT: {
-            // NOTE: We don't support custom pools for the DICT case yet.
-            // This is fine since streaming groupby doesn't support
-            // MODE yet anyway (https://bodo.atlassian.net/browse/BSE-1139).
-            mode_operation_strings_dict(arr, out_arr, grp_info);
+            mode_operation_strings_dict(arr, out_arr, grp_info, pool,
+                                        std::move(mm));
             break;
         }
         case bodo_array_type::TIMESTAMPTZ: {
