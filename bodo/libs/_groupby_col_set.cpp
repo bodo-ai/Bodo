@@ -1593,12 +1593,6 @@ void ModeColSet::update(const std::vector<grouping_info>& grp_infos,
                         bodo::IBufferPool* const pool,
                         std::shared_ptr<::arrow::MemoryManager> mm) {
     aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
-    // Mode is not supported with streaming groupby yet, so we don't
-    // technically need to use the custom pool for it yet
-    // (https://bodo.atlassian.net/browse/BSE-1139).
-    // However we've added support for it in most places anyway, except for the
-    // DICT case. That should be handled as part of the task that enables
-    // streaming MODE.
     mode_computation(this->in_col, this->update_cols[0], grp_infos[0], pool,
                      std::move(mm));
 }

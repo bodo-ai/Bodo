@@ -307,8 +307,12 @@ inline void fill_recv_data_inner(T* recv_buff, T* data,
  * need to gather the data? Note: The output should not assume the data is
  * sorted.
  */
-void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
-                                      bool sort_dictionary_if_modified = false);
+void drop_duplicates_local_dictionary(
+    std::shared_ptr<array_info> dict_array,
+    bool sort_dictionary_if_modified = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Python wrapper for drop_duplicates_local_dictionary
