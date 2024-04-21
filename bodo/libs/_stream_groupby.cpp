@@ -1700,22 +1700,22 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
         // but they may not be supported in streaming groupby yet
         // Should be kept in sync with
         // https://github.com/Bodo-inc/Bodo/blob/56c77832aea4c4d5b33fd5cf631b201f4157f73a/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/rel/core/AggregateBase.kt#L58
-        if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
-            ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
-            ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
-            ftype == Bodo_FTypes::transform || ftype == Bodo_FTypes::ngroup ||
-            ftype == Bodo_FTypes::window || ftype == Bodo_FTypes::listagg ||
-            ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::head ||
-            ftype == Bodo_FTypes::gen_udf ||
+        if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::mode ||
+            ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
+            ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax ||
+            ftype == Bodo_FTypes::shift || ftype == Bodo_FTypes::transform ||
+            ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
+            ftype == Bodo_FTypes::listagg || ftype == Bodo_FTypes::nunique ||
+            ftype == Bodo_FTypes::head || ftype == Bodo_FTypes::gen_udf ||
             ftype == Bodo_FTypes::min_row_number_filter) {
             this->accumulate_before_update = true;
         }
-        if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
-            ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
-            ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
-            ftype == Bodo_FTypes::transform || ftype == Bodo_FTypes::ngroup ||
-            ftype == Bodo_FTypes::window || ftype == Bodo_FTypes::listagg ||
-            ftype == Bodo_FTypes::nunique) {
+        if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::mode ||
+            ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
+            ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax ||
+            ftype == Bodo_FTypes::shift || ftype == Bodo_FTypes::transform ||
+            ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
+            ftype == Bodo_FTypes::listagg || ftype == Bodo_FTypes::nunique) {
             this->req_extended_group_info = true;
         }
         if (ftype == Bodo_FTypes::min_row_number_filter) {

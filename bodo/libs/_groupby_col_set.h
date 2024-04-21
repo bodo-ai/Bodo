@@ -1108,26 +1108,6 @@ class MedianColSet : public BasicColSet {
  *
  */
 class ModeColSet : public BasicColSet {
-    virtual void setUpdateCols(
-        std::vector<std::shared_ptr<array_info>> update_cols_) override {
-        throw std::runtime_error(
-            "ModeColSet not implemented for streaming groupby");
-    }
-    virtual void setCombineCols(
-        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
-        throw std::runtime_error(
-            "ModeColSet not implemented for streaming groupby");
-    }
-    virtual void setInCol(
-        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
-        throw std::runtime_error(
-            "ModeColSet not implemented for streaming groupby");
-    }
-    virtual void clear() override {
-        throw std::runtime_error(
-            "ModeColSet not implemented for streaming groupby");
-    }
-
    public:
     ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules);
 

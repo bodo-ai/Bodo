@@ -1370,7 +1370,8 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
 bodo::vector<int64_t> drop_duplicates_table_helper(
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
     int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
-    std::shared_ptr<uint32_t[]> hashes) {
+    std::shared_ptr<uint32_t[]> hashes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<std::shared_ptr<array_info>> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
@@ -1382,7 +1383,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
                 // Should we ensure that the dictionary values are unique?
                 // If this is just a local drop duplicates then we don't
                 // need to do this and can just do a best effort approach.
-                drop_duplicates_local_dictionary(key);
+                drop_duplicates_local_dictionary(key, false, pool, mm);
             }
             key = key->child_arrays[1];
         }
@@ -1390,6 +1391,11 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
     }
     uint32_t seed = SEED_HASH_CONTAINER;
     if (!hashes) {
+        // TODO: add pool/mm support in hash_keys
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, where the number of dict elements is small (limited by
+        // batch size). Therefore, tracking memory of hashes isn't necessary.
         hashes = hash_keys(key_arrs, seed, is_parallel,
                            /*global_dict_needed=*/false);
     }
@@ -1397,7 +1403,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     bodo::unord_map_container<size_t, size_t, HashDropDuplicates,
                               KeyEqualDropDuplicates>
-        entSet({}, hash_fct, equal_fct);
+        entSet({}, hash_fct, equal_fct, pool);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
     // in value. The one exception is if we are dropping NA values
@@ -1408,7 +1414,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
         return !has_nulls || !does_row_has_nulls(key_arrs, i_row);
     };
     auto RetrieveListIdx1 = [&]() -> bodo::vector<int64_t> {
-        bodo::vector<int64_t> ListRow;
+        bodo::vector<int64_t> ListRow(pool);
         uint64_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
             // don't add if entry is NA and dropna=true
@@ -1431,7 +1437,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
                 }
             }
         }
-        bodo::vector<int64_t> ListIdx;
+        bodo::vector<int64_t> ListIdx(pool);
         for (auto& eRow : ListRow) {
             if (eRow != -1) {
                 ListIdx.push_back(eRow);
@@ -1442,7 +1448,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
     // In this case we store the pairs of values, the first and the last.
     // This allows to reach conclusions in all possible cases.
     auto RetrieveListIdx2 = [&]() -> bodo::vector<int64_t> {
-        bodo::vector<std::pair<int64_t, int64_t>> ListRowPair;
+        bodo::vector<std::pair<int64_t, int64_t>> ListRowPair(pool);
         size_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
             // don't add if entry is NA and dropna=true
@@ -1458,7 +1464,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
                 }
             }
         }
-        bodo::vector<int64_t> ListIdx;
+        bodo::vector<int64_t> ListIdx(pool);
         for (auto& eRowPair : ListRowPair) {
             if (eRowPair.first != -1) {
                 ListIdx.push_back(eRowPair.first);
@@ -1469,7 +1475,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
         }
         return ListIdx;
     };
-    bodo::vector<int64_t> ListIdx;
+    bodo::vector<int64_t> ListIdx(pool);
     if (step == 1 || keep == 0 || keep == 1) {
         ListIdx = RetrieveListIdx1();
     } else {
@@ -1513,7 +1519,8 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
 std::shared_ptr<table_info> drop_duplicates_table_inner(
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
     int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
-    std::shared_ptr<uint32_t[]> hashes) {
+    std::shared_ptr<uint32_t[]> hashes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("drop_duplicates_table_inner", is_parallel);
     ev.add_attribute("table_nrows_before",
                      static_cast<size_t>(in_table->nrows()));
@@ -1523,10 +1530,10 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
     }
     bodo::vector<int64_t> ListIdx = drop_duplicates_table_helper(
         in_table, num_keys, keep, step, is_parallel, dropna,
-        drop_duplicates_dict, hashes);
+        drop_duplicates_dict, hashes, pool, mm);
     // Now building the out_arrs array.
-    std::shared_ptr<table_info> ret_table =
-        RetrieveTable(std::move(in_table), ListIdx, -1);
+    std::shared_ptr<table_info> ret_table = RetrieveTable(
+        std::move(in_table), ListIdx, -1, false, pool, std::move(mm));
     //
     ev.add_attribute("table_nrows_after",
                      static_cast<size_t>(ret_table->nrows()));
@@ -1593,24 +1600,30 @@ std::shared_ptr<table_info> drop_duplicates_keys(
  */
 std::shared_ptr<table_info> drop_duplicates_table(
     std::shared_ptr<table_info> in_table, bool is_parallel, int64_t num_keys,
-    int64_t keep, bool dropna, bool drop_local_first) {
+    int64_t keep, bool dropna, bool drop_local_first,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // serial case
     if (!is_parallel) {
-        return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
-                                           is_parallel, dropna,
-                                           /*drop_duplicates_dict=*/true);
+        return drop_duplicates_table_inner(
+            in_table, num_keys, keep, 1, is_parallel, dropna,
+            /*drop_duplicates_dict=*/true, std::shared_ptr<uint32_t[]>(nullptr),
+            pool, std::move(mm));
     }
     // parallel case
     // pre reduction of duplicates
     std::shared_ptr<table_info> red_table;
     if (drop_local_first) {
-        red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
-                                                is_parallel, dropna,
-                                                /*drop_duplicates_dict=*/false);
+        red_table = drop_duplicates_table_inner(
+            in_table, num_keys, keep, 2, is_parallel, dropna,
+            /*drop_duplicates_dict=*/false,
+            std::shared_ptr<uint32_t[]>(nullptr), pool, mm);
     } else {
         red_table = in_table;
     }
-    // shuffling of values
+    // TODO: add pool/mm support in shuffle_table
+    // NOTE: pool/mm were added for streaming groupby mode
+    // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+    // duplicates, which doesn't run in parallel.
     std::shared_ptr<table_info> shuf_table =
         shuffle_table(red_table, num_keys, is_parallel);
     // no need to decref since shuffle_table() steals a reference
@@ -1624,7 +1637,8 @@ std::shared_ptr<table_info> drop_duplicates_table(
         dropna = false;
     std::shared_ptr<table_info> ret_table = drop_duplicates_table_inner(
         shuf_table, num_keys, keep, 1, is_parallel, dropna,
-        /*drop_duplicates_dict=*/true);
+        /*drop_duplicates_dict=*/true, std::shared_ptr<uint32_t[]>(nullptr),
+        pool, std::move(mm));
     // returning table
     return ret_table;
 }
