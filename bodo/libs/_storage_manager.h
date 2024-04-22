@@ -6,6 +6,14 @@
 
 #include <arrow/status.h>
 
+// Forward declare boost::json::object to avoid including the entire header and
+// increasing compile times
+namespace boost {
+namespace json {
+class object;
+}
+}  // namespace boost
+
 // TODO Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                                      \
     if (!(expr.ok())) {                                                 \
@@ -216,5 +224,10 @@ std::unique_ptr<StorageManager> MakeStorageManager(
 void PrintStorageManagerStats(FILE* os,
                               const std::span<std::string_view> m_names,
                               const std::span<const StorageManagerStats> stats);
+
+/// @brief Get Storage Manager Statistics for All Managers as JSON
+boost::json::object GetStorageManagerStats(
+    const std::span<std::string_view> m_names,
+    const std::span<const StorageManagerStats> stats);
 
 };  // namespace bodo

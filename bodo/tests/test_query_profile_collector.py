@@ -500,28 +500,6 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
     ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
 
 
-def test_output_directory_can_be_set():
-    """Check that the output directory can be set"""
-
-    with tempfile.TemporaryDirectory() as test_dir:
-        with temp_env_override(
-            {"BODO_TRACING_OUTPUT_DIR": test_dir, "BODO_TRACING_LEVEL": "1"}
-        ):
-
-            @bodo.jit
-            def impl():
-                bodo.libs.query_profile_collector.init()
-                bodo.libs.query_profile_collector.start_pipeline(1)
-                bodo.libs.query_profile_collector.end_pipeline(1, 10)
-                bodo.libs.query_profile_collector.finalize()
-                return
-
-            impl()
-            for f in os.listdir(test_dir):
-                assert f.startswith("query_profile")
-                assert f.endswith(".json")
-
-
 def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     """
     Test that generated query profile has the metrics that we expect

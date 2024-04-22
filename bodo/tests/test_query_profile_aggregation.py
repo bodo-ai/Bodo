@@ -109,3 +109,62 @@ def test_aggregate_pipelines():
     assert num_iterations1["summary"]["median"] == 45
     assert num_iterations1["summary"]["q3"] == 67.5
     assert num_iterations1["summary"]["max"] == 90
+
+
+def test_aggregate_invalid_bufferpool_stats():
+    """Test aggregating buffer pool stats"""
+    profiles = [
+        {"buffer_pool_stats": {"a": 0}},
+        {"buffer_pool_stats": {"b": 0}},
+    ]
+
+    with pytest.raises(AssertionError, match="Inconsistent buffer pool stat keys"):
+        aggregate_query_profiles.aggregate(profiles)
+
+
+def test_aggregate_bufferpool_stats():
+    """Test aggregating buffer pool stats"""
+    profile = {
+        "buffer_pool_stats": {
+            "general stats": {
+                "curr_bytes_allocated": 0,
+            },
+            "SizeClassMetrics": {
+                "64KiB": {
+                    "Num Spilled": 0,
+                    "Spill Time": 0,
+                    "Num Readback": 0,
+                    "Readback Time": 0,
+                    "Num Madvise": 0,
+                    "Madvise Time": 0,
+                    "Unmapped Time": 0,
+                },
+                "128KiB": {
+                    "Num Spilled": 0,
+                    "Spill Time": 0,
+                    "Num Readback": 0,
+                    "Readback Time": 0,
+                    "Num Madvise": 0,
+                    "Madvise Time": 0,
+                    "Unmapped Time": 0,
+                },
+            },
+        }
+    }
+
+    agg = aggregate_query_profiles.aggregate([profile, profile])
+    assert "buffer_pool_stats" in agg
+
+    assert "general stats" in agg["buffer_pool_stats"]
+    assert "curr_bytes_allocated" in agg["buffer_pool_stats"]["general stats"]
+    assert (
+        "summary" in agg["buffer_pool_stats"]["general stats"]["curr_bytes_allocated"]
+    )
+
+    assert "SizeClassMetrics" in agg["buffer_pool_stats"]
+    assert "64KiB" in agg["buffer_pool_stats"]["SizeClassMetrics"]
+    assert "128KiB" in agg["buffer_pool_stats"]["SizeClassMetrics"]
+    for k in profile["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"]:
+        assert k in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"]
+        assert "data" in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"][k]
+        assert "summary" in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"][k]
