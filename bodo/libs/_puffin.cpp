@@ -1,4 +1,5 @@
 #include "_puffin.h"
+#include <arrow/python/api.h>
 
 static char puffin_magic[4] = {0x50, 0x46, 0x41, 0x31};
 
@@ -288,13 +289,15 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
 #undef invalid_footer
 
 std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, size_t n_sketches) {
+    immutable_theta_sketch_collection_t sketches, int64_t snapshot_id,
+    int64_t sequence_number) {
+    size_t n_sketches = sketches.size();
     // For each theta sketch, add the serialized sketch to blobs, then
     // populate the metadata.
     std::vector<std::string> blobs;
     std::vector<BlobMetadata> metadata;
     std::vector<std::optional<std::string>> serialized_sketches =
-        serialize_theta_sketches(sketches, n_sketches);
+        serialize_theta_sketches(sketches);
     size_t curr_offset = 4;
     for (size_t sketch_idx = 0; sketch_idx < n_sketches; sketch_idx++) {
         if (sketches[sketch_idx] != std::nullopt) {
@@ -306,8 +309,8 @@ std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
             metadata.push_back({
                 "apache-datasketches-theta-v1",  // type
                 {(int64_t)sketch_idx + 1},       // fields (1-indexed)
-                -1,                              // snapshot-id (dummy)
-                -1,                              // sequence-number (dummy)
+                snapshot_id,                     // snapshot-id
+                sequence_number,                 // sequence-number
                 (int64_t)curr_offset,            // offset
                 (int64_t)blob.size(),            // length
                 std::nullopt,                    // codec (absent)
@@ -371,3 +374,75 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
     }
     return deserialize_theta_sketches(to_deserialize);
 }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
+/**
+ * Entrypoint from Python to initialize a PuffinFile write.
+ * @param table_loc_buffer: buffer storing the table_loc string.
+ * @param table_loc_size: number of characters in table_loc_buffer.
+ * @param snapshot_id: the snapshot_id to use for the PuffinFile metadata.
+ * @param snapshot_id: the sequence_number to use for the PuffinFile metadata.
+ * @param sketches: the collection of theta sketches to write.
+ * @param iceberg_arrow_schema_py: the schema of the table being written.
+ * @param already_exists: whether the table being written to already exists.
+ */
+void write_puffin_file_py_entrypt(char *table_loc_buffer,
+                                  int64_t table_loc_size, int64_t snapshot_id,
+                                  int64_t sequence_number,
+                                  theta_sketch_collection_t sketches,
+                                  PyObject *iceberg_arrow_schema_py,
+                                  bool already_exists) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    std::shared_ptr<arrow::Schema> iceberg_schema;
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+                           "Iceberg Schema Couldn't Unwrap from Python",
+                           iceberg_schema);
+    size_t n_cols = iceberg_schema->num_fields();
+    // Gather the theta sketches onto rank 0
+    auto immutable_collection = compact_theta_sketches(sketches, n_cols);
+    auto merged_collection =
+        merge_parallel_theta_sketches(immutable_collection);
+    // TODO: if already exists, combine merged_collections with the existing
+    // theta sketches
+    if (rank == 0) {
+        std::string table_loc(table_loc_buffer, table_loc_size);
+        auto puff = PuffinFile::from_theta_sketches(
+            merged_collection, snapshot_id, sequence_number);
+        std::string serialized = puff->serialize();
+        // TODO: write serialized
+    }
+}
+
+PyMODINIT_FUNC PyInit_puffin_file(void) {
+    PyObject *m;
+    MOD_DEF(m, "puffin_file", "No docs", NULL);
+    if (m == NULL) {
+        return NULL;
+    }
+
+    bodo_common_init();
+
+    SetAttrStringFromVoidPtr(m, write_puffin_file_py_entrypt);
+
+    return m;
+}
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN

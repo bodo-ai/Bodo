@@ -2,10 +2,14 @@ import operator
 import os
 import traceback
 
+import llvmlite.binding as ll
 import numba
 import pandas as pd
+from bodo_iceberg_connector.catalog_conn import parse_conn_str
+from bodo_iceberg_connector.py4j_support import get_java_table_handler
+from llvmlite import ir as lir
 from mpi4py import MPI
-from numba.core import types
+from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -35,9 +39,17 @@ from bodo.io.iceberg import (
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,
     register_table_write,
+    theta_sketch_collection_type,
     wrap_start_write,
 )
-from bodo.libs.array import array_to_info, py_table_to_cpp_table
+from bodo.libs import puffin_file, theta_sketches
+from bodo.libs.array import (
+    ArrayInfoType,
+    array_to_info,
+    delete_info,
+    info_to_array,
+    py_table_to_cpp_table,
+)
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
 from bodo.utils.transform import get_call_expr_arg
@@ -51,9 +63,230 @@ from bodo.utils.typing import (
     unwrap_typeref,
 )
 
+ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
+ll.add_symbol(
+    "fetch_ndv_approximations", theta_sketches.fetch_ndv_approximations_py_entrypt
+)
+ll.add_symbol("write_puffin_file", puffin_file.write_puffin_file_py_entrypt)
+
 # Maximum Parquet file size for streaming Iceberg write
 # TODO[BSE-2609] get max file size from Iceberg metadata
 ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
+
+
+def get_env_value(env_var):  # pragma: no cover
+    pass
+
+
+@overload(get_env_value)
+def overload_get_env_value(env_var):
+    """
+    Returns the current runtime value of an environment variable
+    """
+
+    def impl(env_var):  # pragma: no cover
+        with bodo.objmode(env_value="string"):
+            env_value = os.environ.get(env_var, "0")
+        return env_value
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _init_theta_sketches(
+    typingctx,
+    output_pyarrow_schema_t,
+    already_exists_t,
+    enable_theta_sketches_t,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # table_info*
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="init_theta_sketches"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        theta_sketch_collection_type(
+            pyarrow_schema_type,
+            types.bool_,
+            types.bool_,
+        ),
+        codegen,
+    )
+
+
+def init_theta_sketches_wrapper(
+    con_str, schema, table_name, output_pyarrow_schema, already_exists
+):  # pragma: no cover
+    pass
+
+
+@overload(init_theta_sketches_wrapper)
+def overload_init_theta_sketches_wrapper(
+    con_str, schema, table_name, output_pyarrow_schema, already_exists
+):
+    """
+    Creates a new theta sketch collection when starting to write an Iceberg table.
+    For now, most of the arguments are unused and we just worry about the schema,
+    whether the table already exists, and whether theta sketches are allowed.
+
+    con_str: Iceberg connection string
+    schema: database schema where the table is being written to
+    table_name: table name being written
+    output_pyarrow_schema: Iceberg pyarrow schema of the final table
+    already_exists: true if the table is being inserted into, false if it is being created from scratch
+    """
+
+    def impl(
+        con_str, schema, table_name, output_pyarrow_schema, already_exists
+    ):  # pragma: no cover
+        enable_theta = get_env_value("BODO_ENABLE_THETA_SKETCHES") != "0"
+        return _init_theta_sketches(output_pyarrow_schema, already_exists, enable_theta)
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _iceberg_writer_fetch_theta(typingctx, array_info_t, output_pyarrow_schema_t):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # table_info*
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="fetch_ndv_approximations"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        ArrayInfoType()(theta_sketch_collection_type, pyarrow_schema_type),
+        codegen,
+    )
+
+
+def iceberg_writer_fetch_theta(writer):
+    pass
+
+
+@overload(iceberg_writer_fetch_theta)
+def overload_iceberg_writer_fetch_theta(writer):
+    """
+    Fetches the current values of the theta sketch approximations
+    of NDV for each column in an iceberg writer. For each column
+    that does not have a theta sketch, returns null instead. Largely
+    used for testing purposes.
+    """
+    arr_type = bodo.FloatingArrayType(types.float64)
+
+    def impl(writer):  # pragma: no cover
+        res_info = _iceberg_writer_fetch_theta(
+            writer["theta_sketches"], writer["output_pyarrow_schema"]
+        )
+        res = info_to_array(res_info, arr_type)
+        delete_info(res_info)
+        return res
+
+    return impl
+
+
+@intrinsic
+def _write_puffin_file(
+    typingctx,
+    table_loc_t,
+    snapshot_id_t,
+    sequence_number_t,
+    theta_sketches_t,
+    output_pyarrow_schema_t,
+    already_exists_t,
+):
+    def codegen(context, builder, sig, args):
+        (
+            table_loc_str,
+            snapshot_id,
+            sequence_number,
+            theta_sketches,
+            output_pyarrow_schema,
+            already_exists,
+        ) = args
+        table_loc_struct = cgutils.create_struct_proxy(types.unicode_type)(
+            context, builder, value=table_loc_str
+        )
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),  # table_loc buffer
+                lir.IntType(64),  # table_loc length
+                lir.IntType(64),  # snapshot_id
+                lir.IntType(64),  # sequence_number
+                lir.IntType(8).as_pointer(),  # theta_sketches
+                lir.IntType(8).as_pointer(),  # output_pyarrow_schema
+                lir.IntType(1),  # already_exists
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="write_puffin_file"
+        )
+        ret = builder.call(
+            fn_tp,
+            [
+                table_loc_struct.data,
+                table_loc_struct.length,
+                snapshot_id,
+                sequence_number,
+                theta_sketches,
+                output_pyarrow_schema,
+                already_exists,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        types.void(
+            table_loc_t,
+            snapshot_id_t,
+            sequence_number_t,
+            theta_sketches_t,
+            output_pyarrow_schema_t,
+            already_exists_t,
+        ),
+        codegen,
+    )
+
+
+def fetch_snapshot_id(rank, conn, db_schema, table_name):
+    """
+    Fetches the snapshot_id from the current Iceberg transaction.
+    """
+    snapshot_id = -1
+    if rank == 0:
+        catalog_type, _ = parse_conn_str(conn)
+        bodo_iceberg_table_reader = get_java_table_handler(
+            conn,
+            catalog_type,
+            db_schema,
+            table_name,
+        )
+        # TODO: get this from the write commit function instead so we can
+        # avoid getting the wrong snapshotID
+        snapshot_id = bodo_iceberg_table_reader.getSnapshotId()
+    snapshot_id = MPI.COMM_WORLD.bcast(snapshot_id)
+    return snapshot_id
 
 
 class IcebergWriterType(types.Type):
@@ -105,6 +338,10 @@ iceberg_writer_payload_members = (
     ("finished", types.boolean),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
+    # Whether the table is being inserted into, as opposed to created from scratch
+    ("already_exists", types.boolean),
+    # Collection of theta sketch data for the columns that have it
+    ("theta_sketches", theta_sketch_collection_type),
     # Transaction ID for the write
     ("txn_id", types.int64),
 )
@@ -500,6 +737,10 @@ def gen_iceberg_writer_init_impl(
             table_builder_state_type,
             input_dicts_unified=input_dicts_unified,
         )
+        writer["already_exists"] = already_exists
+        writer["theta_sketches"] = init_theta_sketches_wrapper(
+            con_str, schema, table_name, output_pyarrow_schema, already_exists
+        )
         writer["txn_id"] = txn_id
 
         # Barrier ensures that internal stage exists before we upload files to it
@@ -649,6 +890,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["iceberg_schema_str"],
                     writer["parallel"],
                     writer["output_pyarrow_schema"],
+                    writer["theta_sketches"],
                 )
                 append_py_list(writer["iceberg_files_info"], iceberg_files_info)
 
@@ -684,6 +926,26 @@ def gen_iceberg_writer_append_table_impl_inner(
                     metrics,
                     iceberg_schema_id,
                     if_exists,
+                )
+
+            # If theta sketches are turned on, fetch the snapshot id of the
+            # current transaction and use it to write the Puffin file
+            enable_theta = get_env_value("BODO_ENABLE_THETA_SKETCHES") != "0"
+            if enable_theta:
+                snapshot_id = -1
+                rank = bodo.get_rank()
+                with bodo.no_warning_objmode(snapshot_id="int64"):
+                    snapshot_id = fetch_snapshot_id(rank, conn, db_schema, table_name)
+
+                # TODO: find real way to determine sequence_number
+                sequence_number = 1
+                _write_puffin_file(
+                    table_loc,
+                    snapshot_id,
+                    sequence_number,
+                    writer["theta_sketches"],
+                    writer["output_pyarrow_schema"],
+                    writer["already_exists"],
                 )
 
             if not success:
