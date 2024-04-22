@@ -10,6 +10,14 @@
 
 #include "_storage_manager.h"
 
+// Forward declare boost::json::object to avoid including the entire header and
+// increasing compile times
+namespace boost {
+namespace json {
+class object;
+}
+}  // namespace boost
+
 // Fraction of the smallest mmap-ed SizeClass
 // that should be used as threshold for allocation
 // through malloc.
@@ -787,7 +795,7 @@ class BufferPool final : public IBufferPool {
     int64_t get_bytes_freed_through_malloc_since_last_trim() const;
 
     /// @brief Get the current allocation stats for the BufferPool
-    BufferPoolStats get_stats() const { return this->stats_; }
+    boost::json::object get_stats() const;
 
    protected:
     /// @brief Options that were used for building the BufferPool.

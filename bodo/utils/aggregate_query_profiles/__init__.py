@@ -20,6 +20,87 @@ def five_number_summary(data: list[float]) -> dict[str, float]:
     }
 
 
+def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
+    stat0 = stats[0]
+    aggregated_stats = {}
+    # assert that all ranks have the same buffer pool stat keys
+    assert all(
+        set(stat.keys()) == set(stat0.keys()) for stat in stats[1:]
+    ), "Inconsistent buffer pool stat keys"
+
+    assert all(
+        set(stat["general stats"].keys()) == set(stat0["general stats"].keys())
+        for stat in stats[1:]
+    ), "Inconsistent buffer pool stat keys"
+
+    general_stats = {}
+    for k in stat0["general stats"]:
+        data = [stat["general stats"][k] for stat in stats]
+        general_stats[k] = {
+            "data": data,
+            "summary": five_number_summary(data),
+        }
+    aggregated_stats["general stats"] = general_stats
+
+    # Helper since both SizeClassMetrics and StorageManagerStats have the same
+    # logic - we want to iterate over all keys under the initial key, and for
+    # each key, we have an object where every subkey has a data point we want a
+    # summary for.
+    # e.g.
+    # {
+    #     "buffer_pool_stats": {
+    #         "general stats": {
+    #           "curr_bytes_allocated": 0,
+    #           ...
+    #         },
+    #         "SizeClassMetrics": {
+    #           "64KiB": {
+    #             "Num Spilled": 0,
+    #             "Spill Time": 0,
+    #             "Num Readback": 0,
+    #             "Readback Time": 0,
+    #             "Num Madvise": 0,
+    #             "Madvise Time": 0,
+    #             "Unmapped Time": 0
+    #           },
+    #           "128KiB": {
+    #             "Num Spilled": 0,
+    #             "Spill Time": 0,
+    #             "Num Readback": 0,
+    #             "Readback Time": 0,
+    #             "Num Madvise": 0,
+    #             "Madvise Time": 0,
+    #             "Unmapped Time": 0
+    #           },
+    #           ...
+    #         },
+    #         ...
+    #       },
+    #     ...
+    # }
+    def aggregate_bufferpool_subkeys(key: str):
+        assert key in stat0, f"Missing {key}"
+        subkeys = stat0[key].keys()
+        assert all(
+            set(stat[key].keys()) == set(subkeys) for stat in stats[1:]
+        ), "Inconsistent keys"
+
+        aggregated_stats[key] = {subkey: {} for subkey in subkeys}
+        for subkey in subkeys:
+            for k in stat0[key][subkey]:
+                data = [stat[key][subkey][k] for stat in stats]
+                aggregated_stats[key][subkey][k] = {
+                    "data": data,
+                    "summary": five_number_summary(data),
+                }
+
+    aggregate_bufferpool_subkeys("SizeClassMetrics")
+    # StorageManagerStats is optional
+    if "StorageManagerStats" in stat0:
+        aggregate_bufferpool_subkeys("StorageManagerStats")
+    return aggregated_stats
+
+
 def aggregate_helper(
     profiles: list[dict[str, Any]], key: str, aggregated: dict[str, Any]
 ) -> None:
@@ -72,6 +153,12 @@ def aggregate_helper(
     if key == "initial_operator_budgets":
         # Assumes that all ranks have the same initial operator budgets
         aggregated[key] = profile0[key]
+        return
+
+    if key == "buffer_pool_stats":
+        aggregated[key] = aggregate_buffer_pool_stats(
+            [profile[key] for profile in profiles]
+        )
         return
 
     # default to aggregating as a list

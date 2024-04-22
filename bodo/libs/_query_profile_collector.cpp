@@ -3,12 +3,13 @@
 #include <fmt/core.h>
 #include <mpi.h>
 #include <sys/stat.h>
-#include <boost/json/src.hpp>
+#include <boost/json.hpp>
 #include <chrono>
 #include <iostream>
 #include <unordered_set>
 #include "../io/_io.h"
 #include "_bodo_common.h"
+#include "_memory.h"
 #include "_memory_budget.h"
 
 #define DISABLE_IF_TRACING_DISABLED \
@@ -282,6 +283,8 @@ void QueryProfileCollector::Finalize() {
             OperatorToJson(op_id, max_stage);
     }
     profile["operator_reports"] = operator_reports;
+
+    profile["buffer_pool_stats"] = bodo::BufferPool::Default()->get_stats();
 
     auto s = boost::json::serialize(profile);
 

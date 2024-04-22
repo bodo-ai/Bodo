@@ -8,6 +8,10 @@
 #include <optional>
 #include <string>
 
+// The source header has to be included by _memory.cpp so that it's available in
+// the memory shared object and the main extension shared object.
+#include <boost/json/src.hpp>
+
 #ifdef __linux__
 // Needed for 'malloc_trim'
 #include <malloc.h>
@@ -1816,6 +1820,82 @@ void BufferPool::Cleanup() {
 
         PrintStorageManagerStats(stderr, manager_names, stats);
     }
+}
+
+boost::json::object BufferPool::get_stats() const {
+    boost::json::object out_stats;
+
+    boost::json::object general_stats;
+    general_stats["curr_bytes_allocated"] = stats_.curr_bytes_allocated;
+    general_stats["curr_bytes_in_memory"] = stats_.curr_bytes_in_memory;
+    general_stats["curr_bytes_malloced"] = stats_.curr_bytes_malloced;
+    general_stats["curr_bytes_pinned"] = stats_.curr_bytes_pinned;
+    general_stats["curr_num_allocations"] = stats_.curr_num_allocations;
+    general_stats["total_bytes_allocated"] = stats_.total_bytes_allocated;
+    general_stats["total_bytes_requested"] = stats_.total_bytes_requested;
+    general_stats["total_bytes_malloced"] = stats_.total_bytes_malloced;
+    general_stats["total_bytes_pinned"] = stats_.total_bytes_pinned;
+    general_stats["total_bytes_unpinned"] = stats_.total_bytes_unpinned;
+    general_stats["total_bytes_reallocs_reused"] =
+        stats_.total_bytes_reallocs_reused;
+    general_stats["total_num_allocations"] = stats_.total_num_allocations;
+    general_stats["total_num_reallocations"] = stats_.total_num_reallocations;
+    general_stats["total_num_pins"] = stats_.total_num_pins;
+    general_stats["total_num_unpins"] = stats_.total_num_unpins;
+    general_stats["total_num_frees_from_spill"] =
+        stats_.total_num_frees_from_spill;
+    general_stats["total_num_reallocs_reused"] =
+        stats_.total_num_reallocs_reused;
+    general_stats["max_bytes_allocated"] = stats_.max_bytes_allocated;
+    general_stats["max_bytes_in_memory"] = stats_.max_bytes_in_memory;
+    general_stats["max_bytes_malloced"] = stats_.max_bytes_malloced;
+    general_stats["max_bytes_pinned"] = stats_.max_bytes_pinned;
+    general_stats["total_allocation_time"] =
+        stats_.total_allocation_time.count();
+    general_stats["total_malloc_time"] = stats_.total_malloc_time.count();
+    general_stats["total_realloc_time"] = stats_.total_realloc_time.count();
+    general_stats["total_free_time"] = stats_.total_free_time.count();
+    general_stats["total_pin_time"] = stats_.total_pin_time.count();
+    general_stats["total_find_evict_time"] =
+        stats_.total_find_evict_time.count();
+
+    out_stats["general stats"] = general_stats;
+
+    boost::json::object per_size_class_stats;
+    for (const auto& s : size_classes_) {
+        boost::json::object size_class_stats;
+        size_class_stats["Num Spilled"] = s->stats_.total_blocks_spilled;
+        size_class_stats["Spill Time"] = s->stats_.total_spilling_time.count();
+        size_class_stats["Num Readback"] = s->stats_.total_blocks_readback;
+        size_class_stats["Readback Time"] =
+            s->stats_.total_readback_time.count();
+        size_class_stats["Num Madvise"] = s->stats_.total_advise_away_calls;
+        size_class_stats["Madvise Time"] =
+            s->stats_.total_advise_away_time.count();
+        size_class_stats["Unmapped Time"] =
+            s->stats_.total_find_unmapped_time.count();
+        std::string key = BytesToHumanReadableString(s->getBlockSize());
+        per_size_class_stats[key] = size_class_stats;
+    }
+
+    out_stats["SizeClassMetrics"] = per_size_class_stats;
+
+    if (this->storage_managers_.size() > 0) {
+        std::vector<std::string_view> manager_names;
+        for (auto& manager : this->storage_managers_) {
+            manager_names.push_back(manager->storage_name);
+        }
+
+        std::vector<StorageManagerStats> stats;
+        for (auto& manager : this->storage_managers_) {
+            stats.push_back(manager->stats_);
+        }
+
+        out_stats["StorageManagerStats"] =
+            GetStorageManagerStats(manager_names, stats);
+    }
+
+    return out_stats;
 }
 
 /// Helper Functions for using BufferPool in Arrow
