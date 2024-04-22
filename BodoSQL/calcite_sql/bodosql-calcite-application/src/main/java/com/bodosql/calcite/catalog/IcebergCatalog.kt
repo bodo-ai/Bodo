@@ -119,6 +119,8 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
     ): Double? {
         val table = loadIcebergTable(schemaPath, tableName)
         val currentSnapshot = table.currentSnapshot() ?: return null
+        val schema = table.schema()
+        val fieldId = schema.columns()[colIdx].fieldId()
         // [BSE-3168] TODO: explore using the sequence number to check if
         // a file is "fresh enough."
         table.statisticsFiles().forEach { statFile ->
@@ -126,7 +128,7 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
                 statFile.blobMetadata().forEach { blob ->
                     if ((blob.type() == "apache-datasketches-theta-v1") &&
                         (blob.fields().size == 1) &&
-                        (blob.fields()[0] - 1 == colIdx)
+                        (blob.fields()[0] == fieldId)
                     ) {
                         return blob.properties()["ndv"]?.let { ndvStr -> ndvStr.toDouble() }
                     }
