@@ -1134,11 +1134,17 @@ def _test_equal(
                 np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
             elif isinstance(bodo_out, pd.arrays.ArrowStringArray):
                 pd.testing.assert_extension_array_equal(
-                    bodo_out, pd.array(py_out, "string[pyarrow]")
+                    bodo_out,
+                    pd.array(py_out, "string[pyarrow]"),
+                    rtol=rtol,
+                    atol=atol,
                 )
             elif isinstance(bodo_out, pd.arrays.FloatingArray):
                 pd.testing.assert_extension_array_equal(
-                    bodo_out, pd.array(py_out, bodo_out.dtype)
+                    bodo_out,
+                    pd.array(py_out, bodo_out.dtype),
+                    rtol=rtol,
+                    atol=atol,
                 )
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
@@ -1159,7 +1165,9 @@ def _test_equal(
             bodo_out = pd.Categorical(
                 bodo_out, categories=bodo_out.categories.sort_values()
             )
-        pd.testing.assert_extension_array_equal(bodo_out, py_out, check_dtype=False)
+        pd.testing.assert_extension_array_equal(
+            bodo_out, py_out, check_dtype=False, rtol=rtol, atol=atol
+        )
     elif isinstance(py_out, csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
         #

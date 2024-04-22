@@ -24,6 +24,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_shuffle.h"
+#include "../libs/_theta_sketches.h"
 #include "../libs/iceberg_transforms.h"
 #include "iceberg_helpers.h"
 #include "parquet_write.h"
@@ -562,6 +563,8 @@ std::shared_ptr<arrow::Table> cast_arrow_table_to_iceberg_schema(
  * schema's metadata with key 'iceberg.schema'
  * @param iceberg_arrow_schema Iceberg schema in Arrow format that written
  * Parquet files should match
+ * @param sketches collection of theta sketches accumulating ndv for the table
+ * as it is being written.
  * @param[out] record_count Number of records in this file
  * @param[out] file_size_in_bytes Size of the file in bytes
  * @return A vector of Python Objects representing the metadata information
@@ -572,8 +575,8 @@ std::vector<PyObject *> iceberg_pq_write_helper(
     const char *fpath, const std::shared_ptr<table_info> table,
     const std::shared_ptr<array_info> col_names_arr, const char *compression,
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
-    char *iceberg_metadata,
-    std::shared_ptr<arrow::Schema> iceberg_arrow_schema) {
+    char *iceberg_metadata, std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
+    theta_sketch_collection_t sketches) {
     std::unordered_map<std::string, std::string> md = {
         {"iceberg.schema", std::string(iceberg_metadata)}};
 
@@ -600,6 +603,7 @@ std::vector<PyObject *> iceberg_pq_write_helper(
     std::shared_ptr<arrow::Table> iceberg_table =
         cast_arrow_table_to_iceberg_schema(std::move(arrow_table),
                                            std::move(iceberg_arrow_schema));
+    update_theta_sketches(sketches, iceberg_table);
     std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
     for (auto col : table->columns) {
         bodo_array_types.push_back(col->arr_type);
@@ -661,6 +665,8 @@ std::vector<PyObject *> iceberg_pq_write_helper(
  be passed in as an empty list which will be filled during execution.
  * @param iceberg_schema Expected Arrow schema of files written to Iceberg
  table, if given.
+ * @param sketches collection of theta sketches accumulating ndv for the table
+ * as it is being written.
  */
 void iceberg_pq_write(const char *table_data_loc,
                       std::shared_ptr<table_info> table,
@@ -669,7 +675,8 @@ void iceberg_pq_write(const char *table_data_loc,
                       const char *compression, bool is_parallel,
                       const char *bucket_region, int64_t row_group_size,
                       char *iceberg_metadata, PyObject *iceberg_files_info_py,
-                      std::shared_ptr<arrow::Schema> iceberg_schema) {
+                      std::shared_ptr<arrow::Schema> iceberg_schema,
+                      theta_sketch_collection_t sketches) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
     ev.add_attribute("iceberg_metadata", iceberg_metadata);
@@ -1014,8 +1021,8 @@ void iceberg_pq_write(const char *table_data_loc,
             // We don't need to check if record count is zero in this case.
             std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
                 p.fpath.c_str(), part_table, col_names_arr, compression, false,
-                bucket_region, row_group_size, iceberg_metadata,
-                iceberg_schema);
+                bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
+                sketches);
 
             for (int i = 0; i < NUM_ICEBERG_DATA_FILE_STATS; i++) {
                 PyObject *obj = iceberg_py_objs[i];
@@ -1048,7 +1055,8 @@ void iceberg_pq_write(const char *table_data_loc,
         // more elegantly.
         std::vector<PyObject *> iceberg_py_objs = iceberg_pq_write_helper(
             fpath.c_str(), working_table, col_names_arr, compression, false,
-            bucket_region, row_group_size, iceberg_metadata, iceberg_schema);
+            bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
+            sketches);
 
         if (iceberg_py_objs.size() > 0) {
             PyObject *file_name_py = PyUnicode_FromString(fname.c_str());
@@ -1077,7 +1085,7 @@ PyObject *iceberg_pq_write_py_entry(
     array_info *in_col_names_arr, PyObject *partition_spec,
     PyObject *sort_order, const char *compression, bool is_parallel,
     const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
-    PyObject *iceberg_arrow_schema_py) {
+    PyObject *iceberg_arrow_schema_py, theta_sketch_collection_t sketches) {
     try {
         std::shared_ptr<table_info> table =
             std::shared_ptr<table_info>(in_table);
@@ -1097,7 +1105,7 @@ PyObject *iceberg_pq_write_py_entry(
         iceberg_pq_write(table_data_loc, table, col_names_arr, partition_spec,
                          sort_order, compression, is_parallel, bucket_region,
                          row_group_size, iceberg_metadata,
-                         iceberg_files_info_py, iceberg_schema);
+                         iceberg_files_info_py, iceberg_schema, sketches);
 
         return iceberg_files_info_py;
     } catch (const std::exception &e) {

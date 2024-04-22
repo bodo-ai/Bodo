@@ -8,6 +8,8 @@ from bodo.ext import (  # noqa
     hio,
     hstr_ext,
     lateral,
+    theta_sketches,
+    puffin_file,
     lead_lag,
     listagg,
     quantile_alg,

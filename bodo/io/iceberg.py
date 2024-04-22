@@ -28,7 +28,13 @@ import pyarrow.parquet as pq
 import requests
 from mpi4py import MPI
 from numba.core import types
-from numba.extending import intrinsic
+from numba.extending import (
+    box,
+    intrinsic,
+    models,
+    register_model,
+    unbox,
+)
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -353,6 +359,20 @@ def sanitize_col_name(col_name: str) -> str:  # pragma: no cover
         str: Sanitized string
     """
     return re.sub(r"\W|^(?=\d)", "_", col_name)
+
+
+class ThetaSketchCollectionType(types.Type):
+    """Type for C++ pointer to a collection of theta sketches"""
+
+    def __init__(self):  # pragma: no cover
+        super(ThetaSketchCollectionType, self).__init__(
+            name=f"ThetaSketchCollectionType(r)"
+        )
+
+
+register_model(ThetaSketchCollectionType)(models.OpaqueModel)
+
+theta_sketch_collection_type = ThetaSketchCollectionType()
 
 
 class IcebergSchemaGroup:
@@ -3090,6 +3110,7 @@ def iceberg_pq_write(
     iceberg_schema_str,
     is_parallel,
     expected_schema,
+    sketch_collection,
 ):  # pragma: no cover
     """
     Writes a table to Parquet files in an Iceberg table's data warehouse
@@ -3104,6 +3125,7 @@ def iceberg_pq_write(
         is_parallel (bool): Whether the write is occurring on a distributed dataframe
         expected_schema (pyarrow.Schema): Expected schema of output PyArrow table written
             to Parquet files in the Iceberg table. None if not necessary
+        sketch_collection: collection of theta sketches being used to build NDV values during write
 
     Returns:
         Distributed list of written file info needed by Iceberg for committing
@@ -3136,6 +3158,7 @@ def iceberg_pq_write(
         rg_size,
         unicode_to_utf8(iceberg_schema_str),
         expected_schema,
+        sketch_collection,
     )
 
     return iceberg_files_info
@@ -3185,6 +3208,7 @@ def iceberg_write(
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
         mode="unicode_type",
+        already_exists="bool_",
     ):
         (
             table_loc,
@@ -3220,7 +3244,9 @@ def iceberg_write(
             sort_order,
             mode,
         )
-
+    dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
+        conn, database_schema, table_name, output_pyarrow_schema, already_exists
+    )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,
@@ -3230,6 +3256,7 @@ def iceberg_write(
         iceberg_schema_str,
         is_parallel,
         output_pyarrow_schema,
+        dummy_theta_sketch,
     )
 
     with bodo.no_warning_objmode(success="bool_"):
@@ -3392,6 +3419,9 @@ def iceberg_merge_cow(
     if not already_exists:
         raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
 
+    dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
+        conn, database_schema, table_name, output_pyarrow_schema, already_exists
+    )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,
@@ -3401,6 +3431,7 @@ def iceberg_merge_cow(
         iceberg_schema_str,
         is_parallel,
         output_pyarrow_schema,
+        dummy_theta_sketch,
     )
 
     with bodo.no_warning_objmode(success="bool_"):
@@ -3451,6 +3482,7 @@ def iceberg_pq_write_table_cpp(
     row_group_size,
     iceberg_metadata_t,
     iceberg_schema_t,
+    sketch_collection_t,
 ):
     """
     Call C++ iceberg parquet write function
@@ -3472,6 +3504,7 @@ def iceberg_pq_write_table_cpp(
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
             ],
@@ -3496,6 +3529,7 @@ def iceberg_pq_write_table_cpp(
             types.int64,
             types.voidptr,
             pyarrow_schema_type,
+            theta_sketch_collection_type,
         ),
         codegen,
     )

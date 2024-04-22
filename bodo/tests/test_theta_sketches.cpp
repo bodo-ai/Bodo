@@ -551,7 +551,7 @@ static bodo::tests::suite tests([] {
 
         // First test: merge collections 0 and 1, observe the estimates
         immutable_theta_sketch_collection_t merge_01 =
-            merge_theta_sketches({compact_0, compact_1}, 1);
+            merge_theta_sketches({compact_0, compact_1});
         bodo::tests::check(!merge_01[0].value().is_empty());
         bodo::tests::check(!merge_01[0].value().is_estimation_mode());
         check_approx(merge_01[0].value().get_theta(), 1.0);
@@ -561,7 +561,7 @@ static bodo::tests::suite tests([] {
 
         // Second test: serialize the merged #0/#1, then deserialize,
         // then confirm the estimates are intact.
-        auto serialized_01 = serialize_theta_sketches(merge_01, 1);
+        auto serialized_01 = serialize_theta_sketches(merge_01);
         immutable_theta_sketch_collection_t deserialized_01 =
             deserialize_theta_sketches(serialized_01);
         bodo::tests::check(!deserialized_01[0].value().is_empty());
@@ -573,7 +573,7 @@ static bodo::tests::suite tests([] {
 
         // Third test: merge with #2, confirm the accuracy of the estimates
         immutable_theta_sketch_collection_t merge_012 =
-            merge_theta_sketches({deserialized_01, compact_2}, 1);
+            merge_theta_sketches({deserialized_01, compact_2});
         bodo::tests::check(!merge_012[0].value().is_empty());
         bodo::tests::check(!merge_012[0].value().is_estimation_mode());
         check_approx(merge_012[0].value().get_theta(), 1.0);
@@ -583,7 +583,7 @@ static bodo::tests::suite tests([] {
 
         // Fourth test: serialize the merged #0/#1/#2, then deserialize,
         // then confirm the estimates are intact.
-        auto serialized_012 = serialize_theta_sketches(merge_012, 1);
+        auto serialized_012 = serialize_theta_sketches(merge_012);
         immutable_theta_sketch_collection_t deserialized_012 =
             deserialize_theta_sketches(serialized_012);
         bodo::tests::check(!deserialized_012[0].value().is_empty());
@@ -595,7 +595,7 @@ static bodo::tests::suite tests([] {
 
         // Fifth test: merge with #3, confirm the accuracy of the estimates
         immutable_theta_sketch_collection_t merge_0123 =
-            merge_theta_sketches({deserialized_012, compact_3}, 1);
+            merge_theta_sketches({deserialized_012, compact_3});
         bodo::tests::check(!merge_0123[0].value().is_empty());
         bodo::tests::check(merge_0123[0].value().is_estimation_mode());
         check_approx(merge_0123[0].value().get_theta(), 0.372599);
@@ -605,7 +605,7 @@ static bodo::tests::suite tests([] {
 
         // Sixth test: serialize the merged #0/#1/#2/#3, then deserialize,
         // then confirm the estimates are intact.
-        auto serialized_0123 = serialize_theta_sketches(merge_0123, 1);
+        auto serialized_0123 = serialize_theta_sketches(merge_0123);
         immutable_theta_sketch_collection_t deserialized_0123 =
             deserialize_theta_sketches(serialized_0123);
         bodo::tests::check(!deserialized_0123[0].value().is_empty());
@@ -619,15 +619,6 @@ static bodo::tests::suite tests([] {
         delete[] sketch_collection_1;
         delete[] sketch_collection_2;
         delete[] sketch_collection_3;
-        delete[] compact_0;
-        delete[] compact_1;
-        delete[] compact_2;
-        delete[] compact_3;
-        delete[] merge_01;
-        delete[] merge_012;
-        delete[] merge_0123;
-        delete[] deserialized_01;
-        delete[] deserialized_012;
     });
     bodo::tests::test("test_parallel_merge_singleton", [] {
         // Tests creating singleton theta sketches across multiple
@@ -663,24 +654,22 @@ static bodo::tests::suite tests([] {
         auto immutable_collection =
             compact_theta_sketches(sketch_collection, 1);
         auto merged_result =
-            merge_parallel_theta_sketches(immutable_collection, 1);
+            merge_parallel_theta_sketches(immutable_collection);
 
         // Verify that there are a total of 100 distinct values, but only
         // on rank zero since the others should have received a nullptr.
         if (current_rank == 0) {
-            bodo::tests::check(merged_result != nullptr);
+            bodo::tests::check(merged_result.size() == 1);
             bodo::tests::check(!merged_result[0].value().is_empty());
             bodo::tests::check(!merged_result[0].value().is_estimation_mode());
             check_approx(merged_result[0].value().get_theta(), 1.0);
             check_approx(merged_result[0].value().get_estimate(), 100.0);
             check_approx(merged_result[0].value().get_lower_bound(1), 100.0);
             check_approx(merged_result[0].value().get_upper_bound(1), 100.0);
-            delete[] merged_result;
         } else {
-            bodo::tests::check(merged_result == nullptr);
+            bodo::tests::check(merged_result.size() == 0);
         }
         delete[] sketch_collection;
-        delete[] immutable_collection;
     });
     bodo::tests::test("test_parallel_merge_multiple", [] {
         // Tests creating multiple theta sketches across multiple
@@ -721,12 +710,12 @@ static bodo::tests::suite tests([] {
         auto immutable_collection =
             compact_theta_sketches(sketch_collection, 3);
         auto merged_result =
-            merge_parallel_theta_sketches(immutable_collection, 3);
+            merge_parallel_theta_sketches(immutable_collection);
 
         // Verify the expected results, but only on rank zero since the others
         // should have received a nullptr.
         if (current_rank == 0) {
-            bodo::tests::check(merged_result != nullptr);
+            bodo::tests::check(merged_result.size() == 3);
             bodo::tests::check(merged_result[0].has_value());
             bodo::tests::check(!merged_result[1].has_value());
             bodo::tests::check(merged_result[2].has_value());
@@ -742,11 +731,9 @@ static bodo::tests::suite tests([] {
             check_approx(merged_result[2].value().get_estimate(), 9897.76);
             check_approx(merged_result[2].value().get_lower_bound(1), 9778.36);
             check_approx(merged_result[2].value().get_upper_bound(1), 10018.6);
-            delete[] merged_result;
         } else {
-            bodo::tests::check(merged_result == nullptr);
+            bodo::tests::check(merged_result.size() == 0);
         }
         delete[] sketch_collection;
-        delete[] immutable_collection;
     });
 });

@@ -1689,6 +1689,14 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
+        if fdef == ("iceberg_writer_fetch_theta", "bodo.io.stream_iceberg_write"):
+            # Used to obtain the current value of a theta sketch collection from
+            # an Iceberg writer as an array, where each row is the current estimate
+            # for that column of the table. Answer is replicated since there is
+            # only 1 correct answer globally.
+            self._set_REP(lhs, array_dists)
+            return
+
         if fdef in (
             (
                 "snowflake_writer_append_table",
