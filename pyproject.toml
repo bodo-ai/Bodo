@@ -71,10 +71,12 @@ wheel.exclude = [
     "bodo/**/*.c",
     "bodo/**/*.pxd",
     "bodo/**/*.pyx",
+    "bodo/**/*.hpp",
     "bodo/tests/data/**/*.crc",
     "bodo/libs/HashLibs/TSL",
     "bodo/bench",
-    "bodo/transforms",
+    "bodo/transforms/**/*.py",
+    "bodo/transforms/**/*.pyc",
 ]
 
 # When building for Conda, set different
