@@ -94,9 +94,8 @@ void verify_nyc_puffin_file_metadata(const std::unique_ptr<PuffinFile> &puff,
         bodo::tests::check(meta_1.has_compression_codec());
         bodo::tests::check(meta_1.get_compression_codec() == "zstd");
     } else {
-        // Temporary values until we figure out what snapshot/sequence to write
-        bodo::tests::check(meta_1.get_snapshot_id() == -1);
-        bodo::tests::check(meta_1.get_sequence_number() == -1);
+        bodo::tests::check(meta_1.get_snapshot_id() == 123456789);
+        bodo::tests::check(meta_1.get_sequence_number() == 5);
         bodo::tests::check((size_t)meta_1.get_offset() == 4);
         bodo::tests::check((size_t)meta_1.get_length() ==
                            puff->get_blob(0).size());
@@ -120,9 +119,8 @@ void verify_nyc_puffin_file_metadata(const std::unique_ptr<PuffinFile> &puff,
         bodo::tests::check(meta_2.has_compression_codec());
         bodo::tests::check(meta_2.get_compression_codec() == "zstd");
     } else {
-        // Temporary values until we figure out what snapshot/sequence to write
-        bodo::tests::check(meta_2.get_snapshot_id() == -1);
-        bodo::tests::check(meta_2.get_sequence_number() == -1);
+        bodo::tests::check(meta_2.get_snapshot_id() == 123456789);
+        bodo::tests::check(meta_2.get_sequence_number() == 5);
         bodo::tests::check((size_t)meta_2.get_offset() ==
                            4 + puff->get_blob(0).size());
         bodo::tests::check((size_t)meta_2.get_length() ==
@@ -147,9 +145,8 @@ void verify_nyc_puffin_file_metadata(const std::unique_ptr<PuffinFile> &puff,
         bodo::tests::check(meta_3.has_compression_codec());
         bodo::tests::check(meta_3.get_compression_codec() == "zstd");
     } else {
-        // Temporary values until we figure out what snapshot/sequence to write
-        bodo::tests::check(meta_3.get_snapshot_id() == -1);
-        bodo::tests::check(meta_3.get_sequence_number() == -1);
+        bodo::tests::check(meta_3.get_snapshot_id() == 123456789);
+        bodo::tests::check(meta_3.get_sequence_number() == 5);
         bodo::tests::check((size_t)meta_3.get_offset() ==
                            4 + puff->get_blob(0).size() +
                                puff->get_blob(1).size());
@@ -215,8 +212,6 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(collection[0].value().get_estimate() == 265.0);
         bodo::tests::check(collection[1].value().get_estimate() == 7.0);
         bodo::tests::check(collection[2].value().get_estimate() == 262.0);
-
-        delete[] collection;
     });
     bodo::tests::test("test_puffin_read_nyc_theta_to_puffin", [] {
         // Read in the nyc example file and parse it as a puffin file
@@ -230,8 +225,9 @@ static bodo::tests::suite tests([] {
 
         // Convert the theta sketches back to a puffin file and verify it
         // matches the same properties as the original puffin file.
+        // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
         std::unique_ptr<PuffinFile> new_puff =
-            PuffinFile::from_theta_sketches(collection_1, 3);
+            PuffinFile::from_theta_sketches(collection_1, 123456789, 5);
         verify_nyc_puffin_file_metadata(new_puff, nyc_example, false);
 
         // Re-deserialize to make sure the serialized blobs were valid
@@ -243,9 +239,6 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(collection_2[0].value().get_estimate() == 265.0);
         bodo::tests::check(collection_2[1].value().get_estimate() == 7.0);
         bodo::tests::check(collection_2[2].value().get_estimate() == 262.0);
-
-        delete[] collection_1;
-        delete[] collection_2;
     });
     bodo::tests::test("test_puffin_read_nyc_insert_data", [] {
         // Read in the nyc example file and parse it as a puffin file
@@ -276,11 +269,12 @@ static bodo::tests::suite tests([] {
         auto collection_2 = init_theta_sketches({true, true, true});
         update_theta_sketches(collection_2, bodo_table_to_arrow(T));
         auto collection_3 = merge_theta_sketches(
-            {collection_1, compact_theta_sketches(collection_2, 3)}, 3);
+            {collection_1, compact_theta_sketches(collection_2, 3)});
 
-        // Convert the theta sketches back to a puffin file
+        // Convert the theta sketches back to a puffin file.
+        // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
         std::unique_ptr<PuffinFile> new_puff =
-            PuffinFile::from_theta_sketches(collection_3, 3);
+            PuffinFile::from_theta_sketches(collection_3, 123456789, 5);
 
         // Re-deserialize to make sure the serialized blobs were valid
         // and have the correct new estimates
@@ -292,10 +286,5 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(collection_4[0].value().get_estimate() == 268.0);
         bodo::tests::check(collection_4[1].value().get_estimate() == 7.0);
         bodo::tests::check(collection_4[2].value().get_estimate() == 266.0);
-
-        delete[] collection_1;
-        delete[] collection_2;
-        delete[] collection_3;
-        delete[] collection_4;
     });
 });

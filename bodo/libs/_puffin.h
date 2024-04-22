@@ -225,13 +225,14 @@ class PuffinFile {
      * manner that is potentially different versus the input:
      *
      * - PuffinFile properties: has "created by" -> "Bodo version X.X.X".
-     * - BlobMetadata snapshot_id: replaced with a dummy -1 (for now).
-     * - BlobMetadata sequence_number: replaced with a dummy -1 (for now).
-     * - BlobMetadata compression_codec: always uses "zstd" (for now).
+     * - BlobMetadata snapshot_id: replaced with a passed in value.
+     * - BlobMetadata sequence_number: replaced with a passed in value.
+     * - BlobMetadata compression_codec: always uses nothing (for now).
      * - BlobMetadata properties: always has "ndv" field.
      */
     static std::unique_ptr<PuffinFile> from_theta_sketches(
-        immutable_theta_sketch_collection_t sketches, size_t n_sketches);
+        immutable_theta_sketch_collection_t sketches, int64_t snapshot_id,
+        int64_t sequence_number);
 
     /**
      * Converts a PuffinFile into a collection of theta sketches.

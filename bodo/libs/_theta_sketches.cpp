@@ -1,4 +1,6 @@
 #include "_theta_sketches.h"
+#include <arrow/python/api.h>
+#include <mpi.h>
 #include "_shuffle.h"
 
 theta_sketch_collection_t init_theta_sketches(
@@ -134,6 +136,9 @@ void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
 
 void update_theta_sketches(theta_sketch_collection_t sketches,
                            const std::shared_ptr<arrow::Table> &in_table) {
+    if (sketches == nullptr) {
+        return;
+    }
 #define add_column_case(arrow_type)                                  \
     case arrow_type: {                                               \
         int n_chunks = col->num_chunks();                            \
@@ -183,8 +188,7 @@ void update_theta_sketches(theta_sketch_collection_t sketches,
 
 immutable_theta_sketch_collection_t compact_theta_sketches(
     theta_sketch_collection_t sketches, size_t n_sketches) {
-    immutable_theta_sketch_collection_t result =
-        new std::optional<datasketches::compact_theta_sketch>[n_sketches];
+    immutable_theta_sketch_collection_t result(n_sketches);
     // Loop over every column in the original table, skipping indices
     // without a theta sketch.
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
@@ -198,14 +202,15 @@ immutable_theta_sketch_collection_t compact_theta_sketches(
 }
 
 immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, size_t n_sketches) {
+    immutable_theta_sketch_collection_t sketches) {
+    size_t n_sketches = sketches.size();
     int cp, np;
     MPI_Comm_rank(MPI_COMM_WORLD, &cp);
     MPI_Comm_size(MPI_COMM_WORLD, &np);
     auto current_rank = (size_t)cp;
     auto num_ranks = (size_t)np;
     // Serialize the theta sketches and dump into a string array
-    auto serialized = serialize_theta_sketches(sketches, n_sketches);
+    auto serialized = serialize_theta_sketches(sketches);
     bodo::vector<std::string> strings(n_sketches);
     bodo::vector<uint8_t> nulls((n_sketches + 7) >> 3);
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
@@ -252,22 +257,19 @@ immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
                 deserialize_theta_sketches(serialized_collection));
         }
         // Finally, merge the collections
-        auto result = merge_theta_sketches(collections, n_sketches);
-        for (auto collection : collections) {
-            delete[] collection;
-        }
-        return result;
+        return merge_theta_sketches(collections);
     } else {
-        // On all other ranks, the result is null
-        return nullptr;
+        // On all other ranks, the result doesn't matter
+        // so just return an empty vector
+        immutable_theta_sketch_collection_t dummy(0);
+        return dummy;
     }
 }
 
 immutable_theta_sketch_collection_t merge_theta_sketches(
-    std::vector<immutable_theta_sketch_collection_t> sketch_collections,
-    size_t n_sketches) {
-    immutable_theta_sketch_collection_t result =
-        new std::optional<datasketches::compact_theta_sketch>[n_sketches];
+    std::vector<immutable_theta_sketch_collection_t> sketch_collections) {
+    size_t n_sketches = sketch_collections[0].size();
+    immutable_theta_sketch_collection_t result(n_sketches);
     // Loop over every column in the original table, skipping indices
     // without a theta sketch.
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
@@ -291,7 +293,8 @@ immutable_theta_sketch_collection_t merge_theta_sketches(
 }
 
 std::vector<std::optional<std::string>> serialize_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, size_t n_sketches) {
+    immutable_theta_sketch_collection_t sketches) {
+    size_t n_sketches = sketches.size();
     std::vector<std::optional<std::string>> result;
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
         if (sketches[col_idx].has_value()) {
@@ -308,8 +311,7 @@ std::vector<std::optional<std::string>> serialize_theta_sketches(
 immutable_theta_sketch_collection_t deserialize_theta_sketches(
     std::vector<std::optional<std::string>> strings) {
     size_t n_sketches = strings.size();
-    immutable_theta_sketch_collection_t result =
-        new std::optional<datasketches::compact_theta_sketch>[n_sketches];
+    immutable_theta_sketch_collection_t result(n_sketches);
     // Loop over every string in the collection, skipping ones where
     // the option is a nullopt
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
@@ -323,3 +325,136 @@ immutable_theta_sketch_collection_t deserialize_theta_sketches(
     }
     return result;
 }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
+/** Python entrypoint to create a new theta sketch collection.
+ * @param iceberg_arrow_schema_py: pointer to the python object representing the
+ * iceberg arrow schema of the table.
+ * @param already_exists: boolean indicating whether the table already exists or
+ * is being created for the first time.
+ * @param enable_theta_sketches: boolean indicating whether theta sketches are
+ * turned on or not.
+ */
+theta_sketch_collection_t init_theta_sketches_py_entrypt(
+    PyObject *iceberg_arrow_schema_py, bool already_exists,
+    bool enable_theta_sketches) {
+    std::shared_ptr<arrow::Schema> iceberg_schema;
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+                           "Iceberg Schema Couldn't Unwrap from Python",
+                           iceberg_schema);
+    size_t n_fields = iceberg_schema->num_fields();
+    // Turn on theta sketches for a column if the following conditions are true:
+    // 1. The column's type is one of the supported ones for theta sketches.
+    // 2. The boolean was passed in to indicate that theta sketches are enabled.
+    // 3. The boolean was passed in to indicate that this is NOT an insert into
+    // operation.
+    std::vector<bool> ndv_cols(n_fields);
+    for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+        bool valid_theta_type;
+        switch (iceberg_schema->field(col_idx)->type()->id()) {
+            case arrow::Type::INT32:
+            case arrow::Type::INT64:
+            case arrow::Type::DATE32:
+            case arrow::Type::TIME64:
+            case arrow::Type::TIMESTAMP:
+            case arrow::Type::LARGE_STRING:
+            case arrow::Type::LARGE_BINARY:
+            case arrow::Type::DICTIONARY:
+                valid_theta_type = true;
+                break;
+            case arrow::Type::FLOAT:
+            case arrow::Type::DOUBLE:
+            default:
+                valid_theta_type = false;
+                break;
+        }
+        ndv_cols[col_idx] =
+            valid_theta_type && enable_theta_sketches && !already_exists;
+    }
+    return init_theta_sketches(ndv_cols);
+}
+
+/** Python entrypoint to fetch the NDV approximations from a theta sketch
+ * collection, largely for testing purposes.
+ * @param sketches: the theta sketches being used to extract the approximation.
+ * @param iceberg_arrow_schema_py: pointer to the python object representing the
+ * iceberg arrow schema of the table.
+ * @param parallel: boolean indicating whether the test is being done in
+ * parallel.
+ */
+array_info *fetch_ndv_approximations_py_entrypt(
+    theta_sketch_collection_t sketches, PyObject *iceberg_arrow_schema_py) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    std::shared_ptr<arrow::Schema> iceberg_schema;
+    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+                           "Iceberg Schema Couldn't Unwrap from Python",
+                           iceberg_schema);
+    size_t n_fields = iceberg_schema->num_fields();
+    // Gather the theta sketches onto rank 0
+    auto immutable_collection = compact_theta_sketches(sketches, n_fields);
+    auto merged_collection =
+        merge_parallel_theta_sketches(immutable_collection);
+    std::vector<double> local_estimates(n_fields);
+    if (rank == 0) {
+        // Populate the vector on rank 0
+        for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+            if (merged_collection[col_idx].has_value()) {
+                double estimate =
+                    merged_collection[col_idx].value().get_estimate();
+                local_estimates[col_idx] = estimate;
+            } else {
+                local_estimates[col_idx] = -1.0;
+            }
+        }
+    }
+    // Broadcast the vector onto all ranks);
+    MPI_Bcast(local_estimates.data(), n_fields, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Convert to an array where -1 is a sentinel for null
+    std::unique_ptr<array_info> arr =
+        alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64, 0);
+    for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+        if (local_estimates[col_idx] < 0) {
+            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx, 0);
+        } else {
+            arr->data1<bodo_array_type::NULLABLE_INT_BOOL, double>()[col_idx] =
+                local_estimates[col_idx];
+        }
+    }
+    return arr.release();
+}
+
+PyMODINIT_FUNC PyInit_theta_sketches(void) {
+    PyObject *m;
+    MOD_DEF(m, "theta_sketches", "No docs", NULL);
+    if (m == NULL) {
+        return NULL;
+    }
+
+    bodo_common_init();
+
+    SetAttrStringFromVoidPtr(m, init_theta_sketches_py_entrypt);
+    SetAttrStringFromVoidPtr(m, fetch_ndv_approximations_py_entrypt);
+
+    return m;
+}
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN

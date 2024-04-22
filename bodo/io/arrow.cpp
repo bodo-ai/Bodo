@@ -5,6 +5,7 @@
 
 #include <Python.h>
 #include "../libs/_bodo_common.h"
+#include "../libs/_theta_sketches.h"
 #include "arrow_reader.h"
 
 table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
@@ -96,7 +97,8 @@ PyObject* iceberg_pq_write_py_entry(
     const char* table_data_loc, table_info* table, array_info* col_names_arr,
     PyObject* partition_spec, PyObject* sort_order, const char* compression,
     bool is_parallel, const char* bucket_region, int64_t row_group_size,
-    char* iceberg_metadata, PyObject* iceberg_arrow_schema_py);
+    char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
+    theta_sketch_collection_t sketches);
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;

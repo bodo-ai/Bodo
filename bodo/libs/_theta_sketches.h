@@ -13,8 +13,8 @@ typedef std::optional<datasketches::update_theta_sketch>
     *theta_sketch_collection_t;
 
 // Variant of theta_sketch_collection_t that is in its immutable form
-typedef std::optional<datasketches::compact_theta_sketch>
-    *immutable_theta_sketch_collection_t;
+typedef std::vector<std::optional<datasketches::compact_theta_sketch>>
+    immutable_theta_sketch_collection_t;
 
 /**
  * @brief initializes a collection of theta sketches for a group of columns.
@@ -58,13 +58,12 @@ immutable_theta_sketch_collection_t compact_theta_sketches(
  * @param[in] sketches the collection of theta sketches, with an empty option
  *            instead for any columns that we do not want NDV info for. It is
  *            assumed that the nullptr columns are the same across all ranks.
- * @param[in] n_sketches: how many theta sketches are in the collection.
  *
  * @return the combined theta sketch collections in their immutable form
  * on rank zero (on other ranks returns nullptr).
  */
 immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, size_t n_sketches);
+    immutable_theta_sketch_collection_t sketches);
 
 /**
  * @brief takes in multiple collections of theta sketches and combines them
@@ -73,24 +72,21 @@ immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
  * @param[in] sketch_collections: a vector of collections of theta sketches
  *            that are to be combined into a single collection. It is assumed
  * that all the collection have the same length.
- * @param[in] n_sketches: how many theta sketches are in each collection.
  *
  * @return the combined theta sketch collection in its immutable form.
  */
 immutable_theta_sketch_collection_t merge_theta_sketches(
-    std::vector<immutable_theta_sketch_collection_t> sketch_collections,
-    size_t n_sketches);
+    std::vector<immutable_theta_sketch_collection_t> sketch_collections);
 
 /**
  * @brief serializes a collection of theta sketches
  * @param[in] sketches: the collection of sketches that are to be
  *            serialized.
- * @param[in] n_sketches: the number of sketches in the collection.
  *
  * @return the serialized sketches as a vector of optional strings.
  */
 std::vector<std::optional<std::string>> serialize_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, size_t n_sketches);
+    immutable_theta_sketch_collection_t sketches);
 
 /**
  * @brief converts a collection of optional strings to a
