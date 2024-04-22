@@ -5,8 +5,6 @@ import traceback
 import llvmlite.binding as ll
 import numba
 import pandas as pd
-from bodo_iceberg_connector.catalog_conn import parse_conn_str
-from bodo_iceberg_connector.py4j_support import get_java_table_handler
 from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, types
@@ -273,6 +271,9 @@ def fetch_snapshot_id(rank, conn, db_schema, table_name):
     """
     Fetches the snapshot_id from the current Iceberg transaction.
     """
+    from bodo_iceberg_connector.catalog_conn import parse_conn_str
+    from bodo_iceberg_connector.py4j_support import get_java_table_handler
+
     snapshot_id = -1
     if rank == 0:
         catalog_type, _ = parse_conn_str(conn)
