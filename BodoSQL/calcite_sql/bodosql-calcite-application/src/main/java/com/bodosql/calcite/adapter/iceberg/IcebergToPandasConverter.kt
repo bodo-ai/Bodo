@@ -194,12 +194,16 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                             node.childrenAccept(this)
                         }
                         is IcebergProject -> {
+                            val newColMap = mutableListOf<Int>()
+                            // Projects may reorder columns, so we need to update the column mapping.
                             for (i in 0..<colMap.size) {
                                 val project = node.projects[colMap[i]]
                                 if (project !is RexInputRef) {
                                     throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
                                 }
+                                newColMap.add(project.index)
                             }
+                            colMap = newColMap
                             node.childrenAccept(this)
                         }
 
