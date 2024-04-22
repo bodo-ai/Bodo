@@ -537,9 +537,6 @@
                                         <exclude>org/apache/calcite/sql/util/TimeWithTimeZoneString.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/TimestampString.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/TimestampWithTimeZoneString.class</exclude>
-                                        <exclude>org/apache/calcite/sql/util/Util.class</exclude>
-                                        <exclude>org/apache/calcite/sql/util/Util$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/util/Util$FoundOne.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$InitShim.class</exclude>
@@ -621,6 +618,9 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$Registrar.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Shifter.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder.class</exclude>
+                                        <exclude>org/apache/calcite/util/Util.class</exclude>
+                                        <exclude>org/apache/calcite/util/Util$1.class</exclude>
+                                        <exclude>org/apache/calcite/util/Util$FoundOne.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
