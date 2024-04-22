@@ -20,6 +20,7 @@
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/result.h>
 
+#include <boost/json.hpp>
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
 #include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
@@ -846,4 +847,36 @@ void PrintStorageManagerStats(
     fmt::println(os, "{0:─^{1}}", "", total_width);
 }
 
+boost::json::object GetStorageManagerStats(
+    const std::span<std::string_view> m_names,
+    const std::span<const StorageManagerStats> stats) {
+    boost::json::object out_stats;
+
+    // Construct Row Values
+    for (size_t i = 0; i < m_names.size(); i++) {
+        boost::json::object stat_for_manager;
+        stat_for_manager["Current Spilled Bytes"] = stats[i].curr_spilled_bytes;
+        stat_for_manager["Current Blocks Spilled"] =
+            stats[i].curr_num_blocks_spilled;
+        stat_for_manager["Total Blocks Spilled"] =
+            stats[i].total_num_blocks_spilled;
+        stat_for_manager["Total Blocks Read"] = stats[i].total_num_blocks_read;
+        stat_for_manager["Total Num Delete Calls"] =
+            stats[i].total_num_del_calls;
+        stat_for_manager["Total Bytes Spilled"] = stats[i].total_spilled_bytes;
+        stat_for_manager["Total Bytes Read"] = stats[i].total_read_bytes;
+        stat_for_manager["Total Bytes Deleted"] = stats[i].total_bytes_del;
+        stat_for_manager["Max Spilled Bytes"] = stats[i].max_spilled_bytes;
+        stat_for_manager["Total Read Time (ms)"] =
+            stats[i].total_read_time.count();
+        stat_for_manager["Total Write Time (ms)"] =
+            stats[i].total_write_time.count();
+        stat_for_manager["Total Delete Time (ms)"] =
+            stats[i].total_delete_time.count();
+
+        out_stats[std::string(m_names[i])] = stat_for_manager;
+    }
+
+    return out_stats;
+}
 }  // namespace bodo
