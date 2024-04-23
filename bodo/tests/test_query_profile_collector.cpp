@@ -47,53 +47,19 @@ bodo::tests::suite query_profile_collector_tests([] {
         collector.Init();
         // Join Build
         collector.SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(4, 0), 3451, 0);
+            QueryProfileCollector::MakeOperatorStageID(4, 0), 0);
         // Join Probe
         collector.SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(4, 1), 2349012, 90123);
+            QueryProfileCollector::MakeOperatorStageID(4, 1), 90123);
         // Groupby Build
         collector.SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(2, 0), 2830028, 0);
+            QueryProfileCollector::MakeOperatorStageID(2, 0), 0);
         // Groupby Produce Output
         collector.SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(2, 1), 0, 320948);
+            QueryProfileCollector::MakeOperatorStageID(2, 1), 320948);
         // Reader
         collector.SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(0, 1), 0, 872194);
-
-        const auto& input_row_counts =
-            collector.GetOperatorStageInputRowCounts();
-
-        bodo::tests::check(input_row_counts.contains(
-            QueryProfileCollector::MakeOperatorStageID(4, 0)));
-        bodo::tests::check(
-            input_row_counts
-                .find(QueryProfileCollector::MakeOperatorStageID(4, 0))
-                ->second == 3451);
-        bodo::tests::check(input_row_counts.contains(
-            QueryProfileCollector::MakeOperatorStageID(4, 1)));
-        bodo::tests::check(
-            input_row_counts
-                .find(QueryProfileCollector::MakeOperatorStageID(4, 1))
-                ->second == 2349012);
-        bodo::tests::check(input_row_counts.contains(
-            QueryProfileCollector::MakeOperatorStageID(2, 0)));
-        bodo::tests::check(
-            input_row_counts
-                .find(QueryProfileCollector::MakeOperatorStageID(2, 0))
-                ->second == 2830028);
-        bodo::tests::check(input_row_counts.contains(
-            QueryProfileCollector::MakeOperatorStageID(2, 1)));
-        bodo::tests::check(
-            input_row_counts
-                .find(QueryProfileCollector::MakeOperatorStageID(2, 1))
-                ->second == 0);
-        bodo::tests::check(input_row_counts.contains(
-            QueryProfileCollector::MakeOperatorStageID(0, 1)));
-        bodo::tests::check(
-            input_row_counts
-                .find(QueryProfileCollector::MakeOperatorStageID(0, 1))
-                ->second == 0);
+            QueryProfileCollector::MakeOperatorStageID(0, 1), 872194);
 
         const auto& output_row_counts =
             collector.GetOperatorStageOutputRowCounts();

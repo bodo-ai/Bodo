@@ -3292,7 +3292,7 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
             QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                 QueryProfileCollector::MakeOperatorStageID(
                     join_state_->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
-                join_state_->metrics.build_input_row_count, 0);
+                0);
         } catch (const std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
@@ -3467,7 +3467,6 @@ table_info* join_probe_consume_batch_py_entry(
             QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                 QueryProfileCollector::MakeOperatorStageID(
                     join_state_->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
-                join_state_->metrics.probe_input_row_count,
                 join_state_->metrics.probe_output_row_count);
         }
         return out_table;
