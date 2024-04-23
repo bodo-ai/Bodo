@@ -151,7 +151,7 @@ jobs:
       - name: tar platform packages
         working-directory: ./bodo-platform-image
         run: |
-          tar -czvf bodo-platform-utils.tar.gz bodo-platform-utils/
+          tar -czvf bodo-platform-packages.tar.gz bodo-platform-utils/ bodo-platform-extensions/
 
       - name: Create Azure Image definition
         # For event that is not workflow, we skip the image creation in the build step,

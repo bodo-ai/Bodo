@@ -58,7 +58,7 @@
 
 - name: Extract Artifact
   unarchive:
-    src: "/tmp/bodo-platform-utils.tar.gz"
+    src: "/tmp/bodo-platform-packages.tar.gz"
     dest: "/tmp"
     remote_src: true
 
@@ -75,7 +75,7 @@
 # Same problem as above since bodo-platform-utils is a dependency
 - name: BODO | Install Bodo Platform Extensions Package
   command:
-    cmd: "/opt/conda/bin/pip install bodo-platform-extensions=={{ BODO_PLATFORM_EXTENSIONS_VERSION }}"
+    cmd: "/opt/conda/bin/pip install bodo-platform-extensions /tmp/bodo-platform-extensions"
   tags:
     - bodo
 
@@ -83,5 +83,11 @@
 - name: BODO | Clean Cache for Conda
   command:
     cmd: "/opt/conda/bin/mamba clean --all"
+  tags:
+    - bodo
+
+- name: BODO | Clean /tmp Folder
+  command:
+    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions"
   tags:
     - bodo
