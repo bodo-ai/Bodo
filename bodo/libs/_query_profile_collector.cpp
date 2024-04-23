@@ -101,9 +101,7 @@ void QueryProfileCollector::EndPipeline(pipeline_id_t pipeline_id,
 }
 
 void QueryProfileCollector::SubmitOperatorStageRowCounts(
-    operator_stage_t op_stage, uint64_t input_row_count,
-    uint64_t output_row_count) {
-    operator_stage_input_row_counts[op_stage] = input_row_count;
+    operator_stage_t op_stage, uint64_t output_row_count) {
     operator_stage_output_row_counts[op_stage] = output_row_count;
 }
 
@@ -189,9 +187,6 @@ auto QueryProfileCollector::CollectSeenOperators()
     for (const auto& [op_stage, _] : operator_stage_metrics) {
         UpdateSeenOperatorStages(op_stage);
     }
-    for (const auto& [op_stage, _] : operator_stage_input_row_counts) {
-        UpdateSeenOperatorStages(op_stage);
-    }
     for (const auto& [op_stage, _] : operator_stage_output_row_counts) {
         UpdateSeenOperatorStages(op_stage);
     }
@@ -219,10 +214,6 @@ boost::json::object QueryProfileCollector::OperatorStageToJson(
     operator_stage_t op_stage) {
     boost::json::object stage_report;
     stage_report["time"] = operator_stage_times[op_stage];
-    if (operator_stage_input_row_counts.count(op_stage) > 0) {
-        stage_report["input_row_count"] =
-            operator_stage_input_row_counts[op_stage];
-    }
     if (operator_stage_output_row_counts.count(op_stage) > 0) {
         stage_report["output_row_count"] =
             operator_stage_output_row_counts[op_stage];
@@ -325,13 +316,12 @@ static void end_pipeline_query_profile_collector_py_entry(
 }
 
 static void submit_operator_stage_row_counts_query_profile_collector_py_entry(
-    int64_t operator_id, int64_t stage_id, int64_t input_row_count,
-    int64_t output_row_count) {
+    int64_t operator_id, int64_t stage_id, int64_t output_row_count) {
     try {
         auto op_stage =
             QueryProfileCollector::MakeOperatorStageID(operator_id, stage_id);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            op_stage, input_row_count, output_row_count);
+            op_stage, output_row_count);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -363,28 +353,6 @@ static void finalize_query_profile_collector_py_entry() {
 }
 
 /// The following are only used for unit testing purposes:
-
-static int64_t get_input_row_counts_for_op_stage_py_entry(int64_t operator_id,
-                                                          int64_t stage_id) {
-    try {
-        auto op_stage =
-            QueryProfileCollector::MakeOperatorStageID(operator_id, stage_id);
-        const auto& input_row_counts =
-            QueryProfileCollector::Default().GetOperatorStageInputRowCounts();
-        auto iter = input_row_counts.find(op_stage);
-        if (iter == input_row_counts.end()) {
-            throw std::runtime_error(
-                fmt::format("get_input_row_counts_for_op_stage_py_entry: No "
-                            "entry for operator id {} and stage id {}.",
-                            operator_id, stage_id));
-        } else {
-            return iter->second;
-        }
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return -1;
-    }
-}
 
 static int64_t get_output_row_counts_for_op_stage_py_entry(int64_t operator_id,
                                                            int64_t stage_id) {
@@ -430,7 +398,6 @@ PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void) {
     SetAttrStringFromVoidPtr(
         m, get_operator_duration_query_profile_collector_py_entry);
     SetAttrStringFromVoidPtr(m, finalize_query_profile_collector_py_entry);
-    SetAttrStringFromVoidPtr(m, get_input_row_counts_for_op_stage_py_entry);
     SetAttrStringFromVoidPtr(m, get_output_row_counts_for_op_stage_py_entry);
     return m;
 }

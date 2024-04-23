@@ -44,6 +44,7 @@ class PandasTableScan(
         if (isStreaming()) {
             implementor.createStreamingPipeline()
             implementor.buildStreaming(
+                false,
                 { ctx -> initStateVariable(ctx) },
                 { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
                 { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },

@@ -58,6 +58,7 @@ class PandasProject(
         inputVar: BodoEngineTable,
     ): BodoEngineTable {
         return implementor.buildStreaming(
+            true,
             { ctx -> initStateVariable(ctx) },
             {
                     ctx, stateVar ->

@@ -31,24 +31,12 @@ ll.add_symbol(
     query_profile_collector_cpp.submit_operator_stage_time_query_profile_collector_py_entry,
 )
 ll.add_symbol(
-    "get_input_row_counts_for_op_stage_py_entry",
-    query_profile_collector_cpp.get_input_row_counts_for_op_stage_py_entry,
-)
-ll.add_symbol(
-    "get_output_row_counts_for_op_stage_py_entry",
-    query_profile_collector_cpp.get_output_row_counts_for_op_stage_py_entry,
-)
-ll.add_symbol(
     "get_operator_duration_query_profile_collector_py_entry",
     query_profile_collector_cpp.get_operator_duration_query_profile_collector_py_entry,
 )
 ll.add_symbol(
     "finalize_query_profile_collector_py_entry",
     query_profile_collector_cpp.finalize_query_profile_collector_py_entry,
-)
-ll.add_symbol(
-    "get_input_row_counts_for_op_stage_py_entry",
-    query_profile_collector_cpp.get_input_row_counts_for_op_stage_py_entry,
 )
 ll.add_symbol(
     "get_output_row_counts_for_op_stage_py_entry",
@@ -120,7 +108,7 @@ def end_pipeline(typingctx, pipeline_id, num_iterations):
 
 @intrinsic(prefer_literal=True)
 def submit_operator_stage_row_counts(
-    typingctx, operator_id, pipeline_id, input_row_count, output_row_count
+    typingctx, operator_id, pipeline_id, output_row_count
 ):
     """Wrapper for submit_operator_stage_row_counts in _query_profile_collector.cpp"""
 
@@ -128,7 +116,6 @@ def submit_operator_stage_row_counts(
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
@@ -143,7 +130,7 @@ def submit_operator_stage_row_counts(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return context.get_dummy_value()
 
-    sig = types.none(operator_id, pipeline_id, input_row_count, output_row_count)
+    sig = types.none(operator_id, pipeline_id, output_row_count)
     return sig, codegen
 
 
@@ -211,20 +198,10 @@ def finalize(typingctx):
 
 ## Only used for unit testing purposes
 
-get_input_row_counts_for_op_stage_f = types.ExternalFunction(
-    "get_input_row_counts_for_op_stage_py_entry",
-    types.int64(types.int64, types.int64),
-)
-
 get_output_row_counts_for_op_stage_f = types.ExternalFunction(
     "get_output_row_counts_for_op_stage_py_entry",
     types.int64(types.int64, types.int64),
 )
-
-
-@numba.njit
-def get_input_row_counts_for_op_stage(op_id, stage_id):  # pragma: no cover
-    return get_input_row_counts_for_op_stage_f(op_id, stage_id)
 
 
 @numba.njit

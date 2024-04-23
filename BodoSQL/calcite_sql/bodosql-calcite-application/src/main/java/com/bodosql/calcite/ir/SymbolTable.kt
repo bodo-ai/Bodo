@@ -90,6 +90,13 @@ class SymbolTable {
         return Variable("_start_op_stage_${opID}_$stageID")
     }
 
+    fun genOperatorStageRowCountVar(
+        opID: Int,
+        stageID: Int,
+    ): Variable {
+        return Variable("_op_stage_${opID}_${stageID}_output_len")
+    }
+
     // Variable for end timestamp for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerEndVar(
         opID: Int,

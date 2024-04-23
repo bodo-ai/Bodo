@@ -211,7 +211,6 @@ class QueryProfileCollector {
     void StartPipeline(pipeline_id_t pipeline_id);
     void EndPipeline(pipeline_id_t pipeline_id, size_t num_iterations);
     void SubmitOperatorStageRowCounts(operator_stage_t op_stage,
-                                      uint64_t input_row_count,
                                       uint64_t output_row_count);
     void SubmitOperatorStageTime(operator_stage_t op_stage, int64_t time);
     int64_t GetOperatorDuration(operator_id_t operator_id);
@@ -231,11 +230,6 @@ class QueryProfileCollector {
 
     std::unordered_map<pipeline_id_t, uint64_t>& GetPipelineNumIterations() {
         return pipeline_num_iterations;
-    }
-
-    std::unordered_map<operator_stage_t, uint64_t>&
-    GetOperatorStageInputRowCounts() {
-        return operator_stage_input_row_counts;
     }
 
     std::unordered_map<operator_stage_t, uint64_t>&
@@ -260,10 +254,6 @@ class QueryProfileCollector {
 
     // Map the operator stage ID to its start and end timestamps
     std::unordered_map<operator_stage_t, uint64_t> operator_stage_times;
-
-    // Input Row Counts
-    std::unordered_map<operator_stage_t, uint64_t>
-        operator_stage_input_row_counts;
 
     // Output Row Counts
     std::unordered_map<operator_stage_t, uint64_t>

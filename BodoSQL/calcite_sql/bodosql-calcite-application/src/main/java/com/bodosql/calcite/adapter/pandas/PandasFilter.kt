@@ -49,6 +49,7 @@ class PandasFilter(
         inputVar: BodoEngineTable,
     ): BodoEngineTable {
         return implementor.buildStreaming(
+            true,
             { ctx -> initStateVariable(ctx) },
             { ctx, stateVar ->
                 // Extract window aggregates and update the nodes.
