@@ -19,6 +19,7 @@ from numba.extending import (
     unbox,
 )
 
+import bodo
 from bodo.utils.conversion import ensure_contig_if_np
 from bodo.utils.typing import (
     BodoError,
@@ -236,7 +237,7 @@ def impl(iterables, sortorder=None, names=None):
     return mi
 """
     loc_vars = {}
-    exec(func_text, globals(), loc_vars)
+    exec(func_text, {"pd": pd, "bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 
