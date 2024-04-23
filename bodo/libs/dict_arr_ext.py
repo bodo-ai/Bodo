@@ -972,7 +972,7 @@ def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no c
     # numpy object array.
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array_type):
+    with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
         dict_arr_out = pd.array(dict_arr_S.array, "string")._str_contains(
             pat, case, flags, na, regex
         )
@@ -1050,7 +1050,7 @@ def str_match(arr, pat, case, flags, na):  # pragma: no cover
     out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array_type):
+    with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
         dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
 
     for i in range(n_indices):

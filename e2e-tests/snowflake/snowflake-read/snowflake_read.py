@@ -42,7 +42,7 @@ def checksum(df):
         ["l_shipinstruct", "l_shipmode", "l_comment", "paded_mode"],
         axis=1,
     )
-    # multiplying by 100 so cent values don't get truncatted from the checksum
+    # multiplying by 100 so cent values don't get truncated from the checksum
     df_no_str_sum = np.int64(np.floor(df_no_str.sum().sum() * 100))
 
     df_str = df[["l_shipinstruct", "l_shipmode", "l_comment", "paded_mode"]]
@@ -66,7 +66,7 @@ bodo.set_verbose_level(1)
 def main(sf_read_conn, sf_write_conn, table_name):
     """
     Snowflake E2E read test. We read in three string columns from TPCH-SF1 on Snowflake,
-    perform some groupby and string functions to the dataframe, and write the transformed
+    perform some groupby and string functions to the DataFrame, and write the transformed
     data frame back to snowflake.
 
     Args:

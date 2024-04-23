@@ -981,7 +981,7 @@ def to_offset_value(freq):  # pragma: no cover
     if freq is None:
         return None
 
-    with numba.objmode(r="int64"):
+    with bodo.objmode(r="int64"):
         r = pd.tseries.frequencies.to_offset(freq).nanos
     return r
 

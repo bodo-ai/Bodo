@@ -1343,7 +1343,7 @@ def pd_to_datetime_error_checked(
             if not (is_date_format_1 or is_date_format_2):
                 return (False, pd.Timestamp(0))
 
-    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 
@@ -1379,7 +1379,7 @@ def to_date_error_checked(val, format):  # pragma: no cover
     py_format = convert_snowflake_date_format_str_to_py_format(format)
     if py_format == "":
         return (False, None)
-    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+    with bodo.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 

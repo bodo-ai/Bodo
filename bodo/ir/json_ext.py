@@ -338,7 +338,7 @@ def _gen_json_reader_py(
     )
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
-    func_text += f"  with objmode({typ_strs}):\n"
+    func_text += f"  with bodo.no_warning_objmode({typ_strs}):\n"
     func_text += f"    df = pd.read_json(f_reader, orient='{orient}',\n"
     func_text += f"       convert_dates = {convert_dates}, \n"
     func_text += f"       precise_float={precise_float}, \n"
@@ -358,7 +358,6 @@ def _gen_json_reader_py(
             "bodo": bodo,
             "pd": pd,
             "np": np,
-            "objmode": bodo.no_warning_objmode,
             "check_java_installation": check_java_installation,
             "df_typeref": bodo.DataFrameType(
                 tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
