@@ -309,7 +309,7 @@ build {
 
   provisioner "file" {
     destination = "/tmp/"
-    source      = "../bodo-platform-utils.tar.gz"
+    source      = "../bodo-platform-packages.tar.gz"
   }
 
 
