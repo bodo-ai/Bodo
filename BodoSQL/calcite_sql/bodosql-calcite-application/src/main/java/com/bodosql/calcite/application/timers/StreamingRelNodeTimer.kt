@@ -28,6 +28,8 @@ class StreamingRelNodeTimer(
     private val loggingTitle: String,
     private val nodeDetails: String,
 ) {
+    // TODO(aneesh) Rename this class to reflect that it isn't just a timer, but an interface to the profiler in general
+
     // Only generate timers if BODO_TRACING_LEVEL >= 1
     private val isNoOp = tracingLevel == 0
 
@@ -96,6 +98,37 @@ class StreamingRelNodeTimer(
         val timeCall = Expr.Call("time.time")
         val stmt = Assign(builder.symbolTable.genOperatorStageTimerStartVar(opID, stage), timeCall)
         frame.add(stmt)
+    }
+
+    fun updateRowCount(
+        stage: Int,
+        outTable: Variable,
+    ) {
+        if (isNoOp || !builder.isStreamingFrame()) {
+            return
+        }
+        val frame = builder.getCurrentStreamingPipeline()
+
+        // Before the loop, set up an accumulator to store the total output rows produced by this stage
+        val accumulator = builder.symbolTable.genOperatorStageRowCountVar(opID, stage)
+        frame.addInitialization(Assign(accumulator, Expr.Zero))
+
+        // In the loop, update the accumulator with the local_len of the output produced in this iteration
+        val outputLength = Expr.Call("bodo.hiframes.table.local_len", outTable)
+        val newLength = Expr.Binary("+", accumulator, outputLength)
+        frame.add(Assign(accumulator, newLength))
+
+        // After the loop, submit the row count to the profiler
+        frame.addTermination(
+            Stmt(
+                Expr.Call(
+                    "bodo.libs.query_profile_collector.submit_operator_stage_row_counts",
+                    Expr.IntegerLiteral(opID),
+                    Expr.IntegerLiteral(stage),
+                    accumulator,
+                ),
+            ),
+        )
     }
 
     /**

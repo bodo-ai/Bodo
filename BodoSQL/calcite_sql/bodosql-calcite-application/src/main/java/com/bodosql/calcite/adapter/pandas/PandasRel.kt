@@ -109,6 +109,7 @@ interface PandasRel : RelNode {
         fun build(fn: (BuildContext) -> BodoEngineTable): BodoEngineTable
 
         fun buildStreaming(
+            reportOutTableSize: Boolean,
             initFn: (BuildContext) -> StateVariable,
             bodyFn: (BuildContext, StateVariable) -> BodoEngineTable,
             deleteFn: (BuildContext, StateVariable) -> Unit,

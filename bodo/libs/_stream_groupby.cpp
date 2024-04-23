@@ -3337,8 +3337,8 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                 // Build doesn't output anything, so it's output row count is 0.
                 QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                     QueryProfileCollector::MakeOperatorStageID(
-                        groupby_state->op_id, groupby_state->curr_stage_id),
-                    groupby_state->metrics.build_input_row_count, 0);
+                        groupby_state->op_id, 0),
+                    0);
             }
             // Report and reset metrics
             groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
@@ -3376,7 +3376,7 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
             QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                 QueryProfileCollector::MakeOperatorStageID(
                     groupby_state->op_id, groupby_state->curr_stage_id),
-                0, groupby_state->metrics.output_row_count);
+                groupby_state->metrics.output_row_count);
         }
         return new table_info(*out);
     } catch (const std::exception& e) {

@@ -1569,7 +1569,7 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
                 QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                     QueryProfileCollector::MakeOperatorStageID(
                         reader->op_id, QUERY_PROFILE_READ_STAGE_ID),
-                    0, reader->metrics.output_row_count);
+                    reader->metrics.output_row_count);
             }
             reader->ReportReadStageMetrics();
         }

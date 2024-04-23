@@ -38,7 +38,7 @@ def test_query_profile_collection_compiles(memory_leak_check):
     def impl():
         bodo.libs.query_profile_collector.init()
         bodo.libs.query_profile_collector.start_pipeline(1)
-        bodo.libs.query_profile_collector.submit_operator_stage_row_counts(1, 0, 0, 0)
+        bodo.libs.query_profile_collector.submit_operator_stage_row_counts(1, 0, 0)
         bodo.libs.query_profile_collector.submit_operator_stage_time(1, 0, 100)
         bodo.libs.query_profile_collector.get_operator_duration(1)
         bodo.libs.query_profile_collector.end_pipeline(1, 10)
@@ -175,28 +175,15 @@ def test_join_row_count_collection(memory_leak_check):
     )
 
     _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
-    build_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
-    )
-    probe_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 2)
-    )
+
     build_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
     probe_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 2)
     )
-    build_input_row_count = reduce_sum(build_input_row_count)
-    probe_input_row_count = reduce_sum(probe_input_row_count)
     build_output_row_count = reduce_sum(build_output_row_count)
     probe_output_row_count = reduce_sum(probe_output_row_count)
-    assert (
-        build_input_row_count == 37500
-    ), f"Expected build_input_row_count to be 37500 but it was {build_input_row_count} instead"
-    assert (
-        probe_input_row_count == 5000
-    ), f"Expected probe_input_row_count to be 5000 but it was {probe_input_row_count} instead"
     assert (
         build_output_row_count == 0
     ), f"Expected build_output_row_count to be 0 but it was {build_output_row_count} instead"
@@ -298,31 +285,11 @@ def test_groupby_row_count_collection(memory_leak_check):
         return df
 
     _ = impl(_get_dist_arg(df))
-    build_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
-    )
-    produce_output_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 2)
-    )
-    build_output_row_count = (
-        bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
-    )
+
     produce_output_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 2)
     )
-    build_input_row_count = reduce_sum(build_input_row_count)
-    produce_output_input_row_count = reduce_sum(produce_output_input_row_count)
-    build_output_row_count = reduce_sum(build_output_row_count)
     produce_output_output_row_count = reduce_sum(produce_output_output_row_count)
-    assert (
-        build_input_row_count == 32000
-    ), f"Expected build_input_row_count to be 32000 but it was {build_input_row_count} instead"
-    assert (
-        produce_output_input_row_count == 0
-    ), f"Expected produce_output_input_row_count to be 0 but it was {produce_output_input_row_count} instead"
-    assert (
-        build_output_row_count == 0
-    ), f"Expected build_output_row_count to be 0 but it was {build_output_row_count} instead"
     assert (
         produce_output_output_row_count == 1000
     ), f"Expected produce_output_output_row_count to be 1000 but it was {produce_output_output_row_count} instead"
@@ -371,17 +338,10 @@ def test_snowflake_read_row_count_collection(memory_leak_check):
     conn = get_snowflake_connection_string(db, schema)
 
     _ = impl(conn)
-    reader_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
-    )
     reader_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
-    reader_input_row_count = reduce_sum(reader_input_row_count)
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_input_row_count == 0
-    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
     assert (
         reader_output_row_count == 6001215
     ), f"Expected reader_output_row_count to be 6001215, but it was {reader_output_row_count} instead."
@@ -436,17 +396,10 @@ def test_iceberg_read_row_count_collection(
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     _ = impl(table_name, conn, db_schema)
-    reader_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
-    )
     reader_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
-    reader_input_row_count = reduce_sum(reader_input_row_count)
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_input_row_count == 0
-    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
     assert (
         reader_output_row_count == 200
     ), f"Expected reader_output_row_count to be 200, but it was {reader_output_row_count} instead."
@@ -484,17 +437,10 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
         return total_max
 
     _ = impl(datapath("tpch-test_data/parquet/lineitem.parquet"))
-    reader_input_row_count = (
-        bodo.libs.query_profile_collector.get_input_row_counts_for_op_stage(0, 1)
-    )
     reader_output_row_count = (
         bodo.libs.query_profile_collector.get_output_row_counts_for_op_stage(0, 1)
     )
-    reader_input_row_count = reduce_sum(reader_input_row_count)
     reader_output_row_count = reduce_sum(reader_output_row_count)
-    assert (
-        reader_input_row_count == 0
-    ), f"Expected reader_input_row_count to be 0, but it was {reader_input_row_count} instead."
     assert (
         reader_output_row_count == 120515
     ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."

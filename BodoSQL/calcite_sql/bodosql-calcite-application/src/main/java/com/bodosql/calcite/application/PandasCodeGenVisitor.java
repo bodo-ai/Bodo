@@ -766,6 +766,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             "bodo.libs.stream_union.union_produce_batch", List.of(stateVar, outputControl));
     timerInfo.insertLoopOperationStartTimer(i + 2);
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    timerInfo.updateRowCount(i + 2, outTable);
     timerInfo.insertLoopOperationEndTimer(i + 2);
 
     // Append the code to delete the table builder state
@@ -2571,6 +2572,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable buildStreaming(
+        @NotNull boolean reportOutTableSize,
         @NotNull Function1<? super PandasRel.BuildContext, ? extends StateVariable> initFn,
         @NotNull
             Function2<? super PandasRel.BuildContext, ? super StateVariable, BodoEngineTable>
@@ -2606,6 +2608,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // Handle the loop body
       timerInfo.insertLoopOperationStartTimer(1);
       BodoEngineTable res = bodyFn.invoke(buildContext, stateVar);
+      if (reportOutTableSize) {
+        timerInfo.updateRowCount(1, res);
+      }
       timerInfo.insertLoopOperationEndTimer(1);
       // Delete the state
       deleteFn.invoke(buildContext, stateVar);
