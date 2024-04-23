@@ -227,6 +227,7 @@ def commit_write(
                 txn_id,
                 file_info_str,
             )
+            handler.removeTransaction(txn_id)
         except Py4JError as e:
             print("Error during Iceberg table create/replace commit: ", e)
             return False
@@ -239,6 +240,7 @@ def commit_write(
 
         try:
             handler.commitAppendTable(txn_id, file_info_str, iceberg_schema_id)
+            handler.removeTransaction(txn_id)
         except Py4JError as e:
             print("Error during Iceberg table append: ", e)
             return False
