@@ -10,9 +10,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.timezone_common import (  # noqa
-    representative_tz,
-)
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -543,7 +540,7 @@ def test_timestamp_tz_extraction(
     )
 
 
-@pytest.skip("Fix assert failure (BSE-2936)")
+@pytest.mark.skip("Fix assert failure (BSE-2936)")
 def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
     """
     Tests that sorting works correctly on timestamp_tz data
@@ -939,7 +936,7 @@ def test_timestamp_tz_from_parts(calc, answer, memory_leak_check):
     )
     check_query(
         query,
-        {"TABLE1": df},
+        ctx,
         None,
         check_names=False,
         check_dtype=False,
