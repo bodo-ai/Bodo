@@ -2929,11 +2929,13 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           (SqlMatchRecognize) node, enclosingNode, alias, forceNullable);
       return node;
     case PIVOT:
-      registerPivot(parentScope, usingScope, (SqlPivot) node, enclosingNode,
+      // Bodo Change: Honor the register parameter
+      registerPivot(parentScope, register ? usingScope : null, (SqlPivot) node, enclosingNode,
           alias, forceNullable);
       return node;
     case UNPIVOT:
-      registerUnpivot(parentScope, usingScope, (SqlUnpivot) node, enclosingNode,
+      // Bodo Change: Honor the register parameter
+      registerUnpivot(parentScope, register ? usingScope : null, (SqlUnpivot) node, enclosingNode,
           alias, forceNullable);
       return node;
     case TABLESAMPLE:
