@@ -1875,11 +1875,12 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
         build_table_schema = std::make_shared<bodo::Schema>(*in_schema_);
     }
 
-    this->key_dict_builders.resize(this->n_keys);
+    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders(
+        this->n_keys);
 
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        this->key_dict_builders[i] = create_dict_builder_for_array(
+        key_dict_builders[i] = create_dict_builder_for_array(
             build_table_schema->column_types[i]->copy(), true);
     }
 
@@ -1894,8 +1895,8 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
     }
 
     this->build_table_dict_builders.insert(
-        this->build_table_dict_builders.end(), this->key_dict_builders.begin(),
-        this->key_dict_builders.end());
+        this->build_table_dict_builders.end(), key_dict_builders.begin(),
+        key_dict_builders.end());
 
     this->build_table_dict_builders.insert(
         this->build_table_dict_builders.end(),
@@ -2566,11 +2567,11 @@ GroupbyState::GetDictionaryHashesForKeys() {
             bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>(
             this->n_keys);
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        if (this->key_dict_builders[i] == nullptr) {
+        if (this->build_table_dict_builders[i] == nullptr) {
             (*dict_hashes)[i] = nullptr;
         } else {
             (*dict_hashes)[i] =
-                this->key_dict_builders[i]->GetDictionaryHashes();
+                this->build_table_dict_builders[i]->GetDictionaryHashes();
         }
     }
     return dict_hashes;
@@ -2584,11 +2585,6 @@ void GroupbyState::ClearColSetsStates() {
 
 void GroupbyState::ClearBuildState() {
     this->col_sets.clear();
-    // this->out_dict_builders retains references
-    // to the DictionaryBuilders required for the output
-    // buffer, so clearing these is safe.
-    this->build_table_dict_builders.clear();
-    this->key_dict_builders.clear();
     this->append_row_to_build_table.resize(0);
     this->append_row_to_build_table.shrink_to_fit();
 }
@@ -3343,6 +3339,16 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
             // Report and reset metrics
             groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
             groupby_state->curr_stage_id++;
+            if (is_final_pipeline) {
+                // groupby_state->out_dict_builders retains references
+                // to the DictionaryBuilders required for the output
+                // buffer, so clearing these is safe.
+                // We cannot free these during FinalizeBuild since we need these
+                // for the metric calculation. Once we've collected the metrics,
+                // these are safe to release.
+                assert(groupby_state->build_input_finalized);
+                groupby_state->build_table_dict_builders.clear();
+            }
         }
 
         return is_last;

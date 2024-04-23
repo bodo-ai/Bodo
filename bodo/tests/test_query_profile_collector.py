@@ -1067,9 +1067,12 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     df = pd.DataFrame(
         {
             "A": pd.array(list(np.arange(200)) * 160, dtype="Int64"),
-            "B": pd.Series(
-                [pd.NA, "apple", "pie", "egg", "salad", "banana", "kiwi", "pudding"]
-                * 4000
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    [None, "apple", "pie", "egg", "salad", "banana", "kiwi", "pudding"]
+                    * 4000,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
             ),
             "C": pd.array(list(np.arange(100)) * 320, dtype="Int64"),
         }
@@ -1230,46 +1233,55 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     df1 = pd.DataFrame(
         {
             "A": pd.array(list(np.arange(90)) * 100, dtype="Int64"),
-            "B": pd.Series(
-                [
-                    pd.NA,
-                    "apple",
-                    "pie",
-                    "egg",
-                    "salad",
-                    "banana",
-                    "kiwi",
-                    "pudding",
-                    "caramel",
-                ]
-                * 1000
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    [
+                        None,
+                        "apple",
+                        "pie",
+                        "egg",
+                        "salad",
+                        "banana",
+                        "kiwi",
+                        "pudding",
+                        "caramel",
+                    ]
+                    * 1000,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
             ),
         }
     )
     df2 = pd.DataFrame(
         {
             "A": pd.array(list(np.arange(900)) * 20, dtype="Int64"),
-            "B": pd.Series(
-                [
-                    "apple",
-                    "kiwi",
-                    "pudding",
-                    pd.NA,
-                    "caramel",
-                ]
-                * 3600
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    [
+                        "apple",
+                        "kiwi",
+                        "pudding",
+                        None,
+                        "caramel",
+                    ]
+                    * 3600,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
             ),
         }
     )
     df3 = pd.DataFrame(
         {
             "A": pd.array(list(np.arange(10000, 10010)) * 10, dtype="Int64"),
-            "B": pd.Series(
-                [
-                    "apple",
-                    "pie",
-                ]
-                * 50
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    [
+                        "apple",
+                        "pie",
+                    ]
+                    * 50,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
             ),
         }
     )
@@ -1395,12 +1407,14 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
         profile_json = json.load(f)
 
-    assert "operator_stages" in profile_json
-    assert "0" in profile_json["operator_stages"]
-    assert "1" in profile_json["operator_stages"]
-    init_metrics = profile_json["operator_stages"]["0"]["metrics"]
+    assert "operator_reports" in profile_json
+    assert "0" in profile_json["operator_reports"]
+    operator_report = profile_json["operator_reports"]["0"]
+    assert "stage_0" in operator_report
+    assert "stage_1" in operator_report
+    init_metrics = operator_report["stage_0"]["metrics"]
     init_metrics_names: set[str] = set([x["name"] for x in init_metrics])
-    read_metrics = profile_json["operator_stages"]["1"]["metrics"]
+    read_metrics = operator_report["stage_1"]["metrics"]
     read_metrics_names: set[str] = set([x["name"] for x in read_metrics])
 
     if rank == 0:

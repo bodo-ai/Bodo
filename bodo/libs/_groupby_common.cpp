@@ -715,16 +715,14 @@ void alloc_init_keys(
                              j, bit);
                 }
             } else {
-                assert(key_col->arr_type == bodo_array_type::NUMPY);
                 int64_t dtype_size = numpy_item_size[key_col->dtype];
+                char* new_data1 = new_key_col->data1();
+                char* old_data1 = key_col->data1();
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i, grp_infos);
-                    memcpy(new_key_col->data1<bodo_array_type::NUMPY>() +
-                               j * dtype_size,
-                           key_col->data1<bodo_array_type::NUMPY>() +
-                               key_row * dtype_size,
-                           dtype_size);
+                    memcpy(new_data1 + j * dtype_size,
+                           old_data1 + key_row * dtype_size, dtype_size);
                 }
             }
             if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
