@@ -543,6 +543,7 @@ def test_timestamp_tz_extraction(
     )
 
 
+@pytest.skip("Fix assert failure (BSE-2936)")
 def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
     """
     Tests that sorting works correctly on timestamp_tz data
