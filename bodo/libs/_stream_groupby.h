@@ -762,18 +762,13 @@ class GroupbyState {
     // TODO(njriasan): Move to initialization information.
     std::shared_ptr<ChunkedTableBuilder> output_buffer = nullptr;
 
-    // Dictionary builders for the key columns. This is
-    // always of length n_keys and is nullptr for non DICT keys.
-    // These will be shared between the build_shuffle_buffer,
-    // build_table_buffers of all partitions and the output buffer.
-    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
-
     // Simple concatenation of key_dict_builders and
-    // non key dict builders.
-    // Key dict builders are always at the beginning of the vector, and non-key
-    // dict builders follow. For all columns, if the array type is not dict
-    // encoded, the value is nullptr
-    // These will be shared between build_table_buffers of all partitions.
+    // non key dict builders. The key_dict_builders will be shared between the
+    // build_shuffle_buffer, build_table_buffers of all partitions and the
+    // output buffer. Key dict builders are always at the beginning of the
+    // vector, and non-key dict builders follow. For all columns, if the array
+    // type is not dict encoded, the value is nullptr These will be shared
+    // between build_table_buffers of all partitions.
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
 
     // Dictionary builders for output columns
