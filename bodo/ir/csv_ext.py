@@ -14,7 +14,6 @@ from numba.extending import intrinsic
 import bodo
 import bodo.ir.connector
 import bodo.user_logging
-from bodo import objmode  # noqa
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -946,9 +945,9 @@ def _gen_read_csv_objmode(
 
     if idx_col_index != None:
         # idx_array_typ is added to the globals at a higher level
-        func_text += f"  with objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
     else:
-        func_text += f"  with objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
+        func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
     # create typemap for `df.astype` in runtime
     func_text += f"    typemap = {{}}\n"
     for i, t_str in enumerate(typ_map.keys()):

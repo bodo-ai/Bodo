@@ -1370,7 +1370,7 @@ def test_parfor_empty_entry_block(memory_leak_check):
 
 
 def test_objmode_warning(memory_leak_check):
-    """Test that numba.objmode and bodo.objmode raise a warning when used
+    """Test that bodo.objmode raises a warning when used
     and that bodo.no_warning_objmode does not."""
 
     def g():
@@ -1378,18 +1378,12 @@ def test_objmode_warning(memory_leak_check):
 
     @bodo.jit
     def impl1():
-        with numba.objmode(a="int64"):
-            a = g()
-        return a
-
-    @bodo.jit
-    def impl2():
         with bodo.objmode(a="int64"):
             a = g()
         return a
 
     @bodo.jit
-    def impl3():
+    def impl2():
         with bodo.no_warning_objmode(a="int64"):
             a = g()
         return a
@@ -1403,14 +1397,8 @@ def test_objmode_warning(memory_leak_check):
         ):
             assert impl1() == 1, "Incorrect output with numba.objmode"
 
-        with pytest.warns(
-            BodoWarning,
-            match="Entered bodo\\.objmode\\. This will likely negatively impact performance\\.",
-        ):
-            assert impl2() == 1, "Incorrect output with bodo.objmode"
-
         with warnings.catch_warnings():
             warnings.simplefilter("error", BodoWarning)
-            assert impl3() == 1, "Incorrect output with bodo.no_warning_objmode"
+            assert impl2() == 1, "Incorrect output with bodo.no_warning_objmode"
     finally:
         numba.core.config.DEVELOPER_MODE = old_developer_mode

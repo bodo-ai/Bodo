@@ -702,7 +702,7 @@ def get_valid_entries_from_date_offset(
     )
     if types.unliteral(offset) == types.unicode_type:
         func_text += (
-            "  with numba.objmode(threshhold_date=bodo.pd_timestamp_tz_naive_type):\n"
+            "  with bodo.objmode(threshhold_date=bodo.pd_timestamp_tz_naive_type):\n"
         )
         func_text += "    date_offset = pd.tseries.frequencies.to_offset(offset)\n"
         if not get_overload_const_bool(is_last):

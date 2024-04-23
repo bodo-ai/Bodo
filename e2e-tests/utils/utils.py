@@ -12,7 +12,7 @@ import bodo
 
 def checksum_str_df(df):
     """
-    Compute checksum of the a dataframe with all string columns.
+    Compute checksum of the a DataFrame with all string columns.
     We sum up the ascii encoding and compute modulo 256 for
     each element and then add it up across all processes.
 

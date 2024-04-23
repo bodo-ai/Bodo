@@ -1376,7 +1376,7 @@ def _gen_sql_reader_py(
             if limit is not None:
                 func_text += f"  nb_row = {limit}\n"
             else:
-                func_text += '  with objmode(nb_row="int64"):\n'
+                func_text += '  with bodo.no_warning_objmode(nb_row="int64"):\n'
                 func_text += f"     if rank == {MPI_ROOT}:\n"
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
@@ -1384,7 +1384,7 @@ def _gen_sql_reader_py(
                 func_text += "     else:\n"
                 func_text += "         nb_row = 0\n"
                 func_text += "  nb_row = bcast_scalar(nb_row)\n"
-            func_text += f"  with objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
             if db_type == "oracle":
@@ -1397,7 +1397,7 @@ def _gen_sql_reader_py(
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             )
         else:
-            func_text += f"  with objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
+            func_text += f"  with bodo.no_warning_objmode(table_var=py_table_type_{call_id}, index_var=index_col_typ):\n"
             func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
             func_text += (
                 "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
@@ -1453,7 +1453,6 @@ def _gen_sql_reader_py(
             {
                 "sqlalchemy_check": sqlalchemy_check,
                 "pd": pd,
-                "objmode": bodo.no_warning_objmode,
                 "bcast_scalar": bcast_scalar,
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,
