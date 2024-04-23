@@ -14,6 +14,9 @@ from numba.core.withcontexts import (
     _mutate_with_block_caller,
 )
 
+import bodo
+from bodo.utils.typing import BodoWarning
+
 seen_functions = set()
 
 
@@ -25,8 +28,6 @@ def generate_objmode_warning(function_key: str):
     Args:
         function_key (str): A uuid4 unique key for the function.
     """
-    from bodo.utils.typing import BodoWarning
-
     global seen_functions
     if function_key not in seen_functions:
         if numba.core.config.DEVELOPER_MODE:
@@ -145,14 +146,6 @@ class _BodoObjModeContextType(numba.core.withcontexts._ObjModeContextType):
             arg_count=len(inputs),
             force_non_generator=True,
         )
-        # Bodo Change: Make sure Bodo is imported if we need to emit warnings.
-        if self.emit_warnings:
-            import bodo
-
-            lifted_globals = lifted_ir.func_id.func.__globals__
-            if "bodo" not in lifted_globals:
-                lifted_globals["bodo"] = bodo
-
         dispatcher = dispatcher_factory(lifted_ir, objectmode=True, output_types=outtup)
 
         newblk = _mutate_with_block_caller(
@@ -211,8 +204,6 @@ def fill_callee_prologue(block, inputs, label_next, emit_warnings: bool):
 
     Expected to use with *fill_block_with_call()*
     """
-    import bodo
-
     scope = block.scope
     loc = block.loc
     # load args

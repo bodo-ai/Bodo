@@ -66,7 +66,6 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
-from bodo.ir.object_mode import warning_objmode
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
     peep_hole_fuse_dict_add_updates,
@@ -6397,9 +6396,5 @@ if _check_numba_change:  # pragma: no cover
         != "286d40f659b730fdef4414eb35c21da7311abeba516c348790999992941b29ca"
     ):
         warnings.warn("numba.core.ir_utils.fill_callee_prologue has changed")
-
-# Replace the objmode implementation
-numba.objmode = warning_objmode
-numba.core.withcontexts.objmode_context = warning_objmode
 
 ######### End changes to enable adding an objmode warning #########

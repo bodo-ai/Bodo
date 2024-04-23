@@ -200,7 +200,7 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-            with numba.objmode(res="pd_timedelta_type"):
+            with bodo.objmode(res="pd_timedelta_type"):
                 res = pd.Timedelta(value)
             return res
 

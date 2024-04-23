@@ -134,7 +134,7 @@ def random_forest_model_fit(m, X, y):
 
     # Gather all trees from each first rank/node to rank 0 within subcomm. Then broadcast to all
     # Get lowest rank in each node
-    with numba.objmode(first_rank_node="int32[:]"):
+    with bodo.objmode(first_rank_node="int32[:]"):
         first_rank_node = get_nodes_first_ranks()
     # Create subcommunicator with these ranks only
     subcomm = create_subcomm_mpi4py(first_rank_node)
@@ -256,7 +256,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with numba.objmode(m="random_forest_classifier_type"):
+        with bodo.objmode(m="random_forest_classifier_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -295,7 +295,7 @@ def parallel_predict_regression(m, X):
     check_sklearn_version()
 
     def _model_predict_impl(m, X):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             if len(X) == 0:
@@ -318,7 +318,7 @@ def parallel_predict(m, X):
     check_sklearn_version()
 
     def _model_predict_impl(m, X):  # pragma: no cover
-        with numba.objmode(result="int64[:]"):
+        with bodo.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -342,7 +342,7 @@ def parallel_predict_proba(m, X):
     check_sklearn_version()
 
     def _model_predict_proba_impl(m, X):  # pragma: no cover
-        with numba.objmode(result="float64[:,:]"):
+        with bodo.objmode(result="float64[:,:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -366,7 +366,7 @@ def parallel_predict_log_proba(m, X):
     check_sklearn_version()
 
     def _model_predict_log_proba_impl(m, X):  # pragma: no cover
-        with numba.objmode(result="float64[:,:]"):
+        with bodo.objmode(result="float64[:,:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
             # len cannot be used with csr
@@ -399,7 +399,7 @@ def parallel_score(
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.score(X, y, sample_weight=sample_weight)
             if _is_data_distributed:
                 # replicate result so that the average is weighted based on
@@ -525,7 +525,7 @@ def precision_recall_fscore_parallel(
     # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L541
     tn = y_true.shape[0] - tp - fp - fn
 
-    with numba.objmode(result="float64[:]"):
+    with bodo.objmode(result="float64[:]"):
         # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L543
         MCM = np.array([tn, fp, fn, tp]).T.reshape(-1, 2, 2)
         if operation == "precision":
@@ -572,7 +572,7 @@ def overload_precision_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64[:]"):
+                with bodo.objmode(score="float64[:]"):
                     score = sklearn.metrics.precision_score(
                         y_true,
                         y_pred,
@@ -620,7 +620,7 @@ def overload_precision_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = sklearn.metrics.precision_score(
                         y_true,
                         y_pred,
@@ -683,7 +683,7 @@ def overload_recall_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64[:]"):
+                with bodo.objmode(score="float64[:]"):
                     score = sklearn.metrics.recall_score(
                         y_true,
                         y_pred,
@@ -731,7 +731,7 @@ def overload_recall_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = sklearn.metrics.recall_score(
                         y_true,
                         y_pred,
@@ -794,7 +794,7 @@ def overload_f1_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64[:]"):
+                with bodo.objmode(score="float64[:]"):
                     score = sklearn.metrics.f1_score(
                         y_true,
                         y_pred,
@@ -842,7 +842,7 @@ def overload_f1_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = sklearn.metrics.f1_score(
                         y_true,
                         y_pred,
@@ -979,7 +979,7 @@ def overload_mean_squared_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(err="float64[:]"):
+                with bodo.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1013,7 +1013,7 @@ def overload_mean_squared_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(err="float64[:]"):
+                with bodo.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1050,7 +1050,7 @@ def overload_mean_squared_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(err="float64"):
+                with bodo.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1084,7 +1084,7 @@ def overload_mean_squared_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(err="float64"):
+                with bodo.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1141,7 +1141,7 @@ def overload_mean_absolute_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(err="float64[:]"):
+                with bodo.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1173,7 +1173,7 @@ def overload_mean_absolute_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(err="float64[:]"):
+                with bodo.objmode(err="float64[:]"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1208,7 +1208,7 @@ def overload_mean_absolute_error(
             ):  # pragma: no cover
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(err="float64"):
+                with bodo.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1240,7 +1240,7 @@ def overload_mean_absolute_error(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(err="float64"):
+                with bodo.objmode(err="float64"):
                     if _is_data_distributed:
                         err = mse_mae_dist_helper(
                             y_true,
@@ -1340,7 +1340,7 @@ def overload_log_loss(
         )
         func_text += "    labels = bodo.allgatherv(labels, False)\n"
 
-    func_text += "    with numba.objmode(loss='float64'):\n"
+    func_text += "    with bodo.objmode(loss='float64'):\n"
     if is_overload_false(_is_data_distributed):
         # For replicated data, directly call sklearn
         func_text += "        loss = sklearn.metrics.log_loss(\n"
@@ -1421,7 +1421,7 @@ def overload_metrics_cosine_similarity(
 
         # Indexing by [:,::1] instead of [:,:] forces C-style memory layout.
         # This is needed to prevent ambiguous typing of output array
-        func_text += "    with numba.objmode(out='float64[:,::1]'):\n"
+        func_text += "    with bodo.objmode(out='float64[:,::1]'):\n"
         func_text += "        out = sklearn.metrics.pairwise.cosine_similarity(\n"
         func_text += "            X, Y, dense_output=dense_output\n"
         func_text += "        )\n"
@@ -1558,7 +1558,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
 
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = sklearn.metrics.accuracy_score(
                         y_true, y_pred, normalize=normalize, sample_weight=sample_weight
                     )
@@ -1579,7 +1579,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = sklearn.metrics.accuracy_score(
                         y_true, y_pred, normalize=normalize, sample_weight=sample_weight
                     )
@@ -1601,7 +1601,7 @@ def overload_accuracy_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = accuracy_score_dist_helper(
                         y_true,
                         y_pred,
@@ -1625,7 +1625,7 @@ def overload_accuracy_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     score = accuracy_score_dist_helper(
                         y_true,
                         y_pred,
@@ -1801,7 +1801,7 @@ def overload_r2_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64[:]"):
+                with bodo.objmode(score="float64[:]"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1834,7 +1834,7 @@ def overload_r2_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(score="float64[:]"):
+                with bodo.objmode(score="float64[:]"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1869,7 +1869,7 @@ def overload_r2_score(
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -1903,7 +1903,7 @@ def overload_r2_score(
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
-                with numba.objmode(score="float64"):
+                with bodo.objmode(score="float64"):
                     if _is_data_distributed:
                         score = r2_score_dist_helper(
                             y_true,
@@ -2067,7 +2067,7 @@ def overload_confusion_matrix(
             func_text += "    labels = bodo.allgatherv(labels, False)\n"
             func_text += "    labels = bodo.libs.array_kernels.sort(labels, ascending=True, inplace=False)\n"
 
-    func_text += f"    with numba.objmode(cm='{cm_dtype[0]}'):\n"
+    func_text += f"    with bodo.objmode(cm='{cm_dtype[0]}'):\n"
     if is_overload_false(_is_data_distributed):
         func_text += "      cm = sklearn.metrics.confusion_matrix(\n"
     else:
@@ -2154,7 +2154,7 @@ def sklearn_linear_model_SGDRegressor_overload(
         warm_start=False,
         average=False,
     ):  # pragma: no cover
-        with numba.objmode(m="sgd_regressor_type"):
+        with bodo.objmode(m="sgd_regressor_type"):
             m = sklearn.linear_model.SGDRegressor(
                 loss=loss,
                 penalty=penalty,
@@ -2218,7 +2218,7 @@ def overload_sgdr_model_fit(
             _is_data_distributed=False,
         ):  # pragma: no cover
             # TODO: Rebalance the data X and y to be the same size on every rank
-            with numba.objmode(m="sgd_regressor_type"):
+            with bodo.objmode(m="sgd_regressor_type"):
                 m = fit_sgd(m, X, y, _is_data_distributed)
 
             bodo.barrier()
@@ -2237,7 +2237,7 @@ def overload_sgdr_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with numba.objmode(m="sgd_regressor_type"):
+            with bodo.objmode(m="sgd_regressor_type"):
                 m = m.fit(X, y, coef_init, intercept_init, sample_weight)
             return m
 
@@ -2331,7 +2331,7 @@ def sklearn_linear_model_SGDClassifier_overload(
         warm_start=False,
         average=False,
     ):  # pragma: no cover
-        with numba.objmode(m="sgd_classifier_type"):
+        with bodo.objmode(m="sgd_classifier_type"):
             m = sklearn.linear_model.SGDClassifier(
                 loss=loss,
                 penalty=penalty,
@@ -2461,7 +2461,7 @@ def overload_sgdc_model_fit(
             y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
             y_classes = bodo.allgatherv(y_classes, False)
 
-            with numba.objmode(m="sgd_classifier_type"):
+            with bodo.objmode(m="sgd_classifier_type"):
                 m = fit_sgd(m, X, y, y_classes, _is_data_distributed)
 
             return m
@@ -2478,7 +2478,7 @@ def overload_sgdc_model_fit(
             sample_weight=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with numba.objmode(m="sgd_classifier_type"):
+            with bodo.objmode(m="sgd_classifier_type"):
                 m = m.fit(X, y, coef_init, intercept_init, sample_weight)
             return m
 
@@ -2520,7 +2520,7 @@ def get_sgdc_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:,:]"):
+        with bodo.objmode(result="float64[:,:]"):
             result = m.coef_
         return result
 
@@ -2569,7 +2569,7 @@ def sklearn_cluster_kmeans_overload(
         copy_x=True,
         algorithm="lloyd",
     ):  # pragma: no cover
-        with numba.objmode(m="kmeans_clustering_type"):
+        with bodo.objmode(m="kmeans_clustering_type"):
             m = sklearn.cluster.KMeans(
                 n_clusters=n_clusters,
                 init=init,
@@ -2671,7 +2671,7 @@ def overload_kmeans_clustering_fit(
             all_X = X
             all_sample_weight = sample_weight
 
-        with numba.objmode(m="kmeans_clustering_type"):
+        with bodo.objmode(m="kmeans_clustering_type"):
             m = kmeans_fit_helper(
                 m, len(X), all_X, all_sample_weight, _is_data_distributed
             )
@@ -2710,7 +2710,7 @@ def overload_kmeans_clustering_predict(
     sample_weight=None,
 ):
     def _cluster_kmeans_predict(m, X, sample_weight=None):  # pragma: no cover
-        with numba.objmode(preds="int64[:]"):
+        with bodo.objmode(preds="int64[:]"):
             # TODO: Set _n_threads to 1, even though it shouldn't be necessary
             preds = kmeans_predict_helper(m, X, sample_weight)
         return preds
@@ -2736,7 +2736,7 @@ def overload_kmeans_clustering_score(
     def _cluster_kmeans_score(
         m, X, y=None, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with numba.objmode(result="float64"):
+        with bodo.objmode(result="float64"):
             # Don't NEED to set _n_threads becasue
             # (a) it isn't used, (b) OMP_NUM_THREADS is set to 1 by bodo init
             # But we're do it anyway in case sklearn changes its behavior later
@@ -2770,7 +2770,7 @@ def overload_kmeans_clustering_transform(m, X):
     """
 
     def _cluster_kmeans_transform(m, X):  # pragma: no cover
-        with numba.objmode(X_new="float64[:,:]"):
+        with bodo.objmode(X_new="float64[:,:]"):
             # Doesn't parallelize automatically afaik. Set n_threads to 1 anyway.
             orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
             m._n_threads = 1
@@ -2819,7 +2819,7 @@ def sklearn_naive_bayes_multinomialnb_overload(
         fit_prior=True,
         class_prior=None,
     ):  # pragma: no cover
-        with numba.objmode(m="multinomial_nb_type"):
+        with bodo.objmode(m="multinomial_nb_type"):
             m = sklearn.naive_bayes.MultinomialNB(
                 alpha=alpha,
                 fit_prior=fit_prior,
@@ -2846,7 +2846,7 @@ def overload_multinomial_nb_model_fit(
         def _naive_bayes_multinomial_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -2889,7 +2889,7 @@ def overload_multinomial_nb_model_fit(
         func_text += "            bodo.gatherv(X[:, start:end:1], root=i)\n"
         # Replicate y in all ranks
         func_text += "    y_train = bodo.allgatherv(y, False)\n"
-        func_text += '    with numba.objmode(m="multinomial_nb_type"):\n'
+        func_text += '    with bodo.objmode(m="multinomial_nb_type"):\n'
         func_text += "        m = fit_multinomial_nb(\n"
         func_text += "            m, X_train, y_train, sample_weight, total_cols, _is_data_distributed\n"
         func_text += "        )\n"
@@ -3058,7 +3058,7 @@ def sklearn_linear_model_logistic_regression_overload(
         n_jobs=None,
         l1_ratio=None,
     ):  # pragma: no cover
-        with numba.objmode(m="logistic_regression_type"):
+        with bodo.objmode(m="logistic_regression_type"):
             m = sklearn.linear_model.LogisticRegression(
                 penalty=penalty,
                 dual=dual,
@@ -3106,7 +3106,7 @@ def overload_logistic_regression_fit(
         def _logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -3123,7 +3123,7 @@ def overload_logistic_regression_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDClassifier")
-            with numba.objmode(clf="sgd_classifier_type"):
+            with bodo.objmode(clf="sgd_classifier_type"):
                 # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
                 if m.l1_ratio is None:
                     l1_ratio = 0.15
@@ -3143,7 +3143,7 @@ def overload_logistic_regression_fit(
                     l1_ratio=l1_ratio,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with numba.objmode():
+            with bodo.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -3188,7 +3188,7 @@ def get_logisticR_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:,:]"):
+        with bodo.objmode(result="float64[:,:]"):
             result = m.coef_
         return result
 
@@ -3228,7 +3228,7 @@ def sklearn_linear_model_linear_regression_overload(
         n_jobs=None,
         positive=False,
     ):  # pragma: no cover
-        with numba.objmode(m="linear_regression_type"):
+        with bodo.objmode(m="linear_regression_type"):
             m = sklearn.linear_model.LinearRegression(
                 fit_intercept=fit_intercept,
                 copy_X=copy_X,
@@ -3255,7 +3255,7 @@ def overload_linear_regression_fit(
         def _linear_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -3272,14 +3272,14 @@ def overload_linear_regression_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with numba.objmode(clf="sgd_regressor_type"):
+            with bodo.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_error",
                     penalty=None,
                     fit_intercept=m.fit_intercept,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with numba.objmode():
+            with bodo.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
             return m
@@ -3310,7 +3310,7 @@ def get_lr_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.coef_
         return result
 
@@ -3361,7 +3361,7 @@ def sklearn_linear_model_lasso_overload(
         random_state=None,
         selection="cyclic",
     ):  # pragma: no cover
-        with numba.objmode(m="lasso_type"):
+        with bodo.objmode(m="lasso_type"):
             m = sklearn.linear_model.Lasso(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
@@ -3395,7 +3395,7 @@ def overload_lasso_fit(
         def _lasso_fit_impl(
             m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight, check_input)
             return m
 
@@ -3416,7 +3416,7 @@ def overload_lasso_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with numba.objmode(clf="sgd_regressor_type"):
+            with bodo.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_error",
                     penalty="l1",
@@ -3428,7 +3428,7 @@ def overload_lasso_fit(
                     random_state=m.random_state,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with numba.objmode():
+            with bodo.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -3495,7 +3495,7 @@ def sklearn_linear_model_ridge_overload(
         positive=False,
         random_state=None,
     ):  # pragma: no cover
-        with numba.objmode(m="ridge_type"):
+        with bodo.objmode(m="ridge_type"):
             m = sklearn.linear_model.Ridge(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
@@ -3526,7 +3526,7 @@ def overload_ridge_fit(
         def _ridge_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -3543,7 +3543,7 @@ def overload_ridge_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDRegressor")
-            with numba.objmode(clf="sgd_regressor_type"):
+            with bodo.objmode(clf="sgd_regressor_type"):
                 if m.max_iter is None:
                     max_iter = 1000
                 else:
@@ -3558,7 +3558,7 @@ def overload_ridge_fit(
                     random_state=m.random_state,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with numba.objmode():
+            with bodo.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -3590,7 +3590,7 @@ def get_ridge_coef(m):
     """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.coef_
         return result
 
@@ -3645,7 +3645,7 @@ def sklearn_svm_linear_svc_overload(
         random_state=None,
         max_iter=1000,
     ):  # pragma: no cover
-        with numba.objmode(m="linear_svc_type"):
+        with bodo.objmode(m="linear_svc_type"):
             m = sklearn.svm.LinearSVC(
                 penalty=penalty,
                 loss=loss,
@@ -3680,7 +3680,7 @@ def overload_linear_svc_fit(
         def _svm_linear_svc_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode():
+            with bodo.objmode():
                 m.fit(X, y, sample_weight)
             return m
 
@@ -3697,7 +3697,7 @@ def overload_linear_svc_fit(
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
                 _raise_SGD_warning("SGDClassifier")
-            with numba.objmode(clf="sgd_classifier_type"):
+            with bodo.objmode(clf="sgd_classifier_type"):
                 clf = sklearn.linear_model.SGDClassifier(
                     loss="hinge",
                     penalty=m.penalty,
@@ -3709,7 +3709,7 @@ def overload_linear_svc_fit(
                     verbose=m.verbose,
                 )
             clf.fit(X, y, _is_data_distributed=True)
-            with numba.objmode():
+            with bodo.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
                 m.n_iter_ = clf.n_iter_
@@ -3795,7 +3795,7 @@ def get_one_hot_encoder_categories_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="preprocessing_one_hot_encoder_categories_type"):
+        with bodo.objmode(result="preprocessing_one_hot_encoder_categories_type"):
             result = m.categories_
         return result
 
@@ -3815,7 +3815,7 @@ def get_one_hot_encoder_drop_idx_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="preprocessing_one_hot_encoder_drop_idx_type"):
+        with bodo.objmode(result="preprocessing_one_hot_encoder_drop_idx_type"):
             result = m.drop_idx_
         return result
 
@@ -3835,7 +3835,7 @@ def get_one_hot_encoder_n_features_in_(m):
     """
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="int64"):
+        with bodo.objmode(result="int64"):
             result = m.n_features_in_
         return result
 
@@ -3928,7 +3928,7 @@ def sklearn_preprocessing_one_hot_encoder_overload(
         max_categories=None,
         feature_name_combiner="concat",
     ):  # pragma: no cover
-        with numba.objmode(m="preprocessing_one_hot_encoder_type"):
+        with bodo.objmode(m="preprocessing_one_hot_encoder_type"):
             m = sklearn.preprocessing.OneHotEncoder(
                 categories=categories,
                 drop=drop,
@@ -4057,7 +4057,7 @@ def overload_preprocessing_one_hot_encoder_fit(
     func_text = "def _preprocessing_one_hot_encoder_fit_impl(\n"
     func_text += "    m, X, y=None, _is_data_distributed=False\n"
     func_text += "):\n"
-    func_text += "    with numba.objmode(m='preprocessing_one_hot_encoder_type'):\n"
+    func_text += "    with bodo.objmode(m='preprocessing_one_hot_encoder_type'):\n"
     # sklearn.fit() expects a 2D array as input, but Bodo does not support
     # 2D string arrays - these are instead typed as 1D arrays of object
     # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
@@ -4105,7 +4105,7 @@ def overload_preprocessing_one_hot_encoder_transform(
         m,
         X,
     ):  # pragma: no cover
-        with numba.objmode(transformed_X="float64[:,:]"):
+        with bodo.objmode(transformed_X="float64[:,:]"):
             # sklearn.fit() expects a 2D array as input, but Bodo does not support
             # 2D string arrays - these are instead typed as 1D arrays of object
             # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
@@ -4157,7 +4157,7 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
         m,
         input_features=None,
     ):  # pragma: no cover
-        with numba.objmode(out_features="string[:]"):
+        with bodo.objmode(out_features="string[:]"):
             out_features = get_feature_names_out(input_features)
         return out_features
 
@@ -4201,7 +4201,7 @@ def sklearn_preprocessing_standard_scaler_overload(
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
     ):  # pragma: no cover
-        with numba.objmode(m="preprocessing_standard_scaler_type"):
+        with bodo.objmode(m="preprocessing_standard_scaler_type"):
             m = sklearn.preprocessing.StandardScaler(
                 copy=copy,
                 with_mean=with_mean,
@@ -4326,7 +4326,7 @@ def overload_preprocessing_standard_scaler_fit(
         def _preprocessing_standard_scaler_fit_impl(
             m, X, y=None, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_standard_scaler_type"):
+            with bodo.objmode(m="preprocessing_standard_scaler_type"):
                 m = sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X)
 
             return m
@@ -4336,7 +4336,7 @@ def overload_preprocessing_standard_scaler_fit(
         def _preprocessing_standard_scaler_fit_impl(
             m, X, y=None, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_standard_scaler_type"):
+            with bodo.objmode(m="preprocessing_standard_scaler_type"):
                 m = m.fit(X, y, sample_weight)
 
             return m
@@ -4362,7 +4362,7 @@ def overload_preprocessing_standard_scaler_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+            with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
                 transformed_X = m.transform(X, copy=copy)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -4375,7 +4375,7 @@ def overload_preprocessing_standard_scaler_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with numba.objmode(transformed_X="float64[:,:]"):
+            with bodo.objmode(transformed_X="float64[:,:]"):
                 transformed_X = m.transform(X, copy=copy)
             return transformed_X
 
@@ -4402,7 +4402,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+            with bodo.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
                 inverse_transformed_X = m.inverse_transform(X, copy=copy)
                 inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
                     np.int64
@@ -4419,7 +4419,7 @@ def overload_preprocessing_standard_scaler_inverse_transform(
             X,
             copy=None,
         ):  # pragma: no cover
-            with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            with bodo.objmode(inverse_transformed_X="float64[:,:]"):
                 inverse_transformed_X = m.inverse_transform(X, copy=copy)
             return inverse_transformed_X
 
@@ -4453,7 +4453,7 @@ def get_max_abs_scaler_scale_(m):
     """Overload scale_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.scale_
         return result
 
@@ -4465,7 +4465,7 @@ def get_max_abs_scaler_max_abs_(m):
     """Overload max_abs_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.max_abs_
         return result
 
@@ -4477,7 +4477,7 @@ def get_max_abs_scaler_n_samples_seen_(m):
     """Overload n_samples_seen_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="int64"):
+        with bodo.objmode(result="int64"):
             result = m.n_samples_seen_
         return result
 
@@ -4494,7 +4494,7 @@ def sklearn_preprocessing_max_abs_scaler_overload(copy=True):
     check_sklearn_version()
 
     def _sklearn_preprocessing_max_abs_scaler_impl(copy=True):  # pragma: no cover
-        with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+        with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
             m = sklearn.preprocessing.MaxAbsScaler(copy=copy)
         return m
 
@@ -4560,7 +4560,7 @@ def overload_preprocessing_max_abs_scaler_fit(
         def _preprocessing_max_abs_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
                     m, X, partial=False
                 )
@@ -4571,7 +4571,7 @@ def overload_preprocessing_max_abs_scaler_fit(
         def _preprocessing_max_abs_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = m.fit(X, y)
             return m
 
@@ -4595,7 +4595,7 @@ def overload_preprocessing_max_abs_scaler_partial_fit(
         def _preprocessing_max_abs_scaler_partial_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
                     m, X, partial=True
                 )
@@ -4606,7 +4606,7 @@ def overload_preprocessing_max_abs_scaler_partial_fit(
         def _preprocessing_max_abs_scaler_partial_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+            with bodo.objmode(m="preprocessing_max_abs_scaler_type"):
                 m = m.partial_fit(X, y)
             return m
 
@@ -4629,7 +4629,7 @@ def overload_preprocessing_max_abs_scaler_transform(
             m,
             X,
         ):  # pragma: no cover
-            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+            with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
                 transformed_X = m.transform(X)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -4641,7 +4641,7 @@ def overload_preprocessing_max_abs_scaler_transform(
             m,
             X,
         ):  # pragma: no cover
-            with numba.objmode(transformed_X="float64[:,:]"):
+            with bodo.objmode(transformed_X="float64[:,:]"):
                 transformed_X = m.transform(X)
             return transformed_X
 
@@ -4666,7 +4666,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
             m,
             X,
         ):  # pragma: no cover
-            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+            with bodo.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
                 inverse_transformed_X = m.inverse_transform(X)
                 inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
                     np.int64
@@ -4682,7 +4682,7 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
             m,
             X,
         ):  # pragma: no cover
-            with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            with bodo.objmode(inverse_transformed_X="float64[:,:]"):
                 inverse_transformed_X = m.inverse_transform(X)
             return inverse_transformed_X
 
@@ -4728,7 +4728,7 @@ def sklearn_model_selection_leave_p_out_overload(
     def _sklearn_model_selection_leave_p_out_impl(
         p,
     ):  # pragma: no cover
-        with numba.objmode(m="model_selection_leave_p_out_type"):
+        with bodo.objmode(m="model_selection_leave_p_out_type"):
             m = sklearn.model_selection.LeavePOut(
                 p=p,
             )
@@ -4800,7 +4800,7 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
+            with bodo.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = sklearn_model_selection_leave_p_out_generator_dist_helper(m, X)
             return gen
 
@@ -4809,7 +4809,7 @@ def overload_model_selection_leave_p_out_generator(
         def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
+            with bodo.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = m.split(X, y=y, groups=groups)
             return gen
 
@@ -4833,7 +4833,7 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(out="int64"):
+            with bodo.objmode(out="int64"):
                 global_data_size = bodo.libs.distributed_api.dist_reduce(
                     len(X), np.int32(Reduce_Type.Sum.value)
                 )
@@ -4845,7 +4845,7 @@ def overload_model_selection_leave_p_out_get_n_splits(
         def _model_selection_leave_p_out_get_n_splits_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(out="int64"):
+            with bodo.objmode(out="int64"):
                 out = m.get_n_splits(X)
 
             return out
@@ -4897,7 +4897,7 @@ def sklearn_model_selection_kfold_overload(
         shuffle=False,
         random_state=None,
     ):  # pragma: no cover
-        with numba.objmode(m="model_selection_kfold_type"):
+        with bodo.objmode(m="model_selection_kfold_type"):
             m = sklearn.model_selection.KFold(
                 n_splits=n_splits,
                 shuffle=shuffle,
@@ -5019,7 +5019,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
+            with bodo.objmode(gen="List(UniTuple(int64[:], 2))"):
                 gen = list(
                     sklearn_model_selection_kfold_generator_dist_helper(
                         m, X, y=None, groups=None
@@ -5036,7 +5036,7 @@ def overload_model_selection_kfold_generator(
         ):  # pragma: no cover
             # Since we do not support iterating through generators directly,
             # as an unperformant hack, we convert the output to a list
-            with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
+            with bodo.objmode(gen="List(UniTuple(int64[:], 2))"):
                 gen = list(m.split(X, y=y, groups=groups))
 
             return gen
@@ -5060,7 +5060,7 @@ def overload_model_selection_kfold_get_n_splits(
     def _model_selection_kfold_get_n_splits_impl(
         m, X=None, y=None, groups=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with numba.objmode(out="int64"):
+        with bodo.objmode(out="int64"):
             out = m.n_splits
         return out
 
@@ -5219,7 +5219,7 @@ def overload_train_test_split(
         func_text += "    stratify=None,\n"
         func_text += "    _is_data_distributed=False,\n"
         func_text += "):  # pragma: no cover\n"
-        func_text += "    with numba.objmode(data_train='{}', data_test='{}', labels_train='{}', labels_test='{}'):\n".format(
+        func_text += "    with bodo.objmode(data_train='{}', data_test='{}', labels_train='{}', labels_test='{}'):\n".format(
             data_type_name, data_type_name, labels_type_name, labels_type_name
         )
         func_text += "        data_train, data_test, labels_train, labels_test = sklearn.model_selection.train_test_split(\n"
@@ -5356,11 +5356,11 @@ def sklearn_utils_shuffle_overload(
         #
         # Here, data is the underlying numba type of `data`. We need to set the
         # kwargs of objmode to be compile-time constants that represent the
-        # output type of each PyObject defined under the numba.objmode context.
+        # output type of each PyObject defined under the bodo.objmode context.
         #
         # Following https://github.com/numba/numba/blob/main/numba/core/withcontexts.py#L182
         # and https://github.com/numba/numba/blob/main/numba/core/sigutils.py#L12,
-        # numba.objmode() will eval() the given type annotation string, with
+        # bodo.objmode() will eval() the given type annotation string, with
         # the entries of numba.core.types as global variables, to determine the
         # type signature of each output.
 
@@ -5379,7 +5379,7 @@ def sklearn_utils_shuffle_overload(
             "    data, random_state=None, n_samples=None, _is_data_distributed=False\n"
         )
         func_text += "):\n"
-        func_text += f"    with numba.objmode(out='{data_type_name}'):\n"
+        func_text += f"    with bodo.objmode(out='{data_type_name}'):\n"
         func_text += "        out = sklearn.utils.shuffle(\n"
         func_text += (
             "            data, random_state=random_state, n_samples=n_samples\n"
@@ -5446,7 +5446,7 @@ def sklearn_preprocessing_minmax_scaler_overload(
         copy=True,
         clip=False,
     ):  # pragma: no cover
-        with numba.objmode(m="preprocessing_minmax_scaler_type"):
+        with bodo.objmode(m="preprocessing_minmax_scaler_type"):
             m = sklearn.preprocessing.MinMaxScaler(
                 feature_range=feature_range,
                 copy=copy,
@@ -5520,7 +5520,7 @@ def overload_preprocessing_minmax_scaler_fit(
     def _preprocessing_minmax_scaler_fit_impl(
         m, X, y=None, _is_data_distributed=False
     ):  # pragma: no cover
-        with numba.objmode(m="preprocessing_minmax_scaler_type"):
+        with bodo.objmode(m="preprocessing_minmax_scaler_type"):
             if _is_data_distributed:
                 # If distributed, then use native implementation
                 m = sklearn_preprocessing_minmax_scaler_fit_dist_helper(m, X)
@@ -5547,7 +5547,7 @@ def overload_preprocessing_minmax_scaler_transform(
         m,
         X,
     ):  # pragma: no cover
-        with numba.objmode(transformed_X="float64[:,:]"):
+        with bodo.objmode(transformed_X="float64[:,:]"):
             transformed_X = m.transform(X)
         return transformed_X
 
@@ -5570,7 +5570,7 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
         m,
         X,
     ):  # pragma: no cover
-        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+        with bodo.objmode(inverse_transformed_X="float64[:,:]"):
             inverse_transformed_X = m.inverse_transform(X)
         return inverse_transformed_X
 
@@ -5603,7 +5603,7 @@ def get_robust_scaler_with_centering(m):
     """Overload with_centering attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="boolean"):
+        with bodo.objmode(result="boolean"):
             result = m.with_centering
         return result
 
@@ -5615,7 +5615,7 @@ def get_robust_scaler_with_scaling(m):
     """Overload with_scaling attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="boolean"):
+        with bodo.objmode(result="boolean"):
             result = m.with_scaling
         return result
 
@@ -5629,7 +5629,7 @@ def get_robust_scaler_quantile_range(m):
     typ = numba.typeof((25.0, 75.0))
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result=typ):
+        with bodo.objmode(result=typ):
             result = m.quantile_range
         return result
 
@@ -5641,7 +5641,7 @@ def get_robust_scaler_unit_variance(m):
     """Overload unit_variance attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="boolean"):
+        with bodo.objmode(result="boolean"):
             result = m.unit_variance
         return result
 
@@ -5653,7 +5653,7 @@ def get_robust_scaler_copy(m):
     """Overload copy attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="boolean"):
+        with bodo.objmode(result="boolean"):
             result = m.copy
         return result
 
@@ -5665,7 +5665,7 @@ def get_robust_scaler_center_(m):
     """Overload center_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.center_
         return result
 
@@ -5677,7 +5677,7 @@ def get_robust_scaler_scale_(m):
     """Overload scale_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
+        with bodo.objmode(result="float64[:]"):
             result = m.scale_
         return result
 
@@ -5706,7 +5706,7 @@ def sklearn_preprocessing_robust_scaler_overload(
         copy=True,
         unit_variance=False,
     ):  # pragma: no cover
-        with numba.objmode(m="preprocessing_robust_scaler_type"):
+        with bodo.objmode(m="preprocessing_robust_scaler_type"):
             m = sklearn.preprocessing.RobustScaler(
                 with_centering=with_centering,
                 with_scaling=with_scaling,
@@ -5753,7 +5753,7 @@ def overload_preprocessing_robust_scaler_fit(
         if isinstance(X, DataFrameType):
             func_text += f"  X = X.to_numpy()\n"
 
-        func_text += f"  with numba.objmode(qrange_l='float64', qrange_r='float64'):\n"
+        func_text += f"  with bodo.objmode(qrange_l='float64', qrange_r='float64'):\n"
         func_text += f"    (qrange_l, qrange_r) = m.quantile_range\n"
         func_text += f"  if not 0 <= qrange_l <= qrange_r <= 100:\n"
         # scikit-learn throws the error: `"Invalid quantile range: %s" % str(self.quantile_range)`
@@ -5799,12 +5799,12 @@ def overload_preprocessing_robust_scaler_fit(
         func_text += f"    constant_mask = scales < 10 * np.finfo(scales.dtype).eps\n"
         func_text += f"    scales[constant_mask] = 1.0\n"
         func_text += f"    if m.unit_variance:\n"
-        func_text += f"      with numba.objmode(adjust='float64'):\n"
+        func_text += f"      with bodo.objmode(adjust='float64'):\n"
         func_text += (
             f"        adjust = stats.norm.ppf(qrange_r) - stats.norm.ppf(qrange_l)\n"
         )
         func_text += f"      scales = scales / adjust\n"
-        func_text += f"  with numba.objmode():\n"
+        func_text += f"  with bodo.objmode():\n"
         func_text += f"    m.center_ = centers\n"
         func_text += f"    m.scale_ = scales\n"
         func_text += f"  return m\n"
@@ -5825,7 +5825,7 @@ def overload_preprocessing_robust_scaler_fit(
         def _preprocessing_robust_scaler_fit_impl(
             m, X, y=None, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_robust_scaler_type"):
+            with bodo.objmode(m="preprocessing_robust_scaler_type"):
                 m = m.fit(X, y)
             return m
 
@@ -5848,7 +5848,7 @@ def overload_preprocessing_robust_scaler_transform(
         m,
         X,
     ):  # pragma: no cover
-        with numba.objmode(transformed_X="float64[:,:]"):
+        with bodo.objmode(transformed_X="float64[:,:]"):
             transformed_X = m.transform(X)
         return transformed_X
 
@@ -5873,7 +5873,7 @@ def overload_preprocessing_robust_scaler_inverse_transform(
         m,
         X,
     ):  # pragma: no cover
-        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+        with bodo.objmode(inverse_transformed_X="float64[:,:]"):
             inverse_transformed_X = m.inverse_transform(X)
         return inverse_transformed_X
 
@@ -5919,7 +5919,7 @@ def sklearn_preprocessing_label_encoder_overload():
     check_sklearn_version()
 
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
-        with numba.objmode(m="preprocessing_label_encoder_type"):
+        with bodo.objmode(m="preprocessing_label_encoder_type"):
             m = sklearn.preprocessing.LabelEncoder()
         return m
 
@@ -5948,7 +5948,7 @@ def overload_preprocessing_label_encoder_fit(
             y_classes = bodo.libs.array_kernels.sort(
                 y_classes, ascending=True, inplace=False
             )
-            with numba.objmode:
+            with bodo.objmode:
                 y_classes_obj = _pa_str_to_obj(y_classes)
                 m.classes_ = y_classes_obj
 
@@ -5961,7 +5961,7 @@ def overload_preprocessing_label_encoder_fit(
         def _sklearn_preprocessing_label_encoder_fit_impl(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_label_encoder_type"):
+            with bodo.objmode(m="preprocessing_label_encoder_type"):
                 m = m.fit(y)
 
             return m
@@ -5983,7 +5983,7 @@ def overload_preprocessing_label_encoder_transform(
     def _preprocessing_label_encoder_transform_impl(
         m, y, _is_data_distributed=False
     ):  # pragma: no cover
-        with numba.objmode(transformed_y="int64[:]"):
+        with bodo.objmode(transformed_y="int64[:]"):
             transformed_y = m.transform(y)
         return transformed_y
 
@@ -6022,7 +6022,7 @@ def overload_preprocessing_label_encoder_fit_transform(
         def _preprocessing_label_encoder_fit_transform_impl(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
-            with numba.objmode(transformed_y="int64[:]"):
+            with bodo.objmode(transformed_y="int64[:]"):
                 transformed_y = m.fit_transform(y)
             return transformed_y
 
@@ -6092,7 +6092,7 @@ def sklearn_hashing_vectorizer_overload(
         alternate_sign=True,
         dtype=np.float64,
     ):  # pragma: no cover
-        with numba.objmode(m="f_extract_hashing_vectorizer_type"):
+        with bodo.objmode(m="f_extract_hashing_vectorizer_type"):
             m = sklearn.feature_extraction.text.HashingVectorizer(
                 input=input,
                 encoding=encoding,
@@ -6135,7 +6135,7 @@ def overload_hashing_vectorizer_fit_transform(
         y=None,
         _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
     ):  # pragma: no cover
-        with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+        with bodo.objmode(transformed_X="csr_matrix_float64_int64"):
             transformed_X = m.fit_transform(X, y)
             transformed_X.indices = transformed_X.indices.astype(np.int64)
             transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -6210,7 +6210,7 @@ def overload_sklearn_rf_regressor(
         max_samples=None,
         monotonic_cst=None,
     ):  # pragma: no cover
-        with numba.objmode(m="random_forest_regressor_type"):
+        with bodo.objmode(m="random_forest_regressor_type"):
             if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
@@ -6279,7 +6279,7 @@ def overload_rf_classifier_model_fit(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
         # Get lowest rank in each node
-        with numba.objmode(first_rank_node="int32[:]"):
+        with bodo.objmode(first_rank_node="int32[:]"):
             first_rank_node = get_nodes_first_ranks()
         if _is_data_distributed:
             nnodes = len(first_rank_node)
@@ -6294,7 +6294,7 @@ def overload_rf_classifier_model_fit(
                     y, comm_ranks=first_rank_node, nranks=nnodes
                 )
 
-        with numba.objmode:
+        with bodo.objmode:
             random_forest_model_fit(m, X, y)  # return value is m
 
         bodo.barrier()
@@ -6382,7 +6382,7 @@ def sklearn_count_vectorizer_overload(
         binary=False,
         dtype=np.int64,
     ):  # pragma: no cover
-        with numba.objmode(m="f_extract_count_vectorizer_type"):
+        with bodo.objmode(m="f_extract_count_vectorizer_type"):
             m = sklearn.feature_extraction.text.CountVectorizer(
                 input=input,
                 encoding=encoding,
@@ -6414,7 +6414,7 @@ def get_cv_vocabulary_(m):
     types.dict_string_int = types.DictType(types.unicode_type, types.int64)
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result="dict_string_int"):
+        with bodo.objmode(result="dict_string_int"):
             result = m.vocabulary_
         return result
 
@@ -6456,7 +6456,7 @@ def overload_count_vectorizer_fit_transform(
             y=None,
             _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
         ):  # pragma: no cover
-            with numba.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
+            with bodo.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
                 changeVoc, local_vocabulary = _cv_fit_transform_helper(m, X)
             # Gather vocabulary from each rank and generate its integer indices (alphabetical order)
             if changeVoc:
@@ -6476,7 +6476,7 @@ def overload_count_vectorizer_fit_transform(
             else:
                 new_data = local_vocabulary
             # Run fit_transform with generated vocabulary_
-            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
+            with bodo.objmode(transformed_X="csr_matrix_int64_int64"):
                 if changeVoc:
                     m.vocabulary = new_data
                 transformed_X = m.fit_transform(X, y)
@@ -6493,7 +6493,7 @@ def overload_count_vectorizer_fit_transform(
             y=None,
             _is_data_distributed=False,
         ):  # pragma: no cover
-            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
+            with bodo.objmode(transformed_X="csr_matrix_int64_int64"):
                 transformed_X = m.fit_transform(X, y)
                 transformed_X.indices = transformed_X.indices.astype(np.int64)
                 transformed_X.indptr = transformed_X.indptr.astype(np.int64)
@@ -6513,7 +6513,7 @@ def overload_count_vectorizer_get_feature_names_out(m):
     check_sklearn_version()
 
     def impl(m):  # pragma: no cover
-        with numba.objmode(result=bodo.string_array_type):
+        with bodo.objmode(result=bodo.string_array_type):
             result = m.get_feature_names_out()
         return result
 
