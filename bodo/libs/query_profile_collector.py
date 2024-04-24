@@ -144,7 +144,7 @@ def submit_operator_stage_time(typingctx, operator_id, stage_id, time):
             [
                 lir.IntType(64),
                 lir.IntType(64),
-                lir.IntType(64),
+                lir.DoubleType(),
             ],
         )
         fn_typ = cgutils.get_or_insert_function(
@@ -165,17 +165,17 @@ def get_operator_duration(typingctx, operator_id):
     """Wrapper for get_operator_duration_query_profile_collector_py_entry in _query_profile_collector.cpp"""
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(64)])
+        fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(64)])
         fn_typ = cgutils.get_or_insert_function(
             builder.module,
             fnty,
             name="get_operator_duration_query_profile_collector_py_entry",
         )
-        builder.call(fn_typ, args)
+        ret = builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
+        return ret
 
-    sig = types.int64(operator_id)
+    sig = types.float64(operator_id)
     return sig, codegen
 
 
