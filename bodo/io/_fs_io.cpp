@@ -7,6 +7,7 @@
 #include <string>
 
 #include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/result.h>
 
@@ -110,6 +111,47 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
         // path_name is a file
         *fname = *path_name;
     }
+}
+
+std::shared_ptr<arrow::fs::FileSystem> get_reader_file_system(
+    std::string file_path, std::string s3_bucket_region, bool s3fs_anon) {
+    bool is_hdfs = file_path.starts_with("hdfs://") ||
+                   file_path.starts_with("abfs://") ||
+                   file_path.starts_with("abfss://");
+    bool is_s3 = file_path.starts_with("s3://");
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    if (is_s3 || is_hdfs) {
+        arrow::internal::Uri uri;
+        (void)uri.Parse(file_path);
+        PyObject *fs_mod = nullptr;
+        PyObject *func_obj = nullptr;
+        if (is_s3) {
+            import_fs_module(Bodo_Fs::s3, "", fs_mod);
+            get_get_fs_pyobject(Bodo_Fs::s3, "", fs_mod, func_obj);
+            s3_get_fs_t s3_get_fs =
+                (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+            std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
+            s3_get_fs(&s3_fs, s3_bucket_region, s3fs_anon);
+            fs = s3_fs;
+            // remove s3:// prefix from file_path
+            file_path = file_path.substr(strlen("s3://"));
+        } else if (is_hdfs) {
+            import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
+            get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
+            hdfs_get_fs_t hdfs_get_fs =
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+            std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+            hdfs_get_fs(file_path, &hdfs_fs);
+            fs = hdfs_fs;
+            // remove hdfs://host:port prefix from file_path
+            file_path = uri.path();
+        }
+        Py_DECREF(fs_mod);
+        Py_DECREF(func_obj);
+    } else {
+        fs = std::make_shared<arrow::fs::LocalFileSystem>();
+    }
+    return fs;
 }
 
 void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,

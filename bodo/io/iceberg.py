@@ -3068,6 +3068,35 @@ def fetch_puffin_metadata(
     return metadata
 
 
+@run_rank0
+def commit_statistics_file(
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+    snapshot_id: int,
+    statistic_file_info,
+):
+    """
+    Commit the statistics file to the iceberg table. This occurs after
+    the puffin file has already been written and records the statistic_file_info
+    in the metadata.
+
+    Args:
+        conn_str (str): The Iceberg connector string.
+        db_name (str): The iceberg database name.
+        table_name (str): The iceberg table.
+        statistic_file_info (bodo_iceberg_connector.StatisticsFile):
+            The Python object containing the statistics file information.
+    """
+    import bodo_iceberg_connector
+
+    ev = tracing.Event("commit_statistics_file")
+    bodo_iceberg_connector.commit_statistics_file(
+        conn_str, db_name, table_name, snapshot_id, statistic_file_info
+    )
+    ev.finalize()
+
+
 def register_table_merge_cow(
     conn_str: str,
     db_name: str,
@@ -3148,12 +3177,30 @@ def box_python_list_of_heterogeneous_tuples_type(typ, val, c):
 
 # Class for a PyObject that is a list.
 this_module = sys.modules[__name__]
-PyObjectOfList = install_py_obj_class(
+install_py_obj_class(
     types_name="pyobject_of_list_type",
     python_type=None,
     module=this_module,
     class_name="PyObjectOfListType",
     model_name="PyObjectOfListModel",
+)
+
+# Create a type for the Iceberg StatisticsFile object
+# if we have the connector.
+statistics_file_type = None
+try:
+    import bodo_iceberg_connector
+
+    statistics_file_type = bodo_iceberg_connector.StatisticsFile
+except ImportError:
+    pass
+
+install_py_obj_class(
+    types_name="statistics_file_type",
+    python_type=statistics_file_type,
+    module=this_module,
+    class_name="StatisticsFileType",
+    model_name="StatisticsFileModel",
 )
 
 

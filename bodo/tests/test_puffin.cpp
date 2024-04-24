@@ -213,6 +213,7 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(serialize_result.first == nyc_example);
     });
     bodo::tests::test("test_puffin_read_nyc_theta_conversion", [] {
+        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(4);
         // Read in the nyc example file and parse it as a puffin file
         std::string nyc_example =
             read_data_file("puffin_data/nyc_example_puffin.stats");
@@ -222,7 +223,7 @@ static bodo::tests::suite tests([] {
         // non-existant dummy column to make sure that the nullopt is
         // generated).
         immutable_theta_sketch_collection_t collection =
-            puff->to_theta_sketches(4);
+            puff->to_theta_sketches(schema);
 
         // Verify that the theta sketch collection has the expected setup.
         bodo::tests::check(collection[0].has_value());
@@ -242,11 +243,12 @@ static bodo::tests::suite tests([] {
             read_data_file("puffin_data/nyc_example_puffin.stats");
         std::unique_ptr<PuffinFile> puff = PuffinFile::deserialize(nyc_example);
 
+        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
+
         // Convert to a theta sketch with 3 columns
         immutable_theta_sketch_collection_t collection_1 =
-            puff->to_theta_sketches(3);
+            puff->to_theta_sketches(schema);
 
-        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
         // Convert the theta sketches back to a puffin file and verify it
         // matches the same properties as the original puffin file.
         // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
@@ -256,7 +258,7 @@ static bodo::tests::suite tests([] {
 
         // Re-deserialize to make sure the serialized blobs were valid
         immutable_theta_sketch_collection_t collection_2 =
-            puff->to_theta_sketches(3);
+            puff->to_theta_sketches(schema);
         bodo::tests::check(collection_2[0].has_value());
         bodo::tests::check(collection_2[1].has_value());
         bodo::tests::check(collection_2[2].has_value());
@@ -265,6 +267,8 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(collection_2[2].value().get_estimate() == 262.0);
     });
     bodo::tests::test("test_puffin_read_nyc_insert_data", [] {
+        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
+
         // Read in the nyc example file and parse it as a puffin file
         std::string nyc_example =
             read_data_file("puffin_data/nyc_example_puffin.stats");
@@ -272,7 +276,7 @@ static bodo::tests::suite tests([] {
 
         // Convert to a theta sketch with 3 columns
         immutable_theta_sketch_collection_t collection_1 =
-            puff->to_theta_sketches(3);
+            puff->to_theta_sketches(schema);
 
         // Merge with a batch of data with 5 rows and the following properties:
         // Column 0: 5 unique numbers, 2 of which overlap with existing data
@@ -295,7 +299,6 @@ static bodo::tests::suite tests([] {
         auto collection_3 = merge_theta_sketches(
             {collection_1, compact_theta_sketches(collection_2, 3)});
 
-        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
         // Convert the theta sketches back to a puffin file.
         // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
         std::unique_ptr<PuffinFile> new_puff =
@@ -304,7 +307,7 @@ static bodo::tests::suite tests([] {
         // Re-deserialize to make sure the serialized blobs were valid
         // and have the correct new estimates
         immutable_theta_sketch_collection_t collection_4 =
-            new_puff->to_theta_sketches(3);
+            new_puff->to_theta_sketches(schema);
         bodo::tests::check(collection_4[0].has_value());
         bodo::tests::check(collection_4[1].has_value());
         bodo::tests::check(collection_4[2].has_value());

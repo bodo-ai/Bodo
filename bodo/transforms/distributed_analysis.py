@@ -1697,6 +1697,11 @@ class DistributedAnalysis:
             self._set_REP(lhs, array_dists)
             return
 
+        if fdef == ("read_puffin_file_ndvs", "bodo.io.stream_iceberg_write"):
+            # Used to the ndvs from a puffin file for testing.
+            self._set_REP(lhs, array_dists)
+            return
+
         if fdef in (
             (
                 "snowflake_writer_append_table",

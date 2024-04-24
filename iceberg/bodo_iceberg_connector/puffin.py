@@ -15,8 +15,8 @@ class BlobMetadata:
     """
 
     type: str
-    source_snapshot_id: int
-    source_snapshot_sequence_number: int
+    sourceSnapshotId: int
+    sourceSnapshotSequenceNumber: int
     fields: list[int]
     properties: dict[str, str]
 
@@ -28,8 +28,12 @@ class StatisticsFile:
     This is used for passing information to the Java connector via JSON.
     """
 
-    snapshot_id: int
+    snapshotId: int
     path: str
-    file_size_in_bytes: int
-    file_footer_size_in_bytes: int
-    blob_metadata: list[BlobMetadata]
+    fileSizeInBytes: int
+    fileFooterSizeInBytes: int
+    blobMetadata: list[BlobMetadata]
+
+    @staticmethod
+    def empty():
+        return StatisticsFile(-1, "", -1, -1, [])

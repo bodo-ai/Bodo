@@ -401,17 +401,28 @@ theta_sketch_collection_t init_theta_sketches_py_entrypt(
  */
 array_info *fetch_ndv_approximations_py_entrypt(
     theta_sketch_collection_t sketches, PyObject *iceberg_arrow_schema_py) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+        size_t n_fields = iceberg_schema->num_fields();
+        // Gather the theta sketches onto rank 0
+        auto immutable_collection = compact_theta_sketches(sketches, n_fields);
+        auto merged_collection =
+            merge_parallel_theta_sketches(immutable_collection);
+        return compute_ndv(merged_collection, n_fields).release();
+
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+std::unique_ptr<array_info> compute_ndv(
+    immutable_theta_sketch_collection_t merged_collection, size_t n_fields) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    std::shared_ptr<arrow::Schema> iceberg_schema;
-    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
-                           "Iceberg Schema Couldn't Unwrap from Python",
-                           iceberg_schema);
-    size_t n_fields = iceberg_schema->num_fields();
-    // Gather the theta sketches onto rank 0
-    auto immutable_collection = compact_theta_sketches(sketches, n_fields);
-    auto merged_collection =
-        merge_parallel_theta_sketches(immutable_collection);
     std::vector<double> local_estimates(n_fields);
     if (rank == 0) {
         // Populate the vector on rank 0
@@ -439,7 +450,7 @@ array_info *fetch_ndv_approximations_py_entrypt(
                 local_estimates[col_idx];
         }
     }
-    return arr.release();
+    return arr;
 }
 
 PyMODINIT_FUNC PyInit_theta_sketches(void) {
