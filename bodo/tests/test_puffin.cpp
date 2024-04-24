@@ -1,3 +1,4 @@
+#include <arrow/util/key_value_metadata.h>
 #include <fstream>
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_puffin.h"
@@ -53,6 +54,27 @@ std::shared_ptr<array_info> string_array_from_vectors(
         SetBitTo(null_bitmask.data(), i, nulls[i]);
     }
     return create_string_array(Bodo_CTypes::STRING, null_bitmask, strings, -1);
+}
+
+/**
+ * @brief Generate a dummy arrow schema for testing purposes
+ * with the given number of fields. The types are assumed irrelevant
+ * and each field is given an id `index + 1`.
+ *
+ * @param num_fields
+ * @return std::shared_ptr<arrow::Schema>
+ */
+std::shared_ptr<arrow::Schema> generate_dummy_arrow_schema(size_t num_fields) {
+    arrow::FieldVector fields;
+    for (size_t i = 0; i < num_fields; i++) {
+        auto field = arrow::field("field_" + std::to_string(i), arrow::int32());
+        // TODO: Replace PARQUET:field_id with ICEBERG_FIELD_ID_MD_KEY, but
+        // that requires code refactoring due to unused functions.
+        auto metadata = arrow::KeyValueMetadata::Make({"PARQUET:field_id"},
+                                                      {std::to_string(i + 1)});
+        fields.emplace_back(field->WithMetadata(metadata));
+    }
+    return arrow::schema(fields);
 }
 
 /**
@@ -187,7 +209,8 @@ static bodo::tests::suite tests([] {
         std::unique_ptr<PuffinFile> puff = PuffinFile::deserialize(nyc_example);
 
         // Re-serialize it and verify that it matches the original string
-        bodo::tests::check(puff->serialize() == nyc_example);
+        auto serialize_result = puff->serialize();
+        bodo::tests::check(serialize_result.first == nyc_example);
     });
     bodo::tests::test("test_puffin_read_nyc_theta_conversion", [] {
         // Read in the nyc example file and parse it as a puffin file
@@ -223,11 +246,12 @@ static bodo::tests::suite tests([] {
         immutable_theta_sketch_collection_t collection_1 =
             puff->to_theta_sketches(3);
 
+        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
         // Convert the theta sketches back to a puffin file and verify it
         // matches the same properties as the original puffin file.
         // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
         std::unique_ptr<PuffinFile> new_puff =
-            PuffinFile::from_theta_sketches(collection_1, 123456789, 5);
+            PuffinFile::from_theta_sketches(collection_1, schema, 123456789, 5);
         verify_nyc_puffin_file_metadata(new_puff, nyc_example, false);
 
         // Re-deserialize to make sure the serialized blobs were valid
@@ -271,10 +295,11 @@ static bodo::tests::suite tests([] {
         auto collection_3 = merge_theta_sketches(
             {collection_1, compact_theta_sketches(collection_2, 3)});
 
+        std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
         // Convert the theta sketches back to a puffin file.
         // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
         std::unique_ptr<PuffinFile> new_puff =
-            PuffinFile::from_theta_sketches(collection_3, 123456789, 5);
+            PuffinFile::from_theta_sketches(collection_3, schema, 123456789, 5);
 
         // Re-deserialize to make sure the serialized blobs were valid
         // and have the correct new estimates

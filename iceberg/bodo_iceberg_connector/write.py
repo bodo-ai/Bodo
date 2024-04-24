@@ -227,7 +227,6 @@ def commit_write(
                 txn_id,
                 file_info_str,
             )
-            handler.removeTransaction(txn_id)
         except Py4JError as e:
             print("Error during Iceberg table create/replace commit: ", e)
             return False
@@ -240,11 +239,61 @@ def commit_write(
 
         try:
             handler.commitAppendTable(txn_id, file_info_str, iceberg_schema_id)
-            handler.removeTransaction(txn_id)
         except Py4JError as e:
             print("Error during Iceberg table append: ", e)
             return False
     return True
+
+
+def remove_transaction(
+    transaction_id: int,
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+):
+    """Indicate that a transaction is no longer
+    needed and can be remove from any internal state.
+    This DOES NOT finalize or commit a transaction.
+
+    Args:
+        transaction_id (int): Transaction ID to remove.
+        conn_str (str): Connection string for indexing into our object list.
+        db_name (str): Name of the database for indexing into our object list.
+        table_name (str): Name of the table for indexing into our object list.
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler.removeTransaction(transaction_id)
+
+
+def fetch_puffin_metadata(
+    transaction_id: int,
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+):
+    """Fetch the puffin file metadata that we need from the committed
+    transaction to write the puffin file. These are the:
+        1. Snapshot ID for the committed data
+        2. Sequence Number for the committed data
+        3. The Location at which to write the puffin file.
+
+    Args:
+        transaction_id (int): Transaction ID to remove.
+        conn_str (str): Connection string for indexing into our object list.
+        db_name (str): Name of the database for indexing into our object list.
+        table_name (str): Name of the table for indexing into our object list.
+
+    Returns:
+        tuple[int, int, str]: Tuple of the snapshot ID, sequence number, and
+        location at which to write the puffin file.
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    snapshot_id = handler.getTransactionSnapshotID(transaction_id)
+    sequence_number = handler.getTransactionSequenceNumber(transaction_id)
+    location = handler.getTransactionStatisticFileLocation(transaction_id)
+    return snapshot_id, sequence_number, location
 
 
 def commit_merge_cow(

@@ -1,5 +1,7 @@
 #include "_puffin.h"
 #include <arrow/python/api.h>
+#include "../io/_fs_io.h"
+#include "../io/iceberg_helpers.h"
 
 static char puffin_magic[4] = {0x50, 0x46, 0x41, 0x31};
 
@@ -135,7 +137,7 @@ boost::json::object BlobMetadata::to_json() {
     return obj;
 }
 
-std::string PuffinFile::serialize() {
+std::pair<std::string, int32_t> PuffinFile::serialize() {
     std::stringstream ss;
     // Start with the magic 4 bytes
     ss.write(puffin_magic, 4);
@@ -170,7 +172,17 @@ std::string PuffinFile::serialize() {
     ss.write(footer_payload.data(), payload_size);
 
     // Add the size of the footer payload.
-    ss.write((const char *)(&payload_size), 4);
+    const char *payload_size_bytes =
+        reinterpret_cast<const char *>(&payload_size);
+    if constexpr (std::endian::native == std::endian::little) {
+        ss.write(payload_size_bytes, 4);
+    } else {
+        // Convert to little endian
+        std::string str = std::string(payload_size_bytes, 4);
+        std::reverse(std::begin(str), std::end(str));
+        const char *little_endian_bytes = str.c_str();
+        ss.write(little_endian_bytes, sizeof(int32_t));
+    }
 
     // Add the 4 flag bytes (all zero)
     char flags[4] = {0x0, 0x0, 0x0, 0x0};
@@ -180,7 +192,7 @@ std::string PuffinFile::serialize() {
     ss.write(puffin_magic, 4);
 
     // Finalize and return the result
-    return ss.str();
+    return std::pair(ss.str(), payload_size);
 }
 
 #define invalid_footer(footer, errmsg)                                    \
@@ -213,6 +225,14 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
     int32_t footer_payload_size;
     std::memcpy(&footer_payload_size, src.substr(file_size - 12).data(),
                 sizeof(int32_t));
+    if (std::endian::native == std::endian::big) {
+        // Reverse the string if our architecture is big endian
+        const char *bytes =
+            reinterpret_cast<const char *>(&footer_payload_size);
+        std::string str = std::string(bytes, 4);
+        std::reverse(std::begin(str), std::end(str));
+        footer_payload_size = *reinterpret_cast<const int32_t *>(str.c_str());
+    }
     if (file_size < (size_t)footer_payload_size + 20) {
         throw std::runtime_error(
             "Malformed puffin file with footer payload size of " +
@@ -289,7 +309,8 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
 #undef invalid_footer
 
 std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
-    immutable_theta_sketch_collection_t sketches, int64_t snapshot_id,
+    immutable_theta_sketch_collection_t sketches,
+    std::shared_ptr<arrow::Schema> iceberg_schema, int64_t snapshot_id,
     int64_t sequence_number) {
     size_t n_sketches = sketches.size();
     // For each theta sketch, add the serialized sketch to blobs, then
@@ -306,9 +327,11 @@ std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
             std::unordered_map<std::string, std::string> properties;
             properties["ndv"] = std::to_string(
                 (size_t)(sketches[sketch_idx].value().get_estimate()));
+            int field_id =
+                get_iceberg_field_id(iceberg_schema->field(sketch_idx));
             metadata.push_back({
                 "apache-datasketches-theta-v1",  // type
-                {(int64_t)sketch_idx + 1},       // fields (1-indexed)
+                {field_id},                      // field ids
                 snapshot_id,                     // snapshot-id
                 sequence_number,                 // sequence-number
                 (int64_t)curr_offset,            // offset
@@ -375,6 +398,14 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
     return deserialize_theta_sketches(to_deserialize);
 }
 
+// Throw an error if there is a null pointer returned
+// by a CPython API call.
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        throw std::runtime_error(msg); \
+    }
+
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #undef CHECK_ARROW
@@ -394,40 +425,154 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
     lhs = std::move(res).ValueOrDie();
 
 /**
+ * @brief Get Python statistics file object from C++ Puffin file
+ * information.
+ *
+ * @param puffin The puffin information we use to create the statistics file.
+ * @param puffin_loc The location of the puffin file.
+ * @param snapshot_id The snapshot id of the puffin file's target data.
+ * @param file_size_in_bytes The size of the puffin file in bytes.
+ * @param footer_size The size of the footer in the puffin file in bytes.
+ * @return PyObject* The Python statistics file object.
+ */
+PyObject *get_statistics_file_metadata(
+    const std::unique_ptr<PuffinFile> &puffin, std::string puffin_loc,
+    int64_t snapshot_id, size_t file_size_in_bytes, int32_t footer_size) {
+    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
+    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    // Create the list of BlobMetadata objects
+    PyObject *blob_metadata_class = PyObject_GetAttrString(bic, "BlobMetadata");
+    CHECK(blob_metadata_class,
+          "getting bodo_iceberg_connector.BlobMetadata failed");
+    size_t n_blobs = puffin->num_blobs();
+    PyObject *blob_list = PyList_New(n_blobs);
+    CHECK(blob_list, "creating blob list failed");
+    for (size_t i = 0; i < n_blobs; i++) {
+        BlobMetadata blob_metadata = puffin->get_blob_metadata(i);
+        // Get the fields
+        std::vector<int64_t> fields = blob_metadata.get_fields();
+        PyObject *fields_list = PyList_New(fields.size());
+        CHECK(fields_list, "creating fields list failed");
+        for (size_t j = 0; j < fields.size(); j++) {
+            // PyList_SetItem steals the reference created by
+            // PyLong_FromLong.
+            CHECK(
+                PyList_SetItem(fields_list, j, PyLong_FromLong(fields[j])) == 0,
+                "setting fields list item failed");
+        }
+        // Get the properties
+        PyObject *properties_dict = PyDict_New();
+        CHECK(properties_dict, "creating properties dict failed");
+        if (blob_metadata.has_properties()) {
+            for (auto it : blob_metadata.get_properties()) {
+                PyObject *key = PyUnicode_FromString(it.first.c_str());
+                CHECK(key, "creating key string failed");
+                PyObject *value = PyUnicode_FromString(it.second.c_str());
+                CHECK(value, "creating value string failed");
+                CHECK(PyDict_SetItem(properties_dict, key, value) == 0,
+                      "setting properties dict item failed");
+                Py_DECREF(key);
+                Py_DECREF(value);
+            }
+        }
+
+        PyObject *blob_metadata_obj = PyObject_CallFunction(
+            blob_metadata_class, "sllOO", blob_metadata.get_type().c_str(),
+            blob_metadata.get_snapshot_id(),
+            blob_metadata.get_sequence_number(), fields_list, properties_dict);
+        CHECK(blob_metadata_obj, "creating BlobMetadata object failed");
+        // PyList_SetItem steals the reference created by
+        // the constructor.
+        CHECK(PyList_SetItem(blob_list, i, blob_metadata_obj) == 0,
+              "setting blob list item failed");
+        Py_DECREF(fields_list);
+        Py_DECREF(properties_dict);
+    }
+    Py_DECREF(blob_metadata_class);
+    // Create the statistics file object
+    PyObject *statistics_file_class =
+        PyObject_GetAttrString(bic, "StatisticsFile");
+    CHECK(statistics_file_class,
+          "getting bodo_iceberg_connector.StatisticsFile failed");
+    PyObject *statistics_file_obj = PyObject_CallFunction(
+        statistics_file_class, "lsliO", snapshot_id, puffin_loc.c_str(),
+        file_size_in_bytes, footer_size, blob_list);
+    CHECK(statistics_file_obj, "creating StatisticsFile object failed");
+    Py_DECREF(blob_list);
+    Py_DECREF(statistics_file_class);
+    Py_DECREF(bic);
+    return statistics_file_obj;
+}
+
+/**
  * Entrypoint from Python to initialize a PuffinFile write.
- * @param table_loc_buffer: buffer storing the table_loc string.
- * @param table_loc_size: number of characters in table_loc_buffer.
+ * @param puffin_file_loc: Where to write the puffin file.
+ * @param bucket_region: AWS bucket region.
  * @param snapshot_id: the snapshot_id to use for the PuffinFile metadata.
  * @param snapshot_id: the sequence_number to use for the PuffinFile metadata.
  * @param sketches: the collection of theta sketches to write.
  * @param iceberg_arrow_schema_py: the schema of the table being written.
- * @param already_exists: whether the table being written to already exists.
+ *        This is needed to determine the field_id for each column.
+ * @return: A StatisticsFile object with the information to forward to the
+ *          Iceberg connector.
  */
-void write_puffin_file_py_entrypt(char *table_loc_buffer,
-                                  int64_t table_loc_size, int64_t snapshot_id,
-                                  int64_t sequence_number,
-                                  theta_sketch_collection_t sketches,
-                                  PyObject *iceberg_arrow_schema_py,
-                                  bool already_exists) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    std::shared_ptr<arrow::Schema> iceberg_schema;
-    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
-                           "Iceberg Schema Couldn't Unwrap from Python",
-                           iceberg_schema);
-    size_t n_cols = iceberg_schema->num_fields();
-    // Gather the theta sketches onto rank 0
-    auto immutable_collection = compact_theta_sketches(sketches, n_cols);
-    auto merged_collection =
-        merge_parallel_theta_sketches(immutable_collection);
-    // TODO: if already exists, combine merged_collections with the existing
-    // theta sketches
-    if (rank == 0) {
-        std::string table_loc(table_loc_buffer, table_loc_size);
-        auto puff = PuffinFile::from_theta_sketches(
-            merged_collection, snapshot_id, sequence_number);
-        std::string serialized = puff->serialize();
-        // TODO: write serialized
+PyObject *write_puffin_file_py_entrypt(const char *puffin_file_loc,
+                                       const char *bucket_region,
+                                       int64_t snapshot_id,
+                                       int64_t sequence_number,
+                                       theta_sketch_collection_t sketches,
+                                       PyObject *iceberg_arrow_schema_py) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+
+        // Gather the theta sketches onto rank 0
+        auto immutable_collection =
+            compact_theta_sketches(sketches, iceberg_schema->num_fields());
+        auto merged_collection =
+            merge_parallel_theta_sketches(immutable_collection);
+        // TODO: if already exists, combine merged_collections with the existing
+        // theta sketches
+        int rank;
+        int n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        if (rank == 0) {
+            std::string puffin_loc(puffin_file_loc);
+            auto puff = PuffinFile::from_theta_sketches(
+                merged_collection, iceberg_schema, snapshot_id,
+                sequence_number);
+            // TODO: Should we write directly to the output buffer instead?
+            auto serialized_result = puff->serialize();
+            std::string &serialized = serialized_result.first;
+            int32_t footer_size = serialized_result.second;
+            // TODO: Refactor this old code into simpler/logical APIs.
+            // This function does too much.
+            std::string path_name;
+            // Unused but we need to pass the directory.
+            std::string dirname = "";
+            std::string fname = "";
+            Bodo_Fs::FsEnum fs_option;
+            extract_fs_dir_path(puffin_file_loc, false, "", "", 0, n_pes,
+                                &fs_option, &dirname, &fname, &puffin_loc,
+                                &path_name);
+            std::shared_ptr<::arrow::io::OutputStream> out_stream;
+            // TODO: Simplify/refactor this function. Its doing too much.
+            open_outstream(fs_option, false, "puffin", dirname, fname,
+                           puffin_loc, &out_stream, bucket_region);
+            CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
+                        "Failed to write puffin data");
+            CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");
+            return get_statistics_file_metadata(puff, puffin_loc, snapshot_id,
+                                                serialized.size(), footer_size);
+        } else {
+            return Py_None;
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
 }
 
