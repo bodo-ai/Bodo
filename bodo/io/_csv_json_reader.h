@@ -18,7 +18,7 @@ extern "C" void PyInit_json(PyObject *);
  *
  * @param[in]  f   the input file name
  * @param[in]  is_parallel   if parallel read of different chunks required
- * @param[in]  skiprows   number of rows to skip at the beginnning
+ * @param[in]  skiprows   number of rows to skip at the beginning
  * @param[in]  nrows   numebr of rows to read
  * @param[in]  header   whether csv file(s) contain header(s)
  * @param[in]  compression   compression scheme of file(s)

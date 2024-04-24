@@ -27,6 +27,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.StatisticsFile;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
@@ -358,6 +359,19 @@ public class BodoIcebergHandler {
 
     List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
     this.addData(txn.table().newAppend(), table.spec(), table.sortOrder(), fileInfos);
+    txn.commitTransaction();
+  }
+
+  /**
+   * Commit a statistics file to the table.
+   *
+   * <p>Note: This API is exposed to Python.
+   */
+  public void commitStatisticsFile(long snapshotID, String statisticsFileJson) {
+    StatisticsFile statisticsFile = BodoStatisticFile.fromJson(statisticsFileJson);
+    Table table = catalog.loadTable(id);
+    Transaction txn = table.newTransaction();
+    txn.updateStatistics().setStatistics(snapshotID, statisticsFile).commit();
     txn.commitTransaction();
   }
 

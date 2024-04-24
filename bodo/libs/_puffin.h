@@ -247,11 +247,12 @@ class PuffinFile {
 
     /**
      * Converts a PuffinFile into a collection of theta sketches.
-     * @param n_columns: the number of columns in the original table. Any
-     *                   column that does not have a theta sketch in the
-     *                   PuffinFile will be empty in the collection.
+     * @param iceberg_schema: The iceberg schema. This is used to map
+     *    the field_ids in the BlobMetadata to the corresponding column
+     *    locations.
      */
-    immutable_theta_sketch_collection_t to_theta_sketches(size_t n_columns);
+    immutable_theta_sketch_collection_t to_theta_sketches(
+        std::shared_ptr<arrow::Schema> iceberg_schema);
 
    private:
     std::vector<std::string> blobs;

@@ -98,3 +98,17 @@ std::vector<std::optional<std::string>> serialize_theta_sketches(
  */
 immutable_theta_sketch_collection_t deserialize_theta_sketches(
     std::vector<std::optional<std::string>> strings);
+
+/**
+ * @brief Computes the number of distinct values estimates for each theta
+ * sketch, returning -1 for any columns that do not have a sketch. This is
+ * primarily used for testing.
+ *
+ * @param merged_collection The final collection of theta sketches to compute
+ * NDV for.
+ * @param n_fields The number of fields in the table.
+ * @return std::unique_ptr<array_info> An array of NDV estimates for each
+ * column.
+ */
+std::unique_ptr<array_info> compute_ndv(
+    immutable_theta_sketch_collection_t merged_collection, size_t n_fields);

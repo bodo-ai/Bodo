@@ -11,6 +11,7 @@ from bodo_iceberg_connector.catalog_conn import (
     normalize_loc,
     parse_conn_str,
 )
+from bodo_iceberg_connector.puffin import StatisticsFile
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
@@ -294,6 +295,20 @@ def fetch_puffin_metadata(
     sequence_number = handler.getTransactionSequenceNumber(transaction_id)
     location = handler.getTransactionStatisticFileLocation(transaction_id)
     return snapshot_id, sequence_number, location
+
+
+def commit_statistics_file(
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+    snapshot_id: int,
+    statistic_file_info: StatisticsFile,
+):
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    # Json encode the statistics file info
+    statistic_file_info_str = json.dumps(asdict(statistic_file_info))
+    handler.commitStatisticsFile(snapshot_id, statistic_file_info_str)
 
 
 def commit_merge_cow(

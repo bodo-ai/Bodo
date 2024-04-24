@@ -370,9 +370,15 @@ std::string PuffinFile::get_blob(size_t idx) {
 }
 
 immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
-    size_t n_columns) {
+    std::shared_ptr<arrow::Schema> iceberg_schema) {
+    size_t n_columns = iceberg_schema->num_fields();
     std::vector<std::optional<std::string>> to_deserialize(n_columns,
                                                            std::nullopt);
+    // Create a map from to field id to field index.
+    std::unordered_map<int, int> field_id_to_index;
+    for (size_t i = 0; i < n_columns; i++) {
+        field_id_to_index[get_iceberg_field_id(iceberg_schema->field(i))] = i;
+    }
     // Iterate across all the blobs and add the theta sketches to the
     // collection.
     for (size_t blob_idx = 0; blob_idx < num_blobs(); blob_idx++) {
@@ -380,19 +386,21 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
             "apache-datasketches-theta-v1") {
             // Fetch the column index and decrement by 1 so it is zero-indexed.
             if (get_blob_metadata(blob_idx).get_fields().size() != 1) {
-                throw std::runtime_error(
-                    "Expected theta sketch blob metadata to refer to exactly 1 "
-                    "column");
+                // Bodo can only support theta sketches on a single field.
+                continue;
             }
-            int64_t field = get_blob_metadata(blob_idx).get_fields()[0] - 1;
-            if (field < 0 || field >= (int64_t)n_columns) {
-                throw std::runtime_error(
-                    "Expected theta sketch blob metadata to refer to a valid "
-                    "column index");
+            int64_t field = get_blob_metadata(blob_idx).get_fields()[0];
+            auto field_it = field_id_to_index.find(field);
+            if (field_it == field_id_to_index.end()) {
+                // The field id does not correspond to any column in the schema.
+                // This can occur if schema evolution has caused a column to be
+                // dropped.
+                continue;
             }
+            int64_t field_idx = field_it->second;
             // Fetch the corresponding string and add it to the collection.
             std::string blob = get_blob(blob_idx);
-            to_deserialize[field] = blob;
+            to_deserialize[field_idx] = blob;
         }
     }
     return deserialize_theta_sketches(to_deserialize);
@@ -505,6 +513,31 @@ PyObject *get_statistics_file_metadata(
 }
 
 /**
+ * @brief Generate an equivalent empty bodo_iceberg_connector.StatisticsFile
+ * object for when the rank is not 0. This is used for type stability when
+ * interacting with object mode.
+ *
+ * @return PyObject*
+ */
+PyObject *get_empty_statistics_file_metadata() {
+    PyObject *bic = PyImport_ImportModule("bodo_iceberg_connector");
+    CHECK(bic, "importing bodo_iceberg_connector module failed");
+    PyObject *statistics_file_class =
+        PyObject_GetAttrString(bic, "StatisticsFile");
+    CHECK(statistics_file_class,
+          "getting bodo_iceberg_connector.StatisticsFile failed");
+    PyObject *empty_call = PyObject_GetAttrString(bic, "empty");
+    CHECK(empty_call,
+          "getting bodo_iceberg_connector.StatisticsFile.empty failed");
+    PyObject *statistics_file_obj = PyObject_CallNoArgs(empty_call);
+    CHECK(statistics_file_obj, "creating empty StatisticsFile object failed");
+    Py_DECREF(empty_call);
+    Py_DECREF(statistics_file_class);
+    Py_DECREF(bic);
+    return statistics_file_obj;
+}
+
+/**
  * Entrypoint from Python to initialize a PuffinFile write.
  * @param puffin_file_loc: Where to write the puffin file.
  * @param bucket_region: AWS bucket region.
@@ -568,8 +601,79 @@ PyObject *write_puffin_file_py_entrypt(const char *puffin_file_loc,
             return get_statistics_file_metadata(puff, puffin_loc, snapshot_id,
                                                 serialized.size(), footer_size);
         } else {
-            return Py_None;
+            return get_empty_statistics_file_metadata();
         }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief Read a puffin file using an arrow file system and return the
+ * result as a string.
+ *
+ * @param puffin_loc
+ * @param bucket_region
+ * @return std::unique_ptr<PuffinFile>
+ */
+std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
+                                             std::string bucket_region) {
+    std::shared_ptr<arrow::fs::FileSystem> fs =
+        get_reader_file_system(puffin_loc, bucket_region, false);
+    arrow::fs::FileInfo puffin_info;
+    CHECK_ARROW_AND_ASSIGN(fs->GetFileInfo(puffin_loc),
+                           "Failed to get puffin file info", puffin_info);
+    // Fetch the file size
+    int64_t file_size = puffin_info.size();
+    CHECK(file_size >= 0, "Invalid file size");
+    std::shared_ptr<arrow::io::InputStream> file_stream;
+    CHECK_ARROW_AND_ASSIGN(fs->OpenInputStream(puffin_info),
+                           "Failed to open puffin file", file_stream);
+    std::string puffin_data(file_size, 0);
+    CHECK_ARROW(file_stream->Read(file_size, puffin_data.data()).status(),
+                "Failed to read puffin file");
+    CHECK_ARROW(file_stream->Close(), "Failed to close puffin file");
+    return PuffinFile::deserialize(puffin_data);
+}
+
+/**
+ * @brief Python entrypoint for reading a puffin file
+ * and returning a theta_sketch_collection_t. Right now this
+ * is primarily used for testing, but its components will also
+ * be used to implement insert into logic in the future.
+ * @param puffin_file_loc The location of the puffin file.
+ * @param bucket_region_info The bucket region info.
+ * @param iceberg_arrow_schema_py The schema of the iceberg table.
+ */
+array_info *read_puffin_file_ndvs_py_entrypt(
+    const char *puffin_file_loc, const char *bucket_region_info,
+    PyObject *iceberg_arrow_schema_py) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+        int rank;
+        int n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        // TODO: Replace with a represent that can be shared by C++ and Python.
+        immutable_theta_sketch_collection_t result;
+        if (rank == 0) {
+            std::string puffin_loc(puffin_file_loc);
+            std::string bucket_region(bucket_region_info);
+            std::unique_ptr<PuffinFile> puffin =
+                read_puffin_file(puffin_loc, bucket_region);
+            result = puffin->to_theta_sketches(iceberg_schema);
+        } else {
+            // TODO: Refactor. Ideally we want to match sketches that already
+            // exist.
+            std::vector<bool> ndv(iceberg_schema->num_fields(), false);
+            result = compact_theta_sketches(init_theta_sketches(ndv),
+                                            iceberg_schema->num_fields());
+        }
+        return compute_ndv(result, iceberg_schema->num_fields()).release();
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
@@ -586,6 +690,7 @@ PyMODINIT_FUNC PyInit_puffin_file(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, write_puffin_file_py_entrypt);
+    SetAttrStringFromVoidPtr(m, read_puffin_file_ndvs_py_entrypt);
 
     return m;
 }
