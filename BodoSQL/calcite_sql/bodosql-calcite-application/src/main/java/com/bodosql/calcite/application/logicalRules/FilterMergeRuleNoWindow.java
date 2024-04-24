@@ -29,9 +29,9 @@ import org.immutables.value.Value;
 /**
  * Planner rule that combines two {@link org.apache.calcite.rel.logical.LogicalFilter}s.
  *
- * <p>This is equivalent to FilterMergeRule, but we add a restriction that neither filter contains
- * an Over clause. This is only possible due to our other optimization rules that can push a
- * optimized window function into a filter.
+ * <p>This is equivalent to FilterMergeRule, but we two restrictions: 1. Neither filter contains an
+ * Over clause. 2. Both filters have the same convention This is only possible due to our other
+ * optimization rules that can push a optimized window function into a filter.
  */
 @BodoSQLStyleImmutable
 @Value.Enclosing
@@ -49,6 +49,11 @@ public class FilterMergeRuleNoWindow extends RelRule<FilterMergeRuleNoWindow.Con
   public void onMatch(RelOptRuleCall call) {
     final Filter topFilter = call.rel(0);
     final Filter bottomFilter = call.rel(1);
+
+    // Bodo Change: Add check for same convention.
+    if (topFilter.getConvention() != bottomFilter.getConvention()) {
+      return;
+    }
 
     final RelBuilder relBuilder = call.builder();
     relBuilder
