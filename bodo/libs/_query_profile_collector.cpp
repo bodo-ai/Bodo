@@ -39,7 +39,7 @@ void QueryProfileCollector::Init() {
         // Create the output directory only on rank 0
         char* template_ = std::getenv("BODO_TRACING_OUTPUT_DIR");
         // X will be replaced by mkdtemp
-        output_dir = template_ ? template_ : "query_profile.XXXXX";
+        output_dir = template_ ? template_ : "query_profile.XXXXXX";
         // Check if the directory already exists
         struct stat info;
         bool exists = false;
