@@ -349,8 +349,7 @@ public class RelationalAlgebraGenerator {
   /**
    * Parses the SQL query into a SQLNode and updates the relational Algebra Generator's state
    *
-   * @param sql Query to parse
-   * @return The generated SQLNode
+   * @param sql Query to parse Sets parseNode to the generated SQLNode
    * @throws SqlSyntaxException if the SQL syntax is incorrect.
    */
   public void parseQuery(String sql) throws SqlSyntaxException {
@@ -505,7 +504,7 @@ public class RelationalAlgebraGenerator {
       String originalSQL,
       List<ColumnDataTypeInfo> dynamicParamTypes,
       Map<String, ColumnDataTypeInfo> namedParamTypeMap) {
-    /**
+    /*
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
@@ -523,7 +522,7 @@ public class RelationalAlgebraGenerator {
     RelNode rel = PandasUtilKt.pandasProject(plan.getLeft());
     // Create a mapping for the new root/newly created nodes - this is a bit of a hack, and long
     // term we probably want
-    // something that's part of the RelNode itself instead of an auxillary map to make this safer.
+    // something that's part of the RelNode itself instead of an auxiliary map to make this safer.
     RelIDToOperatorIDVisitor v = new RelIDToOperatorIDVisitor(new HashMap<>(plan.getRight()));
     v.visit(rel, 0, null);
 
