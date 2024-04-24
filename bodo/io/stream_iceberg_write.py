@@ -32,6 +32,7 @@ from bodo.io.helpers import (
     stream_writer_alloc_codegen,
 )
 from bodo.io.iceberg import (
+    commit_statistics_file,
     fetch_puffin_metadata,
     generate_data_file_info,
     get_table_details_before_write,
@@ -69,6 +70,8 @@ ll.add_symbol(
     "fetch_ndv_approximations", theta_sketches.fetch_ndv_approximations_py_entrypt
 )
 ll.add_symbol("write_puffin_file", puffin_file.write_puffin_file_py_entrypt)
+ll.add_symbol("read_puffin_file_ndvs", puffin_file.read_puffin_file_ndvs_py_entrypt)
+
 
 # Maximum Parquet file size for streaming Iceberg write
 # TODO[BSE-2609] get max file size from Iceberg metadata
@@ -161,7 +164,7 @@ def overload_init_theta_sketches_wrapper(
 def _iceberg_writer_fetch_theta(typingctx, array_info_t, output_pyarrow_schema_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),  # table_info*
+            lir.IntType(8).as_pointer(),  # array_info*
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -205,6 +208,59 @@ def overload_iceberg_writer_fetch_theta(writer):
     return impl
 
 
+@intrinsic(prefer_literal=True)
+def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_schema_t):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # array_info*
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="read_puffin_file_ndvs"
+        )
+
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        ArrayInfoType()(types.voidptr, types.voidptr, types.pyarrow_schema_type),
+        codegen,
+    )
+
+
+def read_puffin_file_ndvs(puffin_file_loc):  # pragma: no cover
+    pass
+
+
+@overload(read_puffin_file_ndvs)
+def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
+    """
+    Reads the NDV values from a puffin file. This is used for testing purposes
+    to verify that the theta sketches are being written correctly.
+    """
+    arr_type = bodo.FloatingArrayType(types.float64)
+
+    def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+            puffin_file_loc, parallel=True
+        )
+        res_info = _read_puffin_file_ndvs(
+            unicode_to_utf8(puffin_file_loc),
+            unicode_to_utf8(bucket_region),
+            iceberg_schema,
+        )
+        res = info_to_array(res_info, arr_type)
+        delete_info(res_info)
+        return res
+
+    return impl
+
+
 @intrinsic
 def _write_puffin_file(
     typingctx,
@@ -225,7 +281,7 @@ def _write_puffin_file(
             output_pyarrow_schema,
         ) = args
         fnty = lir.FunctionType(
-            lir.VoidType(),
+            lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),  # puffin_file_loc
                 lir.IntType(8).as_pointer(),  # bucket_region
@@ -250,10 +306,13 @@ def _write_puffin_file(
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        # Wrap the PyObject* in a version that can track reference counts.
+        return bodo.utils.py_objs.create_struct_from_pyobject(
+            sig.return_type, ret, context, builder, context.get_python_api(builder)
+        )
 
     return (
-        types.void(
+        types.statistics_file_type(
             types.voidptr,  # Pass UTF-8 string as void*
             types.voidptr,  # Pass UTF-8 string as void*
             snapshot_id_t,
@@ -947,7 +1006,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                 bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
                     puffin_loc, parallel=True
                 )
-                _write_puffin_file(
+                statistic_file_info = _write_puffin_file(
                     unicode_to_utf8(puffin_loc),
                     unicode_to_utf8(bucket_region),
                     snapshot_id,
@@ -955,6 +1014,14 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["theta_sketches"],
                     writer["output_pyarrow_schema"],
                 )
+                with bodo.no_warning_objmode():
+                    commit_statistics_file(
+                        conn, db_schema, table_name, snapshot_id, statistic_file_info
+                    )
+
+            # Now that puffin files are finished we no longer need the transaction
+            with bodo.no_warning_objmode():
+                remove_transaction(txn_id, conn, db_schema, table_name)
 
             # Now that puffin files are finished we no longer need the transaction
             with bodo.no_warning_objmode():

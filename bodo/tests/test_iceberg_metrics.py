@@ -7,8 +7,6 @@ these metrics for its child arrays, except that it omits the min/max. The
 exception to this is that struct arrays must match all fields.
 """
 import datetime
-import json
-import os
 import typing as pt
 from decimal import Decimal
 
@@ -20,6 +18,10 @@ from avro.datafile import DataFileReader
 from avro.io import DatumReader
 
 import bodo
+from bodo.tests.iceberg_database_helpers.metadata_utils import (
+    get_metadata_field,
+    get_metadata_path,
+)
 from bodo.tests.utils import pytest_mark_one_rank
 
 pytestmark = pytest.mark.iceberg
@@ -30,19 +32,6 @@ pytestmark = pytest.mark.iceberg
 @bodo.jit(distributed=["df"])
 def create_table_jit(df, table_name, conn, db_schema):
     df.to_sql(table_name, conn, db_schema, if_exists="replace")
-
-
-def create_metadata_path(warehouse_loc: str, db_schema: str, table_name: str):
-    """
-    Convert the iceberg path information to the expected location of the metadata file.
-    """
-    # Note: Since we write the first table entry the metadata should always be v1.
-    # In the spec we technically just need to select the highest version number.
-    # This assumes all of these tables are originally created in this file and not
-    # created in multiple tests.
-    return os.path.join(
-        warehouse_loc, db_schema, table_name, "metadata", "v1.metadata.json"
-    )
 
 
 def update_field_mapping(
@@ -86,16 +75,14 @@ def extract_schema_information(metadata_json_file: str) -> tuple[str, dict[str, 
     - The path to the manifest list file.
     - A mapping from field name to field id.
     """
-    with open(metadata_json_file, "r") as f:
-        metadata = json.load(f)
-    schemas = metadata["schemas"]
+    schemas = get_metadata_field(metadata_json_file, "schemas")
     assert len(schemas) == 1, "There should only be 1 schema"
     schema = schemas[0]
     fields = schema["fields"]
     field_id_map = {}
     for field in fields:
         update_field_mapping(field_id_map, field)
-    snapshots = metadata["snapshots"]
+    snapshots = get_metadata_field(metadata_json_file, "snapshots")
     assert len(snapshots) == 1, "There should only be 1 snapshot"
     snapshot = snapshots[0]
     # Extract the manifest list file
@@ -167,7 +154,7 @@ def validate_metrics(
     expected_lower_bounds: dict[str, bytes],
     expected_upper_bounds: dict[str, bytes],
 ):
-    metadata_json_file = create_metadata_path(warehouse_loc, db_schema, table_name)
+    metadata_json_file = get_metadata_path(warehouse_loc, db_schema, table_name)
     manifest_list_path, name_to_id_map = extract_schema_information(metadata_json_file)
     manifest_file_path = get_manifest_file_path(manifest_list_path)
     value_counts, null_counts, lower_bounds, upper_bounds = get_manifest_file_metrics(

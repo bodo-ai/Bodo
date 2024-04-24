@@ -6,7 +6,7 @@
   and can so be used as the input argument to pandas CSV & JSON read.
   When called in a parallel/distributed setup, each process owns a
   chunk of the csv/json file only. The chunks are balanced by number of
-  rows of dataframe (not necessarily number of bytes), determined by number
+  rows of DataFrame (not necessarily number of bytes), determined by number
   of lines(csv & json(orient = 'records', lines=True)) or
   number of objects (json(orient = 'records', lines=False)) . The actual file
   read is done lazily in the objects read method.
@@ -25,8 +25,6 @@
 #include <string>
 #include <vector>
 
-#include <arrow/filesystem/api.h>
-#include <arrow/filesystem/localfs.h>
 #include <arrow/io/compressed.h>
 #include <arrow/util/compression.h>
 
@@ -37,9 +35,9 @@
 
 // lines argument of read_json(lines = json_lines)
 // when json_lines=true, we are reading Json line format where each
-// dataframe row/json record takes up exactly one line, ended with '\n'
+// DataFrame row/json record takes up exactly one line, ended with '\n'
 // when json_lines=false. we are reading a multi line json format where each
-// dataframe row/json record takes up more than one lines, separated by '},'
+// DataFrame row/json record takes up more than one lines, separated by '},'
 
 #undef CHECK
 #define CHECK(expr, msg)                                    \
@@ -203,46 +201,17 @@ class PathInfo {
      * Get arrow::fs::FileSystem object necessary to read data from this path.
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
-        if (!fs) {
-            bool is_hdfs = file_path.starts_with("hdfs://") ||
-                           file_path.starts_with("abfs://") ||
-                           file_path.starts_with("abfss://");
-            bool is_s3 = file_path.starts_with("s3://");
-            if (is_s3 || is_hdfs) {
-                this->is_remote_fs = true;
-                arrow::internal::Uri uri;
-                (void)uri.Parse(file_path);
-                PyObject *fs_mod = nullptr;
-                PyObject *func_obj = nullptr;
-                if (is_s3) {
-                    import_fs_module(Bodo_Fs::s3, "", fs_mod);
-                    get_get_fs_pyobject(Bodo_Fs::s3, "", fs_mod, func_obj);
-                    s3_get_fs_t s3_get_fs =
-                        (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-                    std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-                    s3_get_fs(&s3_fs, bucket_region, s3fs_anon);
-                    fs = s3_fs;
-
-                    // remove s3:// prefix from file_path
-                    file_path = file_path.substr(strlen("s3://"));
-                } else if (is_hdfs) {
-                    import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
-                    get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
-                    hdfs_get_fs_t hdfs_get_fs =
-                        (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-                    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
-                    hdfs_get_fs(file_path, &hdfs_fs);
-                    fs = hdfs_fs;
-                    // remove hdfs://host:port prefix from file_path
-                    file_path = uri.path();
-                }
-                Py_DECREF(fs_mod);
-                Py_DECREF(func_obj);
-            } else {
-                fs = std::make_shared<arrow::fs::LocalFileSystem>();
+        if (!this->fs) {
+            this->fs = get_reader_file_system(
+                this->file_path, this->bucket_region, this->s3fs_anon);
+            // Check for LocalFileSystem.type_name()
+            this->is_remote_fs = this->fs->type_name() != "local";
+            if (this->fs->type_name() == "s3") {
+                // remove s3:// prefix from file_path
+                this->file_path = this->file_path.substr(strlen("s3://"));
             }
         }
-        return fs;
+        return this->fs;
     }
 
     /**

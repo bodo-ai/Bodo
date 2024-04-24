@@ -89,7 +89,7 @@ def install_py_obj_class(
     unbox(class_value)(unbox_py_obj)
     box(class_value)(box_py_obj)
 
-    # We return the class for convenience (better IDE compatbility).
+    # We return the class for convenience (better IDE compatibility).
     # If the function is called from the module specified in 'module',
     # this is essentially a no-op.
     return class_value
@@ -104,10 +104,21 @@ def box_py_obj(typ, val, c):
 
 
 def unbox_py_obj(typ, obj, c):
-    struct_proxy = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    return NativeValue(
+        create_struct_from_pyobject(typ, obj, c.context, c.builder, c.pyapi)
+    )
+
+
+def create_struct_from_pyobject(typ, obj, context, builder, pyapi):
+    """
+    Helper function to wrap a regular Python Object pointer into a version that
+    borrows and manages a reference to the object. This is useful for passing Python
+    objects allocated in C++ into object mode.
+    """
+    struct_proxy = cgutils.create_struct_proxy(typ)(context, builder)
     # borrows and manages a reference for obj (see data model comments above)
-    struct_proxy.meminfo = c.pyapi.nrt_meminfo_new_from_pyobject(
-        c.context.get_constant_null(types.voidptr), obj
+    struct_proxy.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+        context.get_constant_null(types.voidptr), obj
     )
     struct_proxy.pyobj = obj
-    return NativeValue(struct_proxy._getvalue())
+    return struct_proxy._getvalue()
