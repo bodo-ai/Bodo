@@ -1,6 +1,6 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.adapter.iceberg.AbstractIcebergFilterRule.Companion.splitFilterConditions
+import com.bodosql.calcite.adapter.iceberg.AbstractIcebergFilterRuleHelpers.Companion.splitFilterConditions
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
@@ -173,7 +173,10 @@ object IcebergConvertProgram : Program {
 
                 else -> {
                     // Try and push this node.
-                    val (icebergCondition, pandasCondition) = splitFilterConditions(node, rexBuilder, simplify)
+                    // The PredicateList should not be empty here, but there isn't a good way to get it,
+                    // and the price for now having one is at most one duplicate filter that could potentially be
+                    // cleaned up in a later step.
+                    val (icebergCondition, pandasCondition) = splitFilterConditions(node, rexBuilder, simplify, RelOptPredicateList.EMPTY)
                     if (icebergCondition == null) {
                         // Nothing can be pushed to Iceberg
                         val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
