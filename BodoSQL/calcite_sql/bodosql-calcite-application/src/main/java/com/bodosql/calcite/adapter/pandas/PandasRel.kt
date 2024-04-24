@@ -98,6 +98,8 @@ interface PandasRel : RelNode {
     fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         expectedOutputBatchingProperty(inputBatchingProperty)
 
+    data class ProfilingOptions(val reportOutTableSize: Boolean = true, val timeStateInitialization: Boolean = true)
+
     interface Implementor {
         fun visitChild(
             input: RelNode,
@@ -109,7 +111,7 @@ interface PandasRel : RelNode {
         fun build(fn: (BuildContext) -> BodoEngineTable): BodoEngineTable
 
         fun buildStreaming(
-            reportOutTableSize: Boolean,
+            profilingOptions: ProfilingOptions,
             initFn: (BuildContext) -> StateVariable,
             bodyFn: (BuildContext, StateVariable) -> BodoEngineTable,
             deleteFn: (BuildContext, StateVariable) -> Unit,

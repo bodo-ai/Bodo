@@ -83,13 +83,26 @@ class StreamingRelNodeTimer(
     /**
      * Insert the initial time.time() before the code in the body of a streaming operator.
      * This must be called before the code is generated that occurs on each batch
-     * of a streaming operator.
+     * of a streaming operator. Optionally, isTermination can be provided to time finalizations.
      */
     fun insertLoopOperationStartTimer(stage: Int) {
+        insertLoopOperationStartTimer(stage, false)
+    }
+
+    fun insertLoopOperationStartTimer(
+        stage: Int,
+        isTermination: Boolean,
+    ) {
         if (isNoOp) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+        val addToFrame =
+            if (isTermination) {
+                { s: Op -> frame.addTermination(s) }
+            } else {
+                { s: Op -> frame.add(s) }
+            }
 
         // set up accumulator for stage
         val accumulator = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
@@ -97,7 +110,7 @@ class StreamingRelNodeTimer(
 
         val timeCall = Expr.Call("time.time")
         val stmt = Assign(builder.symbolTable.genOperatorStageTimerStartVar(opID, stage), timeCall)
-        frame.add(stmt)
+        addToFrame(stmt)
     }
 
     fun updateRowCount(
@@ -135,27 +148,42 @@ class StreamingRelNodeTimer(
      * Insert the time.time() after the code in the body of a streaming operator and compute
      * the difference in time. This must be called after the code is generated that occurs on
      * each batch of a streaming operator and requires insertLoopOperationStartTimer() to
-     * have previously been called.
+     * have previously been called. Optionally, isTermination can be provided to time finalizations.
      */
     fun insertLoopOperationEndTimer(stage: Int) {
+        insertLoopOperationEndTimer(stage, false)
+    }
+
+    fun insertLoopOperationEndTimer(
+        stage: Int,
+        isTermination: Boolean,
+    ) {
         if (isNoOp) {
             return
         }
+
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+        val addToFrame =
+            if (isTermination) {
+                { s: Op -> frame.addTermination(s) }
+            } else {
+                { s: Op -> frame.add(s) }
+            }
+
         val loopEndTimerVar = builder.symbolTable.genOperatorStageTimerEndVar(opID, stage)
         val timeCall = Expr.Call("time.time")
         val endTimer = Assign(loopEndTimerVar, timeCall)
-        frame.add(endTimer)
+        addToFrame(endTimer)
         // Compute the difference
         val subVar = builder.symbolTable.genOperatorStageTimerElapsedVar(opID, stage)
         val subCall = Expr.Binary("-", loopEndTimerVar, builder.symbolTable.genOperatorStageTimerStartVar(opID, stage))
         val subAssign = Assign(subVar, subCall)
-        frame.add(subAssign)
+        addToFrame(subAssign)
         // Update the accumulator
         val accumulator = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
         val addCall = Expr.Binary("+", accumulator, subVar)
         val addAssign = Assign(accumulator, addCall)
-        frame.add(addAssign)
+        addToFrame(addAssign)
 
         val updateProfiler =
             Expr.Call(

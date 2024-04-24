@@ -82,7 +82,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         if (isStreaming()) {
             implementor.createStreamingPipeline()
             implementor.buildStreaming(
-                false,
+                PandasRel.ProfilingOptions(false),
                 { ctx -> initStateVariable(ctx) },
                 { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
                 { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
