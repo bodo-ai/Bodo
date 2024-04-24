@@ -3459,6 +3459,7 @@ def iceberg_merge_cow(
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
+        mode="unicode_type",
     ):
         (
             table_loc,
