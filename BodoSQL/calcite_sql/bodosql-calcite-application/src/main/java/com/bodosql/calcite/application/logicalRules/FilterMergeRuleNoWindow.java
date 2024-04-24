@@ -50,7 +50,7 @@ public class FilterMergeRuleNoWindow extends RelRule<FilterMergeRuleNoWindow.Con
     final Filter topFilter = call.rel(0);
     final Filter bottomFilter = call.rel(1);
 
-    // Bodo Change: Add check for same convention.
+    // Bodo Change: Add check for same convention to avoid undoing filter-locking.
     if (topFilter.getConvention() != bottomFilter.getConvention()) {
       return;
     }

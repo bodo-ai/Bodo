@@ -632,11 +632,11 @@ object BodoRules {
 
     /**
      * Converts a PandasFilter to an IcebergFilter if it is located directly on top of a
-     * IcebergRel.
+     * IcebergRel. Should only be used in HEP pass to avoid infinite loop.
      */
     @JvmField
     val ICEBERG_FILTER_LOCK_RULE: RelOptRule =
-        IcebergFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+        IcebergFilterLockRule.Config.HEP_DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
      * Converts a BodoLogicalProject to a SnowflakeProject if it is located directly on top of a
