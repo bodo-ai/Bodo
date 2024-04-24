@@ -60,7 +60,7 @@ class PandasRuntimeJoinFilter private constructor(
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         val inputVar = implementor.visitChild(this.input, 0)
         return implementor.buildStreaming(
-            true,
+            PandasRel.ProfilingOptions(timeStateInitialization = false),
             {
                     ctx ->
                 initStateVariable(ctx)

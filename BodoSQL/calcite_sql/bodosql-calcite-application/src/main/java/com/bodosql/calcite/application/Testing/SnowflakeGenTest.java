@@ -90,7 +90,7 @@ public class SnowflakeGenTest {
             schema,
             RelationalAlgebraGenerator.STREAMING_PLANNER,
             0,
-            0,
+            1,
             BatchingProperty.defaultBatchSize,
             true, // Always hide credentials
             true, // Enable Iceberg for testing
