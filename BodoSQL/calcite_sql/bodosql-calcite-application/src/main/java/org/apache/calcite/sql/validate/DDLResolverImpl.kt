@@ -51,6 +51,11 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
     override fun executeDDL(node: SqlNode): DDLExecutionResult {
         assert (!RelationalAlgebraGenerator.isComputeKind(node.kind)) { "Node is not a DDL operation: $node" }
         return when (node.kind) {
+            // No-ops, only return expected value
+            SqlKind.BEGIN, SqlKind.COMMIT, SqlKind.ROLLBACK -> {
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+            }
+
             SqlKind.DROP_TABLE -> {
                 executeDropTable(node as SqlDropTable)
             }

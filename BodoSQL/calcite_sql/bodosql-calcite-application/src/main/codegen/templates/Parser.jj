@@ -33,9 +33,13 @@ package ${parser.package};
 import ${importStr};
 </#list>
 
-import org.apache.calcite.sql.VariantTypeNameSpec;
 import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.sql.func.SqlNamedParam;
+import com.bodosql.calcite.sql.ddl.SqlBegin;
+import com.bodosql.calcite.sql.ddl.SqlCommit;
+import com.bodosql.calcite.sql.ddl.SqlRollback;
+
+import org.apache.calcite.sql.VariantTypeNameSpec;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
@@ -1195,6 +1199,12 @@ SqlNode SqlStmt() :
 }
 {
     (
+        stmt = SqlBegin()
+    |
+        stmt = SqlCommit()
+    |
+        stmt = SqlRollback()
+    |
 <#-- Add methods to parse additional statements here -->
 <#list (parser.statementParserMethods!default.parser.statementParserMethods) as method>
         LOOKAHEAD(2) stmt = ${method}

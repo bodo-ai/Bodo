@@ -49,6 +49,7 @@ public class SnowflakeGenTest {
             + "    n_name\n"
             + "order by\n"
             + "    revenue desc\n";
+
     Map envVars = System.getenv();
     Properties prop = new Properties();
     BodoSQLCatalog catalog =
