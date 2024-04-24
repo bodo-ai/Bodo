@@ -39,7 +39,7 @@ class StreamingRelNodeTimer(
      * (e.g. Snowflake Read). This must be called before the state code is generated.
      */
     fun insertStateStartTimer(stage: Int) {
-        if (isNoOp || !builder.isStreamingFrame()) {
+        if (isNoOp) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
@@ -55,7 +55,7 @@ class StreamingRelNodeTimer(
      * to have previously been called and must be called after the state code is generated.
      */
     fun insertStateEndTimer(stage: Int) {
-        if (isNoOp || !builder.isStreamingFrame()) {
+        if (isNoOp) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
@@ -86,14 +86,14 @@ class StreamingRelNodeTimer(
      * of a streaming operator.
      */
     fun insertLoopOperationStartTimer(stage: Int) {
-        if (isNoOp || !builder.isStreamingFrame()) {
+        if (isNoOp) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
 
         // set up accumulator for stage
         val accumulator = builder.symbolTable.genOperatorStageTimerVar(opID, stage)
-        frame.addInitialization(Assign(accumulator, Expr.Zero))
+        frame.addInitialization(Assign(accumulator, Expr.DoubleLiteral(0.0)))
 
         val timeCall = Expr.Call("time.time")
         val stmt = Assign(builder.symbolTable.genOperatorStageTimerStartVar(opID, stage), timeCall)
@@ -138,7 +138,7 @@ class StreamingRelNodeTimer(
      * have previously been called.
      */
     fun insertLoopOperationEndTimer(stage: Int) {
-        if (isNoOp || !builder.isStreamingFrame()) {
+        if (isNoOp) {
             return
         }
         val frame: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
@@ -177,7 +177,7 @@ class StreamingRelNodeTimer(
      * of the timing from the other calls using a description of the given node.
      */
     fun terminateTimer() {
-        if (isNoOp || !builder.isStreamingFrame()) {
+        if (isNoOp) {
             return
         }
         if (isVerbose) {

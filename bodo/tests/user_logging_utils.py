@@ -15,6 +15,10 @@ def set_logging_stream(logger, verbose_level):
     err = None
     try:
         passed = 1
+        # TODO(aneesh) this is slightly hacky - remove when tracing level is 1
+        # by default
+        original_tracing_level = bodo.tracing_level
+        bodo.tracing_level = 1
         bodo.set_verbose_level(verbose_level)
         bodo.set_bodo_verbose_logger(logger)
         yield
@@ -22,6 +26,7 @@ def set_logging_stream(logger, verbose_level):
         err = e
         passed = 0
     finally:
+        bodo.tracing_level = original_tracing_level
         bodo.user_logging.restore_default_bodo_verbose_level()
         bodo.user_logging.restore_default_bodo_verbose_logger()
         n_passed = reduce_sum(passed)

@@ -106,13 +106,13 @@ void QueryProfileCollector::SubmitOperatorStageRowCounts(
 }
 
 void QueryProfileCollector::SubmitOperatorStageTime(operator_stage_t op_stage,
-                                                    int64_t time) {
+                                                    double time) {
     DISABLE_IF_TRACING_DISABLED;
     operator_stage_times[op_stage] = time;
 }
 
-int64_t QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
-    int64_t total_time = 0;
+double QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
+    double total_time = 0;
     for (auto [op_stage, time] : operator_stage_times) {
         if (op_stage.operator_id == operator_id) {
             total_time += time;
@@ -328,7 +328,7 @@ static void submit_operator_stage_row_counts_query_profile_collector_py_entry(
 }
 
 static void submit_operator_stage_time_query_profile_collector_py_entry(
-    int64_t operator_id, int64_t pipeline_id, int64_t time) {
+    int64_t operator_id, int64_t pipeline_id, double time) {
     try {
         auto op_stage = QueryProfileCollector::MakeOperatorStageID(operator_id,
                                                                    pipeline_id);
@@ -339,9 +339,9 @@ static void submit_operator_stage_time_query_profile_collector_py_entry(
     }
 }
 
-static void get_operator_duration_query_profile_collector_py_entry(
+static double get_operator_duration_query_profile_collector_py_entry(
     int64_t operator_id) {
-    QueryProfileCollector::Default().GetOperatorDuration(operator_id);
+    return QueryProfileCollector::Default().GetOperatorDuration(operator_id);
 }
 
 static void finalize_query_profile_collector_py_entry() {

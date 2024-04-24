@@ -39,7 +39,7 @@ def test_query_profile_collection_compiles(memory_leak_check):
         bodo.libs.query_profile_collector.init()
         bodo.libs.query_profile_collector.start_pipeline(1)
         bodo.libs.query_profile_collector.submit_operator_stage_row_counts(1, 0, 0)
-        bodo.libs.query_profile_collector.submit_operator_stage_time(1, 0, 100)
+        bodo.libs.query_profile_collector.submit_operator_stage_time(1, 0, 100.0)
         bodo.libs.query_profile_collector.get_operator_duration(1)
         bodo.libs.query_profile_collector.end_pipeline(1, 10)
         bodo.libs.query_profile_collector.finalize()
