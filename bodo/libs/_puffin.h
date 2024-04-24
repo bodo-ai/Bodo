@@ -209,8 +209,10 @@ class PuffinFile {
     /**
      * Converts the entire PuffinFile to a string such that if
      * deserialized, it would return the same PuffinFile object.
+     * @return A pair of the serialized string and the length of the
+     *         footer as this is needed for writing the metadata.
      */
-    std::string serialize();
+    std::pair<std::string, int32_t> serialize();
 
     /**
      * Create a PuffinFile from parsing a string. The idea is that
@@ -229,9 +231,18 @@ class PuffinFile {
      * - BlobMetadata sequence_number: replaced with a passed in value.
      * - BlobMetadata compression_codec: always uses nothing (for now).
      * - BlobMetadata properties: always has "ndv" field.
+     *
+     * @param sketches: the collection of theta sketches to convert.
+     * @param iceberg_schema: The schema of the Iceberg table that is used
+     *     to extract the corresponding field_ids for each sketch.
+     * @param snapshot_id: the Iceberg snapshot that the sketches were computed
+     * from.
+     * @param sequence_number: the sequence number of the Iceberg table's
+     * snapshot.
      */
     static std::unique_ptr<PuffinFile> from_theta_sketches(
-        immutable_theta_sketch_collection_t sketches, int64_t snapshot_id,
+        immutable_theta_sketch_collection_t sketches,
+        std::shared_ptr<arrow::Schema> iceberg_schema, int64_t snapshot_id,
         int64_t sequence_number);
 
     /**

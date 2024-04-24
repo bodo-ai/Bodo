@@ -32,11 +32,13 @@ from bodo.io.helpers import (
     stream_writer_alloc_codegen,
 )
 from bodo.io.iceberg import (
+    fetch_puffin_metadata,
     generate_data_file_info,
     get_table_details_before_write,
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,
     register_table_write,
+    remove_transaction,
     theta_sketch_collection_type,
     wrap_start_write,
 )
@@ -48,6 +50,7 @@ from bodo.libs.array import (
     info_to_array,
     py_table_to_cpp_table,
 )
+from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
 from bodo.utils.transform import get_call_expr_arg
@@ -205,35 +208,31 @@ def overload_iceberg_writer_fetch_theta(writer):
 @intrinsic
 def _write_puffin_file(
     typingctx,
-    table_loc_t,
+    puffin_file_loc_t,
+    bucket_region_t,
     snapshot_id_t,
     sequence_number_t,
     theta_sketches_t,
     output_pyarrow_schema_t,
-    already_exists_t,
 ):
     def codegen(context, builder, sig, args):
         (
-            table_loc_str,
+            puffin_file_loc,
+            bucket_region,
             snapshot_id,
             sequence_number,
             theta_sketches,
             output_pyarrow_schema,
-            already_exists,
         ) = args
-        table_loc_struct = cgutils.create_struct_proxy(types.unicode_type)(
-            context, builder, value=table_loc_str
-        )
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(8).as_pointer(),  # table_loc buffer
-                lir.IntType(64),  # table_loc length
+                lir.IntType(8).as_pointer(),  # puffin_file_loc
+                lir.IntType(8).as_pointer(),  # bucket_region
                 lir.IntType(64),  # snapshot_id
                 lir.IntType(64),  # sequence_number
                 lir.IntType(8).as_pointer(),  # theta_sketches
                 lir.IntType(8).as_pointer(),  # output_pyarrow_schema
-                lir.IntType(1),  # already_exists
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -242,13 +241,12 @@ def _write_puffin_file(
         ret = builder.call(
             fn_tp,
             [
-                table_loc_struct.data,
-                table_loc_struct.length,
+                puffin_file_loc,
+                bucket_region,
                 snapshot_id,
                 sequence_number,
                 theta_sketches,
                 output_pyarrow_schema,
-                already_exists,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -256,12 +254,12 @@ def _write_puffin_file(
 
     return (
         types.void(
-            table_loc_t,
+            types.voidptr,  # Pass UTF-8 string as void*
+            types.voidptr,  # Pass UTF-8 string as void*
             snapshot_id_t,
             sequence_number_t,
             theta_sketches_t,
             output_pyarrow_schema_t,
-            already_exists_t,
         ),
         codegen,
     )
@@ -740,7 +738,11 @@ def gen_iceberg_writer_init_impl(
         )
         writer["already_exists"] = already_exists
         writer["theta_sketches"] = init_theta_sketches_wrapper(
-            con_str, schema, table_name, output_pyarrow_schema, already_exists
+            con_str,
+            schema,
+            table_name,
+            output_pyarrow_schema,
+            already_exists and mode != "replace",
         )
         writer["txn_id"] = txn_id
 
@@ -932,22 +934,31 @@ def gen_iceberg_writer_append_table_impl_inner(
             # If theta sketches are turned on, fetch the snapshot id of the
             # current transaction and use it to write the Puffin file
             enable_theta = get_env_value("BODO_ENABLE_THETA_SKETCHES") != "0"
-            if enable_theta:
-                snapshot_id = -1
-                rank = bodo.get_rank()
-                with bodo.no_warning_objmode(snapshot_id="int64"):
-                    snapshot_id = fetch_snapshot_id(rank, conn, db_schema, table_name)
-
-                # TODO: find real way to determine sequence_number
-                sequence_number = 1
+            is_new_table = not writer["already_exists"] or if_exists == "replace"
+            if enable_theta and is_new_table:
+                with bodo.no_warning_objmode(
+                    snapshot_id="int64",
+                    sequence_number="int64",
+                    puffin_loc="unicode_type",
+                ):
+                    snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(
+                        txn_id, conn, db_schema, table_name
+                    )
+                bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+                    puffin_loc, parallel=True
+                )
                 _write_puffin_file(
-                    table_loc,
+                    unicode_to_utf8(puffin_loc),
+                    unicode_to_utf8(bucket_region),
                     snapshot_id,
                     sequence_number,
                     writer["theta_sketches"],
                     writer["output_pyarrow_schema"],
-                    writer["already_exists"],
                 )
+
+            # Now that puffin files are finished we no longer need the transaction
+            with bodo.no_warning_objmode():
+                remove_transaction(txn_id, conn, db_schema, table_name)
 
             if not success:
                 # TODO [BE-3249] If it fails due to schema changing, then delete the files.
