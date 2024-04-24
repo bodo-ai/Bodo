@@ -3011,6 +3011,63 @@ def register_table_write(
     return success
 
 
+@run_rank0
+def remove_transaction(
+    transaction_id: int,
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+):
+    """Indicate that a transaction is no longer
+    needed and can be remove from any internal state.
+    This DOES NOT finalize or commit a transaction.
+
+    Args:
+        transaction_id (int): Transaction ID to remove.
+        conn_str (str): Connection string for indexing into our object list.
+        db_name (str): Name of the database for indexing into our object list.
+        table_name (str): Name of the table for indexing into our object list.
+    """
+    import bodo_iceberg_connector
+
+    bodo_iceberg_connector.remove_transaction(
+        transaction_id, conn_str, db_name, table_name
+    )
+
+
+@run_rank0
+def fetch_puffin_metadata(
+    transaction_id: int,
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+) -> tuple[int, int, str]:
+    """Fetch the puffin file metadata that we need from the committed
+    transaction to write the puffin file. These are the:
+        1. Snapshot ID for the committed data
+        2. Sequence Number for the committed data
+        3. The Location at which to write the puffin file.
+
+    Args:
+        transaction_id (int): Transaction ID to remove.
+        conn_str (str): Connection string for indexing into our object list.
+        db_name (str): Name of the database for indexing into our object list.
+        table_name (str): Name of the table for indexing into our object list.
+
+    Returns:
+        tuple[int, int, str]: Tuple of the snapshot ID, sequence number, and
+        location at which to write the puffin file.
+    """
+    import bodo_iceberg_connector
+
+    ev = tracing.Event("fetch_puffin_file_metadata")
+    metadata = bodo_iceberg_connector.fetch_puffin_metadata(
+        transaction_id, conn_str, db_name, table_name
+    )
+    ev.finalize()
+    return metadata
+
+
 def register_table_merge_cow(
     conn_str: str,
     db_name: str,
@@ -3122,7 +3179,7 @@ def iceberg_pq_write(
         partition_spec: Array of Tuples containing Partition Spec for Iceberg Table (passed to C++)
         sort_order: Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
         iceberg_schema_str (str): JSON Encoding of Iceberg Schema to include in Parquet metadata
-        is_parallel (bool): Whether the write is occurring on a distributed dataframe
+        is_parallel (bool): Whether the write is occurring on a distributed DataFrame
         expected_schema (pyarrow.Schema): Expected schema of output PyArrow table written
             to Parquet files in the Iceberg table. None if not necessary
         sketch_collection: collection of theta sketches being used to build NDV values during write
@@ -3245,7 +3302,11 @@ def iceberg_write(
             mode,
         )
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
-        conn, database_schema, table_name, output_pyarrow_schema, already_exists
+        conn,
+        database_schema,
+        table_name,
+        output_pyarrow_schema,
+        already_exists and mode != "replace",
     )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
@@ -3274,6 +3335,7 @@ def iceberg_write(
             iceberg_schema_id,
             mode,
         )
+        remove_transaction(txn_id, conn, database_schema, table_name)
 
     if not success:
         # TODO [BE-3249] If it fails due to schema changing, then delete the files.
@@ -3420,7 +3482,11 @@ def iceberg_merge_cow(
         raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
 
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
-        conn, database_schema, table_name, output_pyarrow_schema, already_exists
+        conn,
+        database_schema,
+        table_name,
+        output_pyarrow_schema,
+        already_exists and mode != "replace",
     )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
