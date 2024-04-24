@@ -1066,6 +1066,7 @@ public enum SqlKind {
 
   /** The {@code ROW_NUMBER} window function. */
   ROW_NUMBER,
+
   /** The Bodo Internal {@code MIN_ROW_NUMBER_FILTER} window function. */
   MIN_ROW_NUMBER_FILTER,
 
@@ -1164,6 +1165,9 @@ public enum SqlKind {
 
   // DDL and session control statements follow. The list is not exhaustive: feel
   // free to add more.
+
+  /** {@code BEGIN} session control statement. BODO ADDITION */
+  BEGIN,
 
   /** {@code COMMIT} session control statement. */
   COMMIT,
@@ -1307,7 +1311,7 @@ public enum SqlKind {
    * Category consisting of all DDL operators.
    */
   public static final EnumSet<SqlKind> DDL =
-      EnumSet.of(COMMIT, ROLLBACK, ALTER_SESSION,
+      EnumSet.of(BEGIN, COMMIT, ROLLBACK, ALTER_SESSION,
           CREATE_SCHEMA, CREATE_FOREIGN_SCHEMA, DROP_SCHEMA,
           CREATE_TABLE, CREATE_TABLE_LIKE,
           ALTER_TABLE, DROP_TABLE, TRUNCATE_TABLE,

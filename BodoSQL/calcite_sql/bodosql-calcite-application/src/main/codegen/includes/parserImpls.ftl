@@ -1350,3 +1350,40 @@ final Span s;
         return ObjectOperatorTable.OBJECT_CONSTRUCT.createCall(s.end(this), list);
     }
 }
+
+// Transaction Queries - Just simple wrappers
+SqlBegin SqlBegin() :
+{
+    final Span s;
+}
+{
+    <BEGIN> { s = span(); }
+    [ <WORK> | <TRANSACTION> ]
+    {
+        return new SqlBegin(s.end(this));
+    }
+}
+
+SqlCommit SqlCommit() :
+{
+    final Span s;
+}
+{
+    <COMMIT> { s = span(); }
+    [ <WORK> ]
+    {
+        return new SqlCommit(s.end(this));
+    }
+}
+
+SqlRollback SqlRollback() :
+{
+    final Span s;
+}
+{
+    <ROLLBACK> { s = span(); }
+    [ <WORK> ]
+    {
+        return new SqlRollback(s.end(this));
+    }
+}
