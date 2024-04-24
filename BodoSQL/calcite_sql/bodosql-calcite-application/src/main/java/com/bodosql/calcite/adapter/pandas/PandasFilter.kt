@@ -49,7 +49,7 @@ class PandasFilter(
         inputVar: BodoEngineTable,
     ): BodoEngineTable {
         return implementor.buildStreaming(
-            true,
+            PandasRel.ProfilingOptions(timeStateInitialization = false),
             { ctx -> initStateVariable(ctx) },
             { ctx, stateVar ->
                 // Extract window aggregates and update the nodes.

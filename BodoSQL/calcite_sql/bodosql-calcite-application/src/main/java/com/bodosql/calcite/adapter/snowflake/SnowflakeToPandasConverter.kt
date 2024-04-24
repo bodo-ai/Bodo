@@ -112,7 +112,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         if (isStreaming()) {
             implementor.createStreamingPipeline()
             implementor.buildStreaming(
-                false,
+                PandasRel.ProfilingOptions(false),
                 { ctx -> initStateVariable(ctx) },
                 { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
                 { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },

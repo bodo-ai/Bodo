@@ -498,12 +498,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
 
+    StreamingRelNodeTimer timer =
+        StreamingRelNodeTimer.createStreamingTimer(
+            operatorID,
+            this.generatedCode,
+            verboseLevel,
+            tracingLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+
     // get memory estimate of input
     RelMetadataQuery mq = node.getCluster().getMetadataQuery();
     Double inputRows = mq.getRowCount(node.getInput(0));
     Double averageInputRowSize =
         Optional.ofNullable(mq.getAverageRowSize(node.getInput(0))).orElse(8.0);
     int memoryEstimate = Double.valueOf(Math.ceil(inputRows * averageInputRowSize)).intValue();
+    timer.insertStateStartTimer(0);
     activePipeline.initializeStreamingState(
         operatorID,
         new Op.Assign(
@@ -513,22 +525,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 new Expr.IntegerLiteral(operatorID))),
         OperatorType.ACCUMULATE_TABLE,
         memoryEstimate);
+    timer.insertStateEndTimer(0);
 
     // Append to the list at the end of the loop.
+    timer.insertLoopOperationStartTimer(1);
     List<Expr> args = new ArrayList<>();
     args.add(batchAccumulatorVariable);
     args.add(inputTableVar);
     Op appendStatement =
         new Op.Stmt(new Expr.Call("bodo.libs.table_builder.table_builder_append", args));
     generatedCode.add(appendStatement);
+    timer.updateRowCount(1, inputTableVar);
+    timer.insertLoopOperationEndTimer(1);
+
     // Finally, concatenate the batches in the accumulator into a table to use in
     // regular code.
+    timer.insertLoopOperationStartTimer(2, true);
     Variable accumulatedTable = genTableVar();
     Expr concatenatedTable =
         new Expr.Call(
             "bodo.libs.table_builder.table_builder_finalize", List.of(batchAccumulatorVariable));
     Op.Assign assign = new Op.Assign(accumulatedTable, concatenatedTable);
     activePipeline.deleteStreamingState(operatorID, assign);
+    timer.insertLoopOperationEndTimer(2, true);
+
     // Pop the pipeline
     StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
     // Append the pipeline
@@ -2572,7 +2592,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable buildStreaming(
-        @NotNull boolean reportOutTableSize,
+        @NotNull PandasRel.ProfilingOptions profilingOptions,
         @NotNull Function1<? super PandasRel.BuildContext, ? extends StateVariable> initFn,
         @NotNull
             Function2<? super PandasRel.BuildContext, ? super StateVariable, BodoEngineTable>
@@ -2601,14 +2621,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       PandasCodeGenVisitor.BuildContext buildContext =
           new PandasCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ());
-      // Init the state and time it.
-      timerInfo.insertStateStartTimer(0);
+      if (profilingOptions.getTimeStateInitialization()) {
+        // Init the state and time it.
+        timerInfo.insertStateStartTimer(0);
+      }
       StateVariable stateVar = initFn.invoke(buildContext);
-      timerInfo.insertStateEndTimer(0);
+      if (profilingOptions.getTimeStateInitialization()) {
+        timerInfo.insertStateEndTimer(0);
+      }
       // Handle the loop body
       timerInfo.insertLoopOperationStartTimer(1);
       BodoEngineTable res = bodyFn.invoke(buildContext, stateVar);
-      if (reportOutTableSize) {
+      if (profilingOptions.getReportOutTableSize()) {
         timerInfo.updateRowCount(1, res);
       }
       timerInfo.insertLoopOperationEndTimer(1);
