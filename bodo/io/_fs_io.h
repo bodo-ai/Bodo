@@ -8,6 +8,7 @@
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/python/filesystem.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
 
 #include "_bodo_file_reader.h"
 

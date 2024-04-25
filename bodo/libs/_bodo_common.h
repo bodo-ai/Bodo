@@ -1869,6 +1869,23 @@ inline struct numpy_arr_payload make_numpy_array_payload(
 }
 #endif
 
+template <typename T>
+struct numba_optional {
+    T* value;
+    // 0 = false, 1 = true
+    // Numba assumes this is 1 byte, the C++ spec doesn't guarantee sizeof(bool)
+    // == 1 so we use uint8_t
+    uint8_t has_value;
+    numba_optional() { numba_optional(nullptr, false); }
+    numba_optional(T* _value, uint8_t _has_value)
+        : value(_value), has_value(_has_value) {
+        // This has to be standard layout since it is intended to be passed from
+        // numba generated code
+        static_assert(std::is_standard_layout<numba_optional<T>>::value,
+                      "numba_optional must be standard layout");
+    }
+};
+
 extern "C" {
 PyMODINIT_FUNC PyInit_hdist(void);
 PyMODINIT_FUNC PyInit_hstr_ext(void);

@@ -26,6 +26,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import TableType
+from bodo.io.fs_io import ArrowFs, arrow_filesystem_del
 from bodo.io.helpers import (
     _get_stream_writer_payload,
     pyarrow_schema_type,
@@ -33,9 +34,11 @@ from bodo.io.helpers import (
 )
 from bodo.io.iceberg import (
     commit_statistics_file,
+    create_iceberg_aws_credentials_provider,
     fetch_puffin_metadata,
     generate_data_file_info,
     get_old_statistics_file_path,
+    get_rest_catalog_config,
     get_table_details_before_write,
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,
@@ -45,6 +48,7 @@ from bodo.io.iceberg import (
     theta_sketch_collection_type,
     wrap_start_write,
 )
+from bodo.io.s3_fs import create_s3_fs_instance
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
     array_info_type,
@@ -433,6 +437,19 @@ def fetch_snapshot_id(rank, conn, db_schema, table_name):
     return snapshot_id
 
 
+@numba.njit
+def create_iceberg_rest_s3_fs(
+    catalog_uri: str, bearer_token: str, warehouse: str, schema: str, table_name: str
+):
+    if catalog_uri == "" or bearer_token == "" or warehouse == "":
+        return None
+    return create_s3_fs_instance(
+        credentials_provider=create_iceberg_aws_credentials_provider(
+            catalog_uri, bearer_token, warehouse, schema, table_name
+        )
+    )
+
+
 class IcebergWriterType(types.Type):
     """Data type for streaming Iceberg writer's internal state"""
 
@@ -489,6 +506,8 @@ iceberg_writer_payload_members = (
     ("theta_sketches", theta_sketch_collection_type),
     # Transaction ID for the write
     ("txn_id", types.int64),
+    # Arrow filesystem for Iceberg REST S3 FS
+    ("arrow_fs", types.optional(ArrowFs())),
 )
 iceberg_writer_payload_members_dict = dict(iceberg_writer_payload_members)
 
@@ -741,6 +760,28 @@ def overload_get_table_details_before_write_wrapper(
     return impl
 
 
+def get_rest_catalog_config_wrapper(con_str):  # pragma: no cover
+    pass
+
+
+@overload(get_rest_catalog_config_wrapper)
+def overload_get_rest_catalog_config_wrapper(con_str):
+    def impl(con_str):  # pragma: no cover
+        with bodo.no_warning_objmode(
+            catalog_uri="unicode_type",
+            bearer_token="unicode_type",
+            warehouse="unicode_type",
+        ):
+            catalog_uri, bearer_token, warehouse = "", "", ""
+            conf = get_rest_catalog_config(con_str)
+            if conf is not None:
+                catalog_uri, bearer_token, warehouse = conf
+
+        return catalog_uri, bearer_token, warehouse
+
+    return impl
+
+
 def get_empty_pylist():  # pragma: no cover
     pass
 
@@ -854,6 +895,7 @@ def gen_iceberg_writer_init_impl(
             partition_spec,
             sort_order,
         )
+        catalog_uri, bearer_token, warehouse = get_rest_catalog_config_wrapper(con_str)
 
         # Initialize writer
         writer = iceberg_writer_alloc(expected_state_type)
@@ -898,6 +940,9 @@ def gen_iceberg_writer_init_impl(
         writer["use_theta_sketches"] = theta_sketches_possible and theta_columns.any()
         writer["theta_sketches"] = init_theta_sketches_wrapper(theta_columns)
         writer["txn_id"] = txn_id
+        writer["arrow_fs"] = create_iceberg_rest_s3_fs(
+            catalog_uri, bearer_token, warehouse, schema, table_name
+        )
 
         # Barrier ensures that internal stage exists before we upload files to it
         bodo.barrier()
@@ -1104,6 +1149,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["iceberg_schema_str"],
                     writer["parallel"],
                     writer["output_pyarrow_schema"],
+                    writer["arrow_fs"],
                     writer["theta_sketches"],
                 )
                 append_py_list(writer["iceberg_files_info"], iceberg_files_info)
@@ -1184,6 +1230,7 @@ def gen_iceberg_writer_append_table_impl_inner(
             with bodo.no_warning_objmode():
                 remove_transaction(txn_id, conn, db_schema, table_name)
 
+            arrow_filesystem_del(writer["arrow_fs"])
             # Now that puffin files are finished we no longer need the transaction
             with bodo.no_warning_objmode():
                 remove_transaction(txn_id, conn, db_schema, table_name)

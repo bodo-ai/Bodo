@@ -28,17 +28,17 @@ import pyarrow.parquet as pq
 import requests
 from mpi4py import MPI
 from numba.core import types
-from numba.extending import (
-    box,
-    intrinsic,
-    models,
-    register_model,
-    unbox,
-)
+from numba.extending import box, intrinsic, models, overload, register_model, unbox
 
 import bodo
 import bodo.utils.tracing as tracing
-from bodo.io.fs_io import get_s3_bucket_region_njit, validate_gcsfs_installed
+from bodo.ext import s3_reader
+from bodo.io.fs_io import (
+    ArrowFs,
+    arrow_filesystem_del,
+    get_s3_bucket_region_njit,
+    validate_gcsfs_installed,
+)
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
     is_pyarrow_list_type,
@@ -54,6 +54,7 @@ from bodo.io.parquet_pio import (
     parse_fpath,
     schema_with_dict_cols,
 )
+from bodo.io.s3_fs import create_s3_fs_instance
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -152,6 +153,118 @@ def format_iceberg_conn_njit(conn_str):  # pragma: no cover
     with bodo.no_warning_objmode(conn_str="unicode_type"):
         conn_str = format_iceberg_conn(conn_str)
     return conn_str
+
+
+class IcebergAwsCredentialsProviderType(types.Type):
+    """Type for C++ Iceberg REST AWS Credentials Provider"""
+
+    def __init__(self):  # pragma: no cover
+        super(IcebergAwsCredentialsProviderType, self).__init__(
+            name=f"IcebergAwsCredentialsProvider()"
+        )
+
+
+register_model(IcebergAwsCredentialsProviderType)(models.OpaqueModel)
+
+
+@intrinsic
+def _create_iceberg_aws_credentials_provider(
+    typingctx, catalog_uri, bearer_token, warehouse, schema, table
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="create_iceberg_aws_credentials_provider_py_entry",
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        IcebergAwsCredentialsProviderType()(
+            types.voidptr, types.voidptr, types.voidptr, types.voidptr, types.voidptr
+        ),
+        codegen,
+    )
+
+
+def create_iceberg_aws_credentials_provider(
+    catalog_uri: str, bearer_token: str, warehouse: str, schema: str, table: str
+):
+    pass
+
+
+@overload(create_iceberg_aws_credentials_provider)
+def overload_create_iceberg_aws_credentials_provider(
+    catalog_uri: str, bearer_token: str, warehouse: str, schema: str, table: str
+):
+    """
+    Create a C++ Iceberg AWS Credentials Provider
+    Creates an Iceberg REST AWS Credentials Provider object if all the parameters
+    have values, otherwise creates a default AWS Credentials Provider object.
+    @param catalog_uri: Iceberg REST Catalog URI
+    @param bearer_token: Bearer token for authentication to the REST server
+    @param warehouse: Iceberg warehouse
+    @param schema: database schema
+    @param table: table name
+    @return: Iceberg AWS Credentials Provider object
+    """
+
+    def impl(
+        catalog_uri: str, bearer_token: str, warehouse: str, schema: str, table: str
+    ):
+        return _create_iceberg_aws_credentials_provider(
+            unicode_to_utf8(catalog_uri),
+            unicode_to_utf8(bearer_token),
+            unicode_to_utf8(warehouse),
+            unicode_to_utf8(schema),
+            unicode_to_utf8(table),
+        )
+
+    return impl
+
+
+@intrinsic
+def _destroy_iceberg_aws_credentials_provider(typingctx, provider):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="destroy_iceberg_aws_credentials_provider_py_entry",
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    return types.void(IcebergAwsCredentialsProviderType()), codegen
+
+
+def destroy_iceberg_aws_credentials_provider(provider):
+    pass
+
+
+@overload(destroy_iceberg_aws_credentials_provider)
+def overload_destroy_iceberg_rest_aws_credentials_provider(provider):
+    """
+    Destroy a C++ Iceberg REST AWS Credentials Provider
+    """
+
+    def impl(provider):
+        if provider is not None:
+            return _destroy_iceberg_aws_credentials_provider(provider)
+
+    return impl
 
 
 # ----------------------------- Iceberg Read -----------------------------#
@@ -1660,20 +1773,11 @@ def warn_if_non_ideal_io_parallelism(
 
 
 @run_rank0
-def get_temp_aws_credentials_for_rest_catalog_wh(
-    conn: str, database_schema: str, table_name: str
-) -> AWSCredentials | None:
+def get_rest_catalog_config(conn: str) -> tuple[str, str, str] | None:
     """
-    Get aws credentials from a rest catalog useing credentials from the connection string.
-    Only runs on rank 0, so the credentials are only fetched once. After they are fetched
-    they are broadcasted to all ranks.
-    https://github.com/apache/iceberg/blob/e6a1a45624b8bd8246c6ef5601cae046015f4532/open-api/rest-catalog-open-api.yaml#L625
-    Args:
-        conn (str): Iceberg connection string.
-        database_schema (str): Schema of the database.
-        table_name (str): Name of the table.
-    Returns:
-        dict[str, str]: aws credentials.
+    Get the configuration for a rest catalog connection string.
+    @param conn: Iceberg connection string.
+    @return: Tuple of uri, user_token, warehouse if successful, None otherwise (e.g. invalid connection string or not a rest catalog).
     """
     parsed_conn = urlparse(conn)
     if parsed_conn.scheme.lower() != "rest":
@@ -1716,6 +1820,32 @@ def get_temp_aws_credentials_for_rest_catalog_wh(
         raise BodoError(
             f"Unable to authenticate with {uri}. Please check your connection string."
         )
+    return uri, str(user_token), str(warehouse)
+
+
+@run_rank0
+def get_temp_aws_credentials_for_rest_catalog_wh(
+    conn: str, database_schema: str, table_name: str
+) -> AWSCredentials | None:
+    """
+    Get aws credentials from a rest catalog useing credentials from the connection string.
+    Only runs on rank 0, so the credentials are only fetched once. After they are fetched
+    they are broadcasted to all ranks.
+    https://github.com/apache/iceberg/blob/e6a1a45624b8bd8246c6ef5601cae046015f4532/open-api/rest-catalog-open-api.yaml#L625
+    Args:
+        conn (str): Iceberg connection string.
+        database_schema (str): Schema of the database.
+        table_name (str): Name of the table.
+    Returns:
+        dict[str, str]: aws credentials.
+    """
+    # Use the underlying function to get the config so we
+    # don't try to broadcast the results and cause a hang
+    conf = get_rest_catalog_config.__wrapped__(conn)
+    if conf is None:
+        return None
+    uri, user_token, warehouse = conf
+
     # Get the catalog config
     warehouse_config_resp = requests.get(
         f"{uri}/v1/config?warehouse={warehouse}",
@@ -3239,6 +3369,7 @@ def iceberg_pq_write(
     iceberg_schema_str,
     is_parallel,
     expected_schema,
+    arrow_fs,
     sketch_collection,
 ):  # pragma: no cover
     """
@@ -3254,6 +3385,8 @@ def iceberg_pq_write(
         is_parallel (bool): Whether the write is occurring on a distributed DataFrame
         expected_schema (pyarrow.Schema): Expected schema of output PyArrow table written
             to Parquet files in the Iceberg table. None if not necessary
+        arrow_fs (Arrow.fs.FileSystem): Optional Arrow FileSystem object to use for writing, will fallback to parsing
+            the table_loc if not provided
         sketch_collection: collection of theta sketches being used to build NDV values during write
 
     Returns:
@@ -3287,6 +3420,7 @@ def iceberg_pq_write(
         rg_size,
         unicode_to_utf8(iceberg_schema_str),
         expected_schema,
+        arrow_fs,
         sketch_collection,
     )
 
@@ -3338,6 +3472,9 @@ def iceberg_write(
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
         mode="unicode_type",
+        catalog_uri="unicode_type",
+        bearer_token="unicode_type",
+        warehouse="unicode_type",
     ):
         (
             table_loc,
@@ -3372,6 +3509,19 @@ def iceberg_write(
             sort_order,
             mode,
         )
+        conf = get_rest_catalog_config(conn)
+        catalog_uri, bearer_token, warehouse = "", "", ""
+
+        if conf is not None:
+            catalog_uri, bearer_token, warehouse = conf
+    fs = None
+    if catalog_uri and bearer_token and warehouse:
+        fs = create_s3_fs_instance(
+            credentials_provider=create_iceberg_aws_credentials_provider(
+                catalog_uri, bearer_token, warehouse, database_schema, table_name
+            )
+        )
+
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(n_cols)
     )
@@ -3384,8 +3534,10 @@ def iceberg_write(
         iceberg_schema_str,
         is_parallel,
         output_pyarrow_schema,
+        fs,
         dummy_theta_sketch,
     )
+    arrow_filesystem_del(fs)
 
     with bodo.no_warning_objmode(success="bool_"):
         fnames, file_size_bytes, metrics = generate_data_file_info(iceberg_files_info)
@@ -3532,6 +3684,9 @@ def iceberg_merge_cow(
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
+        catalog_uri="unicode_type",
+        bearer_token="unicode_type",
+        warehouse="unicode_type",
     ):
         (
             table_loc,
@@ -3550,9 +3705,21 @@ def iceberg_merge_cow(
             "append",
             allow_downcasting=True,
         )
+        catalog_uri, bearer_token, warehouse = "", "", ""
+        conf = get_rest_catalog_config(conn)
+        if conf is not None:
+            catalog_uri, bearer_token, warehouse = conf
 
     if not already_exists:
         raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
+
+    arrow_fs = None
+    if catalog_uri and bearer_token and warehouse:
+        arrow_fs = create_s3_fs_instance(
+            credentials_provider=create_iceberg_aws_credentials_provider(
+                catalog_uri, bearer_token, warehouse, database_schema, table_name
+            ),
+        )
 
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(num_cols)
@@ -3566,6 +3733,7 @@ def iceberg_merge_cow(
         iceberg_schema_str,
         is_parallel,
         output_pyarrow_schema,
+        arrow_fs,
         dummy_theta_sketch,
     )
 
@@ -3604,6 +3772,15 @@ from bodo.io import arrow_cpp
 
 ll.add_symbol("iceberg_pq_write_py_entry", arrow_cpp.iceberg_pq_write_py_entry)
 
+ll.add_symbol(
+    "create_iceberg_aws_credentials_provider_py_entry",
+    s3_reader.create_iceberg_aws_credentials_provider_py_entry,
+)
+ll.add_symbol(
+    "destroy_iceberg_aws_credentials_provider_py_entry",
+    s3_reader.destroy_iceberg_aws_credentials_provider_py_entry,
+)
+
 
 @intrinsic(prefer_literal=True)
 def iceberg_pq_write_table_cpp(
@@ -3619,6 +3796,7 @@ def iceberg_pq_write_table_cpp(
     row_group_size,
     iceberg_metadata_t,
     iceberg_schema_t,
+    arrow_fs,
     sketch_collection_t,
 ):
     """
@@ -3643,12 +3821,14 @@ def iceberg_pq_write_table_cpp(
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.LiteralStructType([lir.IntType(8).as_pointer(), lir.IntType(1)]),
                 lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="iceberg_pq_write_py_entry"
         )
+
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
@@ -3666,6 +3846,7 @@ def iceberg_pq_write_table_cpp(
             types.int64,
             types.voidptr,
             pyarrow_schema_type,
+            types.optional(ArrowFs()),
             theta_sketch_collection_type,
         ),
         codegen,

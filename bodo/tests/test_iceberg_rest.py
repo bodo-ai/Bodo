@@ -1,6 +1,13 @@
-import pandas as pd
+from uuid import uuid4
 
-from bodo.tests.utils import check_func, pytest_tabular
+import bodo_iceberg_connector as bic
+import numpy as np
+import pandas as pd
+import pytest
+
+import bodo
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_tabular
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest_tabular
 
@@ -24,3 +31,70 @@ def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
         return checksum, len(df), list(df.columns)
 
     check_func(f, (), py_output=(35245, 265, ["location_id", "borough", "zone_name"]))
+
+
+@pytest.mark.parametrize(
+    "df, rank_skew",
+    [
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}), False, id="values_all_ranks"
+        ),
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}), True, id="values_rank_0"
+        ),
+        pytest.param(
+            pd.DataFrame({"A": np.empty((0,), dtype=np.int32)}), False, id="empty"
+        ),
+    ],
+)
+def test_iceberg_tabular_write_basic(
+    df, tabular_connection, memory_leak_check, rank_skew
+):
+    """
+    Test writing to an Iceberg table in a Tabular REST catalog.
+    Checksum is used to verify the data is written correctly.
+    """
+    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    table_uuid = run_rank0(uuid4)()
+    table_name = f"bodo_write_test_{table_uuid}"
+
+    con_str = f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}"
+    write_complete = False
+    try:
+
+        def f(df, table_name):
+            df.to_sql(
+                table_name,
+                con=con_str,
+                schema="CI",
+                index=True,
+                if_exists="replace",
+            )
+
+        dist_df = _get_dist_arg(df)
+        if rank_skew and bodo.get_rank != 0:
+            dist_df = dist_df[:0]
+        bodo.jit(f, distributed=["df"])(dist_df, table_name)
+        write_complete = True
+
+        def read(table_name):
+            return pd.read_sql_table(
+                table_name,
+                con=con_str,
+                schema="CI",
+            )
+
+        check_func(
+            read,
+            tuple([table_name]),
+            py_output=bodo.allgatherv(dist_df),
+        )
+    finally:
+        delete_succeeded = run_rank0(bic.delete_table)(
+            bodo.io.iceberg.format_iceberg_conn(con_str),
+            "CI",
+            table_name,
+        )
+        assert (
+            not write_complete or delete_succeeded
+        ), f"Cleanup failed, {table_name} may need manual cleanup"

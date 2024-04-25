@@ -2,6 +2,7 @@
 
 // Functions to write Bodo arrays to parquet
 
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
@@ -47,6 +48,8 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * @param create_dir (default true): flag to create directory for Parquet
  * parallel write if it doesn't exist. Set to false in streaming Parquet write
  * since the writer init function creates the directory.
+ * @param arrow_fs (default nullptr): Arrow filesystem to write to, fall back to
+ * parsing the path if not present
  * @returns size of the written file (in bytes)
  */
 int64_t pq_write(const char *_path_name,
@@ -55,7 +58,8 @@ int64_t pq_write(const char *_path_name,
                  const char *bucket_region, int64_t row_group_size,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
-                 bool create_dir = true, std::string filename = "");
+                 bool create_dir = true, std::string filename = "",
+                 arrow::fs::FileSystem *arrow_fs = nullptr);
 
 int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           array_info *col_names_arr, array_info *index,

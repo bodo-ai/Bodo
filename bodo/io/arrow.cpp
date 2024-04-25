@@ -4,8 +4,10 @@
 // bodo.io.arrow_cpp extension module to Python
 
 #include <Python.h>
+#include <arrow/filesystem/filesystem.h>
 #include "../libs/_bodo_common.h"
 #include "../libs/_theta_sketches.h"
+#include "_s3_reader.h"
 #include "arrow_reader.h"
 
 table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
@@ -98,7 +100,23 @@ PyObject* iceberg_pq_write_py_entry(
     PyObject* partition_spec, PyObject* sort_order, const char* compression,
     bool is_parallel, const char* bucket_region, int64_t row_group_size,
     char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
+    numba_optional<arrow::fs::FileSystem> arrow_fs,
     theta_sketch_collection_t sketches);
+
+/**
+ * @brief Delete the given Arrow FileSystem object if it is not NULL.
+ *
+ * @param fs The Arrow FileSystem object to delete.
+ */
+void arrow_filesystem_del_py_entry(numba_optional<arrow::fs::FileSystem> fs) {
+    try {
+        if (fs.has_value) {
+            delete fs.value;
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
@@ -123,6 +141,8 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
 
     SetAttrStringFromVoidPtr(m, arrow_reader_read_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_reader_del_py_entry);
+
+    SetAttrStringFromVoidPtr(m, arrow_filesystem_del_py_entry);
 
     return m;
 }

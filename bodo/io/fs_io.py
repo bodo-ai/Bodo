@@ -15,10 +15,19 @@ from fsspec.implementations.arrow import (
     ArrowFSWrapper,
     wrap_exceptions,
 )
-from numba.core import types
-from numba.extending import NativeValue, models, overload, register_model, unbox
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.extending import (
+    NativeValue,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    unbox,
+)
 
 import bodo
+from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
@@ -700,3 +709,43 @@ def overload_get_storage_options_pyobject(storage_options):
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     return loc_vars["impl"]
+
+
+class ArrowFs(types.Type):
+    def __init__(self, name=""):  # pragma: no cover
+        super(ArrowFs, self).__init__(name=f"ArrowFs({name})")
+
+
+register_model(ArrowFs)(models.OpaqueModel)
+
+ll.add_symbol("arrow_filesystem_del_py_entry", arrow_cpp.arrow_filesystem_del_py_entry)
+
+
+@intrinsic
+def _arrow_filesystem_del(typingctx, fs_instance):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [lir.LiteralStructType([lir.IntType(8).as_pointer(), lir.IntType(1)])],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arrow_filesystem_del_py_entry"
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        builder.call(fn_tp, args)
+
+    return types.void(types.optional(ArrowFs())), codegen
+
+
+def arrow_filesystem_del(fs_instance):
+    pass
+
+
+@overload(arrow_filesystem_del)
+def overload_arrow_filesystem_del(fs_instance):
+    """Delete ArrowFs instance"""
+
+    def impl(fs_instance):
+        return _arrow_filesystem_del(fs_instance)
+
+    return impl
