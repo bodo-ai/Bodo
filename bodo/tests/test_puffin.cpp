@@ -32,7 +32,7 @@ template <Bodo_CTypes::CTypeEnum dtype, typename T>
 std::shared_ptr<array_info> nullable_array_from_vector(
     std::vector<T> numbers, std::vector<bool> nulls) {
     size_t length = numbers.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype, 0);
+    auto result = alloc_nullable_array_no_nulls(length, dtype);
     T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
     for (size_t i = 0; i < length; i++) {
         if (nulls[i]) {

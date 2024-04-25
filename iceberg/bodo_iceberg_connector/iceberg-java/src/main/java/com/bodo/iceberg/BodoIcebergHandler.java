@@ -5,6 +5,7 @@ import com.bodo.iceberg.filters.FilterExpr;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.apache.iceberg.AppendFiles;
+import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.DeleteFiles;
@@ -39,6 +41,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
+import org.apache.iceberg.types.Types;
 
 public class BodoIcebergHandler {
   /**
@@ -159,6 +162,53 @@ public class BodoIcebergHandler {
     }
 
     return parquetPaths;
+  }
+
+  /**
+   * Return a boolean list indicating which columns have theta sketch blobs.
+   *
+   * <p>Note: This API is exposed to Python.
+   *
+   * @return List of booleans indicating which columns have theta sketches. The booleans correspond
+   *     to the columns in the schema, not the field IDs.
+   */
+  public List<Boolean> tableColumnsHaveThetaSketches() {
+    Table table = catalog.loadTable(id);
+    Schema schema = table.schema();
+    List<Types.NestedField> columns = schema.columns();
+    List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
+    Snapshot currentSnapshot = catalog.loadTable(id).currentSnapshot();
+    if (currentSnapshot != null) {
+      // Create a mapping of field ID to column index
+      Map<Integer, Integer> fieldIdToIndex = new HashMap<>();
+      for (int i = 0; i < columns.size(); i++) {
+        fieldIdToIndex.put(columns.get(i).fieldId(), i);
+      }
+      List<StatisticsFile> statisticsFiles = table.statisticsFiles();
+      for (StatisticsFile statisticsFile : statisticsFiles) {
+        if (statisticsFile.snapshotId() == currentSnapshot.snapshotId()) {
+          for (BlobMetadata blobMetadata : statisticsFile.blobMetadata()) {
+            // We only support theta sketches with a single field that is still
+            // in the schema.
+            String type = blobMetadata.type();
+            if (!type.equals("apache-datasketches-theta-v1")) {
+              continue;
+            }
+            List<Integer> fields = blobMetadata.fields();
+            if (fields.size() != 1) {
+              continue;
+            }
+            int field = fields.get(0);
+            if (fieldIdToIndex.containsKey(field)) {
+              hasThetaSketches.set(fieldIdToIndex.get(field), true);
+            }
+          }
+          // There can only be one statistics file per snapshot
+          return hasThetaSketches;
+        }
+      }
+    }
+    return hasThetaSketches;
   }
 
   /**
@@ -295,6 +345,33 @@ public class BodoIcebergHandler {
     // Generate a random file name based upon the snapshot ID, so it's always unique.
     String statsFileName = String.format(Locale.ROOT, "%d-%s.stats", snapshotId, UUID.randomUUID());
     return String.format(Locale.ROOT, "%s/metadata/%s", tableLocation, statsFileName);
+  }
+
+  /**
+   * Get the existing statistics files for the table. This function raises an exception if the table
+   * does not have a valid statistics file as that should already be checked.
+   *
+   * <p>Note: This API is exposed to Python.
+   *
+   * @param txnID Transaction ID of transaction.
+   * @return An existing table file for snapshot of the table in the current transaction state.
+   */
+  public @Nonnull String getStatisticsFilePath(int txnID) {
+    Transaction txn = this.transactions.get(txnID);
+    Table table = txn.table();
+    Snapshot snapshot = txn.table().currentSnapshot();
+    if (snapshot == null) {
+      throw new RuntimeException(
+          "Table does not have a snapshot. Cannot get statistics file location.");
+    }
+    List<StatisticsFile> statisticsFiles = table.statisticsFiles();
+    for (StatisticsFile statisticsFile : statisticsFiles) {
+      if (statisticsFile.snapshotId() == snapshot.snapshotId()) {
+        return statisticsFile.path();
+      }
+    }
+    throw new RuntimeException(
+        "Table does not have a valid statistics file. Cannot get statistics file location.");
   }
 
   /**

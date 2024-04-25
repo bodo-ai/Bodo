@@ -470,8 +470,7 @@ std::shared_ptr<array_info> interleave_numeric_arrays(
     // and allocate a numpy array with the correct size.
     size_t rows_kept = fields_to_pick.size();
     Bodo_CTypes::CTypeEnum dtype = get_common_numeric_dtype(inner_arrs);
-    std::shared_ptr out_arr =
-        alloc_nullable_array_no_nulls(rows_kept, dtype, 0);
+    std::shared_ptr out_arr = alloc_nullable_array_no_nulls(rows_kept, dtype);
 
     // For each row, iterate across all of the fields and write them
     // to the output array at the corresponding index.
@@ -644,7 +643,7 @@ std::unique_ptr<table_info> lateral_flatten_array(
     // indices within each inner array.
     if (output_index) {
         std::shared_ptr<array_info> idx_arr =
-            alloc_nullable_array_no_nulls(exploded_size, Bodo_CTypes::INT64, 0);
+            alloc_nullable_array_no_nulls(exploded_size, Bodo_CTypes::INT64);
         for (size_t i = 0; i < explode_arr->length; i++) {
             offset_t start_offset = offset_buffer[i];
             offset_t end_offset = offset_buffer[i + 1];

@@ -8,6 +8,7 @@ from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
     gen_file_loc,
+    normalize_data_loc,
     normalize_loc,
     parse_conn_str,
 )
@@ -114,7 +115,6 @@ def start_write(
     table_name: str,
     table_loc: str,
     iceberg_schema_id: int,
-    already_exists: bool,
     pa_schema: pa.Schema,
     partition_spec: Optional[str],
     sort_order: Optional[str],
@@ -176,9 +176,8 @@ def start_write(
             print("Error during Iceberg table append: ", e)
             return None
 
-    if not already_exists:
-        # Refetch the table_loc if the table did not exist
-        table_loc = normalize_loc(handler.getTransactionTableLocation(txn_id))
+    # Refresh the table location.
+    table_loc = normalize_data_loc(handler.getTransactionTableLocation(txn_id))
 
     return (
         txn_id,
@@ -293,7 +292,9 @@ def fetch_puffin_metadata(
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
     snapshot_id = handler.getTransactionSnapshotID(transaction_id)
     sequence_number = handler.getTransactionSequenceNumber(transaction_id)
-    location = handler.getTransactionStatisticFileLocation(transaction_id)
+    location = normalize_loc(
+        handler.getTransactionStatisticFileLocation(transaction_id)
+    )
     return snapshot_id, sequence_number, location
 
 

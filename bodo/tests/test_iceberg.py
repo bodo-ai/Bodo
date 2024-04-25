@@ -2139,7 +2139,7 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
         df.to_sql(table_name, conn, db_schema)
 
     with pytest.raises(
-        AssertionError, match="Iceberg Write only supported for distributed dataframes"
+        AssertionError, match="Iceberg Write only supported for distributed DataFrames"
     ):
         bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)
 

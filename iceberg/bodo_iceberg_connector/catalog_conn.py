@@ -140,5 +140,9 @@ def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) 
 
 
 def normalize_loc(loc: str):
-    loc = loc.replace("s3a://", "s3://").removeprefix("file:")
+    return loc.replace("s3a://", "s3://").removeprefix("file:")
+
+
+def normalize_data_loc(loc: str):
+    loc = normalize_loc(loc)
     return os.path.join(loc, "data")

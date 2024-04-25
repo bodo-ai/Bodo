@@ -32,7 +32,7 @@ template <Bodo_CTypes::CTypeEnum dtype, typename T>
 std::shared_ptr<array_info> nullable_array_from_vector(
     std::vector<T> numbers, std::vector<bool> nulls) {
     size_t length = numbers.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype, 0);
+    auto result = alloc_nullable_array_no_nulls(length, dtype);
     T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
     for (size_t i = 0; i < length; i++) {
         if (nulls[i]) {
@@ -50,7 +50,7 @@ template <Bodo_CTypes::CTypeEnum dtype, typename T>
 std::shared_ptr<array_info> nullable_array_from_vector(
     std::vector<bool> booleans, std::vector<bool> nulls) {
     size_t length = booleans.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype, 0);
+    auto result = alloc_nullable_array_no_nulls(length, dtype);
     uint8_t *buffer =
         result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
     for (size_t i = 0; i < length; i++) {
@@ -606,7 +606,7 @@ static bodo::tests::suite tests([] {
                         : v8::BigInt::New(isolate, max);
                 // Create a bodo int array
                 std::shared_ptr<array_info> bodo_int_array =
-                    alloc_nullable_array_all_nulls(0, ctype, 0);
+                    alloc_nullable_array_all_nulls(0, ctype);
                 // Create a int array builder
                 std::shared_ptr<ArrayBuildBuffer> int_arr_builder =
                     std::make_shared<ArrayBuildBuffer>(bodo_int_array);
@@ -689,7 +689,7 @@ static bodo::tests::suite tests([] {
                 v8::Local<v8::Number> js_number = v8::Number::New(isolate, 2);
                 // Create a bodo int16 array
                 std::shared_ptr<array_info> bodo_int_array =
-                    alloc_nullable_array_all_nulls(0, ctype, 0);
+                    alloc_nullable_array_all_nulls(0, ctype);
                 // Create a int16 array builder
                 std::shared_ptr<ArrayBuildBuffer> int_arr_builder =
                     std::make_shared<ArrayBuildBuffer>(bodo_int_array);
@@ -782,7 +782,7 @@ static bodo::tests::suite tests([] {
             v8::Local<v8::Number> js_number = v8::Number::New(isolate, 2.2);
             // Create a bodo float64 array
             std::shared_ptr<array_info> bodo_float64_array =
-                alloc_nullable_array_all_nulls(0, Bodo_CTypes::FLOAT64, 0);
+                alloc_nullable_array_all_nulls(0, Bodo_CTypes::FLOAT64);
             // Create a float64 array builder
             std::shared_ptr<ArrayBuildBuffer> float64_arr_builder =
                 std::make_shared<ArrayBuildBuffer>(bodo_float64_array);
@@ -909,7 +909,7 @@ static bodo::tests::suite tests([] {
             v8::Local<v8::Boolean> js_bool = v8::Boolean::New(isolate, true);
             // Create a bodo nullable bool array
             std::shared_ptr<array_info> bodo_nullable_bool_array =
-                alloc_nullable_array_all_nulls(0, Bodo_CTypes::_BOOL, 0);
+                alloc_nullable_array_all_nulls(0, Bodo_CTypes::_BOOL);
             // Create a nullable bool array builder
             std::shared_ptr<ArrayBuildBuffer> nullable_bool_arr_builder =
                 std::make_shared<ArrayBuildBuffer>(bodo_nullable_bool_array);
@@ -976,7 +976,7 @@ static bodo::tests::suite tests([] {
                 v8::Date::New(context, 1620000000000).ToLocalChecked();
             // Create a bodo nullable date array
             std::shared_ptr<array_info> bodo_nullable_date_array =
-                alloc_nullable_array_all_nulls(0, Bodo_CTypes::DATE, 0);
+                alloc_nullable_array_all_nulls(0, Bodo_CTypes::DATE);
             // Create a nullable bool array builder
             std::shared_ptr<ArrayBuildBuffer> nullable_date_arr_builder =
                 std::make_shared<ArrayBuildBuffer>(bodo_nullable_date_array);

@@ -398,9 +398,14 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
                 continue;
             }
             int64_t field_idx = field_it->second;
-            // Fetch the corresponding string and add it to the collection.
-            std::string blob = get_blob(blob_idx);
-            to_deserialize[field_idx] = blob;
+            // To ensure consistent with the sketches we write ensure we support
+            // the type.
+            if (type_supports_theta_sketch(
+                    iceberg_schema->field(field_idx)->type())) {
+                // Fetch the corresponding string and add it to the collection.
+                std::string blob = get_blob(blob_idx);
+                to_deserialize[field_idx] = blob;
+            }
         }
     }
     return deserialize_theta_sketches(to_deserialize);
@@ -417,11 +422,11 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #undef CHECK_ARROW
-#define CHECK_ARROW(expr, msg)                                              \
-    if (!(expr.ok())) {                                                     \
-        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
-                              msg + " " + expr.ToString();                  \
-        throw std::runtime_error(err_msg);                                  \
+#define CHECK_ARROW(expr, msg)                                             \
+    if (!(expr.ok())) {                                                    \
+        std::string err_msg = std::string("Error in puffin I/O: ") + msg + \
+                              " " + expr.ToString();                       \
+        throw std::runtime_error(err_msg);                                 \
     }
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -526,15 +531,40 @@ PyObject *get_empty_statistics_file_metadata() {
         PyObject_GetAttrString(bic, "StatisticsFile");
     CHECK(statistics_file_class,
           "getting bodo_iceberg_connector.StatisticsFile failed");
-    PyObject *empty_call = PyObject_GetAttrString(bic, "empty");
-    CHECK(empty_call,
-          "getting bodo_iceberg_connector.StatisticsFile.empty failed");
-    PyObject *statistics_file_obj = PyObject_CallNoArgs(empty_call);
+    PyObject *statistics_file_obj =
+        PyObject_CallMethod(statistics_file_class, "empty", "");
     CHECK(statistics_file_obj, "creating empty StatisticsFile object failed");
-    Py_DECREF(empty_call);
     Py_DECREF(statistics_file_class);
     Py_DECREF(bic);
     return statistics_file_obj;
+}
+
+/**
+ * @brief Read a puffin file using an arrow file system and return the
+ * result as a string.
+ *
+ * @param puffin_loc
+ * @param bucket_region
+ * @return std::unique_ptr<PuffinFile>
+ */
+std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
+                                             std::string bucket_region) {
+    std::shared_ptr<arrow::fs::FileSystem> fs =
+        get_reader_file_system(puffin_loc, bucket_region, false);
+    arrow::fs::FileInfo puffin_info;
+    CHECK_ARROW_AND_ASSIGN(fs->GetFileInfo(puffin_loc),
+                           "Failed to get puffin file info", puffin_info);
+    // Fetch the file size
+    int64_t file_size = puffin_info.size();
+    CHECK(file_size >= 0, "Invalid file size");
+    std::shared_ptr<arrow::io::InputStream> file_stream;
+    CHECK_ARROW_AND_ASSIGN(fs->OpenInputStream(puffin_info),
+                           "Failed to open puffin file", file_stream);
+    std::string puffin_data(file_size, 0);
+    CHECK_ARROW(file_stream->Read(file_size, puffin_data.data()).status(),
+                "Failed to read puffin file");
+    CHECK_ARROW(file_stream->Close(), "Failed to close puffin file");
+    return PuffinFile::deserialize(puffin_data);
 }
 
 /**
@@ -546,15 +576,16 @@ PyObject *get_empty_statistics_file_metadata() {
  * @param sketches: the collection of theta sketches to write.
  * @param iceberg_arrow_schema_py: the schema of the table being written.
  *        This is needed to determine the field_id for each column.
+ * @param existing_puffin_file_loc: The location of an existing puffin file
+ *        to combine with the new sketches when doing an insert into. If this
+ *        is a create table it will be "".
  * @return: A StatisticsFile object with the information to forward to the
  *          Iceberg connector.
  */
-PyObject *write_puffin_file_py_entrypt(const char *puffin_file_loc,
-                                       const char *bucket_region,
-                                       int64_t snapshot_id,
-                                       int64_t sequence_number,
-                                       theta_sketch_collection_t sketches,
-                                       PyObject *iceberg_arrow_schema_py) {
+PyObject *write_puffin_file_py_entrypt(
+    const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
+    int64_t sequence_number, theta_sketch_collection_t sketches,
+    PyObject *iceberg_arrow_schema_py, const char *existing_puffin_file_loc) {
     try {
         std::shared_ptr<arrow::Schema> iceberg_schema;
         CHECK_ARROW_AND_ASSIGN(
@@ -566,13 +597,19 @@ PyObject *write_puffin_file_py_entrypt(const char *puffin_file_loc,
             compact_theta_sketches(sketches, iceberg_schema->num_fields());
         auto merged_collection =
             merge_parallel_theta_sketches(immutable_collection);
-        // TODO: if already exists, combine merged_collections with the existing
-        // theta sketches
+        std::string existing_puffin_path(existing_puffin_file_loc);
         int rank;
         int n_pes;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         if (rank == 0) {
+            if (existing_puffin_path != "") {
+                auto existing_puffin =
+                    read_puffin_file(existing_puffin_path, bucket_region);
+                merged_collection = merge_theta_sketches(
+                    {existing_puffin->to_theta_sketches(iceberg_schema),
+                     std::move(merged_collection)});
+            }
             std::string puffin_loc(puffin_file_loc);
             auto puff = PuffinFile::from_theta_sketches(
                 merged_collection, iceberg_schema, snapshot_id,
@@ -607,34 +644,6 @@ PyObject *write_puffin_file_py_entrypt(const char *puffin_file_loc,
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
-}
-
-/**
- * @brief Read a puffin file using an arrow file system and return the
- * result as a string.
- *
- * @param puffin_loc
- * @param bucket_region
- * @return std::unique_ptr<PuffinFile>
- */
-std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
-                                             std::string bucket_region) {
-    std::shared_ptr<arrow::fs::FileSystem> fs =
-        get_reader_file_system(puffin_loc, bucket_region, false);
-    arrow::fs::FileInfo puffin_info;
-    CHECK_ARROW_AND_ASSIGN(fs->GetFileInfo(puffin_loc),
-                           "Failed to get puffin file info", puffin_info);
-    // Fetch the file size
-    int64_t file_size = puffin_info.size();
-    CHECK(file_size >= 0, "Invalid file size");
-    std::shared_ptr<arrow::io::InputStream> file_stream;
-    CHECK_ARROW_AND_ASSIGN(fs->OpenInputStream(puffin_info),
-                           "Failed to open puffin file", file_stream);
-    std::string puffin_data(file_size, 0);
-    CHECK_ARROW(file_stream->Read(file_size, puffin_data.data()).status(),
-                "Failed to read puffin file");
-    CHECK_ARROW(file_stream->Close(), "Failed to close puffin file");
-    return PuffinFile::deserialize(puffin_data);
 }
 
 /**
@@ -694,5 +703,6 @@ PyMODINIT_FUNC PyInit_puffin_file(void) {
 
     return m;
 }
+#undef CHECK
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN

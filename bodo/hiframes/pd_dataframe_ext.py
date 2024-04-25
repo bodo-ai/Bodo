@@ -4383,6 +4383,7 @@ def to_sql_overload(
                 "Python to modify column names."
             )
     col_names_arr = pd.array(df.columns)
+    n_cols = len(col_names_arr)
 
     func_text = (
         "def df_to_sql(\n"
@@ -4439,7 +4440,7 @@ def to_sql_overload(
         "        bodo.io.iceberg.iceberg_write(\n"
         "            con_str, schema, name, table, col_names,\n"
         "            if_exists, _is_parallel, pyarrow_table_schema,\n"
-        "            _bodo_allow_downcasting,\n"
+        f"            {n_cols}, _bodo_allow_downcasting,\n"
         "        )\n"
     )
 
