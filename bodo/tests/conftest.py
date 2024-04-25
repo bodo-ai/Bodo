@@ -878,8 +878,17 @@ def tabular_connection():
     Returns the catalog url, warehouse name, and credential.
     """
     assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
-    return (
-        "https://api.tabular.io/ws",
-        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-        os.getenv("TABULAR_CREDENTIAL"),
-    )
+    # Unset the AWS credentials to avoid using them
+    # to confirm that the tests are getting aws credentials from Tabular
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": None,
+            "AWS_SECRET_ACCESS_KEY": None,
+            "AWS_SESSION_TOKEN": None,
+        }
+    ):
+        yield (
+            "https://api.tabular.io/ws",
+            os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
+            os.getenv("TABULAR_CREDENTIAL"),
+        )

@@ -388,6 +388,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
+    "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
       set(sources_list "${sources_list}"

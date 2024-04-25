@@ -2,6 +2,8 @@
 
 // Functions to write Bodo arrays to parquet
 
+#include <arrow/filesystem/filesystem.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
@@ -201,7 +203,8 @@ int64_t pq_write(const char *_path_name,
                  const char *bucket_region, int64_t row_group_size,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
-                 bool create_dir, std::string filename) {
+                 bool create_dir, std::string filename,
+                 arrow::fs::FileSystem *arrow_fs) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_compression", compression);
@@ -252,8 +255,18 @@ int64_t pq_write(const char *_path_name,
     if (table->num_rows() == 0) {
         return 0;
     }
-    open_outstream(fs_option, is_parallel, "parquet", dirname, fname, orig_path,
-                   &out_stream, bucket_region);
+
+    // If we already have a filesystem, use it
+    if (arrow_fs != nullptr) {
+        std::filesystem::path out_path(dirname);
+        out_path /= fname;  // append file name to output path
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            arrow_fs->OpenOutputStream(out_path);
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+    } else {
+        open_outstream(fs_option, is_parallel, "parquet", dirname, fname,
+                       orig_path, &out_stream, bucket_region);
+    }
 
     auto pool = bodo::BufferPool::DefaultPtr();
 

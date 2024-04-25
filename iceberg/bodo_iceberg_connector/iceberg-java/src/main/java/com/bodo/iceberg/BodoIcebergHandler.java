@@ -394,8 +394,13 @@ public class BodoIcebergHandler {
           catalog.newReplaceTableTransaction(
               id, schema, PartitionSpec.unpartitioned(), properties, false);
     } else {
+      // Create the table and then replace it,
+      // this is so we can fetch credentials for the table in python, otherwise we get a table not
+      // found error
+      catalog.createTable(id, schema, PartitionSpec.unpartitioned(), properties);
       txn =
-          catalog.newCreateTableTransaction(id, schema, PartitionSpec.unpartitioned(), properties);
+          catalog.newReplaceTableTransaction(
+              id, schema, PartitionSpec.unpartitioned(), properties, false);
     }
     this.transactions.put(txn.hashCode(), txn);
     return txn.hashCode();
@@ -528,5 +533,15 @@ public class BodoIcebergHandler {
       return -1;
     }
     return snapshot.snapshotId();
+  }
+
+  /**
+   * Delete the table from the catalog
+   *
+   * @param purge Whether to purge the table from the underlying storage
+   * @return Whether the table was successfully deleted
+   */
+  public boolean deleteTable(boolean purge) {
+    return catalog.dropTable(id, purge);
   }
 }

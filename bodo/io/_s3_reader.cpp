@@ -7,8 +7,16 @@
 #include <arrow/result.h>
 #include <arrow/status.h>
 
+#include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/utils/DateTime.h>
+#include <fmt/format.h>
+#include <boost/json/parser.hpp>
+#include <boost/json/value_to.hpp>
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
+#include "_s3_reader.h"
 
 // helper macro for CHECK_ARROW to add a message regarding AWS creds or S3
 // bucket region being an issue.
@@ -83,26 +91,250 @@ arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
     return options;
 }
 
+void _sleep_exponential_backoff(unsigned int n, unsigned int max = 10) {
+    sleep(std::min<unsigned int>((1 << n), max));
+}
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
 static std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_anonymous_mode = false;  // only valid when is_fs_initialized is true
 
+std::pair<const std::string, const std::string>
+IcebergRestAwsCredentialsProvider::get_warehouse_config() {
+    const std::string uri = fmt::format("{}/v1/config?warehouse={}",
+                                        this->catalog_uri, this->warehouse);
+    curl_easy_setopt(hnd, CURLOPT_URL, uri.c_str());
+
+    const std::string auth_header =
+        fmt::format("Authorization: Bearer {}", this->bearer_token);
+
+    struct curl_slist *slist1 = nullptr;
+    slist1 = curl_slist_append(slist1, auth_header.c_str());
+    curl_easy_setopt(hnd, CURLOPT_HTTPHEADER, slist1);
+
+    for (unsigned int i = 0; i < this->n_retries; i++) {
+        CURLcode res = curl_easy_perform(hnd);
+        if (res != CURLE_OK) {
+            if (i == this->n_retries - 1) {
+                throw std::runtime_error(
+                    fmt::format("Failed to get warehouse config: {}",
+                                curl_easy_strerror(res)));
+            }
+            _sleep_exponential_backoff(i);
+        } else {
+            break;
+        }
+    }
+
+    // Parse the response
+    try {
+        boost::json::parser parser;
+        parser.write(curl_buffer);
+        auto parsed_json = parser.release();
+        auto config = parsed_json.as_object();
+        auto overrides = config["overrides"].as_object();
+        const std::string prefix =
+            std::move(overrides["prefix"].as_string().c_str());
+        const std::string warehouse_token =
+            std::move(overrides["token"].as_string().c_str());
+
+        curl_slist_free_all(slist1);
+        curl_buffer.clear();
+        return {prefix, warehouse_token};
+    } catch (const std::exception &e) {
+        throw std::runtime_error(
+            fmt::format("Failed to parse warehouse config: {}", e.what()));
+    }
+}
+
+std::tuple<const std::string, const std::string, const std::string>
+IcebergRestAwsCredentialsProvider::get_aws_credentials_from_rest_catalog(
+    const std::string_view prefix, const std::string_view warehouse_token) {
+    const std::string uri =
+        fmt::format("{}/v1/{}/namespaces/{}/tables/{}", this->catalog_uri,
+                    prefix, this->schema, this->table);
+    curl_easy_setopt(hnd, CURLOPT_URL, uri.c_str());
+
+    const std::string auth_header =
+        fmt::format("Authorization: Bearer {}", warehouse_token);
+    const std::string access_delegation_header =
+        "X-Iceberg-Access-Delegation: vended_credentials";
+
+    struct curl_slist *slist1 = nullptr;
+    slist1 = curl_slist_append(slist1, auth_header.c_str());
+    slist1 = curl_slist_append(slist1, access_delegation_header.c_str());
+    curl_easy_setopt(hnd, CURLOPT_HTTPHEADER, slist1);
+    for (unsigned int i = 0; i < this->n_retries; i++) {
+        CURLcode res = curl_easy_perform(hnd);
+        if (res != CURLE_OK) {
+            if (i == this->n_retries - 1) {
+                throw std::runtime_error(
+                    fmt::format("Failed to get table credentials: {}",
+                                curl_easy_strerror(res)));
+            }
+            _sleep_exponential_backoff(i);
+        } else {
+            break;
+        }
+    }
+
+    try {
+        boost::json::parser parser;
+        parser.write(curl_buffer);
+        auto parsed_json = parser.release();
+        auto table_config = parsed_json.as_object()["config"].as_object();
+        const std::string access_key =
+            std::move(table_config["s3.access-key-id"].as_string().c_str());
+        const std::string secret_key =
+            std::move(table_config["s3.secret-access-key"].as_string().c_str());
+        const std::string session_token =
+            std::move(table_config["s3.session-token"].as_string().c_str());
+
+        curl_slist_free_all(slist1);
+        curl_buffer.clear();
+        return {access_key, secret_key, session_token};
+    } catch (const std::exception &e) {
+        throw std::runtime_error(
+            fmt::format("Failed to parse table credentials: {}", e.what()));
+    }
+}
+Aws::Auth::AWSCredentials
+IcebergRestAwsCredentialsProvider::GetAWSCredentials() {
+    if (this->credentials.IsExpiredOrEmpty()) {
+        this->Reload();
+    }
+    return this->credentials;
+}
+void IcebergRestAwsCredentialsProvider::Reload() {
+    auto [prefix, warehouse_token] = this->get_warehouse_config();
+    auto [access_key, secret_key, session_token] =
+        this->get_aws_credentials_from_rest_catalog(prefix, warehouse_token);
+    // We don't know the expiration time of the credentials, so we set it to
+    // 15 minutes by default which is the minimum from AWS
+    this->credentials = Aws::Auth::AWSCredentials(
+        access_key, secret_key, session_token,
+        Aws::Utils::DateTime(std::chrono::system_clock::now() +
+                             std::chrono::minutes(this->credential_timeout)));
+}
+
+/**
+ * @brief Ensure that Arrow S3 APIs are initialized
+ * If they are not initialized, initialize them
+ */
+void ensure_arrow_s3_initialized() {
+    if (!arrow::fs::IsS3Initialized()) {
+        arrow::fs::S3GlobalOptions g_options;
+        g_options.log_level = arrow::fs::S3LogLevel::Off;
+        arrow::Status status = arrow::fs::InitializeS3(g_options);
+        CHECK_ARROW(status, "InitializeS3", std::string(""));
+        if (!status.ok()) {
+            throw std::runtime_error("Failed to initialize Arrow S3 APIs: " +
+                                     status.ToString());
+        }
+    }
+}
+
+/**
+ * @brief Initialize an S3FileSystem instance, some options are set through
+ * environment variables
+ * @param bucket_region The region of the S3 bucket, auto-detected if empty
+ * @param anonymous Whether to use anonymous mode
+ * @param aws_credentials_provider An optional pointer to an
+ * AWSCredentialsProvider
+ * @return An S3FileSystem instance
+ */
+arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> init_s3fs_instance(
+    std::string bucket_region, bool anonymous,
+    std::unique_ptr<Aws::Auth::AWSCredentialsProvider>
+        aws_credentials_provider) {
+    // get S3FileSystem
+    arrow::fs::S3Options options;
+    if (!anonymous) {
+        options = arrow::fs::S3Options::Defaults();
+    } else {
+        options = arrow::fs::S3Options::Anonymous();
+    }
+    char *default_region = std::getenv("AWS_DEFAULT_REGION");
+
+    // Set region if one is provided, else a default region if one is
+    // provided, else let Arrow use its default region (us-east-1)
+    if (bucket_region != "") {
+        options.region = std::string(bucket_region);
+    } else if (default_region) {
+        // Arrow actually seems to look for AWS_DEFAULT_REGION
+        // variable and use other heuristics (based on AWS SDK version)
+        // to determine region if one isn't provided, but doesn't
+        // hurt to set it explicitly if env var is provided
+        options.region = std::string(default_region);
+    }
+    char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
+    if (custom_endpoint)
+        options.endpoint_override = std::string(custom_endpoint);
+    if (aws_credentials_provider.get() != nullptr) {
+        // Give ownership to S3FileSystem so the credentials_provider is
+        // deallocated when the filesystem is destroyed
+        options.credentials_provider = std::move(aws_credentials_provider);
+    }
+
+    // Set proxy options if the appropriate environment variables are set
+    options.proxy_options = get_s3_proxy_options_from_env_vars();
+
+    return arrow::fs::S3FileSystem::Make(options,
+                                         bodo::default_buffer_io_context());
+}
+
+/**
+ * @brief Create an S3FileSystem instance and return a pointer to it to python
+ * @param bucket_region The region of the S3 bucket
+ * @param anonymous Whether to use anonymous mode
+ * @param aws_credentials_provider_opt Optional pointer to an
+ * AWSCredentialsProvider, takes ownership
+ */
+void *create_s3_fs_instance_py_entry(
+    const char *bucket_region, bool anonymous,
+    numba_optional<Aws::Auth::AWSCredentialsProvider>
+        aws_credentials_provider_opt) {
+    try {
+        ensure_arrow_s3_initialized();
+        const Aws::SDKOptions options;
+        Aws::InitAPI(options);
+        std::unique_ptr<Aws::Auth::AWSCredentialsProvider>
+            aws_credentials_provider;
+        if (aws_credentials_provider_opt.has_value) {
+            aws_credentials_provider =
+                std::unique_ptr<Aws::Auth::AWSCredentialsProvider>(
+                    static_cast<Aws::Auth::AWSCredentialsProvider *>(
+                        aws_credentials_provider_opt.value));
+        } else {
+            aws_credentials_provider = std::make_unique<
+                Aws::Auth::DefaultAWSCredentialsProviderChain>();
+        }
+
+        auto result = init_s3fs_instance(bucket_region, anonymous,
+                                         std::move(aws_credentials_provider));
+        std::shared_ptr<arrow::fs::S3FileSystem> s3_fs_instance;
+        CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs_instance,
+                               std::string(""));
+        Aws::ShutdownAPI(options);
+        return new arrow::fs::S3FileSystem(*s3_fs_instance.get());
+
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
                                                    bool anonymous) {
     bool reinit_s3fs_instance;
     bool is_initialized = arrow::fs::IsS3Initialized();
+    ensure_arrow_s3_initialized();
 
     if (is_initialized && s3_fs == nullptr) {
         // always init in this case
         reinit_s3fs_instance = true;
 
     } else if (!is_initialized) {
-        // initialize S3 APIs
-        arrow::fs::S3GlobalOptions g_options;
-        g_options.log_level = arrow::fs::S3LogLevel::Off;
-        arrow::Status status = arrow::fs::InitializeS3(g_options);
-        CHECK_ARROW(status, "InitializeS3", std::string(""));
         // always init in this case
         reinit_s3fs_instance = true;
 
@@ -116,38 +348,8 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
     }
 
     if (reinit_s3fs_instance) {
-        // get S3FileSystem
-        arrow::fs::S3Options options;
-        if (!anonymous) {
-            options = arrow::fs::S3Options::Defaults();
-            is_fs_anonymous_mode = false;
-        } else {
-            options = arrow::fs::S3Options::Anonymous();
-            is_fs_anonymous_mode = true;
-        }
-        char *default_region = std::getenv("AWS_DEFAULT_REGION");
-
-        // Set region if one is provided, else a default region if one is
-        // provided, else let Arrow use its default region (us-east-1)
-        if (bucket_region != "") {
-            options.region = std::string(bucket_region);
-        } else if (default_region) {
-            // Arrow actually seems to look for AWS_DEFAULT_REGION
-            // variable and use other heuristics (based on AWS SDK version)
-            // to determine region if one isn't provided, but doesn't
-            // hurt to set it explicitly if env var is provided
-            options.region = std::string(default_region);
-        }
-        char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
-        if (custom_endpoint)
-            options.endpoint_override = std::string(custom_endpoint);
-
-        // Set proxy options if the appropriate environment variables are set
-        options.proxy_options = get_s3_proxy_options_from_env_vars();
-
-        arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result =
-            arrow::fs::S3FileSystem::Make(options,
-                                          bodo::default_buffer_io_context());
+        auto result = init_s3fs_instance(bucket_region, anonymous, nullptr);
+        is_fs_anonymous_mode = anonymous;
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs,
                                std::string(""))
     }
@@ -276,6 +478,60 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
     }
 }
 
+/**
+ * @brief Create an AWSCredentialsProvider object
+ * if any of the input arguments is empty or null, return a
+ * default AWSCredentialsProvider object
+ * otherwise, return an IcebergRestAwsCredentialsProvider object
+ * @param catalog_uri URI of the Iceberg catalog
+ * @param bearer_token Bearer token to authenticate with the Iceberg catalog
+ * @param warehouse Warehouse name
+ * @param schema Schema name
+ * @param table Table name
+ * @return an AWSCredentialsProvider
+ */
+void *create_iceberg_aws_credentials_provider_py_entry(const char *catalog_uri,
+                                                       const char *bearer_token,
+                                                       const char *warehouse,
+                                                       const char *schema,
+                                                       const char *table) {
+    const Aws::SDKOptions options;
+    try {
+        bool all_args_not_null =
+            catalog_uri && bearer_token && warehouse && schema && table;
+        bool all_args_not_empty = catalog_uri[0] && bearer_token[0] &&
+                                  warehouse[0] && schema[0] && table[0];
+
+        // Init the AWS SDK with default options
+        Aws::InitAPI(options);
+        Aws::Auth::AWSCredentialsProvider *provider;
+        {
+            if (all_args_not_null && all_args_not_empty) {
+                provider = new IcebergRestAwsCredentialsProvider(
+                    catalog_uri, bearer_token, warehouse, schema, table);
+            } else {
+                provider = new Aws::Auth::DefaultAWSCredentialsProviderChain();
+            }
+        }
+        Aws::ShutdownAPI(options);
+        return provider;
+    } catch (const std::exception &e) {
+        Aws::ShutdownAPI(options);
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+void destroy_iceberg_aws_credentials_provider_py_entry(void *provider) {
+    try {
+        if (provider != nullptr) {
+            delete static_cast<Aws::Auth::AWSCredentialsProvider *>(provider);
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+}
+
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file,
                   const char *bucket_region, bool anonymous) {
@@ -295,6 +551,12 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     // Both only ever called from C++
     SetAttrStringFromVoidPtr(m, init_s3_reader);
     SetAttrStringFromVoidPtr(m, s3_get_fs);
+
+    SetAttrStringFromVoidPtr(m,
+                             create_iceberg_aws_credentials_provider_py_entry);
+    SetAttrStringFromVoidPtr(m,
+                             destroy_iceberg_aws_credentials_provider_py_entry);
+    SetAttrStringFromVoidPtr(m, create_s3_fs_instance_py_entry);
 
     return m;
 }

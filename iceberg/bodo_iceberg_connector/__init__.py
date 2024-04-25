@@ -28,6 +28,7 @@ from bodo_iceberg_connector.write import (
     commit_write,
     fetch_puffin_metadata,
     get_schema_with_init_field_ids,
+    delete_table,
     remove_transaction,
     start_write,
 )

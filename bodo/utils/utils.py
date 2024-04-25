@@ -2,6 +2,7 @@
 """
 Collection of utility functions. Needs to be refactored in separate files.
 """
+import functools
 import hashlib
 import inspect
 import keyword
@@ -1736,6 +1737,7 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
             useful in the bcase_result=False case. Defaults to None.
     """
 
+    @functools.wraps(func)
     def inner(*args, **kwargs):
         comm = MPI.COMM_WORLD
         result = result_default
