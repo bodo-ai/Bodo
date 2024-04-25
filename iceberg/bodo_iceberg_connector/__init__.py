@@ -34,6 +34,8 @@ from bodo_iceberg_connector.write import (
 from bodo_iceberg_connector.puffin import (
     BlobMetadata,
     StatisticsFile,
+    get_old_statistics_file_path,
+    table_columns_have_theta_sketches,
 )
 
 # ----------------------- Version Import from Metadata -----------------------

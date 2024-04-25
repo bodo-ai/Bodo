@@ -694,7 +694,7 @@ class WindowAggfunc {
         if (out_indices == nullptr) {
             int64_t length = in_arr->length;
             out_indices =
-                alloc_nullable_array_all_nulls(length, Bodo_CTypes::INT32, 0);
+                alloc_nullable_array_all_nulls(length, Bodo_CTypes::INT32);
         }
     }
 

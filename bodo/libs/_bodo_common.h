@@ -1288,13 +1288,15 @@ std::unique_ptr<array_info> alloc_nullable_array(
         bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());

@@ -6,6 +6,30 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 
+/**
+ * @brief Indicate which arrow types support theta sketches.
+ *
+ * @param type The Pyarrow type
+ * @return Does the type support theta sketches?
+ */
+inline bool type_supports_theta_sketch(std::shared_ptr<arrow::DataType> type) {
+    switch (type->id()) {
+        case arrow::Type::INT32:
+        case arrow::Type::INT64:
+        case arrow::Type::DATE32:
+        case arrow::Type::TIME64:
+        case arrow::Type::TIMESTAMP:
+        case arrow::Type::LARGE_STRING:
+        case arrow::Type::LARGE_BINARY:
+        case arrow::Type::DICTIONARY:
+        case arrow::Type::FLOAT:
+        case arrow::Type::DOUBLE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // The type representing a collection of theta sketches as an array where each
 // entry could be a theta sketch or absent, indicating that a column does not
 // use a sketch. This type allows updates to be done.

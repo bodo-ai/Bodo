@@ -3,6 +3,31 @@
 #include <mpi.h>
 #include "_shuffle.h"
 
+/**
+ * @brief Indicate which arrow types enable theta sketches by default.
+ *
+ * @param type The Pyarrow type
+ * @return Do we want theta sketches enabled by default?
+ */
+inline bool is_default_theta_sketch_type(
+    std::shared_ptr<arrow::DataType> type) {
+    switch (type->id()) {
+        case arrow::Type::INT32:
+        case arrow::Type::INT64:
+        case arrow::Type::DATE32:
+        case arrow::Type::TIME64:
+        case arrow::Type::TIMESTAMP:
+        case arrow::Type::LARGE_STRING:
+        case arrow::Type::LARGE_BINARY:
+        case arrow::Type::DICTIONARY:
+            return true;
+        case arrow::Type::FLOAT:
+        case arrow::Type::DOUBLE:
+        default:
+            return false;
+    }
+}
+
 theta_sketch_collection_t init_theta_sketches(
     const std::vector<bool> &ndv_cols) {
     size_t n_cols = ndv_cols.size();
@@ -347,48 +372,21 @@ immutable_theta_sketch_collection_t deserialize_theta_sketches(
 /** Python entrypoint to create a new theta sketch collection.
  * @param iceberg_arrow_schema_py: pointer to the python object representing the
  * iceberg arrow schema of the table.
- * @param already_exists: boolean indicating whether the table already exists or
- * is being created for the first time.
+ * @param used_existing_table: boolean indicating whether we reference an
+ * existing table or not.
  * @param enable_theta_sketches: boolean indicating whether theta sketches are
  * turned on or not.
  */
 theta_sketch_collection_t init_theta_sketches_py_entrypt(
-    PyObject *iceberg_arrow_schema_py, bool already_exists,
-    bool enable_theta_sketches) {
-    std::shared_ptr<arrow::Schema> iceberg_schema;
-    CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_schema(iceberg_arrow_schema_py),
-                           "Iceberg Schema Couldn't Unwrap from Python",
-                           iceberg_schema);
-    size_t n_fields = iceberg_schema->num_fields();
-    // Turn on theta sketches for a column if the following conditions are true:
-    // 1. The column's type is one of the supported ones for theta sketches.
-    // 2. The boolean was passed in to indicate that theta sketches are enabled.
-    // 3. The boolean was passed in to indicate that this is NOT an insert into
-    // operation.
-    std::vector<bool> ndv_cols(n_fields);
-    for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
-        bool valid_theta_type;
-        switch (iceberg_schema->field(col_idx)->type()->id()) {
-            case arrow::Type::INT32:
-            case arrow::Type::INT64:
-            case arrow::Type::DATE32:
-            case arrow::Type::TIME64:
-            case arrow::Type::TIMESTAMP:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LARGE_BINARY:
-            case arrow::Type::DICTIONARY:
-                valid_theta_type = true;
-                break;
-            case arrow::Type::FLOAT:
-            case arrow::Type::DOUBLE:
-            default:
-                valid_theta_type = false;
-                break;
-        }
-        ndv_cols[col_idx] =
-            valid_theta_type && enable_theta_sketches && !already_exists;
+    array_info *theta_columns_py) {
+    try {
+        std::shared_ptr<array_info> theta_columns =
+            std::shared_ptr<array_info>(theta_columns_py);
+        return init_theta_sketches(array_to_boolean_vector(theta_columns));
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    return init_theta_sketches(ndv_cols);
 }
 
 /** Python entrypoint to fetch the NDV approximations from a theta sketch
@@ -441,7 +439,7 @@ std::unique_ptr<array_info> compute_ndv(
 
     // Convert to an array where -1 is a sentinel for null
     std::unique_ptr<array_info> arr =
-        alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64, 0);
+        alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64);
     for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
         if (local_estimates[col_idx] < 0) {
             arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx, 0);
@@ -451,6 +449,96 @@ std::unique_ptr<array_info> compute_ndv(
         }
     }
     return arr;
+}
+
+/**
+ * @brief Delete the theta sketch object. This is called by
+ * Python after the object is no longer needed.
+ *
+ * @param sketches The sketches to delete.
+ */
+void delete_theta_sketches(theta_sketch_collection_t sketches) {
+    delete[] sketches;
+}
+
+/**
+ * @brief Python entrypoint to output a boolean array indicating which columns
+ * have theta sketches enabled based on types we can support.
+ *
+ * @param iceberg_arrow_schema_py The iceberg arrow schema of the table.
+ * @return array_info* The boolean array indicating which columns have theta
+ * sketches.
+ */
+array_info *get_supported_theta_sketch_columns_py_entrypt(
+    PyObject *iceberg_arrow_schema_py) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+        size_t n_fields = iceberg_schema->num_fields();
+        std::shared_ptr<array_info> supported_columns =
+            alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::_BOOL);
+        uint8_t *out_arr = reinterpret_cast<uint8_t *>(
+            supported_columns->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+            bool valid_theta_type = type_supports_theta_sketch(
+                iceberg_schema->field(col_idx)->type());
+            SetBitTo(out_arr, col_idx, valid_theta_type);
+        }
+        return new array_info(*supported_columns);
+
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief Python entrypoint to output a boolean array indicating which columns
+ * have theta sketches enabled based on types we can support.
+ *
+ * @param iceberg_arrow_schema_py The iceberg arrow schema of the table.
+ * @return array_info* The boolean array indicating which columns have theta
+ * sketches.
+ */
+array_info *get_default_theta_sketch_columns_py_entrypt(
+    PyObject *iceberg_arrow_schema_py) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+        size_t n_fields = iceberg_schema->num_fields();
+        std::shared_ptr<array_info> supported_columns =
+            alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::_BOOL);
+        uint8_t *out_arr = reinterpret_cast<uint8_t *>(
+            supported_columns->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+            bool valid_theta_type = is_default_theta_sketch_type(
+                iceberg_schema->field(col_idx)->type());
+            SetBitTo(out_arr, col_idx, valid_theta_type);
+        }
+        return new array_info(*supported_columns);
+
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief Python entrypoint to delete the theta sketch object.
+ * This is called by Python once the object is no longer needed.
+ *
+ * @param sketches The sketches to delete.
+ */
+void delete_theta_sketches_py_entrypt(theta_sketch_collection_t sketches) {
+    try {
+        delete_theta_sketches(sketches);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 PyMODINIT_FUNC PyInit_theta_sketches(void) {
@@ -464,6 +552,9 @@ PyMODINIT_FUNC PyInit_theta_sketches(void) {
 
     SetAttrStringFromVoidPtr(m, init_theta_sketches_py_entrypt);
     SetAttrStringFromVoidPtr(m, fetch_ndv_approximations_py_entrypt);
+    SetAttrStringFromVoidPtr(m, get_supported_theta_sketch_columns_py_entrypt);
+    SetAttrStringFromVoidPtr(m, get_default_theta_sketch_columns_py_entrypt);
+    SetAttrStringFromVoidPtr(m, delete_theta_sketches_py_entrypt);
 
     return m;
 }

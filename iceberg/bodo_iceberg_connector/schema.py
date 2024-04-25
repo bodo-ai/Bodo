@@ -11,7 +11,7 @@ from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
     gen_table_loc,
-    normalize_loc,
+    normalize_data_loc,
     parse_conn_str,
 )
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
@@ -182,7 +182,7 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
     # is_required == nullable from pyarrow
     return (
         schema_id,
-        normalize_loc(table_loc),
+        normalize_data_loc(table_loc),
         iceberg_schema,
         # This has the Iceberg Field IDs embedded in the
         # fields' metadata:

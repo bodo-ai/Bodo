@@ -51,7 +51,7 @@ std::shared_ptr<array_info> make_arr(size_t n) {
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
     requires(nullable_array<ArrType>)
 std::shared_ptr<array_info> make_all_null_arr(size_t n) {
-    return alloc_nullable_array_all_nulls(n, DType, 0);
+    return alloc_nullable_array_all_nulls(n, DType);
 }
 
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>

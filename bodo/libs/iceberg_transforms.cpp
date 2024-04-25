@@ -484,8 +484,7 @@ std::shared_ptr<array_info> array_transform_void(
     tracing::Event ev("array_transform_void", is_parallel);
     // We simply return a nullable int32 array
     // with all nulls (as per the Iceberg spec)
-    return alloc_nullable_array_all_nulls(in_arr->length, Bodo_CTypes::INT32,
-                                          0);
+    return alloc_nullable_array_all_nulls(in_arr->length, Bodo_CTypes::INT32);
 }
 
 std::shared_ptr<array_info> array_transform_year(

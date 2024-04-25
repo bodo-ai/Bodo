@@ -6,9 +6,9 @@ import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.io.iceberg import table_columns_have_theta_sketches
 from bodo.io.stream_iceberg_write import (
     iceberg_writer_append_table,
-    iceberg_writer_fetch_theta,
     iceberg_writer_init,
     read_puffin_file_ndvs,
 )
@@ -17,21 +17,21 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
     get_metadata_path,
 )
-from bodo.tests.utils import _get_dist_arg, check_func, temp_env_override
+from bodo.tests.utils import _get_dist_arg, temp_env_override
 from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
 
 
-def create_iceberg_table_with_puffin_files(df, table_name, conn, db_schema):
+def write_iceberg_table_with_puffin_files(df, table_name, conn, db_schema, write_type):
     """Helper to create an Iceberg table with puffin files."""
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     batch_size = 5
 
-    def impl(df, table_name, conn, db_schema):
+    def impl(df, table_name, conn, db_schema, write_type):
         # Create the writer, including the theta sketch
         writer = iceberg_writer_init(
-            -1, conn, table_name, db_schema, col_meta, "replace"
+            -1, conn, table_name, db_schema, col_meta, write_type
         )
         # Write the values from the df using the writer in batches
         all_is_last = False
@@ -54,65 +54,19 @@ def create_iceberg_table_with_puffin_files(df, table_name, conn, db_schema):
     return impl
 
 
-def write_iceberg_table_check_theta(
-    df, table_name, conn, db_schema, if_exists, expected_theta
-):
-    """helper that writes Iceberg table using Bodo's streaming write and checks for theta values"""
-
-    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
-    batch_size = 11
-
-    def impl(df, table_name, conn, db_schema, if_exists):
-        # Create the writer, including the theta sketch
-        writer = iceberg_writer_init(
-            -1, conn, table_name, db_schema, col_meta, if_exists
-        )
-        # Write the values from the df using the writer in batches
-        all_is_last = False
-        iter_val = 0
-        T1 = bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df)
-        while not all_is_last:
-            table = bodo.hiframes.table.table_local_filter(
-                T1,
-                slice(
-                    (iter_val * batch_size),
-                    ((iter_val + 1) * batch_size),
-                ),
-            )
-            is_last = (iter_val * batch_size) >= len(df)
-            all_is_last = iceberg_writer_append_table(
-                writer, table, col_meta, is_last, iter_val
-            )
-            iter_val += 1
-        # Fetch the theta sketch values
-        result = iceberg_writer_fetch_theta(writer)
-        return result
-
-    check_func(
-        impl,
-        (df, table_name, conn, db_schema, if_exists),
-        py_output=expected_theta,
-        check_names=False,
-        check_dtype=False,
-        reset_index=True,
-        is_out_distributed=False,
-        use_dict_encoded_strings=True,
-        only_1DVar=True,
-        rtol=0.05,
-    )
-
-
 def test_iceberg_write_theta_estimates(
     iceberg_database, iceberg_table_conn, memory_leak_check
 ):
     """Test basic streaming Iceberg write with theta sketches enabled to ensure
-    that they are generated for 4/5 columns."""
+    that they are generated for 4/5 columns. This"""
     table_name = "iceberg_ctas_theta_test_table_1"
     # A: 10000 unique values, valid type (integer)
     # B: 256 unique values, valid type (integer)
     # C: 101 unique values, invalid type (float)
     # D: 1000 unique values, valid type (string)
     # E: 4365 unique values, valid type (date)
+    # The ndv estimates won't match these values exactly, but they should be close.
+    # We hardcode the expected values below.
     df = pd.DataFrame(
         {
             "A": pd.array(np.arange(10000), dtype=pd.Int64Dtype()),
@@ -125,6 +79,11 @@ def test_iceberg_write_theta_estimates(
             ],
         }
     )
+    ndvs = {1: "9897", 2: "256", 4: "1000", 5: "4366"}
+    ndvs_array = pd.array(
+        [9897.762845698651, 256.0, None, 1000.0, 4366.14457972729],
+        dtype=pd.Float64Dtype(),
+    )
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -134,12 +93,17 @@ def test_iceberg_write_theta_estimates(
     bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     try:
         with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
-            expected_theta = pd.array(
-                [10000, 256, None, 1000, 4365], dtype=pd.Float64Dtype()
+            f = write_iceberg_table_with_puffin_files(
+                df, table_name, conn, db_schema, "replace"
             )
-            write_iceberg_table_check_theta(
-                df, table_name, conn, db_schema, "replace", expected_theta
+            df = _get_dist_arg(df, var_length=True)
+            bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+            puffin_file_name = check_ndv_metadata(
+                warehouse_loc, db_schema, table_name, ndvs
             )
+            pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
+            ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
+            pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
@@ -163,6 +127,7 @@ def test_iceberg_write_disabled_theta(
             ],
         }
     )
+    ndvs = {}
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
@@ -172,25 +137,49 @@ def test_iceberg_write_disabled_theta(
     bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
     try:
         with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "0"}):
-            expected_theta = pd.array([None] * 5, dtype=pd.Float64Dtype())
-            write_iceberg_table_check_theta(
-                df, table_name, conn, db_schema, "replace", expected_theta
+            f = write_iceberg_table_with_puffin_files(
+                df, table_name, conn, db_schema, "replace"
             )
+            df = _get_dist_arg(df, var_length=True)
+            bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+            puffin_file_name = check_ndv_metadata(
+                warehouse_loc, db_schema, table_name, ndvs, num_statistics=0
+            )
+            assert (
+                puffin_file_name is None
+            ), "Found a puffin file when none should exist"
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
 
 
 @run_rank0
-def check_ndv_metadata(warehouse_loc, db_schema, table_name, expected_ndvs):
+def check_ndv_metadata(
+    warehouse_loc, db_schema, table_name, expected_ndvs, num_statistics=1
+):
     """
     Check the NDV information found in the metadata file and return the path to the
     puffin file for further testing.
     """
     metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
     statistics_lst = get_metadata_field(metadata_path, "statistics")
-    assert len(statistics_lst) == 1, "Expected only one statistics file"
-    statistics = statistics_lst[0]
+    assert (
+        len(statistics_lst) == num_statistics
+    ), f"Expected only {num_statistics} statistics file(s)"
+    if num_statistics > 1:
+        # Need to fetch the latest snapshot and iterate through them to select the match statistics file
+        latest_snapshot_id = get_metadata_field(metadata_path, "current-snapshot-id")
+        for entry in statistics_lst:
+            if entry["snapshot-id"] == latest_snapshot_id:
+                statistics = entry
+                break
+    elif num_statistics == 0:
+        assert (
+            len(statistics_lst) == 0
+        ), "Found a statistics file when none should exist"
+        return None
+    else:
+        statistics = statistics_lst[0]
     # Check the NDVs match expectations
     blob_metadata = statistics["blob-metadata"]
     seen_fields = set()
@@ -210,6 +199,13 @@ def check_ndv_metadata(warehouse_loc, db_schema, table_name, expected_ndvs):
     return statistics["statistics-path"]
 
 
+@run_rank0
+def check_no_statistics_file(warehouse_loc, db_schema, table_name):
+    metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
+    statistics_lst = get_metadata_field(metadata_path, "statistics")
+    assert len(statistics_lst) == 0, "Found a statistics file when none should exist"
+
+
 @bodo.jit
 def get_statistics_ndvs(puffin_file_name, iceberg_schema):
     return read_puffin_file_ndvs(puffin_file_name, iceberg_schema)
@@ -224,6 +220,11 @@ def get_iceberg_pyarrow_schema(conn, db_schema, table_name):
         conn, db_schema, table_name
     )
     return pyarrow_schema
+
+
+def get_theta_sketch_columns(conn, db_schema, table_name):
+    conn = remove_iceberg_prefix(conn)
+    return table_columns_have_theta_sketches(conn, db_schema, table_name)
 
 
 def test_full_iceberg_theta_write(
@@ -265,11 +266,147 @@ def test_full_iceberg_theta_write(
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
-        f = create_iceberg_table_with_puffin_files(df, table_name, conn, db_schema)
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
         df = _get_dist_arg(df, var_length=True)
-        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
         puffin_file_name = check_ndv_metadata(
             warehouse_loc, db_schema, table_name, ndvs
+        )
+        pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
+        ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
+        pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+
+
+def test_theta_sketch_detection(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test if we can correctly detect which columns have a theta sketch in the
+    connector.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
+            # B shouldn't generate theta sketches right now because we disable
+            # float by default.
+            "B": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
+            "C": pd.array(["a", "ab", "cde", "af", "eg"] * 4, dtype=object),
+            # We don't generate theta sketches for boolean types right now
+            # because the max NDV is 2.
+            "D": pd.array([True, False, None, False] * 5, dtype="boolean"),
+            "E": pd.array(
+                [datetime.date(2021, 1, 1)] * 20, dtype=pd.ArrowDtype(pa.date32())
+            ),
+        }
+    )
+    table_name = "sketch_detection_table"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
+        df = _get_dist_arg(df, var_length=True)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+        theta_sketch_columns = get_theta_sketch_columns(
+            conn,
+            db_schema,
+            table_name,
+        )
+        expected_theta_sketch_columns = pd.array(
+            [True, False, True, False, True], dtype=pd.BooleanDtype()
+        )
+        pd.testing.assert_extension_array_equal(
+            theta_sketch_columns, expected_theta_sketch_columns
+        )
+
+
+def test_no_theta_enabled_columns(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test that when we don't have any enabled columns we don't write a puffin
+    file, even if they are enabled.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
+            "B": pd.array([True, False, None, False] * 5, dtype="boolean"),
+        }
+    )
+    table_name = "no_sketch_table"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
+        df = _get_dist_arg(df, var_length=True)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+        check_no_statistics_file(warehouse_loc, db_schema, table_name)
+
+
+def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_check):
+    """
+    Test that insert into operations generate theta sketches by updating the
+    existing sketches.
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
+            # B shouldn't generate theta sketches right now because we disable
+            # float by default.
+            "B": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
+            "C": pd.array(["a", "ab", "cde", "af", "eg"] * 4, dtype=object),
+            # We don't generate theta sketches for boolean types right now
+            # because the max NDV is 2.
+            "D": pd.array([True, False, None, False] * 5, dtype="boolean"),
+            "E": pd.array(
+                [datetime.date(2021, 1, 1)] * 20, dtype=pd.ArrowDtype(pa.date32())
+            ),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.array(list(range(10, 20)), dtype=pd.Int64Dtype()),
+            "B": pd.array([1.4, 1.5] * 5, dtype=pd.Float64Dtype()),
+            "C": pd.array(["a", "af", "cfe", "afg", "egd"] * 2, dtype=object),
+            "D": pd.array([False] * 10, dtype="boolean"),
+            "E": pd.array(
+                [
+                    datetime.date(2021, 1, 2),
+                    datetime.date(2021, 1, 1),
+                    datetime.date(2021, 1, 2),
+                    datetime.date(2021, 1, 4),
+                    datetime.date(2021, 1, 3),
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(pa.date32()),
+            ),
+        }
+    )
+
+    # These are hardcoded field IDs based upon how IDs are assigned starting from 1.
+    ndvs = {1: "20", 3: "8", 5: "4"}
+    ndvs_array = pd.array([20, None, 8, None, 4], dtype=pd.Float64Dtype())
+    table_name = "insert_into_puffin_table"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+        f1 = write_iceberg_table_with_puffin_files(
+            df1, table_name, conn, db_schema, "replace"
+        )
+        df1 = _get_dist_arg(df1, var_length=True)
+        bodo.jit(distributed=["df"])(f1)(df1, table_name, conn, db_schema, "replace")
+        f2 = write_iceberg_table_with_puffin_files(
+            df1, table_name, conn, db_schema, "append"
+        )
+        df2 = _get_dist_arg(df2, var_length=True)
+        bodo.jit(distributed=["df"])(f2)(df2, table_name, conn, db_schema, "append")
+        puffin_file_name = check_ndv_metadata(
+            warehouse_loc, db_schema, table_name, ndvs, num_statistics=2
         )
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)

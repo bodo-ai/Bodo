@@ -501,6 +501,19 @@ inline std::vector<std::string> array_to_string_vector(
     return output;
 }
 
+inline std::vector<bool> array_to_boolean_vector(
+    std::shared_ptr<array_info> arr) {
+    assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+           arr->dtype == Bodo_CTypes::_BOOL);
+    std::vector<bool> output;
+    uint8_t* data = reinterpret_cast<uint8_t*>(
+        arr->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+    for (size_t i = 0; i < arr->length; i++) {
+        output.push_back(GetBit(data, i));
+    }
+    return output;
+}
+
 template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T>
 constexpr inline bool isnan_alltype(T const& val) {
