@@ -446,6 +446,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
+                    bodo.bodo_identifier_casing,
                 )
             else:
                 extra_args = (
@@ -464,6 +465,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
+                    bodo.bodo_identifier_casing,
                     *extra_args,
                 )
         except Exception as e:

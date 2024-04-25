@@ -124,6 +124,12 @@ public class RelationalAlgebraGenerator {
   public static boolean enableRuntimeJoinFilters = false;
 
   /**
+   * Which case sensitivity protocol should be used for identifiers? Currently supported modes:
+   * SNOWFLAKE (default) and SPARK.
+   */
+  public static String bodoIdentifierCasing = "SNOWFLAKE";
+
+  /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
    */
@@ -140,7 +146,8 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   private void setupPlanner(List<SchemaPlus> defaultSchemas, RelDataTypeSystem typeSystem) {
-    PlannerImpl.Config config = new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType);
+    PlannerImpl.Config config =
+        new PlannerImpl.Config(defaultSchemas, typeSystem, plannerType, bodoIdentifierCasing);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -170,7 +177,8 @@ public class RelationalAlgebraGenerator {
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters) {
+      boolean enableRuntimeJoinFilters,
+      String bodoIdentifierCasing) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -184,6 +192,7 @@ public class RelationalAlgebraGenerator {
             });
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
+    this.bodoIdentifierCasing = bodoIdentifierCasing;
     setupPlanner(defaultSchemas, typeSystem);
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
@@ -202,6 +211,7 @@ public class RelationalAlgebraGenerator {
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
+      String bodoIdentifierCasing,
       String defaultTz) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
@@ -217,6 +227,7 @@ public class RelationalAlgebraGenerator {
     BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo, 0, 0, null);
     this.typeSystem = typeSystem;
+    this.bodoIdentifierCasing = bodoIdentifierCasing;
     setupPlanner(defaultSchemas, typeSystem);
     this.hideCredentials = hideCredentials;
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
@@ -243,7 +254,8 @@ public class RelationalAlgebraGenerator {
       boolean hideCredentials,
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
-      boolean enableRuntimeJoinFilters) {
+      boolean enableRuntimeJoinFilters,
+      String bodoIdentifierCasing) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -253,6 +265,7 @@ public class RelationalAlgebraGenerator {
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.bodoIdentifierCasing = bodoIdentifierCasing;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
     final @Nullable String currentDatabase;

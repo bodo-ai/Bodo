@@ -46,6 +46,27 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
 
     companion object {
         private fun frameworkConfig(config: Config): FrameworkConfig {
+            // Set up the parser config based on which case sensitivity
+            // protocol was selected
+            var parserConfig =
+                SqlParser.Config.DEFAULT
+                    .withConformance(SqlConformanceEnum.LENIENT)
+                    .withParserFactory(SqlBodoParserImpl.FACTORY)
+            parserConfig =
+                when (config.bodoIdentifierCasing) {
+                    "SNOWFLAKE" ->
+                        parserConfig
+                            .withCaseSensitive(true)
+                            .withQuotedCasing(Casing.UNCHANGED)
+                            .withUnquotedCasing(Casing.TO_UPPER)
+                    "SPARK" ->
+                        parserConfig
+                            .withCaseSensitive(false)
+                            .withQuotedCasing(Casing.UNCHANGED)
+                            .withUnquotedCasing(Casing.UNCHANGED)
+                    else ->
+                        throw Exception("Unrecognized bodo identifier casing protocol: " + config.bodoIdentifierCasing)
+                }
             return Frameworks.newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
                 .typeSystem(config.typeSystem)
@@ -53,14 +74,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     SqlToRelConverter.config()
                         .withInSubQueryThreshold(Integer.MAX_VALUE),
                 )
-                .parserConfig(
-                    SqlParser.Config.DEFAULT
-                        .withCaseSensitive(true)
-                        .withQuotedCasing(Casing.UNCHANGED)
-                        .withUnquotedCasing(Casing.TO_UPPER)
-                        .withConformance(SqlConformanceEnum.LENIENT)
-                        .withParserFactory(SqlBodoParserImpl.FACTORY),
-                )
+                .parserConfig(parserConfig)
                 .convertletTable(
                     BodoConvertletTable(
                         StandardConvertletTableConfig(false, false),
@@ -144,5 +158,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
         val plannerType: PlannerType,
+        val bodoIdentifierCasing: String,
     )
 }

@@ -1,6 +1,6 @@
 # Identifier Case Sensitivity
 
-In BodoSQL all identifiers not wrapped in quotes are automatically converted to upper case.
+In BodoSQL, by default all identifiers not wrapped in quotes are automatically converted to upper case.
 If you are a Snowflake user who is using either the Snowflake Catalog or Table Path API, then this should not impact you and the
 rules will be the same as Snowflake (i.e. identifiers are case-insensitive unless wrapped in quotes during table creation).
 [See here for the Snowflake documentation.](https://docs.snowflake.com/en/sql-reference/identifiers-syntax#label-identifier-casing).
@@ -46,3 +46,13 @@ SELECT A as "myIdentifier" FROM table1
 If you provide DataFrames directly from Python or are using the TablePath API to load Parquet files, then please be advised
 that the column names will be required to match exactly and for ease of use we highly recommend using uppercase column names.
 
+BodoSQL's identifier handling behavior can be controlled by an environment variable `BODO_IDENTIFIER_CASING` which
+has two currently supported values:
+
+- `SNOWFLAKE` (the default)
+- `SPARK`
+
+If `BODO_IDENTIFIER_CASING` is set to `SPARK`, then a different set of case sensitivity rules will be used:
+
+- Identifiers, both with and without quotes, will not have their casing altered.
+- All identifier matching is case-insensitive.
