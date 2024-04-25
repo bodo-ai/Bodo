@@ -361,3 +361,22 @@ def commit_merge_cow(
         return False
 
     return True
+
+
+def delete_table(conn_str: str, db_name: str, table_name: str, purge: bool = True):
+    """
+    Delete an Iceberg table.
+    args:
+        conn_str: Iceberg connection string
+        db_name: Database name
+        table_name: Table name
+        purge: If true, delete data/metadata files as well
+    return: True if successful, False otherwise
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    try:
+        return handler.deleteTable(purge)
+    except Py4JError as e:
+        print("Error during Iceberg table delete: ", e)
+        return False
