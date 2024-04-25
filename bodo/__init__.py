@@ -121,6 +121,8 @@ enable_runtime_join_filters = (
 )
 # Flag used to enable creating theta sketches for columns when writing with Iceberg
 enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "0") != "0"
+# Which BodoSQL parsing identifier protocol should be used (Snowflake vs Spark)
+bodo_identifier_casing = os.environ.get("BODO_IDENTIFIER_CASING", "SNOWFLAKE")
 
 # --------------------------- End Streaming Config ---------------------------
 
