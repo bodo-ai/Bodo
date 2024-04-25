@@ -18,7 +18,7 @@ std::unique_ptr<table_info> make_array_item_testing_table() {
 
     // Create the internal array containing numbers from 0 to 9
     std::shared_ptr<array_info> inner_arr =
-        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64, 0);
+        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64);
     for (int64_t i = 0; i < 10; i++) {
         getv<int64_t>(inner_arr, i) = i;
     }
@@ -61,7 +61,7 @@ std::unique_ptr<table_info> make_array_item_testing_table() {
     dict_inner_offsets[1] = 8;
     dict_inner_offsets[2] = 12;
     std::shared_ptr<array_info> dict_indices =
-        alloc_nullable_array_no_nulls(5, Bodo_CTypes::INT32, 0);
+        alloc_nullable_array_no_nulls(5, Bodo_CTypes::INT32);
     getv<int32_t>(dict_indices, 0) = 0;
     dict_indices->set_null_bit(1, false);
     getv<int32_t>(dict_indices, 2) = 1;
@@ -81,7 +81,7 @@ std::unique_ptr<table_info> make_array_item_testing_table() {
 std::shared_ptr<array_info> get_sample_array_item() {
     // Create the internal array containing numbers from 0 to 9
     std::shared_ptr<array_info> inner_arr =
-        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64, 0);
+        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64);
     for (int64_t i = 0; i < 10; i++) {
         getv<int64_t>(inner_arr, i) = i;
     }
@@ -106,7 +106,7 @@ std::shared_ptr<array_info> get_sample_struct(size_t nfields = 1) {
     for (size_t i = 0; i < nfields; ++i) {
         // Create the child array containing numbers from 0 to 9
         std::shared_ptr<array_info> child_array =
-            alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64, 0);
+            alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64);
         for (int64_t i = 0; i < 10; i++) {
             getv<int64_t>(child_array, i) = i;
         }
@@ -135,7 +135,7 @@ std::shared_ptr<array_info> get_sample_map() {
         keys_offset_buffer[i] = i;
     }
     std::shared_ptr<array_info> values =
-        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64, 0);
+        alloc_nullable_array_no_nulls(10, Bodo_CTypes::INT64);
     for (int64_t i = 0; i < 10; i++) {
         getv<int64_t>(values, i) = i;
     }

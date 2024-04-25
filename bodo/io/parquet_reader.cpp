@@ -98,8 +98,7 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
             // use alloc_nullable_array_no_nulls since there cannot
             // be any nulls here
             this->input_file_name_col_indices_arr =
-                alloc_nullable_array_no_nulls(total_rows, Bodo_CTypes::INT32,
-                                              0);
+                alloc_nullable_array_no_nulls(total_rows, Bodo_CTypes::INT32);
         }
         // fill a range in the indices array
         fill_input_file_name_col_indices(

@@ -191,7 +191,7 @@ array_info* null_array_to_info(uint64_t n_items) {
 
     // TODO[BSE-433]: Avoid allocating the null bitmap and data array and create
     // a NULL CTYPE. This will require changes in the C++ code to support.
-    return alloc_nullable_array_all_nulls(n_items, Bodo_CTypes::_BOOL, 0)
+    return alloc_nullable_array_all_nulls(n_items, Bodo_CTypes::_BOOL)
         .release();
 }
 

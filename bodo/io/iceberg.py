@@ -59,6 +59,7 @@ from bodo.libs.array import (
     array_to_info,
     py_table_to_cpp_table,
 )
+from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
@@ -3097,6 +3098,30 @@ def commit_statistics_file(
     ev.finalize()
 
 
+@run_rank0
+def table_columns_have_theta_sketches(conn_str: str, db_name: str, table_name: str):
+    import bodo_iceberg_connector
+
+    return bodo_iceberg_connector.table_columns_have_theta_sketches(
+        conn_str, db_name, table_name
+    )
+
+
+@run_rank0
+def get_old_statistics_file_path(
+    txn_id: int, conn_str: str, db_name: str, table_name: str
+):
+    """
+    Get the old puffin file path from the connector. We know that the puffin file
+    must exist because of previous checks.
+    """
+    import bodo_iceberg_connector
+
+    return bodo_iceberg_connector.get_old_statistics_file_path(
+        txn_id, conn_str, db_name, table_name
+    )
+
+
 def register_table_merge_cow(
     conn_str: str,
     db_name: str,
@@ -3279,6 +3304,7 @@ def iceberg_write(
     if_exists,
     is_parallel,
     df_pyarrow_schema,  # Additional Param to Compare Compile-Time and Iceberg Schema
+    n_cols,
     allow_downcasting=False,
 ):  # pragma: no cover
     """
@@ -3290,8 +3316,8 @@ def iceberg_write(
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
         if_exists (str): behavior when table exists. must be one of ['fail', 'append', 'replace']
-        is_parallel (bool): whether the write is occurring on a distributed dataframe
-        df_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
+        is_parallel (bool): whether the write is occurring on a distributed DataFrame
+        df_pyarrow_schema (pyarrow.Schema): PyArrow schema of the DataFrame being written
         allow_downcasting (bool): Perform write downcasting on table columns to fit Iceberg schema
             This includes both type and nullability downcasting
 
@@ -3302,7 +3328,7 @@ def iceberg_write(
     ev = tracing.Event("iceberg_write_py", is_parallel)
     # Supporting REPL requires some refactor in the parquet write infrastructure,
     # so we're not implementing it for now. It will be added in a following PR.
-    assert is_parallel, "Iceberg Write only supported for distributed dataframes"
+    assert is_parallel, "Iceberg Write only supported for distributed DataFrames"
     with bodo.no_warning_objmode(
         txn_id="i8",
         table_loc="unicode_type",
@@ -3312,11 +3338,10 @@ def iceberg_write(
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
         mode="unicode_type",
-        already_exists="bool_",
     ):
         (
             table_loc,
-            already_exists,
+            _,
             iceberg_schema_id,
             partition_spec,
             sort_order,
@@ -3342,18 +3367,13 @@ def iceberg_write(
             table_name,
             table_loc,
             iceberg_schema_id,
-            already_exists,
             output_pyarrow_schema,
             partition_spec,
             sort_order,
             mode,
         )
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
-        conn,
-        database_schema,
-        table_name,
-        output_pyarrow_schema,
-        already_exists and mode != "replace",
+        alloc_false_bool_array(n_cols)
     )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
@@ -3390,6 +3410,8 @@ def iceberg_write(
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg write failed.")
 
+    bodo.io.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
+
     ev.finalize()
 
 
@@ -3407,6 +3429,7 @@ def iceberg_merge_cow_py(
         bodo_df, is_iceberg=True
     )
     col_names_py = pd.array(bodo_df.columns)
+    num_cols = len(col_names_py)
 
     if bodo_df.is_table_format:
         bodo_table_type = bodo_df.table_type
@@ -3432,6 +3455,7 @@ def iceberg_merge_cow_py(
                 old_fnames,
                 array_to_info(col_names_py),
                 df_pyarrow_schema,
+                num_cols,
                 is_parallel,
             )
 
@@ -3463,6 +3487,7 @@ def iceberg_merge_cow_py(
         func_text += "        old_fnames,\n"
         func_text += "        array_to_info(col_names_py),\n"
         func_text += "        df_pyarrow_schema,\n"
+        func_text += f"        {num_cols},\n"
         func_text += "        is_parallel,\n"
         func_text += "    )\n"
 
@@ -3492,12 +3517,13 @@ def iceberg_merge_cow(
     old_fnames,
     col_names,
     df_pyarrow_schema,
+    num_cols,
     is_parallel,
 ):  # pragma: no cover
     ev = tracing.Event("iceberg_merge_cow_py", is_parallel)
     # Supporting REPL requires some refactor in the parquet write infrastructure,
     # so we're not implementing it for now. It will be added in a following PR.
-    assert is_parallel, "Iceberg Write only supported for distributed dataframes"
+    assert is_parallel, "Iceberg Write only supported for distributed DataFrames"
 
     with bodo.no_warning_objmode(
         already_exists="bool_",
@@ -3506,7 +3532,6 @@ def iceberg_merge_cow(
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
         output_pyarrow_schema="pyarrow_schema_type",
-        mode="unicode_type",
     ):
         (
             table_loc,
@@ -3516,7 +3541,7 @@ def iceberg_merge_cow(
             sort_order,
             iceberg_schema_str,
             output_pyarrow_schema,
-            mode,
+            _,
         ) = get_table_details_before_write(
             table_name,
             conn,
@@ -3530,11 +3555,7 @@ def iceberg_merge_cow(
         raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
 
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
-        conn,
-        database_schema,
-        table_name,
-        output_pyarrow_schema,
-        already_exists and mode != "replace",
+        alloc_false_bool_array(num_cols)
     )
     iceberg_files_info = iceberg_pq_write(
         table_loc,
@@ -3569,6 +3590,8 @@ def iceberg_merge_cow(
         # Note that this might not always be possible since
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg MERGE INTO: write failed")
+
+    bodo.io.stream_iceberg_write.delete_theta_sketches(dummy_theta_sketch)
 
     ev.finalize()
 
@@ -3656,7 +3679,6 @@ def wrap_start_write(
     table_name: str,
     table_loc: str,
     iceberg_schema_id: int,
-    already_exists: bool,
     output_pyarrow_schema: pa.Schema,
     partition_spec: list,
     sort_order: list,
@@ -3672,11 +3694,11 @@ def wrap_start_write(
     table_name (str): name of iceberg table
     table_loc (str): location of the data/ folder in the warehouse
     iceberg_schema_id (int): iceberg schema id
-    already_exists (bool): whether the table already exists
     output_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
     partition_spec (list): partition spec
     sort_order (list): sort order
-    mode (str): write mode
+    mode (str): What write operation we are doing. This must be one of
+        ['create', 'append', 'replace']
     """
     import bodo_iceberg_connector as connector
 
@@ -3686,7 +3708,6 @@ def wrap_start_write(
         table_name,
         table_loc,
         iceberg_schema_id,
-        already_exists,
         output_pyarrow_schema,
         partition_spec,
         sort_order,

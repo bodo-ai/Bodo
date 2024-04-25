@@ -7,7 +7,7 @@ from numba.extending import intrinsic, models, overload, register_model
 
 import bodo
 from bodo.libs.array import (
-    ArrayInfoType,
+    array_info_type,
     array_to_info,
     delete_info,
     info_to_array,
@@ -221,7 +221,7 @@ def _execute_javascript_udf(typing_context, js_func, js_func_args):  # pragma: n
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = ArrayInfoType()(js_func, js_func_args)
+    sig = array_info_type(js_func, js_func_args)
     return sig, codegen
 
 
