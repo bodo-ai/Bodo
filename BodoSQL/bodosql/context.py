@@ -1170,6 +1170,7 @@ class BodoSQLContext:
                 bodo.enable_snowflake_iceberg,
                 bodo.enable_timestamp_tz,
                 bodo.enable_runtime_join_filters,
+                bodo.bodo_identifier_casing,
             )
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
@@ -1182,6 +1183,7 @@ class BodoSQLContext:
             bodo.enable_snowflake_iceberg,
             bodo.enable_timestamp_tz,
             bodo.enable_runtime_join_filters,
+            bodo.bodo_identifier_casing,
             *extra_args,
         )
         return generator
