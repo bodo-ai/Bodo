@@ -254,10 +254,9 @@ class JoinStateType(types.Type):
         return types
 
     @staticmethod
-    def _derive_common_key_type(
-        input_types: list[types.ArrayCompatible],
-    ) -> types.ArrayCompatible:
-        """Derive a common key type for a list of array input types.
+    def _derive_common_key_type(input_types: list[types.ArrayCompatible]):
+        """
+        Derive a common key type for a list of array input types.
         This is used for unifying the build/probe key types and for
         unifying the key types for duplicated columns.
 
@@ -276,33 +275,75 @@ class JoinStateType(types.Type):
         # Make sure arrays have the same nullability.
         if any([nullable for nullable in are_nullable]):
             input_types = [to_nullable_type(t) for t in input_types]
+
         # Check if all array types are the same.
         if all([t == input_types[0] for t in input_types]):
-            common_type = input_types[0]
-        else:
-            are_bodosql_integer_arr_types = [
-                is_bodosql_integer_arr_type(t) for t in input_types
-            ]
-            if all(are_bodosql_integer_arr_types):
-                # TODO: Future optimization. If the types don't match exactly and
-                # we don't have an outer join on the larger bitwidth side, we don't
-                # have to upcast and can instead filter + downcast. In particular we
-                # know that any type that doesn't fit in the smaller array type
-                # cannot have a match.
-                #
-                # Note: If we have an outer join we can't do this because we need to
-                # preserve the elements without matches.
-                #
-                common_type = get_common_bodosql_integer_arr_type(input_types)
-            else:
-                # If the inputs are all string or dict, return string.
-                valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
-                if all([t in valid_str_types for t in input_types]):
-                    common_type = bodo.string_array_type
-                else:
-                    raise BodoError(
-                        "StreamingHashJoin: Build and probe keys must have the same types"
+            return input_types[0]
+
+        if isinstance(input_types[0], bodo.MapArrayType):
+            assert all(
+                [isinstance(t, bodo.MapArrayType) for t in input_types]
+            ), f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
+            common_key_arr_type = JoinStateType._derive_common_key_type(
+                [t.key_arr_type for t in input_types]
+            )
+            common_value_arr_types = JoinStateType._derive_common_key_type(
+                [t.value_arr_type for t in input_types]
+            )
+            return bodo.MapArrayType(common_key_arr_type, common_value_arr_types)
+
+        if isinstance(input_types[0], bodo.ArrayItemArrayType):
+            assert all(
+                [isinstance(t, bodo.ArrayItemArrayType) for t in input_types]
+            ), f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
+
+            common_element_type = JoinStateType._derive_common_key_type(
+                [t.dtype for t in input_types]
+            )
+            return bodo.ArrayItemArrayType(common_element_type)
+
+        if isinstance(input_types[0], bodo.StructArrayType):
+            assert all(
+                [isinstance(t, bodo.StructArrayType) for t in input_types]
+            ), f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
+            n_fields = len(input_types[0].data)
+            assert all([len(t.data) == n_fields for t in input_types])
+            field_names = input_types[0].names
+            assert all([t.names == field_names for t in input_types])
+
+            common_field_types = []
+            for i in range(len(input_types[0].data)):
+                common_field_types.append(
+                    JoinStateType._derive_common_key_type(
+                        [t.data[i] for t in input_types]
                     )
+                )
+            return bodo.StructArrayType(tuple(common_field_types), field_names)
+
+        # Handle non-nested types:
+        are_bodosql_integer_arr_types = [
+            is_bodosql_integer_arr_type(t) for t in input_types
+        ]
+        if all(are_bodosql_integer_arr_types):
+            # TODO: Future optimization. If the types don't match exactly and
+            # we don't have an outer join on the larger bitwidth side, we don't
+            # have to upcast and can instead filter + downcast. In particular we
+            # know that any type that doesn't fit in the smaller array type
+            # cannot have a match.
+            #
+            # Note: If we have an outer join we can't do this because we need to
+            # preserve the elements without matches.
+            #
+            common_type = get_common_bodosql_integer_arr_type(input_types)
+        else:
+            # If the inputs are all string or dict, return string.
+            valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+            if all([t in valid_str_types for t in input_types]):
+                common_type = bodo.string_array_type
+            else:
+                raise BodoError(
+                    f"StreamingHashJoin: Build and probe keys must have the same types. {input_types=}"
+                )
         return common_type
 
     @cached_property
