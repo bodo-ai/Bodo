@@ -331,6 +331,23 @@ def get_iceberg_type_info(
     return (col_names, bodo_types, pyarrow_schema)
 
 
+def is_snowflake_managed_iceberg_wh(con: str) -> bool:
+    """
+    Does the connection string correspond to a Snowflake-managed
+    Iceberg catalog.
+
+    Args:
+        con (str): Iceberg connection string
+
+    Returns:
+        bool: Whether it's a Snowflake-managed Iceberg catalog.
+    """
+    import bodo_iceberg_connector
+
+    catalog_type, _ = run_rank0(bodo_iceberg_connector.parse_iceberg_conn_str)(con)
+    return catalog_type == "snowflake"
+
+
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters: str | None
 ) -> tuple[list[str], list[str]]:
@@ -1669,14 +1686,14 @@ def get_row_counts_for_schema_group(
             # file schema isn't compatible with the read_schema.
             file_schema = frag.metadata.schema.to_arrow_schema()
             try:
-                t0 = time.time()
+                t0 = time.monotonic()
                 # We use the original read-schema from the schema group
                 # here (i.e. without the dictionary types) since that's
                 # what the file is supposed to contain.
                 validate_file_schema_compatible_with_read_schema(
                     file_schema, schema_group.read_schema
                 )
-                file_schema_validation_time += time.time() - t0
+                file_schema_validation_time += time.monotonic() - t0
             except Exception as e:
                 msg = f"Schema of file {fpath} is not compatible.\n" + str(e)
                 raise BodoError(msg)
@@ -1687,13 +1704,13 @@ def get_row_counts_for_schema_group(
             # pa.dictionary fields for the dictionary encoded fields. This is
             # important for correctness since this is what we will do during
             # the actual read (see 'get_scanner_for_schema_group').
-            t0 = time.time()
+            t0 = time.monotonic()
             row_count = frag.scanner(
                 schema=read_schema,
                 filter=schema_group.expr_filter,
                 use_threads=True,
             ).count_rows()
-            ds_scan_time += time.time() - t0
+            ds_scan_time += time.monotonic() - t0
             row_counts.append(row_count)
             n_rgs += frag.num_row_groups
             total_sizes_bytes += sum(rg.total_byte_size for rg in frag.row_groups)
@@ -2187,7 +2204,7 @@ def get_scanner_for_schema_group(
             Defaults to None.
 
     Returns:
-        tuple[Scanner, int]:
+        tuple[Scanner, pa.Schema, int]:
             - Arrow Dataset Scanner for the files in the
             schema group.
             - The schema that the Dataset Scanner will use

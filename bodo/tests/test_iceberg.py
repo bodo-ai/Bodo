@@ -412,10 +412,20 @@ def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check)
 
 
 @pytest.mark.slow
-def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
+@pytest.mark.parametrize("dict_encode_in_bodo", [True, False])
+def test_dict_encoded_string_arrays(
+    iceberg_database, iceberg_table_conn, dict_encode_in_bodo
+):
     """
     Test reading string arrays as dictionary-encoded when specified by the user or
     determined from properties of table data.
+
+    dict_encode_in_bodo: Whether the dict-encoding should be performed by
+        Bodo instead of Arrow. This is used to test the read behavior
+        on Snowflake-managed Iceberg tables where we do the dict-encoding
+        ourselves after reading the columns as string arrays because of
+        Arrow gaps in being able to read files written by Snowflake
+        as dict-encoded columns directly.
     """
 
     table_name = "SIMPLE_DICT_ENCODED_STRING"
@@ -455,7 +465,9 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
     # read all columns and determine dict-encoding automatically
     def impl1(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_dict_encode_in_bodo=dict_encode_in_bodo
+        )
         return df
 
     check_func(impl1, (table_name, conn, db_schema), py_output=df)
@@ -468,7 +480,9 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
     # test dead column elimination with dict-encoded columns
     def impl2(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_dict_encode_in_bodo=dict_encode_in_bodo
+        )
         return df[["B", "D"]]
 
     check_func(impl2, (table_name, conn, db_schema), py_output=df[["B", "D"]])
@@ -482,7 +496,11 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     # test _bodo_read_as_dict (force non-dict to dict)
     def impl3(table_name, conn, db_schema):
         df = pd.read_sql_table(
-            table_name, conn, db_schema, _bodo_read_as_dict=["C", "E"]
+            table_name,
+            conn,
+            db_schema,
+            _bodo_read_as_dict=["C", "E"],
+            _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
         )  # type: ignore
         return df[["B", "C", "D", "E"]]
 
@@ -498,7 +516,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     with pytest.raises(BodoError, match=r"must be a constant list of column names"):
 
         def impl4(table_name, conn, db_schema):
-            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True)  # type: ignore
+            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True, _bodo_dict_encode_in_bodo=dict_encode_in_bodo)  # type: ignore
             return df
 
         bodo.jit(impl4)(table_name, conn, db_schema)
@@ -507,7 +525,11 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
         def impl5(table_name, conn, db_schema):
             df = pd.read_sql_table(
-                table_name, conn, db_schema, _bodo_read_as_dict=["H"]
+                table_name,
+                conn,
+                db_schema,
+                _bodo_read_as_dict=["H"],
+                _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
             )  # type: ignore
             return df
 
@@ -517,7 +539,11 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
         def impl6(table_name, conn, db_schema):
             df = pd.read_sql_table(
-                table_name, conn, db_schema, _bodo_read_as_dict=["D"]
+                table_name,
+                conn,
+                db_schema,
+                _bodo_read_as_dict=["D"],
+                _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
             )  # type: ignore
             return df
 
@@ -528,7 +554,8 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
 
     # create a new table since CachingCatalog inside Bodo can't see schema changes done
     # by Spark code below
-    table_name = "SIMPLE_DICT_ENCODED_STRING2"
+    suffix = "1" if dict_encode_in_bodo else "2"
+    table_name = f"SIMPLE_DICT_ENCODED_STRING2_{suffix}"
     if bodo.get_rank() == 0:
         create_iceberg_table(df, sql_schema, table_name, spark)
     bodo.barrier()
@@ -579,11 +606,163 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     bodo.barrier()
 
     def impl7(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_dict_encode_in_bodo=dict_encode_in_bodo
+        )
         df = df[df.F >= 10000]
         return df
 
     check_func(impl7, (table_name, conn, db_schema), py_output=df)
+
+
+@pytest.mark.parametrize("dict_encode_in_bodo", [True, False])
+def test_dict_encoded_string_arrays_streaming_read(
+    iceberg_database,
+    iceberg_table_conn,
+    dict_encode_in_bodo,
+):
+    """
+    Similar to the previous test, but using the streaming code path.
+    The error-checking code paths are common between streaming and non-streaming,
+    so we skip them here.
+    """
+    table_name = "SIMPLE_DICT_ENCODED_STRING_STREAMING"
+
+    db_schema, warehouse_loc = iceberg_database(table_name)
+
+    # Write a simple dataset with strings (repetitive/non-repetitive) and non-strings
+    df = pd.DataFrame(
+        {
+            # non-string
+            "A": np.arange(2000) + 1.1,
+            # should be dictionary encoded
+            "B": ["awe", "awv2"] * 1000,
+            # should not be dictionary encoded
+            "C": [str(i) for i in range(2000)],
+            # non-string column
+            "D": np.arange(2000) + 3,
+            # should be dictionary encoded
+            "E": ["r32"] * 2000,
+            # non-string column
+            "F": np.arange(2000),
+        }
+    )
+    sql_schema = [
+        ("A", "double", True),
+        ("B", "string", False),
+        ("C", "string", True),
+        ("D", "long", False),
+        ("E", "string", True),
+        ("F", "long", True),
+    ]
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+        create_iceberg_table(df, sql_schema, table_name, spark)
+
+    setup()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E", "F"))
+
+    def impl1(table_name, conn, db_schema):
+        is_last_global = False
+        reader = pd.read_sql_table(
+            table_name,
+            conn,
+            db_schema,
+            _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
+            # TODO Investigate the failure when we set this to 64 (including on develop)
+            _bodo_chunksize=4000,
+        )  # type: ignore
+        __bodo_streaming_batches_table_builder_1 = (
+            bodo.libs.table_builder.init_table_builder_state(-1)
+        )
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            bodo.libs.table_builder.table_builder_append(
+                __bodo_streaming_batches_table_builder_1, table
+            )
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        out_table = bodo.libs.table_builder.table_builder_finalize(
+            __bodo_streaming_batches_table_builder_1
+        )
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl1,
+            (table_name, conn, db_schema),
+            py_output=df,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(stream, "Columns ['B', 'E'] using dictionary encoding")
+
+    # test _bodo_read_as_dict (force non-dict to dict)
+    col_meta = bodo.utils.typing.ColNamesMetaType(("B", "C", "D", "E"))
+
+    def impl2(table_name, conn, db_schema):
+        is_last_global = False
+        reader = pd.read_sql_table(
+            table_name,
+            conn,
+            db_schema,
+            _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
+            _bodo_chunksize=4000,
+            _bodo_read_as_dict=["C", "E"],
+            _bodo_columns=["B", "C", "D", "E"],
+        )  # type: ignore
+        __bodo_streaming_batches_table_builder_1 = (
+            bodo.libs.table_builder.init_table_builder_state(-1)
+        )
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            bodo.libs.table_builder.table_builder_append(
+                __bodo_streaming_batches_table_builder_1, table
+            )
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        out_table = bodo.libs.table_builder.table_builder_finalize(
+            __bodo_streaming_batches_table_builder_1
+        )
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl2,
+            (table_name, conn, db_schema),
+            py_output=df[["B", "C", "D", "E"]],
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(stream, "Columns ['B', 'C', 'E'] using dictionary encoding")
 
 
 @pytest.mark.slow
