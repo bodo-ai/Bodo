@@ -88,6 +88,6 @@
 
 - name: BODO | Clean /tmp Folder
   command:
-    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions"
+    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions /tmp/bodo-platform-ipyparallel-kernel"
   tags:
     - bodo
