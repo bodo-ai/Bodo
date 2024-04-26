@@ -358,8 +358,10 @@ class IcebergParquetReader : public ArrowReader {
         this->curr_reader = nullptr;
     }
 
-    void init_iceberg_reader(std::span<int32_t> str_as_dict_cols) {
-        ArrowReader::init_arrow_reader(str_as_dict_cols, false);
+    void init_iceberg_reader(std::span<int32_t> str_as_dict_cols,
+                             bool create_dict_from_string) {
+        ArrowReader::init_arrow_reader(str_as_dict_cols,
+                                       create_dict_from_string);
         // Initialize the scanners.
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
@@ -381,9 +383,13 @@ class IcebergParquetReader : public ArrowReader {
             this->dict_builders =
                 std::vector<std::shared_ptr<DictionaryBuilder>>(
                     selected_fields.size());
+
+            // This will create dict-builders for the nested types. The target
+            // schema doesn't have dict-encoding information, so this will
+            // essentially create nullptrs.
             for (size_t i = 0; i < selected_fields.size(); i++) {
                 const std::shared_ptr<arrow::Field>& field =
-                    schema->field(selected_fields[i]);
+                    this->schema->field(selected_fields[i]);
                 this->dict_builders[i] = create_dict_builder_for_array(
                     arrow_type_to_bodo_data_type(field->type()), false);
             }
@@ -395,9 +401,9 @@ class IcebergParquetReader : public ArrowReader {
                 str_as_dict_cols_map[selected_fields[i]] = i;
             }
 
-            // TODO: Remove. This step is unnecessary if we can guarantee that
-            // the arrow schema always specifies if the fields should be
-            // dictionary.
+            // Create dict builders for columns we will be reading
+            // with dict-encoding (either directly from Arrow or doing the
+            // dict-encoding ourselves).
             for (int str_as_dict_col : str_as_dict_cols) {
                 int32_t index = str_as_dict_cols_map[str_as_dict_col];
                 this->dict_builders[index] = create_dict_builder_for_array(
@@ -429,14 +435,22 @@ class IcebergParquetReader : public ArrowReader {
             throw std::runtime_error("python");
         }
 
-        PyObject* str_as_dict_cols_py =
-            PyList_New(this->str_as_dict_colnames.size());
-        size_t i = 0;
-        for (auto field_name : this->str_as_dict_colnames) {
-            // PyList_SetItem steals the reference created by
-            // PyUnicode_FromString.
-            PyList_SetItem(str_as_dict_cols_py, i++,
-                           PyUnicode_FromString(field_name.c_str()));
+        // If we will be doing the conversion to dict-encoded strings ourselves
+        // (e.g. when reading Snowflake-managed Iceberg tables), then we can
+        // simply pass str_as_dict_cols_py as an empty list for the purposes of
+        // getting the dataset object.
+        PyObject* str_as_dict_cols_py;
+        if (this->create_dict_encoding_from_strings) {
+            str_as_dict_cols_py = PyList_New(0);
+        } else {
+            str_as_dict_cols_py = PyList_New(this->str_as_dict_colnames.size());
+            size_t i = 0;
+            for (auto field_name : this->str_as_dict_colnames) {
+                // PyList_SetItem steals the reference created by
+                // PyUnicode_FromString.
+                PyList_SetItem(str_as_dict_cols_py, i++,
+                               PyUnicode_FromString(field_name.c_str()));
+            }
         }
 
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
@@ -672,18 +686,26 @@ class IcebergParquetReader : public ArrowReader {
                            PyLong_FromLong(this->pieces_schema_group_idx[i]));
         }
 
-        PyObject* str_as_dict_cols_py =
-            PyList_New(this->str_as_dict_colnames.size());
-        size_t i = 0;
-        for (auto field_name : this->str_as_dict_colnames) {
-            // PyList_SetItem steals the reference created by
-            // PyUnicode_FromString.
-            PyList_SetItem(str_as_dict_cols_py, i++,
-                           PyUnicode_FromString(field_name.c_str()));
+        // If we will be doing the conversion to dict-encoded strings ourselves
+        // (e.g. when reading Snowflake-managed Iceberg tables), then we can
+        // simply pass str_as_dict_cols_py as an empty list for the purposes of
+        // getting the Arrow scanners.
+        PyObject* str_as_dict_cols_py;
+        if (this->create_dict_encoding_from_strings) {
+            str_as_dict_cols_py = PyList_New(0);
+        } else {
+            str_as_dict_cols_py = PyList_New(this->str_as_dict_colnames.size());
+            size_t i = 0;
+            for (auto field_name : this->str_as_dict_colnames) {
+                // PyList_SetItem steals the reference created by
+                // PyUnicode_FromString.
+                PyList_SetItem(str_as_dict_cols_py, i++,
+                               PyUnicode_FromString(field_name.c_str()));
+            }
         }
 
         PyObject* selected_fields_py = PyList_New(selected_fields.size());
-        i = 0;
+        size_t i = 0;
         for (int field_num : selected_fields) {
             // PyList_SetItem steals the reference created by
             // PyLong_FromLong.
@@ -883,20 +905,30 @@ class IcebergParquetReader : public ArrowReader {
  * @param filter_scalars : Python list of tuples of the form
  * (var_name: str, var_value: Any). These are the scalars to plug into
  * the Arrow expression filters.
- * @param selected_fields : Fields to select from the parquet dataset,
+ * @param _selected_fields : Fields to select from the parquet dataset,
  * using the field ID of Arrow schema. Note that this *DOES* include
  * partition columns (Iceberg has hidden partitioning, so they *ARE* part of the
  * parquet files)
  * NOTE: selected_fields must be sorted
  * @param num_selected_fields : length of selected_fields array
- * @param is_nullable : array of booleans that indicates which of the
+ * @param _is_nullable : array of booleans that indicates which of the
  * selected fields is nullable. Same length and order as selected_fields.
  * @param pyarrow_schema : PyArrow schema (instance of pyarrow.lib.Schema)
  * determined at compile time. Used for schema evolution detection, and for
  * evaluating transformations in the future.
- * @param is_merge_into : Is this table loaded as the target table for merge
+ * @param _str_as_dict_cols Indices of fields that must be read as dict-encoded
+ * strings.
+ * @param num_str_as_dict_cols Number of fields to read as dict-encoded strings.
+ * @param create_dict_from_string Whether we should read the fields as strings
+ * and then dict-encode them ourselves in Bodo (e.g. similar to the
+ * SnowflakeReader) or should we let Arrow return dict-encoded arrays directly.
+ * The former is useful when reading Snowflake-managed Iceberg tables since the
+ * parquet files written by Snowflake are sometimes encoded in a way that Arrow
+ * cannot convert to dict-encoded columns and can error out.
+ * @param is_merge_into_cow : Is this table loaded as the target table for merge
  * into with COW. If True we will only apply filters that limit the number of
  * files and cannot filter rows within a file.
+ * @param[out] total_rows_out Total number of rows read (globally).
  * @param[out] file_list_ptr : Additional output of the Python list of read-in
  * files. This is currently only used for MERGE INTO COW
  * @param[out] snapshot_id_ptr : Additional output of current snapshot id
@@ -909,8 +941,8 @@ table_info* iceberg_pq_read_py_entry(
     const char* expr_filter_f_str_, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
-    int32_t num_str_as_dict_cols, bool is_merge_into_cow,
-    int64_t* total_rows_out, PyObject** file_list_ptr,
+    int32_t num_str_as_dict_cols, bool create_dict_from_string,
+    bool is_merge_into_cow, int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr) {
     try {
         std::vector<int> selected_fields(
@@ -932,7 +964,7 @@ table_info* iceberg_pq_read_py_entry(
             selected_fields, is_nullable, pyarrow_schema, -1, -1);
 
         // Initialize reader
-        reader.init_iceberg_reader(str_as_dict_cols);
+        reader.init_iceberg_reader(str_as_dict_cols, create_dict_from_string);
 
         // MERGE INTO COW Output Handling
         if (is_merge_into_cow) {
@@ -1020,7 +1052,8 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
     const char* expr_filter_f_str, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
-    int32_t num_str_as_dict_cols, int64_t batch_size, int64_t op_id) {
+    int32_t num_str_as_dict_cols, bool create_dict_from_string,
+    int64_t batch_size, int64_t op_id) {
     try {
         std::vector<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
@@ -1035,7 +1068,7 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
             selected_fields, is_nullable, pyarrow_schema, batch_size, op_id);
 
         // Initialize reader
-        reader->init_iceberg_reader(str_as_dict_cols);
+        reader->init_iceberg_reader(str_as_dict_cols, create_dict_from_string);
 
         return reinterpret_cast<ArrowReader*>(reader);
 

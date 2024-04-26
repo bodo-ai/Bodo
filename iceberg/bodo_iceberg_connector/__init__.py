@@ -18,6 +18,7 @@ from bodo_iceberg_connector.schema import (
     get_iceberg_typing_schema,
     get_typing_info,
 )
+from bodo_iceberg_connector.catalog_conn import parse_conn_str as parse_iceberg_conn_str
 from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
 from bodo_iceberg_connector.table_info import (
     bodo_connector_get_current_snapshot_id,
