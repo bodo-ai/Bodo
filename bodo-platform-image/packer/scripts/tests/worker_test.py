@@ -189,7 +189,7 @@ def test_connectors(connector, pip_packages, conda_packages):
         ("bodo", os.environ["BODO_VERSION"]),
         ("bodo-iceberg-connector", os.environ["ICEBERG_VERSION"]),
         ("bodosql", os.environ["BODOSQL_VERSION"]),
-        ("bodo-platform-ipyparallel-kernel", "2.4.0"),
+        ("bodo-platform-ipyparallel-kernel", "2.0.0"),
         ("ipyparallel", "8.6.1"),
         ("ipywidgets", "8.1.1"),
         ("bodo-azurefs-sas-token-provider", "1.0"),
