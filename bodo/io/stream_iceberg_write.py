@@ -1379,7 +1379,7 @@ def overload_convert_to_snowflake_iceberg_table(
     """JIT wrapper around convert_to_snowflake_iceberg_table_py above"""
 
     def impl(
-        snowflake_conn, iceberg_base, iceberg_volume, table_name
+        snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
     ):  # pragma: no cover
         with bodo.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
