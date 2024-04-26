@@ -45,6 +45,7 @@ class SnowflakeIcebergWriteTarget(
                 // Note: This is the name of the volume, not the path or connection string.
                 Expr.StringLiteral(icebergVolume),
                 Expr.StringLiteral(tableName),
+                Expr.BooleanLiteral(ifExistsBehavior == IfExistsBehavior.REPLACE),
             )
         return Op.Stmt(expr)
     }
