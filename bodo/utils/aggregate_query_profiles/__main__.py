@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from bodo.utils.aggregate_logs import aggregate
+from bodo.utils.aggregate_query_profiles import aggregate
 
 # The pragma: no cover comments are used to skip coverage because this is just a
 # wraper around the functionality in __init__.py, which is covered by tests.
