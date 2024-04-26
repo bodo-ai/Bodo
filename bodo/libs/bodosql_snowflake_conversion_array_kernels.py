@@ -12,10 +12,12 @@ from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.timestamptz_ext import TimestampTZ
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
+    BodoError,
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
     is_literal_type,
+    is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
@@ -1838,6 +1840,68 @@ def make_to_number(_try):
 
 try_to_number = make_to_number(True)
 to_number = make_to_number(False)
+
+
+def numeric_to_decimal(expr, precision, scale, null_on_error):  # pragma: no cover
+    pass
+
+
+@overload(numeric_to_decimal, no_unliteral=True)
+def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
+    """
+    Cast a numeric expression (either integer or decimal) array or scalar
+    to a decimal type with the given precision and scale. If the leading digits
+    don't fit in the precision, the function will throw an error if null_on_error is False,
+    otherwise it will return None for any invalid values.
+
+    Note: This function shouldn't be called directly from BodoSQL because it doesn't
+    have optional handling so it should be called by to_number.
+
+    Args:
+        expr (numeric array or scalar): the input numeric array or scalar
+        precision (positive integer literal): the precision of the decimal type
+        scale (positive integer literal): the scale of the decimal type
+        null_on_error (bool literal): if True, return None for invalid values, otherwise throw an error
+
+    Returns:
+        decimal array or scalar: the converted decimal array or scalar
+    """
+    if not is_overload_constant_int(precision):
+        raise_bodo_error("numeric_to_decimal: prec must be a literal value if provided")
+    if not is_overload_constant_int(scale):
+        raise_bodo_error(
+            "numeric_to_decimal: scale must be a literal value if provided"
+        )
+    if not is_overload_constant_bool(null_on_error):
+        raise_bodo_error("numeric_to_decimal: null_on_error must be a literal value")
+
+    # Note: We don't use gen_vectorized here because there are optimized
+    # array kernels in C++.
+    if is_overload_none(expr):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return None
+
+        return impl
+    elif isinstance(expr, bodo.DecimalArrayType):
+
+        def impl(expr, precision, scale, null_on_error):
+            return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_array(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+    elif isinstance(expr, bodo.Decimal128Type):
+
+        def impl(expr, precision, scale, null_on_error):
+            return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_scalar(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+
+    else:
+        raise BodoError("numeric_to_decimal: invalid input type")
 
 
 @numba.generated_jit(nopython=True)

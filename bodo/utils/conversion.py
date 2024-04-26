@@ -20,7 +20,6 @@ from bodo.libs.array_item_arr_ext import (
 )
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_dtype
-from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.str_arr_ext import get_utf8_size
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
@@ -218,7 +217,7 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
 
     if not is_overload_none(scalar_to_arr_len):
-        if isinstance(data, Decimal128Type):
+        if isinstance(data, bodo.Decimal128Type):
             precision = data.precision
             scale = data.scale
 

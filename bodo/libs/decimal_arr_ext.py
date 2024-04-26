@@ -37,6 +37,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import decimal_ext
+from bodo.utils.typing import raise_bodo_error, unwrap_typeref
 
 ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
 ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
@@ -60,6 +61,22 @@ ll.add_symbol(
 ll.add_symbol(
     "arrow_compute_cmp_decimal_decimal_py_entry",
     decimal_ext.arrow_compute_cmp_decimal_decimal_py_entry,
+)
+ll.add_symbol(
+    "cast_decimal_to_decimal_scalar_safe",
+    decimal_ext.cast_decimal_to_decimal_scalar_safe_py_entry,
+)
+ll.add_symbol(
+    "cast_decimal_to_decimal_scalar_unsafe",
+    decimal_ext.cast_decimal_to_decimal_scalar_unsafe_py_entry,
+)
+ll.add_symbol(
+    "cast_decimal_to_decimal_array_safe",
+    decimal_ext.cast_decimal_to_decimal_array_safe_py_entry,
+)
+ll.add_symbol(
+    "cast_decimal_to_decimal_array_unsafe",
+    decimal_ext.cast_decimal_to_decimal_array_unsafe_py_entry,
 )
 
 
@@ -639,6 +656,272 @@ def decimal_hash(val):  # pragma: no cover
     return impl
 
 
+def validate_decimal_arguments(fname, precision_type, scale_type):
+    if not is_overload_constant_int(precision_type):
+        raise_bodo_error(f"{fname}: constant new_precision expected")
+    if not is_overload_constant_int(scale_type):
+        raise_bodo_error(f"{fname}: constant new_scale expected")
+    precision = get_overload_const_int(precision_type)
+    scale = get_overload_const_int(scale_type)
+    assert precision <= 38, f"{fname}: precision <= 38 expected, {precision} provided "
+    assert scale <= 37, f"{fname}: scale <= 37 expected, {scale} provided"
+    return precision, scale
+
+
+def cast_decimal_to_decimal_array(
+    val, new_precision, new_scale, null_on_error
+):  # pragma: no cover
+    pass
+
+
+@overload(cast_decimal_to_decimal_array, prefer_literal=True)
+def overload_cast_decimal_to_decimal_array(
+    val, new_precision, new_scale, null_on_error
+):
+    """
+    Converts a decimal whose leading digits are assumed to fully fit inside
+    the new precision and scale and returns a new decimal with the new precision
+    and scale after rescaling the decimal.
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    precision, scale = validate_decimal_arguments(
+        "cast_decimal_to_decimal_array", new_precision, new_scale
+    )
+
+    old_leading_digits = val.precision - val.scale
+    new_leading_digits = precision - scale
+    check_leading_digits = old_leading_digits > new_leading_digits
+
+    input_type = val
+    output_type = DecimalArrayType(precision, scale)
+    if check_leading_digits:
+
+        def impl(val, new_precision, new_scale, null_on_error):  # pragma: no cover
+            input_info = array_to_info(val)
+            out_info = _cast_decimal_to_decimal_array_safe(
+                input_info, input_type, output_type, null_on_error
+            )
+            out_arr = info_to_array(out_info, output_type)
+            delete_info(out_info)
+            return out_arr
+
+        return impl
+    else:
+        # Avoid checking leading digits if we know they fit
+        def impl(val, new_precision, new_scale, null_on_error):  # pragma: no cover
+            input_info = array_to_info(val)
+            out_info = _cast_decimal_to_decimal_array_unsafe(
+                input_info, input_type, output_type
+            )
+            out_arr = info_to_array(out_info, output_type)
+            delete_info(out_info)
+            return out_arr
+
+        return impl
+
+
+@intrinsic
+def _cast_decimal_to_decimal_array_unsafe(
+    typingctx, val_t, input_type_t, output_type_t
+):
+    from bodo.libs.array import array_info_type
+
+    input_type = unwrap_typeref(input_type_t)
+    output_type = unwrap_typeref(output_type_t)
+    shift_amount = output_type.scale - input_type.scale
+
+    def codegen(context, builder, signature, args):
+        val, _, _ = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+            ],
+        )
+        scale_amount_const = context.get_constant(types.int64, shift_amount)
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_decimal_to_decimal_array_unsafe"
+        )
+        ret = builder.call(fn, [val, scale_amount_const])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_t, input_type_t, output_type_t), codegen
+
+
+@intrinsic
+def _cast_decimal_to_decimal_array_safe(
+    typingctx, val_t, input_type_t, output_type_t, null_on_error_t
+):
+    from bodo.libs.array import array_info_type
+
+    input_type = unwrap_typeref(input_type_t)
+    output_type = unwrap_typeref(output_type_t)
+    shift_amount = output_type.scale - input_type.scale
+    new_leading_digits = output_type.precision - output_type.scale
+    # In the safe path we need to check that we aren't truncating the
+    # leading digits of the input decimal. This can occur if we increase
+    # the scale of the decimal or decrease the precision.
+    # For example, Decimal(38, 2) -> Decimal(38, 4) goes from 36 to 34 leading
+    # digits. To do this we can check that the actual decimal value would fit
+    # inside the new location by confirming its less than 10^(old_scale + new_leading_digits)
+    max_allowed_input_precision = input_type.scale + new_leading_digits
+
+    def codegen(context, builder, signature, args):
+        val, _, _, null_on_error = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
+        )
+        scale_amount_const = context.get_constant(types.int64, shift_amount)
+        max_allowed_input_precision_const = context.get_constant(
+            types.int64, max_allowed_input_precision
+        )
+
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_decimal_to_decimal_array_safe"
+        )
+        ret = builder.call(
+            fn,
+            [val, scale_amount_const, max_allowed_input_precision_const, null_on_error],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_t, input_type_t, output_type_t, null_on_error_t), codegen
+
+
+def cast_decimal_to_decimal_scalar(
+    val, new_precision, new_scale, null_on_error
+):  # pragma: no cover
+    pass
+
+
+@overload(cast_decimal_to_decimal_scalar, prefer_literal=True)
+def overload_cast_decimal_to_decimal_scalar(
+    val, new_precision, new_scale, null_on_error
+):
+    """
+    Converts a decimal whose leading digits are assumed to fully fit inside
+    the new precision and scale and returns a new decimal with the new precision
+    and scale after rescaling the decimal.
+    """
+    precision, scale = validate_decimal_arguments(
+        "cast_decimal_to_decimal_scalar", new_precision, new_scale
+    )
+
+    old_leading_digits = val.precision - val.scale
+    new_leading_digits = precision - scale
+    check_leading_digits = old_leading_digits > new_leading_digits
+
+    if check_leading_digits:
+
+        def impl(val, new_precision, new_scale, null_on_error):  # pragma: no cover
+            value, safe = _cast_decimal_to_decimal_scalar_safe(
+                val, new_precision, new_scale
+            )
+            # Note: We evaluate this in Python since there isn't a great way to have the intrinsic
+            # sometimes return NULL.
+            if not safe:
+                if null_on_error:
+                    return None
+                else:
+                    raise ValueError("Number out of representable range")
+            else:
+                return value
+
+        return impl
+    else:
+        # Avoid checking leading digits if we know they fit
+        def impl(val, new_precision, new_scale, null_on_error):  # pragma: no cover
+            return _cast_decimal_to_decimal_scalar_unsafe(val, new_precision, new_scale)
+
+        return impl
+
+
+@intrinsic(prefer_literal=True)
+def _cast_decimal_to_decimal_scalar_unsafe(typingctx, val_t, precision_t, scale_t):
+    """
+    Cast a Decimal128 value to a new Decimal 128 value with a new precision and scale.
+    """
+
+    assert isinstance(val_t, Decimal128Type)
+    assert is_overload_constant_int(precision_t)
+    assert is_overload_constant_int(scale_t)
+    precision = get_overload_const_int(precision_t)
+    scale = get_overload_const_int(scale_t)
+    shift_amount = scale - val_t.scale
+
+    def codegen(context, builder, signature, args):
+        val, _, _ = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+            ],
+        )
+        scale_amount_const = context.get_constant(types.int64, shift_amount)
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_decimal_to_decimal_scalar_unsafe"
+        )
+        ret = builder.call(fn, [val, scale_amount_const])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    decimal_type = Decimal128Type(precision, scale)
+    return decimal_type(val_t, precision_t, scale_t), codegen
+
+
+@intrinsic(prefer_literal=True)
+def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t):
+    """
+    Cast a Decimal128 value to a new Decimal 128 value with a new precision and scale.
+    """
+
+    assert isinstance(val_t, Decimal128Type)
+    assert is_overload_constant_int(precision_t)
+    assert is_overload_constant_int(scale_t)
+    scale = get_overload_const_int(scale_t)
+    precision = get_overload_const_int(precision_t)
+    shift_amount = scale - val_t.scale
+    new_leading_digits = precision - scale
+    n = val_t.scale + new_leading_digits
+
+    def codegen(context, builder, signature, args):
+        val, _, _ = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        scale_amount_const = context.get_constant(types.int64, shift_amount)
+        n_const = context.get_constant(types.int64, n)
+        safe_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_decimal_to_decimal_scalar_safe"
+        )
+        ret = builder.call(fn, [val, scale_amount_const, n_const, safe_pointer])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        safe = builder.load(safe_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, safe])
+
+    decimal_type = Decimal128Type(precision, scale)
+    ret_type = types.Tuple([decimal_type, types.bool_])
+    return ret_type(val_t, precision_t, scale_t), codegen
+
+
 class DecimalArrayType(types.ArrayCompatible):
     def __init__(self, precision, scale):
         self.precision = precision
@@ -844,6 +1127,7 @@ def unbox_decimal_arr(typ, val, c):
     bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
         c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
     )
+    scale = c.context.get_constant(types.int8, typ.scale)
 
     # function signature of unbox_decimal_array
     fnty = lir.FunctionType(
@@ -851,6 +1135,7 @@ def unbox_decimal_arr(typ, val, c):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
+            lir.IntType(8),
             lir.IntType(128).as_pointer(),
             lir.IntType(8).as_pointer(),
         ],
@@ -863,6 +1148,7 @@ def unbox_decimal_arr(typ, val, c):
         [
             val,
             n,
+            scale,
             data_arr_struct.data,
             bitmap_arr_struct.data,
         ],
@@ -1143,11 +1429,7 @@ def call_arrow_compute_cmp(op, lhs, rhs):
     """Create an implementation that calls Arrow compute for comparison
     operator op with input types lhs and rhs
     """
-    from bodo.libs.array import (
-        array_info_type,
-        delete_info,
-        info_to_array,
-    )
+    from bodo.libs.array import array_info_type, delete_info, info_to_array
 
     _arrow_compute_cmp = types.ExternalFunction(
         "arrow_compute_cmp_py_entry",
