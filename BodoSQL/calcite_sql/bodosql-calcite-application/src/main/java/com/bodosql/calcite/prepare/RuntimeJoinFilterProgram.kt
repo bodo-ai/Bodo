@@ -1,5 +1,6 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.common.LimitUtils
 import com.bodosql.calcite.adapter.pandas.PandasAggregate
 import com.bodosql.calcite.adapter.pandas.PandasFilter
 import com.bodosql.calcite.adapter.pandas.PandasFlatten
@@ -63,8 +64,9 @@ object RuntimeJoinFilterProgram : Program {
                 }
 
                 is PandasSort -> {
-                    // Sort can't modify columns. It won't produce the filter.
-                    super.visit(rel)
+                    // Sort can produce the filter only if
+                    // we have an order by + limit.
+                    visit(rel)
                 }
 
                 is PandasAggregate -> {
@@ -210,6 +212,16 @@ object RuntimeJoinFilterProgram : Program {
                     columnTransformFunction = { keptInputs[it] },
                 )
             return processSingleRel(node, pushLiveJoinInfo, outputLiveJoinInfo)
+        }
+
+        private fun visit(sort: PandasSort): RelNode {
+            val canPush = !LimitUtils.isOrderedLimit(sort)
+            val (pushLiveJoinInfo, outputLiveJoinInfo) =
+                splitFilterSections(
+                    canPushPredicate = { canPush },
+                    columnTransformFunction = { it },
+                )
+            return processSingleRel(sort, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(aggregate: Aggregate): RelNode {

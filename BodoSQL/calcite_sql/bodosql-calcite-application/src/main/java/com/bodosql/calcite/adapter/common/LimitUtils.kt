@@ -31,5 +31,13 @@ class LimitUtils private constructor() {
             // We push down sorts that only contain fetch and/or offset
             return (sort.offset != null || sort.fetch != null) && sort.getCollation().fieldCollations.isEmpty()
         }
+
+        /**
+         * Determine if we have a limit with a sort.
+         */
+        @JvmStatic
+        fun isOrderedLimit(sort: Sort): Boolean {
+            return sort.getCollation().fieldCollations.isNotEmpty() && (sort.offset != null || sort.fetch != null)
+        }
     }
 }
