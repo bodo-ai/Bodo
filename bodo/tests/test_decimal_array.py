@@ -521,3 +521,173 @@ def test_setitem_cast_decimal(memory_leak_check):
     out[2] = float(val)
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            )
+        ),
+    ]
+)
+def precision_scale_decimal_array(request):
+    return request.param
+
+
+def test_box_arrow_array_precision_scale(precision_scale_decimal_array):
+    """
+    Test that we can box/unbox an arrow decimal array without 38, 18 precision and scale.
+    """
+
+    def impl(arr):
+        return arr
+
+    check_func(
+        impl, (precision_scale_decimal_array,), py_output=precision_scale_decimal_array
+    )
+
+
+def test_cast_decimal_to_decimal_scalar(
+    precision_scale_decimal_array, memory_leak_check
+):
+    # This takes the unsafe cast route because the leading digits increase.
+    def impl1(arr):
+        out_arr = bodo.libs.decimal_arr_ext.alloc_decimal_array(len(arr), 28, 3)
+        for i in bodo.prange(len(arr)):
+            if bodo.libs.array_kernels.isna(arr, i):
+                out_arr[i] = None
+            else:
+                out_arr[i] = bodo.libs.bodosql_array_kernels.numeric_to_decimal(
+                    arr[i], 28, 3, False
+                )
+
+        return out_arr
+
+    # This takes the safe cast route because the leading digits decrease, so we
+    # need to ensure the data fits.
+    def impl2(arr):
+        out_arr = bodo.libs.decimal_arr_ext.alloc_decimal_array(len(arr), 15, 1)
+        for i in bodo.prange(len(arr)):
+            if bodo.libs.array_kernels.isna(arr, i):
+                out_arr[i] = None
+            else:
+                out_arr[i] = bodo.libs.bodosql_array_kernels.numeric_to_decimal(
+                    arr[i], 15, 1, False
+                )
+        return out_arr
+
+    py_output1 = pd.array(
+        ["1", "1.55", "1.56", "10.56", "1000.5", None, None, "10004.1", "-11.41"],
+        dtype=pd.ArrowDtype(pa.decimal128(28, 3)),
+    )
+    check_func(impl1, (precision_scale_decimal_array,), py_output=py_output1)
+    py_output2 = pd.array(
+        ["1", "1.6", "1.6", "10.6", "1000.5", None, None, "10004.1", "-11.4"],
+        dtype=pd.ArrowDtype(pa.decimal128(15, 1)),
+    )
+    check_func(impl2, (precision_scale_decimal_array,), py_output=py_output2)
+
+
+def test_cast_decimal_to_decimal_scalar_loss_null_on_error(
+    precision_scale_decimal_array, memory_leak_check
+):
+    """
+    Test that when decimal scalars are truncated we correctly output NULL
+    values if error on null is set.
+    """
+
+    def impl(arr):
+        out_arr = bodo.libs.decimal_arr_ext.alloc_decimal_array(len(arr), 28, 3)
+        for i in bodo.prange(len(arr)):
+            if bodo.libs.array_kernels.isna(arr, i):
+                out_arr[i] = None
+            else:
+                out_arr[i] = bodo.libs.bodosql_array_kernels.numeric_to_decimal(
+                    arr[i], 4, 3, True
+                )
+
+        return out_arr
+
+    py_output = pd.array(
+        ["1", "1.55", "1.56", None, None, None, None, None, None],
+        dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
+    )
+    check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
+
+
+@pytest_mark_one_rank
+def test_cast_decimal_to_decimal_scalar_error(precision_scale_decimal_array):
+    """
+    Test that decimals that don't fit raise an error when numeric_to_decimal
+    doesn't have null on error set.
+    """
+
+    @bodo.jit
+    def impl(arr):
+        out_arr = bodo.libs.decimal_arr_ext.alloc_decimal_array(len(arr), 28, 3)
+        for i in bodo.prange(len(arr)):
+            if bodo.libs.array_kernels.isna(arr, i):
+                out_arr[i] = None
+            else:
+                out_arr[i] = bodo.libs.bodosql_array_kernels.numeric_to_decimal(
+                    arr[i], 4, 3, False
+                )
+
+        return out_arr
+
+    with pytest.raises(Exception, match=r"Number out of representable range"):
+        impl(precision_scale_decimal_array)
+
+
+def test_cast_decimal_to_decimal_array(
+    precision_scale_decimal_array, memory_leak_check
+):
+    # This takes the unsafe cast route because the leading digits increase.
+    def impl1(arr):
+        return bodo.libs.bodosql_array_kernels.numeric_to_decimal(arr, 28, 3, False)
+
+    # This takes the safe cast route because the leading digits decrease, so we
+    # need to ensure the data fits.
+    def impl2(arr):
+        return bodo.libs.bodosql_array_kernels.numeric_to_decimal(arr, 15, 1, False)
+
+    py_output1 = pd.array(
+        ["1", "1.55", "1.56", "10.56", "1000.5", None, None, "10004.1", "-11.41"],
+        dtype=pd.ArrowDtype(pa.decimal128(28, 3)),
+    )
+    check_func(impl1, (precision_scale_decimal_array,), py_output=py_output1)
+    py_output2 = pd.array(
+        ["1", "1.6", "1.6", "10.6", "1000.5", None, None, "10004.1", "-11.4"],
+        dtype=pd.ArrowDtype(pa.decimal128(15, 1)),
+    )
+    check_func(impl2, (precision_scale_decimal_array,), py_output=py_output2)
+
+
+@pytest_mark_one_rank
+def test_cast_decimal_to_decimal_array_loss_null_on_error(
+    precision_scale_decimal_array,
+):
+    """
+    Test that decimals that don't fit raise an error when numeric_to_decimal
+    doesn't have null on error set.
+    """
+
+    @bodo.jit
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.numeric_to_decimal(arr, 4, 3, False)
+
+    with pytest.raises(Exception, match=r"Number out of representable range"):
+        impl(precision_scale_decimal_array)

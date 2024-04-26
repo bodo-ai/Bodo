@@ -200,6 +200,7 @@ broadcasted_fixed_arg_functions = {
     "not_equal",
     "not_equal_null",
     "nullif",
+    "numeric_to_decimal",
     "nvl2",
     "object_insert",
     "object_keys",
