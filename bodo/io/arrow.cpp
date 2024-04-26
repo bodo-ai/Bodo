@@ -46,8 +46,8 @@ table_info* iceberg_pq_read_py_entry(
     const char* expr_filter_f_str_, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
-    int32_t num_str_as_dict_cols, bool is_merge_into_cow,
-    int64_t* total_rows_out, PyObject** file_list_ptr,
+    int32_t num_str_as_dict_cols, bool create_dict_from_string,
+    bool is_merge_into_cow, int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr);
 
 ArrowReader* iceberg_pq_reader_init_py_entry(
@@ -56,7 +56,8 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
     const char* expr_filter_f_str, PyObject* filter_scalars,
     int32_t* _selected_fields, int32_t num_selected_fields,
     int32_t* _is_nullable, PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
-    int32_t num_str_as_dict_cols, int64_t batch_size, int64_t op_id);
+    int32_t num_str_as_dict_cols, bool create_dict_from_string,
+    int64_t batch_size, int64_t op_id);
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read_py_entry(

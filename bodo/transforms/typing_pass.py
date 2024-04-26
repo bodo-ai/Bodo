@@ -3909,6 +3909,33 @@ class TypingTransforms:
         if not isinstance(detect_dict_cols, bool):
             raise BodoError(err_msg)
 
+        # Whether Bodo should do the dictionary encoding (for the columns selected for dict-encoding)
+        # after reading the columns as string from Arrow. This is useful for testing purposes. In
+        # practice, we don't expect users to specify this.
+        _bodo_dict_encode_in_bodo_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_dict_encode_in_bodo",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_dict_encode_in_bodo', if provided, must be a constant boolean."
+        dict_encode_in_bodo = None
+        if _bodo_dict_encode_in_bodo_var:
+            dict_encode_in_bodo = self._get_const_value(
+                _bodo_dict_encode_in_bodo_var, label, rhs.loc, err_msg=err_msg
+            )
+            if not isinstance(dict_encode_in_bodo, bool):
+                raise BodoError(err_msg)
+        else:
+            # If the user did not specify where the dict-encoding should happen,
+            # we will make the decision ourselves. At this point, we will only
+            # do the dict-encoding ourselves if the table is a Snowflake managed
+            # Iceberg table. If it isn't, we will let Arrow do it.
+            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(con)
+
         # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
         _bodo_chunksize_var = get_call_expr_arg(
             func_str,
@@ -4133,6 +4160,7 @@ class TypingTransforms:
                 orig_col_names=orig_col_names,
                 orig_col_types=orig_arr_types,
                 sql_op_id=_bodo_sql_op_id_const,
+                dict_encode_in_bodo=dict_encode_in_bodo,
             )
         ]
 
