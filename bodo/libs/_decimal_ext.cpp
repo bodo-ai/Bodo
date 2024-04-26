@@ -76,6 +76,179 @@ double decimal_to_double(__int128 const& val, uint8_t scale) {
     return dec.ToDouble(scale);
 }
 
+arrow::Decimal128 shift_decimal_scalar(arrow::Decimal128 val,
+                                       int64_t shift_amount) {
+    if (shift_amount == 0) {
+        return val;
+    } else if (shift_amount > 0) {
+        return val.IncreaseScaleBy(shift_amount);
+    } else {
+        // We always round "half up".
+        return val.ReduceScaleBy(-shift_amount, true);
+    }
+}
+
+arrow::Decimal128 cast_decimal_to_decimal_scalar_unsafe_py_entry(
+    arrow::Decimal128 val, int64_t shift_amount) {
+    try {
+        return shift_decimal_scalar(val, shift_amount);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+arrow::Decimal128 cast_decimal_to_decimal_scalar_safe_py_entry(
+    arrow::Decimal128 val, int64_t shift_amount, int64_t max_power_of_ten,
+    bool* safe) {
+    try {
+        bool safe_cast = val.FitsInPrecision(max_power_of_ten);
+        *safe = safe_cast;
+        if (!safe_cast) {
+            return val;
+        } else {
+            return shift_decimal_scalar(val, shift_amount);
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Check if the input array can be safely cast to the output array. If
+ * null_on_error is true, then the output array's null bitmap is updated to
+ * reflect whether the input array can be safely cast. If null_on_error is
+ * false, then an exception is thrown if the input array cannot be safely cast.
+ *
+ * @param[in] input_array The input array.
+ * @param max_power_of_ten The maximum power of ten that every value must fit
+ * inside.
+ * @param null_on_error Should we throw an exception if the input array cannot
+ * be safely cast.
+ * @param[out] output_array The output array for updating the null bitmap if
+ * null_on_error is true.
+ */
+void check_cast_safe(std::shared_ptr<array_info> input_array,
+                     int64_t max_power_of_ten, bool null_on_error,
+                     std::shared_ptr<array_info> output_array) {
+    arrow::Decimal128* input_data = reinterpret_cast<arrow::Decimal128*>(
+        input_array->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+    uint8_t* input_null_bitmap = reinterpret_cast<uint8_t*>(
+        input_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>());
+    if (null_on_error) {
+        uint8_t* output_null_bitmap = reinterpret_cast<uint8_t*>(
+            output_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>());
+        for (size_t i = 0; i < input_array->length; i++) {
+            if (arrow::bit_util::GetBit(input_null_bitmap, i)) {
+                arrow::bit_util::SetBitTo(
+                    output_null_bitmap, i,
+                    input_data[i].FitsInPrecision(max_power_of_ten));
+            }
+        }
+    } else {
+        for (size_t i = 0; i < input_array->length; i++) {
+            if (arrow::bit_util::GetBit(input_null_bitmap, i) &&
+                !input_data[i].FitsInPrecision(max_power_of_ten)) {
+                throw std::runtime_error("Number out of representable range");
+            }
+        }
+    }
+}
+
+/**
+ * @brief Shift all non-null values in a decimal array by a given amount into
+ * output array. This is done to enable a shared implementation between safe
+ * and unsafe casts.
+ *
+ * @param[in] input_array The input array to shift.
+ * @param shift_amount The amount to shift by.
+ * @param[out] output_array The output array for updating the shifted values. We
+ * assume that the null bitmap has been preallocated to either all 1s if doing
+ * an unsafe cast, or some nulls if doing a safe cast and the values are not
+ * safe to cast.
+ */
+void shift_decimal_array(std::shared_ptr<array_info> input_array,
+                         int64_t shift_amount,
+                         std::shared_ptr<array_info> output_array) {
+    arrow::Decimal128* input_data = reinterpret_cast<arrow::Decimal128*>(
+        input_array->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+    uint8_t* input_null_bitmap = reinterpret_cast<uint8_t*>(
+        input_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>());
+    arrow::Decimal128* output_data = reinterpret_cast<arrow::Decimal128*>(
+        output_array->data1<bodo_array_type::NULLABLE_INT_BOOL>());
+    uint8_t* output_null_bitmap = reinterpret_cast<uint8_t*>(
+        output_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>());
+    if (shift_amount == 0) {
+        // TODO: Remove this copy. We can avoid the copy in the unsafe code path
+        // because it doesn't modify the null bit mask. However, adding a
+        // no_copy argument seems too risky because someone may modify the data
+        // inplace.
+        memcpy((char*)output_data, (char*)input_data,
+               input_array->length * sizeof(arrow::Decimal128));
+        for (size_t i = 0; i < input_array->length; i++) {
+            bool bit = arrow::bit_util::GetBit(input_null_bitmap, i) &&
+                       arrow::bit_util::GetBit(output_null_bitmap, i);
+            arrow::bit_util::SetBitTo(output_null_bitmap, i, bit);
+        }
+    } else if (shift_amount > 0) {
+        for (size_t i = 0; i < input_array->length; i++) {
+            if (arrow::bit_util::GetBit(input_null_bitmap, i) &&
+                arrow::bit_util::GetBit(output_null_bitmap, i)) {
+                output_data[i] = input_data[i].IncreaseScaleBy(shift_amount);
+            } else {
+                arrow::bit_util::ClearBit(output_null_bitmap, i);
+            }
+        }
+    } else {
+        shift_amount = -shift_amount;
+        for (size_t i = 0; i < input_array->length; i++) {
+            if (arrow::bit_util::GetBit(input_null_bitmap, i) &&
+                arrow::bit_util::GetBit(output_null_bitmap, i)) {
+                output_data[i] =
+                    input_data[i].ReduceScaleBy(shift_amount, true);
+            } else {
+                arrow::bit_util::ClearBit(output_null_bitmap, i);
+            }
+        }
+    }
+}
+
+array_info* cast_decimal_to_decimal_array_unsafe_py_entry(
+    array_info* arr, int64_t shift_amount) {
+    try {
+        std::shared_ptr<array_info> input_array =
+            std::shared_ptr<array_info>(arr);
+        std::shared_ptr<array_info> output_array =
+            alloc_nullable_array_no_nulls(input_array->length,
+                                          Bodo_CTypes::DECIMAL);
+        shift_decimal_array(input_array, shift_amount, output_array);
+        return new array_info(*output_array);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+array_info* cast_decimal_to_decimal_array_safe_py_entry(
+    array_info* arr, int64_t shift_amount, int64_t max_power_of_ten,
+    bool null_on_error) {
+    try {
+        std::shared_ptr<array_info> input_array =
+            std::shared_ptr<array_info>(arr);
+        std::shared_ptr<array_info> output_array =
+            alloc_nullable_array_no_nulls(input_array->length,
+                                          Bodo_CTypes::DECIMAL);
+        check_cast_safe(input_array, max_power_of_ten, null_on_error,
+                        output_array);
+        shift_decimal_array(input_array, shift_amount, output_array);
+        return new array_info(*output_array);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     auto high = static_cast<uint64_t>(val.high);
     auto low = static_cast<uint64_t>(val.low);
@@ -129,8 +302,8 @@ decimal_value int64_to_decimal(int64_t value) {
 
 void* box_decimal_array(int64_t n, const uint8_t* data,
                         const uint8_t* null_bitmap, int scale);
-void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
-                         uint8_t* null_bitmap);
+void unbox_decimal_array(PyObject* obj, int64_t n, int8_t dest_scale,
+                         uint8_t* data, uint8_t* null_bitmap);
 void unbox_decimal(PyObject* obj, uint8_t* data);
 
 PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
@@ -391,6 +564,10 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_int_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_float_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_decimal_py_entry);
+    SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_scalar_safe_py_entry);
+    SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_scalar_unsafe_py_entry);
+    SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
+    SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
 
     return m;
 }
@@ -493,11 +670,12 @@ void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
  *
  * @param obj ndarray object of Decimal objects
  * @param n number of values
+ * @param dest_scale Destination scale.
  * @param data pointer to 128-bit data buffer
  * @param null_bitmap pointer to null_bitmap buffer
  */
-void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
-                         uint8_t* null_bitmap) {
+void unbox_decimal_array(PyObject* obj, int64_t n, int8_t dest_scale,
+                         uint8_t* data, uint8_t* null_bitmap) {
 #undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -548,9 +726,8 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
             status = arrow::Decimal128::FromString(
                 (const char*)PyUnicode_DATA(s_str_obj), &d128, &precision,
                 &scale);
-            CHECK(status.ok(), "decimal rescale faild");
-            // rescale decimal to 18 (default scale converting from Python)
-            CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, PY_DECIMAL_SCALE),
+            CHECK(status.ok(), "decimal rescale failed");
+            CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, dest_scale),
                                    "decimal rescale error", d128_18);
             // write to data array
             uint8_t* data_ptr = (data + i * BYTES_PER_DECIMAL);
