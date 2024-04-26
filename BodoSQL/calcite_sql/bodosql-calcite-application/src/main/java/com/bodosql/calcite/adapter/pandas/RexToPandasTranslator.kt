@@ -998,17 +998,19 @@ open class RexToPandasTranslator(
         precision: Int,
         scale: Int,
     ): Boolean {
-        return if (inputType.sqlTypeName == outputType.sqlTypeName) {
-            // Can omit cast if the input and output types are the same.
+        return if (inputType == outputType) {
+            true
+        } else if (inputType.sqlTypeName == outputType.sqlTypeName && inputType.sqlTypeName != SqlTypeName.DECIMAL) {
+            // Can omit cast if the input and output types are the same, and it's not a type where precision matters
+            // to Bodo.
             true
         } else if (SqlTypeFamily.CHARACTER.contains(inputType) && SqlTypeFamily.CHARACTER.contains(outputType)) {
             // Can omit cast if the input and output types are both character types.
             true
+        } else if (SqlTypeFamily.INTEGER.contains(inputType) && SqlTypeFamily.INTEGER.contains(outputType)) {
+            inputType.precision <= precision && scale == 0
         } else {
-            // Can omit cast if it's an integer upcast or integer -> decimal without a scale (no float conversion).
-            SqlTypeFamily.INTEGER.contains(inputType) &&
-                SqlTypeFamily.EXACT_NUMERIC.contains(outputType) &&
-                inputType.precision <= precision && scale == 0
+            false
         }
     }
 
