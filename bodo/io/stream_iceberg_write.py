@@ -1303,7 +1303,7 @@ def overload_get_old_statistics_file_path_wrapper(txn_id, conn, db_schema, table
 
 
 def convert_to_snowflake_iceberg_table_py(
-    snowflake_conn, iceberg_base, iceberg_volume, table_name
+    snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
 ):  # pragma: no cover
     """Convert Iceberg table written by Bodo to object storage to a Snowflake-managed
     Iceberg table.
@@ -1337,8 +1337,12 @@ def convert_to_snowflake_iceberg_table_py(
 
             # Create Iceberg table
             base = f"{iceberg_base}/{table_name}"
+            if replace:
+                or_replace = "OR REPLACE"
+            else:
+                or_replace = ""
             create_query = f"""
-                CREATE ICEBERG TABLE {table_name}
+                CREATE {or_replace} ICEBERG TABLE {table_name}
                 EXTERNAL_VOLUME='{iceberg_volume}'
                 CATALOG='{catalog_integration_name}'
                 METADATA_FILE_PATH='{base}/metadata/v1.metadata.json';
@@ -1363,14 +1367,14 @@ def convert_to_snowflake_iceberg_table_py(
 
 
 def convert_to_snowflake_iceberg_table(
-    snowflake_conn, iceberg_base, iceberg_volume, schema, table_name
+    snowflake_conn, iceberg_base, iceberg_volume, schema, table_name, replace
 ):  # pragma: no cover
     pass
 
 
 @overload(convert_to_snowflake_iceberg_table)
 def overload_convert_to_snowflake_iceberg_table(
-    snowflake_conn, iceberg_base, iceberg_volume, table_name
+    snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
 ):  # pragma: no cover
     """JIT wrapper around convert_to_snowflake_iceberg_table_py above"""
 
@@ -1379,7 +1383,7 @@ def overload_convert_to_snowflake_iceberg_table(
     ):  # pragma: no cover
         with bodo.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
-                snowflake_conn, iceberg_base, iceberg_volume, table_name
+                snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
             )
 
     return impl
