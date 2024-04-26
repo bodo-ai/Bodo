@@ -58,14 +58,15 @@ class AbstractIcebergFilterRuleHelpers {
                 return
             }
 
-            val (icebergConditions, pandasConditions) =
+            val (unSimplifiedIcebergConditions, pandasConditions) =
                 FilterUtils.extractPushableConditions(
                     filter.condition,
                     filter.cluster.rexBuilder,
                     ::isPushableCondition,
                     partialFunction,
                 )
-            assert(icebergConditions != null)
+            assert(unSimplifiedIcebergConditions != null)
+            val icebergConditions = simplify.simplifyUnknownAsFalse(unSimplifiedIcebergConditions)
 
             if (pandasConditions == null) {
                 // If none of the conditions cannot be pushed, then the entire filter can
@@ -75,7 +76,7 @@ class AbstractIcebergFilterRuleHelpers {
                         filter.cluster,
                         filter.traitSet,
                         rel,
-                        filter.condition,
+                        icebergConditions,
                         catalogTable,
                     )
                 call.transformTo(newNode)
@@ -91,7 +92,7 @@ class AbstractIcebergFilterRuleHelpers {
                         filter.cluster,
                         filter.traitSet,
                         rel,
-                        icebergConditions!!,
+                        icebergConditions,
                         catalogTable,
                     )
                 builder.push(childFilter)
