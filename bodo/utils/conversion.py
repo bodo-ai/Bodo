@@ -9,6 +9,7 @@ import numba
 import numpy as np
 import pandas as pd
 from numba.core import types
+from numba.core.ir_utils import next_label
 from numba.extending import overload
 
 import bodo
@@ -972,6 +973,151 @@ def overload_fix_arr_dtype(
         return (
             lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
         )  # pragma: no cover
+
+    # Handle nested types recursively:
+    if isinstance(data, bodo.ArrayItemArrayType):
+        nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
+        if not isinstance(nb_dtype, bodo.ArrayItemArrayType):
+            raise BodoError(
+                f"Both source and target types must be ArrayTimeArrayType! Got {data} and {nb_dtype} instead."
+            )
+
+        new_inner_type = bodo.utils.typing.get_castable_arr_dtype(nb_dtype.dtype)
+
+        if not do_copy:
+            # This still requires copying the inner data, but the null-bitmap and offsets
+            # are re-used.
+            def impl(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                new_inner_data = bodo.utils.conversion.fix_arr_dtype(
+                    bodo.libs.array_item_arr_ext.get_data(data),
+                    new_inner_type,
+                    copy,
+                    nan_to_str,
+                    from_series,
+                )
+                new_data = bodo.libs.array_item_arr_ext.init_array_item_array(
+                    bodo.libs.array_item_arr_ext.get_n_arrays(data),
+                    new_inner_data,
+                    bodo.libs.array_item_arr_ext.get_offsets(data),
+                    bodo.libs.array_item_arr_ext.get_null_bitmap(data),
+                )
+                return new_data
+
+            return impl
+        else:
+            # This copies the null-bitmap and offsets in addition to the inner data
+            # that will be copied during the cast.
+            def impl(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                new_inner_data = bodo.utils.conversion.fix_arr_dtype(
+                    bodo.libs.array_item_arr_ext.get_data(data),
+                    new_inner_type,
+                    copy,
+                    nan_to_str,
+                    from_series,
+                )
+                new_data = bodo.libs.array_item_arr_ext.init_array_item_array(
+                    bodo.libs.array_item_arr_ext.get_n_arrays(data),
+                    new_inner_data,
+                    bodo.libs.array_item_arr_ext.get_offsets(data).copy(),
+                    bodo.libs.array_item_arr_ext.get_null_bitmap(data).copy(),
+                )
+                return new_data
+
+            return impl
+    elif isinstance(data, bodo.StructArrayType):
+        nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
+        if not isinstance(nb_dtype, bodo.StructArrayType):
+            raise BodoError(
+                f"Both source and target types must be StructArrayType! Got {data} and {nb_dtype} instead."
+            )
+
+        if len(data.data) != len(nb_dtype.data):
+            raise BodoError(
+                f"Number of fields in the source ({len(data.data)}) and target ({len(nb_dtype.data)}) struct fields don't match!"
+            )
+        if data.names != nb_dtype.names:
+            raise BodoError(
+                f"Names of the fields in the source ({data.names}) and target ({nb_dtype.names}) struct fields don't match!"
+            )
+
+        n_fields = len(data.data)
+        new_inner_types = tuple(
+            [bodo.utils.typing.get_castable_arr_dtype(t) for t in nb_dtype.data]
+        )
+        field_names = data.names
+
+        # Handle the 0 fields case.
+        if n_fields == 0:
+            if do_copy:
+                return (
+                    lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.copy()
+                )  # pragma: no cover
+            else:
+                return (
+                    lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
+                )  # pragma: no cover
+
+        call_id = next_label()
+        func_text = "def impl(data, new_dtype, copy=None, nan_to_str=True, from_series=False):\n"
+        func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
+        for i in range(n_fields):
+            # String types need to be constants and are therefore inlined.
+            if isinstance(new_inner_types[i], str):
+                func_text += f"  new_inner_data_arr_{i} = bodo.utils.conversion.fix_arr_dtype(inner_data_arrs[{i}], '{new_inner_types[i]}', copy, nan_to_str, from_series)\n"
+            else:
+                func_text += f"  new_inner_data_arr_{i} = bodo.utils.conversion.fix_arr_dtype(inner_data_arrs[{i}], new_inner_types_{call_id}[{i}], copy, nan_to_str, from_series)\n"
+
+        new_data_tuple_str = "({},)".format(
+            ", ".join([f"new_inner_data_arr_{i}" for i in range(n_fields)])
+        )
+        field_names_tuple_str = "({},)".format(
+            ", ".join([f"'{f}'" for f in field_names])
+        )
+        copy_str = ".copy()" if do_copy else ""
+        func_text += f"  new_data = bodo.libs.struct_arr_ext.init_struct_arr({n_fields}, {new_data_tuple_str}, bodo.libs.struct_arr_ext.get_null_bitmap(data){copy_str}, {field_names_tuple_str})\n"
+        func_text += "  return new_data\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                f"new_inner_types_{call_id}": new_inner_types,
+            },
+            loc_vars,
+        )
+        return loc_vars["impl"]
+
+    elif isinstance(data, bodo.MapArrayType):
+        nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
+
+        if not isinstance(nb_dtype, bodo.MapArrayType):
+            raise BodoError(
+                f"Both source and target types must be MapArrayType! Got {data} and {nb_dtype} instead."
+            )
+
+        # Get the underlying ArrayItemArray type.
+        new_underlying_type = bodo.libs.map_arr_ext._get_map_arr_data_type(nb_dtype)
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            # Call it recursively on the underlying ArrayItemArray array.
+            new_underlying_data = bodo.utils.conversion.fix_arr_dtype(
+                data._data,
+                new_underlying_type,
+                copy,
+                nan_to_str,
+                from_series,
+            )
+            # Reconstruct the Map array from the new ArrayItemArray array.
+            new_data = bodo.libs.map_arr_ext.init_map_arr(new_underlying_data)
+            return new_data
+
+        return impl
 
     if isinstance(data, NullableTupleType):
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)

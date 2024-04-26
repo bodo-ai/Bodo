@@ -2936,7 +2936,11 @@ def get_castable_arr_dtype(arr_type: types.Type):
     Returns:
         Any: The value used to generate the cast value.
     """
-    if isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+    if isinstance(
+        arr_type, (bodo.ArrayItemArrayType, bodo.MapArrayType, bodo.StructArrayType)
+    ):
+        cast_typ = arr_type
+    elif isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
     elif arr_type == bodo.boolean_array_type:
         cast_typ = bodo.libs.bool_arr_ext.boolean_dtype

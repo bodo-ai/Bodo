@@ -4225,8 +4225,221 @@ semi_structured_keys = [
     ),
 ]
 
+# Test that we can both unify nested types between build and probe and then apply the necessary casts
+semi_structured_keys_with_cast_reqs = [
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [[1, 2], [3], [], None, [4, 5], [6]],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+                ),
+                "B": [1, 2, 3, 4, 5, 6],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [[1, 2], [9], [], None, [5, 4], [6]],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                ),
+                "D": [6, 5, 4, 3, 2, 1],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [[1, 2], [], [6]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+                ),
+                "B": [1, 3, 6],
+                "C": pd.Series(
+                    [[1, 2], [], [6]], dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+                ),
+                "D": [6, 4, 1],
+            }
+        ),
+        id="array_item_int_cast",
+    ),
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        ["A", "bc", "De", "FGh", "Ij"],
+                        ["FGh", "Ij", "A", "bc", "De"],
+                        [],
+                        None,
+                        ["pizza", "pie"],
+                        ["kiwi"],
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.large_list(pa.dictionary(pa.int32(), pa.string()))
+                    ),
+                ),
+                "B": [1, 2, 3, 4, 5, 6],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [
+                        ["FGh", "Ij", "A", "bc", "De"],
+                        ["A", "bc", "De", "FGh", "Ij"],
+                        [],
+                        None,
+                        ["kiwi"],
+                        ["potatoes"],
+                    ],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                ),
+                "D": [6, 5, 4, 3, 2, 1],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        ["A", "bc", "De", "FGh", "Ij"],
+                        ["FGh", "Ij", "A", "bc", "De"],
+                        [],
+                        ["kiwi"],
+                    ],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                ),
+                "B": [1, 2, 3, 6],
+                "C": pd.Series(
+                    [
+                        ["A", "bc", "De", "FGh", "Ij"],
+                        ["FGh", "Ij", "A", "bc", "De"],
+                        [],
+                        ["kiwi"],
+                    ],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+                ),
+                "D": [5, 6, 4, 2],
+            }
+        ),
+        id="array_item_dict_str_cast",
+    ),
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        {"x": 1, "y": 2},
+                        {"x": 3, "y": 4},
+                        {"a": 2, "b": 3, "c": 4},
+                        {"x": 5, "y": 6},
+                        {},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.map_(pa.dictionary(pa.int32(), pa.string()), pa.int32())
+                    ),
+                ),
+                "B": [1, 2, 3, 4, 5],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [
+                        {"y": 2, "x": 1},
+                        {"a": 2, "b": 3, "c": 4},
+                        {"p": 1, "q": 2},
+                        {"x": 1},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                "D": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [{"x": 1, "y": 2}, {"a": 2, "b": 3, "c": 4}],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                "B": [1, 3],
+                "C": pd.Series(
+                    [{"y": 2, "x": 1}, {"a": 2, "b": 3, "c": 4}],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                "D": [1, 2],
+            }
+        ),
+        id="map_int_and_dict_str_cast",
+    ),
+    pytest.param(
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        {"x": "1", "y": 2},
+                        {"x": "2", "y": 3},
+                        {"x": "2", "y": 4},
+                        {"x": "1", "y": 1},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.string()), pa.field("y", pa.int32())]
+                        )
+                    ),
+                ),
+                "B": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "C": pd.Series(
+                    [
+                        {"x": "1", "y": 1},
+                        {"x": "1", "y": 3},
+                        {"x": "2", "y": 5},
+                        {"x": "1", "y": 2},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("x", pa.dictionary(pa.int32(), pa.string())),
+                                pa.field("y", pa.int64()),
+                            ]
+                        )
+                    ),
+                ),
+                "D": [1, 2, 3, 4],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [{"x": 1, "y": 2}, {"x": 1, "y": 1}],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.string()), pa.field("y", pa.int64())]
+                        )
+                    ),
+                ),
+                "B": [1, 4],
+                "C": pd.Series(
+                    [{"x": 1, "y": 2}, {"x": 1, "y": 1}],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("x", pa.string()), pa.field("y", pa.int64())]
+                        )
+                    ),
+                ),
+                "D": [4, 1],
+            }
+        ),
+        id="struct_int_and_dict_str_cast",
+    ),
+]
 
-@pytest.mark.parametrize("probe_df, build_df, expected_df", semi_structured_keys)
+
+@pytest.mark.parametrize(
+    "probe_df, build_df, expected_df",
+    semi_structured_keys + semi_structured_keys_with_cast_reqs,
+)
 def test_hash_join_semistructured_keys(
     probe_df, build_df, expected_df, memory_leak_check
 ):
