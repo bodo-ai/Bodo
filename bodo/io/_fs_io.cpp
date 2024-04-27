@@ -113,8 +113,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     }
 }
 
-std::shared_ptr<arrow::fs::FileSystem> get_reader_file_system(
-    std::string file_path, std::string s3_bucket_region, bool s3fs_anon) {
+std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>
+get_reader_file_system(std::string file_path, std::string s3_bucket_region,
+                       bool s3fs_anon) {
     bool is_hdfs = file_path.starts_with("hdfs://") ||
                    file_path.starts_with("abfs://") ||
                    file_path.starts_with("abfss://");
@@ -151,7 +152,7 @@ std::shared_ptr<arrow::fs::FileSystem> get_reader_file_system(
     } else {
         fs = std::make_shared<arrow::fs::LocalFileSystem>();
     }
-    return fs;
+    return std::pair(fs, file_path);
 }
 
 void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,

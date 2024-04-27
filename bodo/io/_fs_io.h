@@ -68,10 +68,13 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
  * @param file_path: The path/connection string to the file.
  * @param s3_bucket_region: The region of the S3 bucket if the file is on S3.
  * @param s3fs_anon: Whether to use anonymous access for S3.
+ * @return A pair containing the file system and the updated path to use
+ *         with it.
  *
  */
-std::shared_ptr<arrow::fs::FileSystem> get_reader_file_system(
-    std::string file_path, std::string s3_bucket_region, bool s3fs_anon);
+std::pair<std::shared_ptr<arrow::fs::FileSystem>, std::string>
+get_reader_file_system(std::string file_path, std::string s3_bucket_region,
+                       bool s3fs_anon);
 
 /*
  * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader,

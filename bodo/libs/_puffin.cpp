@@ -549,10 +549,11 @@ PyObject *get_empty_statistics_file_metadata() {
  */
 std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
                                              std::string bucket_region) {
-    std::shared_ptr<arrow::fs::FileSystem> fs =
-        get_reader_file_system(puffin_loc, bucket_region, false);
+    auto info = get_reader_file_system(puffin_loc, bucket_region, false);
+    std::shared_ptr<arrow::fs::FileSystem> &fs = info.first;
+    const std::string &updated_puffin_loc = info.second;
     arrow::fs::FileInfo puffin_info;
-    CHECK_ARROW_AND_ASSIGN(fs->GetFileInfo(puffin_loc),
+    CHECK_ARROW_AND_ASSIGN(fs->GetFileInfo(updated_puffin_loc),
                            "Failed to get puffin file info", puffin_info);
     // Fetch the file size
     int64_t file_size = puffin_info.size();
