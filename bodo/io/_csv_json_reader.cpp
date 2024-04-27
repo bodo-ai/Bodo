@@ -202,14 +202,12 @@ class PathInfo {
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
         if (!this->fs) {
-            this->fs = get_reader_file_system(
+            auto info = get_reader_file_system(
                 this->file_path, this->bucket_region, this->s3fs_anon);
+            this->fs = info.first;
             // Check for LocalFileSystem.type_name()
             this->is_remote_fs = this->fs->type_name() != "local";
-            if (this->fs->type_name() == "s3") {
-                // remove s3:// prefix from file_path
-                this->file_path = this->file_path.substr(strlen("s3://"));
-            }
+            this->file_path = info.second;
         }
         return this->fs;
     }
