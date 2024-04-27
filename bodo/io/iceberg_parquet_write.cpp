@@ -203,10 +203,12 @@ PyObject *arrow_scalar_to_iceberg_bytes(std::shared_ptr<arrow::Scalar> scalar) {
  * @param dict_array The dictionary array from which to extract the data.
  * @return std::shared_ptr<arrow::ChunkedArray> A string array that can
  * be used to compute metrics like min and max.
+ * @param dict_hits: A bitmaks indicating which indices are used.
  */
 std::shared_ptr<arrow::ChunkedArray>
 get_metrics_computable_array_for_dictionary(
-    const std::shared_ptr<arrow::ChunkedArray> &dict_array) {
+    const std::shared_ptr<arrow::ChunkedArray> &dict_array,
+    const std::shared_ptr<arrow::Buffer> &dict_hits) {
     // Dictionary arrays cannot directly call MinMax because
     // they are not supported. We need to convert them to
     // get the underlying data array and skip any values we
@@ -228,43 +230,8 @@ get_metrics_computable_array_for_dictionary(
         reinterpret_cast<arrow::DictionaryArray *>(first_chunk.get())
             ->dictionary();
     // We mark elements as seen/not seen by marking them
-    // as null in the values we pass to arrow. This requires
-    // a copy of the null bitmask, but not the underlying
-    // data.
-    // Note: This can be null if there are no nulls.
-    auto old_null_bitmap = dictionary->null_bitmap();
-    // Initialize to all nulls
-    size_t num_null_bytes = arrow::bit_util::BytesForBits(dictionary->length());
-    arrow::Result<std::shared_ptr<arrow::Buffer>> res =
-        AllocateBuffer(num_null_bytes, bodo::BufferPool::DefaultPtr());
-    std::shared_ptr<arrow::Buffer> new_null_bitmap;
-    CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", new_null_bitmap);
-    // Ensure 0 allocated.
-    memset(new_null_bitmap->mutable_data(), 0x0,
-           static_cast<size_t>(num_null_bytes));
-    // Iterate through the indices and mark the dictionary
-    for (auto chunk : unified_arr->chunks()) {
-        std::shared_ptr<arrow::Array> indices =
-            reinterpret_cast<arrow::DictionaryArray *>(chunk.get())->indices();
-        auto indices_type_id = indices->type()->id();
-        if (indices_type_id == arrow::Type::INT32) {
-            auto indices_arr = std::dynamic_pointer_cast<
-                arrow::NumericArray<arrow::Int32Type>>(indices);
-            const int32_t *raw_values = indices_arr->raw_values();
-            for (int64_t j = 0; j < indices_arr->length(); j++) {
-                bool is_null_index = indices_arr->IsNull(j);
-                int32_t index = is_null_index ? 0 : raw_values[j];
-                bool is_null_bit = dictionary->IsNull(index);
-                if (!is_null_index && !is_null_bit) {
-                    arrow::bit_util::SetBit(new_null_bitmap->mutable_data(),
-                                            index);
-                }
-            }
-        } else {
-            throw std::runtime_error(
-                "Iceberg Parquet Write: Dictionary indices must be INT32");
-        }
-    }
+    // as null in the values we pass to arrow. The passed
+    // in dict_hits bitmask serves this purpose.
     // Dictionary can be either string or large string.
     auto dict_type_id = dictionary->type()->id();
     std::shared_ptr<arrow::Array> new_array;
@@ -273,14 +240,14 @@ get_metrics_computable_array_for_dictionary(
             std::dynamic_pointer_cast<arrow::StringArray>(dictionary);
         new_array = make_shared<arrow::StringArray>(
             dict_string_array->length(), dict_string_array->value_offsets(),
-            dict_string_array->value_data(), new_null_bitmap);
+            dict_string_array->value_data(), dict_hits);
     } else {
         assert(dict_type_id == arrow::Type::LARGE_STRING);
         auto dict_string_array =
             std::dynamic_pointer_cast<arrow::LargeStringArray>(dictionary);
         new_array = make_shared<arrow::LargeStringArray>(
             dict_string_array->length(), dict_string_array->value_offsets(),
-            dict_string_array->value_data(), new_null_bitmap);
+            dict_string_array->value_data(), dict_hits);
     }
     return make_shared<arrow::ChunkedArray>(new_array);
 }
@@ -295,13 +262,16 @@ get_metrics_computable_array_for_dictionary(
  * lower bound information for the field.
  * @param[out] upper_bound_dict_py Python dictionary object for writing the
  * upper bound information for the field.
+ * @param[in] dict_hits: for dictionary encoded columns, which indices are used.
  */
 void compute_min_max_iceberg_field(
     const std::shared_ptr<arrow::ChunkedArray> &column, PyObject *field_id_py,
-    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py) {
+    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py,
+    std::optional<std::shared_ptr<arrow::Buffer>> dict_hits = std::nullopt) {
     std::shared_ptr<arrow::ChunkedArray> chunked_array;
     if (column->type()->id() == arrow::Type::DICTIONARY) {
-        chunked_array = get_metrics_computable_array_for_dictionary(column);
+        chunked_array = get_metrics_computable_array_for_dictionary(
+            column, dict_hits.value());
     } else {
         chunked_array = column;
     }
@@ -341,12 +311,16 @@ void compute_min_max_iceberg_field(
  * for writing the lower bound information for the field(s).
  * @param[out] upper_bound_dict_py Python dictionary object
  * for writing the upper bound information for the field(s).
+ * @param[in] col_idx: the original column index from the table column
+ * was fetched from.
+ * @param[in] sketches: the theta sketches to update
  */
 void generate_iceberg_field_metrics(
     const std::shared_ptr<arrow::ChunkedArray> &column,
     const std::shared_ptr<arrow::Field> &field, bool compute_min_and_max,
     PyObject *value_counts_dict_py, PyObject *null_count_dict_py,
-    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py) {
+    PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py,
+    size_t col_idx, theta_sketch_collection_t sketches) {
     // Compute the value counts and null count for all columns. This differs
     // from Spark (which doesn't compute any statistics for anything but the
     // bottom-most level of nested arrays), but the null values may be useful
@@ -377,9 +351,10 @@ void generate_iceberg_field_metrics(
         std::shared_ptr<arrow::BaseListType> list_type =
             std::static_pointer_cast<arrow::BaseListType>(field->type());
         std::shared_ptr<arrow::Field> child_field = list_type->value_field();
-        generate_iceberg_field_metrics(
-            child_column, child_field, false, value_counts_dict_py,
-            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+        generate_iceberg_field_metrics(child_column, child_field, false,
+                                       value_counts_dict_py, null_count_dict_py,
+                                       lower_bound_dict_py, upper_bound_dict_py,
+                                       -1, nullptr);
     } else if (type_id == arrow::Type::LARGE_LIST) {
         // If we have a large list we want to recurse onto the child values.
         std::vector<std::shared_ptr<arrow::Array>> chunks;
@@ -395,9 +370,10 @@ void generate_iceberg_field_metrics(
         std::shared_ptr<arrow::BaseListType> list_type =
             std::static_pointer_cast<arrow::BaseListType>(field->type());
         std::shared_ptr<arrow::Field> child_field = list_type->value_field();
-        generate_iceberg_field_metrics(
-            child_column, child_field, false, value_counts_dict_py,
-            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+        generate_iceberg_field_metrics(child_column, child_field, false,
+                                       value_counts_dict_py, null_count_dict_py,
+                                       lower_bound_dict_py, upper_bound_dict_py,
+                                       -1, nullptr);
     } else if (type_id == arrow::Type::MAP) {
         // If we have a map we recurse onto the key and value.
         std::vector<std::shared_ptr<arrow::Array>> key_chunks;
@@ -413,15 +389,17 @@ void generate_iceberg_field_metrics(
             std::static_pointer_cast<arrow::MapType>(field->type());
 
         std::shared_ptr<arrow::Field> key_field = map_type->key_field();
-        generate_iceberg_field_metrics(
-            key_column, key_field, false, value_counts_dict_py,
-            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+        generate_iceberg_field_metrics(key_column, key_field, false,
+                                       value_counts_dict_py, null_count_dict_py,
+                                       lower_bound_dict_py, upper_bound_dict_py,
+                                       -1, nullptr);
         std::shared_ptr<arrow::ChunkedArray> value_column =
             std::make_shared<arrow::ChunkedArray>(value_chunks);
         std::shared_ptr<arrow::Field> value_field = map_type->item_field();
-        generate_iceberg_field_metrics(
-            value_column, value_field, false, value_counts_dict_py,
-            null_count_dict_py, lower_bound_dict_py, upper_bound_dict_py);
+        generate_iceberg_field_metrics(value_column, value_field, false,
+                                       value_counts_dict_py, null_count_dict_py,
+                                       lower_bound_dict_py, upper_bound_dict_py,
+                                       -1, nullptr);
     } else if (type_id == arrow::Type::STRUCT) {
         // If we have a struct we recurse onto the children.
         std::shared_ptr<arrow::StructType> struct_type =
@@ -443,9 +421,26 @@ void generate_iceberg_field_metrics(
             generate_iceberg_field_metrics(
                 child_column, child_field, compute_min_and_max,
                 value_counts_dict_py, null_count_dict_py, lower_bound_dict_py,
-                upper_bound_dict_py);
+                upper_bound_dict_py, -1, nullptr);
+        }
+    } else if (type_id == arrow::Type::DICTIONARY) {
+        // Pre-compute the bitmask indicating which dict
+        // indices are used.
+        arrow::Result<std::shared_ptr<::arrow::ChunkedArray>> unified_arr_res =
+            arrow::DictionaryUnifier::UnifyChunkedArray(column);
+        std::shared_ptr<::arrow::ChunkedArray> unified_arr;
+        CHECK_ARROW_AND_ASSIGN(unified_arr_res, "UnifyChunkedArray",
+                               unified_arr);
+        auto dict_hits = get_dictionary_hits(unified_arr);
+        update_theta_sketches(sketches, unified_arr, col_idx, dict_hits);
+        // Generate max and min if they exist.
+        if (compute_min_and_max && null_count != value_counts) {
+            compute_min_max_iceberg_field(unified_arr, field_id_py,
+                                          lower_bound_dict_py,
+                                          upper_bound_dict_py, dict_hits);
         }
     } else {
+        update_theta_sketches(sketches, column, col_idx);
         // Generate max and min if they exist.
         if (compute_min_and_max && null_count != value_counts) {
             compute_min_max_iceberg_field(
@@ -605,7 +600,6 @@ std::vector<PyObject *> iceberg_pq_write_helper(
     std::shared_ptr<arrow::Table> iceberg_table =
         cast_arrow_table_to_iceberg_schema(std::move(arrow_table),
                                            std::move(iceberg_arrow_schema));
-    update_theta_sketches(sketches, iceberg_table);
     std::vector<bodo_array_type::arr_type_enum> bodo_array_types;
     for (auto col : table->columns) {
         bodo_array_types.push_back(col->arr_type);
@@ -639,7 +633,7 @@ std::vector<PyObject *> iceberg_pq_write_helper(
             auto field = iceberg_table->schema()->field(i);
             generate_iceberg_field_metrics(
                 column, field, true, value_counts_dict_py, null_count_dict_py,
-                lower_bound_dict_py, upper_bound_dict_py);
+                lower_bound_dict_py, upper_bound_dict_py, i, sketches);
         }
         return iceberg_py_objs;
     }

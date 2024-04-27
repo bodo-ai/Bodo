@@ -124,3 +124,13 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
  */
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
     std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length);
+
+/**
+ * @brief Returns a vector whose data is a bitmask indicating
+ * which indices of a dictionary array were used at least once.
+ * Assumes that UnifyDictionary has already been called.
+ *
+ * @param[in] column Arrow chunked array of dictionary data
+ */
+std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
+    const std::shared_ptr<arrow::ChunkedArray> &column);

@@ -1484,3 +1484,38 @@ std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
 
     return std::make_shared<table_info>(cols, length);
 }
+
+std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
+    const std::shared_ptr<arrow::ChunkedArray> &column) {
+    // After unification, all chunks should have the same
+    // dictionary.
+    const auto &first_chunk = column->chunk(0);
+    const auto &dict_array_chunk =
+        std::dynamic_pointer_cast<arrow::DictionaryArray>(first_chunk);
+    size_t n_strs = dict_array_chunk->dictionary()->length();
+    size_t num_null_bytes = arrow::bit_util::BytesForBits(n_strs);
+    arrow::Result<std::shared_ptr<arrow::Buffer>> res =
+        AllocateBuffer(num_null_bytes, bodo::BufferPool::DefaultPtr());
+    std::shared_ptr<arrow::Buffer> null_bitmap;
+    CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", null_bitmap);
+    // Ensure 0 allocated.
+    memset(null_bitmap->mutable_data(), 0x0, num_null_bytes);
+    for (int64_t chunk_idx = 0; chunk_idx < column->num_chunks(); chunk_idx++) {
+        const auto &chunk = column->chunk(chunk_idx);
+        const auto &dict_chunk =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(chunk);
+        const auto &indices =
+            std::dynamic_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
+                dict_chunk->indices());
+        int64_t n_rows = (int64_t)indices->length();
+        // Loop over every row and mark that dictionary index location as set
+        for (int64_t idx = 0; idx < n_rows; idx++) {
+            if (indices->IsNull(idx)) {
+                continue;
+            }
+            arrow::bit_util::SetBit(null_bitmap->mutable_data(),
+                                    indices->Value(idx));
+        }
+    }
+    return null_bitmap;
+}
