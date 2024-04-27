@@ -266,7 +266,11 @@ static bodo::tests::suite tests([] {
              true});
         std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
         T1->columns.push_back(A1);
-        update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+        auto arrow_table = bodo_table_to_arrow(T1);
+        for (int i = 0; i < arrow_table->num_columns(); i++) {
+            auto column = arrow_table->column(i);
+            update_theta_sketches(sketch_collection, column, i);
+        }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(!sketch_collection[0].value().is_estimation_mode());
         bodo::tests::check(sketch_collection[0].value().get_theta() == 1.0);
@@ -308,7 +312,11 @@ static bodo::tests::suite tests([] {
                 data, nulls);
             std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
             T1->columns.push_back(A1);
-            update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+            auto arrow_table = bodo_table_to_arrow(T1);
+            for (int i = 0; i < arrow_table->num_columns(); i++) {
+                auto column = arrow_table->column(i);
+                update_theta_sketches(sketch_collection, column, i);
+            }
         }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(sketch_collection[0].value().is_estimation_mode());
@@ -362,7 +370,11 @@ static bodo::tests::suite tests([] {
             T1->columns.push_back(A1);
             T1->columns.push_back(A2);
             T1->columns.push_back(A3);
-            update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+            auto arrow_table = bodo_table_to_arrow(T1);
+            for (int i = 0; i < arrow_table->num_columns(); i++) {
+                auto column = arrow_table->column(i);
+                update_theta_sketches(sketch_collection, column, i);
+            }
         }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(sketch_collection[0].value().is_estimation_mode());
@@ -394,7 +406,11 @@ static bodo::tests::suite tests([] {
             {true, false, true, false, true, false, true, false, true});
         std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
         T1->columns.push_back(A1);
-        update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+        auto arrow_table = bodo_table_to_arrow(T1);
+        for (int i = 0; i < arrow_table->num_columns(); i++) {
+            auto column = arrow_table->column(i);
+            update_theta_sketches(sketch_collection, column, i);
+        }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(!sketch_collection[0].value().is_estimation_mode());
         bodo::tests::check(sketch_collection[0].value().get_theta() == 1.0);
@@ -433,7 +449,11 @@ static bodo::tests::suite tests([] {
             auto A1 = string_array_from_vector(data, nulls);
             std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
             T1->columns.push_back(A1);
-            update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+            auto arrow_table = bodo_table_to_arrow(T1);
+            for (int i = 0; i < arrow_table->num_columns(); i++) {
+                auto column = arrow_table->column(i);
+                update_theta_sketches(sketch_collection, column, i);
+            }
         }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(sketch_collection[0].value().is_estimation_mode());
@@ -449,7 +469,8 @@ static bodo::tests::suite tests([] {
         // the number of distinct entries.
         auto sketch_collection = init_theta_sketches({true});
         // Create and insert 100 batches of data with a total of
-        // 111383 rows and 9595 distinct non-null strings.
+        // 111383 rows and 9595 distinct non-null strings, including
+        // many dict rows that are never used.
         bodo::vector<std::string> data;
         bodo::vector<bool> nulls;
         for (size_t i = 0; i < 20000; i++) {
@@ -464,7 +485,8 @@ static bodo::tests::suite tests([] {
             std::vector<bool> nulls;
             for (size_t i = 0; i < batch_size; i++) {
                 if ((i * batch) % 201 < 200) {
-                    indices.push_back((row_id * row_id * row_id) % 20000);
+                    int64_t val = (row_id * row_id * row_id) % 20000;
+                    indices.push_back(val);
                     nulls.push_back(true);
                 } else {
                     indices.push_back(0);
@@ -478,7 +500,10 @@ static bodo::tests::suite tests([] {
             std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
             T1->columns.push_back(
                 create_dict_string_array(dict_arr, index_arr));
-            update_theta_sketches(sketch_collection, bodo_table_to_arrow(T1));
+            auto arrow_table = bodo_table_to_arrow(T1);
+            auto column = arrow_table->column(0);
+            auto dict_hits = get_dictionary_hits(column);
+            update_theta_sketches(sketch_collection, column, 0, dict_hits);
         }
         bodo::tests::check(!sketch_collection[0].value().is_empty());
         bodo::tests::check(sketch_collection[0].value().is_estimation_mode());
@@ -505,14 +530,22 @@ static bodo::tests::suite tests([] {
             {true, true, true, true, true, true, true, true});
         std::shared_ptr<table_info> T0 = std::make_shared<table_info>();
         T0->columns.push_back(A0);
-        update_theta_sketches(sketch_collection_0, bodo_table_to_arrow(T0));
+        auto arrow_table_0 = bodo_table_to_arrow(T0);
+        for (int i = 0; i < arrow_table_0->num_columns(); i++) {
+            auto column = arrow_table_0->column(i);
+            update_theta_sketches(sketch_collection_0, column, i);
+        }
         // Collection 1: insert 8 values, 2 duplicates of #0 and 2 unique
         auto A1 = nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(
             {3, 4, 5, 6, 3, 4, 5, 6},
             {true, true, true, true, true, true, true, true});
         std::shared_ptr<table_info> T1 = std::make_shared<table_info>();
         T1->columns.push_back(A1);
-        update_theta_sketches(sketch_collection_1, bodo_table_to_arrow(T1));
+        auto arrow_table_1 = bodo_table_to_arrow(T1);
+        for (int i = 0; i < arrow_table_1->num_columns(); i++) {
+            auto column = arrow_table_1->column(i);
+            update_theta_sketches(sketch_collection_1, column, i);
+        }
         // Collection 2: insert 1,000 values, all unique except for 1 overlap
         // with #1
         std::vector<int64_t> data2;
@@ -525,7 +558,11 @@ static bodo::tests::suite tests([] {
             data2, nulls2);
         std::shared_ptr<table_info> T2 = std::make_shared<table_info>();
         T2->columns.push_back(A2);
-        update_theta_sketches(sketch_collection_2, bodo_table_to_arrow(T2));
+        auto arrow_table_2 = bodo_table_to_arrow(T2);
+        for (int i = 0; i < arrow_table_2->num_columns(); i++) {
+            auto column = arrow_table_2->column(i);
+            update_theta_sketches(sketch_collection_2, column, i);
+        }
         // Collection 3: insert 10,000 values, all unique (no overlap with
         // #0/#1/#2)
         std::vector<int64_t> data3;
@@ -538,7 +575,11 @@ static bodo::tests::suite tests([] {
             data3, nulls3);
         std::shared_ptr<table_info> T3 = std::make_shared<table_info>();
         T3->columns.push_back(A3);
-        update_theta_sketches(sketch_collection_3, bodo_table_to_arrow(T3));
+        auto arrow_table_3 = bodo_table_to_arrow(T3);
+        for (int i = 0; i < arrow_table_3->num_columns(); i++) {
+            auto column = arrow_table_3->column(i);
+            update_theta_sketches(sketch_collection_3, column, i);
+        }
 
         immutable_theta_sketch_collection_t compact_0 =
             compact_theta_sketches(sketch_collection_0, 1);
@@ -648,7 +689,11 @@ static bodo::tests::suite tests([] {
             data, nulls);
         std::shared_ptr<table_info> T0 = std::make_shared<table_info>();
         T0->columns.push_back(A0);
-        update_theta_sketches(sketch_collection, bodo_table_to_arrow(T0));
+        auto arrow_table_0 = bodo_table_to_arrow(T0);
+        for (int i = 0; i < arrow_table_0->num_columns(); i++) {
+            auto column = arrow_table_0->column(i);
+            update_theta_sketches(sketch_collection, column, i);
+        }
 
         // Compact and merge the results across ranks
         auto immutable_collection =
@@ -704,7 +749,11 @@ static bodo::tests::suite tests([] {
         T->columns.push_back(A0);
         T->columns.push_back(A0);
         T->columns.push_back(A2);
-        update_theta_sketches(sketch_collection, bodo_table_to_arrow(T));
+        auto arrow_table = bodo_table_to_arrow(T);
+        for (int i = 0; i < arrow_table->num_columns(); i++) {
+            auto column = arrow_table->column(i);
+            update_theta_sketches(sketch_collection, column, i);
+        }
 
         // Compact and merge the results across ranks
         auto immutable_collection =

@@ -54,15 +54,19 @@ theta_sketch_collection_t init_theta_sketches(
 
 /**
  * @brief modifies a collection of theta sketches in-place as they receive a
- *        new batch of data for each column.
- * @param[in] sketches the collection of theta sketches, with an empty option
+ *        new batch of data for a single column.
+ * @param[in] sketches: the collection of theta sketches, with an empty option
  *            instead for any columns that we do not want NDV info for.
- * @param[in] in_table the most recently received batch of data that we wish
- *            to insert into the NDV information. Should have a number of
- * columns equal to the size of sketches.
+ * @param[in] in_col: the most recently received batch of data that we wish
+ *            to insert into the NDV information for one of the columns.
+ * @param[in] col_idx: which column is being inserted.
+ * @param[in] dict_hits: vector indicating which dictionary indices
+ *            are used (nullopt if not a dictionary column)
  */
-void update_theta_sketches(theta_sketch_collection_t sketches,
-                           const std::shared_ptr<arrow::Table> &in_table);
+void update_theta_sketches(
+    theta_sketch_collection_t sketches,
+    const std::shared_ptr<arrow::ChunkedArray> &in_col, size_t col_idx,
+    std::optional<std::shared_ptr<arrow::Buffer>> dict_hits = std::nullopt);
 
 /**
  * @brief takes in a collection of theta sketches and returns the immutable
