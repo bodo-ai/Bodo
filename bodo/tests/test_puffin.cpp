@@ -295,7 +295,11 @@ static bodo::tests::suite tests([] {
         T->columns.push_back(A1);
         T->columns.push_back(A2);
         auto collection_2 = init_theta_sketches({true, true, true});
-        update_theta_sketches(collection_2, bodo_table_to_arrow(T));
+        auto arrow_table = bodo_table_to_arrow(T);
+        for (int i = 0; i < arrow_table->num_columns(); i++) {
+            auto column = arrow_table->column(i);
+            update_theta_sketches(collection_2, arrow_table->column(i), i);
+        }
         auto collection_3 = merge_theta_sketches(
             {collection_1, compact_theta_sketches(collection_2, 3)});
 

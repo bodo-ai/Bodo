@@ -60,155 +60,140 @@ inline void insert_numeric_buffer_theta_sketch(
 }
 
 template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::INT32)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
+    requires(ArrowType == arrow::Type::INT32 ||
+             ArrowType == arrow::Type::INT64 ||
+             ArrowType == arrow::Type::FLOAT ||
+             ArrowType == arrow::Type::DOUBLE ||
+             ArrowType == arrow::Type::DATE32 ||
+             ArrowType == arrow::Type::TIME64 ||
+             ArrowType == arrow::Type::TIMESTAMP)
+void insert_value_theta_sketch(const char *data, int64_t num_bytes,
                                datasketches::update_theta_sketch &sketch) {
-    auto int32_scalar = std::static_pointer_cast<arrow::Int32Scalar>(scalar);
-    int32_t value = int32_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(int32_t));
+    const char *initial_bytes = reinterpret_cast<const char *>(data);
+    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, num_bytes);
 }
 
 template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::INT64)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
+    requires(ArrowType == arrow::Type::LARGE_STRING ||
+             ArrowType == arrow::Type::LARGE_BINARY)
+void insert_value_theta_sketch(const char *data, int64_t num_bytes,
                                datasketches::update_theta_sketch &sketch) {
-    auto int64_scalar = std::static_pointer_cast<arrow::Int64Scalar>(scalar);
-    int64_t value = int64_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(int64_t));
+    sketch.update(data, num_bytes);
 }
 
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::FLOAT)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto float_scalar = std::static_pointer_cast<arrow::FloatScalar>(scalar);
-    float value = float_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(float));
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::DOUBLE)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto double_scalar = std::static_pointer_cast<arrow::DoubleScalar>(scalar);
-    double value = double_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(double));
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::DATE32)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto date32_scalar = std::static_pointer_cast<arrow::Date32Scalar>(scalar);
-    int32_t value = date32_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(int32_t));
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::TIME64)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto time64_scalar = std::static_pointer_cast<arrow::Time64Scalar>(scalar);
-    int64_t value = time64_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(int64_t));
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::TIMESTAMP)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto timestamp_scalar =
-        std::static_pointer_cast<arrow::TimestampScalar>(scalar);
-    int64_t value = timestamp_scalar->value;
-    const char *initial_bytes = reinterpret_cast<const char *>(&value);
-    insert_numeric_buffer_theta_sketch(sketch, initial_bytes, sizeof(int64_t));
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::LARGE_STRING)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto string_scalar =
-        std::static_pointer_cast<arrow::LargeStringScalar>(scalar);
-    sketch.update(string_scalar->value->data(), string_scalar->value->size());
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::LARGE_BINARY)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto binary_scalar =
-        std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar);
-    sketch.update(binary_scalar->value->data(), binary_scalar->value->size());
-}
-
-template <arrow::Type::type ArrowType>
-    requires(ArrowType == arrow::Type::DICTIONARY)
-void insert_value_theta_sketch(const std::shared_ptr<arrow::Scalar> &scalar,
-                               datasketches::update_theta_sketch &sketch) {
-    auto dict_scalar =
-        std::static_pointer_cast<arrow::DictionaryScalar>(scalar);
-    std::shared_ptr<arrow::Scalar> string_scalar =
-        dict_scalar->GetEncodedValue().ValueOrDie();
-    insert_value_theta_sketch<arrow::Type::LARGE_STRING>(string_scalar, sketch);
-}
-
-void update_theta_sketches(theta_sketch_collection_t sketches,
-                           const std::shared_ptr<arrow::Table> &in_table) {
-    if (sketches == nullptr) {
-        return;
-    }
-#define add_column_case(arrow_type)                                  \
-    case arrow_type: {                                               \
-        int n_chunks = col->num_chunks();                            \
-        for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) { \
-            const std::shared_ptr<arrow::Array> &chunk =             \
-                col->chunk(cur_chunk);                               \
-            size_t n_rows = chunk->length();                         \
-            for (size_t row = 0; row < n_rows; row++) {              \
-                if (chunk->IsNull((int64_t)row))                     \
-                    continue;                                        \
-                std::shared_ptr<arrow::Scalar> current_row =         \
-                    chunk->GetScalar((int64_t)row).ValueOrDie();     \
-                insert_value_theta_sketch<arrow_type>(               \
-                    current_row, sketches[col_idx].value());         \
-            }                                                        \
-        }                                                            \
-        break;                                                       \
-    }
-    // Loop over every column in the table, skipping columns where the theta
-    // sketch is absent.
-    size_t n_columns = in_table->columns().size();
-    for (size_t col_idx = 0; col_idx < n_columns; col_idx++) {
-        if (sketches[col_idx].has_value()) {
-            std::shared_ptr<arrow::ChunkedArray> col =
-                in_table->column(col_idx);
-            switch (col->type()->id()) {
-                add_column_case(arrow::Type::INT32);
-                add_column_case(arrow::Type::INT64);
-                add_column_case(arrow::Type::FLOAT);
-                add_column_case(arrow::Type::DOUBLE);
-                add_column_case(arrow::Type::DATE32);
-                add_column_case(arrow::Type::TIME64);
-                add_column_case(arrow::Type::TIMESTAMP);
-                add_column_case(arrow::Type::LARGE_STRING);
-                add_column_case(arrow::Type::LARGE_BINARY);
-                add_column_case(arrow::Type::DICTIONARY);
-                default: {
-                    throw std::runtime_error(
-                        "update_theta_sketches: unsupported arrow type " +
-                        col->type()->name());
-                }
+void insert_theta_sketch_dict_column(
+    const std::shared_ptr<arrow::ChunkedArray> &col,
+    datasketches::update_theta_sketch &sketch,
+    const std::shared_ptr<arrow::Buffer> &dict_hits) {
+    for (int64_t chunk_idx = 0; chunk_idx < col->num_chunks(); chunk_idx++) {
+        const auto &chunk = col->chunks()[chunk_idx];
+        const auto &dict_array_chunk =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(chunk);
+        const auto &str_arr =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(
+                dict_array_chunk->dictionary());
+        int64_t dict_size = str_arr->length();
+        for (int64_t row = 0; row < dict_size; row++) {
+            if (arrow::bit_util::GetBit(dict_hits->mutable_data(), row)) {
+                arrow::LargeStringType::offset_type num_bytes;
+                const char *buffer = reinterpret_cast<const char *>(
+                    str_arr->GetValue(row, &num_bytes));
+                sketch.update(buffer, num_bytes);
             }
         }
     }
-#undef add_column_case
+}
+
+void update_theta_sketches(
+    theta_sketch_collection_t sketches,
+    const std::shared_ptr<arrow::ChunkedArray> &col, size_t col_idx,
+    std::optional<std::shared_ptr<arrow::Buffer>> dict_hits) {
+    if (sketches == nullptr) {
+        return;
+    }
+#define add_numeric_column_case(arrow_type)                                    \
+    case (arrow_type::type_id): {                                              \
+        datasketches::update_theta_sketch &sketch = sketches[col_idx].value(); \
+        int n_chunks = col->num_chunks();                                      \
+        for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {           \
+            const std::shared_ptr<arrow::Array> &chunk =                       \
+                col->chunk(cur_chunk);                                         \
+            size_t n_rows = chunk->length();                                   \
+            std::shared_ptr<arrow::NumericArray<arrow_type>> base_array =      \
+                std::reinterpret_pointer_cast<                                 \
+                    arrow::NumericArray<arrow_type>>(chunk);                   \
+            using T = typename arrow_type::c_type;                             \
+            const T *raw_values = base_array->raw_values();                    \
+            for (size_t row = 0; row < n_rows; row++) {                        \
+                if (chunk->IsNull(row)) {                                      \
+                    continue;                                                  \
+                }                                                              \
+                int64_t num_bytes = sizeof(T);                                 \
+                const char *data =                                             \
+                    reinterpret_cast<const char *>(raw_values + row);          \
+                insert_value_theta_sketch<arrow_type::type_id>(                \
+                    data, num_bytes, sketch);                                  \
+            }                                                                  \
+        }                                                                      \
+        break;                                                                 \
+    }
+#define add_binary_column_case(arrow_type)                                     \
+    case (arrow_type::type_id): {                                              \
+        datasketches::update_theta_sketch &sketch = sketches[col_idx].value(); \
+        int n_chunks = col->num_chunks();                                      \
+        for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {           \
+            const std::shared_ptr<arrow::Array> &chunk =                       \
+                col->chunk(cur_chunk);                                         \
+            size_t n_rows = chunk->length();                                   \
+            std::shared_ptr<arrow::BaseBinaryArray<arrow_type>> base_array =   \
+                std::reinterpret_pointer_cast<                                 \
+                    arrow::BaseBinaryArray<arrow_type>>(chunk);                \
+            for (size_t row = 0; row < n_rows; row++) {                        \
+                if (chunk->IsNull(row)) {                                      \
+                    continue;                                                  \
+                }                                                              \
+                arrow_type::offset_type num_bytes;                             \
+                const char *data = reinterpret_cast<const char *>(             \
+                    base_array->GetValue(row, &num_bytes));                    \
+                insert_value_theta_sketch<arrow_type::type_id>(                \
+                    data, num_bytes, sketch);                                  \
+            }                                                                  \
+        }                                                                      \
+        break;                                                                 \
+    }
+    // Skipping the column if the theta sketch is absent.
+    if (sketches[col_idx].has_value()) {
+        switch (col->type()->id()) {
+            add_numeric_column_case(arrow::Int32Type);
+            add_numeric_column_case(arrow::Int64Type);
+            add_numeric_column_case(arrow::FloatType);
+            add_numeric_column_case(arrow::DoubleType);
+            add_numeric_column_case(arrow::Date32Type);
+            add_numeric_column_case(arrow::Time64Type);
+            add_numeric_column_case(arrow::TimestampType);
+            add_binary_column_case(arrow::LargeStringType);
+            add_binary_column_case(arrow::LargeBinaryType);
+            case arrow::Type::DICTIONARY: {
+                if (dict_hits.has_value()) {
+                    insert_theta_sketch_dict_column(
+                        col, sketches[col_idx].value(), dict_hits.value());
+                } else {
+                    throw std::runtime_error(
+                        "update_theta_sketches: dictionary encoded column "
+                        "requires "
+                        "non-nullopt value for dict-hits");
+                }
+                break;
+            }
+            default: {
+                throw std::runtime_error(
+                    "update_theta_sketches: unsupported arrow type " +
+                    col->type()->name());
+            }
+        }
+    }
+#undef add_numeric_column_case
+#undef add_binary_column_case
 }
 
 immutable_theta_sketch_collection_t compact_theta_sketches(
@@ -256,7 +241,7 @@ immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
 
     if (current_rank == 0) {
         // On rank zero, convert the combined array into a vector of theta
-        // sketch collecitons
+        // sketch collections
         std::vector<immutable_theta_sketch_collection_t> collections;
         char *raw_data_ptr =
             combined_string_array->data1<bodo_array_type::STRING>();
