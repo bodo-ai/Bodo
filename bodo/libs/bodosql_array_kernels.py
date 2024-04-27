@@ -193,6 +193,7 @@ broadcasted_fixed_arg_functions = {
     "mod",
     "monthname",
     "months_between",
+    "multiply_decimals",
     "multiply_numeric",
     "negate",
     "negate_interval",

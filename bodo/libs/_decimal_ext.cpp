@@ -7,11 +7,12 @@
 
 #include <arrow/compute/cast.h>
 #include <arrow/python/pyarrow.h>
+#include <arrow/util/bit_util.h>
+#include <arrow/util/decimal.h>
 #include <fmt/format.h>
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/decimal.h"
+#include "_gandiva_decimal_copy.h"
 
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
@@ -253,6 +254,39 @@ double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     auto high = static_cast<uint64_t>(val.high);
     auto low = static_cast<uint64_t>(val.low);
     return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+}
+
+/**
+ * @brief Multiply two decimal scalars with the given precision and scale
+ * and return the output. The output should have its scale truncated to
+ * the provided output scale. If overflow is detected, then the overflow
+ * need to be updated to true.
+ *
+ * @param v1 First decimal value
+ * @param p1 Precision of first decimal value
+ * @param s1 Scale of first decimal value
+ * @param v2 Second decimal value
+ * @param p2 Precision of second decimal value
+ * @param s2 Scale of second decimal value
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param[out] overflow Overflow flag
+ * @return arrow::Decimal128
+ */
+arrow::Decimal128 multiply_decimal_scalars_py_entry(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+    bool* overflow) {
+    try {
+        arrow::Decimal128Scalar val1(v1, arrow::decimal128(p1, s1));
+        arrow::Decimal128Scalar val2(v2, arrow::decimal128(p2, s2));
+        return decimalops::Multiply(val1, val2, out_precision, out_scale,
+                                    overflow);
+
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
 }
 
 /**
@@ -568,6 +602,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_scalar_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
+    SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
 
     return m;
 }
