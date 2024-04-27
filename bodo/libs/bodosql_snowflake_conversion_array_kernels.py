@@ -1904,6 +1904,61 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
         raise BodoError("numeric_to_decimal: invalid input type")
 
 
+def multiply_decimals(arr1, arr2):  # pragma: no cover
+    pass
+
+
+@overload(multiply_decimals)
+def overload_multiply_decimals(arr1, arr2):
+    """
+    Implementation to multiply two decimal arrays or scalars. This does
+    not handle optional type support and so it should not be called directly
+    from BodoSQL. This is meant as a convenience function to simplify the
+    multiplication logic.
+    """
+    if not (
+        is_overload_none(arr1)
+        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("multiply_decimals: arr1 must be a decimal array or scalar")
+    if not (
+        is_overload_none(arr2)
+        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("multiply_decimals: arr2 must be a decimal array or scalar")
+
+    if is_overload_none(arr1):
+        # Pick dummy values for precision and scale to simplify the code.
+        p1, s1 = 38, 0
+    else:
+        p1, s1 = arr1.precision, arr1.scale
+    if is_overload_none(arr2):
+        # Pick dummy values for precision and scale to simplify the code.
+        p2, s2 = 38, 0
+    else:
+        p2, s2 = arr2.precision, arr2.scale
+
+    p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
+        p1, s1, p2, s2
+    )
+    out_dtype = bodo.DecimalArrayType(p, s)
+
+    arg_names = ["arr1", "arr2"]
+    arg_types = [arr1, arr2]
+    propagate_null = [True, True]
+    scalar_text = (
+        "res[i] = bodo.libs.decimal_arr_ext.multiply_decimal_scalars(arg0, arg1)"
+    )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
 @numba.generated_jit(nopython=True)
 def _is_string_numeric(expr):  # pragma: no cover
     """Check if a string is numeric."""
