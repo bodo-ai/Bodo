@@ -200,7 +200,11 @@ open class RexToPandasTranslator(
                     operands,
                 )
             }
-
+            SqlKind.ROW -> {
+                val keys = node.getType().fieldNames.map { Expr.StringLiteral(it) }
+                val scalars = node.operands.map { Expr.BooleanLiteral(isOperandScalar(it)) }
+                return JsonCodeGen.getObjectConstructKeepNullCode("OBJECT_CONSTRUCT_KEEP_NULL", keys, operands, scalars, visitor)
+            }
             else -> throw BodoSQLCodegenException(
                 "Internal Error: Calcite Plan Produced an Unsupported special operand call: " +
                     node.operator,
@@ -766,7 +770,17 @@ open class RexToPandasTranslator(
         val fnName = fnOperation.operator.name
         val codeExprs: MutableList<Expr> = ArrayList()
         if ((fnName == "OBJECT_CONSTRUCT") || (fnName == "OBJECT_CONSTRUCT_KEEP_NULL")) {
-            return JsonCodeGen.getObjectConstructKeepNullCode(fnName, fnOperation, argScalars, this, visitor)
+            val keys: MutableList<Expr.StringLiteral> = ArrayList()
+            val values: MutableList<Expr> = ArrayList()
+            val scalars: MutableList<Expr.BooleanLiteral> = ArrayList()
+            for (i in 0 until fnOperation.operands.size step 2) {
+                keys.add(Expr.StringLiteral((fnOperation.operands[i] as RexLiteral).getValueAs(String::class.java)!!))
+            }
+            for (i in 1 until fnOperation.operands.size step 2) {
+                values.add(fnOperation.operands[i].accept(this))
+                scalars.add(Expr.BooleanLiteral(argScalars[i]))
+            }
+            return JsonCodeGen.getObjectConstructKeepNullCode(fnName, keys, values, scalars, visitor)
         }
         for (operand: RexNode in fnOperation.operands) {
             var operandInfo = operand.accept(this)
