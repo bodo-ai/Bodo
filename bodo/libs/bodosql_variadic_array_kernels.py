@@ -89,7 +89,10 @@ def overload_object_construct_keep_null(values, names, scalars):
     arg_string = "values, names, scalars"
     arg_sources = {f"v{i}": f"values[{i}]" for i in range(len(values))}
 
-    data = ", ".join(f"arg{i}" for i in range(len(values)))
+    data = ", ".join(
+        f"bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i})"
+        for i in range(len(values))
+    )
     nulls = []
     for i in range(len(values)):
         if values[i] == bodo.none:
