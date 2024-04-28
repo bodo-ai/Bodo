@@ -1701,7 +1701,7 @@ void HashJoinState::ReportBuildStageMetrics() {
                                     !this->build_parallel));
 
     // Get shuffle stats from build shuffle state
-    this->build_shuffle_state.metrics.add_to_metrics(metrics);
+    this->build_shuffle_state.ExportMetrics(metrics);
 
     // Get time spent appending to and number of rows in build_na_key_buffer
     metrics.emplace_back(TimerMetric("na_buffer_append_time",
@@ -2175,7 +2175,7 @@ void HashJoinState::ReportProbeStageMetrics() {
     }
 
     // Get shuffle stats from probe shuffle state
-    this->probe_shuffle_state.metrics.add_to_metrics(metrics);
+    this->probe_shuffle_state.ExportMetrics(metrics);
 
     MetricBase::StatValue na_counter = this->probe_na_counter;
     metrics.emplace_back(StatMetric("na_counter", na_counter));

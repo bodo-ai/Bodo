@@ -39,7 +39,8 @@ const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
  * @brief Struct for Shuffle metrics.
  *
  */
-struct IncrementalShuffleMetrics {
+class IncrementalShuffleMetrics {
+   public:
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
 
@@ -76,7 +77,7 @@ struct IncrementalShuffleMetrics {
      *
      * @param metrics Vector of metrics to append to.
      */
-    virtual void add_to_metrics(std::vector<MetricBase>& metrics);
+    void add_to_metrics(std::vector<MetricBase>& metrics);
 };
 
 /**
@@ -189,8 +190,20 @@ class IncrementalShuffleState {
      */
     virtual void Finalize();
 
-    // Metrics for query profile.
-    IncrementalShuffleMetrics metrics;
+    /**
+     * @brief Export shuffle metrics into the provided vector.
+     *
+     * @param[in, out] metrics Vector to append the metrics to.
+     */
+    virtual void ExportMetrics(std::vector<MetricBase>& metrics) {
+        this->metrics.add_to_metrics(metrics);
+    }
+
+    /**
+     * @brief Reset the metrics.
+     *
+     */
+    virtual void ResetMetrics() { this->metrics = IncrementalShuffleMetrics(); }
 
    protected:
     /**
@@ -276,6 +289,8 @@ class IncrementalShuffleState {
     /// @brief Print information about the shuffle state during initialization,
     /// during every shuffle and after sync frequency is updated.
     bool debug_mode = false;
+    /// @brief Metrics for query profile.
+    IncrementalShuffleMetrics metrics;
 
     /**
      * @brief Helper function for ShuffleIfRequired. This determines whether we
