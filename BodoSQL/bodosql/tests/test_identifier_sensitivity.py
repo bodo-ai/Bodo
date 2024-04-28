@@ -29,9 +29,9 @@ def test_spark_name_matching_invalid(memory_leak_check):
         bodo.utils.typing.BodoError,
         match=r"Object 'TABLE1' not found within '__BODOLOCAL__'; did you mean 'table1'?",
     ):
-        old_casing_value = bodo.bodo_identifier_casing
+        old_sql_style = bodo.bodo_sql_style
         try:
-            bodo.bodo_identifier_casing = "SNOWFLAKE"
+            bodo.bodo_sql_style = "SNOWFLAKE"
             check_query(
                 query,
                 {"table1": df},
@@ -41,7 +41,7 @@ def test_spark_name_matching_invalid(memory_leak_check):
                 expected_output=df.loc[:, ["Gamma", "Alpha"]],
             )
         finally:
-            bodo.bodo_identifier_casing = old_casing_value
+            bodo.bodo_sql_style = old_sql_style
 
 
 def test_spark_name_matching_valid(memory_leak_check):
@@ -57,9 +57,9 @@ def test_spark_name_matching_valid(memory_leak_check):
             "Gamma": [100, 200, 300, 400, 500],
         }
     )
-    old_casing_value = bodo.bodo_identifier_casing
+    old_sql_style = bodo.bodo_sql_style
     try:
-        bodo.bodo_identifier_casing = "SPARK"
+        bodo.bodo_sql_style = "SPARK"
         check_query(
             query,
             {"table1": df},
@@ -69,4 +69,4 @@ def test_spark_name_matching_valid(memory_leak_check):
             expected_output=df.loc[:, ["Gamma", "Alpha"]],
         )
     finally:
-        bodo.bodo_identifier_casing = old_casing_value
+        bodo.bodo_sql_style = old_sql_style

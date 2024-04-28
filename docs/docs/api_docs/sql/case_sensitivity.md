@@ -46,13 +46,13 @@ SELECT A as "myIdentifier" FROM table1
 If you provide DataFrames directly from Python or are using the TablePath API to load Parquet files, then please be advised
 that the column names will be required to match exactly and for ease of use we highly recommend using uppercase column names.
 
-BodoSQL's identifier handling behavior can be controlled by an environment variable `BODO_IDENTIFIER_CASING` which
+BodoSQL's identifier handling behavior can be controlled by an environment variable `BODO_SQL_STYLE` which
 has two currently supported values:
 
 - `SNOWFLAKE` (the default)
 - `SPARK`
 
-If `BODO_IDENTIFIER_CASING` is set to `SPARK`, then a different set of case sensitivity rules will be used:
+If `BODO_SQL_STYLE` is set to `SPARK`, then a different set of case sensitivity rules will be used:
 
 - Identifiers, both with and without quotes, will not have their casing altered.
 - All identifier matching is case-insensitive.

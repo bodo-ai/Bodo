@@ -7,12 +7,19 @@ or descending order. By default, it sorts the records in ascending order.
 NULLs are sorted in accordance with the optional `#!sql NULLS FIRST` or
 `#!sql NULLS LAST` keywords.
 
-If the null ordering is not provided, then the default ordering depends
-on if the column is ascending or descending. For ascending order, by
-default NULL values are returned at the end, while for descending order
-nulls are returned at the front. If the order of nulls matter we strongly
-recommend explicitly providing either `#!sql NULLS FIRST` or
-`#!sql NULLS LAST`.
+BodoSQL's default NULLS FIRST and NULLS LAST behavior is controlled by
+an environment variable `BODO_SQL_STYLE` which has two currently supported
+values:
+
+- `SNOWFLAKE` (the default)
+- `SPARK`
+
+If `BODO_SQL_STYLE` is set to `SNOWFLAKE` then the default behavior is `NULLS LAST`
+for ascending order and `NULLS FIRST` for descending order. If `BODO_SQL_STYLE` is
+set to `SPARK` then the default behavior is `NULLS FIRST` for ascending order and
+`NULLS LAST` for descending order. If you are transitioning a query from any other
+system we strongly recommend manually specifying `NULLS FIRST` or `NULLS LAST` to
+ensure the correct behavior.
 
 ```sql
 SELECT <COLUMN_NAMES>
@@ -57,4 +64,3 @@ SELECT A, B FROM table1 ORDER BY B, A DESC NULLS LAST
 6  Jonathon Middleton  12764.50
 9      Darryl Rosales  25645.39
 ```
-

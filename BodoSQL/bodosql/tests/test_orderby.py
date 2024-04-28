@@ -5,6 +5,7 @@ Test correctness of SQL queries containing orderby on BodoSQL
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
@@ -603,3 +604,46 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
         expected_output=py_output,
         session_tz=representative_tz,
     )
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        (
+            "Select A from TABLE1 order by A",
+            pd.array([None, None, 1, 1, 2, 2, 3, 4, 5], dtype="Int64"),
+        ),
+        (
+            "Select A from TABLE1 order by A ASC",
+            pd.array([None, None, 1, 1, 2, 2, 3, 4, 5], dtype="Int64"),
+        ),
+        (
+            "Select A from TABLE1 order by A DESC",
+            pd.array([5, 4, 3, 2, 2, 1, 1, None, None], dtype="Int64"),
+        ),
+    ],
+)
+def test_orderby_spark_style(query, answer, memory_leak_check):
+    """
+    Test that with BODO_SQL_STYLE set to Spark we match spark order by
+    rules.
+    """
+
+    old_style = bodo.bodo_sql_style
+    try:
+        bodo.bodo_sql_style = "SPARK"
+        df = pd.DataFrame(
+            {
+                "A": pd.array([1, 2, 3, 4, None, 5, None, 1, 2], dtype="Int64"),
+            }
+        )
+        check_query(
+            query,
+            {"TABLE1": df},
+            None,
+            expected_output=pd.DataFrame({"A": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_sql_style = old_style

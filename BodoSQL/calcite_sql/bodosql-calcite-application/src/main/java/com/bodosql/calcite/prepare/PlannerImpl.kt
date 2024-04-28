@@ -53,7 +53,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     .withConformance(SqlConformanceEnum.LENIENT)
                     .withParserFactory(SqlBodoParserImpl.FACTORY)
             parserConfig =
-                when (config.bodoIdentifierCasing) {
+                when (config.sqlStyle) {
                     "SNOWFLAKE" ->
                         parserConfig
                             .withCaseSensitive(true)
@@ -65,7 +65,25 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                             .withQuotedCasing(Casing.UNCHANGED)
                             .withUnquotedCasing(Casing.UNCHANGED)
                     else ->
-                        throw Exception("Unrecognized bodo identifier casing protocol: " + config.bodoIdentifierCasing)
+                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
+                }
+            var validator =
+                SqlValidator.Config.DEFAULT
+                    .withCallRewrite(false)
+                    .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                    .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance())
+            validator =
+                when (config.sqlStyle) {
+                    // Ensure order by defaults match. The only differences
+                    // are in the default behavior for nulls first/last.
+                    "SNOWFLAKE" ->
+                        validator
+                            .withDefaultNullCollation(NullCollation.HIGH)
+                    "SPARK" ->
+                        validator
+                            .withDefaultNullCollation(NullCollation.LOW)
+                    else ->
+                        throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
                 }
             return Frameworks.newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
@@ -80,16 +98,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         StandardConvertletTableConfig(false, false),
                     ),
                 )
-                .sqlValidatorConfig(
-                    SqlValidator.Config.DEFAULT
-                        // Note: We use NullCollation.HIGH to match Snowflake. In the future
-                        // when we get Databricks customers we need to either allows users to configure
-                        // null collation automatically based on the catalog or define Bodo rules (or both).
-                        .withDefaultNullCollation(NullCollation.HIGH)
-                        .withCallRewrite(false)
-                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
-                        .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance()),
-                )
+                .sqlValidatorConfig(validator)
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
                 .programs(config.plannerType.programs().toList())
@@ -158,6 +167,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
         val plannerType: PlannerType,
-        val bodoIdentifierCasing: String,
+        val sqlStyle: String,
     )
 }
