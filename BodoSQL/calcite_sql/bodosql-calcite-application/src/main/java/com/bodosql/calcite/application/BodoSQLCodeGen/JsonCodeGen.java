@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
@@ -10,8 +9,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import kotlin.Pair;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexLiteral;
 
 public class JsonCodeGen {
   static HashMap<String, String> jsonFnMap;
@@ -34,34 +31,15 @@ public class JsonCodeGen {
    */
   public static Expr getObjectConstructKeepNullCode(
       String fnName,
-      RexCall operation,
-      List<Boolean> argScalars,
-      RexToPandasTranslator rexToPandas,
+      List<Expr.StringLiteral> keys,
+      List<Expr> values,
+      List<Expr.BooleanLiteral> scalars,
       PandasCodeGenVisitor visitor) {
-    ArrayList<Expr> valExprs = new ArrayList<>();
-    ArrayList<Expr> keyExprs = new ArrayList<>();
-    ArrayList<Expr> scalarExprs = new ArrayList<>();
-    for (int i = 0; i < operation.operands.size(); i++) {
-      if (i % 2 == 0) {
-        String key = ((RexLiteral) (operation.operands.get(i))).getValueAs(String.class);
-        keyExprs.add(new Expr.StringLiteral(key));
-      } else {
-        Expr operandInfo = operation.operands.get(i).accept(rexToPandas);
-        // Need to unbox scalar timestamp values.
-        if (argScalars.get(i)) {
-          operandInfo =
-              new Expr.Call(
-                  "bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(operandInfo));
-        }
-        valExprs.add(operandInfo);
-        scalarExprs.add(new Expr.BooleanLiteral(argScalars.get(i)));
-      }
-    }
-    Expr keyGlobal = visitor.lowerAsColNamesMetaType(new Expr.Tuple(keyExprs));
-    Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
+    Expr keyGlobal = visitor.lowerAsColNamesMetaType(new Expr.Tuple(keys));
+    Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalars));
     return ExprKt.bodoSQLKernel(
         fnName.toLowerCase(Locale.ROOT),
-        List.of(new Expr.Tuple(valExprs), keyGlobal, scalarGlobal),
+        List.of(new Expr.Tuple(values), keyGlobal, scalarGlobal),
         List.of());
   }
 
