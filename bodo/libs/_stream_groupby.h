@@ -512,7 +512,11 @@ class GroupbyPartition {
     void ClearBuildState();
 };
 
-struct GroupbyIncrementalShuffleMetrics : IncrementalShuffleMetrics {
+class GroupbyIncrementalShuffleMetrics {
+   public:
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
     // Number of times we reset the hash table because it grew too large.
     stat_t n_ht_reset = 0;
     stat_t peak_ht_size_bytes = 0;
@@ -544,7 +548,7 @@ struct GroupbyIncrementalShuffleMetrics : IncrementalShuffleMetrics {
      *
      * @param metrics Vector of metrics to append to.
      */
-    void add_to_metrics(std::vector<MetricBase>& metrics) override;
+    void add_to_metrics(std::vector<MetricBase>& metrics);
 };
 
 /**
@@ -570,7 +574,6 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     // Temporary batch data (used by HashGroupbyTable and KeyEqualGroupbyTable)
     std::shared_ptr<table_info> in_table = nullptr;
     std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
-    GroupbyIncrementalShuffleMetrics metrics;
 
     /**
      * @brief Constructor. Same as the base class constructor.
@@ -610,6 +613,26 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * This is meant to be called in GroupbyState::FinalizeBuild.
      */
     void Finalize() override;
+
+    /**
+     * @brief Export shuffle metrics into the provided vector.
+     *
+     * @param[in, out] metrics Vector to append the metrics to.
+     */
+    void ExportMetrics(std::vector<MetricBase>& metrics) override {
+        IncrementalShuffleState::ExportMetrics(metrics);
+        this->metrics.add_to_metrics(metrics);
+    }
+
+    /**
+     * @brief Reset metrics. This is useful for the Union case where we want to
+     * do this after every pipeline.
+     *
+     */
+    void ResetMetrics() override {
+        IncrementalShuffleState::ResetMetrics();
+        this->metrics = GroupbyIncrementalShuffleMetrics();
+    }
 
     friend class GroupbyState;
 
@@ -658,6 +681,8 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     const bool nunique_only = false;
     /// Whether this is the mrnf-only case.
     const bool mrnf_only = false;
+    /// Metrics
+    GroupbyIncrementalShuffleMetrics metrics;
 };
 
 class GroupbyState {

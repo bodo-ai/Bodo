@@ -1426,7 +1426,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 
 void GroupbyIncrementalShuffleMetrics::add_to_metrics(
     std::vector<MetricBase>& metrics) {
-    IncrementalShuffleMetrics::add_to_metrics(metrics);
     metrics.emplace_back(StatMetric("shuffle_n_ht_resets", this->n_ht_reset));
     metrics.emplace_back(
         StatMetric("shuffle_peak_ht_size_bytes", this->peak_ht_size_bytes));
@@ -2590,9 +2589,6 @@ void GroupbyState::ClearBuildState() {
 }
 
 void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
-    if (this->op_id == -1) {
-        return;
-    }
     std::vector<MetricBase> metrics;
     metrics.reserve(128);
 
@@ -2766,7 +2762,7 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
     }
 
     // Shuffle metrics
-    this->shuffle_state->metrics.add_to_metrics(metrics);
+    this->shuffle_state->ExportMetrics(metrics);
 
     // Dict Builders Stats
     if (this->mrnf_only) {
@@ -2856,14 +2852,16 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
         metrics.emplace_back(StatMetric("output_n_chunks", output_n_chunks));
     }
 
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(this->op_id,
-                                                   this->curr_stage_id),
-        std::move(metrics));
+    if (this->op_id != -1) {
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                       this->curr_stage_id),
+            std::move(metrics));
+    }
 
     // Reset metrics
     this->metrics = GroupbyMetrics();
-    this->shuffle_state->metrics = GroupbyIncrementalShuffleMetrics();
+    this->shuffle_state->ResetMetrics();
 }
 
 void GroupbyState::FinalizeBuild() {
@@ -3329,13 +3327,6 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
         }
 
         if (is_last) {
-            if (groupby_state->op_id != -1) {
-                // Build doesn't output anything, so it's output row count is 0.
-                QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-                    QueryProfileCollector::MakeOperatorStageID(
-                        groupby_state->op_id, 0),
-                    0);
-            }
             // Report and reset metrics
             groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
             groupby_state->curr_stage_id++;

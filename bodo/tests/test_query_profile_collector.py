@@ -582,31 +582,35 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     # Verify build metrics
     stage_1_metrics = operator_report["stage_1"]["metrics"]
     build_metrics: list = stage_1_metrics
-    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
     if rank == 0:
-        assert "bcast_join" in build_metrics_names
-        assert "bloom_filter_enabled" in build_metrics_names
-        assert "n_key_dict_builders" in build_metrics_names
-        assert "n_non_key_dict_builders" in build_metrics_names
-    assert "shuffle_buffer_append_time" in build_metrics_names
-    assert "ht_hashing_time" in build_metrics_names
-    assert "repartitioning_time_total" in build_metrics_names
+        assert "bcast_join" in build_metrics_dict
+        assert "bloom_filter_enabled" in build_metrics_dict
+        assert "n_key_dict_builders" in build_metrics_dict
+        assert "n_non_key_dict_builders" in build_metrics_dict
+        assert "n_shuffles" in build_metrics_dict
+        assert build_metrics_dict["n_shuffles"] >= 1
+    assert "shuffle_buffer_append_time" in build_metrics_dict
+    assert "ht_hashing_time" in build_metrics_dict
+    assert "repartitioning_time_total" in build_metrics_dict
 
     # Verify probe metrics
     stage_2_metrics = operator_report["stage_2"]["metrics"]
     probe_metrics: list = stage_2_metrics
-    probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
+    probe_metrics_dict = {x["name"]: x["stat"] for x in probe_metrics}
     if rank == 0:
-        assert "n_key_dict_builders" in probe_metrics_names
-        assert "n_non_key_dict_builders" in probe_metrics_names
-    assert "output_append_time" in probe_metrics_names
-    assert "output_total_nrows" in probe_metrics_names
-    assert "output_total_nrows_rem_at_finalize" in probe_metrics_names
-    assert "output_peak_nrows" in probe_metrics_names
-    assert "shuffle_buffer_append_time" in probe_metrics_names
-    assert "ht_probe_time" in probe_metrics_names
-    assert "finalize_inactive_partitions_total_time" in probe_metrics_names
-    assert "join_filter_materialization_time" in probe_metrics_names
+        assert "n_key_dict_builders" in probe_metrics_dict
+        assert "n_non_key_dict_builders" in probe_metrics_dict
+        assert "n_shuffles" in probe_metrics_dict
+        assert probe_metrics_dict["n_shuffles"] >= 1
+    assert "output_append_time" in probe_metrics_dict
+    assert "output_total_nrows" in probe_metrics_dict
+    assert "output_total_nrows_rem_at_finalize" in probe_metrics_dict
+    assert "output_peak_nrows" in probe_metrics_dict
+    assert "shuffle_buffer_append_time" in probe_metrics_dict
+    assert "ht_probe_time" in probe_metrics_dict
+    assert "finalize_inactive_partitions_total_time" in probe_metrics_dict
+    assert "join_filter_materialization_time" in probe_metrics_dict
 
 
 def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
@@ -730,29 +734,29 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     # Verify build metrics
     stage_1_metrics = operator_report["stage_1"]["metrics"]
     build_metrics: list = stage_1_metrics
-    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
     if rank == 0:
-        assert "bcast_join" in build_metrics_names
-        assert "block_size_bytes" in build_metrics_names
-        assert "chunk_size_nrows" in build_metrics_names
-        assert "n_dict_builders" in build_metrics_names
-    assert "append_time" in build_metrics_names
-    assert "num_chunks" in build_metrics_names
+        assert "bcast_join" in build_metrics_dict
+        assert "block_size_bytes" in build_metrics_dict
+        assert "chunk_size_nrows" in build_metrics_dict
+        assert "n_dict_builders" in build_metrics_dict
+    assert "append_time" in build_metrics_dict
+    assert "num_chunks" in build_metrics_dict
 
     # Verify probe metrics
     stage_2_metrics = operator_report["stage_2"]["metrics"]
     probe_metrics: list = stage_2_metrics
-    probe_metrics_names: set[str] = set([x["name"] for x in probe_metrics])
+    probe_metrics_dict = {x["name"]: x["stat"] for x in probe_metrics}
     if rank == 0:
-        assert "n_dict_builders" in probe_metrics_names
-    assert "output_append_time" in probe_metrics_names
-    assert "output_total_nrows" in probe_metrics_names
-    assert "output_total_nrows_rem_at_finalize" in probe_metrics_names
-    assert "output_peak_nrows" in probe_metrics_names
-    assert "global_dict_unification_time" in probe_metrics_names
-    assert "bcast_size_bytes" in probe_metrics_names
-    assert "bcast_table_time" in probe_metrics_names
-    assert "compute_matches_time" in probe_metrics_names
+        assert "n_dict_builders" in probe_metrics_dict
+    assert "output_append_time" in probe_metrics_dict
+    assert "output_total_nrows" in probe_metrics_dict
+    assert "output_total_nrows_rem_at_finalize" in probe_metrics_dict
+    assert "output_peak_nrows" in probe_metrics_dict
+    assert "global_dict_unification_time" in probe_metrics_dict
+    assert "bcast_size_bytes" in probe_metrics_dict
+    assert "bcast_table_time" in probe_metrics_dict
+    assert "compute_matches_time" in probe_metrics_dict
 
 
 def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
@@ -843,6 +847,9 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     stage_1 = operator_report["stage_1"]
     assert "stage_2" in operator_report
 
+    build_metrics = stage_1["metrics"]
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
+
     if rank == 0:
         initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
@@ -855,22 +862,23 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "AGG"
         )
-    build_metrics = stage_1["metrics"]
-    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
-    assert "pre_agg_total_time" in build_metrics_names
-    assert "n_repartitions_in_append" in build_metrics_names
-    assert "input_groupby_hashing_time" in build_metrics_names
-    assert "update_logical_ht_time" in build_metrics_names
-    assert "combine_input_time" in build_metrics_names
-    assert "shuffle_update_logical_ht_time" in build_metrics_names
-    assert "finalize_time_total" in build_metrics_names
-    assert "shuffle_time" in build_metrics_names
-    assert "shuffle_n_local_reductions" in build_metrics_names
-    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "output_append_time" in build_metrics_names
-    assert "final_partitioning_state" in build_metrics_names
+        assert "n_shuffles" in build_metrics_dict
+        assert build_metrics_dict["n_shuffles"] >= 1
+
+    assert "pre_agg_total_time" in build_metrics_dict
+    assert "n_repartitions_in_append" in build_metrics_dict
+    assert "input_groupby_hashing_time" in build_metrics_dict
+    assert "update_logical_ht_time" in build_metrics_dict
+    assert "combine_input_time" in build_metrics_dict
+    assert "shuffle_update_logical_ht_time" in build_metrics_dict
+    assert "finalize_time_total" in build_metrics_dict
+    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_n_local_reductions" in build_metrics_dict
+    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "output_append_time" in build_metrics_dict
+    assert "final_partitioning_state" in build_metrics_dict
 
 
 def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
@@ -960,6 +968,8 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     stage_0 = operator_report["stage_0"]
     stage_1 = operator_report["stage_1"]
     assert "stage_2" in operator_report
+    build_metrics = stage_1["metrics"]
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
     if rank == 0:
         initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
@@ -972,20 +982,21 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "ACC"
         )
-    build_metrics = stage_1["metrics"]
-    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
-    assert "pre_agg_total_time" not in build_metrics_names
-    assert "n_repartitions_in_append" in build_metrics_names
-    assert "input_groupby_hashing_time" not in build_metrics_names
-    assert "input_part_hashing_time" in build_metrics_names
-    assert "finalize_time_total" in build_metrics_names
-    assert "shuffle_time" in build_metrics_names
-    assert "shuffle_n_local_reductions" in build_metrics_names
-    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "output_append_time" in build_metrics_names
-    assert "final_partitioning_state" in build_metrics_names
+        assert "n_shuffles" in build_metrics_dict
+        assert build_metrics_dict["n_shuffles"] >= 1
+
+    assert "pre_agg_total_time" not in build_metrics_dict
+    assert "n_repartitions_in_append" in build_metrics_dict
+    assert "input_groupby_hashing_time" not in build_metrics_dict
+    assert "input_part_hashing_time" in build_metrics_dict
+    assert "finalize_time_total" in build_metrics_dict
+    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_n_local_reductions" in build_metrics_dict
+    assert "key_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "non_key_output_dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "output_append_time" in build_metrics_dict
+    assert "final_partitioning_state" in build_metrics_dict
 
 
 def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
@@ -1091,6 +1102,9 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     stage_0 = operator_report["stage_0"]
     stage_1 = operator_report["stage_1"]
     assert "stage_2" in operator_report
+    build_metrics = stage_1["metrics"]
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
+
     if rank == 0:
         initialization_metrics = stage_0["metrics"]
         initialization_metrics_names: list[str] = [
@@ -1110,20 +1124,21 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             ]
             == 1
         )
-    build_metrics = stage_1["metrics"]
-    build_metrics_names: set[str] = set([x["name"] for x in build_metrics])
-    assert "pre_agg_total_time" not in build_metrics_names
-    assert "n_repartitions_in_append" in build_metrics_names
-    assert "appends_active_time" in build_metrics_names
-    assert "input_part_hashing_time" in build_metrics_names
-    assert "finalize_time_total" in build_metrics_names
-    assert "finalize_compute_mrnf_time" in build_metrics_names
-    assert "finalize_colset_update_time" in build_metrics_names
-    assert "shuffle_time" in build_metrics_names
-    assert "shuffle_local_reduction_mrnf_colset_update_time" in build_metrics_names
-    assert "dict_builders_unify_cache_id_misses" in build_metrics_names
-    assert "output_append_time" in build_metrics_names
-    assert "final_partitioning_state" in build_metrics_names
+        assert "n_shuffles" in build_metrics_dict
+        assert build_metrics_dict["n_shuffles"] >= 1
+
+    assert "pre_agg_total_time" not in build_metrics_dict
+    assert "n_repartitions_in_append" in build_metrics_dict
+    assert "appends_active_time" in build_metrics_dict
+    assert "input_part_hashing_time" in build_metrics_dict
+    assert "finalize_time_total" in build_metrics_dict
+    assert "finalize_compute_mrnf_time" in build_metrics_dict
+    assert "finalize_colset_update_time" in build_metrics_dict
+    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_local_reduction_mrnf_colset_update_time" in build_metrics_dict
+    assert "dict_builders_unify_cache_id_misses" in build_metrics_dict
+    assert "output_append_time" in build_metrics_dict
+    assert "final_partitioning_state" in build_metrics_dict
 
 
 def test_union_metrics_collection(memory_leak_check, tmp_path):
@@ -1413,30 +1428,30 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     assert "stage_0" in operator_report
     assert "stage_1" in operator_report
     init_metrics = operator_report["stage_0"]["metrics"]
-    init_metrics_names: set[str] = set([x["name"] for x in init_metrics])
+    init_metrics_dict = {x["name"]: x["stat"] for x in init_metrics}
     read_metrics = operator_report["stage_1"]["metrics"]
-    read_metrics_names: set[str] = set([x["name"] for x in read_metrics])
+    read_metrics_dict = {x["name"]: x["stat"] for x in read_metrics}
 
     if rank == 0:
-        assert "sf_data_prep_time" in init_metrics_names
-        assert "limit_nrows" in init_metrics_names
-        assert "get_ds_time" in init_metrics_names
-        assert "global_nrows_to_read" in init_metrics_names
-        assert "global_n_pieces" in init_metrics_names
-        assert "create_dict_encoding_from_strings" in init_metrics_names
-        assert "n_str_as_dict_cols" in init_metrics_names
-        assert "n_dict_builders" in read_metrics_names
+        assert "sf_data_prep_time" in init_metrics_dict
+        assert "limit_nrows" in init_metrics_dict
+        assert "get_ds_time" in init_metrics_dict
+        assert "global_nrows_to_read" in init_metrics_dict
+        assert "global_n_pieces" in init_metrics_dict
+        assert "create_dict_encoding_from_strings" in init_metrics_dict
+        assert "n_str_as_dict_cols" in init_metrics_dict
+        assert "n_dict_builders" in read_metrics_dict
 
-    assert "local_rows_to_read" in init_metrics_names
-    assert "local_n_pieces_to_read_from" in init_metrics_names
+    assert "local_rows_to_read" in init_metrics_dict
+    assert "local_n_pieces_to_read_from" in init_metrics_dict
 
-    assert "to_arrow_time" in read_metrics_names
-    assert "cast_arrow_table_time" in read_metrics_names
-    assert "total_append_time" in read_metrics_names
-    assert "arrow_rb_to_bodo_time" in read_metrics_names
-    assert "ctb_pop_chunk_time" in read_metrics_names
-    assert "output_append_time" in read_metrics_names
-    assert "output_total_nrows" in read_metrics_names
-    assert "output_peak_nrows" in read_metrics_names
-    assert "dict_builders_unify_cache_id_misses" in read_metrics_names
-    assert "read_batch_total_time" in read_metrics_names
+    assert "to_arrow_time" in read_metrics_dict
+    assert "cast_arrow_table_time" in read_metrics_dict
+    assert "total_append_time" in read_metrics_dict
+    assert "arrow_rb_to_bodo_time" in read_metrics_dict
+    assert "ctb_pop_chunk_time" in read_metrics_dict
+    assert "output_append_time" in read_metrics_dict
+    assert "output_total_nrows" in read_metrics_dict
+    assert "output_peak_nrows" in read_metrics_dict
+    assert "dict_builders_unify_cache_id_misses" in read_metrics_dict
+    assert "read_batch_total_time" in read_metrics_dict
