@@ -81,7 +81,6 @@ stages:
 - stage: Build_Bodo_Binary_Other_Conda
   displayName: 'Build Bodo Binary for Other Conda'
   dependsOn: []
-  condition: or(eq('${{ parameters.BUILD_MAC_CONDA }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
   jobs:
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
@@ -103,6 +102,7 @@ stages:
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.11
+      condition: ${{ or(parameters.BUILD_MAC_CONDA, in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI')) }}
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_310
@@ -113,10 +113,7 @@ stages:
       weeklyTest: false
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
-#  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
-#    parameters:
-#      name: Windows
-#      vmImage: windows-2019
+      condition: ${{ or(parameters.BUILD_MAC_CONDA, in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI')) }}
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_312
@@ -139,6 +136,7 @@ stages:
       buildARM: true
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.11
+      condition: ${{ or(parameters.BUILD_MAC_CONDA, in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI')) }}
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS_ARM_310
@@ -150,7 +148,11 @@ stages:
       buildARM: true
       uploadArtifactory: ${{ or(parameters.UPLOAD_ARTIFACTORY, ne(variables['Build.Reason'], 'Manual')) }}
       pythonVersion: 3.10
-
+      condition: ${{ or(parameters.BUILD_MAC_CONDA, in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI')) }}
+#  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
+#    parameters:
+#      name: Windows
+#      vmImage: windows-2019
 
 # Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
 # modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
