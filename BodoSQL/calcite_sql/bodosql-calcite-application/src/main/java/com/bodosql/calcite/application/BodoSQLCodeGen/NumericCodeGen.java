@@ -120,7 +120,9 @@ public class NumericCodeGen {
    * @param arg The input argument.
    * @param precision The target precision
    * @param scale The target scale
-   * @param is_try Is the call a TRY_TO_XXX function.
+   * @param isTry Is the call a TRY_TO_XXX function.
+   * @param outputDecimal Is the output type decimal. This code generation step is shared by both
+   *     integer and decimal output types.
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
    * @return The Expr for the function call.
@@ -129,7 +131,8 @@ public class NumericCodeGen {
       Expr arg,
       int precision,
       int scale,
-      Boolean is_try,
+      boolean isTry,
+      boolean outputDecimal,
       List<Pair<String, Expr>> streamingNamedArgs) {
     List<Expr> exprs = new ArrayList<>();
     exprs.add(arg);
@@ -151,7 +154,8 @@ public class NumericCodeGen {
     }
     exprs.add(new Expr.IntegerLiteral(finalPrec));
     exprs.add(new Expr.IntegerLiteral(finalScale));
-    String name = is_try ? "try_to_number" : "to_number";
+    exprs.add(new Expr.BooleanLiteral(outputDecimal));
+    String name = isTry ? "try_to_number" : "to_number";
     return bodoSQLKernel(name, exprs, streamingNamedArgs);
   }
 

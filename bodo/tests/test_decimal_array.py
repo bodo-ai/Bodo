@@ -524,30 +524,6 @@ def test_setitem_cast_decimal(memory_leak_check):
     pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
 
 
-@pytest.fixture(
-    params=[
-        pytest.param(
-            pd.array(
-                [
-                    "1",
-                    "1.55",
-                    "1.56",
-                    "10.56",
-                    "1000.5",
-                    None,
-                    None,
-                    "10004.1",
-                    "-11.41",
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
-            )
-        ),
-    ]
-)
-def precision_scale_decimal_array(request):
-    return request.param
-
-
 def test_box_arrow_array_precision_scale(precision_scale_decimal_array):
     """
     Test that we can box/unbox an arrow decimal array without 38, 18 precision and scale.
@@ -677,8 +653,26 @@ def test_cast_decimal_to_decimal_array(
     check_func(impl2, (precision_scale_decimal_array,), py_output=py_output2)
 
 
-@pytest_mark_one_rank
 def test_cast_decimal_to_decimal_array_loss_null_on_error(
+    precision_scale_decimal_array, memory_leak_check
+):
+    """
+    Test that when decimal scalars are truncated we correctly output NULL
+    values if error on null is set.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.numeric_to_decimal(arr, 4, 3, True)
+
+    py_output = pd.array(
+        ["1", "1.55", "1.56", None, None, None, None, None, None],
+        dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
+    )
+    check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
+
+
+@pytest_mark_one_rank
+def test_cast_decimal_to_decimal_array_error(
     precision_scale_decimal_array,
 ):
     """

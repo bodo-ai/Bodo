@@ -1097,9 +1097,31 @@ open class RexToPandasTranslator(
             )
 
             "TO_VARCHAR" -> return ConversionCodeGen.generateToCharFnCode(operands, argScalars)
-            "TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(operands[0], precision, scale, false, streamingNamedArgs)
+            "TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(
+                operands[0],
+                precision,
+                scale,
+                false,
+                // Differentiate between integer and decimal casts since
+                // both could use the same precision and scale. In the future
+                // we may want to separate these, but currently that would
+                // lead to a lot of duplicated code.
+                outputType.sqlTypeName == SqlTypeName.DECIMAL,
+                streamingNamedArgs,
+            )
 
-            "TRY_TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(operands[0], precision, scale, true, streamingNamedArgs)
+            "TRY_TO_NUMBER" -> return NumericCodeGen.generateToNumberCode(
+                operands[0],
+                precision,
+                scale,
+                true,
+                // Differentiate between integer and decimal casts since
+                // both could use the same precision and scale. In the future
+                // we may want to separate these, but currently that would
+                // lead to a lot of duplicated code.
+                outputType.sqlTypeName == SqlTypeName.DECIMAL,
+                streamingNamedArgs,
+            )
 
             "TO_DOUBLE", "TRY_TO_DOUBLE" -> return ConversionCodeGen.generateToDoubleFnCode(
                 operands,
