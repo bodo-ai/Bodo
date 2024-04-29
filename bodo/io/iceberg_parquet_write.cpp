@@ -320,7 +320,7 @@ void generate_iceberg_field_metrics(
     const std::shared_ptr<arrow::Field> &field, bool compute_min_and_max,
     PyObject *value_counts_dict_py, PyObject *null_count_dict_py,
     PyObject *lower_bound_dict_py, PyObject *upper_bound_dict_py,
-    size_t col_idx, theta_sketch_collection_t sketches) {
+    size_t col_idx, UpdateSketchCollection *sketches) {
     // Compute the value counts and null count for all columns. This differs
     // from Spark (which doesn't compute any statistics for anything but the
     // bottom-most level of nested arrays), but the null values may be useful
@@ -432,7 +432,9 @@ void generate_iceberg_field_metrics(
         CHECK_ARROW_AND_ASSIGN(unified_arr_res, "UnifyChunkedArray",
                                unified_arr);
         auto dict_hits = get_dictionary_hits(unified_arr);
-        update_theta_sketches(sketches, unified_arr, col_idx, dict_hits);
+        if (sketches != nullptr) {
+            sketches->update_sketch(unified_arr, col_idx, dict_hits);
+        }
         // Generate max and min if they exist.
         if (compute_min_and_max && null_count != value_counts) {
             compute_min_max_iceberg_field(unified_arr, field_id_py,
@@ -440,7 +442,9 @@ void generate_iceberg_field_metrics(
                                           upper_bound_dict_py, dict_hits);
         }
     } else {
-        update_theta_sketches(sketches, column, col_idx);
+        if (sketches != nullptr) {
+            sketches->update_sketch(column, col_idx);
+        }
         // Generate max and min if they exist.
         if (compute_min_and_max && null_count != value_counts) {
             compute_min_max_iceberg_field(
@@ -573,7 +577,7 @@ std::vector<PyObject *> iceberg_pq_write_helper(
     const std::shared_ptr<array_info> col_names_arr, const char *compression,
     bool is_parallel, const char *bucket_region, int64_t row_group_size,
     char *iceberg_metadata, std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
-    arrow::fs::FileSystem *arrow_fs, theta_sketch_collection_t sketches) {
+    arrow::fs::FileSystem *arrow_fs, UpdateSketchCollection *sketches) {
     std::unordered_map<std::string, std::string> md = {
         {"iceberg.schema", std::string(iceberg_metadata)}};
 
@@ -676,7 +680,7 @@ void iceberg_pq_write(const char *table_data_loc,
                       char *iceberg_metadata, PyObject *iceberg_files_info_py,
                       std::shared_ptr<arrow::Schema> iceberg_schema,
                       arrow::fs::FileSystem *arrow_fs,
-                      theta_sketch_collection_t sketches) {
+                      UpdateSketchCollection *sketches) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
     ev.add_attribute("iceberg_metadata", iceberg_metadata);
@@ -1087,7 +1091,7 @@ PyObject *iceberg_pq_write_py_entry(
     const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
     PyObject *iceberg_arrow_schema_py,
     numba_optional<arrow::fs::FileSystem> arrow_fs,
-    theta_sketch_collection_t sketches) {
+    UpdateSketchCollection *sketches) {
     try {
         std::shared_ptr<table_info> table =
             std::shared_ptr<table_info>(in_table);

@@ -246,12 +246,11 @@ def overload_init_theta_sketches_wrapper(column_bit_mask):
 
 
 @intrinsic
-def _iceberg_writer_fetch_theta(typingctx, array_info_t, output_pyarrow_schema_t):
+def _iceberg_writer_fetch_theta(typingctx, array_info_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),  # array_info*
             [
-                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
             ],
         )
@@ -263,7 +262,7 @@ def _iceberg_writer_fetch_theta(typingctx, array_info_t, output_pyarrow_schema_t
         return ret
 
     return (
-        array_info_type(theta_sketch_collection_type, pyarrow_schema_type),
+        array_info_type(theta_sketch_collection_type),
         codegen,
     )
 
@@ -283,9 +282,7 @@ def overload_iceberg_writer_fetch_theta(writer):
     arr_type = bodo.FloatingArrayType(types.float64)
 
     def impl(writer):  # pragma: no cover
-        res_info = _iceberg_writer_fetch_theta(
-            writer["theta_sketches"], writer["output_pyarrow_schema"]
-        )
+        res_info = _iceberg_writer_fetch_theta(writer["theta_sketches"])
         res = info_to_array(res_info, arr_type)
         delete_info(res_info)
         return res
