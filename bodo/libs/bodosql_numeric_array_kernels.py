@@ -10,6 +10,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import is_overload_none, raise_bodo_error
 from bodo.utils.utils import is_array_typ
 
 
@@ -1397,49 +1398,75 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             # future we can grab this information from SQL or the original function
             return bodo.utils.typing.to_nullable_type(types.Array(out_dtype, 1, "C"))
 
-        verify_int_float_arg(arr0, func_name, "arr0")
-        verify_int_float_arg(arr1, func_name, "arr1")
-        arg_names = ["arr0", "arr1"]
-        arg_types = [arr0, arr1]
-        propagate_null = [True] * 2
+        if func_name == "multiply_numeric":
+            # We only support decimal arithmetic on multiplication.
+            verify_numeric_arg(arr0, "multiply_numeric", "arr0")
+            verify_numeric_arg(arr1, "multiply_numeric", "arr1")
+        else:
+            verify_int_float_arg(arr0, func_name, "arr0")
+            verify_int_float_arg(arr1, func_name, "arr1")
 
-        if is_array_typ(arr0):
-            elem_dtype0 = arr0.dtype
-        else:
-            elem_dtype0 = arr0
-        if is_array_typ(arr1):
-            elem_dtype1 = arr1.dtype
-        else:
-            elem_dtype1 = arr1
+        if isinstance(
+            arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
+        ) and isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
+            if func_name == "multiply_numeric":
 
-        out_dtype = determine_output_arr_type(func_name, elem_dtype0, elem_dtype1)
-        out_elem_dtype = out_dtype.dtype
-        # determine if we need to cast each input.
-        cast_arr0 = elem_dtype0 != out_elem_dtype
-        cast_arr1 = elem_dtype1 != out_elem_dtype
-        if func_name == "add_numeric":
-            operator_str = "+"
-        elif func_name == "subtract_numeric":
-            operator_str = "-"
-        elif func_name == "multiply_numeric":
-            operator_str = "*"
-        elif func_name == "divide_numeric":
-            operator_str = "/"
+                def impl(arr0, arr1):
+                    return bodo.libs.bodosql_array_kernels.multiply_decimals(arr0, arr1)
 
-        cast_name = f"np.{out_elem_dtype.name}"
-        if cast_arr0:
-            arg0_str = f"{cast_name}(arg0)"
+                return impl
+            else:
+                raise_bodo_error(
+                    f"{func_name}: Decimal arithmetic is not yet supported"
+                )
+        elif isinstance(
+            arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
+        ) or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
+            raise_bodo_error(
+                "multiply_numeric: Decimal and integer/float multiplication is not yet supported"
+            )
         else:
-            arg0_str = f"arg0"
-        if cast_arr1:
-            arg1_str = f"{cast_name}(arg1)"
-        else:
-            arg1_str = f"arg1"
-        # cast the output in case the operation causes type promotion.
-        scalar_text = f"res[i] = {cast_name}({arg0_str} {operator_str} {arg1_str})"
-        return gen_vectorized(
-            arg_names, arg_types, propagate_null, scalar_text, out_dtype
-        )
+            arg_names = ["arr0", "arr1"]
+            arg_types = [arr0, arr1]
+            propagate_null = [True] * 2
+
+            if is_array_typ(arr0):
+                elem_dtype0 = arr0.dtype
+            else:
+                elem_dtype0 = arr0
+            if is_array_typ(arr1):
+                elem_dtype1 = arr1.dtype
+            else:
+                elem_dtype1 = arr1
+
+            out_dtype = determine_output_arr_type(func_name, elem_dtype0, elem_dtype1)
+            out_elem_dtype = out_dtype.dtype
+            # determine if we need to cast each input.
+            cast_arr0 = elem_dtype0 != out_elem_dtype
+            cast_arr1 = elem_dtype1 != out_elem_dtype
+            if func_name == "add_numeric":
+                operator_str = "+"
+            elif func_name == "subtract_numeric":
+                operator_str = "-"
+            elif func_name == "multiply_numeric":
+                operator_str = "*"
+            elif func_name == "divide_numeric":
+                operator_str = "/"
+
+            cast_name = f"np.{out_elem_dtype.name}"
+            if cast_arr0:
+                arg0_str = f"{cast_name}(arg0)"
+            else:
+                arg0_str = f"arg0"
+            if cast_arr1:
+                arg1_str = f"{cast_name}(arg1)"
+            else:
+                arg1_str = f"arg1"
+            # cast the output in case the operation causes type promotion.
+            scalar_text = f"res[i] = {cast_name}({arg0_str} {operator_str} {arg1_str})"
+            return gen_vectorized(
+                arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            )
 
     return overload_func_util
 
@@ -1460,3 +1487,58 @@ def _install_numeric_operators_overload():
 
 
 _install_numeric_operators_overload()
+
+
+def multiply_decimals(arr1, arr2):  # pragma: no cover
+    pass
+
+
+@overload(multiply_decimals)
+def overload_multiply_decimals(arr1, arr2):
+    """
+    Implementation to multiply two decimal arrays or scalars. This does
+    not handle optional type support and so it should not be called directly
+    from BodoSQL. This is meant as a convenience function to simplify the
+    multiplication logic.
+    """
+    if not (
+        is_overload_none(arr1)
+        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("multiply_decimals: arr1 must be a decimal array or scalar")
+    if not (
+        is_overload_none(arr2)
+        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("multiply_decimals: arr2 must be a decimal array or scalar")
+
+    if is_overload_none(arr1):
+        # Pick dummy values for precision and scale to simplify the code.
+        p1, s1 = 38, 0
+    else:
+        p1, s1 = arr1.precision, arr1.scale
+    if is_overload_none(arr2):
+        # Pick dummy values for precision and scale to simplify the code.
+        p2, s2 = 38, 0
+    else:
+        p2, s2 = arr2.precision, arr2.scale
+
+    p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
+        p1, s1, p2, s2
+    )
+    out_dtype = bodo.DecimalArrayType(p, s)
+
+    arg_names = ["arr1", "arr2"]
+    arg_types = [arr1, arr2]
+    propagate_null = [True, True]
+    scalar_text = (
+        "res[i] = bodo.libs.decimal_arr_ext.multiply_decimal_scalars(arg0, arg1)"
+    )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )

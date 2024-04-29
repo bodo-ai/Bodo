@@ -1798,12 +1798,14 @@ def make_to_number(_try):
     if _try:
         func_name = "try_to_number"
 
-    def to_number_helper(expr, prec, scale, dict_encoding_state=None, func_id=-1):
+    def to_number_helper(
+        expr, prec, scale, outputs_decimal, dict_encoding_state=None, func_id=-1
+    ):
         return
 
     @overload(to_number_helper, no_unliteral=True)
     def to_number_helper_overload(
-        expr, prec, scale, dict_encoding_state=None, func_id=-1
+        expr, prec, scale, outputs_decimal, dict_encoding_state=None, func_id=-1
     ):
         """Handles cases where TO_NUMBER receives optional arguments and forwards
         to the appropriate version of the real implementation"""
@@ -1813,7 +1815,14 @@ def make_to_number(_try):
             if isinstance(args[i], types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name}",
-                    ["expr", "prec", "scale", "dict_encoding_state", "func_id"],
+                    [
+                        "expr",
+                        "prec",
+                        "scale",
+                        "outputs_decimal",
+                        "dict_encoding_state",
+                        "func_id",
+                    ],
                     i,
                     default_map={
                         "dict_encoding_state": None,
@@ -1822,13 +1831,14 @@ def make_to_number(_try):
                 )
 
         def impl(
-            expr, prec, scale, dict_encoding_state=None, func_id=-1
+            expr, prec, scale, outputs_decimal, dict_encoding_state=None, func_id=-1
         ):  # pragma: no cover
             return to_number_util(
                 expr,
                 prec,
                 scale,
                 _try,
+                outputs_decimal,
                 dict_encoding_state,
                 func_id,
             )
@@ -1904,61 +1914,6 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
         raise BodoError("numeric_to_decimal: invalid input type")
 
 
-def multiply_decimals(arr1, arr2):  # pragma: no cover
-    pass
-
-
-@overload(multiply_decimals)
-def overload_multiply_decimals(arr1, arr2):
-    """
-    Implementation to multiply two decimal arrays or scalars. This does
-    not handle optional type support and so it should not be called directly
-    from BodoSQL. This is meant as a convenience function to simplify the
-    multiplication logic.
-    """
-    if not (
-        is_overload_none(arr1)
-        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
-    ):
-        raise_bodo_error("multiply_decimals: arr1 must be a decimal array or scalar")
-    if not (
-        is_overload_none(arr2)
-        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
-    ):
-        raise_bodo_error("multiply_decimals: arr2 must be a decimal array or scalar")
-
-    if is_overload_none(arr1):
-        # Pick dummy values for precision and scale to simplify the code.
-        p1, s1 = 38, 0
-    else:
-        p1, s1 = arr1.precision, arr1.scale
-    if is_overload_none(arr2):
-        # Pick dummy values for precision and scale to simplify the code.
-        p2, s2 = 38, 0
-    else:
-        p2, s2 = arr2.precision, arr2.scale
-
-    p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
-        p1, s1, p2, s2
-    )
-    out_dtype = bodo.DecimalArrayType(p, s)
-
-    arg_names = ["arr1", "arr2"]
-    arg_types = [arr1, arr2]
-    propagate_null = [True, True]
-    scalar_text = (
-        "res[i] = bodo.libs.decimal_arr_ext.multiply_decimal_scalars(arg0, arg1)"
-    )
-
-    return gen_vectorized(
-        arg_names,
-        arg_types,
-        propagate_null,
-        scalar_text,
-        out_dtype,
-    )
-
-
 @numba.generated_jit(nopython=True)
 def _is_string_numeric(expr):  # pragma: no cover
     """Check if a string is numeric."""
@@ -1987,14 +1942,14 @@ def _is_string_numeric(expr):  # pragma: no cover
 
 
 def to_number_util(
-    expr, prec, scale, _try, dict_encoding_state, func_id
+    expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id
 ):  # pragma: no cover
     pass
 
 
 @overload(to_number_util, no_unliteral=True)
 def to_number_util_overload(
-    expr, prec, scale, _try, dict_encoding_state, func_id
+    expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id
 ):  # pragma: no cover
     """Equivalent to the SQL [TRY] TO_NUMBER/TO_NUMERIC/TO_DECIMAL function.
     With the default args, this converts the input to a 64-bit integer.
@@ -2011,24 +1966,50 @@ def to_number_util_overload(
     Returns:
         numeric series/scalar: the converted number
     """
-    arg_names = ["expr", "prec", "scale", "_try", "dict_encoding_state", "func_id"]
-    arg_types = [expr, prec, scale, _try, dict_encoding_state, func_id]
-    propagate_null = [True, False, False, False, False, False]
+    arg_names = [
+        "expr",
+        "prec",
+        "scale",
+        "_try",
+        "outputs_decimal",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False, False, False, False]
 
     verify_int_arg(prec, "TO_NUMBER", "prec")
     verify_int_arg(scale, "TO_NUMBER", "scale")
 
-    if not (is_overload_constant_int(prec) or is_overload_none(prec)):
-        raise_bodo_error("TO_NUMBER: prec must be a literal value if provided")
-    if not (is_overload_constant_int(scale) or is_overload_none(scale)):
-        raise_bodo_error("TO_NUMBER: scale must be a literal value if provided")
+    if not is_overload_constant_int(prec):
+        raise_bodo_error("TO_NUMBER: prec must be a literal value")
+    if not is_overload_constant_int(scale):
+        raise_bodo_error("TO_NUMBER: scale must be a literal value")
+    if not is_overload_constant_bool(_try):
+        raise_bodo_error("TO_NUMBER: _try must be a literal value")
+    if not is_overload_constant_bool(outputs_decimal):
+        raise_bodo_error("TO_NUMBER: outputs_decimal must be a literal value")
 
-    if is_overload_constant_int(prec):
-        prec = get_overload_const_int(prec)
-    elif is_overload_none(prec):
-        prec = 38  # default value for prec
-    else:
-        raise_bodo_error("TO_NUMBER: prec must be a literal value if provided")
+    _try = get_overload_const_bool(_try)
+    prec = get_overload_const_int(prec)
+    scale = get_overload_const_int(scale)
+    outputs_decimal = get_overload_const_bool(outputs_decimal)
+
+    is_string = is_valid_string_arg(expr)
+    if not is_string:
+        verify_numeric_arg(expr, "TO_NUMBER", "expr")
+
+    if outputs_decimal and bodo.bodo_use_decimal:
+        if is_string:
+            raise_bodo_error("TO_NUMBER: cannot output decimal from string input")
+        else:
+
+            def impl(
+                expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id
+            ):
+                return numeric_to_decimal(expr, prec, scale, _try)
+
+            return impl
 
     # Import must occur within this function, otherwise we hit a circular import error
     from bodo.io.snowflake import precision_to_numpy_dtype
@@ -2040,19 +2021,6 @@ def to_number_util_overload(
     # use int64 if we can't fit the number in the output type
     if output_scalar_int_type is None:
         output_scalar_int_type = types.int64
-
-    if is_overload_constant_int(scale):
-        scale = get_overload_const_int(scale)
-    elif is_overload_none(scale):
-        scale = 0  # default value for scale
-    else:
-        raise_bodo_error("TO_NUMBER: scale must be a literal value if provided")
-
-    is_string = is_valid_string_arg(expr)
-    if not is_string:
-        verify_int_float_arg(expr, "TO_NUMBER", "expr")
-
-    _try = get_overload_const_bool(_try)
 
     if scale == 0:
         out_dtype = bodo.IntegerArrayType(output_scalar_int_type)

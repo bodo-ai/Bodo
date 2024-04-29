@@ -773,7 +773,9 @@ def test_to_number(arr, prec, scale, answer):
     # Tests to_number with a number of different valid inputs
 
     def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.to_number(arr, prec, scale))
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.to_number(arr, prec, scale, True)
+        )
 
     check_func(
         impl,
@@ -920,7 +922,7 @@ def test_try_to_number(arr, prec, scale, answer):
 
     def impl(arr):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale)
+            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale, True)
         )
 
     check_func(
@@ -1007,7 +1009,7 @@ def test_try_to_number_scalar(arr, prec, scale, answer):
 
     def impl(arr):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale),
+            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale, True),
             index=pd.RangeIndex(1),
         )
 
@@ -1034,7 +1036,7 @@ def test_to_number_invalid_precision(val):
     # Tests to_number with too many digits throws an error
 
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.to_number(arr, 3, 1)
+        return bodo.libs.bodosql_array_kernels.to_number(arr, 3, 1, True)
 
     with pytest.raises(
         ValueError, match="Value has too many digits to the left of the decimal"
@@ -1059,7 +1061,7 @@ def invalid_to_number_string_inputs(request):
 def test_try_to_number_invalid_inputs(invalid_to_number_string_inputs):
     def impl(val):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.try_to_number(val, 38, 0),
+            bodo.libs.bodosql_array_kernels.try_to_number(val, 38, 0, True),
             index=pd.RangeIndex(1),
         )
 
@@ -1077,7 +1079,41 @@ def test_try_to_number_invalid_inputs(invalid_to_number_string_inputs):
 
 def test_to_number_invalid_inputs(invalid_to_number_string_inputs):
     def impl(val):
-        return bodo.libs.bodosql_array_kernels.to_number(val, 38, 0)
+        return bodo.libs.bodosql_array_kernels.to_number(val, 38, 0, True)
 
     with pytest.raises(ValueError, match="unable to convert string literal"):
         bodo.jit(impl)(invalid_to_number_string_inputs)
+
+
+def test_to_number_decimal_to_decimal(precision_scale_decimal_array, memory_leak_check):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.to_number(arr, 28, 3, True)
+
+    py_output = pd.array(
+        ["1", "1.55", "1.56", "10.56", "1000.5", None, None, "10004.1", "-11.41"],
+        dtype=pd.ArrowDtype(pa.decimal128(28, 3)),
+    )
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
+
+
+def test_try_to_number_decimal_to_decimal(
+    precision_scale_decimal_array, memory_leak_check
+):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.try_to_number(arr, 4, 3, True)
+
+    py_output = pd.array(
+        ["1", "1.55", "1.56", None, None, None, None, None, None],
+        dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
+    )
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
