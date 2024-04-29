@@ -30,6 +30,34 @@ inline bool type_supports_theta_sketch(std::shared_ptr<arrow::DataType> type) {
     }
 }
 
+/**
+ * @brief Indicate which arrow types enable theta sketches by default.
+ *
+ * @param type The Pyarrow type
+ * @return Do we want theta sketches enabled by default?
+ */
+inline bool is_default_theta_sketch_type(
+    std::shared_ptr<arrow::DataType> type) {
+    if (!type_supports_theta_sketch(type)) {
+        return false;
+    }
+    switch (type->id()) {
+        case arrow::Type::INT32:
+        case arrow::Type::INT64:
+        case arrow::Type::DATE32:
+        case arrow::Type::TIME64:
+        case arrow::Type::TIMESTAMP:
+        case arrow::Type::LARGE_STRING:
+        case arrow::Type::LARGE_BINARY:
+        case arrow::Type::DICTIONARY:
+            return true;
+        case arrow::Type::FLOAT:
+        case arrow::Type::DOUBLE:
+        default:
+            return false;
+    }
+}
+
 // The type representing a collection of theta sketches as an array where each
 // entry could be a theta sketch or absent, indicating that a column does not
 // use a sketch. This type allows updates to be done.
