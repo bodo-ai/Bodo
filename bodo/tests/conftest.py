@@ -15,6 +15,7 @@ from typing import Callable, Generator, List, Protocol, Tuple, Union
 
 import pandas as pd
 import psutil
+import pyarrow as pa
 import pytest
 from mpi4py import MPI
 from numba.core.runtime import rtsys
@@ -892,3 +893,27 @@ def tabular_connection():
             os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
             os.getenv("TABULAR_CREDENTIAL"),
         )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            )
+        ),
+    ]
+)
+def precision_scale_decimal_array(request):
+    return request.param

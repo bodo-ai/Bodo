@@ -861,8 +861,19 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
+def is_numeric_without_decimal(arg):
+    return (
+        is_overload_none(arg)
+        or isinstance(arg, (types.Integer, types.Boolean, types.Float))
+        or (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, (types.Integer, types.Boolean, types.Float))
+        )
+    )
+
+
 def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
-    """Verifies that one of the arguments to a SQL function is an integer float
+    """Verifies that one of the arguments to a SQL function is an integer, float,
        or boolean (scalar or vector)
 
     Args:
@@ -872,14 +883,26 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
 
     raises: BodoError if the argument is not an integer/float/bool scalar/column, or NULL
     """
-    if (
-        arg != types.none
-        and not isinstance(arg, (types.Integer, types.Float, types.Boolean))
-        and not (
-            bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, (types.Integer, types.Float, types.Boolean))
+    if not is_numeric_without_decimal(arg):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a numeric, numeric column, or null, but was {arg}"
         )
-        and not is_overload_constant_number(arg)
+
+
+def verify_numeric_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an integer, float,
+    boolean, or decimal (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+
+    raises: BodoError if the argument is not an integer/float/bool scalar/column, or NULL
+    """
+    if not (
+        is_numeric_without_decimal(arg)
+        or isinstance(arg, (bodo.Decimal128Type, bodo.DecimalArrayType))
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a numeric, numeric column, or null, but was {arg}"

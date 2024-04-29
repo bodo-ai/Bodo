@@ -1529,3 +1529,26 @@ def test_numeric_operators_optional(memory_leak_check):
             check_func(impl2, args, py_output=answer2)
             check_func(impl3, args, py_output=answer3)
             check_func(impl4, args, py_output=answer4)
+
+
+def test_multiply_numeric_decimal(precision_scale_decimal_array, memory_leak_check):
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.multiply_numeric(arr1, arr2)
+
+    arr1 = precision_scale_decimal_array
+    arr2 = precision_scale_decimal_array
+    py_output = pd.array(
+        [
+            "1",
+            "2.4025",
+            "2.4336",
+            "111.5136",
+            "1001000.25",
+            None,
+            None,
+            "100082016.81",
+            "130.1881",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 6)),
+    )
+    check_func(impl, (arr1, arr2), py_output=py_output)
