@@ -7,7 +7,7 @@ static char puffin_magic[4] = {0x50, 0x46, 0x41, 0x31};
 
 // Verify that the input string contains the expected magic 4-byte sequence for
 // puffin files at the index specified.
-inline void verify_magic(std::string src, size_t idx) {
+inline void verify_magic(const std::string &src, size_t idx) {
     if (src.substr(idx, 4) != std::string(puffin_magic, 4)) {
         throw std::runtime_error(
             "Malformed magic bytes for Puffin file (index " +
@@ -295,7 +295,7 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
         invalid_footer(footer_payload, "missing required field 'blobs'");
     }
 
-    // Using the metadatas, extract the string components from the original raw
+    // Using the metadata, extract the string components from the original raw
     // string corresponding to each of the blobs.
     std::vector<std::string> file_blobs;
     for (size_t blob_idx = 0; blob_idx < metadata.size(); blob_idx++) {
@@ -557,6 +557,8 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
                            "Failed to get puffin file info", puffin_info);
     // Fetch the file size
     int64_t file_size = puffin_info.size();
+    // TODO: Can this ever be < 0. The arrow source code mentions
+    // "regular file", which should mean non-dictionary.
     CHECK(file_size >= 0, "Invalid file size");
     std::shared_ptr<arrow::io::InputStream> file_stream;
     CHECK_ARROW_AND_ASSIGN(fs->OpenInputStream(puffin_info),
@@ -649,9 +651,8 @@ PyObject *write_puffin_file_py_entrypt(
 
 /**
  * @brief Python entrypoint for reading a puffin file
- * and returning a theta_sketch_collection_t. Right now this
- * is primarily used for testing, but its components will also
- * be used to implement insert into logic in the future.
+ * and returning a theta_sketch_collection_t. This is just
+ * used for testing.
  * @param puffin_file_loc The location of the puffin file.
  * @param bucket_region_info The bucket region info.
  * @param iceberg_arrow_schema_py The schema of the iceberg table.
@@ -668,7 +669,6 @@ array_info *read_puffin_file_ndvs_py_entrypt(
         int n_pes;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        // TODO: Replace with a represent that can be shared by C++ and Python.
         immutable_theta_sketch_collection_t result;
         if (rank == 0) {
             std::string puffin_loc(puffin_file_loc);
@@ -677,8 +677,6 @@ array_info *read_puffin_file_ndvs_py_entrypt(
                 read_puffin_file(puffin_loc, bucket_region);
             result = puffin->to_theta_sketches(iceberg_schema);
         } else {
-            // TODO: Refactor. Ideally we want to match sketches that already
-            // exist.
             std::vector<bool> ndv(iceberg_schema->num_fields(), false);
             result = compact_theta_sketches(init_theta_sketches(ndv),
                                             iceberg_schema->num_fields());

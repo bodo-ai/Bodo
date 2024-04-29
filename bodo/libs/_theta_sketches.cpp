@@ -3,31 +3,6 @@
 #include <mpi.h>
 #include "_shuffle.h"
 
-/**
- * @brief Indicate which arrow types enable theta sketches by default.
- *
- * @param type The Pyarrow type
- * @return Do we want theta sketches enabled by default?
- */
-inline bool is_default_theta_sketch_type(
-    std::shared_ptr<arrow::DataType> type) {
-    switch (type->id()) {
-        case arrow::Type::INT32:
-        case arrow::Type::INT64:
-        case arrow::Type::DATE32:
-        case arrow::Type::TIME64:
-        case arrow::Type::TIMESTAMP:
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::DICTIONARY:
-            return true;
-        case arrow::Type::FLOAT:
-        case arrow::Type::DOUBLE:
-        default:
-            return false;
-    }
-}
-
 theta_sketch_collection_t init_theta_sketches(
     const std::vector<bool> &ndv_cols) {
     size_t n_cols = ndv_cols.size();
@@ -214,15 +189,13 @@ immutable_theta_sketch_collection_t compact_theta_sketches(
 immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
     immutable_theta_sketch_collection_t sketches) {
     size_t n_sketches = sketches.size();
-    int cp, np;
-    MPI_Comm_rank(MPI_COMM_WORLD, &cp);
-    MPI_Comm_size(MPI_COMM_WORLD, &np);
-    auto current_rank = (size_t)cp;
-    auto num_ranks = (size_t)np;
+    int rank, n_pes;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     // Serialize the theta sketches and dump into a string array
     auto serialized = serialize_theta_sketches(sketches);
     bodo::vector<std::string> strings(n_sketches);
-    bodo::vector<uint8_t> nulls((n_sketches + 7) >> 3);
+    bodo::vector<uint8_t> nulls(arrow::bit_util::BytesForBits(n_sketches));
     for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
         if (serialized[col_idx].has_value()) {
             strings[col_idx] = serialized[col_idx].value();
@@ -236,10 +209,10 @@ immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
         create_string_array(Bodo_CTypes::STRING, nulls, strings, -1);
 
     // Gather the string arrays onto rank zero
-    auto combined_string_array = gather_array(
-        as_string_array, false, num_ranks > 1, 0, num_ranks, current_rank);
+    auto combined_string_array =
+        gather_array(as_string_array, false, n_pes > 1, 0, n_pes, rank);
 
-    if (current_rank == 0) {
+    if (rank == 0) {
         // On rank zero, convert the combined array into a vector of theta
         // sketch collections
         std::vector<immutable_theta_sketch_collection_t> collections;
@@ -248,7 +221,7 @@ immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
         offset_t *offsets =
             combined_string_array->data2<bodo_array_type::STRING, offset_t>();
         size_t combined_idx = 0;
-        for (size_t rank = 0; rank < (size_t)num_ranks; rank++) {
+        for (int i = 0; i < n_pes; i++) {
             std::vector<std::optional<std::string>> serialized_collection;
             for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
                 if (combined_string_array->get_null_bit(combined_idx)) {
@@ -339,11 +312,11 @@ immutable_theta_sketch_collection_t deserialize_theta_sketches(
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #undef CHECK_ARROW
-#define CHECK_ARROW(expr, msg)                                              \
-    if (!(expr.ok())) {                                                     \
-        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
-                              msg + " " + expr.ToString();                  \
-        throw std::runtime_error(err_msg);                                  \
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::string err_msg = std::string("Error in theta sketches: ") + msg + \
+                              " " + expr.ToString();                           \
+        throw std::runtime_error(err_msg);                                     \
     }
 
 // if status of arrow::Result is not ok, form an err msg and raise a
@@ -354,7 +327,8 @@ immutable_theta_sketch_collection_t deserialize_theta_sketches(
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
 
-/** Python entrypoint to create a new theta sketch collection.
+/**
+ * @brief Python entrypoint to create a new theta sketch collection.
  * @param iceberg_arrow_schema_py: pointer to the python object representing the
  * iceberg arrow schema of the table.
  * @param used_existing_table: boolean indicating whether we reference an
@@ -374,7 +348,8 @@ theta_sketch_collection_t init_theta_sketches_py_entrypt(
     }
 }
 
-/** Python entrypoint to fetch the NDV approximations from a theta sketch
+/**
+ * @brief Python entrypoint to fetch the NDV approximations from a theta sketch
  * collection, largely for testing purposes.
  * @param sketches: the theta sketches being used to extract the approximation.
  * @param iceberg_arrow_schema_py: pointer to the python object representing the
