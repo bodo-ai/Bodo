@@ -1303,13 +1303,15 @@ def overload_get_old_statistics_file_path_wrapper(txn_id, conn, db_schema, table
 
 
 def convert_to_snowflake_iceberg_table_py(
-    snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
+    snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
 ):  # pragma: no cover
     """Convert Iceberg table written by Bodo to object storage to a Snowflake-managed
     Iceberg table.
 
     Args:
         snowflake_conn (str): Snowflake connection string
+        iceberg_conn (str): Iceberg connection string used to contact the Iceberg catalog for
+            information.
         iceberg_base (str): base storage path for Iceberg table (excluding volume bucket path)
         iceberg_volume (str): Snowflake Iceberg volume name
         table_name (str): table name
@@ -1319,6 +1321,21 @@ def convert_to_snowflake_iceberg_table_py(
     err = None  # Forward declaration
     if bodo.get_rank() == 0:
         try:
+            import bodo_iceberg_connector
+
+            iceberg_conn = bodo.io.iceberg.format_iceberg_conn(iceberg_conn)
+            full_metadata_path = bodo_iceberg_connector.get_table_metadata_path(
+                iceberg_conn, iceberg_base.replace("/", "."), table_name
+            )
+            # Extract the metadata path that starts with our base location
+            idx = full_metadata_path.find(iceberg_base)
+            if idx == -1:
+                raise RuntimeError(
+                    f"Metadata path {full_metadata_path} does not contain base location {iceberg_base}"
+                )
+            else:
+                metadata_path = full_metadata_path[idx:]
+
             # Connect to snowflake
             conn = bodo.io.snowflake.snowflake_connect(snowflake_conn)
             cursor = conn.cursor()
@@ -1345,7 +1362,7 @@ def convert_to_snowflake_iceberg_table_py(
                 CREATE {or_replace} ICEBERG TABLE {table_name}
                 EXTERNAL_VOLUME='{iceberg_volume}'
                 CATALOG='{catalog_integration_name}'
-                METADATA_FILE_PATH='{base}/metadata/v1.metadata.json';
+                METADATA_FILE_PATH='{metadata_path}';
             """
             cursor.execute(create_query)
 
@@ -1367,23 +1384,34 @@ def convert_to_snowflake_iceberg_table_py(
 
 
 def convert_to_snowflake_iceberg_table(
-    snowflake_conn, iceberg_base, iceberg_volume, schema, table_name, replace
+    snowflake_conn,
+    iceberg_conn,
+    iceberg_base,
+    iceberg_volume,
+    schema,
+    table_name,
+    replace,
 ):  # pragma: no cover
     pass
 
 
 @overload(convert_to_snowflake_iceberg_table)
 def overload_convert_to_snowflake_iceberg_table(
-    snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
+    snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
 ):  # pragma: no cover
     """JIT wrapper around convert_to_snowflake_iceberg_table_py above"""
 
     def impl(
-        snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
+        snowflake_conn, iceberg_conn, iceberg_base, iceberg_volume, table_name, replace
     ):  # pragma: no cover
         with bodo.no_warning_objmode:
             convert_to_snowflake_iceberg_table_py(
-                snowflake_conn, iceberg_base, iceberg_volume, table_name, replace
+                snowflake_conn,
+                iceberg_conn,
+                iceberg_base,
+                iceberg_volume,
+                table_name,
+                replace,
             )
 
     return impl

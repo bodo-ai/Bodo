@@ -41,6 +41,7 @@ class SnowflakeIcebergWriteTarget(
             Expr.Call(
                 "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
                 Expr.StringLiteral(snowflakeConnectionString),
+                Expr.StringLiteral(icebergConnectionString),
                 Expr.StringLiteral(schema.joinToString(separator = "/")),
                 // Note: This is the name of the volume, not the path or connection string.
                 Expr.StringLiteral(icebergVolume),

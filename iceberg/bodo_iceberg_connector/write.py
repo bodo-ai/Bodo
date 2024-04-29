@@ -380,3 +380,12 @@ def delete_table(conn_str: str, db_name: str, table_name: str, purge: bool = Tru
     except Py4JError as e:
         print("Error during Iceberg table delete: ", e)
         return False
+
+
+def get_table_metadata_path(conn_str: str, db_name: str, table_name: str):
+    """
+    Get the path to the current metadata file.
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    return normalize_loc(handler.getTableMetadataPath())
