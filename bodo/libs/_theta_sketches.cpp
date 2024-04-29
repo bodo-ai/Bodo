@@ -3,20 +3,184 @@
 #include <mpi.h>
 #include "_shuffle.h"
 
-theta_sketch_collection_t init_theta_sketches(
-    const std::vector<bool> &ndv_cols) {
-    size_t n_cols = ndv_cols.size();
-    theta_sketch_collection_t result =
-        new std::optional<datasketches::update_theta_sketch>[n_cols];
-    for (size_t col_idx = 0; col_idx < n_cols; col_idx++) {
-        if (ndv_cols[col_idx]) {
-            result[col_idx] =
-                datasketches::update_theta_sketch::builder().build();
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::string err_msg = std::string("Error in theta sketches: ") + msg + \
+                              " " + expr.ToString();                           \
+        throw std::runtime_error(err_msg);                                     \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
+std::shared_ptr<CompactSketchCollection>
+CompactSketchCollection::merge_parallel_sketches() {
+    size_t n_sketches = this->sketches.size();
+    int rank, n_pes;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    // Serialize the theta sketches and dump into a string array
+    std::vector<std::optional<std::string>> serialized =
+        this->serialize_sketches();
+    bodo::vector<std::string> strings(n_sketches);
+    bodo::vector<uint8_t> nulls(arrow::bit_util::BytesForBits(n_sketches));
+    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+        if (serialized[col_idx].has_value()) {
+            strings[col_idx] = serialized[col_idx].value();
+            SetBitTo(nulls.data(), col_idx, true);
+        } else {
+            strings[col_idx] = "";
+            SetBitTo(nulls.data(), col_idx, false);
+        }
+    }
+    std::shared_ptr<array_info> as_string_array =
+        create_string_array(Bodo_CTypes::STRING, nulls, strings, -1);
+
+    // Gather the string arrays onto rank zero
+    auto combined_string_array =
+        gather_array(as_string_array, false, n_pes > 1, 0, n_pes, rank);
+
+    if (rank == 0) {
+        // On rank zero, convert the combined array into a vector of theta
+        // sketch collections
+        char *raw_data_ptr =
+            combined_string_array->data1<bodo_array_type::STRING>();
+        offset_t *offsets =
+            combined_string_array->data2<bodo_array_type::STRING, offset_t>();
+        size_t combined_idx = 0;
+        std::vector<std::shared_ptr<CompactSketchCollection>> collections;
+        for (int i = 0; i < n_pes; i++) {
+            std::vector<std::optional<std::string>> serialized_collection;
+            for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+                if (combined_string_array->get_null_bit(combined_idx)) {
+                    offset_t start_offset = offsets[combined_idx];
+                    offset_t end_offset = offsets[combined_idx + 1];
+                    offset_t length = end_offset - start_offset;
+                    std::string serialized_str(&raw_data_ptr[start_offset],
+                                               length);
+                    serialized_collection.push_back(serialized_str);
+                } else {
+                    serialized_collection.push_back(std::nullopt);
+                }
+                combined_idx++;
+            }
+            collections.push_back(CompactSketchCollection::deserialize_sketches(
+                serialized_collection));
+        }
+        // Finally, merge the collections
+        return CompactSketchCollection::merge_sketches(std::move(collections));
+    } else {
+        // On all other ranks, the result doesn't matter
+        // so just return an empty vector
+        std::vector<std::optional<datasketches::compact_theta_sketch>> empty;
+        return std::make_unique<CompactSketchCollection>(std::move(empty));
+    }
+}
+
+std::shared_ptr<CompactSketchCollection>
+CompactSketchCollection::merge_sketches(
+    std::vector<std::shared_ptr<CompactSketchCollection>> sketch_collections) {
+    size_t n_sketches = sketch_collections[0]->max_num_sketches();
+    std::vector<std::optional<datasketches::compact_theta_sketch>> result(
+        n_sketches);
+    // Loop over every column in the original table, skipping indices
+    // without a theta sketch.
+    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+        if (sketch_collections[0]->sketches[col_idx].has_value()) {
+            // Create a union builder and iterate across all of the collections,
+            // adding the current column's theta sketch from all the collections
+            // into the builder
+            auto combined = datasketches::theta_union::builder().build();
+            for (std::shared_ptr<CompactSketchCollection> &collection :
+                 sketch_collections) {
+                combined.update(collection->sketches[col_idx].value());
+            }
+            // Replace the first collection's theta sketch in the current
+            // column with the combined result.
+            result[col_idx] = combined.get_result();
         } else {
             result[col_idx] = std::nullopt;
         }
     }
+    return std::make_unique<CompactSketchCollection>(std::move(result));
+}
+
+std::vector<std::optional<std::string>>
+CompactSketchCollection::serialize_sketches() {
+    size_t n_sketches = this->sketches.size();
+    std::vector<std::optional<std::string>> result;
+    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+        if (this->sketches[col_idx].has_value()) {
+            std::stringstream serialized;
+            this->sketches[col_idx].value().serialize(serialized);
+            result.push_back(serialized.str());
+        } else {
+            result.push_back(std::nullopt);
+        }
+    }
     return result;
+}
+
+std::shared_ptr<CompactSketchCollection>
+CompactSketchCollection::deserialize_sketches(
+    std::vector<std::optional<std::string>> strings) {
+    size_t n_sketches = strings.size();
+    std::vector<std::optional<datasketches::compact_theta_sketch>> result(
+        n_sketches);
+    // Loop over every string in the collection, skipping ones where
+    // the option is a nullopt
+    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+        if (strings[col_idx].has_value()) {
+            result[col_idx] = datasketches::compact_theta_sketch::deserialize(
+                strings[col_idx].value().data(),
+                strings[col_idx].value().length());
+        } else {
+            result[col_idx] = std::nullopt;
+        }
+    }
+    return std::make_unique<CompactSketchCollection>(std::move(result));
+}
+
+std::unique_ptr<array_info> CompactSketchCollection::compute_ndv() {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    size_t n_fields = this->sketches.size();
+    std::vector<double> local_estimates(n_fields);
+    if (rank == 0) {
+        // Populate the vector on rank 0
+        for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+            if (this->sketches[col_idx].has_value()) {
+                double estimate =
+                    this->sketches[col_idx].value().get_estimate();
+                local_estimates[col_idx] = estimate;
+            } else {
+                local_estimates[col_idx] = -1.0;
+            }
+        }
+    }
+    // Broadcast the vector onto all ranks);
+    MPI_Bcast(local_estimates.data(), n_fields, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Convert to an array where -1 is a sentinel for null
+    std::unique_ptr<array_info> arr =
+        alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64);
+    for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
+        if (local_estimates[col_idx] < 0) {
+            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx, 0);
+        } else {
+            arr->data1<bodo_array_type::NULLABLE_INT_BOOL, double>()[col_idx] =
+                local_estimates[col_idx];
+        }
+    }
+    return arr;
 }
 
 inline void insert_numeric_buffer_theta_sketch(
@@ -79,50 +243,47 @@ void insert_theta_sketch_dict_column(
     }
 }
 
-void update_theta_sketches(
-    theta_sketch_collection_t sketches,
+void UpdateSketchCollection::update_sketch(
     const std::shared_ptr<arrow::ChunkedArray> &col, size_t col_idx,
     std::optional<std::shared_ptr<arrow::Buffer>> dict_hits) {
-    if (sketches == nullptr) {
-        return;
-    }
-#define add_numeric_column_case(arrow_type)                                    \
-    case (arrow_type::type_id): {                                              \
-        datasketches::update_theta_sketch &sketch = sketches[col_idx].value(); \
-        int n_chunks = col->num_chunks();                                      \
-        for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {           \
-            const std::shared_ptr<arrow::Array> &chunk =                       \
-                col->chunk(cur_chunk);                                         \
-            size_t n_rows = chunk->length();                                   \
-            std::shared_ptr<arrow::NumericArray<arrow_type>> base_array =      \
-                std::reinterpret_pointer_cast<                                 \
-                    arrow::NumericArray<arrow_type>>(chunk);                   \
-            using T = typename arrow_type::c_type;                             \
-            const T *raw_values = base_array->raw_values();                    \
-            for (size_t row = 0; row < n_rows; row++) {                        \
-                if (chunk->IsNull(row)) {                                      \
-                    continue;                                                  \
-                }                                                              \
-                int64_t num_bytes = sizeof(T);                                 \
-                const char *data =                                             \
-                    reinterpret_cast<const char *>(raw_values + row);          \
-                insert_value_theta_sketch<arrow_type::type_id>(                \
-                    data, num_bytes, sketch);                                  \
-            }                                                                  \
-        }                                                                      \
-        break;                                                                 \
+#define add_numeric_column_case(arrow_type)                               \
+    case (arrow_type::type_id): {                                         \
+        datasketches::update_theta_sketch &sketch =                       \
+            this->sketches[col_idx].value();                              \
+        int n_chunks = col->num_chunks();                                 \
+        for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {      \
+            const std::shared_ptr<arrow::Array> &chunk =                  \
+                col->chunk(cur_chunk);                                    \
+            size_t n_rows = chunk->length();                              \
+            std::shared_ptr<arrow::NumericArray<arrow_type>> base_array = \
+                std::reinterpret_pointer_cast<                            \
+                    arrow::NumericArray<arrow_type>>(chunk);              \
+            using T = typename arrow_type::c_type;                        \
+            const T *raw_values = base_array->raw_values();               \
+            for (size_t row = 0; row < n_rows; row++) {                   \
+                if (chunk->IsNull(row)) {                                 \
+                    continue;                                             \
+                }                                                         \
+                int64_t num_bytes = sizeof(T);                            \
+                const char *data =                                        \
+                    reinterpret_cast<const char *>(raw_values + row);     \
+                insert_value_theta_sketch<arrow_type::type_id>(           \
+                    data, num_bytes, sketch);                             \
+            }                                                             \
+        }                                                                 \
+        break;                                                            \
     }
 #define add_binary_column_case(arrow_type)                                     \
     case (arrow_type::type_id): {                                              \
-        datasketches::update_theta_sketch &sketch = sketches[col_idx].value(); \
+        datasketches::update_theta_sketch &sketch =                            \
+            this->sketches[col_idx].value();                                   \
         int n_chunks = col->num_chunks();                                      \
         for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {           \
             const std::shared_ptr<arrow::Array> &chunk =                       \
                 col->chunk(cur_chunk);                                         \
             size_t n_rows = chunk->length();                                   \
-            std::shared_ptr<arrow::BaseBinaryArray<arrow_type>> base_array =   \
-                std::reinterpret_pointer_cast<                                 \
-                    arrow::BaseBinaryArray<arrow_type>>(chunk);                \
+            std::shared_ptr<arrow::LargeBinaryArray> base_array =              \
+                std::reinterpret_pointer_cast<arrow::LargeBinaryArray>(chunk); \
             for (size_t row = 0; row < n_rows; row++) {                        \
                 if (chunk->IsNull(row)) {                                      \
                     continue;                                                  \
@@ -137,7 +298,7 @@ void update_theta_sketches(
         break;                                                                 \
     }
     // Skipping the column if the theta sketch is absent.
-    if (sketches[col_idx].has_value()) {
+    if (this->sketches[col_idx].has_value()) {
         switch (col->type()->id()) {
             add_numeric_column_case(arrow::Int32Type);
             add_numeric_column_case(arrow::Int64Type);
@@ -151,18 +312,18 @@ void update_theta_sketches(
             case arrow::Type::DICTIONARY: {
                 if (dict_hits.has_value()) {
                     insert_theta_sketch_dict_column(
-                        col, sketches[col_idx].value(), dict_hits.value());
+                        col, this->sketches[col_idx].value(),
+                        dict_hits.value());
                 } else {
                     throw std::runtime_error(
-                        "update_theta_sketches: dictionary encoded column "
-                        "requires "
+                        "update_sketches: dictionary encoded column requires "
                         "non-nullopt value for dict-hits");
                 }
                 break;
             }
             default: {
                 throw std::runtime_error(
-                    "update_theta_sketches: unsupported arrow type " +
+                    "update_sketches: unsupported arrow type " +
                     col->type()->name());
             }
         }
@@ -171,177 +332,35 @@ void update_theta_sketches(
 #undef add_binary_column_case
 }
 
-immutable_theta_sketch_collection_t compact_theta_sketches(
-    theta_sketch_collection_t sketches, size_t n_sketches) {
-    immutable_theta_sketch_collection_t result(n_sketches);
+std::shared_ptr<CompactSketchCollection>
+UpdateSketchCollection::compact_sketches() {
     // Loop over every column in the original table, skipping indices
     // without a theta sketch.
-    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
+    std::vector<std::optional<datasketches::compact_theta_sketch>> result(
+        this->sketches.size());
+    for (size_t col_idx = 0; col_idx < this->sketches.size(); col_idx++) {
         if (sketches[col_idx].has_value()) {
-            result[col_idx] = sketches[col_idx].value().compact();
+            result[col_idx] = this->sketches[col_idx].value().compact();
         } else {
             result[col_idx] = std::nullopt;
         }
     }
-    return result;
+    return std::make_unique<CompactSketchCollection>(std::move(result));
 }
-
-immutable_theta_sketch_collection_t merge_parallel_theta_sketches(
-    immutable_theta_sketch_collection_t sketches) {
-    size_t n_sketches = sketches.size();
-    int rank, n_pes;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    // Serialize the theta sketches and dump into a string array
-    auto serialized = serialize_theta_sketches(sketches);
-    bodo::vector<std::string> strings(n_sketches);
-    bodo::vector<uint8_t> nulls(arrow::bit_util::BytesForBits(n_sketches));
-    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
-        if (serialized[col_idx].has_value()) {
-            strings[col_idx] = serialized[col_idx].value();
-            SetBitTo(nulls.data(), col_idx, true);
-        } else {
-            strings[col_idx] = "";
-            SetBitTo(nulls.data(), col_idx, false);
-        }
-    }
-    std::shared_ptr<array_info> as_string_array =
-        create_string_array(Bodo_CTypes::STRING, nulls, strings, -1);
-
-    // Gather the string arrays onto rank zero
-    auto combined_string_array =
-        gather_array(as_string_array, false, n_pes > 1, 0, n_pes, rank);
-
-    if (rank == 0) {
-        // On rank zero, convert the combined array into a vector of theta
-        // sketch collections
-        std::vector<immutable_theta_sketch_collection_t> collections;
-        char *raw_data_ptr =
-            combined_string_array->data1<bodo_array_type::STRING>();
-        offset_t *offsets =
-            combined_string_array->data2<bodo_array_type::STRING, offset_t>();
-        size_t combined_idx = 0;
-        for (int i = 0; i < n_pes; i++) {
-            std::vector<std::optional<std::string>> serialized_collection;
-            for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
-                if (combined_string_array->get_null_bit(combined_idx)) {
-                    offset_t start_offset = offsets[combined_idx];
-                    offset_t end_offset = offsets[combined_idx + 1];
-                    offset_t length = end_offset - start_offset;
-                    std::string serialized_str(&raw_data_ptr[start_offset],
-                                               length);
-                    serialized_collection.push_back(serialized_str);
-                } else {
-                    serialized_collection.push_back(std::nullopt);
-                }
-                combined_idx++;
-            }
-            collections.push_back(
-                deserialize_theta_sketches(serialized_collection));
-        }
-        // Finally, merge the collections
-        return merge_theta_sketches(collections);
-    } else {
-        // On all other ranks, the result doesn't matter
-        // so just return an empty vector
-        immutable_theta_sketch_collection_t dummy(0);
-        return dummy;
-    }
-}
-
-immutable_theta_sketch_collection_t merge_theta_sketches(
-    std::vector<immutable_theta_sketch_collection_t> sketch_collections) {
-    size_t n_sketches = sketch_collections[0].size();
-    immutable_theta_sketch_collection_t result(n_sketches);
-    // Loop over every column in the original table, skipping indices
-    // without a theta sketch.
-    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
-        if (sketch_collections[0][col_idx].has_value()) {
-            // Create a union builder and iterate across all of the collections,
-            // adding the current column's theta sketch from all the collections
-            // into the builder
-            auto combined = datasketches::theta_union::builder().build();
-            for (immutable_theta_sketch_collection_t collection :
-                 sketch_collections) {
-                combined.update(collection[col_idx].value());
-            }
-            // Replace the first collection's theta sketch in the current
-            // column with the combined result.
-            result[col_idx] = combined.get_result();
-        } else {
-            result[col_idx] = std::nullopt;
-        }
-    }
-    return result;
-}
-
-std::vector<std::optional<std::string>> serialize_theta_sketches(
-    immutable_theta_sketch_collection_t sketches) {
-    size_t n_sketches = sketches.size();
-    std::vector<std::optional<std::string>> result;
-    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
-        if (sketches[col_idx].has_value()) {
-            std::stringstream serialized;
-            sketches[col_idx].value().serialize(serialized);
-            result.push_back(serialized.str());
-        } else {
-            result.push_back(std::nullopt);
-        }
-    }
-    return result;
-}
-
-immutable_theta_sketch_collection_t deserialize_theta_sketches(
-    std::vector<std::optional<std::string>> strings) {
-    size_t n_sketches = strings.size();
-    immutable_theta_sketch_collection_t result(n_sketches);
-    // Loop over every string in the collection, skipping ones where
-    // the option is a nullopt
-    for (size_t col_idx = 0; col_idx < n_sketches; col_idx++) {
-        if (strings[col_idx].has_value()) {
-            result[col_idx] = datasketches::compact_theta_sketch::deserialize(
-                strings[col_idx].value().data(),
-                strings[col_idx].value().length());
-        } else {
-            result[col_idx] = std::nullopt;
-        }
-    }
-    return result;
-}
-
-// if status of arrow::Result is not ok, form an err msg and raise a
-// runtime_error with it
-#undef CHECK_ARROW
-#define CHECK_ARROW(expr, msg)                                                 \
-    if (!(expr.ok())) {                                                        \
-        std::string err_msg = std::string("Error in theta sketches: ") + msg + \
-                              " " + expr.ToString();                           \
-        throw std::runtime_error(err_msg);                                     \
-    }
-
-// if status of arrow::Result is not ok, form an err msg and raise a
-// runtime_error with it. If it is ok, get value using ValueOrDie
-// and assign it to lhs using std::move
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK_ARROW(res.status(), msg)            \
-    lhs = std::move(res).ValueOrDie();
 
 /**
  * @brief Python entrypoint to create a new theta sketch collection.
- * @param iceberg_arrow_schema_py: pointer to the python object representing the
- * iceberg arrow schema of the table.
- * @param used_existing_table: boolean indicating whether we reference an
- * existing table or not.
- * @param enable_theta_sketches: boolean indicating whether theta sketches are
- * turned on or not.
+ * @param theta_columns_py: Array info indicating which columns have theta
+ * sketches enabled.
+ * @return UpdateSketchCollection* The new theta sketch collection.
  */
-theta_sketch_collection_t init_theta_sketches_py_entrypt(
+UpdateSketchCollection *init_theta_sketches_py_entrypt(
     array_info *theta_columns_py) {
     try {
         std::shared_ptr<array_info> theta_columns =
             std::shared_ptr<array_info>(theta_columns_py);
-        return init_theta_sketches(array_to_boolean_vector(theta_columns));
+        return new UpdateSketchCollection(
+            array_to_boolean_vector(theta_columns));
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
@@ -358,67 +377,17 @@ theta_sketch_collection_t init_theta_sketches_py_entrypt(
  * parallel.
  */
 array_info *fetch_ndv_approximations_py_entrypt(
-    theta_sketch_collection_t sketches, PyObject *iceberg_arrow_schema_py) {
+    UpdateSketchCollection *sketches) {
     try {
-        std::shared_ptr<arrow::Schema> iceberg_schema;
-        CHECK_ARROW_AND_ASSIGN(
-            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
-            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
-        size_t n_fields = iceberg_schema->num_fields();
-        // Gather the theta sketches onto rank 0
-        auto immutable_collection = compact_theta_sketches(sketches, n_fields);
-        auto merged_collection =
-            merge_parallel_theta_sketches(immutable_collection);
-        return compute_ndv(merged_collection, n_fields).release();
-
+        std::shared_ptr<CompactSketchCollection> compact_sketches =
+            sketches->compact_sketches();
+        std::shared_ptr<CompactSketchCollection> merged_sketches =
+            compact_sketches->merge_parallel_sketches();
+        return merged_sketches->compute_ndv().release();
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
-}
-
-std::unique_ptr<array_info> compute_ndv(
-    immutable_theta_sketch_collection_t merged_collection, size_t n_fields) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    std::vector<double> local_estimates(n_fields);
-    if (rank == 0) {
-        // Populate the vector on rank 0
-        for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
-            if (merged_collection[col_idx].has_value()) {
-                double estimate =
-                    merged_collection[col_idx].value().get_estimate();
-                local_estimates[col_idx] = estimate;
-            } else {
-                local_estimates[col_idx] = -1.0;
-            }
-        }
-    }
-    // Broadcast the vector onto all ranks);
-    MPI_Bcast(local_estimates.data(), n_fields, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    // Convert to an array where -1 is a sentinel for null
-    std::unique_ptr<array_info> arr =
-        alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64);
-    for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
-        if (local_estimates[col_idx] < 0) {
-            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx, 0);
-        } else {
-            arr->data1<bodo_array_type::NULLABLE_INT_BOOL, double>()[col_idx] =
-                local_estimates[col_idx];
-        }
-    }
-    return arr;
-}
-
-/**
- * @brief Delete the theta sketch object. This is called by
- * Python after the object is no longer needed.
- *
- * @param sketches The sketches to delete.
- */
-void delete_theta_sketches(theta_sketch_collection_t sketches) {
-    delete[] sketches;
 }
 
 /**
@@ -493,9 +462,9 @@ array_info *get_default_theta_sketch_columns_py_entrypt(
  *
  * @param sketches The sketches to delete.
  */
-void delete_theta_sketches_py_entrypt(theta_sketch_collection_t sketches) {
+void delete_theta_sketches_py_entrypt(UpdateSketchCollection *sketches) {
     try {
-        delete_theta_sketches(sketches);
+        delete sketches;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }

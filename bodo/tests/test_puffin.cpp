@@ -222,20 +222,22 @@ static bodo::tests::suite tests([] {
         // Convert to a theta sketch with 4 columns (with the 4th as a
         // non-existant dummy column to make sure that the nullopt is
         // generated).
-        immutable_theta_sketch_collection_t collection =
-            puff->to_theta_sketches(schema);
+        auto collection = puff->to_theta_sketches(schema);
 
         // Verify that the theta sketch collection has the expected setup.
-        bodo::tests::check(collection[0].has_value());
-        bodo::tests::check(collection[1].has_value());
-        bodo::tests::check(collection[2].has_value());
-        bodo::tests::check(!collection[3].has_value());
+        bodo::tests::check(collection->column_has_sketch(0));
+        bodo::tests::check(collection->column_has_sketch(1));
+        bodo::tests::check(collection->column_has_sketch(2));
+        bodo::tests::check(!collection->column_has_sketch(3));
 
         // Verify that the theta sketch collection has the expected
         // estimates.
-        bodo::tests::check(collection[0].value().get_estimate() == 265.0);
-        bodo::tests::check(collection[1].value().get_estimate() == 7.0);
-        bodo::tests::check(collection[2].value().get_estimate() == 262.0);
+        std::unique_ptr<array_info> ndvs = collection->compute_ndv();
+        double *data =
+            ndvs->data1<bodo_array_type::NULLABLE_INT_BOOL, double>();
+        bodo::tests::check(data[0] == 265.0);
+        bodo::tests::check(data[1] == 7.0);
+        bodo::tests::check(data[2] == 262.0);
     });
     bodo::tests::test("test_puffin_read_nyc_theta_to_puffin", [] {
         // Read in the nyc example file and parse it as a puffin file
@@ -246,8 +248,7 @@ static bodo::tests::suite tests([] {
         std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
 
         // Convert to a theta sketch with 3 columns
-        immutable_theta_sketch_collection_t collection_1 =
-            puff->to_theta_sketches(schema);
+        auto collection_1 = puff->to_theta_sketches(schema);
 
         // Convert the theta sketches back to a puffin file and verify it
         // matches the same properties as the original puffin file.
@@ -257,14 +258,16 @@ static bodo::tests::suite tests([] {
         verify_nyc_puffin_file_metadata(new_puff, nyc_example, false);
 
         // Re-deserialize to make sure the serialized blobs were valid
-        immutable_theta_sketch_collection_t collection_2 =
-            puff->to_theta_sketches(schema);
-        bodo::tests::check(collection_2[0].has_value());
-        bodo::tests::check(collection_2[1].has_value());
-        bodo::tests::check(collection_2[2].has_value());
-        bodo::tests::check(collection_2[0].value().get_estimate() == 265.0);
-        bodo::tests::check(collection_2[1].value().get_estimate() == 7.0);
-        bodo::tests::check(collection_2[2].value().get_estimate() == 262.0);
+        auto collection_2 = puff->to_theta_sketches(schema);
+        bodo::tests::check(collection_2->column_has_sketch(0));
+        bodo::tests::check(collection_2->column_has_sketch(1));
+        bodo::tests::check(collection_2->column_has_sketch(2));
+        std::unique_ptr<array_info> ndvs = collection_2->compute_ndv();
+        double *data =
+            ndvs->data1<bodo_array_type::NULLABLE_INT_BOOL, double>();
+        bodo::tests::check(data[0] == 265.0);
+        bodo::tests::check(data[1] == 7.0);
+        bodo::tests::check(data[2] == 262.0);
     });
     bodo::tests::test("test_puffin_read_nyc_insert_data", [] {
         std::shared_ptr<arrow::Schema> schema = generate_dummy_arrow_schema(3);
@@ -275,8 +278,7 @@ static bodo::tests::suite tests([] {
         std::unique_ptr<PuffinFile> puff = PuffinFile::deserialize(nyc_example);
 
         // Convert to a theta sketch with 3 columns
-        immutable_theta_sketch_collection_t collection_1 =
-            puff->to_theta_sketches(schema);
+        auto collection_1 = puff->to_theta_sketches(schema);
 
         // Merge with a batch of data with 5 rows and the following properties:
         // Column 0: 5 unique numbers, 2 of which overlap with existing data
@@ -294,14 +296,16 @@ static bodo::tests::suite tests([] {
         T->columns.push_back(A0);
         T->columns.push_back(A1);
         T->columns.push_back(A2);
-        auto collection_2 = init_theta_sketches({true, true, true});
+        std::vector<bool> alloc_sketches = {true, true, true};
+        auto collection_2 =
+            std::make_unique<UpdateSketchCollection>(alloc_sketches);
         auto arrow_table = bodo_table_to_arrow(T);
         for (int i = 0; i < arrow_table->num_columns(); i++) {
             auto column = arrow_table->column(i);
-            update_theta_sketches(collection_2, arrow_table->column(i), i);
+            collection_2->update_sketch(arrow_table->column(i), i);
         }
-        auto collection_3 = merge_theta_sketches(
-            {collection_1, compact_theta_sketches(collection_2, 3)});
+        auto collection_3 = CompactSketchCollection::merge_sketches(
+            {collection_1, collection_2->compact_sketches()});
 
         // Convert the theta sketches back to a puffin file.
         // Pass in a dummy snapshot_id & sequence_number: 123456789, 5
@@ -310,13 +314,16 @@ static bodo::tests::suite tests([] {
 
         // Re-deserialize to make sure the serialized blobs were valid
         // and have the correct new estimates
-        immutable_theta_sketch_collection_t collection_4 =
+        std::shared_ptr<CompactSketchCollection> collection_4 =
             new_puff->to_theta_sketches(schema);
-        bodo::tests::check(collection_4[0].has_value());
-        bodo::tests::check(collection_4[1].has_value());
-        bodo::tests::check(collection_4[2].has_value());
-        bodo::tests::check(collection_4[0].value().get_estimate() == 268.0);
-        bodo::tests::check(collection_4[1].value().get_estimate() == 7.0);
-        bodo::tests::check(collection_4[2].value().get_estimate() == 266.0);
+        bodo::tests::check(collection_4->column_has_sketch(0));
+        bodo::tests::check(collection_4->column_has_sketch(1));
+        bodo::tests::check(collection_4->column_has_sketch(2));
+        std::unique_ptr<array_info> ndvs = collection_4->compute_ndv();
+        double *data =
+            ndvs->data1<bodo_array_type::NULLABLE_INT_BOOL, double>();
+        bodo::tests::check(data[0] == 268.0);
+        bodo::tests::check(data[1] == 7.0);
+        bodo::tests::check(data[2] == 266.0);
     });
 });

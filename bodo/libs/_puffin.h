@@ -241,7 +241,7 @@ class PuffinFile {
      * snapshot.
      */
     static std::unique_ptr<PuffinFile> from_theta_sketches(
-        immutable_theta_sketch_collection_t sketches,
+        std::shared_ptr<CompactSketchCollection> sketches,
         std::shared_ptr<arrow::Schema> iceberg_schema, int64_t snapshot_id,
         int64_t sequence_number);
 
@@ -251,7 +251,7 @@ class PuffinFile {
      *    the field_ids in the BlobMetadata to the corresponding column
      *    locations.
      */
-    immutable_theta_sketch_collection_t to_theta_sketches(
+    std::shared_ptr<CompactSketchCollection> to_theta_sketches(
         std::shared_ptr<arrow::Schema> iceberg_schema);
 
    private:
