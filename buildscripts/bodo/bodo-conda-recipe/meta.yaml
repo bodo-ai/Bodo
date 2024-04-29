@@ -32,7 +32,7 @@ requirements:
     # This should be installed automatically as a depended of the cpp compiler,
     # but we need to explicitly specify it so that we can pin the version with
     # the variant file for pip.
-    - libstdcxx-ng
+    - libstdcxx-ng  # [linux64]
 
   host:
     - python
@@ -66,7 +66,7 @@ requirements:
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
     # See comment on build libstdcxx-ng above
-    - libstdcxx-ng
+    - libstdcxx-ng  # [linux64]
     - requests
     - aws-sdk-cpp
     - zstd

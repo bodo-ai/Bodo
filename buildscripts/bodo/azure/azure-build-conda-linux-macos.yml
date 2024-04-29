@@ -24,6 +24,9 @@ parameters:
 - name: pythonVersion
   type: string
   default: ''
+- name: condition
+  type: boolean
+  default: true
 
 jobs:
 - job: ${{ parameters.name }}
@@ -31,6 +34,7 @@ jobs:
     - group: AWS-427-S3-Access-Keys
   timeoutInMinutes: 360
   pool: ${{ parameters.pool }}
+  condition: ${{ parameters.condition }}
 
   steps:
   - task: UsePythonVersion@0
@@ -147,7 +151,7 @@ jobs:
       source activate bodo_build
       set -x
 
-      mamba install -y "conda-forge-ci-setup=3" -c conda-forge
+      mamba install -y "conda-forge-ci-setup=4" -c conda-forge
       setup_conda_rc ./ ./buildscripts/bodo/bodo-m1-conda-recipe ./buildscripts/bodo/bodo-m1-conda-recipe/release_conda_build_config.yaml
       /usr/bin/sudo mangle_homebrew
       /usr/bin/sudo -k
