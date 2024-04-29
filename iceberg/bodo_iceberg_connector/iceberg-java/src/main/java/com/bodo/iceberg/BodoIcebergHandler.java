@@ -21,6 +21,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
@@ -375,6 +376,23 @@ public class BodoIcebergHandler {
   }
 
   /**
+   * Return the location of the table metadata file.
+   *
+   * <p>Note: This API is exposed to Python.
+   *
+   * @return Location of the table metadata file.
+   */
+  public @Nonnull String getTableMetadataPath() {
+    Table table = catalog.loadTable(id);
+    if (table instanceof HasTableOperations) {
+      HasTableOperations opsTable = (HasTableOperations) table;
+      return opsTable.operations().current().metadataFileLocation();
+    } else {
+      throw new RuntimeException("Unable to determine table metadata path.");
+    }
+  }
+
+  /**
    * Create a transaction to create a new table in the DB.
    *
    * <p>Note: This API is exposed to Python.
@@ -390,9 +408,15 @@ public class BodoIcebergHandler {
     // TODO: Support passing in new partition spec and sort order as well
     final Transaction txn;
     if (replace) {
+      if (getTableInfo(false) == null) {
+        // Temporarily create the table to avoid breaking the rest catalog.
+        // TODO: REMOVE. The REST catalog runtime should use the information
+        // from the active transaction.
+        catalog.createTable(id, schema, PartitionSpec.unpartitioned(), properties);
+      }
       txn =
           catalog.newReplaceTableTransaction(
-              id, schema, PartitionSpec.unpartitioned(), properties, false);
+              id, schema, PartitionSpec.unpartitioned(), properties, true);
     } else {
       // Create the table and then replace it,
       // this is so we can fetch credentials for the table in python, otherwise we get a table not
