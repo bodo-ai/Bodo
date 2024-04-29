@@ -1071,6 +1071,43 @@ def test_random_decimal_sum_min_max_last(impl, memory_leak_check):
         raise ValueError("Unexpected impl")
 
 
+def test_decimal_sum():
+    """Test groupby sum on decimal input, where overflow throws an error"""
+
+    def impl(df):
+        return df.groupby("A", as_index=False)["B"].sum()
+
+    B = pd.array(
+        pa.array(["0.01", "0.03", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(37, 37)),
+    )
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})
+    B_out = pd.array(
+        pa.array(["0.1", "0.3", "0"]).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    py_output = pd.DataFrame({"A": [1, 2, 3], "B": B_out})
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+    # Group 2 will overflow
+    B = pd.array(
+        pa.array(["0.01", "3.3", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})
+    with pytest.raises(
+        RuntimeError, match="Overflow detected in groupby sum of Decimal data"
+    ):
+        bodo.jit(impl)(df)
+
+
 def test_random_string_sum_min_max_first_last(memory_leak_check):
     def impl1(df):
         A = df.groupby("A").sum()
@@ -4283,7 +4320,7 @@ def test_mean_median_other_supported_types(memory_leak_check):
                     Decimal("1.6"),
                     Decimal("-0.2"),
                     Decimal("44.2"),
-                    np.nan,
+                    None,
                     Decimal("0"),
                 ]
             ),
@@ -4824,7 +4861,7 @@ def test_first_last_supported_types(memory_leak_check):
         {
             "A": [2, 1, 1, 2, 2],
             "B": pd.Series(
-                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), np.nan, Decimal("0")]
+                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), None, Decimal("0")]
             ),
         }
     )
@@ -6246,7 +6283,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
                             Decimal("1.6"),
                             Decimal("-0.2"),
                             Decimal("44.2"),
-                            np.nan,
+                            None,
                             Decimal("0"),
                         ]
                     ),
@@ -6995,7 +7032,7 @@ def test_head(memory_leak_check):
             "B": pd.Series(
                 [
                     Decimal("1.6"),
-                    np.nan,
+                    None,
                     Decimal("1.6"),
                     Decimal("44.2"),
                     Decimal("1.6"),

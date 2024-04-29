@@ -260,7 +260,7 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
                 Decimal("1.6"),
                 Decimal("-0.2"),
                 Decimal("44.2"),
-                np.nan,
+                None,
                 Decimal("0"),
             ]
         )

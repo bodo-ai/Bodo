@@ -916,6 +916,13 @@ def sort_series_values_index(S):
     return S1.sort_values(kind="mergesort")
 
 
+def _is_nested_arrow_dtype(dtype):
+    """return True if Pandas dtype is a nested Arrow dtype (map/struct/list)"""
+    return isinstance(dtype, pd.ArrowDtype) and isinstance(
+        dtype.pyarrow_dtype, (pa.MapType, pa.StructType, pa.ListType, pa.LargeListType)
+    )
+
+
 def sort_dataframe_values_index(df):
     """sort data frame based on values and index"""
     if isinstance(df.index, pd.MultiIndex):
@@ -924,7 +931,8 @@ def sort_dataframe_values_index(df):
         list_col_names = [
             c
             for i, c in enumerate(df.columns)
-            if not isinstance(df.dtypes.iloc[i], pd.ArrowDtype)
+            # Avoid sorting nested dtypes since not supported in Pandas yet
+            if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
         ] + index_names
         return df.rename_axis(index_names).sort_values(list_col_names, kind="mergesort")
 
@@ -932,7 +940,8 @@ def sort_dataframe_values_index(df):
     list_col_names = [
         c
         for i, c in enumerate(df.columns)
-        if not isinstance(df.dtypes.iloc[i], pd.ArrowDtype)
+        # Avoid sorting nested dtypes since not supported in Pandas yet
+        if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
     ] + [eName]
     if None in list_col_names:
         raise RuntimeError(
@@ -1087,9 +1096,14 @@ def _test_equal(
         and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
     ):
         py_out = _to_pa_array(py_out, bodo.typeof(bodo_out))
+        py_out = pd.Series(py_out)
+        bodo_out = pd.Series(bodo_out)
+        if sort_output:
+            py_out = py_out.sort_values().reset_index(drop=True)
+            bodo_out = bodo_out.sort_values().reset_index(drop=True)
         pd.testing.assert_series_equal(
-            pd.Series(py_out),
-            pd.Series(bodo_out),
+            py_out,
+            bodo_out,
             check_dtype=False,
             atol=atol,
             rtol=rtol,

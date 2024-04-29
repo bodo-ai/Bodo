@@ -334,10 +334,6 @@ decimal_value int64_to_decimal(int64_t value) {
     return {static_cast<int64_t>(low_bits), high_bits};
 }
 
-void* box_decimal_array(int64_t n, const uint8_t* data,
-                        const uint8_t* null_bitmap, int scale);
-void unbox_decimal_array(PyObject* obj, int64_t n, int8_t dest_scale,
-                         uint8_t* data, uint8_t* null_bitmap);
 void unbox_decimal(PyObject* obj, uint8_t* data);
 
 PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
@@ -583,8 +579,6 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.
-    SetAttrStringFromVoidPtr(m, box_decimal_array);
-    SetAttrStringFromVoidPtr(m, unbox_decimal_array);
     SetAttrStringFromVoidPtr(m, unbox_decimal);
     SetAttrStringFromVoidPtr(m, box_decimal);
 
@@ -605,65 +599,6 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
 
     return m;
-}
-
-/// @brief  Box native DecimalArray data to Numpy object array of
-/// decimal.Decimal items
-/// @return Numpy object array of decimal.Decimal
-/// @param[in] n number of values
-/// @param[in] data pointer to 128-bit values
-/// @param[in] null_bitmap bitvector representing nulls (Arrow format)
-void* box_decimal_array(int64_t n, const uint8_t* data,
-                        const uint8_t* null_bitmap, int scale) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {n};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-
-    // get decimal.Decimal constructor
-    PyObject* dec_mod = PyImport_ImportModule("decimal");
-    CHECK(dec_mod, "importing decimal module failed");
-    PyObject* decimal_constructor = PyObject_GetAttrString(dec_mod, "Decimal");
-    CHECK(decimal_constructor, "getting decimal.Decimal failed");
-
-    for (int64_t i = 0; i < n; ++i) {
-        // using Arrow's Decimal128 to get string representation
-        // and call decimal.Decimal(), similar to Arrow to pandas code.
-        uint64_t high_bytes =
-            *(uint64_t*)(data + i * BYTES_PER_DECIMAL + sizeof(uint64_t));
-        uint64_t low_bytes = *(uint64_t*)(data + i * BYTES_PER_DECIMAL);
-        arrow::Decimal128 arrow_decimal(high_bytes, low_bytes);
-        std::string str = decimal_to_std_string(arrow_decimal, scale);
-        PyObject* d =
-            PyObject_CallFunction(decimal_constructor, "s", str.c_str());
-
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (!is_na(null_bitmap, i))
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
-        else
-            // TODO: replace None with pd.NA when Pandas switch to pd.NA
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, Py_None);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(d);
-    }
-
-    Py_DECREF(decimal_constructor);
-    Py_DECREF(dec_mod);
-
-    PyGILState_Release(gilstate);
-    return ret;
-#undef CHECK
 }
 
 /**
@@ -698,87 +633,6 @@ void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
     decimal_scalar.ToBytes(data_ptr);
 
     PyGILState_Release(gilstate);
-}
-
-/**
- * @brief unbox ndarray of Decimal objects into native DecimalArray
- *
- * @param obj ndarray object of Decimal objects
- * @param n number of values
- * @param dest_scale Destination scale.
- * @param data pointer to 128-bit data buffer
- * @param null_bitmap pointer to null_bitmap buffer
- */
-void unbox_decimal_array(PyObject* obj, int64_t n, int8_t dest_scale,
-                         uint8_t* data, uint8_t* null_bitmap) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return;                        \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-
-    CHECK(PySequence_Check(obj), "expecting a PySequence");
-    CHECK(n >= 0 && data && null_bitmap, "output arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    // simple equality check is enough since the object is a singleton
-    // example:
-    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    arrow::Status status;
-
-    for (int64_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(obj, i);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None, nan, or pd.NA
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // null bit
-            ::arrow::bit_util::ClearBit(null_bitmap, i);
-            memset(data + i * BYTES_PER_DECIMAL, 0, BYTES_PER_DECIMAL);
-        } else {
-            // set not null
-            ::arrow::bit_util::SetBit(null_bitmap, i);
-            // construct Decimal128 from str(decimal)
-            PyObject* s_str_obj = PyObject_Str(s);
-            CHECK(s_str_obj, "str(decimal) failed");
-            arrow::Decimal128 d128, d128_18;
-            int32_t precision;
-            int32_t scale;
-            status = arrow::Decimal128::FromString(
-                (const char*)PyUnicode_DATA(s_str_obj), &d128, &precision,
-                &scale);
-            CHECK(status.ok(), "decimal rescale failed");
-            CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, dest_scale),
-                                   "decimal rescale error", d128_18);
-            // write to data array
-            uint8_t* data_ptr = (data + i * BYTES_PER_DECIMAL);
-            d128_18.ToBytes(data_ptr);
-            Py_DECREF(s_str_obj);
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(C_NA);
-    Py_DECREF(pd_mod);
-
-    PyGILState_Release(gilstate);
-
-    return;
-#undef CHECK
 }
 
 /**

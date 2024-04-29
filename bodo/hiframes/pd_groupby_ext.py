@@ -47,7 +47,7 @@ from bodo.libs.array import (
     shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.decimal_arr_ext import DECIMAL128_MAX_PRECISION, Decimal128Type
 from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -372,6 +372,12 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
 
     elif func_name == "size":
         return dtype_to_array_type(types.int64), "ok"
+    elif func_name == "sum" and isinstance(in_dtype, Decimal128Type):
+        # Use maximum precision since sum can produce large output values
+        # TODO[BSE-3224] Support changing decimal representation in runtime to handle
+        # overflows.
+        out_dtype = Decimal128Type(DECIMAL128_MAX_PRECISION, in_dtype.scale)
+        return dtype_to_array_type(out_dtype), "ok"
     elif (
         func_name
         in {

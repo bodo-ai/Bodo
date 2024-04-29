@@ -3,12 +3,14 @@
 #include "_groupby_do_apply_to_column.h"
 
 #include <numeric>
+#include <stdexcept>
 
 #include "_bodo_common.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
 #include "_stl.h"
+#include "arrow/vendored/portable-snippets/safe-math.h"
 
 /**
  * This file defines the functions that create the
@@ -1533,220 +1535,255 @@ void apply_to_column_nullable(
 // TODO XXX The getv and set_null_bit calls need to be templated with the arr
 // types!
 #ifndef APPLY_TO_COLUMN_REGULAR_CASE
-#define APPLY_TO_COLUMN_REGULAR_CASE                                           \
-    switch (ftype) {                                                           \
-        case Bodo_FTypes::count:                                               \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                count_agg<bool, DType>::apply(getv<int64_t>(out_col, i_grp),   \
-                                              data_bit);                       \
-            } else {                                                           \
-                count_agg<T, DType>::apply(getv<int64_t>(out_col, i_grp),      \
-                                           getv<T, ArrType>(in_col, i));       \
-            }                                                                  \
-            break;                                                             \
-        case Bodo_FTypes::mean:                                                \
-            mean_agg<T, DType>::apply(getv<double>(out_col, i_grp),            \
-                                      getv<T, ArrType>(in_col, i),             \
-                                      getv<uint64_t>(aux_cols[0], i_grp));     \
-            out_col->set_null_bit(i_grp, true);                                \
-            aux_cols[0]->set_null_bit(i_grp, true);                            \
-            break;                                                             \
-        case Bodo_FTypes::var_pop:                                             \
-        case Bodo_FTypes::std_pop:                                             \
-        case Bodo_FTypes::var:                                                 \
-        case Bodo_FTypes::std:                                                 \
-            var_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),              \
-                                     getv<uint64_t>(aux_cols[0], i_grp),       \
-                                     getv<double>(aux_cols[1], i_grp),         \
-                                     getv<double>(aux_cols[2], i_grp));        \
-            out_col->set_null_bit(i_grp, true);                                \
-            aux_cols[0]->set_null_bit(i_grp, true);                            \
-            aux_cols[1]->set_null_bit(i_grp, true);                            \
-            aux_cols[2]->set_null_bit(i_grp, true);                            \
-            break;                                                             \
-        case Bodo_FTypes::skew:                                                \
-            skew_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),             \
-                                      getv<uint64_t>(aux_cols[0], i_grp),      \
-                                      getv<double>(aux_cols[1], i_grp),        \
-                                      getv<double>(aux_cols[2], i_grp),        \
-                                      getv<double>(aux_cols[3], i_grp));       \
-            out_col->set_null_bit(i_grp, true);                                \
-            aux_cols[0]->set_null_bit(i_grp, true);                            \
-            aux_cols[1]->set_null_bit(i_grp, true);                            \
-            aux_cols[2]->set_null_bit(i_grp, true);                            \
-            aux_cols[3]->set_null_bit(i_grp, true);                            \
-            break;                                                             \
-        case Bodo_FTypes::kurtosis:                                            \
-            kurt_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),             \
-                                      getv<uint64_t>(aux_cols[0], i_grp),      \
-                                      getv<double>(aux_cols[1], i_grp),        \
-                                      getv<double>(aux_cols[2], i_grp),        \
-                                      getv<double>(aux_cols[3], i_grp),        \
-                                      getv<double>(aux_cols[4], i_grp));       \
-            out_col->set_null_bit(i_grp, true);                                \
-            aux_cols[0]->set_null_bit(i_grp, true);                            \
-            aux_cols[1]->set_null_bit(i_grp, true);                            \
-            aux_cols[2]->set_null_bit(i_grp, true);                            \
-            aux_cols[3]->set_null_bit(i_grp, true);                            \
-            aux_cols[4]->set_null_bit(i_grp, true);                            \
-            break;                                                             \
-        case Bodo_FTypes::boolxor_eval:                                        \
-            boolxor_eval(out_col, aux_cols[0], i);                             \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::mean_eval:                                           \
-            mean_eval(getv<double>(out_col, i),                                \
-                      getv<uint64_t, ArrType>(in_col, i));                     \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::var_pop_eval:                                        \
-            var_pop_eval(getv<double>(out_col, i),                             \
-                         getv<uint64_t>(aux_cols[0], i),                       \
-                         getv<double>(aux_cols[2], i));                        \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::std_pop_eval:                                        \
-            std_pop_eval(getv<double>(out_col, i),                             \
-                         getv<uint64_t>(aux_cols[0], i),                       \
-                         getv<double>(aux_cols[2], i));                        \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::var_eval:                                            \
-            var_eval(getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i), \
-                     getv<double>(aux_cols[2], i));                            \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::std_eval:                                            \
-            std_eval(getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i), \
-                     getv<double>(aux_cols[2], i));                            \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::skew_eval:                                           \
-            skew_eval(                                                         \
-                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),      \
-                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),    \
-                getv<double>(aux_cols[3], i));                                 \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::kurt_eval:                                           \
-            kurt_eval(                                                         \
-                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),      \
-                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),    \
-                getv<double>(aux_cols[3], i), getv<double>(aux_cols[4], i));   \
-            out_col->set_null_bit(i, true);                                    \
-            break;                                                             \
-        case Bodo_FTypes::first:                                               \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                SetBitTo((uint8_t*)out_col->data1(), i_grp, data_bit);         \
-            } else {                                                           \
-                getv<T>(out_col, i_grp) = getv<T, ArrType>(in_col, i);         \
-            }                                                                  \
-            out_col->set_null_bit(i_grp, true);                                \
-            break;                                                             \
-        case Bodo_FTypes::idxmax:                                              \
-        case Bodo_FTypes::idxmax_na_first:                                     \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                idxmax_bool(out_col, i_grp, data_bit,                          \
-                            getv<uint64_t>(aux_cols[0], i_grp), i);            \
-            } else {                                                           \
-                idxmax_agg<T, DType>::apply(                                   \
-                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),      \
-                    getv<uint64_t>(aux_cols[0], i_grp), i);                    \
-            }                                                                  \
-            out_col->set_null_bit(i_grp, true);                                \
-            break;                                                             \
-        case Bodo_FTypes::idxmin:                                              \
-        case Bodo_FTypes::idxmin_na_first:                                     \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                idxmin_bool(out_col, i_grp, data_bit,                          \
-                            getv<uint64_t>(aux_cols[0], i_grp), i);            \
-            } else {                                                           \
-                idxmin_agg<T, DType>::apply(                                   \
-                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),      \
-                    getv<uint64_t>(aux_cols[0], i_grp), i);                    \
-            }                                                                  \
-            out_col->set_null_bit(i_grp, true);                                \
-            break;                                                             \
-        case Bodo_FTypes::boolor_agg:                                          \
-        case Bodo_FTypes::booland_agg:                                         \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
-                                                        data_bit);             \
-            } else {                                                           \
-                bool_aggfunc<T, DType, ftype>::apply(                          \
-                    out_col, i_grp, getv<T, ArrType>(in_col, i));              \
-            }                                                                  \
-            out_col->set_null_bit(i_grp, true);                                \
-            break;                                                             \
-        case Bodo_FTypes::boolxor_agg:                                         \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                boolxor_agg<bool, DType>::apply(data_bit, out_col,             \
-                                                aux_cols[0], i_grp);           \
-            } else {                                                           \
-                T val = getv<T, ArrType>(in_col, i);                           \
-                boolxor_agg<T, DType>::apply(val, out_col, aux_cols[0],        \
-                                             i_grp);                           \
-            }                                                                  \
-            out_col->set_null_bit(i_grp, true);                                \
-            aux_cols[0]->set_null_bit(i_grp, true);                            \
-            break;                                                             \
-        case Bodo_FTypes::bitor_agg:                                           \
-        case Bodo_FTypes::bitand_agg:                                          \
-        case Bodo_FTypes::bitxor_agg: {                                        \
-            T val2 = getv<T, ArrType>(in_col, i);                              \
-            if (!isnan_alltype<T, DType>(val2)) {                              \
-                if (std::is_integral<T>::value) {                              \
-                    T& val1 = getv<T>(out_col, i_grp);                         \
-                    casted_aggfunc<T, T, DType, ftype>::apply(val1, val2);     \
-                } else {                                                       \
-                    int64_t& val1 = getv<int64_t>(out_col, i_grp);             \
-                    casted_aggfunc<int64_t, T, DType, ftype>::apply(val1,      \
-                                                                    val2);     \
-                }                                                              \
-                out_col->set_null_bit(i_grp, true);                            \
-            }                                                                  \
-            break;                                                             \
-        }                                                                      \
-        case Bodo_FTypes::count_if: {                                          \
-            bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);     \
-            bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                 \
-            break;                                                             \
-        }                                                                      \
-        case Bodo_FTypes::sum:                                                 \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                bool_sum(getv<int64_t>(out_col, i_grp), data_bit);             \
-                out_col->set_null_bit(i_grp, true);                            \
-                break;                                                         \
-            }                                                                  \
-        case Bodo_FTypes::min:                                                 \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
-                                                        data_bit);             \
-                out_col->set_null_bit(i_grp, true);                            \
-                break;                                                         \
-            }                                                                  \
-        default:                                                               \
-            if (DType == Bodo_CTypes::_BOOL) {                                 \
-                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
-                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
-                                                        data_bit);             \
-                out_col->set_null_bit(i_grp, true);                            \
-            } else {                                                           \
-                aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),       \
-                                                getv<T, ArrType>(in_col, i));  \
-                out_col->set_null_bit(i_grp, true);                            \
-            }                                                                  \
+#define APPLY_TO_COLUMN_REGULAR_CASE                                                                                                        \
+    switch (ftype) {                                                                                                                        \
+        case Bodo_FTypes::count:                                                                                                            \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                count_agg<bool, DType>::apply(getv<int64_t>(out_col, i_grp),                                                                \
+                                              data_bit);                                                                                    \
+            } else {                                                                                                                        \
+                count_agg<T, DType>::apply(getv<int64_t>(out_col, i_grp),                                                                   \
+                                           getv<T, ArrType>(in_col, i));                                                                    \
+            }                                                                                                                               \
+            break;                                                                                                                          \
+        case Bodo_FTypes::mean:                                                                                                             \
+            mean_agg<T, DType>::apply(getv<double>(out_col, i_grp),                                                                         \
+                                      getv<T, ArrType>(in_col, i),                                                                          \
+                                      getv<uint64_t>(aux_cols[0], i_grp));                                                                  \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            aux_cols[0]->set_null_bit(i_grp, true);                                                                                         \
+            break;                                                                                                                          \
+        case Bodo_FTypes::var_pop:                                                                                                          \
+        case Bodo_FTypes::std_pop:                                                                                                          \
+        case Bodo_FTypes::var:                                                                                                              \
+        case Bodo_FTypes::std:                                                                                                              \
+            var_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),                                                                           \
+                                     getv<uint64_t>(aux_cols[0], i_grp),                                                                    \
+                                     getv<double>(aux_cols[1], i_grp),                                                                      \
+                                     getv<double>(aux_cols[2], i_grp));                                                                     \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            aux_cols[0]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[1]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[2]->set_null_bit(i_grp, true);                                                                                         \
+            break;                                                                                                                          \
+        case Bodo_FTypes::skew:                                                                                                             \
+            skew_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),                                                                          \
+                                      getv<uint64_t>(aux_cols[0], i_grp),                                                                   \
+                                      getv<double>(aux_cols[1], i_grp),                                                                     \
+                                      getv<double>(aux_cols[2], i_grp),                                                                     \
+                                      getv<double>(aux_cols[3], i_grp));                                                                    \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            aux_cols[0]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[1]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[2]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[3]->set_null_bit(i_grp, true);                                                                                         \
+            break;                                                                                                                          \
+        case Bodo_FTypes::kurtosis:                                                                                                         \
+            kurt_agg<T, DType>::apply(getv<T, ArrType>(in_col, i),                                                                          \
+                                      getv<uint64_t>(aux_cols[0], i_grp),                                                                   \
+                                      getv<double>(aux_cols[1], i_grp),                                                                     \
+                                      getv<double>(aux_cols[2], i_grp),                                                                     \
+                                      getv<double>(aux_cols[3], i_grp),                                                                     \
+                                      getv<double>(aux_cols[4], i_grp));                                                                    \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            aux_cols[0]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[1]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[2]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[3]->set_null_bit(i_grp, true);                                                                                         \
+            aux_cols[4]->set_null_bit(i_grp, true);                                                                                         \
+            break;                                                                                                                          \
+        case Bodo_FTypes::boolxor_eval:                                                                                                     \
+            boolxor_eval(out_col, aux_cols[0], i);                                                                                          \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::mean_eval:                                                                                                        \
+            mean_eval(getv<double>(out_col, i),                                                                                             \
+                      getv<uint64_t, ArrType>(in_col, i));                                                                                  \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::var_pop_eval:                                                                                                     \
+            var_pop_eval(getv<double>(out_col, i),                                                                                          \
+                         getv<uint64_t>(aux_cols[0], i),                                                                                    \
+                         getv<double>(aux_cols[2], i));                                                                                     \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::std_pop_eval:                                                                                                     \
+            std_pop_eval(getv<double>(out_col, i),                                                                                          \
+                         getv<uint64_t>(aux_cols[0], i),                                                                                    \
+                         getv<double>(aux_cols[2], i));                                                                                     \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::var_eval:                                                                                                         \
+            var_eval(getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),                                                              \
+                     getv<double>(aux_cols[2], i));                                                                                         \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::std_eval:                                                                                                         \
+            std_eval(getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),                                                              \
+                     getv<double>(aux_cols[2], i));                                                                                         \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::skew_eval:                                                                                                        \
+            skew_eval(                                                                                                                      \
+                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),                                                                   \
+                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),                                                                 \
+                getv<double>(aux_cols[3], i));                                                                                              \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::kurt_eval:                                                                                                        \
+            kurt_eval(                                                                                                                      \
+                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),                                                                   \
+                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),                                                                 \
+                getv<double>(aux_cols[3], i), getv<double>(aux_cols[4], i));                                                                \
+            out_col->set_null_bit(i, true);                                                                                                 \
+            break;                                                                                                                          \
+        case Bodo_FTypes::first:                                                                                                            \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                SetBitTo((uint8_t*)out_col->data1(), i_grp, data_bit);                                                                      \
+            } else {                                                                                                                        \
+                getv<T>(out_col, i_grp) = getv<T, ArrType>(in_col, i);                                                                      \
+            }                                                                                                                               \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            break;                                                                                                                          \
+        case Bodo_FTypes::idxmax:                                                                                                           \
+        case Bodo_FTypes::idxmax_na_first:                                                                                                  \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                idxmax_bool(out_col, i_grp, data_bit,                                                                                       \
+                            getv<uint64_t>(aux_cols[0], i_grp), i);                                                                         \
+            } else {                                                                                                                        \
+                idxmax_agg<T, DType>::apply(                                                                                                \
+                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),                                                                   \
+                    getv<uint64_t>(aux_cols[0], i_grp), i);                                                                                 \
+            }                                                                                                                               \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            break;                                                                                                                          \
+        case Bodo_FTypes::idxmin:                                                                                                           \
+        case Bodo_FTypes::idxmin_na_first:                                                                                                  \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                idxmin_bool(out_col, i_grp, data_bit,                                                                                       \
+                            getv<uint64_t>(aux_cols[0], i_grp), i);                                                                         \
+            } else {                                                                                                                        \
+                idxmin_agg<T, DType>::apply(                                                                                                \
+                    getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i),                                                                   \
+                    getv<uint64_t>(aux_cols[0], i_grp), i);                                                                                 \
+            }                                                                                                                               \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            break;                                                                                                                          \
+        case Bodo_FTypes::boolor_agg:                                                                                                       \
+        case Bodo_FTypes::booland_agg:                                                                                                      \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,                                                                     \
+                                                        data_bit);                                                                          \
+            } else {                                                                                                                        \
+                bool_aggfunc<T, DType, ftype>::apply(                                                                                       \
+                    out_col, i_grp, getv<T, ArrType>(in_col, i));                                                                           \
+            }                                                                                                                               \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            break;                                                                                                                          \
+        case Bodo_FTypes::boolxor_agg:                                                                                                      \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                boolxor_agg<bool, DType>::apply(data_bit, out_col,                                                                          \
+                                                aux_cols[0], i_grp);                                                                        \
+            } else {                                                                                                                        \
+                T val = getv<T, ArrType>(in_col, i);                                                                                        \
+                boolxor_agg<T, DType>::apply(val, out_col, aux_cols[0],                                                                     \
+                                             i_grp);                                                                                        \
+            }                                                                                                                               \
+            out_col->set_null_bit(i_grp, true);                                                                                             \
+            aux_cols[0]->set_null_bit(i_grp, true);                                                                                         \
+            break;                                                                                                                          \
+        case Bodo_FTypes::bitor_agg:                                                                                                        \
+        case Bodo_FTypes::bitand_agg:                                                                                                       \
+        case Bodo_FTypes::bitxor_agg: {                                                                                                     \
+            T val2 = getv<T, ArrType>(in_col, i);                                                                                           \
+            if (!isnan_alltype<T, DType>(val2)) {                                                                                           \
+                if (std::is_integral<T>::value) {                                                                                           \
+                    T& val1 = getv<T>(out_col, i_grp);                                                                                      \
+                    casted_aggfunc<T, T, DType, ftype>::apply(val1, val2);                                                                  \
+                } else {                                                                                                                    \
+                    int64_t& val1 = getv<int64_t>(out_col, i_grp);                                                                          \
+                    casted_aggfunc<int64_t, T, DType, ftype>::apply(val1,                                                                   \
+                                                                    val2);                                                                  \
+                }                                                                                                                           \
+                out_col->set_null_bit(i_grp, true);                                                                                         \
+            }                                                                                                                               \
+            break;                                                                                                                          \
+        }                                                                                                                                   \
+        case Bodo_FTypes::count_if: {                                                                                                       \
+            bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                                  \
+            bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                                                                              \
+            break;                                                                                                                          \
+        }                                                                                                                                   \
+        case Bodo_FTypes::sum:                                                                                                              \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                                                                          \
+                out_col->set_null_bit(i_grp, true);                                                                                         \
+                break;                                                                                                                      \
+            }                                                                                                                               \
+            if (DType == Bodo_CTypes::DECIMAL) {                                                                                            \
+                /* Support overflow handling for Decimal data. */                                                                           \
+                /* Output is set to null similar to Spark. */                                                                               \
+                /* Same as Arrow implementation of decimal addition except has                                                              \
+                 * overflow handling */                                                                                                     \
+                /* https://github.com/apache/arrow/blob/6a28035c2b49b432dc63f5ee7524d76b4ed2d762/cpp/src/arrow/util/basic_decimal.cc#L80    \
+                 */                                                                                                                         \
+                /* https://github.com/apache/arrow/blob/6a28035c2b49b432dc63f5ee7524d76b4ed2d762/cpp/src/arrow/util/int_util_overflow.h#L43 \
+                 */                                                                                                                         \
+                arrow::Decimal128 data_val =                                                                                                \
+                    getv<arrow::Decimal128, ArrType>(in_col, i);                                                                            \
+                arrow::Decimal128* out_ptr =                                                                                                \
+                    out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,                                                                      \
+                                   arrow::Decimal128>() +                                                                                   \
+                    i_grp;                                                                                                                  \
+                arrow::Decimal128 out_val = *out_ptr;                                                                                       \
+                int64_t result_hi;                                                                                                          \
+                success &= psnip_safe_int64_add(                                                                                            \
+                    &result_hi, out_val.high_bits(), data_val.high_bits());                                                                 \
+                uint64_t result_lo = out_val.low_bits() + data_val.low_bits();                                                              \
+                /* Handle carry bit from low bits */                                                                                        \
+                success &= psnip_safe_int64_add(                                                                                            \
+                    &result_hi, result_hi, result_lo < out_val.low_bits());                                                                 \
+                arrow::Decimal128 result_decimal =                                                                                          \
+                    arrow::Decimal128(result_hi, result_lo);                                                                                \
+                success &=                                                                                                                  \
+                    result_decimal.FitsInPrecision(DECIMAL128_MAX_PRECISION);                                                               \
+                *out_ptr = result_decimal;                                                                                                  \
+                out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(                                                                  \
+                    i_grp, true);                                                                                                           \
+                break;                                                                                                                      \
+            }                                                                                                                               \
+        case Bodo_FTypes::min:                                                                                                              \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,                                                                     \
+                                                        data_bit);                                                                          \
+                out_col->set_null_bit(i_grp, true);                                                                                         \
+                break;                                                                                                                      \
+            }                                                                                                                               \
+        default:                                                                                                                            \
+            if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
+                bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
+                bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,                                                                     \
+                                                        data_bit);                                                                          \
+                out_col->set_null_bit(i_grp, true);                                                                                         \
+            } else {                                                                                                                        \
+                aggfunc<T, DType, ftype>::apply(getv<T>(out_col, i_grp),                                                                    \
+                                                getv<T, ArrType>(in_col, i));                                                               \
+                out_col->set_null_bit(i_grp, true);                                                                                         \
+            }                                                                                                                               \
     }
 
 #endif
+
+    // Use for overflow detection of decimal sum
+    bool success = true;
 
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = -1;
@@ -1763,6 +1800,15 @@ void apply_to_column_nullable(
             }
         }
     }
+
+    // Throw error in case of decimal sum overflow
+    if ((ftype == Bodo_FTypes::sum) && (DType == Bodo_CTypes::DECIMAL)) {
+        if (!success) {
+            throw std::runtime_error(
+                "Overflow detected in groupby sum of Decimal data");
+        }
+    }
+
 #undef APPLY_TO_COLUMN_FIND_GROUP
 #undef APPLY_TO_COLUMN_VALID_GROUP
 #undef APPLY_TO_COLUMN_IS_NA_SPECIAL_CASE
@@ -2191,6 +2237,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::sum, Bodo_CTypes::TIMEDELTA)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::sum, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::sum, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::sum, Bodo_CTypes::DECIMAL)
             break;
         case Bodo_FTypes::min:
             // MIN

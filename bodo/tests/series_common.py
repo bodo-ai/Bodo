@@ -45,7 +45,7 @@ GLOBAL_VAL = 2
                     Decimal("1.6"),
                     Decimal("-0.2"),
                     Decimal("44.2"),
-                    np.nan,
+                    None,
                     Decimal("0"),
                 ]
                 * 2
