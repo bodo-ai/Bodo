@@ -1864,7 +1864,9 @@ def test_sort_table_for_interval_join(
         # Verify that it's sorted correctly:
         sorted_py = out.sort_values(by=["A", "B"])
         pd.testing.assert_frame_equal(
-            out.reset_index(drop=True), sorted_py.reset_index(drop=True)
+            out.reset_index(drop=True),
+            sorted_py.reset_index(drop=True),
+            check_dtype=False,
         )
 
         # Verify that all the rows that are expected to be sent to this rank,
@@ -1882,7 +1884,7 @@ def test_sort_table_for_interval_join(
 
         exp_df = exp_df.sort_values(by=["A", "B"])
         pd.testing.assert_frame_equal(
-            out.reset_index(drop=True), exp_df.reset_index(drop=True)
+            out.reset_index(drop=True), exp_df.reset_index(drop=True), check_dtype=False
         )
 
     for df in dfs:

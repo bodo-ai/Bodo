@@ -987,7 +987,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                         Decimal("1.6"),
                         Decimal("-0.2"),
                         Decimal("44.2"),
-                        np.nan,
+                        None,
                         Decimal("0"),
                     ]
                 ),
@@ -1039,8 +1039,10 @@ def test_sum_prod_unsupported_types(df, memory_leak_check):
 
     err_msg = "not supported in groupby"
 
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df)
+    # Groupby sum of decimal is supported now
+    if not isinstance(df.iloc[0, 1], Decimal):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl1)(df)
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl2)(df)
@@ -1384,7 +1386,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                         Decimal("1.6"),
                         Decimal("-0.2"),
                         Decimal("44.2"),
-                        np.nan,
+                        None,
                         Decimal("0"),
                     ]
                 ),
@@ -1567,7 +1569,7 @@ def test_cumultative_args(memory_leak_check):
                             Decimal("1.6"),
                             Decimal("-0.2"),
                             Decimal("44.2"),
-                            np.nan,
+                            None,
                             Decimal("0"),
                         ]
                     ),

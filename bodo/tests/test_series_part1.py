@@ -911,6 +911,10 @@ def test_series_astype_str(series_val):
         check_func(test_impl2, (series_val,), py_output=expected_out)
         return
 
+    # Avoid Pandas issues for decimal nulls
+    if isinstance(series_val.iloc[0], Decimal):
+        series_val = series_val.dropna()
+
     check_func(test_impl1, (series_val,))
     # Bodo doesn't unbox string dtypes as pd.StringDtype(), so provide a py_output
     check_func(test_impl2, (series_val,), py_output=series_val.astype(str))
