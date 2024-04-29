@@ -2955,7 +2955,10 @@ def get_table_details_before_write(
             if already_exists:
                 mode = if_exists
             else:
-                mode = "create"
+                if if_exists == "replace":
+                    mode = "replace"
+                else:
+                    mode = "create"
 
             if if_exists != "append":
                 # In the create/replace case, disregard some of the properties
@@ -2965,7 +2968,7 @@ def get_table_details_before_write(
                 sort_order = []
             else:
                 # Ensure that all column names in the partition spec and sort order are
-                # in the dataframe being written
+                # in the DataFrame being written
                 for col_name, *_ in partition_spec:
                     assert (
                         col_name in col_name_to_idx_map
