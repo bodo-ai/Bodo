@@ -9,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodosql
 from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_groupby
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
@@ -1582,6 +1583,41 @@ def test_mode(values, dtype, memory_leak_check):
         check_names=False,
         check_dtype=False,
     )
+
+
+def test_decimal_sum():
+    """Tests groupby sum for decimals, which shoud throw error in case of overflow"""
+    query = "SELECT A, sum(B) FROM table1 GROUP BY A"
+    B = pd.array(
+        pa.array(["0.01", "0.03", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    B_out = pd.array(
+        pa.array(["0.1", "0.3", None]).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    answer = pd.DataFrame({"A": [1, 2, 3], "B": B_out})
+    ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})}
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+    )
+
+    # Group 2 will overflow
+    B = pd.array(
+        pa.array(["0.01", "3.3", None] * 10).cast(pa.decimal128(38, 37)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+    )
+    bc = bodosql.BodoSQLContext({"TABLE1": pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})})
+    with pytest.raises(
+        RuntimeError, match="Overflow detected in groupby sum of Decimal data"
+    ):
+        bc.sql(query)
 
 
 @pytest.mark.parametrize(

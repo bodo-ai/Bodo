@@ -100,6 +100,7 @@ def test_np_unique(memory_leak_check):
             Decimal("1.113"),
         ]
     )
+    arr = pd.array(arr, dtype=pd.ArrowDtype(pa.decimal128(38, 12)))
     check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 

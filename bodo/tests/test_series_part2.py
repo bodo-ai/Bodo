@@ -853,7 +853,7 @@ def test_series_infer_objects(S, memory_leak_check):
                     Decimal("2"),
                     Decimal("4.5"),
                     Decimal("5"),
-                    np.nan,
+                    None,
                     Decimal("4.9"),
                 ]
             ),

@@ -39,10 +39,8 @@ import bodo
 from bodo.libs import decimal_ext
 from bodo.utils.typing import raise_bodo_error, unwrap_typeref
 
-ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
 ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("box_decimal", decimal_ext.box_decimal)
-ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
@@ -115,6 +113,8 @@ int_to_decimal_precision = {
     types.uint32: 9,
     types.uint64: 19,
 }
+
+DECIMAL128_MAX_PRECISION = 38
 
 
 class Decimal128Type(types.Type):
@@ -1170,101 +1170,20 @@ ArrayAnalysis._analyze_op_call_bodo_libs_decimal_arr_ext_alloc_decimal_array = (
 @box(DecimalArrayType)
 def box_decimal_arr(typ, val, c):
     """
-    Box decimal array into ndarray with decimal.Decimal values.
-    Represents null as None to match Pandas.
+    Box decimal array into Pandas Arrow extension array
     """
-    in_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-
-    data_arr = c.context.make_array(types.Array(int128_type, 1, "C"))(
-        c.context, c.builder, in_arr.data
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, in_arr.null_bitmap
-    ).data
-
-    n = c.builder.extract_value(data_arr.shape, 0)
-    scale = c.context.get_constant(types.int32, typ.scale)
-
-    fnty = lir.FunctionType(
-        c.pyapi.pyobj,
-        [
-            lir.IntType(64),
-            lir.IntType(128).as_pointer(),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(32),
-        ],
-    )
-    fn_get = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="box_decimal_array"
-    )
-    obj_arr = c.builder.call(
-        fn_get,
-        [
-            n,
-            data_arr.data,
-            bitmap_arr_data,
-            scale,
-        ],
-    )
-
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj_arr
+    # Reusing nested array boxing since it covers decimal arrays as well
+    return bodo.libs.array.box_nested_array(typ, val, c)
 
 
 @unbox(DecimalArrayType)
 def unbox_decimal_arr(typ, val, c):
     """
-    Unbox a numpy array with Decimal objects into native DecimalArray
+    Unbox a numpy array with Decimal objects or Arrow decimal array into native
+    DecimalArray
     """
-    decimal_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-
-    # allocate data and null_bitmap arrays
-    n_obj = c.pyapi.call_method(val, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-    c.pyapi.decref(n_obj)
-
-    n_bitmask_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    data_arr_struct = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(int128_type, 1, "C"), [n]
-    )
-    bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
-    )
-    scale = c.context.get_constant(types.int8, typ.scale)
-
-    # function signature of unbox_decimal_array
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(8),
-            lir.IntType(128).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="unbox_decimal_array"
-    )
-    c.builder.call(
-        fn,
-        [
-            val,
-            n,
-            scale,
-            data_arr_struct.data,
-            bitmap_arr_struct.data,
-        ],
-    )
-
-    decimal_arr.null_bitmap = bitmap_arr_struct._getvalue()
-    decimal_arr.data = data_arr_struct._getvalue()
-
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(decimal_arr._getvalue(), is_error=is_error)
+    # Reusing nested array unboxing since it covers decimal arrays as well
+    return bodo.libs.array.unbox_nested_array(typ, val, c)
 
 
 @overload_method(DecimalArrayType, "copy", no_unliteral=True)
