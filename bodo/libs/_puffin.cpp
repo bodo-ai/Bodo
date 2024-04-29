@@ -3,6 +3,32 @@
 #include "../io/_fs_io.h"
 #include "../io/iceberg_helpers.h"
 
+// Throw an error if there is a null pointer returned
+// by a CPython API call.
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        throw std::runtime_error(msg); \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#undef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                             \
+    if (!(expr.ok())) {                                                    \
+        std::string err_msg = std::string("Error in puffin I/O: ") + msg + \
+                              " " + expr.ToString();                       \
+        throw std::runtime_error(err_msg);                                 \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
 static char puffin_magic[4] = {0x50, 0x46, 0x41, 0x31};
 
 // Verify that the input string contains the expected magic 4-byte sequence for
@@ -309,24 +335,24 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
 #undef invalid_footer
 
 std::unique_ptr<PuffinFile> PuffinFile::from_theta_sketches(
-    immutable_theta_sketch_collection_t sketches,
+    std::shared_ptr<CompactSketchCollection> sketches,
     std::shared_ptr<arrow::Schema> iceberg_schema, int64_t snapshot_id,
     int64_t sequence_number) {
-    size_t n_sketches = sketches.size();
+    size_t n_sketches = sketches->max_num_sketches();
     // For each theta sketch, add the serialized sketch to blobs, then
     // populate the metadata.
     std::vector<std::string> blobs;
     std::vector<BlobMetadata> metadata;
     std::vector<std::optional<std::string>> serialized_sketches =
-        serialize_theta_sketches(sketches);
+        sketches->serialize_sketches();
     size_t curr_offset = 4;
     for (size_t sketch_idx = 0; sketch_idx < n_sketches; sketch_idx++) {
-        if (sketches[sketch_idx] != std::nullopt) {
+        if (sketches->column_has_sketch(sketch_idx)) {
             std::string blob = serialized_sketches[sketch_idx].value();
             blobs.push_back(blob);
             std::unordered_map<std::string, std::string> properties;
             properties["ndv"] = std::to_string(
-                (size_t)(sketches[sketch_idx].value().get_estimate()));
+                (size_t)(sketches->get_value(sketch_idx).get_estimate()));
             int field_id =
                 get_iceberg_field_id(iceberg_schema->field(sketch_idx));
             metadata.push_back({
@@ -369,7 +395,7 @@ std::string PuffinFile::get_blob(size_t idx) {
     }
 }
 
-immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
+std::shared_ptr<CompactSketchCollection> PuffinFile::to_theta_sketches(
     std::shared_ptr<arrow::Schema> iceberg_schema) {
     size_t n_columns = iceberg_schema->num_fields();
     std::vector<std::optional<std::string>> to_deserialize(n_columns,
@@ -408,34 +434,8 @@ immutable_theta_sketch_collection_t PuffinFile::to_theta_sketches(
             }
         }
     }
-    return deserialize_theta_sketches(to_deserialize);
+    return CompactSketchCollection::deserialize_sketches(to_deserialize);
 }
-
-// Throw an error if there is a null pointer returned
-// by a CPython API call.
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        throw std::runtime_error(msg); \
-    }
-
-// if status of arrow::Result is not ok, form an err msg and raise a
-// runtime_error with it
-#undef CHECK_ARROW
-#define CHECK_ARROW(expr, msg)                                             \
-    if (!(expr.ok())) {                                                    \
-        std::string err_msg = std::string("Error in puffin I/O: ") + msg + \
-                              " " + expr.ToString();                       \
-        throw std::runtime_error(err_msg);                                 \
-    }
-
-// if status of arrow::Result is not ok, form an err msg and raise a
-// runtime_error with it. If it is ok, get value using ValueOrDie
-// and assign it to lhs using std::move
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK_ARROW(res.status(), msg)            \
-    lhs = std::move(res).ValueOrDie();
 
 /**
  * @brief Get Python statistics file object from C++ Puffin file
@@ -587,7 +587,7 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
  */
 PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
-    int64_t sequence_number, theta_sketch_collection_t sketches,
+    int64_t sequence_number, UpdateSketchCollection *sketches,
     PyObject *iceberg_arrow_schema_py, const char *existing_puffin_file_loc) {
     try {
         std::shared_ptr<arrow::Schema> iceberg_schema;
@@ -596,10 +596,10 @@ PyObject *write_puffin_file_py_entrypt(
             "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
 
         // Gather the theta sketches onto rank 0
-        auto immutable_collection =
-            compact_theta_sketches(sketches, iceberg_schema->num_fields());
-        auto merged_collection =
-            merge_parallel_theta_sketches(immutable_collection);
+        std::shared_ptr<CompactSketchCollection> compact_sketches =
+            sketches->compact_sketches();
+        std::shared_ptr<CompactSketchCollection> merged_sketches =
+            compact_sketches->merge_parallel_sketches();
         std::string existing_puffin_path(existing_puffin_file_loc);
         int rank;
         int n_pes;
@@ -609,14 +609,13 @@ PyObject *write_puffin_file_py_entrypt(
             if (existing_puffin_path != "") {
                 auto existing_puffin =
                     read_puffin_file(existing_puffin_path, bucket_region);
-                merged_collection = merge_theta_sketches(
+                merged_sketches = CompactSketchCollection::merge_sketches(
                     {existing_puffin->to_theta_sketches(iceberg_schema),
-                     std::move(merged_collection)});
+                     std::move(merged_sketches)});
             }
             std::string puffin_loc(puffin_file_loc);
             auto puff = PuffinFile::from_theta_sketches(
-                merged_collection, iceberg_schema, snapshot_id,
-                sequence_number);
+                merged_sketches, iceberg_schema, snapshot_id, sequence_number);
             // TODO: Should we write directly to the output buffer instead?
             auto serialized_result = puff->serialize();
             std::string &serialized = serialized_result.first;
@@ -651,7 +650,7 @@ PyObject *write_puffin_file_py_entrypt(
 
 /**
  * @brief Python entrypoint for reading a puffin file
- * and returning a theta_sketch_collection_t. This is just
+ * and returning a the ndv calculations. This is just
  * used for testing.
  * @param puffin_file_loc The location of the puffin file.
  * @param bucket_region_info The bucket region info.
@@ -669,7 +668,7 @@ array_info *read_puffin_file_ndvs_py_entrypt(
         int n_pes;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        immutable_theta_sketch_collection_t result;
+        std::shared_ptr<CompactSketchCollection> result;
         if (rank == 0) {
             std::string puffin_loc(puffin_file_loc);
             std::string bucket_region(bucket_region_info);
@@ -678,10 +677,10 @@ array_info *read_puffin_file_ndvs_py_entrypt(
             result = puffin->to_theta_sketches(iceberg_schema);
         } else {
             std::vector<bool> ndv(iceberg_schema->num_fields(), false);
-            result = compact_theta_sketches(init_theta_sketches(ndv),
-                                            iceberg_schema->num_fields());
+            result = std::make_unique<UpdateSketchCollection>(ndv)
+                         ->compact_sketches();
         }
-        return compute_ndv(result, iceberg_schema->num_fields()).release();
+        return result->compute_ndv().release();
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;

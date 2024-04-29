@@ -102,7 +102,7 @@ PyObject* iceberg_pq_write_py_entry(
     bool is_parallel, const char* bucket_region, int64_t row_group_size,
     char* iceberg_metadata, PyObject* iceberg_arrow_schema_py,
     numba_optional<arrow::fs::FileSystem> arrow_fs,
-    theta_sketch_collection_t sketches);
+    UpdateSketchCollection* sketches);
 
 /**
  * @brief Delete the given Arrow FileSystem object if it is not NULL.
