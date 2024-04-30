@@ -2,6 +2,7 @@
 """
 Test correctness of SQL projection queries on BodoSQL
 """
+
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -387,3 +388,21 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
         check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
+
+
+def test_decimal(memory_leak_check):
+    """
+    Verify we can pass decimal columns to BodoSQL.
+    """
+    query = "SELECT * FROM table1"
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 6, 7, 8],
+            "B": pd.array(
+                ["1", "1.55", "1.56", None] * 2,
+                dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
+            ),
+        }
+    )
+    ctx = {"TABLE1": df}
+    check_query(query, ctx, None, expected_output=df)

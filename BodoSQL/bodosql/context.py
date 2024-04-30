@@ -51,8 +51,6 @@ class SqlTypeEnum(Enum):
     UInt64 = 8
     Float32 = 9
     Float64 = 10
-    # Note: This is only used for General Iceberg and isn't used for
-    # decimal arrays yet.
     Decimal = 11
     Bool = 12
     Date = 13
@@ -243,12 +241,10 @@ def get_sql_data_type(arr_type):
         # Time array types have their own special handling for precision
         return construct_time_array_type(arr_type, nullable)
     elif isinstance(arr_type, bodo.DecimalArrayType):
-        # For now, treat Decimal like float64 in BodoSQL planning
-        warnings.warn(
-            f"Type {arr_type} is not properly supported from a Python + Pandas DataFrame. BodoSQL will implicitly treat this column as a float64, which may lead to unexpected conversion errors. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
+        return ColumnDataTypeClass(
+            type_enum, nullable, arr_type.precision, arr_type.scale
         )
-        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Float64.value)
-        return ColumnDataTypeClass(type_enum, nullable)
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
         return construct_array_item_array_type(arr_type)
     elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
@@ -329,6 +325,12 @@ def get_sql_param_column_type_info(param_type: types.Type):
     elif isinstance(unliteral_type, bodo.TimeType):
         # Time array types have their own special handling for precision
         return construct_time_array_type(param_type, nullable)
+    elif isinstance(unliteral_type, bodo.Decimal128Type):
+        # Decimal types need handling for precision and scale.
+        type_enum = ColumnDataEnum.fromTypeId(SqlTypeEnum.Decimal.value)
+        return ColumnDataTypeClass(
+            type_enum, nullable, unliteral_type.precision, unliteral_type.scale
+        )
     elif unliteral_type in _numba_to_sql_param_type_map:
         type_enum = ColumnDataEnum.fromTypeId(
             _numba_to_sql_param_type_map[unliteral_type]

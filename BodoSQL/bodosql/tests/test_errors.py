@@ -3,7 +3,6 @@
 Test SQL operations that should produce understandable errors on BodoSQL
 """
 import re
-from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -128,52 +127,6 @@ def test_unsupported_format_str_jit(memory_leak_check):
         BodoError,
         match=r"STR_TO_DATE contains an unsupported escape character %l",
     ):
-        impl(df)
-
-
-@pytest.mark.slow
-def test_unsupported_decimal(memory_leak_check):
-    """
-    Checks reading DecimalArrayType raises a warning in Python.
-    """
-
-    def impl(df):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        # Bodo updates/finalizes schema types in between parsing and validation, which doesn't happen
-        # unless we have a query
-        return bc.sql("SELECT A from table1")
-
-    df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
-    if bodo.get_rank() == 0:
-        with pytest.warns(
-            UserWarning,
-            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas DataFrame. BodoSQL will implicitly treat this column as a float64",
-        ):
-            impl(df)
-    else:
-        impl(df)
-
-
-@pytest.mark.slow
-def test_unsupported_decimal_jit(memory_leak_check):
-    """
-    Checks reading DecimalArrayType raises a warning in JIT.
-    """
-
-    @bodo.jit
-    def impl(df):
-        bc = bodosql.BodoSQLContext({"TABLE1": df})
-        # Bodo doesn't try assign a type until there is a sql call
-        return bc.sql("select * from table1")
-
-    df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
-    if bodo.get_rank() == 0:
-        with pytest.warns(
-            UserWarning,
-            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas DataFrame. BodoSQL will implicitly treat this column as a float64",
-        ):
-            impl(df)
-    else:
         impl(df)
 
 
