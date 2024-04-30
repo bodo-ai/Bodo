@@ -106,7 +106,13 @@ public class RelationalAlgebraGenerator {
   private final int tracingLevel;
 
   /** The batch size used for streaming. This is configurable for testing purposes. */
-  private final int streamingBatchSize;
+  public static int streamingBatchSize = 4096;
+
+  /**
+   * The ratio of distinct rows versus total rows required for dictionary encoding. If the ratio is
+   * less than or equal to this value, then dictionary encoding is used for string columns.
+   */
+  public static double READ_DICT_THRESHOLD = 0.5;
 
   /**
    * Hide credential information in any generated code. This is used for code generated in Python by

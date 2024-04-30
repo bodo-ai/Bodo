@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
@@ -8,6 +9,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.ConventionTraitDef
@@ -22,6 +24,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.sql.type.SqlTypeFamily
 import java.lang.RuntimeException
 import java.math.BigDecimal
 
@@ -141,6 +144,33 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 StringLiteral("iceberg+" + relInput.generatePythonConnStr(schemaPath)),
                 StringLiteral(schemaPath.joinToString(separator = ".")),
             )
+        // Add extra keyword argument specifying which columns should be dictionary encoded
+        // based on their NDV values. If a string column is not in this list, then Bodo
+        // will do an approx NDV check at compile time to determine whether it should be
+        // dictionary encoded.
+        val dictArgs: MutableList<String> = mutableListOf()
+        val rowCount = cluster.metadataQuery.getRowCount(relInput)
+        relInput.rowType.fieldList.mapIndexed {
+                idx, field ->
+            if (rowType.fieldList[idx].type.family == SqlTypeFamily.CHARACTER) {
+                val distinctRowCount =
+                    (cluster.metadataQuery as BodoRelMetadataQuery).getColumnDistinctCount(relInput, idx)
+                // A column is added if it is a string column whose distinct count is less than
+                // a certain ratio of the total row count, and is also less than the batch size.
+                if (rowCount != null && distinctRowCount != null &&
+                    distinctRowCount / rowCount <= RelationalAlgebraGenerator.READ_DICT_THRESHOLD &&
+                    distinctRowCount < RelationalAlgebraGenerator.streamingBatchSize
+                ) {
+                    dictArgs.add(field.name)
+                }
+            }
+        }
+        val dictExpr =
+            if (dictArgs.isEmpty()) {
+                Expr.None
+            } else {
+                Expr.List(dictArgs.map { Expr.StringLiteral(it) })
+            }
         val namedArgs =
             listOf(
                 "_bodo_chunksize" to getStreamingBatchArg(ctx),
@@ -149,6 +179,7 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
                 "_bodo_filter" to filtersArg,
                 "_bodo_limit" to limit,
                 "_bodo_sql_op_id" to Expr.IntegerLiteral(ctx.operatorID()),
+                "_bodo_read_as_dict" to dictExpr,
             )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)
