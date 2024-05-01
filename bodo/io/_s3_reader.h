@@ -69,6 +69,17 @@ struct IcebergRestAwsCredentialsProvider : Aws::Auth::AWSCredentialsProvider {
      */
     void Reload() override;
 
+    /**
+     * Get an OAuth2 token from the Iceberg REST Catalog at base_url
+     * @param base_url Url of the Iceberg REST Catalog to fetch the token from
+     * @param credential Credential to exchange for a token, crednials should be
+     * of the form "client_id:client_secret" and can be generated in the Tabular
+     * UI for Tabular REST Catalogs
+     * @returns the token
+     */
+    static std::string getToken(const std::string_view base_url,
+                                const std::string_view credential);
+
    protected:
     // URI of the Iceberg catalog
     const std::string catalog_uri;
@@ -90,7 +101,7 @@ struct IcebergRestAwsCredentialsProvider : Aws::Auth::AWSCredentialsProvider {
     CURL *hnd;
     // Buffer to store the response from the Iceberg REST API
     std::string curl_buffer;
-    const unsigned int n_retries = 3;
+    static const unsigned int n_retries = 3;
 
     /**
      * Callback function for CURL

@@ -15,23 +15,44 @@ struct PyTestCase {
 
     PyTestCase(const std::string &filenm, const std::string &nm,
                bodo::tests::test_case tc)
-        : filenm_(filenm), nm_(nm), lineno_(tc.lineno_), func_(tc.func_) {
+        : filenm_(filenm),
+          nm_(nm),
+          lineno_(tc.lineno_),
+          func_(tc.func_),
+          markers_(tc.markers_) {
         PyObject_Init(reinterpret_cast<PyObject *>(this), &PyTestCase::TYPE);
         Py_INCREF(reinterpret_cast<PyObject *>(this));
 
         nmstr_ = PyUnicode_DecodeLocaleAndSize(nm.data(), nm.size(), nullptr);
-        if (nmstr_ == nullptr)
+        if (nmstr_ == nullptr) {
             throw std::runtime_error("PyTestCase fails");
+        }
 
         filenmstr_ = PyUnicode_DecodeLocaleAndSize(filenm.data(), filenm.size(),
                                                    nullptr);
-        if (filenmstr_ == nullptr)
+        if (filenmstr_ == nullptr) {
             throw std::runtime_error("PyTestCase fails");
+        }
+
+        markers_list_ = PyList_New(markers_.size());
+        if (markers_list_ == nullptr) {
+            throw std::runtime_error("PyTestCase fails");
+        }
+        for (size_t i = 0; i < markers_.size(); ++i) {
+            std::string_view marker = markers_[i];
+            PyObject *markerstr = PyUnicode_DecodeLocaleAndSize(
+                marker.data(), marker.size(), nullptr);
+            if (markerstr == nullptr) {
+                throw std::runtime_error("PyTestCase fails");
+            }
+            PyList_SetItem(markers_list_, i, markerstr);
+        }
     }
 
     ~PyTestCase() {
         Py_DECREF(nmstr_);
         Py_DECREF(filenmstr_);
+        Py_DECREF(markers_list_);
     }
 
     PyObject *operator()(PyObject *args, PyObject *kwargs) {
@@ -67,6 +88,10 @@ struct PyTestCase {
             return nmstr_;
         } else if (strcmp(attr, "lineno") == 0) {
             return PyLong_FromLong(lineno_);
+
+        } else if (strcmp(attr, "markers") == 0) {
+            Py_INCREF(markers_list_);
+            return markers_list_;
         } else {
             return nullptr;
         }
@@ -76,9 +101,10 @@ struct PyTestCase {
 
    private:
     std::string filenm_, nm_;
-    PyObject *filenmstr_, *nmstr_;
+    PyObject *filenmstr_, *nmstr_, *markers_list_;
     int lineno_;
     std::function<void()> func_;
+    std::vector<std::string> markers_;
 };
 
 PyObject *PyTestCase_as_str(PyObject *tc) {
