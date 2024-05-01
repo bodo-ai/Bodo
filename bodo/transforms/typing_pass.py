@@ -3879,6 +3879,8 @@ class TypingTransforms:
             if _bodo_read_as_dict_var
             else []
         )
+        if _bodo_read_as_dict == None:
+            _bodo_read_as_dict = []
         if not isinstance(_bodo_read_as_dict, list):
             raise BodoError(err_msg)
 
