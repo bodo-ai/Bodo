@@ -28,11 +28,13 @@ class test_case {
     /// @param f Callable that can be used to run the test. Should throw an
     /// exception on failure
     /// @param lineno Line in the file where the test is defined
-    test_case(std::function<void()> f, int lineno)
-        : func_(f), lineno_(lineno) {}
+    test_case(std::function<void()> f, int lineno,
+              std::vector<std::string> &markers)
+        : func_(f), lineno_(lineno), markers_(markers) {}
 
     std::function<void()> func_;
     int lineno_;
+    std::vector<std::string> markers_;
 };
 
 /// @brief Logically groups tests into groups. Each c++ test file should contain
@@ -76,7 +78,8 @@ class suite {
     /// @param func Callable to run the test. Should throw an exception on error
     /// @param lineno Line in the source file where the test was defined.
     template <typename T>
-    void add_test(const std::string &nm, T func, int lineno) {
+    void add_test(const std::string &nm, T func,
+                  std::vector<std::string> &markers, int lineno) {
         auto wrapped_test = [&]() {
             if (before_each_) {
                 (*before_each_)();
@@ -88,7 +91,8 @@ class suite {
                 (*after_each_)();
             }
         };
-        tests_.insert(std::make_pair(nm, test_case(wrapped_test, lineno)));
+        tests_.insert(
+            std::make_pair(nm, test_case(wrapped_test, lineno, markers)));
     }
 
     /// @brief Register a callback to fire after every test in the suite
@@ -148,8 +152,9 @@ class suite {
 /// set. Defaults to the calling source location.
 template <typename TestFunc>
 void test(const std::string &nm, TestFunc func,
+          std::vector<std::string> markers = {},
           std::source_location location = std::source_location::current()) {
-    suite::get_current()->add_test(nm, func, location.line());
+    suite::get_current()->add_test(nm, func, markers, location.line());
 }
 
 /// @brief Register a callback to fire after every test in the suite
