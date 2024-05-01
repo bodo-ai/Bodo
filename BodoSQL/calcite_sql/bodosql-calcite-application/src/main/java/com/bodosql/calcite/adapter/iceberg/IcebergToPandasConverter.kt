@@ -30,6 +30,12 @@ import java.math.BigDecimal
 
 class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
+    init {
+        // Initialize the type to avoid errors with Kotlin suggesting to access
+        // the protected field directly.
+        rowType = getRowType()
+    }
+
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
@@ -150,9 +156,9 @@ class IcebergToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, inpu
         // dictionary encoded.
         val dictArgs: MutableList<String> = mutableListOf()
         val rowCount = cluster.metadataQuery.getRowCount(relInput)
-        relInput.rowType.fieldList.mapIndexed {
+        relInput.getRowType().fieldList.mapIndexed {
                 idx, field ->
-            if (rowType.fieldList[idx].type.family == SqlTypeFamily.CHARACTER) {
+            if (getRowType().fieldList[idx].type.family == SqlTypeFamily.CHARACTER) {
                 val distinctRowCount =
                     (cluster.metadataQuery as BodoRelMetadataQuery).getColumnDistinctCount(relInput, idx)
                 // A column is added if it is a string column whose distinct count is less than
