@@ -276,43 +276,6 @@ class AbstractIcebergFilterRuleHelpers {
             )
         }
 
-        /** Returns whether an expression is effectively NOT NULL due to an
-         * `e IS NOT NULL` condition in this predicate list.
-         *
-         * This is a copy of the identically named method in RelOptPredicateList, but with the addition of
-         * a check for casting. Eventually, this should be extended so that any
-         * function which cannot introduce nullability can be considered effectively
-         * not null if the arguments are effectively not null, and merged back into Calcite.
-         *
-         * TODO: This method could be implemented using the simplifier. This would be more general/scalable,
-         * but it would also be more error prone, so this will be left to follow up work.
-         * */
-        fun isEffectivelyNotNull(
-            pulledUpPredicates: List<RexNode>,
-            e: RexNode,
-        ): Boolean {
-            if (!e.type.isNullable) {
-                return true
-            }
-            for (p in pulledUpPredicates) {
-                if (p.kind == SqlKind.IS_NOT_NULL && (p as RexCall).getOperands()[0] == e) {
-                    return true
-                }
-            }
-            if (SqlKind.COMPARISON.contains(e.kind)) {
-                val operands = (e as RexCall).getOperands()
-                for (operand in operands) {
-                    if (!isEffectivelyNotNull(pulledUpPredicates, operand)) {
-                        return false
-                    }
-                }
-                return true
-            } else if (e.kind == SqlKind.CAST) {
-                return isEffectivelyNotNull(pulledUpPredicates, (e as RexCall).getOperands()[0])
-            }
-            return false
-        }
-
         @JvmStatic
         fun generatePartialDerivationFunction(
             rexBuilder: RexBuilder,
@@ -320,11 +283,25 @@ class AbstractIcebergFilterRuleHelpers {
             predicateList: RelOptPredicateList,
         ): (RexNode) -> RexNode {
             return { condition: RexNode ->
-                if (condition.type.isNullable && !isEffectivelyNotNull(predicateList.pulledUpPredicates, condition)) {
-                    val updatedCondition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, condition)
-                    rexSimplify.simplifyUnknownAsFalse(updatedCondition)
+                val updatedCondition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, condition)
+                val simplifiedUpdatedCondition = rexSimplify.simplifyUnknownAsFalse(updatedCondition)
+                if (predicateList.pulledUpPredicates.isEmpty()) {
+                    simplifiedUpdatedCondition
                 } else {
-                    condition
+                    val oldCondition =
+                        if (predicateList.pulledUpPredicates.size == 1) {
+                            predicateList.pulledUpPredicates[0]
+                        } else {
+                            rexBuilder.makeCall(SqlStdOperatorTable.AND, predicateList.pulledUpPredicates)
+                        }
+                    val simplifiedOldCondition = rexSimplify.simplifyUnknownAsFalse(oldCondition)
+                    val updatedCondition2 = rexBuilder.makeCall(SqlStdOperatorTable.AND, simplifiedOldCondition, simplifiedUpdatedCondition)
+                    val simplifiedUpdatedCondition2 = rexSimplify.simplifyUnknownAsFalse(updatedCondition2)
+                    if (simplifiedUpdatedCondition2 == simplifiedOldCondition) {
+                        condition
+                    } else {
+                        simplifiedUpdatedCondition
+                    }
                 }
             }
         }
