@@ -1,13 +1,60 @@
 package com.bodosql.calcite.ddl
 
 import com.bodosql.calcite.catalog.IcebergCatalog
+import com.bodosql.calcite.catalog.IcebergCatalog.Companion.schemaPathToNamespace
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.tablePathToTableIdentifier
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.util.Util
 import org.apache.iceberg.BaseMetastoreCatalog
+import org.apache.iceberg.catalog.Namespace
+import org.apache.iceberg.catalog.SupportsNamespaces
+import org.apache.iceberg.exceptions.AlreadyExistsException
+import org.apache.iceberg.exceptions.NamespaceNotEmptyException
 
-class IcebergDDLExecutor(private val icebergConnection: BaseMetastoreCatalog) : DDLExecutor {
+class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor where T : BaseMetastoreCatalog, T : SupportsNamespaces {
+    override fun createSchema(schemaPath: ImmutableList<String>) {
+        val ns = schemaPathToNamespace(schemaPath)
+        try {
+            icebergConnection.createNamespace(ns)
+            // Even though not explicitly set, all catalogs use this exception
+        } catch (e: AlreadyExistsException) {
+            throw NamespaceAlreadyExistsException()
+        }
+    }
+
+    /**
+     * Helper Function to recursively drop a schema, including its contents
+     * @param ns Namespace path of schema to drop
+     * @return True if the namespace existed, false otherwise
+     */
+    private fun dropSchema(ns: Namespace): Boolean {
+        return try {
+            icebergConnection.dropNamespace(ns)
+        } catch (e: NamespaceNotEmptyException) {
+            for (nsInner in icebergConnection.listNamespaces(ns)) {
+                dropSchema(nsInner)
+            }
+
+            for (tableInner in icebergConnection.listTables(ns)) {
+                icebergConnection.dropTable(tableInner)
+            }
+
+            // Should return true in this path, since the schema has contents
+            icebergConnection.dropNamespace(ns)
+        }
+    }
+
+    override fun dropSchema(
+        defaultSchemaPath: ImmutableList<String>,
+        schemaName: String,
+    ) {
+        val ns = schemaPathToNamespace(ImmutableList.copyOf(defaultSchemaPath + schemaName))
+        if (!dropSchema(ns)) {
+            throw NamespaceNotFoundException()
+        }
+    }
+
     /**
      * Drops a table from the catalog.
      * @param tablePath The path to the table to drop.
@@ -36,7 +83,6 @@ class IcebergDDLExecutor(private val icebergConnection: BaseMetastoreCatalog) : 
         val names = listOf("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY")
         val columnValues = List(7) { ArrayList<String?>() }
 
-        val tableName = tablePath[tablePath.size - 1]
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
         val table = icebergConnection.loadTable(tableIdentifier)
         val schema = table.schema()

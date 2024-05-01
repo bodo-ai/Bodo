@@ -3,15 +3,19 @@
 Tests DDL operations on a BodoSQL catalog.
 """
 
+from contextlib import contextmanager
 
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
 from bodo.tests.utils import (
     _test_equal_guard,
+    check_func_seq,
     create_snowflake_table_from_select_query,
+    gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_snowflake,
     reduce_sum,
@@ -22,6 +26,239 @@ from bodosql.tests.test_types.snowflake_catalog_common import (
 )
 
 pytestmark = pytest_snowflake
+
+
+def gen_unique_id(name_prefix: str) -> str:
+    path = None
+    if bodo.get_rank() == 0:
+        path = gen_unique_table_id(name_prefix)
+    path = MPI.COMM_WORLD.bcast(path)
+    return path
+
+
+def _test_equal_par(bodo_output, py_output):
+    passed = _test_equal_guard(
+        bodo_output,
+        py_output,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+def check_schema_exists(conn_str, schema_name) -> bool:
+    tables = pd.read_sql(
+        f"SHOW SCHEMAS LIKE '{schema_name}' STARTS WITH '{schema_name}'",
+        conn_str,
+    )
+    return len(tables) == 1
+
+
+@contextmanager
+def schema_helper(conn_str, schema_name, create=True):
+    if create:
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"CREATE SCHEMA {schema_name}", conn_str)
+        bodo.barrier()
+        assert check_schema_exists(conn_str, schema_name)
+
+    try:
+        yield
+    finally:
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"DROP SCHEMA IF EXISTS {schema_name}", conn_str)
+        bodo.barrier()
+        assert not check_schema_exists(conn_str, schema_name)
+
+
+@pytest.mark.parametrize("if_not_exists", [True, False])
+def test_create_schema(if_not_exists, test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo can create a schema in Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    if_not_exists_str = "IF NOT EXISTS" if if_not_exists else ""
+    query = f"CREATE SCHEMA {if_not_exists_str} {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' successfully created."]}
+    )
+
+    # execute_ddl Version
+    with schema_helper(conn, schema_name, create=False):
+        bodo_output = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+        assert check_schema_exists(conn, schema_name)
+
+    # Python Version
+    with schema_helper(conn, schema_name, create=False):
+        bodo_output = bc.sql(query)
+        _test_equal_par(bodo_output, py_output)
+        assert check_schema_exists(conn, schema_name)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with schema_helper(conn, schema_name, create=False):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        assert check_schema_exists(conn, schema_name)
+
+
+def test_create_schema_already_exists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that Bodo errors when creating a schema
+    that already exists in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    query = f"CREATE SCHEMA {schema_name}"
+    py_output = pd.DataFrame({"STATUS": []})
+
+    with schema_helper(conn, schema_name):
+        with pytest.raises(BodoError, match=f"Schema '{schema_name}' already exists."):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query),
+                py_output=py_output,
+                test_str_literal=True,
+            )
+            assert check_schema_exists(conn, schema_name)
+
+
+def test_create_schema_if_not_exists_already_exists(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that Bodo doesn't error when creating a schema
+    that already exists in Snowflake, when specifying IF NOT EXISTS.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    query = f"CREATE SCHEMA IF NOT EXISTS {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"'{schema_name}' already exists, statement succeeded."]}
+    )
+
+    with schema_helper(conn, schema_name):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=True,
+        )
+        assert check_schema_exists(conn, schema_name)
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_drop_schema(if_exists, test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo can drop a schema in Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query = f"DROP SCHEMA {if_exists_str} {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' successfully dropped."]}
+    )
+
+    # execute_ddl Version
+    with schema_helper(conn, schema_name):
+        bodo_output = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+        assert not check_schema_exists(conn, schema_name)
+
+    # Python Version
+    with schema_helper(conn, schema_name):
+        bodo_output = bc.sql(query)
+        _test_equal_par(bodo_output, py_output)
+        assert not check_schema_exists(conn, schema_name)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with schema_helper(conn, schema_name):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        assert not check_schema_exists(conn, schema_name)
+
+
+def test_drop_schema_doesnt_exists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that Bodo errors when dropping a schema
+    that doesn't exist in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    query = f"DROP SCHEMA {schema_name}"
+    py_output = pd.DataFrame({"STATUS": []})
+
+    with pytest.raises(
+        BodoError,
+        match=f"Schema '{schema_name}' does not exist or drop cannot be performed.",
+    ):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=True,
+        )
+        assert not check_schema_exists(conn, schema_name)
+
+
+def test_drop_schema_if_exists_doesnt_exists(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that Bodo doesn't error when dropping a schema
+    that doesn't exists in Snowflake, when specifying IF EXISTS.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA").upper()
+    query = f"DROP SCHEMA IF EXISTS {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' already dropped, statement succeeded."]}
+    )
+
+    check_func_seq(
+        lambda bc, query: bc.sql(query),
+        (bc, query),
+        py_output=py_output,
+        test_str_literal=True,
+    )
+    assert not check_schema_exists(conn, schema_name)
 
 
 def test_drop_table(test_db_snowflake_catalog, memory_leak_check):

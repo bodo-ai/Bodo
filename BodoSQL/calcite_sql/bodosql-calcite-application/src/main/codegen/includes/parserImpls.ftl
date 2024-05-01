@@ -795,7 +795,7 @@ SqlTruncate CalciteSqlTruncateTable(Span s) :
     }
 }
 
-SqlDrop SqlDropTable(Span s, boolean replace) :
+SqlDrop SqlDropTable(Span s) :
 {
     final boolean ifExists;
     final boolean cascade;
@@ -811,7 +811,7 @@ SqlDrop SqlDropTable(Span s, boolean replace) :
     }
 }
 
-SqlDrop SqlDropView(Span s, boolean replace) :
+SqlDrop SqlDropView(Span s) :
 {
     final boolean ifExists;
     final SqlIdentifier id;
@@ -825,6 +825,19 @@ SqlDrop SqlDropView(Span s, boolean replace) :
     }
 }
 
+SqlDrop SqlDropSchema(Span s) :
+{
+    final boolean ifExists;
+    final SqlIdentifier id;
+}
+{
+    <SCHEMA>
+    ifExists = IfExistsOpt()
+    id = CompoundIdentifier()
+    {
+        return SqlDdlNodes.dropSchema(s.end(this), false, ifExists, id);
+    }
+}
 
 
 
@@ -1298,6 +1311,20 @@ SqlCreate SqlCreateView(Span s, boolean replace) :
     <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) {
         return SqlDdlNodes.createView(s.end(this), replace, id, columnList,
             query);
+    }
+}
+
+SqlCreate SqlCreateSchema(Span s, boolean replace) :
+{
+    final SqlIdentifier id;
+    final boolean ifNotExists;
+}
+{
+    <SCHEMA>
+    ifNotExists = IfNotExistsOpt()
+    id = CompoundIdentifier()
+    {
+        return SqlDdlNodes.createSchema(s.end(this), replace, ifNotExists, id);
     }
 }
 

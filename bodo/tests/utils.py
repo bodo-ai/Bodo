@@ -317,6 +317,7 @@ def check_func(
             bodo_func, w = check_func_seq(
                 func,
                 args,
+                n_pes,
                 py_output,
                 copy_input,
                 sort_output,
@@ -327,7 +328,6 @@ def check_func(
                 additional_compiler_arguments,
                 set_columns_name_to_none,
                 reorder_columns,
-                n_pes,
                 check_categorical,
                 atol,
                 rtol,
@@ -340,6 +340,7 @@ def check_func(
                 bodo_func, _ = check_func_seq(
                     func,
                     args,
+                    n_pes,
                     py_output,
                     copy_input,
                     sort_output,
@@ -350,7 +351,6 @@ def check_func(
                     additional_compiler_arguments,
                     set_columns_name_to_none,
                     reorder_columns,
-                    n_pes,
                     check_categorical,
                     atol,
                     rtol,
@@ -566,25 +566,28 @@ def _type_has_str_array(t):
 def check_func_seq(
     func,
     args,
-    py_output,
-    copy_input,
-    sort_output,
-    check_names,
-    check_dtype,
-    reset_index,
-    convert_columns_to_pandas,
-    additional_compiler_arguments,
-    set_columns_name_to_none,
-    reorder_columns,
-    n_pes,
-    check_categorical,
-    atol,
-    rtol,
+    n_pes=None,
+    py_output: pt.Union[pt.Any, NoDefault] = no_default,
+    copy_input=False,
+    sort_output=False,
+    check_names=True,
+    check_dtype=True,
+    reset_index=False,
+    convert_columns_to_pandas=False,
+    additional_compiler_arguments=None,
+    set_columns_name_to_none=False,
+    reorder_columns=False,
+    check_categorical=False,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
     test_str_literal=False,
 ) -> tuple[Callable, list[warnings.WarningMessage]]:
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
+    if n_pes is None:
+        n_pes = bodo.get_size()
+
     kwargs = {"returns_maybe_distributed": False}
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)

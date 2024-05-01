@@ -1,7 +1,11 @@
 package org.apache.calcite.sql.validate
 
+import com.amazonaws.services.clouddirectory.model.SchemaAlreadyExistsException
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.ddl.DDLExecutionResult
+import com.bodosql.calcite.ddl.MissingObjectException
+import com.bodosql.calcite.ddl.NamespaceAlreadyExistsException
+import com.bodosql.calcite.ddl.NamespaceNotFoundException
 import com.bodosql.calcite.schema.BodoSqlSchema
 import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SqlDropTable
@@ -10,12 +14,15 @@ import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
+import org.apache.avro.message.MissingSchemaException
 import java.lang.Exception
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.sql.SqlDescribeTable
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNode
+import org.apache.calcite.sql.ddl.SqlCreateSchema
+import org.apache.calcite.sql.ddl.SqlDropSchema
 import org.apache.calcite.util.Util
 
 /**
@@ -44,7 +51,6 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
     }
 
 
-
     /**
      * Executes a DDL operation.
      */
@@ -56,9 +62,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
             }
 
-            SqlKind.DROP_TABLE -> {
-                executeDropTable(node as SqlDropTable)
-            }
+            // Create Queries
+            SqlKind.CREATE_SCHEMA -> executeCreateSchema(node as SqlCreateSchema)
+
+            // Drop Queries
+            SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema)
+            SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable)
+            
             SqlKind.DESCRIBE_TABLE -> {
                 executeDescribeTable(node as SqlDescribeTable)
             }
@@ -66,6 +76,54 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
             }
         }
+    }
+
+    private fun executeCreateSchema(node: SqlCreateSchema): DDLExecutionResult {
+        val schemaPath = node.name.names
+        val schemaPathStr = schemaPath.joinToString(separator = ".")
+        val schemaName = schemaPath.last()
+        val parentSchemaPath = Util.skipLast(schemaPath)
+        try {
+            val schema = deriveSchema(parentSchemaPath)
+            val catalogSchema = validateSchema(schema, node.kind, schemaName)
+            // Perform the actual create schema implementation
+            catalogSchema.ddlExecutor.createSchema(schemaPath)
+        } catch (e: NamespaceAlreadyExistsException) {
+            return if (node.ifNotExists) {
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("'$schemaName' already exists, statement succeeded.")))
+            } else {
+                throw RuntimeException("Schema '$schemaPathStr' already exists.")
+            }
+        }
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully created.")))
+    }
+
+    private fun executeDropSchema(node: SqlDropSchema): DDLExecutionResult {
+        val schemaPath = node.name.names
+        val schemaName = schemaPath.last()
+
+        // We always need to validate the parent schema / database / namespace exists.
+        val parentSchemaPath = Util.skipLast(schemaPath)
+        val parentSchemaPathStr = parentSchemaPath.joinToString(separator = ".")
+
+        val catalogSchema = try {
+            val schema = deriveSchema(parentSchemaPath)
+            validateSchema(schema, node.kind, parentSchemaPathStr)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Schema '$parentSchemaPathStr' does not exist or drop cannot be performed.")
+        }
+
+        try {
+            catalogSchema.ddlExecutor.dropSchema(catalogSchema.fullPath, schemaName)
+        } catch (e: NamespaceNotFoundException) {
+            if (node.ifExists) {
+                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' already dropped, statement succeeded.")))
+            } else {
+                // Already verified that the parent exists
+                throw RuntimeException("Schema '$schemaName' does not exist or drop cannot be performed.")
+            }
+        }
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully dropped.")))
     }
 
     private fun executeDropTable(node: SqlDropTable): DDLExecutionResult {
@@ -87,10 +145,10 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                     validateSchema(schema, node.kind, schemaName)
                     return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($tableName already dropped).")))
                 } catch (e: MissingObjectException) {
-                    throw RuntimeException("Schema $schemaName does not exist or not authorized.")
+                    throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
                 }
             } else {
-                throw RuntimeException("Table $tableName does not exist or not authorized to drop.")
+                throw RuntimeException("Table '$tableName' does not exist or not authorized to drop.")
             }
         }
     }
@@ -143,7 +201,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
     }
 
     /**
-     * Derive a table object from a given path.
+     * Derive a schema object from a given path.
      * @param schemaPath The path to the schema. This may be incomplete and need to be resolved.
      * @return A BodoSQL schema object. If the schema is not a BodoSQL schema,
      * then we will raise an error.
@@ -171,7 +229,4 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         }
         return schema
     }
-
-    private class MissingObjectException(message: String) : Exception(message)
-
 }

@@ -22,6 +22,8 @@ import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.DDLExecutor;
+import com.bodosql.calcite.ddl.NamespaceAlreadyExistsException;
+import com.bodosql.calcite.ddl.NamespaceNotFoundException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
@@ -2016,8 +2018,55 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     private SnowflakeJDBCExecutor() {}
 
     private @NotNull String generateSnowflakeObjectString(@NotNull ImmutableList<String> path) {
-      return String.join(
-          ".", path.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+      return path.stream()
+          .map(SnowflakeCatalog.this::makeObjectNameQuoted)
+          .collect(Collectors.joining("."));
+    }
+
+    @Override
+    public void createSchema(@NotNull ImmutableList<String> schemaPath)
+        throws NamespaceAlreadyExistsException {
+      String schemaFullStr = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "CREATE SCHEMA %s", schemaFullStr);
+      try {
+        executeSnowflakeQuery(query);
+      } catch (SQLException e) {
+        if (e.getMessage().contains("already exists.")) {
+          throw new NamespaceAlreadyExistsException();
+        }
+
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to create Snowflake schema %s. Error: %s",
+                schemaFullStr,
+                e.getMessage()));
+      }
+    }
+
+    @Override
+    public void dropSchema(
+        @NotNull ImmutableList<String> defaultSchemaPath, @NotNull String schemaName)
+        throws NamespaceNotFoundException {
+      assert (defaultSchemaPath.size() == 1 || defaultSchemaPath.size() == 2);
+      ImmutableList<String> schemaPath = ImmutableList.of(defaultSchemaPath.get(0), schemaName);
+      String schemaFullStr = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "DROP SCHEMA %s", schemaFullStr);
+
+      try {
+        executeSnowflakeQuery(query);
+      } catch (SQLException e) {
+        if (e.getMessage().contains("does not exist")) {
+          throw new NamespaceNotFoundException();
+        }
+
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to drop Snowflake schema %s. Error: %s",
+                schemaFullStr,
+                e.getMessage()));
+      }
     }
 
     @NotNull
@@ -2029,7 +2078,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               Locale.ROOT, "DROP TABLE %s %s", tableName, cascade ? " CASCADE" : "RESTRICT");
       try {
         ResultSet output = executeSnowflakeQuery(query);
-        List<List<String>> columnValues = new ArrayList();
+        List<List<String>> columnValues = new ArrayList<>();
         columnValues.add(new ArrayList<>());
         while (output.next()) {
           columnValues.get(0).add(output.getString(1));
@@ -2051,7 +2100,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath, @NotNull RelDataTypeFactory typeFactory) {
       String tableName = generateSnowflakeObjectString(tablePath);
       String query = String.format(Locale.ROOT, "DESCRIBE TABLE %s", tableName);
-      List<List<String>> columnValues = new ArrayList();
+      List<List<String>> columnValues = new ArrayList<>();
       List<String> columnNames =
           List.of("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY");
       for (int i = 0; i < columnNames.size(); i++) {

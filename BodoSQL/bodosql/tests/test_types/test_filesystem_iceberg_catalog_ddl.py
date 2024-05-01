@@ -2,6 +2,9 @@
 """
 Tests the general Iceberg DDL functionality with the file system catalog.
 """
+from contextlib import contextmanager
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from mpi4py import MPI
@@ -15,6 +18,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import (
     _test_equal_guard,
+    check_func_seq,
     gen_unique_table_id,
     reduce_sum,
 )
@@ -23,12 +27,24 @@ from bodo.utils.typing import BodoError
 pytestmark = pytest.mark.iceberg
 
 
-@pytest.fixture
-def iceberg_filesystem_catalog():
+@pytest.fixture(scope="session")
+def iceberg_filesystem_catalog(tmp_path_factory):
     """
     An Iceberg FileSystemCatalog.
     """
-    return bodosql.FileSystemCatalog(".", "iceberg")
+    path = None
+    if bodo.get_rank() == 0:
+        path = str(tmp_path_factory.mktemp("iceberg"))
+    path = MPI.COMM_WORLD.bcast(path)
+    return bodosql.FileSystemCatalog(path, "iceberg")
+
+
+def gen_unique_id(name_prefix: str) -> str:
+    name = None
+    if bodo.get_rank() == 0:
+        name = gen_unique_table_id(name_prefix)
+    name = MPI.COMM_WORLD.bcast(name)
+    return name
 
 
 def create_simple_ddl_table(spark):
@@ -36,10 +52,7 @@ def create_simple_ddl_table(spark):
     Creates a very basic table for testing DDL functionality.
     """
     comm = MPI.COMM_WORLD
-    table_name = None
-    if bodo.get_rank() == 0:
-        table_name = gen_unique_table_id("SIMPLY_DDL_TABLE")
-    table_name = comm.bcast(table_name)
+    table_name = gen_unique_id("SIMPLY_DDL_TABLE")
     df = pd.DataFrame({"A": [1, 2, 3]})
     sql_schema = [
         ("A", "long", True),
@@ -50,9 +63,188 @@ def create_simple_ddl_table(spark):
     return table_name
 
 
-def test_iceberg_drop_table(
-    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+@contextmanager
+def ddl_schema(schema_path: Path, create=True):
+    if create and bodo.get_rank() == 0:
+        schema_path.mkdir(exist_ok=True)
+        assert schema_path.exists(), "Failed to create schema"
+
+    try:
+        yield
+    finally:
+        if bodo.get_rank() == 0:
+            if schema_path.exists():
+                schema_path.rmdir()
+            assert not schema_path.exists(), "Failed to drop schema"
+
+
+def _test_equal_par(bodo_output, py_output):
+    passed = _test_equal_guard(
+        bodo_output,
+        py_output,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+@pytest.mark.parametrize("if_not_exists", [True, False])
+def test_create_schema(if_not_exists, iceberg_filesystem_catalog, memory_leak_check):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    if_exists_str = "IF NOT EXISTS" if if_not_exists else ""
+    query = f"CREATE SCHEMA {if_exists_str} {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' successfully created."]}
+    )
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    # execute_ddl Version
+    with ddl_schema(schema_path, create=False):
+        bodo_output: pd.DataFrame = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+        assert schema_path.exists()
+
+    # Python Version
+    with ddl_schema(schema_path, create=False):
+        bodo_output = bc.sql(query)
+        _test_equal_par(bodo_output, py_output)
+        assert schema_path.exists()
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with ddl_schema(schema_path, create=False):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=True,
+        )
+        assert schema_path.exists()
+
+
+def test_create_schema_already_exists(iceberg_filesystem_catalog, memory_leak_check):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    query = f"CREATE SCHEMA {schema_name}"
+    py_out = pd.DataFrame({"STATUS": [f"Schema '{schema_name}' already exists."]})
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    with ddl_schema(schema_path):
+        with pytest.raises(BodoError, match=f"Schema '{schema_name}' already exists."):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query),
+                py_output=py_out,
+                test_str_literal=True,
+            )
+        assert schema_path.exists(), "Schema should still exist"
+
+
+def test_create_schema_if_not_exists_already_exists(
+    iceberg_filesystem_catalog, memory_leak_check
 ):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    query = f"CREATE SCHEMA IF NOT EXISTS {schema_name}"
+    py_out = pd.DataFrame(
+        {"STATUS": [f"'{schema_name}' already exists, statement succeeded."]}
+    )
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    with ddl_schema(schema_path):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_out,
+            test_str_literal=True,
+        )
+        assert schema_path.exists(), "Schema should still exist"
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_drop_schema(if_exists, iceberg_filesystem_catalog, memory_leak_check):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query = f"DROP SCHEMA {if_exists_str} {schema_name}"
+    py_output = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' successfully dropped."]}
+    )
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    # execute_ddl Version
+    with ddl_schema(schema_path):
+        bodo_output = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+        assert not schema_path.exists()
+
+    # Python Version
+    with ddl_schema(schema_path):
+        bodo_output = bc.sql(query)
+        _test_equal_par(bodo_output, py_output)
+        assert not schema_path.exists()
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with ddl_schema(schema_path):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=True,
+        )
+        assert not schema_path.exists()
+
+
+def test_drop_schema_not_exists(iceberg_filesystem_catalog, memory_leak_check):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    query = f"DROP SCHEMA {schema_name}"
+    py_out = pd.DataFrame({"STATUS": []})
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    with pytest.raises(
+        BodoError,
+        match=f"Schema '{schema_name}' does not exist or drop cannot be performed.",
+    ):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_out,
+            test_str_literal=True,
+        )
+    assert not schema_path.exists()
+
+
+def test_drop_schema_if_exists_doesnt_exist(
+    iceberg_filesystem_catalog, memory_leak_check
+):
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    schema_path = Path(iceberg_filesystem_catalog.connection_string) / schema_name
+
+    query = f"DROP SCHEMA IF EXISTS {schema_name}"
+    py_out = pd.DataFrame(
+        {"STATUS": [f"Schema '{schema_name}' already dropped, statement succeeded."]}
+    )
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    check_func_seq(
+        lambda bc, query: bc.sql(query),
+        (bc, query),
+        py_output=py_out,
+        test_str_literal=True,
+    )
+    assert not schema_path.exists()
+
+
+def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table.
     """
@@ -61,7 +253,7 @@ def test_iceberg_drop_table(
     def impl(bc, query):
         return bc.sql(query)
 
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     table_name = create_simple_ddl_table(spark)
     db_schema, _ = iceberg_database(table_name)
     existing_tables = spark.sql(
@@ -73,15 +265,8 @@ def test_iceberg_drop_table(
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = impl(bc, query)
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-        sort_output=True,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Sequential test failed"
+    _test_equal_par(bodo_output, py_output)
+
     # Verify we can't find the table.
     remaining_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
@@ -89,16 +274,14 @@ def test_iceberg_drop_table(
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
-def test_iceberg_drop_table_python(
-    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
-):
+def test_iceberg_drop_table_python(iceberg_filesystem_catalog, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table using
     bc.sql from Python.
     """
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     table_name = create_simple_ddl_table(spark)
-    db_schema, _ = iceberg_database(table_name)
+    db_schema = "iceberg_db"
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()
@@ -108,15 +291,8 @@ def test_iceberg_drop_table_python(
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = bc.sql(query)
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-        sort_output=True,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Sequential test failed"
+    _test_equal_par(bodo_output, py_output)
+
     # Verify we can't find the table.
     remaining_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
@@ -124,16 +300,14 @@ def test_iceberg_drop_table_python(
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
-def test_iceberg_drop_table_execute_ddl(
-    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
-):
+def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_check):
     """
     Tests that the filesystem catalog can drop a table using
     bc.execute_ddl from Python.
     """
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     table_name = create_simple_ddl_table(spark)
-    db_schema, _ = iceberg_database(table_name)
+    db_schema = "iceberg_db"
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()
@@ -143,15 +317,8 @@ def test_iceberg_drop_table_execute_ddl(
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = bc.execute_ddl(query)
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-        sort_output=True,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Sequential test failed"
+    _test_equal_par(bodo_output, py_output)
+
     # Verify we can't find the table.
     remaining_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
@@ -159,21 +326,19 @@ def test_iceberg_drop_table_execute_ddl(
     assert len(remaining_tables) == 0, "Table was not dropped"
 
 
-def test_drop_table_not_found(
-    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
-):
+def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg raises an error."""
 
     @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     # Create an unused table to ensure the database is created
     create_simple_ddl_table(spark)
     # Create a garbage table name.
     table_name = "FEJWIOPFE13_9029J03C32"
-    db_schema, _ = iceberg_database(table_name)
+    db_schema = "iceberg_db"
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()
@@ -186,9 +351,7 @@ def test_drop_table_not_found(
         impl(bc, query)
 
 
-def test_drop_table_not_found_if_exists(
-    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
-):
+def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg doesn't raise an error
     with IF EXISTS."""
 
@@ -196,12 +359,12 @@ def test_drop_table_not_found_if_exists(
     def impl(bc, query):
         return bc.sql(query)
 
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     # Create an unused table to ensure the database is created
     create_simple_ddl_table(spark)
     # Create a garbage table name.
     table_name = "FEJWIOPFE13_9029J03C32"
-    db_schema, _ = iceberg_database(table_name)
+    db_schema = "iceberg_db"
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()
@@ -218,28 +381,20 @@ def test_drop_table_not_found_if_exists(
     )
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = impl(bc, query)
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-        sort_output=True,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Sequential test failed"
+    _test_equal_par(bodo_output, py_output)
 
 
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
 def test_describe_table(
-    describe_keyword, iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+    describe_keyword, iceberg_filesystem_catalog, memory_leak_check
 ):
     """
     Tests that the filesystem catalog can describe an iceberg
     table.
     """
-    spark = get_spark()
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     table_name = create_simple_ddl_table(spark)
-    db_schema, _ = iceberg_database(table_name)
+    db_schema = "iceberg_db"
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()
@@ -259,11 +414,7 @@ def test_describe_table(
             "UNIQUE_KEY": ["N"],
         }
     )
-    passed = _test_equal_guard(bodo_output, expected_output)
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Describe table test failed"
+    _test_equal_par(bodo_output, expected_output)
 
 
 def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):

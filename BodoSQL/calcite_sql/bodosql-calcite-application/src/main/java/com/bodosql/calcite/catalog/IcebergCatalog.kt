@@ -10,6 +10,7 @@ import org.apache.iceberg.BaseMetastoreCatalog
 import org.apache.iceberg.ManifestFiles
 import org.apache.iceberg.Table
 import org.apache.iceberg.catalog.Namespace
+import org.apache.iceberg.catalog.SupportsNamespaces
 import org.apache.iceberg.catalog.TableIdentifier
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types.DecimalType
@@ -33,7 +34,7 @@ import org.apache.iceberg.types.Types.TimestampType
  * the requirements in each individual implementation, but for now we will
  * be explicitly calling the public Iceberg API during development.
  */
-abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalog) : BodoSQLCatalog {
+abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCatalog where T : BaseMetastoreCatalog, T : SupportsNamespaces {
     /**
      * Load an Iceberg table from the connector via its path information.
      * @param schemaPath The schema path to the table.
@@ -142,16 +143,21 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
         return null
     }
 
-    fun getIcebergConnection(): BaseMetastoreCatalog {
+    fun getIcebergConnection(): T {
         return icebergConnection
     }
 
     companion object {
         // All Iceberg Timestamp columns have precision 6
-        private val icebergDatetimePrecision = 6
+        private const val ICEBERG_DATETIME_PRECISION = 6
 
         // Iceberg UUID is defined as 16 bytes
-        private val icebergUUIDPrecision = 16
+        private const val ICEBERG_UUID_PRECISION = 16
+
+        @JvmStatic
+        fun schemaPathToNamespace(schemaPath: List<String>): Namespace {
+            return Namespace.of(*schemaPath.toTypedArray())
+        }
 
         /**
          * Convert a BodoSQL representation for a table, which is an immutable list of strings
@@ -163,10 +169,10 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
          */
         @JvmStatic
         fun tablePathToTableIdentifier(
-            schemaPath: ImmutableList<String>,
+            schemaPath: List<String>,
             tableName: String,
         ): TableIdentifier {
-            val namespace = Namespace.of(*schemaPath.toTypedArray())
+            val namespace = schemaPathToNamespace(schemaPath)
             return TableIdentifier.of(namespace, tableName)
         }
 
@@ -215,9 +221,9 @@ abstract class IcebergCatalog(private val icebergConnection: BaseMetastoreCatalo
             val precision =
                 when (type.typeId()) {
                     Type.TypeID.DECIMAL -> (type as DecimalType).precision()
-                    Type.TypeID.UUID -> icebergUUIDPrecision
+                    Type.TypeID.UUID -> ICEBERG_UUID_PRECISION
                     Type.TypeID.FIXED -> (type as FixedType).length()
-                    Type.TypeID.TIMESTAMP, Type.TypeID.TIME -> icebergDatetimePrecision
+                    Type.TypeID.TIMESTAMP, Type.TypeID.TIME -> ICEBERG_DATETIME_PRECISION
                     else -> RelDataType.PRECISION_NOT_SPECIFIED
                 }
             val scale =

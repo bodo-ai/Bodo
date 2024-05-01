@@ -3,6 +3,12 @@ package com.bodosql.calcite.ddl
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataTypeFactory
 
+class NamespaceAlreadyExistsException : Exception()
+
+class NamespaceNotFoundException : Exception()
+
+class MissingObjectException(message: String) : Exception(message)
+
 /**
  * General interface for executing DDL operations. Each distinct catalog table type
  * (e.g. Iceberg, Snowflake Native, etc.) should have its own implementation of this
@@ -10,6 +16,23 @@ import org.apache.calcite.rel.type.RelDataTypeFactory
  * interacting with the connector.
  */
 interface DDLExecutor {
+    /**
+     * Create a schema / namespace in the catalog. Note: We don't need ifNotExists
+     * because we will do error handling for the existence of the schema in the caller
+     */
+    @Throws(NamespaceAlreadyExistsException::class)
+    fun createSchema(schemaPath: ImmutableList<String>)
+
+    /**
+     * Drops a schema / namespace from the catalog. Note: We don't need ifExists because we
+     * handle that case during error checking in the caller.
+     */
+    @Throws(NamespaceNotFoundException::class)
+    fun dropSchema(
+        defaultSchemaPath: ImmutableList<String>,
+        schemaName: String,
+    )
+
     /**
      * Drops a table from the catalog. Note: We don't need ifExists because we
      * have already checked for the existence of the table before calling this.

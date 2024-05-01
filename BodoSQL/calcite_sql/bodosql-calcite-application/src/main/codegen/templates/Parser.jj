@@ -4917,7 +4917,6 @@ SqlCreate SqlCreate() :
 SqlDrop SqlDrop() :
 {
     final Span s;
-    boolean replace = false;
     final SqlDrop drop;
 }
 {
@@ -4925,7 +4924,7 @@ SqlDrop SqlDrop() :
     (
 <#-- additional literal parser methods are included here -->
 <#list (parser.dropStatementParserMethods!default.parser.dropStatementParserMethods) as method>
-        drop = ${method}(s, replace)
+        drop = ${method}(s)
         <#sep>|</#sep>
 </#list>
     )
