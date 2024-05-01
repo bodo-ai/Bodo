@@ -20,7 +20,7 @@ class SortField(NamedTuple):
     nulls_first: bool  # First when True, Last when False
 
 
-def get_spark() -> SparkSession:
+def get_spark(path: str = ".") -> SparkSession:
     spark = (
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
@@ -31,7 +31,7 @@ def get_spark() -> SparkSession:
             "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
         )
         .config("spark.sql.catalog.hadoop_prod.type", "hadoop")
-        .config("spark.sql.catalog.hadoop_prod.warehouse", ".")
+        .config("spark.sql.catalog.hadoop_prod.warehouse", path)
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",

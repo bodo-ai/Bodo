@@ -4,6 +4,10 @@ import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.catalog.IcebergCatalog;
+import com.bodosql.calcite.catalog.SnowflakeCatalog;
+import com.bodosql.calcite.ddl.DDLExecutor;
+import com.bodosql.calcite.ddl.IcebergDDLExecutor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
@@ -22,8 +26,8 @@ public class CatalogSchema extends BodoSqlSchema {
    * to load the necessary information directly from the catalog, in some cases caching the
    * information.
    *
-   * <p>See the design described on Confluence:
-   * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Schema
+   * <p>See the design described on Confluence: <a
+   * href="https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Schema">...</a>
    */
   private final BodoSQLCatalog catalog;
 
@@ -241,5 +245,16 @@ public class CatalogSchema extends BodoSqlSchema {
       Variable columnNamesGlobal) {
     return catalog.getCreateTableWriteTarget(
         getFullPath(), tableName, createTableType, ifExistsBehavior, columnNamesGlobal);
+  }
+
+  /** Get the DDL Executor for the schema. This is used to execute DDL commands on the table. */
+  public DDLExecutor getDDLExecutor() {
+    if (catalog instanceof SnowflakeCatalog) {
+      return ((SnowflakeCatalog) catalog).getDdlExecutor();
+    } else if (catalog instanceof IcebergCatalog) {
+      return new IcebergDDLExecutor(((IcebergCatalog) catalog).getIcebergConnection());
+    } else {
+      throw new UnsupportedOperationException("DDL operations are not supported for this schema");
+    }
   }
 }

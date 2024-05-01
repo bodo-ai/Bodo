@@ -494,6 +494,7 @@ data: {
     createStatementParserMethods: [
         "SqlCreateTable",
         "SqlCreateView",
+        "SqlCreateSchema",
     ]
 
     # List of methods for parsing extensions to "DROP" calls.
@@ -501,7 +502,8 @@ data: {
     # Example: "SqlDropSchema".
     dropStatementParserMethods: [
         "SqlDropTable",
-        "SqlDropView"
+        "SqlDropView",
+        "SqlDropSchema",
     ]
 
     statementParserMethods: [

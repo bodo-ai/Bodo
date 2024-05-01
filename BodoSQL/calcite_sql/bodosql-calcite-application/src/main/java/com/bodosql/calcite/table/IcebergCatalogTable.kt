@@ -13,23 +13,25 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
+import org.apache.iceberg.BaseMetastoreCatalog
+import org.apache.iceberg.catalog.SupportsNamespaces
 
-class IcebergCatalogTable(
+class IcebergCatalogTable<T>(
     name: String,
     schemaPath: ImmutableList<String>,
     columns: List<BodoSQLColumn>,
-    private val catalog: IcebergCatalog,
+    private val catalog: IcebergCatalog<T>,
 ) : CatalogTable(
         name,
         schemaPath,
         columns,
         catalog,
-    ) {
+    ) where T : BaseMetastoreCatalog, T : SupportsNamespaces {
     // Hold the statistics for this table.
     private val statistic: Statistic = StatisticImpl()
 
     /** Interface to get the Iceberg Catalog.  */
-    override fun getCatalog(): IcebergCatalog {
+    override fun getCatalog(): IcebergCatalog<T> {
         return catalog
     }
 
