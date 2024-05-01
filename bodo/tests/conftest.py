@@ -813,6 +813,8 @@ class CppTestItem(pytest.Item):
     def __init__(self, parent, *, test):
         super().__init__(test.name, parent=parent)
         self.test = test
+        for marker in self.test.markers:
+            self.add_marker(marker)
 
     @property
     def filename(self):
@@ -893,6 +895,13 @@ def tabular_connection():
             os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
             os.getenv("TABULAR_CREDENTIAL"),
         )
+
+
+def pytest_runtest_setup(item):
+    tabular = len([mark for mark in item.iter_markers(name="tabular")])
+    if tabular:
+        if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
+            pytest.skip("Tabular tests must be run on Azure CI")
 
 
 @pytest.fixture(

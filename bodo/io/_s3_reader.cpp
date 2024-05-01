@@ -217,6 +217,79 @@ void IcebergRestAwsCredentialsProvider::Reload() {
                              std::chrono::minutes(this->credential_timeout)));
 }
 
+std::string IcebergRestAwsCredentialsProvider::getToken(
+    const std::string_view base_url, const std::string_view credential) {
+    // Generated using --libcurl
+    CURL *hnd;
+    struct curl_slist *slist1;
+    slist1 = NULL;
+    slist1 = curl_slist_append(
+        slist1, "content-type: application/x-www-form-urlencoded");
+    hnd = curl_easy_init();
+    curl_easy_setopt(hnd, CURLOPT_BUFFERSIZE, 102400L);
+    curl_easy_setopt(hnd, CURLOPT_URL,
+                     fmt::format("{}/v1/oauth/tokens", base_url).c_str());
+    curl_easy_setopt(hnd, CURLOPT_NOPROGRESS, 1L);
+    curl_easy_setopt(hnd, CURLOPT_HTTPHEADER, slist1);
+    curl_easy_setopt(hnd, CURLOPT_USERAGENT, "curl/7.88.1");
+    curl_easy_setopt(hnd, CURLOPT_MAXREDIRS, 50L);
+    curl_easy_setopt(hnd, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
+    curl_easy_setopt(hnd, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_easy_setopt(hnd, CURLOPT_FTP_SKIP_PASV_IP, 1L);
+    curl_easy_setopt(hnd, CURLOPT_TCP_KEEPALIVE, 1L);
+
+    // Set the POST data
+    size_t split_idx = credential.find(':');
+    std::string_view client_id = credential.substr(0, split_idx);
+    std::string_view client_secret =
+        credential.substr(split_idx + 1, credential.size() - (split_idx + 1));
+    std::string post_data = fmt::format(
+        "grant_type=client_credentials&client_id={}&client_secret={}",
+        client_id, client_secret);
+    curl_easy_setopt(hnd, CURLOPT_POSTFIELDS, post_data.data());
+    curl_easy_setopt(hnd, CURLOPT_POSTFIELDSIZE_LARGE,
+                     (curl_off_t)post_data.size());
+
+    // Set a callback function to store the response from the Iceberg REST
+    // API
+    std::string curl_buffer;
+    curl_easy_setopt(hnd, CURLOPT_WRITEFUNCTION,
+                     IcebergRestAwsCredentialsProvider::CurlWriteCallback);
+    curl_easy_setopt(hnd, CURLOPT_WRITEDATA, &curl_buffer);
+
+    for (unsigned int i = 0; i < IcebergRestAwsCredentialsProvider::n_retries;
+         i++) {
+        CURLcode res = curl_easy_perform(hnd);
+        if (res != CURLE_OK) {
+            if (i == IcebergRestAwsCredentialsProvider::n_retries - 1) {
+                throw std::runtime_error(fmt::format(
+                    "Failed to get OAuth2 token: {}", curl_easy_strerror(res)));
+            }
+            _sleep_exponential_backoff(i);
+        } else {
+            break;
+        }
+    }
+
+    curl_easy_cleanup(hnd);
+    hnd = NULL;
+    curl_slist_free_all(slist1);
+    slist1 = NULL;
+
+    try {
+        boost::json::parser parser;
+        parser.write(curl_buffer);
+        curl_buffer.clear();
+        auto parsed_json = parser.release();
+        const std::string access_token = std::move(
+            parsed_json.as_object()["access_token"].as_string().c_str());
+        return access_token;
+    } catch (const std::exception &e) {
+        throw std::runtime_error(
+            fmt::format("Failed to parse OAuth2 Token: {}", e.what()));
+    }
+}
+
 /**
  * @brief Ensure that Arrow S3 APIs are initialized
  * If they are not initialized, initialize them
