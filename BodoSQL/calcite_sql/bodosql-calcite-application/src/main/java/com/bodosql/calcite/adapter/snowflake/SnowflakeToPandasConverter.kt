@@ -36,6 +36,12 @@ import org.apache.calcite.util.Util
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(PandasRel.CONVENTION), input), PandasRel {
+    init {
+        // Initialize the type to avoid errors with Kotlin suggesting to access
+        // the protected field directly.
+        rowType = getRowType()
+    }
+
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
