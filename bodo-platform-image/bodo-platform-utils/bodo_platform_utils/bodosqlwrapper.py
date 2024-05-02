@@ -21,6 +21,7 @@ from .catalog import get_data
 # constants
 AUTH_URL_SUFFIX = "/v1/oauth/tokens"
 
+
 class CatalogType(Enum):
     SNOWFLAKE = "SNOWFLAKE"
     TABULAR = "TABULAR"
@@ -51,9 +52,7 @@ def run_sql_query(
 
 
 @bodo.jit(cache=True)
-def consume_query_result(
-    output, pq_out_filename, print_output
-):
+def consume_query_result(output, pq_out_filename, print_output):
     """Function to consume the query result.
     Args:
         pq_out_filename (str): When provided (i.e. not ''), the query output is written to this location as a parquet file.
@@ -159,7 +158,9 @@ def create_snowflake_catalog(catalog, args):
     # Schema can be None for backwards compatibility
     schema = args.schema if args.schema else catalog.get("schema")
 
-    iceberg_volume = args.iceberg_volume if args.iceberg_volume else catalog.get("icebergVolume")
+    iceberg_volume = (
+        args.iceberg_volume if args.iceberg_volume else catalog.get("icebergVolume")
+    )
 
     # Create connection params
     connection_params = {"role": catalog["role"]} if "role" in catalog else {}
@@ -188,37 +189,41 @@ def create_tabular_catalog(catalog, args):
         raise ValueError(
             "No warehouse specified in either the catalog data or through the arguments."
         )
-    
-    iceberg_rest_url = args.iceberg_rest_url if args.iceberg_rest_url else catalog.get("icebergRestUrl")
+
+    iceberg_rest_url = (
+        args.iceberg_rest_url
+        if args.iceberg_rest_url
+        else catalog.get("icebergRestUrl")
+    )
     if iceberg_rest_url is None:
         raise ValueError(
             "No icebergRestUrl specified in either the catalog data or through the arguments."
         )
 
-    client_id = catalog.get("clientId")
-    if client_id is None:
-        raise ValueError(
-            "No clientId specified in the catalog data."
-        )
-    
-    client_secret = catalog.get("clientSecret")
-    if client_secret is None:
-        raise ValueError(
-            "No clientSecret specified in the catalog data."
-        )
+    credential = catalog.get("credential")
+    if credential is None:
+        raise ValueError("No credential specified in the catalog data.")
+    assert (
+        ":" in credential
+    ), "Credential should be in the format 'client_id:client_secret'"
+    client_id, client_secret = credential.split(":")
 
     # Gets a user access token
     auth_url = iceberg_rest_url + AUTH_URL_SUFFIX
     oauth_response = requests.post(
         auth_url,
-        data={'client_id': client_id, 'client_secret': client_secret, 'grant_type': 'client_credentials'},
-        headers={'Content-Type': 'application/x-www-form-urlencoded'})
-    user_session_token = oauth_response.json()['access_token']
+        data={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "client_credentials",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    user_session_token = oauth_response.json()["access_token"]
 
     return bodosql.TabularCatalog(
         warehouse=warehouse,
-        iceberg_rest_url=iceberg_rest_url,
-        user_session_token=user_session_token,
+        token=user_session_token,
     )
 
 
@@ -236,7 +241,7 @@ def main(args):
     catalog = get_data(args.catalog)
     if catalog is None:
         raise ValueError("Catalog not found in the secret store.")
-    
+
     catalog_type_str = catalog.get("catalogType")
     if catalog_type_str is None:
         catalog_type = CatalogType.SNOWFLAKE
