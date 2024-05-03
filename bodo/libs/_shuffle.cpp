@@ -2758,7 +2758,9 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         std::shared_ptr<array_info> out_arr_item =
             gather_array(in_arr->child_arrays[0], all_gather, is_parallel,
                          mpi_root, n_pes, myrank);
-        return alloc_map(out_arr_item->length, out_arr_item);
+        if (all_gather || myrank == mpi_root) {
+            out_arr = alloc_map(out_arr_item->length, out_arr_item);
+        }
     } else {
         throw std::runtime_error("Unexpected array type in gather_array: " +
                                  GetArrType_as_string(arr_type));
