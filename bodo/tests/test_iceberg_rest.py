@@ -6,7 +6,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func, pytest_tabular
+from bodo.tests.utils import (
+    _get_dist_arg,
+    check_func,
+    pytest_tabular,
+    temp_env_override,
+)
 from bodo.utils.utils import run_rank0
 
 pytestmark = pytest_tabular
@@ -31,6 +36,42 @@ def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
         return checksum, len(df), list(df.columns)
 
     check_func(f, (), py_output=(35245, 265, ["location_id", "borough", "zone_name"]))
+
+
+def test_iceberg_tabular_read_credential_refresh(
+    tabular_connection, memory_leak_check, capfd
+):
+    """
+    Test reading an Iceberg table from a Tabular REST catalog. Sets credentials to be refreshed every request and confirms appropriate logs are present.
+    """
+    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    with temp_env_override(
+        {
+            "DEFAULT_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER_TIMEOUT": "0",
+            "DEBUG_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER": "1",
+        }
+    ):
+        try:
+
+            @bodo.jit
+            def f():
+                df = pd.read_sql_table(
+                    "nyc_taxi_locations",
+                    con=f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}",
+                    schema="examples",
+                )
+                return df
+
+            f()
+        except Exception:
+            out, err = capfd.readouterr()
+            with capfd.disabled():
+                print(f"STDOUT:\n{out}")
+                print(f"STDERR:\n{err}")
+            raise
+
+        out, err = capfd.readouterr()
+        assert "[DEBUG] Reloading AWS Credentials" in err
 
 
 @pytest.mark.parametrize(

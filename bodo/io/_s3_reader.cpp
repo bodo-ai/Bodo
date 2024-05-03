@@ -200,12 +200,18 @@ IcebergRestAwsCredentialsProvider::get_aws_credentials_from_rest_catalog(
 }
 Aws::Auth::AWSCredentials
 IcebergRestAwsCredentialsProvider::GetAWSCredentials() {
+    if (this->debug) {
+        std::cerr << "[DEBUG] Getting AWS Credentials" << std::endl;
+    }
     if (this->credentials.IsExpiredOrEmpty()) {
         this->Reload();
     }
     return this->credentials;
 }
 void IcebergRestAwsCredentialsProvider::Reload() {
+    if (this->debug) {
+        std::cerr << "[DEBUG] Reloading AWS Credentials" << std::endl;
+    }
     auto [prefix, warehouse_token] = this->get_warehouse_config();
     auto [access_key, secret_key, session_token] =
         this->get_aws_credentials_from_rest_catalog(prefix, warehouse_token);
@@ -215,6 +221,12 @@ void IcebergRestAwsCredentialsProvider::Reload() {
         access_key, secret_key, session_token,
         Aws::Utils::DateTime(std::chrono::system_clock::now() +
                              std::chrono::minutes(this->credential_timeout)));
+    if (this->debug) {
+        std::cerr << "[DEBUG] New AWS Credentials expire at"
+                  << this->credentials.GetExpiration().ToLocalTimeString(
+                         Aws::Utils::DateFormat::ISO_8601)
+                  << std::endl;
+    }
 }
 
 std::string IcebergRestAwsCredentialsProvider::getToken(
@@ -603,6 +615,24 @@ void destroy_iceberg_aws_credentials_provider_py_entry(void *provider) {
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
+}
+
+unsigned int get_default_credential_timeout() {
+    const char *default_credential_timeout_env_var =
+        std::getenv("DEFAULT_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER_TIMEOUT");
+    if (default_credential_timeout_env_var != nullptr) {
+        return std::stoi(default_credential_timeout_env_var);
+    }
+    return 15;
+}
+
+bool get_debug_credentials_provider() {
+    const char *debug_credential_provider_env_var =
+        std::getenv("DEBUG_ICEBERG_REST_AWS_CREDENTIALS_PROVIDER");
+    if (debug_credential_provider_env_var != nullptr) {
+        return std::strcmp(debug_credential_provider_env_var, "1") == 0;
+    }
+    return false;
 }
 
 void s3_open_file(const char *fname,

@@ -54,7 +54,6 @@ from bodo.utils.typing import (
     FileSchema,
     get_overload_const_str,
 )
-from bodo.utils.utils import AWSCredentials
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # the ratio of total_uncompressed_size of a Parquet string column vs number of values,
@@ -447,8 +446,6 @@ def getfs(
     protocol: str,
     storage_options: dict | None = None,
     parallel: bool = False,
-    aws_credentials: AWSCredentials | None = None,
-    region: str | None = None,
 ) -> PyFileSystem | pa.fs.FileSystem:
     """
     Get filesystem for the provided file path(s).
@@ -461,10 +458,6 @@ def getfs(
             at this time. Defaults to None.
         parallel (bool, optional): Whether this function is being called in parallel.
             Defaults to False.
-        aws_credentials (dict[str, str], optional): AWS credentials to use when
-            building the filesystem. Defaults to {}.
-        region (Optional[str], optional): Region to use when building the
-            filesystem. Defaults to None.
 
     Returns:
         Filesystem implementation. This is either a PyFileSystem wrapper over
@@ -486,9 +479,6 @@ def getfs(
             sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
         s3_fs = s3fs.S3FileSystem(
             **sopts,
-            key=aws_credentials.access_key if aws_credentials else None,
-            secret=aws_credentials.secret_key if aws_credentials else None,
-            token=aws_credentials.session_token if aws_credentials else None,
         )
         return PyFileSystem(FSSpecHandler(s3_fs))
     elif protocol == "s3":
@@ -497,16 +487,12 @@ def getfs(
                 fpath,
                 parallel=parallel,
                 storage_options=storage_options,
-                aws_credentials=aws_credentials,
-                region=region,
             )
             if not isinstance(fpath, list)
             else get_s3_fs_from_path(
                 fpath[0],
                 parallel=parallel,
                 storage_options=storage_options,
-                aws_credentials=aws_credentials,
-                region=region,
             )
         )
 
