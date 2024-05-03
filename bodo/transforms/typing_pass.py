@@ -61,6 +61,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     container_update_method_names,
     get_call_expr_arg,
+    get_const_arg,
     get_const_func_output_type,
     get_const_value_inner,
     replace_func,
@@ -4887,6 +4888,18 @@ class TypingTransforms:
                 self.needs_transform = True
                 return [assign]
 
+            allow_theta_sketch_val = get_const_arg(
+                "iceberg_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                self.func_ir,
+                self.arg_types,
+                7,
+                "allow_theta_sketches",
+                rhs.loc,
+                default=False,
+            )
+
             if input_table_type != output_type.input_table_type:
                 args = writer_init_def.args[:6]
                 new_type = bodo.io.stream_iceberg_write.IcebergWriterType(
@@ -4896,14 +4909,17 @@ class TypingTransforms:
                     "def impl(operator_id, conn, table_name, schema, col_names_meta, if_exists):\n"
                     "  return bodo.io.stream_iceberg_write.iceberg_writer_init(\n"
                     "    operator_id, conn, table_name, schema, col_names_meta, if_exists, \n"
-                    "    expected_state_type=_expected_state_type\n"
+                    "    expected_state_type=_expected_state_type,\n"
+                    "    allow_theta_sketches=_allow_theta_sketches\n"
                     "  )\n"
                 )
-
                 self._replace_state_definition(
                     func_text,
                     "impl",
-                    {"_expected_state_type": new_type},
+                    {
+                        "_expected_state_type": new_type,
+                        "_allow_theta_sketches": allow_theta_sketch_val,
+                    },
                     args,
                     write_state,
                     writer_init_def,

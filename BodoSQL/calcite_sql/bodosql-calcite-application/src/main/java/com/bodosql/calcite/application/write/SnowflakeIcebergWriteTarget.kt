@@ -4,7 +4,6 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Variable
 import com.google.common.collect.ImmutableList
-import java.util.UUID
 
 /**
  * A WriteTarget implementation for writing to a Snowflake
@@ -21,11 +20,12 @@ class SnowflakeIcebergWriteTarget(
     icebergPath: String,
     private val icebergVolume: String,
     private val snowflakeConnectionString: String,
+    uuid: String,
 ) : IcebergWriteTarget(
         tableName,
         // Note: Conceptually for Iceberg we add extra levels of indirection to ensure we don't conflict with
-        // the other files in the Iceberg volume.
-        ImmutableList.of("bodo_write_temp", schema[0], schema[1], tableName + "_" + UUID.randomUUID()),
+        // the other files in the Iceberg volume. This is hardcoded during codegen testing.
+        ImmutableList.of("bodo_write_temp", schema[0], schema[1], tableName + "_" + uuid),
         ifExistsBehavior,
         columnNamesGlobal,
         icebergPath,
@@ -50,4 +50,6 @@ class SnowflakeIcebergWriteTarget(
             )
         return Op.Stmt(expr)
     }
+
+    override fun allowsThetaSketches(): Boolean = false
 }
