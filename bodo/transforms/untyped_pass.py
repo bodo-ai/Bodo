@@ -8,7 +8,7 @@ import itertools
 import sys
 import types as pytypes
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numba
 import numpy as np
@@ -51,6 +51,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     fix_struct_return,
     get_call_expr_arg,
+    get_const_arg,
     get_const_value,
     get_const_value_inner,
     set_call_expr_arg,
@@ -70,14 +71,6 @@ from bodo.utils.utils import check_java_installation, is_assign, is_call, is_exp
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector import SnowflakeConnection
-
-
-# dummy sentinel singleton to designate constant value not found for variable
-class ConstNotFound:
-    pass
-
-
-CONST_NOT_FOUND = ConstNotFound()
 
 
 class UntypedPass:
@@ -903,16 +896,26 @@ class UntypedPass:
         )
         # the connection string has to be constant
         con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
-        index_col = self._get_const_arg(
-            "read_sql", rhs.args, kws, 2, "index_col", rhs.loc, default=-1
+        index_col = get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            2,
+            "index_col",
+            rhs.loc,
+            default=-1,
         )
         # If defined, perform batched reads on the table
         # Only supported for Snowflake tables
         # Note that we don't want to use Pandas chunksize, since it returns an iterator
-        chunksize: Optional[int] = self._get_const_arg(
+        chunksize: Optional[int] = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_chunksize",
             rhs.loc,
@@ -932,10 +935,12 @@ class UntypedPass:
         # to whatever columns bodo determines should be read in
         # with dictionary encoding. This is only supported when
         # reading from Snowflake.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_read_as_dict",
             rhs.loc,
@@ -943,39 +948,47 @@ class UntypedPass:
             default=None,
         )
         # TODO[BE-4362]: detect table input automatically
-        _bodo_is_table_input: bool = self._get_const_arg(
+        _bodo_is_table_input: bool = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_is_table_input",
             rhs.loc,
             default=False,
         )
         # Allow Unsafe Downcasting to Double when we dont support decimal computation
-        _bodo_downcast_decimal_to_double: bool = self._get_const_arg(
+        _bodo_downcast_decimal_to_double: bool = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_downcast_decimal_to_double",
             rhs.loc,
             default=False,
         )
-        _bodo_read_as_table: bool = self._get_const_arg(
+        _bodo_read_as_table: bool = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_read_as_table",
             rhs.loc,
             default=False,
         )
 
-        _bodo_orig_table_name_const: Optional[str] = self._get_const_arg(
+        _bodo_orig_table_name_const: Optional[str] = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_orig_table_name",
             rhs.loc,
@@ -983,10 +996,12 @@ class UntypedPass:
             use_default=True,
         )
 
-        _bodo_orig_table_indices_const: Optional[Tuple[int]] = self._get_const_arg(
+        _bodo_orig_table_indices_const: Optional[Tuple[int]] = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_orig_table_indices",
             rhs.loc,
@@ -996,10 +1011,12 @@ class UntypedPass:
 
         # Operator ID assigned by the planner for query profile purposes.
         # Only applicable in the streaming case.
-        _bodo_sql_op_id_const: int = self._get_const_arg(
+        _bodo_sql_op_id_const: int = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_sql_op_id",
             rhs.loc,
@@ -1191,37 +1208,60 @@ class UntypedPass:
         # convert_float=True, mangle_dupe_cols=True,
         kws = dict(rhs.kws)
         fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
-        sheet_name = self._get_const_arg(
+        sheet_name = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             1,
             "sheet_name",
             rhs.loc,
             default=0,
             typ="str or int",
         )
-        header = self._get_const_arg(
+        header = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             2,
             "header",
             rhs.loc,
             default=0,
             typ="int",
         )
-        col_names = self._get_const_arg(
-            "read_excel", rhs.args, kws, 3, "names", rhs.loc, default=0
+        col_names = get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            3,
+            "names",
+            rhs.loc,
+            default=0,
         )
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
-        comment = self._get_const_arg(
-            "read_excel", rhs.args, kws, 20, "comment", rhs.loc, default=""
+        comment = get_const_arg(
+            "read_excel",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            20,
+            "comment",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
-        date_cols = self._get_const_arg(
+        date_cols = get_const_arg(
             "pd.read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             17,
             "parse_dates",
             rhs.loc,
@@ -1229,20 +1269,18 @@ class UntypedPass:
             typ="int or str",
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
-        skiprows = self._get_const_arg(
+        skiprows = get_const_arg(
             "read_excel",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             12,
             "skiprows",
             rhs.loc,
             default=0,
             typ="int",
         )
-
-        # replace "" placeholder with default None (can't use None in _get_const_arg)
-        if comment == "":
-            comment = None
 
         # TODO: support index_col
         # if index_col == -1:
@@ -1348,20 +1386,24 @@ class UntypedPass:
 
         # Users can only provide either sep or delim. Use a dummy default value to track
         # this behavior.
-        sep_val = self._get_const_arg(
+        sep_val = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             1,
             "sep",
             rhs.loc,
             default=None,
             use_default=True,
         )
-        delim_val = self._get_const_arg(
+        delim_val = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             2,
             "delimiter",
             rhs.loc,
@@ -1398,8 +1440,16 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        header = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 3, "header", rhs.loc, default="infer"
+        header = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            3,
+            "header",
+            rhs.loc,
+            default="infer",
         )
         # Per Pandas documentation (header: int, list of int, default ‘infer’)
         if header not in ("infer", 0, None):
@@ -1408,8 +1458,16 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        col_names = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 4, "names", rhs.loc, default=0
+        col_names = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            4,
+            "names",
+            rhs.loc,
+            default=0,
         )
         # Per Pandas documentation (names: array-like). Since columns don't need string types,
         # we only check that this is a list or tuple (since constant arrays aren't supported).
@@ -1419,10 +1477,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        index_col = self._get_const_arg(
+        index_col = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             5,
             "index_col",
             rhs.loc,
@@ -1442,10 +1502,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        usecols = self._get_const_arg(
+        usecols = get_const_arg(
             "pd.read_csv()",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             6,
             "usecols",
             rhs.loc,
@@ -1526,10 +1588,12 @@ class UntypedPass:
             "pd.read_csv", rhs.args, kws, 18, "nrows", default=ir.Const(-1, rhs.loc)
         )
 
-        date_cols = self._get_const_arg(
+        date_cols = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             24,
             "parse_dates",
             rhs.loc,
@@ -1546,10 +1610,12 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        chunksize = self._get_const_arg(
+        chunksize = get_const_arg(
             "pandas.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             31,
             "chunksize",
             rhs.loc,
@@ -1562,8 +1628,16 @@ class UntypedPass:
                 "pd.read_csv() 'chunksize' must be a constant integer >= 1 if provided."
             )
 
-        compression = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 32, "compression", rhs.loc, default="infer"
+        compression = get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            32,
+            "compression",
+            rhs.loc,
+            default="infer",
         )
         # Per Pandas documentation (compression: {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default ‘infer’)
         supported_compression_options = ["infer", "gzip", "bz2", "zip", "xz", None]
@@ -1574,10 +1648,12 @@ class UntypedPass:
             )
 
         # TODO: [BE-2146] support passing as a variable.
-        escapechar = self._get_const_arg(
+        escapechar = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             39,
             "escapechar",
             rhs.loc,
@@ -1603,10 +1679,12 @@ class UntypedPass:
             )
 
         # Pandas default is True but Bodo is False
-        pd_low_memory = self._get_const_arg(
+        pd_low_memory = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             48,
             "low_memory",
             rhs.loc,
@@ -1614,10 +1692,12 @@ class UntypedPass:
             use_default=True,
         )
         # storage_options
-        csv_storage_options = self._get_const_arg(
+        csv_storage_options = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             51,
             "storage_options",
             rhs.loc,
@@ -1625,10 +1705,12 @@ class UntypedPass:
             use_default=True,
         )
         # sample_nrows
-        csv_sample_nrows = self._get_const_arg(
+        csv_sample_nrows = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             52,
             "sample_nrows",
             rhs.loc,
@@ -1648,10 +1730,12 @@ class UntypedPass:
         # _bodo_upcast_to_float64 updates types if inference may not be fully accurate.
         # This upcasts all integer/float values to float64. This runs before
         # dtype dictionary and won't impact those columns.
-        _bodo_upcast_to_float64 = self._get_const_arg(
+        _bodo_upcast_to_float64 = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             -1,
             "_bodo_upcast_to_float64",
             rhs.loc,
@@ -1660,10 +1744,12 @@ class UntypedPass:
         )
         # Allows users specify what columns should be read in as dictionary-encoded
         # string arrays manually.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "pd.read_csv",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             -1,
             "_bodo_read_as_dict",
             rhs.loc,
@@ -1770,10 +1856,12 @@ class UntypedPass:
                 try:
                     # Catch the exceptions because don't want the constant value exception
                     # Instead we want to indicate the argument isn't supported.
-                    provided_val = self._get_const_arg(
+                    provided_val = get_const_arg(
                         "pd.read_csv",
                         rhs.args,
                         kws,
+                        self.func_ir,
+                        self.args,
                         i,
                         name,
                         rhs.loc,
@@ -2112,18 +2200,28 @@ class UntypedPass:
         # convert_dates required for date cols
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_json", rhs.args, kws, 0, "path_or_buf")
-        orient = self._get_const_arg(
-            "read_json", rhs.args, kws, 1, "orient", rhs.loc, default="records"
+        orient = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            1,
+            "orient",
+            rhs.loc,
+            default="records",
         )
         frame_or_series = get_call_expr_arg(
             "read_json", rhs.args, kws, 2, "typ", "frame"
         )
         dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 3, "dtype", "")
         # default value is True
-        convert_dates = self._get_const_arg(
+        convert_dates = get_const_arg(
             "read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             5,
             "convert_dates",
             rhs.loc,
@@ -2132,20 +2230,46 @@ class UntypedPass:
         )
         # Q: Why set date_cols = False not empty list as well?
         date_cols = [] if convert_dates is True else convert_dates
-        precise_float = self._get_const_arg(
-            "read_json", rhs.args, kws, 8, "precise_float", rhs.loc, default=False
+        precise_float = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            8,
+            "precise_float",
+            rhs.loc,
+            default=False,
         )
-        lines = self._get_const_arg(
-            "read_json", rhs.args, kws, 12, "lines", rhs.loc, default=True
+        lines = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            12,
+            "lines",
+            rhs.loc,
+            default=True,
         )
-        compression = self._get_const_arg(
-            "read_json", rhs.args, kws, 14, "compression", rhs.loc, default="infer"
+        compression = get_const_arg(
+            "read_json",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            14,
+            "compression",
+            rhs.loc,
+            default="infer",
         )
         # storage_options
-        json_storage_options = self._get_const_arg(
+        json_storage_options = get_const_arg(
             "pd.read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             16,
             "storage_options",
             rhs.loc,
@@ -2155,10 +2279,12 @@ class UntypedPass:
         _check_storage_options(json_storage_options, "read_json", rhs)
 
         # sample_nrows
-        json_sample_nrows = self._get_const_arg(
+        json_sample_nrows = get_const_arg(
             "pd.read_json",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             17,
             "sample_nrows",
             rhs.loc,
@@ -2531,11 +2657,27 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
         engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
-        columns = self._get_const_arg(
-            "read_parquet", rhs.args, kws, 2, "columns", rhs.loc, default=-1
+        columns = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            2,
+            "columns",
+            rhs.loc,
+            default=-1,
         )
-        storage_options = self._get_const_arg(
-            "read_parquet", rhs.args, kws, 10e4, "storage_options", rhs.loc, default={}
+        storage_options = get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            self.func_ir,
+            self.args,
+            10e4,
+            "storage_options",
+            rhs.loc,
+            default={},
         )
 
         # Bodo specific arguments. To avoid constantly needing to update Pandas we
@@ -2545,10 +2687,12 @@ class UntypedPass:
         # https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.functions.input_file_name.html
         # When specified, create a column in the resulting dataframe with this name
         # that contains the name of the file the row comes from
-        _bodo_input_file_name_col = self._get_const_arg(
+        _bodo_input_file_name_col = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_input_file_name_col",
             rhs.loc,
@@ -2560,10 +2704,12 @@ class UntypedPass:
         # dictionary-encoded string arrays. This is in addition
         # to whatever columns bodo determines should be read in
         # with dictionary encoding.
-        _bodo_read_as_dict = self._get_const_arg(
+        _bodo_read_as_dict = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_read_as_dict",
             rhs.loc,
@@ -2571,10 +2717,12 @@ class UntypedPass:
             default=None,
         )
 
-        _bodo_use_hive = self._get_const_arg(
+        _bodo_use_hive = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_use_hive",
             rhs.loc,
@@ -2582,10 +2730,12 @@ class UntypedPass:
             default=True,
         )
 
-        _bodo_read_as_table: bool = self._get_const_arg(
+        _bodo_read_as_table: bool = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e5,
             "_bodo_read_as_table",
             rhs.loc,
@@ -2593,10 +2743,12 @@ class UntypedPass:
         )
 
         # Mimicing the use_index arg from read_csv
-        use_index = self._get_const_arg(
+        use_index = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_use_index",
             rhs.loc,
@@ -2606,10 +2758,12 @@ class UntypedPass:
 
         # If defined, perform batched reads on the dataset
         # Note that we don't want to use Pandas chunksize, since it returns an iterator
-        chunksize: Optional[int] = self._get_const_arg(
+        chunksize: Optional[int] = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_chunksize",
             rhs.loc,
@@ -2626,10 +2780,12 @@ class UntypedPass:
 
         # Operator ID assigned by the planner for query profile purposes.
         # Only applicable in the streaming case.
-        _bodo_sql_op_id_const: int = self._get_const_arg(
+        _bodo_sql_op_id_const: int = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             10e4,
             "_bodo_sql_op_id",
             rhs.loc,
@@ -2701,11 +2857,13 @@ class UntypedPass:
         _count = get_call_expr_arg(
             np_fromfile, rhs.args, kws, 2, "count", default=ir.Const(-1, lhs.loc)
         )
-        sep_err_msg = err_msg = f"{np_fromfile}(): sep argument is not supported"
-        _sep = self._get_const_arg(
+        sep_err_msg = f"{np_fromfile}(): sep argument is not supported"
+        _sep = get_const_arg(
             np_fromfile,
             rhs.args,
             kws,
+            self.func_ir,
+            self.args,
             3,
             "sep",
             rhs.loc,
@@ -2751,46 +2909,6 @@ class UntypedPass:
         nodes = f_block.body[:-3]  # remove none return
         nodes[-1].target = lhs
         return nodes
-
-    def _get_const_arg(
-        self,
-        f_name,
-        args,
-        kws,
-        arg_no,
-        arg_name,
-        loc,
-        *,
-        default=None,
-        err_msg: Optional[str] = None,
-        typ: Optional[str] = None,
-        use_default: bool = False,
-    ) -> Any:
-        """Get constant value for a function call argument. Raise error if the value is
-        not constant.
-        """
-        typ = "str" if typ is None else typ
-        arg = CONST_NOT_FOUND
-        if err_msg is None:
-            err_msg = ("{} requires '{}' argument as a constant {}").format(
-                f_name, arg_name, typ
-            )
-
-        arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
-
-        try:
-            arg = get_const_value_inner(self.func_ir, arg_var, arg_types=self.args)
-        except GuardException:
-            # raise error if argument specified but not constant
-            if arg_var != "":
-                raise BodoError(err_msg, loc=loc)
-
-        if arg is CONST_NOT_FOUND:
-            # Provide use_default to allow letting None be the default value
-            if use_default or default is not None:
-                return default
-            raise BodoError(err_msg, loc=loc)
-        return arg
 
     def _handle_metadata(self):
         """remove distributed input annotation from locals and add to metadata"""

@@ -1575,6 +1575,55 @@ def _get_original_nested_tups(vals):
     return tuple(vals)
 
 
+# dummy sentinel singleton to designate constant value not found for variable
+class ConstNotFound:
+    pass
+
+
+CONST_NOT_FOUND = ConstNotFound()
+
+
+def get_const_arg(
+    f_name,
+    args,
+    kws,
+    func_ir,
+    func_arg_types,
+    arg_no,
+    arg_name,
+    loc,
+    default=None,
+    err_msg: Optional[str] = None,
+    typ: Optional[str] = None,
+    use_default: bool = False,
+):
+    """Get constant value for a function call argument. Raise error if the value is
+    not constant.
+    """
+    typ = "str" if typ is None else typ
+    arg = CONST_NOT_FOUND
+    if err_msg is None:
+        err_msg = ("{} requires '{}' argument as a constant {}").format(
+            f_name, arg_name, typ
+        )
+
+    arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
+
+    try:
+        arg = get_const_value_inner(func_ir, arg_var, arg_types=func_arg_types)
+    except GuardException:
+        # raise error if argument specified but not constant
+        if arg_var != "":
+            raise BodoError(err_msg, loc=loc)
+
+    if arg is CONST_NOT_FOUND:
+        # Provide use_default to allow letting None be the default value
+        if use_default or default is not None:
+            return default
+        raise BodoError(err_msg, loc=loc)
+    return arg
+
+
 def get_call_expr_arg(
     f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, use_default=False
 ):

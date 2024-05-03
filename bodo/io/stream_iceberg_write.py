@@ -110,6 +110,24 @@ def overload_get_env_value(env_var):
     return impl
 
 
+def get_enable_theta():  # pragma: no cover
+    pass
+
+
+@overload(get_enable_theta)
+def overload_get_enable_theta():
+    """
+    Returns whether theta sketches are currently enabled.
+    """
+
+    def impl():  # pragma: no cover
+        with bodo.no_warning_objmode(ret_var="bool_"):
+            ret_var = bodo.enable_theta_sketches
+        return ret_var
+
+    return impl
+
+
 @intrinsic
 def _init_theta_sketches(
     typingctx,
@@ -803,6 +821,7 @@ def iceberg_writer_init(
     col_names_meta,
     if_exists,
     expected_state_type=None,
+    allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
@@ -817,6 +836,7 @@ def gen_iceberg_writer_init_impl(
     col_names_meta,
     if_exists,
     expected_state_type=None,
+    allow_theta_sketches=False,
     input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
@@ -852,6 +872,7 @@ def gen_iceberg_writer_init_impl(
         col_names_meta,
         if_exists,
         expected_state_type=None,
+        allow_theta_sketches=False,
         input_dicts_unified=False,
         _is_parallel=False,
     ):
@@ -914,10 +935,8 @@ def gen_iceberg_writer_init_impl(
             table_builder_state_type,
             input_dicts_unified=input_dicts_unified,
         )
-        # TODO: Also add a parameter to disable theta sketches. This is needed for
-        # when we do Snowflake writes, where we don't want to write theta sketches.
-        theta_sketches_possible = get_env_value("BODO_ENABLE_THETA_SKETCHES") != "0"
-        if theta_sketches_possible:
+        allow_theta = allow_theta_sketches and get_enable_theta()
+        if allow_theta:
             if mode == "append":
                 # For insert into the columns are a union of the existing sketches
                 # and the types we can support.
@@ -934,7 +953,8 @@ def gen_iceberg_writer_init_impl(
                 )
         else:
             theta_columns = alloc_false_bool_array(_n_cols)
-        writer["use_theta_sketches"] = theta_sketches_possible and theta_columns.any()
+        use_theta_sketches = allow_theta and theta_columns.any()
+        writer["use_theta_sketches"] = use_theta_sketches
         writer["theta_sketches"] = init_theta_sketches_wrapper(theta_columns)
         writer["txn_id"] = txn_id
         writer["arrow_fs"] = create_iceberg_rest_s3_fs(
