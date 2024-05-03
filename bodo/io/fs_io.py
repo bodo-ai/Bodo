@@ -19,6 +19,7 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
+    box,
     intrinsic,
     models,
     overload,
@@ -29,6 +30,7 @@ from numba.extending import (
 import bodo
 from bodo.ext import arrow_cpp
 from bodo.io import csv_cpp
+from bodo.io.pyfs import get_pyarrow_fs_from_ptr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
@@ -192,8 +194,6 @@ def get_s3_fs_from_path(
     path,
     parallel=False,
     storage_options=None,
-    aws_credentials: AWSCredentials | None = None,
-    region=None,
 ):
     """
     Get a pyarrow.fs.S3FileSystem object from an S3
@@ -203,11 +203,10 @@ def get_s3_fs_from_path(
     This function is usually called on just rank 0 during compilation,
     hence parallel=False by default.
     """
-    if region is None:
-        region = get_s3_bucket_region_njit(path, parallel=parallel)
-        if region == "":
-            region = None
-    return get_s3_fs(region, storage_options, aws_credentials)
+    region = get_s3_bucket_region_njit(path, parallel=parallel)
+    if region == "":
+        region = None
+    return get_s3_fs(region, storage_options)
 
 
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
@@ -717,6 +716,17 @@ class ArrowFs(types.Type):
 
 
 register_model(ArrowFs)(models.OpaqueModel)
+
+
+@box(ArrowFs)
+def box_ArrowFs(typ, val, c):
+    fs_ptr_obj = c.pyapi.from_native_value(types.RawPointer("fs_ptr"), val)
+    get_fs_obj = c.pyapi.unserialize(c.pyapi.serialize_object(get_pyarrow_fs_from_ptr))
+    fs_obj = c.pyapi.call_function_objargs(get_fs_obj, [fs_ptr_obj])
+    c.pyapi.decref(fs_ptr_obj)
+    c.pyapi.decref(get_fs_obj)
+    return fs_obj
+
 
 ll.add_symbol("arrow_filesystem_del_py_entry", arrow_cpp.arrow_filesystem_del_py_entry)
 
