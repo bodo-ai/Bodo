@@ -2070,6 +2070,12 @@ class DistributedPass:
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
+        if fdef == ("str_arr_min_max", "bodo.libs.str_arr_ext") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
         if fdef == ("array_op_describe", "bodo.libs.array_ops") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):

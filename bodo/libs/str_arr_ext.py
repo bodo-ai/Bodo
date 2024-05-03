@@ -8,6 +8,7 @@ offsets:           [0, 1, 3, 3, 6, 6, 8]
 """
 import glob
 import operator
+from enum import Enum
 
 import llvmlite.binding as ll
 import numba
@@ -55,6 +56,7 @@ from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoArrayIterator,
     BodoError,
+    get_overload_const_int,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_none,
@@ -2580,6 +2582,71 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
         return builder.call(fn_to_numeric, [out_ptr, offsets, data, ind])
 
     return types.int32(out_ptr_t, string_array_type, types.int64, out_dtype_t), codegen
+
+
+class MinOrMax(Enum):
+    Min = 1
+    Max = 2
+
+
+def str_arr_min_max_seq(arr, min_or_max):  # pragma: no cover
+    pass
+
+
+# NOTE: no_unliteral=True is necessary for min_or_max argument to be constant
+@overload(str_arr_min_max_seq, no_unliteral=True)
+def overload_str_arr_min_max_seq(arr, min_or_max):
+    """String array min/max sequential implementation"""
+    # TODO: optimize for dictionary-encoded case
+    assert is_str_arr_type(arr), "str_arr_min_max: string array expected"
+    assert is_overload_constant_int(
+        min_or_max
+    ), "str_arr_min_max: min_or_max should be constant int"
+
+    min_or_max = get_overload_const_int(min_or_max)
+    min_max_func = max if min_or_max == MinOrMax.Max.value else min
+
+    def impl_str_arr_min_max(arr, min_or_max):  # pragma: no cover
+        s = None
+        for i in range(len(arr)):
+            if not bodo.libs.array_kernels.isna(arr, i):
+                v = arr[i]
+                if s is None:
+                    s = v
+                else:
+                    s = min_max_func(s, v)
+        return s
+
+    return impl_str_arr_min_max
+
+
+def str_arr_min_max(arr, min_or_max, parallel=False):  # pragma: no cover
+    pass
+
+
+# NOTE: no_unliteral=True is necessary for min_or_max argument to be constant
+@overload(str_arr_min_max, no_unliteral=True)
+def overload_str_arr_min_max(arr, min_or_max, parallel=False):
+    """String array min/max implementation"""
+    # TODO: optimize for dictionary-encoded case
+    assert is_str_arr_type(arr), "str_arr_min_max: string array expected"
+    assert is_overload_constant_int(
+        min_or_max
+    ), "str_arr_min_max: min_or_max should be constant int"
+
+    def impl_str_arr_min_max(arr, min_or_max, parallel=False):  # pragma: no cover
+        s = str_arr_min_max_seq(arr, min_or_max)
+
+        if parallel:
+            nchars = 0 if s is None else len(bodo.utils.indexing.unoptional(s))
+            loc_val_arr = pre_alloc_string_array(1, nchars)
+            loc_val_arr[0] = s
+            vals_arr = bodo.allgatherv(loc_val_arr)
+            return str_arr_min_max_seq(vals_arr, min_or_max)
+
+        return s
+
+    return impl_str_arr_min_max
 
 
 @unbox(BinaryArrayType)

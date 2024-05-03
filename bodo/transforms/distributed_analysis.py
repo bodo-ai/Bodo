@@ -2631,6 +2631,9 @@ class DistributedAnalysis:
         if fdef == ("array_op_median", "bodo.libs.array_ops"):
             return
 
+        if fdef == ("str_arr_min_max", "bodo.libs.str_arr_ext"):
+            return
+
         if fdef in (
             ("concat", "bodo.libs.array_kernels"),
             ("concat_tables", "bodo.utils.table_utils"),

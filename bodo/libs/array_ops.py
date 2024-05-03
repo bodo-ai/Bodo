@@ -343,6 +343,14 @@ def overload_array_op_min(arr):
 
         return impl_time
 
+    if is_str_arr_type(arr):
+        min_or_max = bodo.libs.str_arr_ext.MinOrMax.Min.value
+
+        def impl_str_arr_min(arr):  # pragma: no cover
+            return bodo.libs.str_arr_ext.str_arr_min_max(arr, min_or_max)
+
+        return impl_str_arr_min
+
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
         s = bodo.hiframes.series_kernels._get_type_max_value(arr)
@@ -459,6 +467,14 @@ def overload_array_op_max(arr):
             return res
 
         return impl_time
+
+    if is_str_arr_type(arr):
+        min_or_max = bodo.libs.str_arr_ext.MinOrMax.Max.value
+
+        def impl_str_arr_max(arr):  # pragma: no cover
+            return bodo.libs.str_arr_ext.str_arr_min_max(arr, min_or_max)
+
+        return impl_str_arr_max
 
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
