@@ -56,6 +56,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1261,7 +1262,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   private boolean useIcebergWrite(
       IfExistsBehavior ifExists, SqlCreateTable.CreateTableType createTableType) {
-    if (icebergVolume == null) {
+    if (icebergVolume == null || !RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
       return false;
     }
     if ((ifExists == IfExistsBehavior.APPEND)
@@ -1969,6 +1970,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
   }
 
+  public String genIcebergTableUUID() {
+    return UUID.randomUUID().toString();
+  }
+
   /**
    * Return the desired WriteTarget for a create table operation. We prioritize Iceberg writes if
    * Iceberg is enabled and, we have sufficient feature support.
@@ -1995,7 +2000,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnNamesGlobal,
           getIcebergBaseURL(icebergVolume),
           icebergVolume,
-          snowflakeConnectionString);
+          snowflakeConnectionString,
+          genIcebergTableUUID());
     } else {
       return new SnowflakeNativeWriteTarget(
           tableName, schema, ifExistsBehavior, columnNamesGlobal, generatePythonConnStr(schema));

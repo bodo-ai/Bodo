@@ -23,6 +23,8 @@ open class IcebergWriteTarget(
         return "iceberg+$path"
     }
 
+    open fun allowsThetaSketches(): Boolean = true
+
     /**
      * Initialize the streaming create table state information for an Iceberg Table.
      * @param operatorID The operatorID used for tracking memory allocation.
@@ -33,14 +35,23 @@ open class IcebergWriteTarget(
         operatorID: Expr.IntegerLiteral,
         createTableType: CreateTableType,
     ): Expr {
+        var args =
+            listOf(
+                operatorID,
+                Expr.StringLiteral(icebergConnectionString),
+                Expr.StringLiteral(tableName),
+                Expr.StringLiteral(schema.joinToString(separator = "/")),
+                columnNamesGlobal,
+                Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
+            )
+        var kwargs =
+            listOf(
+                "allow_theta_sketches" to Expr.BooleanLiteral(allowsThetaSketches()),
+            )
         return Expr.Call(
             "bodo.io.stream_iceberg_write.iceberg_writer_init",
-            operatorID,
-            Expr.StringLiteral(icebergConnectionString),
-            Expr.StringLiteral(tableName),
-            Expr.StringLiteral(schema.joinToString(separator = "/")),
-            columnNamesGlobal,
-            Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
+            args,
+            kwargs,
         )
     }
 

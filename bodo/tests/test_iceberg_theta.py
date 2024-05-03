@@ -17,7 +17,7 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
     get_metadata_path,
 )
-from bodo.tests.utils import _get_dist_arg, temp_env_override
+from bodo.tests.utils import _get_dist_arg
 from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
@@ -31,7 +31,13 @@ def write_iceberg_table_with_puffin_files(df, table_name, conn, db_schema, write
     def impl(df, table_name, conn, db_schema, write_type):
         # Create the writer, including the theta sketch
         writer = iceberg_writer_init(
-            -1, conn, table_name, db_schema, col_meta, write_type
+            -1,
+            conn,
+            table_name,
+            db_schema,
+            col_meta,
+            write_type,
+            allow_theta_sketches=True,
         )
         # Write the values from the df using the writer in batches
         all_is_last = False
@@ -89,24 +95,26 @@ def test_iceberg_write_theta_estimates(
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     orig_chunk_size = bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
     bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.enable_theta_sketches = True
     try:
-        with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
-            f = write_iceberg_table_with_puffin_files(
-                df, table_name, conn, db_schema, "replace"
-            )
-            df = _get_dist_arg(df, var_length=True)
-            bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
-            puffin_file_name = check_ndv_metadata(
-                warehouse_loc, db_schema, table_name, ndvs
-            )
-            pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
-            ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
-            pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
+        df = _get_dist_arg(df, var_length=True)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+        puffin_file_name = check_ndv_metadata(
+            warehouse_loc, db_schema, table_name, ndvs
+        )
+        pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
+        ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
+        pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
+        bodo.enable_theta_sketches = orig_enable_theta
 
 
 def test_iceberg_write_disabled_theta(
@@ -133,24 +141,24 @@ def test_iceberg_write_disabled_theta(
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     orig_chunk_size = bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+    orig_enable_theta = bodo.enable_theta_sketches
     bodo.hiframes.boxing._use_dict_str_type = True
     bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+    bodo.enable_theta_sketches = False
     try:
-        with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "0"}):
-            f = write_iceberg_table_with_puffin_files(
-                df, table_name, conn, db_schema, "replace"
-            )
-            df = _get_dist_arg(df, var_length=True)
-            bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
-            puffin_file_name = check_ndv_metadata(
-                warehouse_loc, db_schema, table_name, ndvs, num_statistics=0
-            )
-            assert (
-                puffin_file_name is None
-            ), "Found a puffin file when none should exist"
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
+        df = _get_dist_arg(df, var_length=True)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+        puffin_file_name = check_ndv_metadata(
+            warehouse_loc, db_schema, table_name, ndvs, num_statistics=0
+        )
+        assert puffin_file_name is None, "Found a puffin file when none should exist"
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
+        bodo.enable_theta_sketches = orig_enable_theta
 
 
 @run_rank0
@@ -265,7 +273,9 @@ def test_full_iceberg_theta_write(
     table_name = "basic_puffin_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
         f = write_iceberg_table_with_puffin_files(
             df, table_name, conn, db_schema, "replace"
         )
@@ -277,6 +287,8 @@ def test_full_iceberg_theta_write(
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
 
 
 def test_theta_sketch_detection(
@@ -304,7 +316,9 @@ def test_theta_sketch_detection(
     table_name = "sketch_detection_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
         f = write_iceberg_table_with_puffin_files(
             df, table_name, conn, db_schema, "replace"
         )
@@ -321,6 +335,8 @@ def test_theta_sketch_detection(
         pd.testing.assert_extension_array_equal(
             theta_sketch_columns, expected_theta_sketch_columns
         )
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
 
 
 def test_no_theta_enabled_columns(
@@ -339,13 +355,17 @@ def test_no_theta_enabled_columns(
     table_name = "no_sketch_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
         f = write_iceberg_table_with_puffin_files(
             df, table_name, conn, db_schema, "replace"
         )
         df = _get_dist_arg(df, var_length=True)
         bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
         check_no_statistics_file(warehouse_loc, db_schema, table_name)
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
 
 
 def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_check):
@@ -394,7 +414,9 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
     table_name = "insert_into_puffin_table"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
-    with temp_env_override({"BODO_ENABLE_THETA_SKETCHES": "1"}):
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
         f1 = write_iceberg_table_with_puffin_files(
             df1, table_name, conn, db_schema, "replace"
         )
@@ -411,3 +433,5 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
