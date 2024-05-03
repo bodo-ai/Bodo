@@ -602,8 +602,8 @@ def test_series_min(series_val, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    # skip strings, TODO: handle strings
-    if isinstance(series_val.values[0], str):
+    # TODO: support categorical
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     # skip binary, TODO: handle binary min BE-1253
@@ -634,8 +634,8 @@ def test_series_max(series_val, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    # skip strings, TODO: handle strings
-    if isinstance(series_val.values[0], str):
+    # TODO: support categorical
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     # skip binary, TODO: handle binary max BE-1253
