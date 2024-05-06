@@ -26,39 +26,60 @@ void QueryProfileCollector::Init() {
     auto operator_comptroller = OperatorComptroller::Default();
     initial_operator_budget = operator_comptroller->GetOperatorBudgets();
 
-    // End of initialization when tracing is disabled
-    if (tracing_level == 0) {
+    char* env_dir = std::getenv("BODO_TRACING_OUTPUT_DIR");
+    // End of initialization when tracing is disabled or if there's no output
+    // directory set
+    if (tracing_level == 0 || env_dir == nullptr) {
         return;
     }
+    std::string parent_dir = env_dir;
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // Set the output directory - this must be synchronized across all ranks
+    // We create the output directory only on rank 0 and assume the filesystem
+    // is shared across all ranks.
     if (rank == 0) {
-        // Create the output directory only on rank 0
-        char* template_ = std::getenv("BODO_TRACING_OUTPUT_DIR");
-        // X will be replaced by mkdtemp
-        output_dir = template_ ? template_ : "query_profile.XXXXXX";
         // Check if the directory already exists
         struct stat info;
         bool exists = false;
-        if (stat(output_dir.c_str(), &info) == 0) {
+        if (stat(parent_dir.c_str(), &info) == 0) {
             exists = true;
-            // Raise a warning if the directory already exists
-            std::cerr << "Warning: Output directory already exists, "
-                         "overwriting profiles\n";
         }
         if (!exists) {
-            // Create the output directory using mkdtemp
-            char* res = mkdtemp(output_dir.data());
-            if (res == nullptr) {
+            int res = mkdir(parent_dir.data(), 0700);
+            if (res != 0) {
                 // TODO XXX Needs error synchronization!
                 throw std::runtime_error(
                     fmt::format("Failed to create output directory {}: {}",
                                 output_dir, strerror(errno)));
             }
-            output_dir = res;
+        }
+
+        // create a subdirectory for the current run with the filename:
+        // <parent_dir>/run_YYYYMMDD_HHMMSS
+        auto timestamp = std::chrono::system_clock::now();
+        auto tt = std::chrono::system_clock::to_time_t(timestamp);
+        auto tm = *gmtime(&tt);
+        auto year = tm.tm_year + 1900;
+        auto month = tm.tm_mon + 1;
+        auto day = tm.tm_mday;
+
+        auto seconds = timestamp.time_since_epoch();
+        auto hour = std::chrono::duration_cast<std::chrono::hours>(seconds);
+        auto minute =
+            std::chrono::duration_cast<std::chrono::minutes>(seconds - hour);
+        auto second = std::chrono::duration_cast<std::chrono::seconds>(
+            seconds - hour - minute);
+        output_dir = fmt::format("{}/run_{}{:02}{:02}_{:02}{:02}{:02}",
+                                 parent_dir, year, month, day, hour.count(),
+                                 minute.count(), second.count());
+        int res = mkdir(output_dir.data(), 0700);
+        if (res != 0) {
+            // TODO XXX Needs error synchronization!
+            throw std::runtime_error(
+                fmt::format("Failed to create output directory {}: {}",
+                            output_dir, strerror(errno)));
         }
     }
     // Broadcast the output_dir length to all ranks
