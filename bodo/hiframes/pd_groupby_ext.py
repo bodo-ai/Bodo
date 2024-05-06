@@ -379,6 +379,19 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         out_dtype = Decimal128Type(DECIMAL128_MAX_PRECISION, in_dtype.scale)
         return dtype_to_array_type(out_dtype), "ok"
     elif (
+        (func_name == "sum")
+        and isinstance(in_dtype, types.Integer)
+        and (in_dtype.bitwidth <= 64)
+    ):
+        # Upcast output integer to the 64-bit variant to prevent overflow.
+        out_dtype = types.int64 if in_dtype.signed else types.uint64
+        if isinstance(arr_type, types.Array):
+            # If regular numpy (i.e. non-nullable)
+            return dtype_to_array_type(out_dtype), "ok"
+        else:
+            # Nullable:
+            return dtype_to_array_type(out_dtype, convert_nullable=True), "ok"
+    elif (
         func_name
         in {
             "median",
@@ -2468,9 +2481,11 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "delete_table": delete_table,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
-        "ind_arr_typ": types.Array(types.int64, 1, "C")
-        if isinstance(df.index, RangeIndexType)
-        else df.index.data,
+        "ind_arr_typ": (
+            types.Array(types.int64, 1, "C")
+            if isinstance(df.index, RangeIndexType)
+            else df.index.data
+        ),
     }
     glbls.update({f"keys{i}_typ": keys.types[i] for i in range(n_keys)})
     glbls.update({f"in_arr{i}_typ": df.data[i] for i in range(n_cols)})
