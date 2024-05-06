@@ -978,12 +978,12 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         Boolean isTable = snowflakeYesNoToBoolean(results.getString(12));
         // Is this a secure function? (column 14)
         Boolean isSecure = snowflakeYesNoToBoolean(results.getString(14));
-        // Is this an external function? (column 15)
-        Boolean isExternal = snowflakeYesNoToBoolean(results.getString(15));
-        // What is this function's language? (column 16)
-        String language = results.getString(16);
-        // Is this function memoizable? (column 17)
-        Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString(17));
+        // Is this an external function? (column 17)
+        Boolean isExternal = snowflakeYesNoToBoolean(results.getString(17));
+        // What is this function's language? (column 18)
+        String language = results.getString(18);
+        // Is this function memoizable? (column 19)
+        Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString(19));
         // Generate a call to describe function to get the information needed to validate the
         // function.
         // This is necessary because the arguments column doesn't contain names.
