@@ -69,7 +69,7 @@ requirements:
     - libstdcxx-ng  # [linux64]
     - requests
     - aws-sdk-cpp
-    - zstd
+    - zstd<=1.5.5
 
   run:
     - python
@@ -86,7 +86,7 @@ requirements:
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
     - requests
     - aws-sdk-cpp
-    - zstd
+    - zstd<=1.5.5
 
 
 
