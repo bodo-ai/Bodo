@@ -8,7 +8,6 @@ import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
@@ -221,20 +220,6 @@ class FileSystemCatalog(
         // Insert "." because it always exists. We use this to handle having
         // the default schema be the root if not provided by the user.
         return elements.toSet() + setOf(".")
-    }
-
-    /**
-     * Returns a schema found within the given parent path.
-     *
-     * @param schemaPath The parent schema path to check.
-     * @param schemaName Name of the schema to fetch.
-     * @return A schema object.
-     */
-    override fun getSchema(
-        schemaPath: ImmutableList<String>,
-        schemaName: String,
-    ): CatalogSchema {
-        return CatalogSchema(schemaName, schemaPath.size + 1, schemaPath, this)
     }
 
     /**

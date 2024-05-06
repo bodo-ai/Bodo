@@ -9,6 +9,7 @@ import bodo
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
+    get_rest_catalog_connection_string,
     pytest_tabular,
     temp_env_override,
 )
@@ -25,11 +26,14 @@ def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
     """
 
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, tabular_warehouse, tabular_credential
+    )
 
     def f():
         df = pd.read_sql_table(
             "nyc_taxi_locations",
-            con=f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}",
+            con=con_str,
             schema="examples",
         )
         checksum = df["location_id"].sum()
@@ -99,9 +103,11 @@ def test_iceberg_tabular_write_basic(
     table_uuid = run_rank0(uuid4)()
     table_name = f"bodo_write_test_{table_uuid}"
 
-    con_str = f"iceberg+{rest_uri.replace('https://', 'REST://')}?warehouse={tabular_warehouse}&credential={tabular_credential}"
     write_complete = False
     try:
+        con_str = get_rest_catalog_connection_string(
+            rest_uri, tabular_warehouse, tabular_credential
+        )
 
         def f(df, table_name):
             df.to_sql(
