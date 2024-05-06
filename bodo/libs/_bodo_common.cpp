@@ -142,6 +142,22 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     }
 }
 
+int32_t decimal_precision_to_integer_bytes(int32_t precision) {
+    if (precision < 3) {
+        return 1;
+    }
+    if (precision < 5) {
+        return 2;
+    }
+    if (precision < 9) {
+        return 4;
+    }
+    if (precision < 18) {
+        return 8;
+    }
+    return 16;
+}
+
 // --------------------- bodo::DataType and bodo::Schema ---------------------
 
 static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {

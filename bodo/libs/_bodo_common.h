@@ -1762,6 +1762,11 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 
+/** Converts the decimal precision to the smallest integer byte
+ *  size  it fits in.
+ */
+int32_t decimal_precision_to_integer_bytes(int32_t precision);
+
 /**
  * @brief Generate a new local id for a dictionary. These
  * can be used to identify if dictionaries are "equivalent"
