@@ -164,7 +164,10 @@ struct KeyEqualNuniqueComputationNumpyOrNullableIntBool {
                 (uint8_t*)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(), i2);
             return bit1 == bit2;
         } else {
-            assert(arr->arr_type == bodo_array_type::NUMPY);
+            assert(arr->arr_type == bodo_array_type::NUMPY ||
+                   arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+            // data1 is identical for NUMPY and NULLABLE_INT_BOOL, so we fix it
+            // to NUMPY for better performance.
             char* ptr1 = arr->data1<bodo_array_type::NUMPY>() + i1 * siztype;
             char* ptr2 = arr->data1<bodo_array_type::NUMPY>() + i2 * siztype;
             return memcmp(ptr1, ptr2, siztype) == 0;
