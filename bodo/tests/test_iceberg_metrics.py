@@ -204,11 +204,19 @@ def test_numeric_metrics(
             "C": pd.array([None, -2.0, 3.0, None, 5.25], dtype="Float32"),
             "D": pd.array([-15.0, 2.0, 3.0, 4.0, 11.5], dtype="Float64"),
             "E": np.array([None, None, None, None, Decimal("5.0")]),
+            "F": pd.array(
+                [Decimal("123.0"), None, Decimal("0.051"), None, Decimal("980.604")],
+                dtype=pd.ArrowDtype(pa.decimal128(6, 3)),
+            ),
+            "G": pd.array(
+                [Decimal(f"{i}.{i}") for i in range(3, 8)],
+                dtype=pd.ArrowDtype(pa.decimal128(2, 1)),
+            ),
         }
     )
     create_table_jit(df, table_name, conn, db_schema)
-    expected_value_counts = {"A": 5, "B": 5, "C": 5, "D": 5, "E": 5}
-    expected_null_counts = {"A": 1, "B": 2, "C": 2, "D": 0, "E": 4}
+    expected_value_counts = {"A": 5, "B": 5, "C": 5, "D": 5, "E": 5, "F": 5, "G": 5}
+    expected_null_counts = {"A": 1, "B": 2, "C": 2, "D": 0, "E": 4, "F": 2, "G": 0}
     # Note: Since the tests care about endianness we manually convert
     # to bytes to ensure portability.
     expected_lower_bounds = {
@@ -218,9 +226,15 @@ def test_numeric_metrics(
         # and remapped to little endian.
         "C": b"\x00\x00\x00\xC0",
         "D": b"\x00\x00\x00\x00\x00\x00\x2E\xC0",
-        # This value is manually calculate for Decimal(38, 18) by computing
+        # This value is manually calculated for Decimal(38, 18) by computing
         # 5 * 10^18 and converting to a 128 bit representation.
         "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xF4\x00\x00",
+        # This value is manually calculated for Decimal(6, 3) by computing
+        # 51 and converting to a 32 bit representation (smallest # of bytes required).
+        "F": b"\x00\x00\x00\x33",
+        # This value is manually calculated for Decimal(2, 1) by computing
+        # 33 and converting to an 8 bit representation (smallest # of bytes required).
+        "G": b"\x21",
     }
     expected_upper_bounds = {
         "A": b"\x05\x00\x00\x00",
@@ -229,9 +243,15 @@ def test_numeric_metrics(
         # and remapped to little endian.
         "C": b"\x00\x00\xA8\x40",
         "D": b"\x00\x00\x00\x00\x00\x00\x27\x40",
-        # This value is manually calculate for Decimal(38, 18) by computing
+        # This value is manually calculated for Decimal(38, 18) by computing
         # 5 * 10^18 and converting to a 128 bit representation.
         "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xF4\x00\x00",
+        # This value is manually calculated for Decimal(6, 3) by computing
+        # 980604 and converting to a 32 bit representation (smallest # of bytes required).
+        "F": b"\x00\x0E\xF6\x7C",
+        # This value is manually calculated for Decimal(2, 1) by computing
+        # 77 and converting to an 8 bit representation (smallest # of bytes required).
+        "G": b"\x4d",
     }
     validate_metrics(
         warehouse_loc,

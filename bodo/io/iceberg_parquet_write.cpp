@@ -166,20 +166,26 @@ PyObject *arrow_scalar_to_iceberg_bytes(std::shared_ptr<arrow::Scalar> scalar) {
         case (arrow::Type::DECIMAL128): {
             auto decimal_scalar =
                 std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+            auto decimal_type =
+                static_pointer_cast<arrow::DecimalType>(scalar->type);
+            auto precision = decimal_type->precision();
+            auto n_bytes = decimal_precision_to_integer_bytes(precision);
+            auto skip_bytes = 16 - n_bytes;
             arrow::Decimal128 value = decimal_scalar->value;
             const char *initial_bytes = reinterpret_cast<const char *>(&value);
-            // TODO: Implement the "minimum" number of bytes
             if constexpr (std::endian::native == std::endian::big) {
-                return PyBytes_FromStringAndSize(initial_bytes,
-                                                 sizeof(arrow::Decimal128));
+                // For big endian, the bytes can be copied as is, but we should
+                // skip the leading zeros and use the bytes starting at the
+                // specified integer byte size based on the integer.
+                return PyBytes_FromStringAndSize(initial_bytes + skip_bytes,
+                                                 n_bytes);
             } else {
-                // Convert to big endian
-                std::string str =
-                    std::string(initial_bytes, sizeof(arrow::Decimal128));
+                // Otherwise, get the leading bytes and reverse to convert
+                // to big endian.
+                std::string str = std::string(initial_bytes, n_bytes);
                 std::reverse(std::begin(str), std::end(str));
                 const char *bytes = str.c_str();
-                return PyBytes_FromStringAndSize(bytes,
-                                                 sizeof(arrow::Decimal128));
+                return PyBytes_FromStringAndSize(bytes, n_bytes);
             }
         }
         default: {

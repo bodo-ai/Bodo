@@ -243,6 +243,73 @@ void insert_theta_sketch_dict_column(
     }
 }
 
+template <size_t n_bytes>
+void insert_theta_sketch_decimal_column_helper(
+    const std::shared_ptr<arrow::ChunkedArray> &col,
+    datasketches::update_theta_sketch &sketch) {
+    const size_t skip_bytes = 16 - n_bytes;
+    for (int64_t chunk_idx = 0; chunk_idx < col->num_chunks(); chunk_idx++) {
+        const auto &chunk = col->chunks()[chunk_idx];
+        const auto &decimal_array_chunk =
+            std::dynamic_pointer_cast<arrow::Decimal128Array>(chunk);
+        int64_t n_rows = decimal_array_chunk->length();
+        const char *raw_values =
+            reinterpret_cast<const char *>(decimal_array_chunk->raw_values());
+        for (int64_t row = 0; row < n_rows; row++) {
+            if (!decimal_array_chunk->IsNull(row)) {
+                if constexpr (std::endian::native == std::endian::big) {
+                    // If already big endian, insert those bytes (skipping
+                    // any of the 16 bytes that are before the relevent section)
+                    const char *initial_bytes =
+                        (raw_values + (16 * row) + skip_bytes);
+                    sketch.update(initial_bytes, n_bytes);
+                } else {
+                    // Convert to big endian (no skipping required because the
+                    // relevant n_bytes are at the begining)
+                    const char *initial_bytes = (raw_values + (16 * row));
+                    std::string str = std::string(initial_bytes, n_bytes);
+                    std::reverse(std::begin(str), std::end(str));
+                    const char *bytes = str.c_str();
+                    sketch.update(bytes, n_bytes);
+                }
+            }
+        }
+    }
+}
+
+void insert_theta_sketch_decimal_column(
+    const std::shared_ptr<arrow::ChunkedArray> &col,
+    datasketches::update_theta_sketch &sketch, size_t prec, size_t scale) {
+    int32_t n_bytes = decimal_precision_to_integer_bytes((int32_t)prec);
+    switch (n_bytes) {
+        case 1: {
+            insert_theta_sketch_decimal_column_helper<1>(col, sketch);
+            break;
+        }
+        case 2: {
+            insert_theta_sketch_decimal_column_helper<2>(col, sketch);
+            break;
+        }
+        case 4: {
+            insert_theta_sketch_decimal_column_helper<4>(col, sketch);
+            break;
+        }
+        case 8: {
+            insert_theta_sketch_decimal_column_helper<8>(col, sketch);
+            break;
+        }
+        case 16: {
+            insert_theta_sketch_decimal_column_helper<16>(col, sketch);
+            break;
+        }
+        default: {
+            throw std::runtime_error(
+                "update_sketches: decimal128 column requires "
+                "a precision of at most 38");
+        }
+    }
+}
+
 void UpdateSketchCollection::update_sketch(
     const std::shared_ptr<arrow::ChunkedArray> &col, size_t col_idx,
     std::optional<std::shared_ptr<arrow::Buffer>> dict_hits) {
@@ -309,6 +376,15 @@ void UpdateSketchCollection::update_sketch(
             add_numeric_column_case(arrow::TimestampType);
             add_binary_column_case(arrow::LargeStringType);
             add_binary_column_case(arrow::LargeBinaryType);
+            case arrow::Type::DECIMAL128: {
+                auto typ =
+                    reinterpret_cast<arrow::DecimalType *>((col->type()).get());
+                size_t prec = typ->precision();
+                size_t scale = typ->scale();
+                insert_theta_sketch_decimal_column(
+                    col, this->sketches[col_idx].value(), prec, scale);
+                break;
+            }
             case arrow::Type::DICTIONARY: {
                 if (dict_hits.has_value()) {
                     insert_theta_sketch_dict_column(

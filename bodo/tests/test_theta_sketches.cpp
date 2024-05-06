@@ -773,4 +773,108 @@ static bodo::tests::suite tests([] {
             bodo::tests::check(merged_result->max_num_sketches() == 0);
         }
     });
+    bodo::tests::test("test_multiple_decimal_update", [] {
+        // Tests creating a collection of multiple theta sketches, adding
+        // batch of decimal data with different precisions/scales, then
+        // estimating the number of distinct entries.
+        auto sketch_collection =
+            UpdateSketchCollection({true, true, true, true, true});
+        // Create and insert a batches of 10,000 rows with the following
+        // patterns: Column 0: Decimal(2, 0) & 4 unique values Column 1:
+        // Decimal(4, 2) & 10 unique values Column 2: Decimal(9, 0) & all unique
+        // values Column 3: Decimal(16, 1) & 5,000 unique values Column 4:
+        // Decimal(38, 18) & all unique values
+        size_t length = 10000;
+        // size_t length = 10;
+        std::shared_ptr<array_info> A0 =
+            alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
+        A0->precision = 2;
+        A0->scale = 0;
+        auto buffer0 =
+            A0->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+        std::shared_ptr<array_info> A1 =
+            alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
+        A1->precision = 4;
+        A1->scale = 2;
+        auto buffer1 =
+            A1->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+        std::shared_ptr<array_info> A2 =
+            alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
+        A2->precision = 9;
+        A2->scale = 0;
+        auto buffer2 =
+            A2->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+        std::shared_ptr<array_info> A3 =
+            alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
+        A3->precision = 16;
+        A3->scale = 1;
+        auto buffer3 =
+            A3->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+        std::shared_ptr<array_info> A4 =
+            alloc_nullable_array_no_nulls(length, Bodo_CTypes::DECIMAL);
+        A4->precision = 38;
+        A4->scale = 18;
+        auto buffer4 =
+            A4->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128>();
+
+        for (size_t row = 0; row < length; row++) {
+            buffer0[row] = (__int128)(row % 4);
+            buffer1[row] = (__int128)((row % 10) * 101);
+            buffer2[row] = (__int128)(row);
+            buffer3[row] = (__int128)(10000000 * (row >> 1) + (row >> 1));
+            __int128 v4 = (__int128)(row);
+            v4 = v4 * v4;
+            v4 = v4 * v4;
+            v4 = v4 * v4;
+            buffer4[row] = v4;
+        }
+
+        std::shared_ptr<table_info> T = std::make_shared<table_info>();
+        T->columns.push_back(A0);
+        T->columns.push_back(A1);
+        T->columns.push_back(A2);
+        T->columns.push_back(A3);
+        T->columns.push_back(A4);
+        auto arrow_table = bodo_table_to_arrow(T);
+        for (int i = 0; i < arrow_table->num_columns(); i++) {
+            auto column = arrow_table->column(i);
+            sketch_collection.update_sketch(column, i);
+        }
+
+        auto value0 = sketch_collection.get_value(0);
+        bodo::tests::check(!value0.is_empty());
+        bodo::tests::check(!value0.is_estimation_mode());
+        check_approx(value0.get_theta(), 1.0);
+        check_approx(value0.get_estimate(), 4.0);
+
+        auto value1 = sketch_collection.get_value(1);
+        bodo::tests::check(!value1.is_empty());
+        bodo::tests::check(!value1.is_estimation_mode());
+        bodo::tests::check(value1.get_theta() == 1.0);
+        bodo::tests::check(value1.get_estimate() == 10.0);
+
+        auto value2 = sketch_collection.get_value(2);
+        bodo::tests::check(!value2.is_empty());
+        bodo::tests::check(value2.is_estimation_mode());
+        check_approx(value2.get_theta(), 0.519426);
+        check_approx(value2.get_estimate(), 10199.7);
+        check_approx(value2.get_lower_bound(1), 10101.6);
+        check_approx(value2.get_upper_bound(1), 10298.8);
+
+        auto value3 = sketch_collection.get_value(3);
+        bodo::tests::check(!value3.is_empty());
+        bodo::tests::check(!value3.is_estimation_mode());
+        bodo::tests::check(value3.get_theta() == 1.0);
+        bodo::tests::check(value3.get_estimate() == 5000.0);
+        bodo::tests::check(value3.get_lower_bound(1) == 5000.0);
+        bodo::tests::check(value3.get_upper_bound(1) == 5000.0);
+
+        auto value4 = sketch_collection.get_value(4);
+        bodo::tests::check(!value4.is_empty());
+        bodo::tests::check(value4.is_estimation_mode());
+        check_approx(value4.get_theta(), 0.534881);
+        check_approx(value4.get_estimate(), 10011.6);
+        check_approx(value4.get_lower_bound(1), 9917.27);
+        check_approx(value4.get_upper_bound(1), 10106.8);
+    });
 });
