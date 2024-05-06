@@ -808,38 +808,50 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_groupby_count_sum_mode_first_fns", [] {
-#define TEST_COUNT_GROUPBY_FN(arr_type, dtype)                               \
-    {                                                                        \
-        size_t n = 1;                                                        \
-        std::shared_ptr<array_info> in_col =                                 \
-            make_all_null_arr<arr_type, dtype>(n);                           \
-        auto size_col_set =                                                  \
-            new BasicColSet(in_col, Bodo_FTypes::size, false, true);         \
-        auto count_col_set =                                                 \
-            new BasicColSet(in_col, Bodo_FTypes::count, false, true);        \
-        auto mode_col_set = new ModeColSet(in_col, true);                    \
-        auto first_col_set = new FirstColSet(in_col, false, true);           \
-        TEST_GROUPBY_FN(size_col_set, n, bodo_array_type::NUMPY,             \
-                        Bodo_CTypes::INT64, empty_return_enum::ONE);         \
-        TEST_GROUPBY_FN(count_col_set, n, bodo_array_type::NUMPY,            \
-                        Bodo_CTypes::INT64, empty_return_enum::ZERO);        \
-        TEST_GROUPBY_FN(mode_col_set, n, arr_type, dtype,                    \
-                        empty_return_enum::NULL_OUTPUT);                     \
-        TEST_GROUPBY_FN(first_col_set, n, arr_type, dtype,                   \
-                        empty_return_enum::NULL_OUTPUT);                     \
-        if (dtype == Bodo_CTypes::_BOOL) {                                   \
-            auto count_if_col_set =                                          \
-                new BasicColSet(in_col, Bodo_FTypes::count_if, false, true); \
-            TEST_GROUPBY_FN(count_if_col_set, n, bodo_array_type::NUMPY,     \
-                            Bodo_CTypes::INT64, empty_return_enum::ZERO);    \
-        }                                                                    \
-        if (float_dtype<dtype> || integer_dtype<dtype>) {                    \
-            auto sum_col_set =                                               \
-                new BasicColSet(in_col, Bodo_FTypes::sum, false, true);      \
-            TEST_GROUPBY_FN(sum_col_set, n,                                  \
-                            bodo_array_type::NULLABLE_INT_BOOL, dtype,       \
-                            empty_return_enum::NULL_OUTPUT);                 \
-        }                                                                    \
+#define TEST_COUNT_GROUPBY_FN(arr_type, dtype)                                \
+    {                                                                         \
+        size_t n = 1;                                                         \
+        std::shared_ptr<array_info> in_col =                                  \
+            make_all_null_arr<arr_type, dtype>(n);                            \
+        auto size_col_set =                                                   \
+            new BasicColSet(in_col, Bodo_FTypes::size, false, true);          \
+        auto count_col_set =                                                  \
+            new BasicColSet(in_col, Bodo_FTypes::count, false, true);         \
+        auto mode_col_set = new ModeColSet(in_col, true);                     \
+        auto first_col_set = new FirstColSet(in_col, false, true);            \
+        TEST_GROUPBY_FN(size_col_set, n, bodo_array_type::NUMPY,              \
+                        Bodo_CTypes::INT64, empty_return_enum::ONE);          \
+        TEST_GROUPBY_FN(count_col_set, n, bodo_array_type::NUMPY,             \
+                        Bodo_CTypes::INT64, empty_return_enum::ZERO);         \
+        TEST_GROUPBY_FN(mode_col_set, n, arr_type, dtype,                     \
+                        empty_return_enum::NULL_OUTPUT);                      \
+        TEST_GROUPBY_FN(first_col_set, n, arr_type, dtype,                    \
+                        empty_return_enum::NULL_OUTPUT);                      \
+        if (dtype == Bodo_CTypes::_BOOL) {                                    \
+            auto count_if_col_set =                                           \
+                new BasicColSet(in_col, Bodo_FTypes::count_if, false, true);  \
+            TEST_GROUPBY_FN(count_if_col_set, n, bodo_array_type::NUMPY,      \
+                            Bodo_CTypes::INT64, empty_return_enum::ZERO);     \
+        }                                                                     \
+        if (float_dtype<dtype> || integer_dtype<dtype>) {                     \
+            auto sum_col_set =                                                \
+                new BasicColSet(in_col, Bodo_FTypes::sum, false, true);       \
+            if (is_integer(dtype)) {                                          \
+                if (is_unsigned_integer(dtype)) {                             \
+                    TEST_GROUPBY_FN(                                          \
+                        sum_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,   \
+                        Bodo_CTypes::UINT64, empty_return_enum::NULL_OUTPUT); \
+                } else {                                                      \
+                    TEST_GROUPBY_FN(                                          \
+                        sum_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,   \
+                        Bodo_CTypes::INT64, empty_return_enum::NULL_OUTPUT);  \
+                }                                                             \
+            } else {                                                          \
+                TEST_GROUPBY_FN(sum_col_set, n,                               \
+                                bodo_array_type::NULLABLE_INT_BOOL, dtype,    \
+                                empty_return_enum::NULL_OUTPUT);              \
+            }                                                                 \
+        }                                                                     \
     }
         TEST_COUNT_GROUPBY_FN(bodo_array_type::NULLABLE_INT_BOOL,
                               Bodo_CTypes::INT8);

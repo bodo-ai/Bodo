@@ -75,7 +75,7 @@ struct aggfunc {
  * input and output types, T_in and T_out, and don't require additional
  * arguments.
  */
-template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum DType,
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum In_DType,
           int ftype>
 struct casted_aggfunc {
     /**
@@ -156,11 +156,27 @@ struct aggfunc<T, DType, Bodo_FTypes::sum> {
     /**
      * Aggregation function for sum. Modifies current sum if value is not a nan
      *
-     * @param[in,out] current sum value, and holds the result
-     * @param second input value.
+     * @param[in,out] v1 sum value, and holds the result
+     * @param v2 input value.
      */
     inline static void apply(T& v1, T& v2) {
         if (!isnan_alltype<T, DType>(v2)) {
+            v1 += v2;
+        }
+    }
+};
+
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum In_DType>
+struct casted_aggfunc<T_out, T_in, In_DType, Bodo_FTypes::sum> {
+    /**
+     * @brief Used for the case where we upcast integers to their 64-bit
+     * variants to prevent overflow when summing up the values.
+     *
+     * @param[in, out] v1 Current sum value, holds the result.
+     * @param v2 Input value
+     */
+    inline static void apply(T_out& v1, T_in& v2) {
+        if (!isnan_alltype<T_in, In_DType>(v2)) {
             v1 += v2;
         }
     }
