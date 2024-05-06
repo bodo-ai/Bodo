@@ -51,7 +51,7 @@ dependencies:
   - s3fs>=2022.1
   - gcsfs>=2022.1
   - aws-sdk-cpp
-  - zstd
+  - zstd<=1.5.5
 
   # Databases
   - pymysql
