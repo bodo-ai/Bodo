@@ -23,7 +23,7 @@ class StreamingRelNodeTimer(
     private val opID: Int,
     private val builder: Module.Builder,
     private val isVerbose: Boolean,
-    private val tracingLevel: Int,
+    tracingLevel: Int,
     private val operationDescriptor: String,
     private val loggingTitle: String,
     private val nodeDetails: String,
