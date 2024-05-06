@@ -484,6 +484,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   private void visitCombineStreamsExchange(CombineStreamsExchange node) {
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
+      return;
+    }
     // For information on how this node handles codegen, please see:
     // https://bodo.atlassian.net/wiki/spaces/B/pages/1337524225/Code+Generation+Design+WIP
 
@@ -553,7 +558,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
     // Append the pipeline
     generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-    tableGenStack.push(new BodoEngineTable(accumulatedTable.emit(), node));
+    BodoEngineTable outEngineTable = new BodoEngineTable(accumulatedTable.emit(), node);
+    tableGenStack.push(outEngineTable);
+    operatorCache.tryCacheNode(node, outEngineTable);
   }
 
   private void visitSeparateStreamExchange(SeparateStreamExchange node) {
@@ -2159,10 +2166,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node join node being visited
    */
   private void visitPandasJoin(PandasJoin node) {
-    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      visitStreamingPandasJoin(node);
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
     } else {
-      visitBatchedPandasJoin(node);
+      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+        visitStreamingPandasJoin(node, operatorCache);
+      } else {
+        visitBatchedPandasJoin(node, operatorCache);
+      }
     }
   }
 
@@ -2171,70 +2183,62 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  private void visitBatchedPandasJoin(PandasJoin node) {
+  private void visitBatchedPandasJoin(PandasJoin node, RelationalOperatorCache operatorCache) {
     BuildContext ctx = new BuildContext(node, genDefaultTZ());
     /* get left/right tables */
 
     List<String> outputColNames = node.getRowType().getFieldNames();
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      BodoEngineTable tableVar = operatorCache.getCachedTable(node);
-      tableGenStack.push(tableVar);
-    } else {
-      Variable outDfVar = this.genDfVar();
-      this.visit(node.getLeft(), 0, node);
-      List<String> leftColNames = node.getLeft().getRowType().getFieldNames();
-      Variable leftTable = ctx.convertTableToDf(tableGenStack.pop());
-      this.visit(node.getRight(), 1, node);
-      List<String> rightColNames = node.getRight().getRowType().getFieldNames();
-      Variable rightTable = ctx.convertTableToDf(tableGenStack.pop());
-      singleBatchTimer(
-          node,
-          () -> {
-            RexNode cond = node.getCondition();
+    Variable outDfVar = this.genDfVar();
+    this.visit(node.getLeft(), 0, node);
+    List<String> leftColNames = node.getLeft().getRowType().getFieldNames();
+    Variable leftTable = ctx.convertTableToDf(tableGenStack.pop());
+    this.visit(node.getRight(), 1, node);
+    List<String> rightColNames = node.getRight().getRowType().getFieldNames();
+    Variable rightTable = ctx.convertTableToDf(tableGenStack.pop());
+    singleBatchTimer(
+        node,
+        () -> {
+          RexNode cond = node.getCondition();
 
-            /** Generate the expression for the join condition in a format Bodo supports. */
-            HashSet<String> mergeCols = new HashSet<>();
-            Expr joinCond = visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
+          /** Generate the expression for the join condition in a format Bodo supports. */
+          HashSet<String> mergeCols = new HashSet<>();
+          Expr joinCond = visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
 
-            /* extract join type */
-            String joinType = node.getJoinType().lowerName;
+          /* extract join type */
+          String joinType = node.getJoinType().lowerName;
 
-            // a join without any conditions is a cross join (how="cross" in pd.merge)
-            if (joinCond.emit().equals("True")) {
-              joinType = "cross";
-            }
+          // a join without any conditions is a cross join (how="cross" in pd.merge)
+          if (joinCond.emit().equals("True")) {
+            joinType = "cross";
+          }
 
-            boolean tryRebalanceOutput = node.getRebalanceOutput();
+          boolean tryRebalanceOutput = node.getRebalanceOutput();
 
-            Op.Assign joinCode =
-                generateJoinCode(
-                    outDfVar,
-                    joinType,
-                    rightTable,
-                    leftTable,
-                    rightColNames,
-                    leftColNames,
-                    outputColNames,
-                    joinCond,
-                    mergeCols,
-                    tryRebalanceOutput);
-            this.generatedCode.add(joinCode);
+          Op.Assign joinCode =
+              generateJoinCode(
+                  outDfVar,
+                  joinType,
+                  rightTable,
+                  leftTable,
+                  rightColNames,
+                  leftColNames,
+                  outputColNames,
+                  joinCond,
+                  mergeCols,
+                  tryRebalanceOutput);
+          this.generatedCode.add(joinCode);
 
-            BodoEngineTable outTable = ctx.convertDfToTable(outDfVar, node);
-            operatorCache.tryCacheNode(node, outTable);
-            tableGenStack.push(outTable);
-          });
-    }
+          BodoEngineTable outTable = ctx.convertDfToTable(outDfVar, node);
+          operatorCache.tryCacheNode(node, outTable);
+          tableGenStack.push(outTable);
+        });
   }
 
   /**
    * Visitor for PandasJoin when it is a streaming join. Both nested loop and hash join use the same
    * API calls and the decision is made based on the values of the arguments.
-   *
-   * <p>Note: Streaming doesn't support caching yet.
    */
-  private void visitStreamingPandasJoin(PandasJoin node) {
+  private void visitStreamingPandasJoin(PandasJoin node, RelationalOperatorCache operatorCache) {
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections,
@@ -2256,7 +2260,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.nodeDetails(),
             node.getTimerType());
     StateVariable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo, operatorID);
-    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo, operatorID);
+    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo, operatorID, operatorCache);
     timerInfo.terminateTimer();
   }
 
@@ -2349,7 +2353,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       PandasJoin node,
       StateVariable joinStateVar,
       StreamingRelNodeTimer timerInfo,
-      int operatorID) {
+      int operatorID,
+      RelationalOperatorCache operatorCache) {
     // Visit the probe side
     this.visit(node.getLeft(), 1, node);
     timerInfo.insertLoopOperationStartTimer(2);
@@ -2379,7 +2384,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
     probePipeline.deleteStreamingState(operatorID, deleteState);
     // Add the table to the stack
-    tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
+    BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
+    tableGenStack.push(outEngineTable);
+    operatorCache.tryCacheNode(node, outEngineTable);
   }
 
   /**
