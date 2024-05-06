@@ -53,8 +53,10 @@ def test_output_directory_can_be_set():
 
     with tempfile.TemporaryDirectory() as test_dir:
         with temp_env_override(
-            {"BODO_TRACING_OUTPUT_DIR": test_dir, "BODO_TRACING_LEVEL": "1"}
+            {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": test_dir}
         ):
+            runs = os.listdir(test_dir)
+            assert len(runs) == 0
 
             @bodo.jit
             def impl():
@@ -65,7 +67,9 @@ def test_output_directory_can_be_set():
                 return
 
             impl()
-            for f in os.listdir(test_dir):
+            runs = os.listdir(test_dir)
+            assert len(runs) == 1
+            for f in os.listdir(f"{test_dir}/{runs[0]}"):
                 assert f.startswith("query_profile")
                 assert f.endswith(".json")
 
@@ -446,6 +450,18 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
     ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
 
 
+def get_profile(output_dir: str) -> str:
+    """Get the path to the query profile file given the output directory.
+    Note that this method will also assert that the expected files are present.
+    """
+    assert os.path.isdir(output_dir)
+    runs = os.listdir(output_dir)
+    assert len(runs) == 1
+    profile_path = os.path.join(output_dir, runs[0], "query_profile_0.json")
+    assert os.path.isfile(profile_path)
+    return profile_path
+
+
 def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     """
     Test that generated query profile has the metrics that we expect
@@ -573,8 +589,8 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -718,15 +734,12 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     )
 
     with temp_env_override(
-        {
-            "BODO_TRACING_LEVEL": "1",
-            "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0,
-        }
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
     ):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -838,8 +851,8 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -960,8 +973,8 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1094,8 +1107,8 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1306,8 +1319,8 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df1), _get_dist_arg(df2), _get_dist_arg(df3))
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1418,8 +1431,8 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(conn)
 
-    assert os.path.isfile(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"))
-    with open(os.path.join(tmp_path_rank0, f"query_profile_{rank}.json"), "r") as f:
+    profile_path = get_profile(tmp_path_rank0)
+    with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
     assert "operator_reports" in profile_json
