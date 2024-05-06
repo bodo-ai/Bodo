@@ -136,8 +136,9 @@ IcebergRestAwsCredentialsProvider::get_warehouse_config() {
         const std::string prefix =
             std::move(overrides["prefix"].as_string().c_str());
         const std::string warehouse_token =
-            std::move(overrides["token"].as_string().c_str());
-
+            overrides.find("token") != overrides.end()
+                ? std::move(overrides["token"].as_string().c_str())
+                : this->bearer_token;
         curl_slist_free_all(slist1);
         curl_buffer.clear();
         return {prefix, warehouse_token};

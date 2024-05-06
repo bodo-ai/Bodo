@@ -1,14 +1,15 @@
 package com.bodosql.calcite.catalog
 
+import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
-import org.apache.iceberg.BaseMetastoreCatalog
 import org.apache.iceberg.ManifestFiles
 import org.apache.iceberg.Table
+import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.SupportsNamespaces
 import org.apache.iceberg.catalog.TableIdentifier
@@ -34,7 +35,7 @@ import org.apache.iceberg.types.Types.TimestampType
  * the requirements in each individual implementation, but for now we will
  * be explicitly calling the public Iceberg API during development.
  */
-abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCatalog where T : BaseMetastoreCatalog, T : SupportsNamespaces {
+abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCatalog where T : Catalog, T : SupportsNamespaces {
     /**
      * Load an Iceberg table from the connector via its path information.
      * @param schemaPath The schema path to the table.
@@ -143,6 +144,18 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         return null
     }
 
+    /**
+     * Returns a schema found within the given parent path.
+     *
+     * @param schemaPath The parent schema path to check.
+     * @param schemaName Name of the schema to fetch.
+     * @return A schema object.
+     */
+    override fun getSchema(
+        schemaPath: ImmutableList<String>,
+        schemaName: String,
+    ): CatalogSchema = CatalogSchema(schemaName, schemaPath.size + 1, schemaPath, this)
+
     fun getIcebergConnection(): T {
         return icebergConnection
     }
@@ -154,6 +167,10 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         // Iceberg UUID is defined as 16 bytes
         private const val ICEBERG_UUID_PRECISION = 16
 
+        /**
+         * Convert a BodoSQL schema path representation, which is an immutable list of
+         * strings, into an Iceberg Namespace.
+         */
         @JvmStatic
         fun schemaPathToNamespace(schemaPath: List<String>): Namespace {
             return Namespace.of(*schemaPath.toTypedArray())

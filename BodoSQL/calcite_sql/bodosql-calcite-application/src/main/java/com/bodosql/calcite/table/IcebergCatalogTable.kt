@@ -13,7 +13,7 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
-import org.apache.iceberg.BaseMetastoreCatalog
+import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.SupportsNamespaces
 
 class IcebergCatalogTable<T>(
@@ -26,7 +26,7 @@ class IcebergCatalogTable<T>(
         schemaPath,
         columns,
         catalog,
-    ) where T : BaseMetastoreCatalog, T : SupportsNamespaces {
+    ) where T : Catalog, T : SupportsNamespaces {
     // Hold the statistics for this table.
     private val statistic: Statistic = StatisticImpl()
 

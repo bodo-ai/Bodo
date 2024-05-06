@@ -2470,6 +2470,29 @@ def get_snowflake_connection_string(
     return conn
 
 
+def get_rest_catalog_connection_string(
+    rest_uri: str,
+    warehouse: str,
+    credential: str | None = None,
+    token: str | None = None,
+) -> str:
+    """
+    Creates a REST Catalog connection string for use in the iceberg connector, either credential or token must be provided
+    args:
+        rest_uri: uri of the catalog
+        warehouse: warehouse to use
+        credential: permanent credential to use for authentication
+        token: temporary token to use for authentication
+    """
+    assert (
+        credential is not None or token is not None
+    ), "credential or token should be provided"
+    auth_param = (
+        f"credential={credential}" if credential is not None else f"token={token}"
+    )
+    return f"iceberg+{rest_uri.replace('https://', 'REST://')}?{auth_param}&warehouse={warehouse}"
+
+
 def snowflake_cred_env_vars_present(user: int = 1) -> bool:
     """
     Simple function to check if environment variables for the
@@ -2562,6 +2585,53 @@ def create_snowflake_iceberg_table(
         finally:
             drop_snowflake_table(
                 iceberg_table_name, db, schema, iceberg_volume=iceberg_volume
+            )
+
+
+@contextmanager
+def create_tabular_iceberg_table(
+    df: pd.DataFrame, base_table_name: str, warehouse: str, schema: str, credential: str
+) -> Generator[str, None, None]:
+    """Creates a new Iceberg table in Tabular derived from the base table name
+    and using the DataFrame.
+
+    Returns the name of the table added to Tabular.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        warehouse (str): Name of the Tabular warehouse
+        schema (str): Name of the Tabular schema
+        credential (str): Credential to authenticate
+
+
+    Returns:
+        str: The final table name.
+    """
+    import bodo_iceberg_connector as bic
+
+    comm = MPI.COMM_WORLD
+    iceberg_table_name = None
+    table_written = False
+    try:
+        if bodo.get_rank() == 0:
+            iceberg_table_name = gen_unique_table_id(base_table_name)
+
+        iceberg_table_name = comm.bcast(iceberg_table_name)
+
+        @bodo.jit(distributed=["df"])
+        def write_table(df, table_name, schema, con_str):
+            df.to_sql(table_name, con=con_str, schema=schema, if_exists="replace")
+
+        con_str = f"iceberg+REST://api.tabular.io/ws?credential={credential}&warehouse={warehouse}"
+        write_table(_get_dist_arg(df), iceberg_table_name, schema, con_str)
+        table_written = True
+
+        yield iceberg_table_name
+    finally:
+        if table_written:
+            run_rank0(bic.delete_table)(
+                bodo.io.iceberg.format_iceberg_conn(con_str), schema, iceberg_table_name
             )
 
 
@@ -3112,3 +3182,20 @@ def enable_timestamptz():
         yield
     finally:
         bodo.enable_timestamp_tz = old_value
+
+
+def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool = True):
+    """Asserts df1 and df2 have the same data without regard
+    for ordering or index.
+
+    Args:
+        df1 (pd.DataFrame): First DataFrame.
+        df2 (pd.DataFrame): Second DataFrame.
+    """
+    # Output ordering is not defined so we sort.
+    df1 = df1.sort_values(by=[col for col in df1.columns])
+    df2 = df2.sort_values(by=[col for col in df2.columns])
+    # Drop the index
+    df1 = df1.reset_index(drop=True)
+    df2 = df2.reset_index(drop=True)
+    pd.testing.assert_frame_equal(df1, df2, check_dtype=check_dtype)

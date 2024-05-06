@@ -875,12 +875,15 @@ pytest_mark_javascript = pytest.mark.skipif(
 
 
 @pytest.fixture
-def tabular_connection():
+def tabular_connection(request):
     """
     Fixture to create a connection to the tabular warehouse.
     Returns the catalog url, warehouse name, and credential.
     """
     assert "TABULAR_CREDENTIAL" in os.environ, "TABULAR_CREDENTIAL is not set"
+    assert (
+        request.node.get_closest_marker("tabular") is not None
+    ), "tabular marker not set"
     # Unset the AWS credentials to avoid using them
     # to confirm that the tests are getting aws credentials from Tabular
     with temp_env_override(
