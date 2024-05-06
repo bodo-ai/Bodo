@@ -1279,6 +1279,48 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
+        case Bodo_FTypes::sum: {
+            if (is_integer(DType) && (DType != Bodo_CTypes::INT128)) {
+                // The output type in this case is the 64-bit variant of the
+                // input type, so we need to use casted_aggfunc instead of
+                // aggfunc.
+                if (is_unsigned_integer(DType)) {
+                    using Out_T =
+                        typename dtype_to_type<Bodo_CTypes::UINT64>::type;
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = get_group_for_row(grp_info, i);
+                        if (i_grp != -1) {
+                            casted_aggfunc<Out_T, T, DType, ftype>::apply(
+                                getv<Out_T, bodo_array_type::NUMPY>(out_col,
+                                                                    i_grp),
+                                getv<T, bodo_array_type::NUMPY>(in_col, i));
+                        }
+                    }
+                } else {
+                    using Out_T =
+                        typename dtype_to_type<Bodo_CTypes::INT64>::type;
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = get_group_for_row(grp_info, i);
+                        if (i_grp != -1) {
+                            casted_aggfunc<Out_T, T, DType, ftype>::apply(
+                                getv<Out_T, bodo_array_type::NUMPY>(out_col,
+                                                                    i_grp),
+                                getv<T, bodo_array_type::NUMPY>(in_col, i));
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = get_group_for_row(grp_info, i);
+                    if (i_grp != -1) {
+                        aggfunc<T, DType, ftype>::apply(
+                            getv<T>(out_col, i_grp),
+                            getv<T, bodo_array_type::NUMPY>(in_col, i));
+                    }
+                }
+            }
+            break;
+        }
         default: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
@@ -1725,6 +1767,29 @@ void apply_to_column_nullable(
                 bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
                 bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                                                                          \
                 out_col->set_null_bit(i_grp, true);                                                                                         \
+                break;                                                                                                                      \
+            }                                                                                                                               \
+            if (is_integer(DType) && (DType != Bodo_CTypes::INT128)) {                                                                      \
+                /* The output type is the 64-bit variant in this case to avoid                                                              \
+                 * overflow issues. Therefore, we need to use casted_aggfunc                                                                \
+                 * instead of regular aggfunc. */                                                                                           \
+                if (is_unsigned_integer(DType)) {                                                                                           \
+                    using Out_T =                                                                                                           \
+                        typename dtype_to_type<Bodo_CTypes::UINT64>::type;                                                                  \
+                    casted_aggfunc<Out_T, T, DType, ftype>::apply(                                                                          \
+                        getv<Out_T, bodo_array_type::NULLABLE_INT_BOOL>(                                                                    \
+                            out_col, i_grp),                                                                                                \
+                        getv<T, ArrType>(in_col, i));                                                                                       \
+                } else {                                                                                                                    \
+                    using Out_T =                                                                                                           \
+                        typename dtype_to_type<Bodo_CTypes::INT64>::type;                                                                   \
+                    casted_aggfunc<Out_T, T, DType, ftype>::apply(                                                                          \
+                        getv<Out_T, bodo_array_type::NULLABLE_INT_BOOL>(                                                                    \
+                            out_col, i_grp),                                                                                                \
+                        getv<T, ArrType>(in_col, i));                                                                                       \
+                }                                                                                                                           \
+                out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(                                                                  \
+                    i_grp, true);                                                                                                           \
                 break;                                                                                                                      \
             }                                                                                                                               \
             if (DType == Bodo_CTypes::DECIMAL) {                                                                                            \

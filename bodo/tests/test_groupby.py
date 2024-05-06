@@ -245,15 +245,114 @@ def test_nullable_int(memory_leak_check):
         }
     )
 
-    # pandas 1.2 has a regression here: output is int64 instead of Int8
-    # so we disable check_dtype
-    check_func(impl, (df,), sort_output=True, check_dtype=False)
+    check_func(impl, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of Int8
     # so we disable check_dtype
     check_func(impl_select_colB, (df,), sort_output=True, check_dtype=False)
     check_func(impl_select_colE, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of UInt32
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
+
+
+def test_groupby_sum_integer_upcast(memory_leak_check):
+    """
+    Test that we upcast output of groupby sum on integers to their
+    64-bit variants and don't overflow.
+    """
+
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 1, 1, 2, 2, 2, 2], "Int32"),
+            "Int8": pd.Series(
+                np.array([124, 124, 127, 54, 125, -4, np.nan]), dtype="Int8"
+            ),
+            "int8": pd.Series(np.array([124, 124, 127, 54, 125, -4, 20]), dtype="int8"),
+            "Int16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, -16000, np.nan]),
+                dtype="Int16",
+            ),
+            "int16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, -16000, 9099]),
+                dtype="int16",
+            ),
+            "Int32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        -1_000_000_000,
+                        np.nan,
+                    ]
+                ),
+                dtype="Int32",
+            ),
+            "int32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        -1_000_000_000,
+                        8790,
+                    ]
+                ),
+                dtype="int32",
+            ),
+            "UInt8": pd.Series(
+                np.array([124, 124, 127, 54, 125, 120, np.nan]), dtype="UInt8"
+            ),
+            "uint8": pd.Series(
+                np.array([124, 124, 127, 54, 125, 120, 20]), dtype="uint8"
+            ),
+            "UInt16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, 1000, np.nan]),
+                dtype="UInt16",
+            ),
+            "uint16": pd.Series(
+                np.array([16000, 16000, 16000, 32000, 32000, 1000, 9099]),
+                dtype="uint16",
+            ),
+            "UInt32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        1_000_000_000,
+                        np.nan,
+                    ]
+                ),
+                dtype="UInt32",
+            ),
+            "uint32": pd.Series(
+                np.array(
+                    [
+                        1_000_000_000,
+                        1_000_000_000,
+                        1_000_000_000,
+                        2_000_000_000,
+                        2_000_000_000,
+                        1_000_000_000,
+                        8790,
+                    ]
+                ),
+                dtype="uint32",
+            ),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
 
 
 @pytest.mark.slow
@@ -503,9 +602,11 @@ def test_sum_bool(df, memory_leak_check):
                     "A": list("ABCDEFGHIJ") * 10,
                     "B": pd.Series(
                         [
-                            None
-                            if (i**2) % 17 > 13
-                            else np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            (
+                                None
+                                if (i**2) % 17 > 13
+                                else np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            )
                             for i in range(100)
                         ]
                     ),
@@ -6786,7 +6887,7 @@ def test_groupby_transform_nullable(memory_leak_check):
     check_func(impl_last, (df,))
     check_func(impl_nunique, (df,))
     # NOTE: Pandas 1.5 doesn't return sum output for non-numerics
-    check_func(impl_sum, (df[["A", "G"]],))
+    check_func(impl_sum, (df[["A", "G"]],), check_dtype=False)
 
 
 @pytest_mark_pandas

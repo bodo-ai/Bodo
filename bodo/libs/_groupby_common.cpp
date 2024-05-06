@@ -597,6 +597,15 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
                 out_dtype = Bodo_CTypes::INT64;
             } else if (dtype == Bodo_CTypes::STRING) {
                 out_array_type = bodo_array_type::STRING;
+            } else if (is_integer(dtype) && (dtype != Bodo_CTypes::INT128) &&
+                       (ftype == Bodo_FTypes::sum)) {
+                // Upcast the output to 64 bit version to avoid
+                // overflow issues.
+                if (is_unsigned_integer(dtype)) {
+                    out_dtype = Bodo_CTypes::UINT64;
+                } else {
+                    out_dtype = Bodo_CTypes::INT64;
+                }
             }
             break;
         case Bodo_FTypes::boolor_agg:
