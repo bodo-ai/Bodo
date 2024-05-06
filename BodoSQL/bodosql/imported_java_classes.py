@@ -46,6 +46,7 @@ if bodo.get_rank() == 0:
         WriteTargetEnum = (
             gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         )
+        TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -66,6 +67,7 @@ else:
     PythonLoggersClass = None
     FileSystemCatalogClass = None
     WriteTargetEnum = None
+    TabularCatalogClass = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)

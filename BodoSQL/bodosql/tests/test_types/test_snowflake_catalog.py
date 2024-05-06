@@ -28,6 +28,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
+    assert_tables_equal,
     check_func,
     create_snowflake_table,
     create_snowflake_table_from_select_query,
@@ -620,23 +621,6 @@ def test_delete_bodosql_syntax(test_db_snowflake_catalog):
             match="Please verify that all of your Delete query syntax is supported inside of Snowflake",
         ):
             impl(query, bc)
-
-
-def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool = True):
-    """Asserts df1 and df2 have the same data without regard
-    for ordering or index.
-
-    Args:
-        df1 (pd.DataFrame): First DataFrame.
-        df2 (pd.DataFrame): Second DataFrame.
-    """
-    # Output ordering is not defined so we sort.
-    df1 = df1.sort_values(by=[col for col in df1.columns])
-    df2 = df2.sort_values(by=[col for col in df2.columns])
-    # Drop the index
-    df1 = df1.reset_index(drop=True)
-    df2 = df2.reset_index(drop=True)
-    pd.testing.assert_frame_equal(df1, df2, check_dtype=check_dtype)
 
 
 def test_current_timestamp_case(

@@ -6,13 +6,13 @@ import com.bodosql.calcite.catalog.IcebergCatalog.Companion.tablePathToTableIden
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.util.Util
-import org.apache.iceberg.BaseMetastoreCatalog
+import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.SupportsNamespaces
 import org.apache.iceberg.exceptions.AlreadyExistsException
 import org.apache.iceberg.exceptions.NamespaceNotEmptyException
 
-class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor where T : BaseMetastoreCatalog, T : SupportsNamespaces {
+class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor where T : Catalog, T : SupportsNamespaces {
     override fun createSchema(schemaPath: ImmutableList<String>) {
         val ns = schemaPathToNamespace(schemaPath)
         try {
