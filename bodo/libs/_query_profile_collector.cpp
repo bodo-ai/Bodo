@@ -161,15 +161,10 @@ static void metric_to_json_helper(boost::json::object& metric_json,
 }
 
 static std::optional<boost::json::object> metric_to_json(MetricBase& metric) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    if (metric.is_global && rank != 0) {
-        return std::nullopt;
-    }
     boost::json::object metric_json;
     metric_json["name"] = metric.name;
     metric_json["type"] = MetricTypes::ToString(metric.type);
+    metric_json["global"] = metric.is_global;
 
     switch (metric.type) {
         case MetricTypes::TIMER:
