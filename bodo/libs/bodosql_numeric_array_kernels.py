@@ -1411,7 +1411,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
         ) and isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
             if func_name == "multiply_numeric":
 
-                def impl(arr0, arr1):
+                def impl(arr0, arr1):  # pragma: no cover
                     return bodo.libs.bodosql_array_kernels.multiply_decimals(arr0, arr1)
 
                 return impl
@@ -1419,11 +1419,37 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                 raise_bodo_error(
                     f"{func_name}: Decimal arithmetic is not yet supported"
                 )
-        elif isinstance(
-            arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
-        ) or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
+        elif (
+            (
+                isinstance(arr0, (bodo.DecimalArrayType, bodo.Decimal128Type))
+                or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+            )
+            and not is_overload_none(arr0)
+            and not is_overload_none(arr1)
+        ):
+            if func_name == "multiply_numeric":
+                if isinstance(arr0, types.Integer) or (
+                    is_array_typ(arr0) and isinstance(arr0.dtype, types.Integer)
+                ):
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.multiply_decimals(
+                            bodo.libs.decimal_arr_ext.int_to_decimal(arr0), arr1
+                        )
+
+                    return impl
+                if isinstance(arr1, types.Integer) or (
+                    is_array_typ(arr1) and isinstance(arr1.dtype, types.Integer)
+                ):
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.multiply_decimals(
+                            arr0, bodo.libs.decimal_arr_ext.int_to_decimal(arr1)
+                        )
+
+                    return impl
             raise_bodo_error(
-                "multiply_numeric: Decimal and integer/float multiplication is not yet supported"
+                f"Unsupported arithmetic: {func_name} between operands of type {arr0} and {arr1}"
             )
         else:
             arg_names = ["arr0", "arr1"]

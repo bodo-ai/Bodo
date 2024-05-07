@@ -45,7 +45,7 @@ ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
 ll.add_symbol("decimal_to_int64", decimal_ext.decimal_to_int64_py_entry)
-ll.add_symbol("int64_to_decimal", decimal_ext.int64_to_decimal)
+ll.add_symbol("int_to_decimal_array", decimal_ext.int_to_decimal_array)
 
 ll.add_symbol("arrow_compute_cmp_py_entry", decimal_ext.arrow_compute_cmp_py_entry)
 ll.add_symbol(
@@ -104,14 +104,14 @@ from bodo.utils.typing import (
 int128_type = types.Integer("int128", 128)
 
 int_to_decimal_precision = {
-    types.int8: 2,
-    types.int16: 4,
-    types.int32: 9,
-    types.int64: 18,
-    types.uint8: 2,
-    types.uint16: 4,
-    types.uint32: 9,
-    types.uint64: 19,
+    types.int8: 3,
+    types.int16: 5,
+    types.int32: 10,
+    types.int64: 19,
+    types.uint8: 3,
+    types.uint16: 5,
+    types.uint32: 10,
+    types.uint64: 20,
 }
 
 DECIMAL128_MAX_PRECISION = 38
@@ -135,7 +135,7 @@ class Decimal128Type(types.Type):
         if isinstance(other, types.Integer) and self.scale == 0:
             other = types.unliteral(other)
             # return integer if it's wider
-            if int_to_decimal_precision[other] >= self.precision:
+            if int_to_decimal_precision[other] > self.precision:
                 return other
             return self
 
@@ -1526,3 +1526,86 @@ def _install_cmp_ops():
 
 
 _install_cmp_ops()
+
+
+@intrinsic
+def int_to_decimal_scalar(typingctx, val_t):
+    """convert integer to decimal128"""
+    assert isinstance(val_t, types.Integer), "expected integer type"
+
+    # Convert int value to int128 using sign extend
+    def int_codegen(context, builder, sig, args):
+        (val,) = args
+        return builder.sext(val, lir.IntType(128))
+
+    # Convert int value to int128 using zero extend
+    def uint_codegen(context, builder, sig, args):
+        (val,) = args
+        return builder.zext(val, lir.IntType(128))
+
+    prec = int_to_decimal_precision[val_t]
+
+    codegen = int_codegen if val_t.signed else uint_codegen
+
+    return Decimal128Type(prec, 0)(val_t), codegen
+
+
+@intrinsic
+def int_to_decimal_array(typingctx, info_t):
+    """cast integer array to decimal array"""
+
+    def codegen(context, builder, sig, args):
+        (val,) = args
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="int_to_decimal_array"
+        )
+        ret = builder.call(fn, [val])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        bodo.libs.array.array_info_type(info_t),
+        codegen,
+    )
+
+
+def int_to_decimal(int_arg):  # pragma: no cover
+    pass
+
+
+@overload(int_to_decimal)
+def overload_int_to_decimal(int_arg):
+    """
+    Takes in an integer scalar or array and converts it to a decimal scalar or array
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    if isinstance(int_arg, types.Integer):
+
+        def impl(int_arg):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.int_to_decimal_scalar(int_arg)
+
+        return impl
+    elif bodo.utils.utils.is_array_typ(int_arg, False) and isinstance(
+        int_arg.dtype, types.Integer
+    ):
+        prec = int_to_decimal_precision[int_arg.dtype]
+        result_type = DecimalArrayType(prec, 0)
+
+        def impl(int_arg):  # pragma: no cover
+            arr_info = array_to_info(int_arg)
+            res_arr_info = bodo.libs.decimal_arr_ext.int_to_decimal_array(arr_info)
+            res_arr = info_to_array(res_arr_info, result_type)
+            delete_info(res_arr_info)
+            return res_arr
+
+        return impl
+    else:
+        raise_bodo_error(f"int_to_decimal: unsupported argument type {int_arg}")
