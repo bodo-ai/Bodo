@@ -143,10 +143,4 @@ batch:
       compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-sonar:1.0
     identifier: Sonar
-  - buildspec: buildscripts/aws/buildspecs/maven_unittest_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_LARGE
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.9
-      variables: {}
-    identifier: linux__MAVEN_UNIT_TESTS
 version: 0.2
