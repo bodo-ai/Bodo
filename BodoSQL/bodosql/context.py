@@ -1347,12 +1347,12 @@ class BodoSQLContext:
 
         if bodo.get_rank() == 0:
             try:
-                result = generator.executeDDL(sql)
+                ddl_result = generator.executeDDL(sql)
                 # Convert the output to a DataFrame.
-                column_names = [x for x in result.getColumnNames()]
+                column_names = [x for x in ddl_result.getColumnNames()]
                 data = [
                     pd.array(column, dtype=object)
-                    for column in result.getColumnValues()
+                    for column in ddl_result.getColumnValues()
                 ]
                 df_dict = {column_names[i]: data[i] for i in range(len(column_names))}
                 result = pd.DataFrame(df_dict)
