@@ -1,3 +1,6 @@
+import difflib
+import json
+
 import pytest
 
 import bodo.utils.aggregate_query_profiles as aggregate_query_profiles
@@ -118,7 +121,7 @@ def test_aggregate_invalid_bufferpool_stats():
         {"buffer_pool_stats": {"b": 0}},
     ]
 
-    with pytest.raises(AssertionError, match="Inconsistent buffer pool stat keys"):
+    with pytest.raises(AssertionError, match="Inconsistent keys"):
         aggregate_query_profiles.aggregate(profiles)
 
 
@@ -140,13 +143,13 @@ def test_aggregate_bufferpool_stats():
                     "Unmapped Time": 0,
                 },
                 "128KiB": {
-                    "Num Spilled": 0,
-                    "Spill Time": 0,
-                    "Num Readback": 0,
-                    "Readback Time": 0,
-                    "Num Madvise": 0,
-                    "Madvise Time": 0,
-                    "Unmapped Time": 0,
+                    "Num Spilled": 1,
+                    "Spill Time": 1,
+                    "Num Readback": 1,
+                    "Readback Time": 1,
+                    "Num Madvise": 1,
+                    "Madvise Time": 1,
+                    "Unmapped Time": 1,
                 },
             },
         }
@@ -157,14 +160,189 @@ def test_aggregate_bufferpool_stats():
 
     assert "general stats" in agg["buffer_pool_stats"]
     assert "curr_bytes_allocated" in agg["buffer_pool_stats"]["general stats"]
-    assert (
-        "summary" in agg["buffer_pool_stats"]["general stats"]["curr_bytes_allocated"]
-    )
+    assert agg["buffer_pool_stats"]["general stats"]["curr_bytes_allocated"] == 0
 
     assert "SizeClassMetrics" in agg["buffer_pool_stats"]
+
     assert "64KiB" in agg["buffer_pool_stats"]["SizeClassMetrics"]
-    assert "128KiB" in agg["buffer_pool_stats"]["SizeClassMetrics"]
     for k in profile["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"]:
         assert k in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"]
-        assert "data" in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"][k]
-        assert "summary" in agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"][k]
+        assert agg["buffer_pool_stats"]["SizeClassMetrics"]["64KiB"][k] == 0
+
+    assert "128KiB" in agg["buffer_pool_stats"]["SizeClassMetrics"]
+    for k in profile["buffer_pool_stats"]["SizeClassMetrics"]["128KiB"]:
+        assert k in agg["buffer_pool_stats"]["SizeClassMetrics"]["128KiB"]
+        assert "data" in agg["buffer_pool_stats"]["SizeClassMetrics"]["128KiB"][k]
+        assert "summary" in agg["buffer_pool_stats"]["SizeClassMetrics"]["128KiB"][k]
+
+
+def test_aggregate_operator_reports():
+    """Test aggregating operator reports"""
+    profile = {
+        "operator_reports": {
+            "1001": {
+                "stage_0": {"time": 0.00013100000023769098},
+                "stage_1": {
+                    "time": 0.00008000000025276677,
+                    "output_row_count": 0,
+                    "metrics": [
+                        {
+                            "name": "bcast_join",
+                            "type": "STAT",
+                            "global": True,
+                            "stat": 0,
+                        },
+                        {
+                            "name": "bcast_time",
+                            "type": "TIMER",
+                            "global": False,
+                            "stat": 0,
+                        },
+                        {
+                            "name": "appends_active_time",
+                            "type": "TIMER",
+                            "global": False,
+                            "stat": 4,
+                        },
+                        {
+                            "name": "final_partitioning_state",
+                            "type": "BLOB",
+                            "global": False,
+                            "stat": "[(0, 0b0),]",
+                        },
+                    ],
+                },
+            },
+            "2001": {
+                "stage_0": {"time": 0.000003000000106112566},
+                "stage_1": {"time": 0.000016000000414351234, "output_row_count": 3},
+            },
+        }
+    }
+
+    agg = aggregate_query_profiles.aggregate([profile, profile])
+    expected = json.dumps(
+        {
+            "operator_reports": {
+                "1001": {
+                    "stage_0": {
+                        "time": {
+                            "max": 0.00013100000023769098,
+                            "data": [0.00013100000023769098, 0.00013100000023769098],
+                            "summary": {
+                                "min": 0.00013100000023769098,
+                                "q1": 0.00013100000023769098,
+                                "median": 0.00013100000023769098,
+                                "q3": 0.00013100000023769098,
+                                "max": 0.00013100000023769098,
+                            },
+                        }
+                    },
+                    "stage_1": {
+                        "time": {
+                            "max": 8.000000025276677e-05,
+                            "data": [8.000000025276677e-05, 8.000000025276677e-05],
+                            "summary": {
+                                "min": 8.000000025276677e-05,
+                                "q1": 8.000000025276677e-05,
+                                "median": 8.000000025276677e-05,
+                                "q3": 8.000000025276677e-05,
+                                "max": 8.000000025276677e-05,
+                            },
+                        },
+                        "output_row_count": 0,
+                        "metrics": [
+                            {
+                                "name": "bcast_join",
+                                "type": "STAT",
+                                "global": True,
+                                "stat": 0,
+                            },
+                            {
+                                "name": "bcast_time",
+                                "type": "TIMER",
+                                "global": False,
+                                "sum": 0,
+                                "max": 0,
+                                "summary": {
+                                    "min": 0.0,
+                                    "q1": 0.0,
+                                    "median": 0.0,
+                                    "q3": 0.0,
+                                    "max": 0.0,
+                                },
+                                "data": [0, 0],
+                            },
+                            {
+                                "name": "appends_active_time",
+                                "type": "TIMER",
+                                "global": False,
+                                "sum": 8,
+                                "max": 4,
+                                "summary": {
+                                    "min": 4.0,
+                                    "q1": 4.0,
+                                    "median": 4.0,
+                                    "q3": 4.0,
+                                    "max": 4.0,
+                                },
+                                "data": [4, 4],
+                            },
+                            {
+                                "name": "final_partitioning_state",
+                                "type": "BLOB",
+                                "global": False,
+                                "data": [
+                                    "[(0, 0b0),]",
+                                    "[(0, 0b0),]",
+                                ],
+                            },
+                        ],
+                    },
+                },
+                "2001": {
+                    "stage_0": {
+                        "time": {
+                            "max": 3.000000106112566e-06,
+                            "data": [3.000000106112566e-06, 3.000000106112566e-06],
+                            "summary": {
+                                "min": 3.000000106112566e-06,
+                                "q1": 3.000000106112566e-06,
+                                "median": 3.000000106112566e-06,
+                                "q3": 3.000000106112566e-06,
+                                "max": 3.000000106112566e-06,
+                            },
+                        }
+                    },
+                    "stage_1": {
+                        "time": {
+                            "max": 1.6000000414351234e-05,
+                            "data": [1.6000000414351234e-05, 1.6000000414351234e-05],
+                            "summary": {
+                                "min": 1.6000000414351234e-05,
+                                "q1": 1.6000000414351234e-05,
+                                "median": 1.6000000414351234e-05,
+                                "q3": 1.6000000414351234e-05,
+                                "max": 1.6000000414351234e-05,
+                            },
+                        },
+                        "output_row_count": {
+                            "data": [3, 3],
+                            "summary": {
+                                "min": 3.0,
+                                "q1": 3.0,
+                                "median": 3.0,
+                                "q3": 3.0,
+                                "max": 3.0,
+                            },
+                            "sum": 6,
+                        },
+                    },
+                },
+            }
+        },
+        indent=4,
+    )
+    actual = json.dumps(agg, indent=4)
+    diff = list(difflib.unified_diff(expected.splitlines(), actual.splitlines()))
+    assert diff == [], "\n".join(diff)
