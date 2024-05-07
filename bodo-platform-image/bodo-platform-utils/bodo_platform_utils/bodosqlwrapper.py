@@ -5,9 +5,9 @@ import argparse
 import os
 import requests
 import time
-from urllib.parse import urlencode
 import logging
 from enum import Enum
+import json
 
 import bodo
 import bodosql
@@ -17,6 +17,7 @@ from bodo.sql_plan_cache import BodoSqlPlanCache
 import numba
 
 from .catalog import get_data
+from .type_convertor import get_value_for_type
 
 # constants
 AUTH_URL_SUFFIX = "/v1/oauth/tokens"
@@ -33,8 +34,8 @@ bodo_logger = bodo.user_logging.get_current_bodo_verbose_logger()
 
 
 def run_sql_query(
-    query_str,
-    bc,
+        query_str,
+        bc,
 ):
     """Boilerplate function to execute a query string.
 
@@ -52,7 +53,9 @@ def run_sql_query(
 
 
 @bodo.jit(cache=True)
-def consume_query_result(output, pq_out_filename, print_output):
+def consume_query_result(
+        output, pq_out_filename, print_output
+):
     """Function to consume the query result.
     Args:
         pq_out_filename (str): When provided (i.e. not ''), the query output is written to this location as a parquet file.
@@ -67,7 +70,6 @@ def consume_query_result(output, pq_out_filename, print_output):
         t0 = time.time()
         output.to_parquet(pq_out_filename)
         print(f"Finished parquet write. It took {time.time() - t0} seconds.")
-
 
 def get_cache_loc_from_dispatcher(dispatcher) -> str:
     """
@@ -90,14 +92,25 @@ def get_cache_loc_from_dispatcher(dispatcher) -> str:
         return None
 
 
+def handle_query_params(query_params):
+    """
+    Handle query params
+    Args:
+        query_params (str): Query params in JSON format
+    """
+    query_params_dict = json.loads(query_params)
+
+    return query_params_dict
+
+
 def run_sql_query_wrapper(
-    dispatcher,
-    sql_text,
-    bc,
-    print_output,
-    write_metrics,
-    args,
-    metrics_file,
+        dispatcher,
+        sql_text,
+        bc,
+        print_output,
+        write_metrics,
+        args,
+        metrics_file,
 ):
     """
     Wrapper function to run the query and consume the result.
@@ -237,6 +250,17 @@ def main(args):
     with open(args.filename, "r") as f:
         sql_text = f.read()
 
+    query_params = []
+
+    # Read in the query params from the file
+    if args.query_param_file:
+        with open(args.query_param_file, "r") as f:
+            query_params_dict = handle_query_params(f.read())
+            for i in range(0, len(query_params_dict) + 1):
+                if str(i) in query_params_dict:
+                    query_params = query_params.append(get_value_for_type(query_params_dict[str(i)]))
+
+    query_params = tuple(query_params)
     # Fetch and create catalog
     catalog = get_data(args.catalog)
     if catalog is None:
@@ -287,7 +311,7 @@ def main(args):
         (numba.types.literal(sql_text), typeof_bodo_sql(bc, None)), cache=True
     )(run_sql_query)
     compilation_time = time.time() - t0
-    bodo.barrier()  # Wait for all ranks to finish compilation
+    bodo.barrier()  # Wait for all rankps to finish compilation
 
     cache_hit: bool = dispatcher._cache_hits[dispatcher.signatures[0]] != 0
     if write_metrics:
@@ -430,6 +454,10 @@ if __name__ == "__main__":
         required=False,
         default=None,
         help="Optional: url for iceberg rest API server",
+    )
+
+    parser.add_argument(
+        "-qpf", "--query-param-file", required=False, help="Path to .json file with the query params"
     )
 
     args = parser.parse_args()
