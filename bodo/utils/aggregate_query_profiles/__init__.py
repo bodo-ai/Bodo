@@ -2,7 +2,7 @@
 """Utilities for aggregating query profiles from multiple ranks into a single
 profile"""
 
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 
@@ -20,26 +20,34 @@ def five_number_summary(data: list[float]) -> dict[str, float]:
     }
 
 
+def generate_summary(data: list[float]) -> Union[float, dict[str, Any]]:
+    if all(d == 0 for d in data):
+        return 0
+    return {
+        "data": data,
+        "summary": five_number_summary(data),
+    }
+
+
+def assert_keys_consistent(objects: list[dict[str, Any]]) -> list[str]:
+    """Assert that all objects have the same keys and returns those keys"""
+    # Using a list here to preserve the order of the keys
+    keys = list(objects[0].keys())
+    assert all(set(obj.keys()) == set(keys) for obj in objects[1:]), "Inconsistent keys"
+    return keys
+
+
 def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
     stat0 = stats[0]
     aggregated_stats = {}
     # assert that all ranks have the same buffer pool stat keys
-    assert all(
-        set(stat.keys()) == set(stat0.keys()) for stat in stats[1:]
-    ), "Inconsistent buffer pool stat keys"
-
-    assert all(
-        set(stat["general stats"].keys()) == set(stat0["general stats"].keys())
-        for stat in stats[1:]
-    ), "Inconsistent buffer pool stat keys"
+    assert_keys_consistent(stats)
+    assert_keys_consistent([stat["general stats"] for stat in stats])
 
     general_stats = {}
     for k in stat0["general stats"]:
         data = [stat["general stats"][k] for stat in stats]
-        general_stats[k] = {
-            "data": data,
-            "summary": five_number_summary(data),
-        }
+        general_stats[k] = generate_summary(data)
     aggregated_stats["general stats"] = general_stats
 
     # Helper since both SizeClassMetrics and StorageManagerStats have the same
@@ -80,25 +88,102 @@ def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
     # }
     def aggregate_bufferpool_subkeys(key: str):
         assert key in stat0, f"Missing {key}"
-        subkeys = stat0[key].keys()
-        assert all(
-            set(stat[key].keys()) == set(subkeys) for stat in stats[1:]
-        ), "Inconsistent keys"
+        subkeys = assert_keys_consistent([stat[key] for stat in stats])
 
         aggregated_stats[key] = {subkey: {} for subkey in subkeys}
         for subkey in subkeys:
             for k in stat0[key][subkey]:
                 data = [stat[key][subkey][k] for stat in stats]
-                aggregated_stats[key][subkey][k] = {
-                    "data": data,
-                    "summary": five_number_summary(data),
-                }
+                aggregated_stats[key][subkey][k] = generate_summary(data)
 
     aggregate_bufferpool_subkeys("SizeClassMetrics")
     # StorageManagerStats is optional
     if "StorageManagerStats" in stat0:
         aggregate_bufferpool_subkeys("StorageManagerStats")
     return aggregated_stats
+
+
+def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    op_ids = assert_keys_consistent(reports)
+    res = {}
+    for op in op_ids:
+        agg_op = {}
+        stage_ids = assert_keys_consistent([report[op] for report in reports])
+        for stage in stage_ids:
+            agg_stage = {}
+            keys = set(
+                assert_keys_consistent([report[op][stage] for report in reports])
+            )
+            assert keys <= set(["time", "output_row_count", "metrics"])
+            if "time" in keys:
+                times = [report[op][stage]["time"] for report in reports]
+                agg_stage["time"] = {
+                    "max": max(times),
+                    "data": times,
+                    "summary": five_number_summary(times),
+                }
+            if "output_row_count" in keys:
+                counts = [report[op][stage]["output_row_count"] for report in reports]
+                agg_stage["output_row_count"] = generate_summary(counts)
+                if not all(c == 0 for c in counts):
+                    agg_stage["output_row_count"]["sum"] = sum(counts)
+
+            if "metrics" in keys:
+                """Metrics are in the from:
+                    "metrics": [
+                        {
+                          "name": "bcast_join",
+                          "type": "STAT",
+                          "stat": 0,
+                          "global": true
+                        },
+                        {
+                          "name": "bcast_time",
+                          "type": "TIMER",
+                          "stat": 0,
+                          "global": false
+                        },
+                        ...
+                    ]
+                We aggregate them with a custom strategy per type.
+                """
+
+                metrics = [report[op][stage]["metrics"] for report in reports]
+                assert all(len(metric) == len(metrics[0]) for metric in metrics[1:])
+                metrics_res = []
+                for i in range(len(metrics[0])):
+                    name = metrics[0][i]["name"]
+                    assert all(metric[i]["name"] == name for metric in metrics)
+                    type_ = metrics[0][i]["type"]
+                    assert all(metric[i]["type"] == type_ for metric in metrics)
+
+                    is_global = metrics[0][i]["global"]
+                    if is_global:
+                        agg_metric = metrics[0][i]
+                    else:
+                        assert type_ in ["TIMER", "STAT", "BLOB"]
+                        data = [metric[i]["stat"] for metric in metrics]
+
+                        agg_metric = {
+                            "name": name,
+                            "type": type_,
+                            "global": False,
+                        }
+                        if type_ == "TIMER" or type_ == "STAT":
+                            agg_metric.update(
+                                {
+                                    "sum": sum(data),
+                                    "max": max(data),
+                                    "summary": five_number_summary(data),
+                                }
+                            )
+                        agg_metric["data"] = data
+                    metrics_res.append(agg_metric)
+
+                agg_stage["metrics"] = metrics_res
+            agg_op[stage] = agg_stage
+        res[op] = agg_op
+    return res
 
 
 def aggregate_helper(
@@ -111,20 +196,24 @@ def aggregate_helper(
         return
 
     if key == "trace_level":
+        trace_level = profile0[key]
         # Assert that the trace_level is consistent across all profiles
         assert all(
-            profile[key] == profile0[key] for profile in profiles
+            profile[key] == trace_level for profile in profiles
         ), "Inconsistent trace levels"
         # Keep the trace level since it might be useful to double check when
         # analyzing profiles
         aggregated[key] = profile0[key]
         return
 
+    if key == "operator_reports":
+        aggregated[key] = aggregate_operator_reports(
+            [profile[key] for profile in profiles]
+        )
+        return
+
     if key == "pipelines":
-        pipeline_ids = profile0[key].keys()
-        assert all(
-            set(profile[key].keys()) == set(pipeline_ids) for profile in profiles[1:]
-        ), "Inconsistent pipeline IDs"
+        pipeline_ids = assert_keys_consistent([profile[key] for profile in profiles])
         aggregated_pipeline = {}
         for pipeline_id in pipeline_ids:
 
@@ -175,13 +264,7 @@ def aggregate(profiles: list[dict[str, Any]]) -> dict[str, Any]:
         return profiles[0]
 
     aggregated = {}
-
-    # Using a list here to preserve the order of the keys
-    keys = list(profiles[0].keys())
-    assert all(
-        set(profile.keys()) == set(keys) for profile in profiles[1:]
-    ), "Inconsistent keys"
-
+    keys = assert_keys_consistent(profiles)
     for k in keys:
         aggregate_helper(profiles, k, aggregated)
     return aggregated
