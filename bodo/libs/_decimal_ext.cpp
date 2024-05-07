@@ -10,6 +10,7 @@
 #include <arrow/util/bit_util.h>
 #include <arrow/util/decimal.h>
 #include <fmt/format.h>
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_gandiva_decimal_copy.h"
@@ -327,6 +328,107 @@ int64_t decimal_to_int64_py_entry(decimal_value val, uint8_t precision,
     }
 }
 
+/**
+ * Copies the elements of an integer array into a decimal array, upcasting as
+ * necessary.
+ */
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+void copy_integer_arr_to_decimal_arr(std::shared_ptr<array_info>& int_arr,
+                                     std::unique_ptr<array_info>& dec_arr) {
+    using T = typename dtype_to_type<DType>::type;
+    // Set the precision of the array type based on the integer dtype
+    uint64_t siztype = numpy_item_size[DType];
+    switch (siztype) {
+        case 1: {
+            dec_arr->precision = 3;
+            break;
+        }
+        case 2: {
+            dec_arr->precision = 5;
+            break;
+        }
+        case 4: {
+            dec_arr->precision = 9;
+            break;
+        }
+        case 8: {
+            dec_arr->precision = 19;
+            break;
+        }
+        default: {
+            dec_arr->precision = 38;
+            break;
+        }
+    }
+    // Copy the integer elements into the decimal buffer, upcasting
+    // along the way.
+    size_t rows = int_arr->length;
+    __int128_t* res_buffer =
+        dec_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, __int128_t>();
+    if constexpr (ArrType == bodo_array_type::NULLABLE_INT_BOOL) {
+        // If the input array is nullable, copy over its null bitmask.
+        // Otherwise, we don't need to do anything since the decimal array was
+        // created with no nulls.
+        int64_t n_bytes = arrow::bit_util::BytesForBits(rows);
+        memcpy(dec_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               int_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+               n_bytes);
+    }
+    for (size_t row = 0; row < rows; row++) {
+        T val = int_arr->data1<ArrType, T>()[row];
+        res_buffer[row] = (__int128_t)(val);
+    }
+}
+
+/**
+ * Converts an integer array into a decimal array.
+ * @param[in] arr_raw: the array info pointer of the input integer
+ * nullable/numpy array.
+ * @return an equivalent decimal array to arr_raw (with scale=0).
+ */
+array_info* int_to_decimal_array(array_info* arr_raw) {
+    std::shared_ptr<array_info> arr = std::shared_ptr<array_info>(arr_raw);
+    // Allocate a decimal array with the correct length (the precision will
+    // be set later)
+    size_t rows = arr->length;
+    std::unique_ptr<array_info> res_arr =
+        alloc_nullable_array_no_nulls(rows, Bodo_CTypes::DECIMAL);
+    res_arr->scale = 0;
+#define dtype_case(dtype)                                                   \
+    case dtype: {                                                           \
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {          \
+            copy_integer_arr_to_decimal_arr<                                \
+                bodo_array_type::NULLABLE_INT_BOOL, dtype>(arr, res_arr);   \
+        } else if (arr->arr_type == bodo_array_type::NUMPY) {               \
+            copy_integer_arr_to_decimal_arr<bodo_array_type::NUMPY, dtype>( \
+                arr, res_arr);                                              \
+        } else {                                                            \
+            throw std::runtime_error(                                       \
+                "Invalid array type for int_to_decimal_array: " +           \
+                GetArrType_as_string(arr->arr_type));                       \
+        }                                                                   \
+        break;                                                              \
+    }
+    // Map to the helper based on the correct dtype & array type
+    switch (arr->dtype) {
+        dtype_case(Bodo_CTypes::INT8);
+        dtype_case(Bodo_CTypes::INT16);
+        dtype_case(Bodo_CTypes::INT32);
+        dtype_case(Bodo_CTypes::INT64);
+        dtype_case(Bodo_CTypes::UINT8);
+        dtype_case(Bodo_CTypes::UINT16);
+        dtype_case(Bodo_CTypes::UINT32);
+        dtype_case(Bodo_CTypes::UINT64);
+        default: {
+            throw std::runtime_error(
+                "Invalid dtype type for int_to_decimal_array: " +
+                GetDtype_as_string(arr->dtype));
+        }
+    }
+#undef dtype_case
+    return res_arr.release();
+}
+
 decimal_value int64_to_decimal(int64_t value) {
     arrow::Decimal128 dec(value);
     auto low_bits = dec.low_bits();
@@ -586,7 +688,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, str_to_decimal);
     SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_to_int64_py_entry);
-    SetAttrStringFromVoidPtr(m, int64_to_decimal);
+    SetAttrStringFromVoidPtr(m, int_to_decimal_array);
 
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_int_py_entry);
