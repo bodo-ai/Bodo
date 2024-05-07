@@ -237,7 +237,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       ResultSet paramInfo =
           executeSnowflakeQuery(String.format("Show parameters like '%s'", param));
       if (paramInfo.next()) {
-        return paramInfo.getString(2);
+        return paramInfo.getString("value");
       } else {
         throw new SQLException("Snowflake returned a empty table of Session parameters");
       }
@@ -468,11 +468,11 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         // https://docs.snowflake.com/en/sql-reference/sql/desc-table#examples
         // TODO: Can we leverage primary key and unique key? Snowflake
         // states they don't enforce them.
-        String writeName = tableInfo.getString(1);
+        String writeName = tableInfo.getString("name");
         String readName = writeName;
-        String dataType = tableInfo.getString(2);
+        String dataType = tableInfo.getString("type");
         // The column is nullable unless we are certain it has no nulls.
-        boolean isNullable = snowflakeYesNoToBoolean(tableInfo.getString(4));
+        boolean isNullable = snowflakeYesNoToBoolean(tableInfo.getString("null?"));
         // Parse the given type for the column type and precision information.
         ColumnDataTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType, isNullable);
         columns.add(new BodoSQLColumnImpl(readName, writeName, typeInfo));
@@ -970,20 +970,19 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       while (results.next()) {
         // See the return values here:
         // https://docs.snowflake.com/en/sql-reference/sql/show-functions
-        // Note: JDBC makes things 1-indexed.
-        java.sql.Timestamp createdOn = results.getTimestamp(1);
-        // Function args + return value, not names (column 9)
-        String arguments = results.getString(9);
-        // Is this a table function? (column 12)
-        Boolean isTable = snowflakeYesNoToBoolean(results.getString(12));
-        // Is this a secure function? (column 14)
-        Boolean isSecure = snowflakeYesNoToBoolean(results.getString(14));
-        // Is this an external function? (column 17)
-        Boolean isExternal = snowflakeYesNoToBoolean(results.getString(17));
-        // What is this function's language? (column 18)
-        String language = results.getString(18);
-        // Is this function memoizable? (column 19)
-        Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString(19));
+        java.sql.Timestamp createdOn = results.getTimestamp("created_on");
+        // Function args + return value, not names
+        String arguments = results.getString("arguments");
+        // Is this a table function?
+        Boolean isTable = snowflakeYesNoToBoolean(results.getString("is_table_function"));
+        // Is this a secure function?
+        Boolean isSecure = snowflakeYesNoToBoolean(results.getString("is_secure"));
+        // Is this an external function?
+        Boolean isExternal = snowflakeYesNoToBoolean(results.getString("is_external_function"));
+        // What is this function's language?
+        String language = results.getString("language");
+        // Is this function memoizable?
+        Boolean isMemoizable = snowflakeYesNoToBoolean(results.getString("is_memoizable"));
         // Generate a call to describe function to get the information needed to validate the
         // function.
         // This is necessary because the arguments column doesn't contain names.
@@ -1074,8 +1073,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String returns = null;
       String body = null;
       while (describeResults.next()) {
-        String property = describeResults.getString(1).toUpperCase(Locale.ROOT);
-        String value = describeResults.getString(2);
+        String property = describeResults.getString("property").toUpperCase(Locale.ROOT);
+        String value = describeResults.getString("value");
         if (property.equals("SIGNATURE")) {
           signature = value;
         } else if (property.equals("RETURNS")) {
@@ -1300,10 +1299,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       ResultSet describeResults =
           executeSnowflakeQuery("describe external volume " + icebergVolume_, 5);
       while (describeResults.next()) {
-        String parent_property = describeResults.getString(1);
-        String property = describeResults.getString(2);
-        String property_type = describeResults.getString(3);
-        String property_value = describeResults.getString(4);
+        String parent_property = describeResults.getString("parent_property");
+        String property = describeResults.getString("property");
+        String property_type = describeResults.getString("property_type");
+        String property_value = describeResults.getString("property_value");
         if (parent_property.equals("STORAGE_LOCATIONS")
             && property.startsWith("STORAGE_LOCATION")
             && property_type.equals("String")) {
@@ -1888,10 +1887,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       if (paramInfo.next()) {
         // See the return types: https://docs.snowflake.com/en/sql-reference/sql/show-views.
         // Note: This is 1 indexed
-        String queryDefinition = paramInfo.getString(8);
+        String queryDefinition = paramInfo.getString("text");
         // is_secure is not safe to inline.
-        String unsafeToInline = paramInfo.getString(9);
-        String isMaterialized = paramInfo.getString(10);
+        String unsafeToInline = paramInfo.getString("is_secure");
+        String isMaterialized = paramInfo.getString("is_materialized");
         return new InlineViewMetadata(
             Boolean.valueOf(unsafeToInline), Boolean.valueOf(isMaterialized), queryDefinition);
       } else {
@@ -2115,15 +2114,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       try {
         ResultSet output = executeSnowflakeQuery(query);
         while (output.next()) {
-          // We keep the first 7 columns, but we do custom processing
+          // We keep the columns, but we do custom processing
           // for types to unify our output.
-          String columnType = output.getString(2);
+          int typeColIdx = output.findColumn("type"); // Second column as of 2024-05-06
+          String columnType = output.getString(typeColIdx);
           // Note We don't care about nullability
           ColumnDataTypeInfo bodoColumnTypeInfo = snowflakeTypeNameToTypeInfo(columnType, true);
           RelDataType type = bodoColumnTypeInfo.convertToSqlType(typeFactory);
           columnValues.get(1).add(type.toString());
           // Other columns are just copied over.
-          columnValues.get(0).add(output.getString(1));
+          columnValues.get(0).add(output.getString("name")); // First column as of 2024-05-06
           for (int i = 2; i < columnNames.size(); i++) {
             columnValues.get(i).add(output.getString(i + 1));
           }
