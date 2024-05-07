@@ -3,7 +3,7 @@ from bodo_platform_utils.config import (
     SNOWFLAKE_PC_CATALOG_NAME,
     DEFAULT_SECRET_GROUP,
 )
-from bodo_platform_utils.secrets import get
+from bodo_platform_utils.secrets_utils import get
 from cachetools import TTLCache, cached
 from cachetools.keys import hashkey
 

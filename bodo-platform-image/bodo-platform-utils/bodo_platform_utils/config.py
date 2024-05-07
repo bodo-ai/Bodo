@@ -13,3 +13,4 @@ SNOWFLAKE_PC_CATALOG_NAME = 'snowflake_pc'
 
 CATALOG_PREFIX = "catalog-secret"
 DEFAULT_SECRET_GROUP = "default"
+
