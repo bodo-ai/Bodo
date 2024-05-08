@@ -1,6 +1,5 @@
 import json
 import os
-import tempfile
 
 import numpy as np
 import pandas as pd
@@ -48,30 +47,35 @@ def test_query_profile_collection_compiles(memory_leak_check):
     impl()
 
 
-def test_output_directory_can_be_set():
+def test_output_directory_can_be_set(tmp_path):
     """Check that the output directory can be set"""
 
-    with tempfile.TemporaryDirectory() as test_dir:
-        with temp_env_override(
-            {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": test_dir}
-        ):
-            runs = os.listdir(test_dir)
-            assert len(runs) == 0
+    comm = MPI.COMM_WORLD
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+    num_ranks = comm.Get_size()
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        runs = os.listdir(tmp_path_rank0)
+        assert len(runs) == 0
 
-            @bodo.jit
-            def impl():
-                bodo.libs.query_profile_collector.init()
-                bodo.libs.query_profile_collector.start_pipeline(1)
-                bodo.libs.query_profile_collector.end_pipeline(1, 10)
-                bodo.libs.query_profile_collector.finalize()
-                return
+        @bodo.jit
+        def impl():
+            bodo.libs.query_profile_collector.init()
+            bodo.libs.query_profile_collector.start_pipeline(1)
+            bodo.libs.query_profile_collector.end_pipeline(1, 10)
+            bodo.libs.query_profile_collector.finalize()
+            return
 
-            impl()
-            runs = os.listdir(test_dir)
-            assert len(runs) == 1
-            for f in os.listdir(f"{test_dir}/{runs[0]}"):
-                assert f.startswith("query_profile")
-                assert f.endswith(".json")
+        impl()
+        runs = os.listdir(tmp_path_rank0)
+        assert len(runs) == 1
+        out_path = f"{tmp_path_rank0}/{runs[0]}"
+        profiles = os.listdir(out_path)
+        assert len(profiles) == num_ranks
+        for f in profiles:
+            assert f.startswith("query_profile")
+            assert f.endswith(".json")
 
 
 def test_join_row_count_collection(memory_leak_check):
