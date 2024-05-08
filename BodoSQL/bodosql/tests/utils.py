@@ -399,12 +399,13 @@ def check_query(
             expected_output = _convert_float_to_nullable_float(expected_output)
         if convert_float_nan:
             expected_output = convert_spark_nan_none(expected_output)
-        if convert_columns_decimal:
-            expected_output = convert_spark_decimal(
-                expected_output, convert_columns_decimal
-            )
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
+
+    if convert_columns_decimal:
+        expected_output = convert_spark_decimal(
+            expected_output, convert_columns_decimal
+        )
 
     if run_python:
         check_query_python(

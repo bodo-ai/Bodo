@@ -9,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodosql.tests.utils import check_query
 
 
@@ -206,3 +207,215 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         check_names=False,
         expected_output=pd.DataFrame({"RES": result}),
     )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="without_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "int_data, prec, scale, result",
+    [
+        pytest.param(
+            pd.array([1, -4, 8, -32, None, -128, 127], dtype=pd.Int8Dtype()),
+            4,
+            1,
+            pa.array(
+                [
+                    Decimal("1.0"),
+                    Decimal("-4.0"),
+                    Decimal("8.0"),
+                    Decimal("-32.0"),
+                    None,
+                    Decimal("-128.0"),
+                    Decimal("127.0"),
+                ],
+                type=pa.decimal128(4, 1),
+            ),
+            id="int8-prec_4-scale_1",
+        ),
+        pytest.param(
+            pd.array([i**3 for i in range(3, 8)], dtype=pd.Int16Dtype()),
+            10,
+            2,
+            pa.array(
+                [
+                    Decimal("27.00"),
+                    Decimal("64.00"),
+                    Decimal("125.00"),
+                    Decimal("216.00"),
+                    Decimal("343.00"),
+                ],
+                type=pa.decimal128(10, 2),
+            ),
+            id="int16-prec_10-scale_2",
+        ),
+        pytest.param(
+            pd.array(
+                [None if i % 2 == 1 else 4**i - 1 for i in range(2, 9)],
+                dtype=pd.Int64Dtype(),
+            ),
+            24,
+            0,
+            pa.array(
+                [
+                    Decimal("15"),
+                    None,
+                    Decimal("255"),
+                    None,
+                    Decimal("4095"),
+                    None,
+                    Decimal("65535"),
+                ],
+                type=pa.decimal128(24, 0),
+            ),
+            id="int64-prec_24-scale_0",
+        ),
+    ],
+)
+def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_check):
+    """
+    Tests direct conversion of integers to decimals with various precisions/scales
+    and at both with or without case statements. The case statement is a no-op
+    so long as the input is not 0.
+    """
+    if use_case:
+        query = f"SELECT CASE WHEN I = 0 THEN NULL ELSE I :: NUMBER({prec}, {scale}) END FROM TABLE1"
+    else:
+        query = f"SELECT I :: NUMBER({prec}, {scale}) FROM TABLE1"
+    ctx = {"TABLE1": pd.DataFrame({"I": int_data})}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=pd.DataFrame({"RES": result}),
+            sort_output=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="without_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "float_data, prec, scale, result",
+    [
+        pytest.param(
+            pd.array(
+                [1.15, 2.93, None, 1234.5, -12.5, 143.5, -98.76],
+                dtype=pd.Float32Dtype(),
+            ),
+            4,
+            0,
+            pa.array(
+                [
+                    Decimal("1"),
+                    Decimal("3"),
+                    None,
+                    Decimal("1234"),
+                    Decimal("-12"),
+                    Decimal("144"),
+                    Decimal("-99"),
+                ],
+                type=pa.decimal128(4, 0),
+            ),
+            id="float32-prec_4-scale_0",
+        ),
+        pytest.param(
+            pd.array(
+                [12.3456, -9876.54321, None, 123456.789, -0.00000000123],
+                dtype=pd.Float64Dtype(),
+            ),
+            8,
+            2,
+            pa.array(
+                [
+                    Decimal("12.35"),
+                    Decimal("-9876.54"),
+                    None,
+                    Decimal("123456.79"),
+                    Decimal("0.00"),
+                ],
+                type=pa.decimal128(8, 2),
+            ),
+            id="float64-prec_8-scale_2",
+        ),
+    ],
+)
+def test_float_to_decimal(float_data, prec, scale, result, use_case, memory_leak_check):
+    """
+    Tests direct conversion of floats to decimals with various precisions/scales
+    and at both with or without case statements. The case statement is a no-op
+    so long as the input is not 0.
+    """
+    if use_case:
+        query = f"SELECT CASE WHEN F = 0 THEN NULL ELSE F :: NUMBER({prec}, {scale}) END as RES FROM TABLE1"
+    else:
+        query = f"SELECT F :: NUMBER({prec}, {scale}) FROM TABLE1"
+    ctx = {"TABLE1": pd.DataFrame({"F": float_data})}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=pd.DataFrame({"RES": result}),
+            sort_output=False,
+            convert_columns_decimal=["RES"] if use_case else None,
+        )
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
+
+
+@pytest.mark.skipif(bodo.get_size() != 1, reason="skip on multiple ranks")
+@pytest.mark.parametrize(
+    "expr, error_message",
+    [
+        pytest.param(
+            "CASE WHEN F = 0 THEN NULL ELSE F :: NUMBER(5, 2) END",
+            "Number out of representable range",
+            id="scalar",
+        ),
+        pytest.param("F :: NUMBER(5, 2)", "Invalid float to decimal cast", id="vector"),
+    ],
+)
+def test_float_to_decimal_error(expr, error_message):
+    """
+    Variant of test_float_to_decimal where the floats won't fit in the decimal range.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": pd.DataFrame({"F": [12345.6789] * 5})}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        with pytest.raises(Exception, match=error_message):
+            check_query(
+                query,
+                ctx,
+                None,
+                check_dtype=False,
+                check_names=False,
+                expected_output=pd.DataFrame({"RES": [-1.0] * 5}),
+                sort_output=False,
+            )
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
