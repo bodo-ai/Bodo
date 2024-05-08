@@ -2598,10 +2598,16 @@ bool join_build_consume_batch(HashJoinState* join_state,
     join_state->AppendBuildBatch(in_table, batch_hashes_partition,
                                  append_row_to_build_table);
 
-    append_row_to_build_table.flip();
-    std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    join_state->build_shuffle_state.AppendBatch(in_table,
-                                                append_row_to_shuffle_table);
+    if (join_state->build_parallel) {
+        // 'append_row_to_build_table' is all 'true' when build side is
+        // replicated, so there's no point in appending to the shuffle buffer.
+        append_row_to_build_table.flip();
+        std::vector<bool>& append_row_to_shuffle_table =
+            append_row_to_build_table;
+        join_state->build_shuffle_state.AppendBatch(
+            in_table, append_row_to_shuffle_table);
+    }
+
     batch_hashes_partition.reset();
     in_table.reset();
 
@@ -2962,8 +2968,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             in_table, batch_hashes_join, batch_hashes_partition,
             append_to_probe_inactive_partition);
     }
-    join_state->probe_shuffle_state.AppendBatch(in_table,
-                                                append_to_probe_shuffle_buffer);
+
+    if (shuffle_possible) {
+        // Skip this when shuffle isn't possible.
+        join_state->probe_shuffle_state.AppendBatch(
+            in_table, append_to_probe_shuffle_buffer);
+    }
+
     append_to_probe_inactive_partition.clear();
     append_to_probe_shuffle_buffer.clear();
 
