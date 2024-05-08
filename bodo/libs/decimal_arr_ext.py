@@ -46,6 +46,12 @@ ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
 ll.add_symbol("decimal_to_int64", decimal_ext.decimal_to_int64_py_entry)
 ll.add_symbol("int_to_decimal_array", decimal_ext.int_to_decimal_array)
+ll.add_symbol(
+    "cast_float_to_decimal_scalar", decimal_ext.cast_float_to_decimal_scalar_py_entry
+)
+ll.add_symbol(
+    "cast_float_to_decimal_array", decimal_ext.cast_float_to_decimal_array_py_entry
+)
 
 ll.add_symbol("arrow_compute_cmp_py_entry", decimal_ext.arrow_compute_cmp_py_entry)
 ll.add_symbol(
@@ -924,6 +930,129 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])
     return ret_type(val_t, precision_t, scale_t), codegen
+
+
+def float_to_decimal_array(val, precision, scale, null_on_error):  # pragma: no cover
+    pass
+
+
+@overload(float_to_decimal_array, prefer_literal=True)
+def overload_float_to_decimal_array(val, precision, scale, null_on_error):
+    """
+    Converts a decimal whose leading digits are assumed to fully fit inside
+    the new precision and scale and returns a new decimal with the new precision
+    and scale after rescaling the decimal.
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    precision, scale = validate_decimal_arguments(
+        "cast_float_to_decimal_array", precision, scale
+    )
+
+    output_type = DecimalArrayType(precision, scale)
+
+    def impl(val, precision, scale, null_on_error):  # pragma: no cover
+        input_info = array_to_info(val)
+        out_info = _cast_float_to_decimal_array(
+            input_info, np.int32(precision), np.int32(scale), null_on_error
+        )
+        out_arr = info_to_array(out_info, output_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic
+def _cast_float_to_decimal_array(
+    typingctx, val_t, scale_t, precision_t, null_on_error_t
+):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(1),
+            ],
+        )
+
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_float_to_decimal_array"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_t, scale_t, precision_t, null_on_error_t), codegen
+
+
+def float_to_decimal_scalar(val, precision, scale, null_on_error):  # pragma: no cover
+    pass
+
+
+@overload(float_to_decimal_scalar, prefer_literal=True)
+def overload_float_to_decimal_scalar(val, precision, scale, null_on_error):
+    """
+    Converts a float to a decimal with the specified precision/scale. If this is impossible
+    due to the magnitude of the value versus the precision/scale, either returns null
+    or throws an error (depending on null_on_error).
+    """
+    validate_decimal_arguments("float_to_decimal", precision, scale)
+
+    def impl(val, precision, scale, null_on_error):  # pragma: no cover
+        value, safe = _cast_float_to_decimal_scalar(np.float64(val), precision, scale)
+        # Note: We evaluate this in Python since there isn't a great way to have the intrinsic
+        # sometimes return NULL.
+        if not safe:
+            if null_on_error:
+                return None
+            else:
+                raise ValueError("Number out of representable range")
+        else:
+            return value
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _cast_float_to_decimal_scalar(typingctx, val_t, precision_t, scale_t):
+    """
+    Cast a float64 value to a new Decimal 128 value with a new precision and scale.
+    """
+
+    assert val_t == types.float64
+    assert is_overload_constant_int(precision_t)
+    assert is_overload_constant_int(scale_t)
+    scale = get_overload_const_int(scale_t)
+    precision = get_overload_const_int(precision_t)
+
+    def codegen(context, builder, signature, args):
+        val, prec, scale = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.DoubleType(),
+                lir.IntType(32),
+                lir.IntType(32),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        safe_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cast_float_to_decimal_scalar"
+        )
+        ret = builder.call(fn, [val, prec, scale, safe_pointer])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        safe = builder.load(safe_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, safe])
+
+    decimal_type = Decimal128Type(precision, scale)
+    ret_type = types.Tuple([decimal_type, types.bool_])
+    return ret_type(val_t, types.int32, types.int32), codegen
 
 
 def decimal_multiplication_output_precision_scale(p1, s1, p2, s2):
