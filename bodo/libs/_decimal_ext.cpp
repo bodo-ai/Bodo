@@ -380,6 +380,135 @@ void copy_integer_arr_to_decimal_arr(std::shared_ptr<array_info>& int_arr,
     }
 }
 
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in decimal utilities: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
+arrow::Decimal128 cast_float_to_decimal_scalar_py_entry(double f,
+                                                        int32_t precision,
+                                                        int32_t scale,
+                                                        bool* safe) {
+    try {
+        double max_value = std::pow(10.0, precision - scale);
+        bool safe_cast = std::abs(f) < max_value;
+        *safe = safe_cast;
+        if (!safe_cast) {
+            return arrow::Decimal128(0);
+        } else {
+            arrow::Decimal128 answer;
+            auto result = arrow::Decimal128::FromReal(f, precision, scale);
+            CHECK_ARROW_AND_ASSIGN(result, "failed to convert float to decimal",
+                                   answer)
+            return answer;
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * Copies the elements of an float array into a decimal array.
+ */
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          bool null_on_error>
+void float_to_decimal_arr(std::shared_ptr<array_info>& arr_in,
+                          std::unique_ptr<array_info>& arr_out,
+                          int32_t precision, int32_t scale) {
+    using T = typename dtype_to_type<DType>::type;
+    T max_value = std::pow(10.0, precision - scale);
+    size_t n_rows = arr_in->length;
+    T* in_buffer = arr_in->data1<ArrType, T>();
+    decimal_value* out_buffer =
+        arr_out->data1<bodo_array_type::NULLABLE_INT_BOOL, decimal_value>();
+    for (size_t row = 0; row < n_rows; row++) {
+        T f = in_buffer[row];
+        if (is_null_at<ArrType, T, DType>(*arr_in, row)) {
+            arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row, 0);
+        } else if (isnan_alltype<T, DType>(f) || std::abs(f) >= max_value) {
+            if constexpr (null_on_error) {
+                arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row,
+                                                                          0);
+            } else {
+                throw std::runtime_error("Invalid float to decimal cast: " +
+                                         std::to_string(f));
+            }
+        } else {
+            arrow::Decimal128 answer;
+            auto result = arrow::Decimal128::FromReal(f, precision, scale);
+            CHECK_ARROW_AND_ASSIGN(result, "failed to convert float to decimal",
+                                   answer);
+            uint64_t low_bits = answer.low_bits();
+            int64_t high_bits = answer.high_bits();
+            decimal_value res = {static_cast<int64_t>(low_bits), high_bits};
+            out_buffer[row] = res;
+        }
+    }
+}
+
+array_info* cast_float_to_decimal_array_py_entry(array_info* in_raw,
+                                                 int32_t precision,
+                                                 int32_t scale,
+                                                 bool null_on_error) {
+#define float_to_dec_case(ArrType, Dtype)                                      \
+    if (null_on_error) {                                                       \
+        float_to_decimal_arr<ArrType, Dtype, true>(in_arr, out_arr, precision, \
+                                                   scale);                     \
+    } else {                                                                   \
+        float_to_decimal_arr<ArrType, Dtype, false>(in_arr, out_arr,           \
+                                                    precision, scale);         \
+    }
+    try {
+        auto in_arr = std::shared_ptr<array_info>(in_raw);
+        size_t n_rows = in_arr->length;
+        std::unique_ptr<array_info> out_arr =
+            alloc_nullable_array_no_nulls(n_rows, Bodo_CTypes::DECIMAL);
+        if (in_arr->arr_type == bodo_array_type::NUMPY) {
+            if (in_arr->dtype == Bodo_CTypes::FLOAT32) {
+                float_to_dec_case(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT32);
+            } else if (in_arr->dtype == Bodo_CTypes::FLOAT64) {
+                float_to_dec_case(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64);
+            } else {
+                throw std::runtime_error(
+                    "Invalid dtype for cast_float_to_decimal_array_py_entry: " +
+                    GetDtype_as_string(in_arr->dtype));
+            }
+        } else if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            if (in_arr->dtype == Bodo_CTypes::FLOAT32) {
+                float_to_dec_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                  Bodo_CTypes::FLOAT32);
+            } else if (in_arr->dtype == Bodo_CTypes::FLOAT64) {
+                float_to_dec_case(bodo_array_type::NULLABLE_INT_BOOL,
+                                  Bodo_CTypes::FLOAT64);
+            } else {
+                throw std::runtime_error(
+                    "Invalid dtype for cast_float_to_decimal_array_py_entry: " +
+                    GetDtype_as_string(in_arr->dtype));
+            }
+        } else {
+            throw std::runtime_error(
+                "Invalid array type for "
+                "cast_float_to_decimal_array_py_entry: " +
+                GetDtype_as_string(in_arr->arr_type));
+        }
+        return out_arr.release();
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN
+
 /**
  * Converts an integer array into a decimal array.
  * @param[in] arr_raw: the array info pointer of the input integer
@@ -690,6 +819,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, decimal_to_int64_py_entry);
     SetAttrStringFromVoidPtr(m, int_to_decimal_array);
 
+    SetAttrStringFromVoidPtr(m, cast_float_to_decimal_array_py_entry);
+    SetAttrStringFromVoidPtr(m, cast_float_to_decimal_scalar_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_int_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_compute_cmp_decimal_float_py_entry);

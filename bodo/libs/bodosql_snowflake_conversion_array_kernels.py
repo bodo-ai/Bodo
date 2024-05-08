@@ -1895,7 +1895,7 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
     elif isinstance(expr, bodo.DecimalArrayType):
 
-        def impl(expr, precision, scale, null_on_error):
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_array(
                 expr, precision, scale, null_on_error
             )
@@ -1903,15 +1903,44 @@ def numeric_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
     elif isinstance(expr, bodo.Decimal128Type):
 
-        def impl(expr, precision, scale, null_on_error):
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_scalar(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+    elif (
+        is_array_typ(expr, False) and isinstance(expr.dtype, types.Integer)
+    ) or isinstance(expr, types.Integer):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            result = bodo.libs.decimal_arr_ext.int_to_decimal(expr)
+            return bodo.libs.bodosql_array_kernels.numeric_to_decimal(
+                result, precision, scale, null_on_error
+            )
+
+        return impl
+
+    elif isinstance(expr, types.Float):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.float_to_decimal_scalar(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+
+    elif is_array_typ(expr, False) and isinstance(expr.dtype, types.Float):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.float_to_decimal_array(
                 expr, precision, scale, null_on_error
             )
 
         return impl
 
     else:
-        raise BodoError("numeric_to_decimal: invalid input type")
+        raise BodoError(f"numeric_to_decimal: invalid input type {expr}")
 
 
 @numba.generated_jit(nopython=True)
@@ -1995,12 +2024,21 @@ def to_number_util_overload(
     scale = get_overload_const_int(scale)
     outputs_decimal = get_overload_const_bool(outputs_decimal)
 
+    is_null_arg = is_overload_none(expr) or expr == bodo.null_array_type
     is_string = is_valid_string_arg(expr)
     if not is_string:
         verify_numeric_arg(expr, "TO_NUMBER", "expr")
 
     if outputs_decimal and bodo.bodo_use_decimal:
-        if is_string:
+        if is_null_arg:
+
+            def impl(
+                expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id
+            ):  # pragma: no cover
+                return expr
+
+            return impl
+        elif is_string:
             raise_bodo_error("TO_NUMBER: cannot output decimal from string input")
         else:
 
