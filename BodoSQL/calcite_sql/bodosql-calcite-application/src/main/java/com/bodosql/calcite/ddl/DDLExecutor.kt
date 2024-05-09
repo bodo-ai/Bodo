@@ -2,10 +2,13 @@ package com.bodosql.calcite.ddl
 
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.ddl.SqlCreateView
 
 class NamespaceAlreadyExistsException : Exception()
 
 class NamespaceNotFoundException : Exception()
+
+class ViewAlreadyExistsException : Exception()
 
 class MissingObjectException(message: String) : Exception(message)
 
@@ -57,4 +60,10 @@ interface DDLExecutor {
         tablePath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
     ): DDLExecutionResult
+
+    @Throws(ViewAlreadyExistsException::class)
+    fun createView(
+        viewPath: ImmutableList<String>,
+        query: SqlCreateView,
+    )
 }

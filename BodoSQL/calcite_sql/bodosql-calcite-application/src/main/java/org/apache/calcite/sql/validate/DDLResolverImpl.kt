@@ -23,7 +23,11 @@ import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.ddl.SqlCreateSchema
 import org.apache.calcite.sql.ddl.SqlDropSchema
+import org.apache.calcite.sql.ddl.SqlCreateView
+import org.apache.calcite.sql.ddl.SqlDdlNodes
+import org.apache.calcite.tools.Planner
 import org.apache.calcite.util.Util
+import java.util.function.Function
 
 /**
  * Implementation class for the DDLResolver interface.
@@ -32,9 +36,9 @@ import org.apache.calcite.util.Util
  * @param dmlValidator The validator to use for DML operations. This can
  * be used to validate sub-expressions if a DDL operation requires it.
  */
-open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, private val definitionValidator: BodoSqlValidator) :
+open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, private val getValidator: Function<List<String>, BodoSqlValidator>) :
     DDLResolver {
-    private val scope: SqlValidatorScope = CatalogScope(EmptyScope(definitionValidator), ImmutableList.of("CATALOG"))
+    private val scope: SqlValidatorScope = CatalogScope(EmptyScope(getValidator.apply(listOf())), ImmutableList.of("CATALOG"))
 
     private fun validateTable(table: BodoSqlTable, kind: SqlKind, tableName: String): CatalogTable {
         if (table !is CatalogTable) {
@@ -71,6 +75,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             
             SqlKind.DESCRIBE_TABLE -> {
                 executeDescribeTable(node as SqlDescribeTable)
+            }
+            SqlKind.CREATE_VIEW -> {
+                executeCreateView(node as SqlCreateView)
             }
             else -> {
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
@@ -160,10 +167,23 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual drop table operation
-            return catalogTable.ddlExecutor.describeTable(catalogTable.fullPath, definitionValidator.typeFactory)
+            return catalogTable.ddlExecutor.describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
         }
+    }
+
+    private fun executeCreateView(node: SqlCreateView): DDLExecutionResult {
+        val schemaPath = node.name.names
+        val schemaName = schemaPath.last()
+        val parentSchemaPath = Util.skipLast(schemaPath)
+        val schema = deriveSchema(parentSchemaPath)
+        val catalogSchema = validateSchema(schema, node.kind, schemaName)
+        val validatedQuery = getValidator.apply(catalogSchema.fullPath).validate(node.query);
+        val validatedCreate = SqlDdlNodes.createView(node.parserPosition, node.replace, node.name, node.columnList, validatedQuery)
+        catalogSchema.ddlExecutor.createView(schemaPath, validatedCreate)
+
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")))
     }
 
     /**

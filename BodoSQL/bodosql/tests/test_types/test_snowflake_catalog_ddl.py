@@ -4,6 +4,7 @@ Tests DDL operations on a BodoSQL catalog.
 """
 
 from contextlib import contextmanager
+from copy import deepcopy
 
 import pandas as pd
 import pytest
@@ -543,3 +544,109 @@ def test_describe_table_compiles_jit(test_db_snowflake_catalog, memory_leak_chec
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     query = "DESCRIBE TABLE SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM"
     bc.validate_query_compiles(query)
+
+
+def check_view_exists(conn_str, view_name) -> bool:
+    tables = pd.read_sql(
+        f"SHOW VIEWS LIKE '{view_name}' STARTS WITH '{view_name}'",
+        conn_str,
+    )
+    return len(tables) == 1
+
+
+@contextmanager
+def view_helper(conn_str, view_name, create=True):
+    if create:
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"CREATE VIEW {view_name} AS SELECT 0", conn_str)
+        bodo.barrier()
+        assert check_view_exists(conn_str, view_name)
+
+    try:
+        yield
+    finally:
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn_str)
+        bodo.barrier()
+        assert not check_view_exists(conn_str, view_name)
+
+
+def test_create_view(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo can create a view in Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query = f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully created."]})
+
+    def verify_view_created():
+        assert check_view_exists(conn, view_name)
+        x = pd.read_sql(f"SELECT * FROM {view_name}", conn)
+        assert "a" in x
+        assert x["a"].shape == (1,)
+        assert x["a"][0] == "testview"
+
+    # execute_ddl Version
+    with view_helper(conn, view_name, create=False):
+        bodo_output = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+        verify_view_created()
+
+    # Python Version
+    with view_helper(conn, view_name, create=False):
+        bodo_output = bc.sql(query)
+        _test_equal_par(bodo_output, py_output)
+        verify_view_created()
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with view_helper(conn, view_name, create=False):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        verify_view_created()
+
+
+def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo validates view definitions before submitting to Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    schema_1 = gen_unique_id("SCEHMA1").upper()
+    schema_2 = gen_unique_id("SCEHMA2").upper()
+
+    # this test creates two schemas - schema_1 and schema_2, and creates a table
+    # at SCHEMA_1.TABLE1. We then ensure that view validation will fail if we
+    # create a view referencing TABLE1 in SCHEMA_2, and that the column of
+    # TABLE1 are validated when we create a view in SCHEMA_1.
+
+    catalog = deepcopy(test_db_snowflake_catalog)
+    with schema_helper(conn, schema_1, create=True):
+        catalog.connection_params["schema"] = schema_1
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
+        bc.sql(table_query)
+        with schema_helper(conn, schema_2, create=True):
+            with pytest.raises(BodoError, match=f"Object 'TABLE1' not found"):
+                query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
+                bc.execute_ddl(query)
+
+        # Test that the view validates if ran in the correct schema
+        py_output = pd.DataFrame({"STATUS": [f"View 'VIEW2' successfully created."]})
+        query = (
+            f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
+        )
+        bodo_output = bc.execute_ddl(query)
+        _test_equal_par(bodo_output, py_output)
+
+        # Column B does not exist - validation should fail
+        with pytest.raises(BodoError, match=f"Column 'B' not found"):
+            query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
+            bc.execute_ddl(query)

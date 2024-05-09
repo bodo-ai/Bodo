@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
@@ -285,7 +286,14 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     ensure(State.STATE_3_PARSED);
     CalciteCatalogReader catalogReader = createCatalogReader();
     this.validator = createSqlValidator(catalogReader);
-    this.ddlResolver = createDDLResolver(catalogReader, this.validator);
+    Function<List<String>, BodoSqlValidator> getValidator =
+        (List<String> path) -> {
+          if (path.isEmpty()) {
+            return this.validator;
+          }
+          return createSqlValidator(createCatalogReaderWithDefaultPath(path));
+        };
+    this.ddlResolver = createDDLResolver(catalogReader, getValidator);
     final DDLExecutionResult result;
     try {
       result = ddlResolver.executeDDL(sqlNode);
@@ -786,8 +794,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
   }
 
   private DDLResolver createDDLResolver(
-      CalciteCatalogReader catalogReader, BodoSqlValidator validator) {
-    return new DDLResolverImpl(catalogReader, validator);
+      CalciteCatalogReader catalogReader, Function<List<String>, BodoSqlValidator> getValidator) {
+    return new DDLResolverImpl(catalogReader, getValidator);
   }
 
   private static SchemaPlus rootSchema(SchemaPlus schema) {

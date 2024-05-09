@@ -24,6 +24,7 @@ import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.ddl.DDLExecutor;
 import com.bodosql.calcite.ddl.NamespaceAlreadyExistsException;
 import com.bodosql.calcite.ddl.NamespaceNotFoundException;
+import com.bodosql.calcite.ddl.ViewAlreadyExistsException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
@@ -71,6 +72,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.ddl.SqlCreateView;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
@@ -2135,6 +2137,26 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                 Locale.ROOT,
                 "Unable to describe Snowflake table %s. Error: %s",
                 tableName,
+                e.getMessage()));
+      }
+    }
+
+    @Override
+    public void createView(@NotNull ImmutableList<String> viewPath, @NotNull SqlCreateView query)
+        throws ViewAlreadyExistsException {
+      String queryStr = query.toSqlString(BodoSnowflakeSqlDialect.DEFAULT).getSql();
+      try {
+        executeSnowflakeQuery(queryStr);
+      } catch (SQLException e) {
+        if (e.getMessage().contains("already exists.")) {
+          throw new ViewAlreadyExistsException();
+        }
+
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to create Snowflake view from query %s. Error: %s",
+                queryStr,
                 e.getMessage()));
       }
     }
