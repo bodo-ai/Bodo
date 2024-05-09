@@ -50,27 +50,27 @@ public class RelationalOperatorCache {
    * @param node the node that may be cached
    * @return If the node is cached
    */
-  public boolean isNodeCached(PandasRel node) {
+  public boolean isNodeCached(PandasRel node, int key) {
     // Note that we can directly check the ID due to merging relNodes during
     // an optimization step.
     // see com.bodosql.calcite.prepare.BodoPrograms.MergeRelProgram
     return node.getTraitSet().contains(BatchingProperty.STREAMING)
-        ? streamingTableCacheMap.containsKey(node.getId())
-        : tableCacheMap.containsKey(node.getId());
+        ? streamingTableCacheMap.containsKey(key)
+        : tableCacheMap.containsKey(key);
   }
 
   /**
    * @brief Get the cached value for a streaming node
    * @param node streaming node
+   * @param key the cache key
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  private BodoEngineTable getCachedStreamingTable(PandasRel node) {
+  private BodoEngineTable getCachedStreamingTable(PandasRel node, int key) {
     assert node.getTraitSet().contains(BatchingProperty.STREAMING);
     // If the node is streaming, we need to do some additional work.
-    int nodeId = node.getId();
     Pair<BodoEngineTable, StreamingPipelineFrame> tableAndFrame =
-        this.streamingTableCacheMap.get(nodeId);
+        this.streamingTableCacheMap.get(key);
     if (tableAndFrame == null) {
       throw new RuntimeException(
           "Error in OperatorCache.getCachedTable: Argument table is not cached.");
@@ -100,7 +100,7 @@ public class RelationalOperatorCache {
                 "bodo.libs.table_builder.table_builder_append",
                 List.of(tableBuilderState, table))));
 
-    // Note: The node lowest on the tree starts the streaming pipeline,
+    // Note: The node that is lowest on the tree starts the streaming pipeline,
     // since the cached tree must contain the node responsible for starting the streaming
     // pipeline,
     // we have to start it here.
@@ -127,37 +127,38 @@ public class RelationalOperatorCache {
     // Update the streaming cache map, so that subsequent
     // caches use this pipeline, instead of the original.
     // This lets us "daisy chain" table buffers, reducing peak memory usage.
-    streamingTableCacheMap.put(
-        nodeId, new Pair<>(outputTable, builder.getCurrentStreamingPipeline()));
+    streamingTableCacheMap.put(key, new Pair<>(outputTable, builder.getCurrentStreamingPipeline()));
     return outputTable;
   }
 
   /**
    * @brief Get the cached value for a non streaming node
    * @param node streaming node
+   * @param key the cache key
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  private BodoEngineTable getCachedNonStreamingTable(PandasRel node) {
+  private BodoEngineTable getCachedNonStreamingTable(PandasRel node, int key) {
     assert node.getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH);
-    if (!tableCacheMap.containsKey(node.getId())) {
+    if (!tableCacheMap.containsKey(key)) {
       throw new RuntimeException(
           "Error in OperatorCache.getCachedTable: Argument table is not cached.");
     }
-    return tableCacheMap.get(node.getId());
+    return tableCacheMap.get(key);
   }
 
   /**
-   * @param node
+   * @param node The node to cache
+   * @param key The cache key
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  public BodoEngineTable getCachedTable(PandasRel node) {
+  public BodoEngineTable getCachedTable(PandasRel node, int key) {
 
     if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      return getCachedStreamingTable(node);
+      return getCachedStreamingTable(node, key);
     } else {
-      return getCachedNonStreamingTable(node);
+      return getCachedNonStreamingTable(node, key);
     }
   }
 
@@ -166,12 +167,12 @@ public class RelationalOperatorCache {
    * the node's output.
    *
    * @param node The node to cache
+   * @param key The cache key
    * @param table The output value to cache
    */
-  private void tryCacheNodeStreaming(PandasRel node, BodoEngineTable table) {
+  private void tryCacheNodeStreaming(PandasRel node, int key, BodoEngineTable table) {
     assert node.getTraitSet().contains(BatchingProperty.STREAMING);
-    this.streamingTableCacheMap.put(
-        node.getId(), new Pair<>(table, builder.getCurrentStreamingPipeline()));
+    this.streamingTableCacheMap.put(key, new Pair<>(table, builder.getCurrentStreamingPipeline()));
   }
 
   /**
@@ -179,11 +180,12 @@ public class RelationalOperatorCache {
    * cache the node's output.
    *
    * @param node The node to cache
+   * @param key The cache key
    * @param table The output value to cache
    */
-  private void tryCacheNodeNonStreaming(PandasRel node, BodoEngineTable table) {
+  private void tryCacheNodeNonStreaming(PandasRel node, int key, BodoEngineTable table) {
     assert node.getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH);
-    this.tableCacheMap.put(node.getId(), table);
+    this.tableCacheMap.put(key, table);
   }
 
   /**
@@ -191,14 +193,15 @@ public class RelationalOperatorCache {
    * output.
    *
    * @param node The node to cache
+   * @param key The cache key
    * @param table The output value to cache
    */
-  public void tryCacheNode(PandasRel node, BodoEngineTable table) {
+  public void tryCacheNode(PandasRel node, int key, BodoEngineTable table) {
     if (canCacheOutput(node)) {
       if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-        tryCacheNodeStreaming(node, table);
+        tryCacheNodeStreaming(node, key, table);
       } else {
-        tryCacheNodeNonStreaming(node, table);
+        tryCacheNodeNonStreaming(node, key, table);
       }
     }
   }

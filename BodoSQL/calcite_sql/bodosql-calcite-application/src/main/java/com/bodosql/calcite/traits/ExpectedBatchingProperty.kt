@@ -41,7 +41,7 @@ class ExpectedBatchingProperty {
         @JvmStatic
         fun rowTypeToTypes(rowType: RelDataType): List<RelDataType> {
             // Note: Types may be lazily computed so use getType() instead of type
-            return rowType.fieldList.map { f -> f.getType() }
+            return rowType.fieldList.map { f -> f.type }
         }
 
         /**
