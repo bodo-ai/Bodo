@@ -370,6 +370,7 @@ def _write_puffin_file(
     sequence_number_t,
     theta_sketches_t,
     output_pyarrow_schema_t,
+    arrow_fs_t,
     exist_puffin_loc_t,
 ):
     def codegen(context, builder, sig, args):
@@ -380,6 +381,7 @@ def _write_puffin_file(
             sequence_number,
             theta_sketches,
             output_pyarrow_schema,
+            arrow_fs,
             exist_puffin_loc,
         ) = args
         fnty = lir.FunctionType(
@@ -391,6 +393,9 @@ def _write_puffin_file(
                 lir.IntType(64),  # sequence_number
                 lir.IntType(8).as_pointer(),  # theta_sketches
                 lir.IntType(8).as_pointer(),  # output_pyarrow_schema
+                lir.LiteralStructType(
+                    [lir.IntType(8).as_pointer(), lir.IntType(1)]
+                ),  # arrow_fs
                 lir.IntType(8).as_pointer(),  # exist_puffin_loc
             ],
         )
@@ -406,6 +411,7 @@ def _write_puffin_file(
                 sequence_number,
                 theta_sketches,
                 output_pyarrow_schema,
+                arrow_fs,
                 exist_puffin_loc,
             ],
         )
@@ -418,11 +424,12 @@ def _write_puffin_file(
     return (
         types.statistics_file_type(
             types.voidptr,  # Pass UTF-8 string as void*
-            types.voidptr,  # Pass UTF-8 string as void*
-            snapshot_id_t,
-            sequence_number_t,
-            theta_sketches_t,
+            types.voidptr,  # const Pass UTF-8 string as void*
+            types.int64,
+            types.int64,
+            theta_sketch_collection_type,
             output_pyarrow_schema_t,
+            types.optional(ArrowFs()),
             types.voidptr,  # Pass UTF-8 string as void*
         ),
         codegen,
@@ -1233,6 +1240,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     sequence_number,
                     writer["theta_sketches"],
                     writer["output_pyarrow_schema"],
+                    writer["arrow_fs"],
                     unicode_to_utf8(old_puffin_file_path),
                 )
                 with bodo.no_warning_objmode():
