@@ -120,7 +120,7 @@ enable_runtime_join_filters = (
     os.environ.get("BODO_ENABLE_RUNTIME_JOIN_FILTERS", "1") != "0"
 )
 # Flag used to enable creating theta sketches for columns when writing with Iceberg
-enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "0") != "0"
+enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "1") != "0"
 # Should Bodo use decimal types when specified by BodoSQL.
 bodo_use_decimal = os.environ.get("BODO_USE_DECIMAL", "0") != "0"
 # Which SQL defaults should BODOSQL use (Snowflake vs Spark)
