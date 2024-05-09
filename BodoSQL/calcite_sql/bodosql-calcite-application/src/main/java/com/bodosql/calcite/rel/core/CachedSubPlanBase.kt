@@ -4,7 +4,6 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.AbstractRelNode
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.RelRoot
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
@@ -13,7 +12,7 @@ import org.apache.calcite.rel.type.RelDataType
  * Base class for a RelNode that represents a cached section of a plan.
  */
 open class CachedSubPlanBase protected constructor(
-    val cachedPlan: RelRoot,
+    val cachedPlan: CachedPlanInfo,
     val cacheID: Int,
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
@@ -38,11 +37,11 @@ open class CachedSubPlanBase protected constructor(
     }
 
     override fun deriveRowType(): RelDataType {
-        return cachedPlan.validatedRowType
+        return cachedPlan.plan.validatedRowType
     }
 
     override fun estimateRowCount(mq: RelMetadataQuery): Double {
-        return cachedPlan.rel.estimateRowCount(mq)
+        return cachedPlan.plan.rel.estimateRowCount(mq)
     }
 
     // TODO: Add cost calculation. This is tricky because the cost should be amortized

@@ -175,7 +175,7 @@ class RelCostAndMetaDataWriter(
             pw.println()
             pw.println("CACHED NODE ${rel.cacheID}")
             spacer.add(2)
-            val node = rel.cachedPlan.rel
+            val node = rel.cachedPlan.plan.rel
             node.explain(this)
         }
     }

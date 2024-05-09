@@ -3,19 +3,19 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
+import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.RelRoot
 
-class PandasCachedSubPlan private constructor(cachedPlan: RelRoot, cacheID: Int, cluster: RelOptCluster, traitSet: RelTraitSet) :
+class PandasCachedSubPlan private constructor(cachedPlan: CachedPlanInfo, cacheID: Int, cluster: RelOptCluster, traitSet: RelTraitSet) :
     CachedSubPlanBase(
         cachedPlan,
         cacheID,
         cluster,
-        traitSet.replace(PandasRel.CONVENTION).replace(cachedPlan.rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)),
+        traitSet.replace(PandasRel.CONVENTION).replace(cachedPlan.plan.rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)),
     ),
     PandasRel {
         override fun copy(
@@ -39,7 +39,7 @@ class PandasCachedSubPlan private constructor(cachedPlan: RelRoot, cacheID: Int,
                 if (relationalOperatorCache.isNodeCached(this, cacheID)) {
                     relationalOperatorCache.getCachedTable(this, cacheID)
                 } else {
-                    val table = implementor.visitChild(cachedPlan.rel, 0)
+                    val table = implementor.visitChild(cachedPlan.plan.rel, 0)
                     relationalOperatorCache.tryCacheNode(this, cacheID, table)
                     table
                 }
@@ -68,10 +68,10 @@ class PandasCachedSubPlan private constructor(cachedPlan: RelRoot, cacheID: Int,
         companion object {
             @JvmStatic
             fun create(
-                cachedPlan: RelRoot,
+                cachedPlan: CachedPlanInfo,
                 cacheID: Int,
             ): PandasCachedSubPlan {
-                val rootNode = cachedPlan.rel
+                val rootNode = cachedPlan.plan.rel
                 return PandasCachedSubPlan(cachedPlan, cacheID, rootNode.cluster, rootNode.traitSet)
             }
         }

@@ -2,6 +2,8 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasCachedSubPlan
 import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.rel.core.CachedPlanInfo
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
@@ -64,18 +66,22 @@ class CacheSubPlanProgram : Program {
 
     private class CacheReplacement(val cacheNodes: Set<Int>) : RelShuttleImpl() {
         // Ensure we only compute each cache node once.
-        private val cacheNodeMap = mutableMapOf<Int, RelNode>()
+        private val cacheNodeMap = mutableMapOf<Int, CachedSubPlanBase>()
         private var cacheID = 0
 
         override fun visit(rel: RelNode): RelNode {
             val id = rel.id
             return if (cacheNodeMap.contains(id)) {
-                cacheNodeMap[id]!!
+                val result = cacheNodeMap[id]!!
+                result.cachedPlan.addConsumer()
+                result
             } else {
                 val children = rel.inputs.map { it.accept(this) }
                 val node = rel.copy(rel.traitSet, children)
                 if (cacheNodes.contains(id)) {
-                    val cachedSubPlan = PandasCachedSubPlan.create(RelRoot.of(node, SqlKind.OTHER), cacheID++)
+                    val root = RelRoot.of(node, SqlKind.OTHER)
+                    val plan = CachedPlanInfo.create(root, 1)
+                    val cachedSubPlan = PandasCachedSubPlan.create(plan, cacheID++)
                     cacheNodeMap[id] = cachedSubPlan
                     cachedSubPlan
                 } else {
