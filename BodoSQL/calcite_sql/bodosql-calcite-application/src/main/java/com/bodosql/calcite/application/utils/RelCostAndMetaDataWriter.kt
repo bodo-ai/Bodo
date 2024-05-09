@@ -22,6 +22,7 @@
 package com.bodosql.calcite.application.utils
 
 import com.bodosql.calcite.plan.Cost
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.rel.RelNode
@@ -30,7 +31,6 @@ import org.apache.calcite.rel.externalize.RelWriterImpl
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.util.Pair
 import java.io.PrintWriter
-import java.lang.RuntimeException
 import java.text.DecimalFormat
 
 /**
@@ -40,10 +40,15 @@ import java.text.DecimalFormat
  * it normalizes the RelNode ids and outputs the cost for
  * each relational operation.
  */
-class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode, private val minRelID: Map<Int, Int>) : RelWriterImpl(pw) {
-    // Holds a mapping of RelNode ids to their rewritten normalized
-    // versions.
-    private val normalizedIdMap: Map<Int, Int> = normalizeDuplicates(countRelIds(rel))
+class RelCostAndMetaDataWriter(
+    pw: PrintWriter,
+    rel: RelNode,
+    private val minRelID: Map<Int, Int>,
+    private val showCosts: Boolean = true,
+) : RelWriterImpl(pw) {
+    // Information caching
+    private val seenCacheIDs = mutableSetOf<Int>()
+    private val cacheQueue = ArrayDeque<CachedSubPlanBase>()
 
     // Use for normalizing RexNode values.
     private val rexBuilder = rel.cluster.rexBuilder
@@ -60,6 +65,11 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode, private val minRel
         rel: RelNode,
         values: List<Pair<String, Any?>>,
     ) {
+        // Add cached nodes to the queue for explains
+        if (rel is CachedSubPlanBase && !seenCacheIDs.contains(rel.id)) {
+            seenCacheIDs.add(rel.id)
+            cacheQueue.add(rel)
+        }
         val inputs = rel.inputs
         val uncastedMq = rel.cluster.metadataQuery
         assert(uncastedMq is BodoRelMetadataQuery) {
@@ -69,70 +79,59 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode, private val minRel
 
         val s = StringBuilder()
 
-        newSection(s, "operator id")
-        s.append("${minRelID[rel.id]}\n")
+        if (showCosts) {
+            newSection(s, "operator id")
+            s.append("${minRelID[rel.id]}\n")
+            // Display cost information.
+            val cost = mq.getNonCumulativeCost(rel) as Cost
+            newSection(s, "cost")
+            s.append("${cost.valueString} $cost\n")
 
-        // Display cost information.
-        val cost = mq.getNonCumulativeCost(rel) as Cost
-        newSection(s, "cost")
-        s.append("${cost.valueString} $cost\n")
-
-        // Assign the physical trait information if that exists
-        // for testing purposes
-        val batchingProperty = rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
-        if (batchingProperty != null) {
-            newSection(s, "batching property")
-            s.append("$batchingProperty\n")
-        }
-
-        // Check if we have distinctiveness information for any of the columns
-        // We don't do this in the case that we're determining what metadata is needed,
-        // because the act of requesting the metadata "mq.getColumnDistinctCount" will make the system assume
-        // that the metadata for this column is needed.
-        if ((System.getenv("BODOSQL_TESTING_FIND_NEEDED_METADATA")?.toIntOrNull() ?: 0) == 0) {
-            val hasDistinctInfo =
-                (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
-            if (hasDistinctInfo) {
-                // If we do,
-                newSection(s, "distinct estimates")
-                for (columnIdx in 0 until rel.rowType.fieldCount) {
-                    val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
-                    if (distinctiveness != null) {
-                        val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
-                        s.append("$$columnIdx = $formattedDistinctiveness values")
-                        if (columnIdx < rel.rowType.fieldCount - 1) {
-                            s.append(", ")
+            // Assign the physical trait information if that exists
+            // for testing purposes
+            val batchingProperty = rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+            if (batchingProperty != null) {
+                newSection(s, "batching property")
+                s.append("$batchingProperty\n")
+            }
+            // Check if we have distinctiveness information for any of the columns
+            // We don't do this in the case that we're determining what metadata is needed,
+            // because the act of requesting the metadata "mq.getColumnDistinctCount" will make the system assume
+            // that the metadata for this column is needed.
+            if ((System.getenv("BODOSQL_TESTING_FIND_NEEDED_METADATA")?.toIntOrNull() ?: 0) == 0) {
+                val hasDistinctInfo =
+                    (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
+                if (hasDistinctInfo) {
+                    // If we do,
+                    newSection(s, "distinct estimates")
+                    for (columnIdx in 0 until rel.rowType.fieldCount) {
+                        val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
+                        if (distinctiveness != null) {
+                            val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
+                            s.append("$$columnIdx = $formattedDistinctiveness values")
+                            if (columnIdx < rel.rowType.fieldCount - 1) {
+                                s.append(", ")
+                            }
                         }
                     }
+                    s.append("\n")
                 }
-                s.append("\n")
+            } else if ((System.getenv("UPDATE_EXPECT")?.toIntOrNull() ?: 0) != 0) {
+                throw RuntimeException("One of UPDATE_EXPECT and BODOSQL_TESTING_FIND_NEEDED_METADATA must be disabled when running tests")
             }
-        } else if ((System.getenv("UPDATE_EXPECT")?.toIntOrNull() ?: 0) != 0) {
-            throw RuntimeException("One of UPDATE_EXPECT and BODOSQL_TESTING_FIND_NEEDED_METADATA must be disabled when running tests")
-        }
 
-        // Add the types of each output column
-        newSection(s, "types")
-        val types =
-            rel.rowType.fieldList.map {
-                val outString = StringBuilder(it.type.toString())
-                if (!it.type.isNullable) {
-                    outString.append(" NOT NULL")
+            // Add the types of each output column
+            newSection(s, "types")
+            val types =
+                rel.rowType.fieldList.map {
+                    val outString = StringBuilder(it.type.toString())
+                    if (!it.type.isNullable) {
+                        outString.append(" NOT NULL")
+                    }
+                    outString
                 }
-                outString
-            }
-        s.append(types.joinToString(", "))
-        s.append("\n")
-
-        // If this relational node appears multiple times in the tree,
-        // we will have assigned it a normalized id. If that normalized id
-        // exists, output it.
-        // We only output normalized ids when there are duplicates to reduce
-        // churn on the diffs when plans change. Ids are really only significant
-        // when they are duplicates.
-        normalizedIdMap[rel.id]?.also { id ->
-            spacer.spaces(s)
-            s.append("# id: $id\n")
+            s.append(types.joinToString(", "))
+            s.append("\n")
         }
 
         // Relational node name and attributes.
@@ -169,6 +168,17 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode, private val minRel
         }
 
     private fun normalizeRexNode(value: RexNode): RexNode = RexNormalizer.normalize(rexBuilder, value)
+
+    fun explainCachedNodes() {
+        while (cacheQueue.isNotEmpty()) {
+            val rel = cacheQueue.removeFirst()
+            pw.println()
+            pw.println("CACHED NODE ${rel.cacheID}")
+            spacer.add(2)
+            val node = rel.cachedPlan.rel
+            node.explain(this)
+        }
+    }
 
     companion object {
         /**

@@ -7,7 +7,6 @@ import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoSubQueryRemaining
 import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE
-import com.bodosql.calcite.prepare.BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
@@ -175,6 +174,7 @@ object BodoPrograms {
             // so no simplification step undoes this conversion.
             SearchArgExpandProgram,
             MergeRelProgram(),
+            CacheSubPlanProgram(),
         )
 
     /**

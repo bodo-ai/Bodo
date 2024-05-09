@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.application.operatorTables.AggOperatorTable
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.RowSample
 import com.bodosql.calcite.rel.core.TableFunctionScanBase
@@ -425,5 +426,12 @@ class BodoRelMdRowCount : RelMdRowCount() {
         if (otherConds.size == 0) return mrnfRowCount
         val otherConditionsCombined = otherConds[0]
         return multiply(mrnfRowCount, mq.getSelectivity(rel.input, otherConditionsCombined))
+    }
+
+    fun getRowCount(
+        rel: CachedSubPlanBase,
+        mq: RelMetadataQuery,
+    ): Double? {
+        return mq.getRowCount(rel.cachedPlan.rel)
     }
 }

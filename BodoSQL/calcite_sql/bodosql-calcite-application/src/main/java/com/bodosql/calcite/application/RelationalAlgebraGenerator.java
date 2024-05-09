@@ -25,7 +25,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
-import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
@@ -460,15 +459,12 @@ public class RelationalAlgebraGenerator {
   private String getOptimizedPlanStringFromRoot(
       Pair<RelRoot, Map<Integer, Integer>> root, Boolean includeCosts) {
     RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
-    if (includeCosts) {
-      StringWriter sw = new StringWriter();
-      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight());
-      newRoot.explain(costWriter);
-      return sw.toString();
-    } else {
-      return RelOptUtil.toString(newRoot);
-    }
+    StringWriter sw = new StringWriter();
+    RelCostAndMetaDataWriter costWriter =
+        new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight(), includeCosts);
+    newRoot.explain(costWriter);
+    costWriter.explainCachedNodes();
+    return sw.toString();
   }
 
   /**
