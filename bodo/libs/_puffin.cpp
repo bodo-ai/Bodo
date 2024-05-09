@@ -588,7 +588,9 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
 PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
-    PyObject *iceberg_arrow_schema_py, const char *existing_puffin_file_loc) {
+    PyObject *iceberg_arrow_schema_py,
+    numba_optional<arrow::fs::FileSystem> arrow_fs,
+    const char *existing_puffin_file_loc) {
     try {
         std::shared_ptr<arrow::Schema> iceberg_schema;
         CHECK_ARROW_AND_ASSIGN(
@@ -631,9 +633,19 @@ PyObject *write_puffin_file_py_entrypt(
                                 &fs_option, &dirname, &fname, &puffin_loc,
                                 &path_name);
             std::shared_ptr<::arrow::io::OutputStream> out_stream;
-            // TODO: Simplify/refactor this function. Its doing too much.
-            open_outstream(fs_option, false, "puffin", dirname, fname,
-                           puffin_loc, &out_stream, bucket_region);
+            // If we already have a filesystem, use it
+            if (arrow_fs.has_value) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;  // append file name to output path
+                arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                    arrow_fs.value->OpenOutputStream(out_path);
+                CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
+                                       out_stream);
+            } else {
+                // TODO: Simplify/refactor this function. Its doing too much.
+                open_outstream(fs_option, false, "puffin", dirname, fname,
+                               puffin_loc, &out_stream, bucket_region);
+            }
             CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
                         "Failed to write puffin data");
             CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");
