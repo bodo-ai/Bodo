@@ -34,7 +34,7 @@ public class RelIDToOperatorIDVisitor extends RelVisitor {
   @Override
   public void visit(RelNode node, int ordinal, @Nullable RelNode parent) {
     if (node instanceof CachedSubPlanBase) {
-      this.visit(((CachedSubPlanBase) node).getCachedPlan().rel, 0, null);
+      this.visit(((CachedSubPlanBase) node).getCachedPlan().getPlan().rel, 0, null);
     }
     node.childrenAccept(this);
     int relNodeID = node.getId();
