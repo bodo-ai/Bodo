@@ -23,7 +23,7 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
                         .predicate(LimitUtils::isOnlyLimit)
                         .oneInput(
                             b1 ->
-                                b1.operand(SnowflakeToPandasConverter.class)
+                                b1.operand(SnowflakeToBodoPhysicalConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
             .as(Config.class);
 

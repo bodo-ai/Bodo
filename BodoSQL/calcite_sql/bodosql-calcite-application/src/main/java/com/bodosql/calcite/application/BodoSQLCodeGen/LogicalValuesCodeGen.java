@@ -3,10 +3,10 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -19,13 +19,13 @@ public class LogicalValuesCodeGen {
    *
    * @param argRows The expressions for each row.
    * @param rowType The row type of the output. This is used if there are no initial values.
-   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
+   * @param bodoVisitorClass The BodoCodeGenVisitor used to lower globals.
    * @return The code generated for the LogicalValues expression.
    */
   public static Expr generateLogicalValuesCode(
       final List<List<Expr>> argRows,
       final RelDataType rowType,
-      final PandasCodeGenVisitor pdVisitorClass) {
+      final BodoCodeGenVisitor bodoVisitorClass) {
 
     List<RelDataTypeField> sqlTypes = rowType.getFieldList();
     // Create the types for the output arrays.
@@ -35,7 +35,7 @@ public class LogicalValuesCodeGen {
     for (RelDataTypeField field : sqlTypes) {
       arrayTypes.add(
           sqlTypeToBodoArrayType(
-              field.getType(), allowDictArrays, pdVisitorClass.genDefaultTZ().getZoneExpr()));
+              field.getType(), allowDictArrays, bodoVisitorClass.genDefaultTZ().getZoneExpr()));
     }
     // Generate the lists to insert
     final int numArrays = rowType.getFieldCount();
@@ -54,20 +54,20 @@ public class LogicalValuesCodeGen {
       Expr.Tuple typeTuple = new Expr.Tuple(arrayTypes);
       Expr tableType = new Expr.Call("bodo.TableType", typeTuple);
       // Move the table type to a global
-      Variable global = pdVisitorClass.lowerAsGlobal(tableType);
+      Variable global = bodoVisitorClass.lowerAsGlobal(tableType);
       return new Expr.Call("bodo.hiframes.table.create_empty_table", global);
     } else {
       // Generate a list of columns to wrap in a table.
       List<Expr> columns = new ArrayList<>();
       for (int i = 0; i < dataValues.size(); i++) {
         // Convert the list to an array.
-        Variable global = pdVisitorClass.lowerAsGlobal(arrayTypes.get(i));
+        Variable global = bodoVisitorClass.lowerAsGlobal(arrayTypes.get(i));
         Expr arrCall =
             new Expr.Call("bodo.utils.conversion.list_to_array", dataValues.get(i), global);
         columns.add(arrCall);
       }
       List<Expr.IntegerLiteral> indices = integerLiteralArange(numArrays);
-      Variable buildIndices = pdVisitorClass.lowerAsMetaType(new Expr.Tuple(indices));
+      Variable buildIndices = bodoVisitorClass.lowerAsMetaType(new Expr.Tuple(indices));
       // Create the table
       return new Expr.Call(
           "bodo.hiframes.table.logical_table_to_table",

@@ -19,9 +19,9 @@ class FilterPushdownAnalyzerProgram : AnalysisProgram() {
     override fun runAnalysis() {
         val plan = retrieveInputPlan()
         // TODO(aneesh) investigate other rules that could be relevant here
-        val program = Programs.ofRules(BodoRules.PANDAS_FILTER_INTO_JOIN_RULE)
-        val new_plan = program.run(plan.cluster.planner, plan, plan.traitSet, ImmutableList.of(), ImmutableList.of())
-        if (!new_plan.deepEquals(plan)) {
+        val program = Programs.ofRules(BodoRules.BODO_PHYSICAL_FILTER_INTO_JOIN_RULE)
+        val newPlan = program.run(plan.cluster.planner, plan, plan.traitSet, ImmutableList.of(), ImmutableList.of())
+        if (!newPlan.deepEquals(plan)) {
             canPushdownFilter = true
         }
     }

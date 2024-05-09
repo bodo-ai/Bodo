@@ -21,7 +21,7 @@ public class SnowflakeProjectRule extends AbstractSnowflakeProjectRule {
 
     // Inputs are:
     // project ->
-    //   SnowflakeToPandasConverter ->
+    //   SnowflakeToBodoPhysicalConverter ->
     //      SnowflakeRel
     Config DEFAULT_CONFIG =
         ImmutableSnowflakeProjectRule.Config.of()
@@ -31,7 +31,7 @@ public class SnowflakeProjectRule extends AbstractSnowflakeProjectRule {
                         .predicate(AbstractSnowflakeProjectRule::isPushableProject)
                         .oneInput(
                             b1 ->
-                                b1.operand(SnowflakeToPandasConverter.class)
+                                b1.operand(SnowflakeToBodoPhysicalConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
             .as(Config.class);
 

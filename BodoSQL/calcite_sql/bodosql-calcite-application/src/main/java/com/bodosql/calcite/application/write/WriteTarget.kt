@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.write
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Variable
@@ -59,7 +59,7 @@ abstract class WriteTarget(
      *
      */
     abstract fun streamingWriteAppend(
-        visitor: PandasCodeGenVisitor,
+        visitor: BodoCodeGenVisitor,
         stateVar: Variable,
         tableVar: Variable,
         isLastVar: Variable,

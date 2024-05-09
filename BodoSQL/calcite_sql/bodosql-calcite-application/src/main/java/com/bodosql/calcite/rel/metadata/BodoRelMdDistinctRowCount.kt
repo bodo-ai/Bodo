@@ -1,6 +1,6 @@
 package com.bodosql.calcite.rel.metadata
 
-import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.WindowBase
 import org.apache.calcite.rel.RelNode
@@ -117,12 +117,12 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
     }
 
     fun getDistinctRowCount(
-        rel: PandasMinRowNumberFilter,
+        rel: BodoPhysicalMinRowNumberFilter,
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,
     ): Double? {
-        val asProjectFilter = rel.asPandasProjectFilter()
+        val asProjectFilter = rel.asBodoProjectFilter()
         return cartesianApproximationDistinctRowCount(asProjectFilter, mq, groupKey)
     }
 

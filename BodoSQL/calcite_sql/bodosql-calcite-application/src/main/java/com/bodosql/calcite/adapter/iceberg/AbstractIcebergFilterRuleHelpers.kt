@@ -96,7 +96,7 @@ class AbstractIcebergFilterRuleHelpers {
                         catalogTable,
                     )
                 builder.push(childFilter)
-                // Create the PandasFilter from the subset that is not pushable.
+                // Create the BodoPhysicalFilter from the subset that is not pushable.
                 builder.filter(pandasConditions)
                 call.transformTo(builder.build())
                 // New plan is absolutely better than old plan.

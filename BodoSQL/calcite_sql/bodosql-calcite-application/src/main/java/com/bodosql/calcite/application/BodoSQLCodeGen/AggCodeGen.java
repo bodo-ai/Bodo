@@ -6,8 +6,8 @@ import static com.bodosql.calcite.application.utils.AggHelpers.generateGroupByCa
 import static com.bodosql.calcite.application.utils.AggHelpers.getCountCall;
 import static com.bodosql.calcite.application.utils.AggHelpers.getDummyColName;
 
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.utils.Utils;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;
@@ -193,7 +193,7 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       boolean distOutput,
-      PandasCodeGenVisitor pdVisitorClass) {
+      BodoCodeGenVisitor pdVisitorClass) {
     // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()], "mean(B)":
     // [test_df1["A"].mean()]})
     // Generate any filters. This is done on a separate line for simpler
@@ -693,7 +693,7 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       Variable funcVar,
-      PandasCodeGenVisitor pdVisitorClass) {
+      BodoCodeGenVisitor pdVisitorClass) {
     StringBuilder fnString = new StringBuilder();
 
     final String indent = Utils.getBodoIndent();
@@ -924,7 +924,7 @@ public class AggCodeGen {
    */
   public static Pair<Variable, Variable> getStreamingGroupByOffsetAndCols(
       List<AggregateCall> aggCalls,
-      PandasCodeGenVisitor visitor,
+      BodoCodeGenVisitor visitor,
       Expr.IntegerLiteral firstKeyColumnIndex) {
     List<Expr.IntegerLiteral> offsets = new ArrayList<>();
     offsets.add(new Expr.IntegerLiteral(0));
@@ -966,7 +966,7 @@ public class AggCodeGen {
    * @return A variable that contains this integer list
    */
   public static Variable getStreamingGroupbyFnames(
-      List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
+      List<AggregateCall> aggCalls, BodoCodeGenVisitor visitor) {
     List<Expr.StringLiteral> fnames = new ArrayList<>();
     for (int i = 0; i < aggCalls.size(); i++) {
       AggregateCall curAggCall = aggCalls.get(i);

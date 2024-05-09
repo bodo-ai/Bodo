@@ -2,8 +2,8 @@ package com.bodosql.calcite.application.utils;
 
 import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 
-import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator;
-import com.bodosql.calcite.adapter.pandas.PandasRel;
+import com.bodosql.calcite.adapter.bodo.ArrayRexToBodoTranslator;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
@@ -428,7 +428,7 @@ public class Utils {
    */
   public static BodoEngineTable concatenateLiteralAggValue(
       final Module.Builder builder,
-      PandasRel.BuildContext ctx,
+      BodoPhysicalRel.BuildContext ctx,
       final BodoEngineTable inputTable,
       final Aggregate node) {
     final List<IntegerLiteral> indices = new ArrayList<>();
@@ -442,7 +442,7 @@ public class Utils {
     final int numAggCols =
         node.getRowType().getFieldCount()
             - (aggregateCallList.size() - literalAggPrunedAggList(aggregateCallList).size());
-    ArrayRexToPandasTranslator translator = ctx.arrayRexTranslator(inputTable);
+    ArrayRexToBodoTranslator translator = ctx.arrayRexTranslator(inputTable);
     int seenLiterals = 0;
     int keptColumns = numGroupCols;
     for (int i = 0; i < aggregateCallList.size(); i++) {

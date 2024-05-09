@@ -1,12 +1,12 @@
 package com.bodosql.calcite.rel.metadata
 
-import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import org.apache.calcite.rel.metadata.RelMdParallelism
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
 class BodoRelMdParallelism(private val ranks: Int) : RelMdParallelism() {
     fun splitCount(
-        rel: PandasRel,
+        rel: BodoPhysicalRel,
         mq: RelMetadataQuery,
     ): Int = rel.splitCount(ranks) ?: ranks
 }

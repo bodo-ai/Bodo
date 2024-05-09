@@ -1,6 +1,6 @@
 package com.bodosql.calcite.table
 
-import com.bodosql.calcite.adapter.pandas.calciteLogicalProject
+import com.bodosql.calcite.adapter.bodo.calciteLogicalProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan.Companion.create
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.RelationalAlgebraGenerator

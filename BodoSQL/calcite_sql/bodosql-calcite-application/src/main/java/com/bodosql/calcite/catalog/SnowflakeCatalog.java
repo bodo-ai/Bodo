@@ -8,11 +8,11 @@ import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LO
 import static com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable.EXTERNAL_TABLE_FILES_NAME;
 import static java.lang.Math.min;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.adapter.bodo.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable;
 import com.bodosql.calcite.application.utils.Memoizer;
@@ -1122,7 +1122,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * Generate a Python connection string used to read from or write to Snowflake in Bodo's SQL
    * Python code.
    *
-   * <p>TODO(jsternberg): This method is needed for the SnowflakeToPandasConverter nodes, but
+   * <p>TODO(jsternberg): This method is needed for the SnowflakeToBodoPhysicalConverter nodes, but
    * exposing this is a bad idea and this class likely needs to be refactored in a way that the
    * connection information can be passed around more easily.
    *
@@ -1213,7 +1213,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateAppendWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName) {
+      BodoCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName) {
     return generateWriteCode(
         visitor,
         varName,
@@ -1233,7 +1233,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateWriteCode(
-      PandasCodeGenVisitor visitor,
+      BodoCodeGenVisitor visitor,
       Variable varName,
       ImmutableList<String> tableName,
       IfExistsBehavior ifExists,

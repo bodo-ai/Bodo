@@ -1,13 +1,13 @@
 package com.bodosql.calcite.prepare;
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRowSample;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
 import com.bodosql.calcite.adapter.iceberg.IcebergRel;
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
-import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter;
-import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter;
-import com.bodosql.calcite.adapter.pandas.PandasRowSample;
-import com.bodosql.calcite.adapter.pandas.PandasSample;
+import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
 import com.bodosql.calcite.rel.core.Flatten;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
@@ -128,7 +128,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   }
 
   public TrimResult trimFields(
-      SnowflakeToPandasConverter node,
+      SnowflakeToBodoPhysicalConverter node,
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
@@ -165,7 +165,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   }
 
   public TrimResult trimFields(
-      IcebergToPandasConverter node,
+      IcebergToBodoPhysicalConverter node,
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
@@ -202,12 +202,12 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   }
 
   public TrimResult trimFields(
-      PandasSample node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+      BodoPhysicalSample node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
   }
 
   public TrimResult trimFields(
-      PandasRowSample node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+      BodoPhysicalRowSample node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
   }
 
@@ -574,7 +574,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   }
 
   public TrimResult trimFields(
-      PandasMinRowNumberFilter filter,
+      BodoPhysicalMinRowNumberFilter filter,
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
     // Same idea as the Filter implementation, but uses the MRNF node
@@ -587,7 +587,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // inputsToKeep should include every field before this point
     if (filter.getInputsToKeep().cardinality() != fieldCount) {
       throw new RuntimeException(
-          "PandasMinRowNumberFilter node does not support pruning via inputsToKeep before rel"
+          "BodoPhysicalMinRowNumberFilter node does not support pruning via inputsToKeep before rel"
               + " trimming");
     }
 
@@ -634,8 +634,8 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     }
 
     // Make a new filter with trimmed input and condition.
-    PandasMinRowNumberFilter newFilter =
-        PandasMinRowNumberFilter.Companion.create(
+    BodoPhysicalMinRowNumberFilter newFilter =
+        BodoPhysicalMinRowNumberFilter.Companion.create(
             filter.getCluster(), newInput, newConditionExpr, newInputsToKeep.build());
 
     // The result has the same mapping as the input gave us. Sometimes we

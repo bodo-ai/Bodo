@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.iceberg
 
-import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.ir.Expr
@@ -50,7 +50,7 @@ private val GENERIC_CALL_TO_OPSTR =
 private val REWRITE_UNARY_KINDS = setOf(SqlKind.IS_NOT_TRUE, SqlKind.IS_NOT_FALSE)
 private val REWRITE_BINOP_KINDS = setOf(SqlKind.IS_DISTINCT_FROM, SqlKind.IS_NOT_DISTINCT_FROM)
 
-class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ctx: PandasRel.BuildContext) : RexVisitor<Expr> {
+class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ctx: BodoPhysicalRel.BuildContext) : RexVisitor<Expr> {
     private val scalarTranslator = ctx.scalarRexTranslator()
 
     // Static Class that can be accessed outside this class

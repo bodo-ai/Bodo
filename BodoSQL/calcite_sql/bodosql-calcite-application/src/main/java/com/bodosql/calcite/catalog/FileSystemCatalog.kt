@@ -1,7 +1,7 @@
 package com.bodosql.calcite.catalog
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions
-import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.adapter.bodo.StreamingOptions
+import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.ParquetWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
@@ -255,7 +255,7 @@ class FileSystemCatalog(
      * @return The generated code to produce the append write.
      */
     override fun generateAppendWriteCode(
-        visitor: PandasCodeGenVisitor?,
+        visitor: BodoCodeGenVisitor?,
         varName: Variable?,
         tableName: ImmutableList<String>?,
     ): Expr {
@@ -273,7 +273,7 @@ class FileSystemCatalog(
      * @return The generated code to produce a write.
      */
     override fun generateWriteCode(
-        visitor: PandasCodeGenVisitor?,
+        visitor: BodoCodeGenVisitor?,
         varName: Variable?,
         tableName: ImmutableList<String>?,
         ifExists: IfExistsBehavior,
