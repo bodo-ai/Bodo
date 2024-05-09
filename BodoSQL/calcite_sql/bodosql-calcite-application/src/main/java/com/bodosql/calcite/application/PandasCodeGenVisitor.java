@@ -52,7 +52,6 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.pandas.StreamingRexToPandasTranslator;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
-import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
@@ -89,7 +88,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
-import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
@@ -441,9 +439,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
     if (node instanceof PandasTableScan) {
-      this.visitPandasTableScan((PandasTableScan) node, !(parent instanceof Filter));
+      this.visitPandasTableScan((PandasTableScan) node);
     } else if (node instanceof TableScan) {
-      this.visitTableScan((TableScan) node, !(parent instanceof Filter));
+      this.visitTableScan((TableScan) node);
     } else if (node instanceof PandasJoin) {
       this.visitPandasJoin((PandasJoin) node);
     } else if (node instanceof PandasSort) {
@@ -484,11 +482,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   private void visitCombineStreamsExchange(CombineStreamsExchange node) {
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
-      return;
-    }
     // For information on how this node handles codegen, please see:
     // https://bodo.atlassian.net/wiki/spaces/B/pages/1337524225/Code+Generation+Design+WIP
 
@@ -560,7 +553,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
     BodoEngineTable outEngineTable = new BodoEngineTable(accumulatedTable.emit(), node);
     tableGenStack.push(outEngineTable);
-    operatorCache.tryCacheNode(node, outEngineTable);
   }
 
   private void visitSeparateStreamExchange(SeparateStreamExchange node) {
@@ -620,19 +612,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node the node to emit code for.
    */
   private void visitPandasRel(PandasRel node) {
-    // Determine if this node has already been cached.
-    // If it has, just return that immediately.
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
-      return;
-    }
-
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
-
-    // Place the output variable in the tableCache and tableGenStack.
-    operatorCache.tryCacheNode(node, out);
     tableGenStack.push(out);
   }
 
@@ -668,7 +649,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node PandasUnion node to be visited
    */
-  private void visitStreamingPandasUnion(PandasUnion node, RelationalOperatorCache operatorCache) {
+  private void visitStreamingPandasUnion(PandasUnion node) {
 
     // Visit the input node
     this.visit(node.getInput(0), 0, node);
@@ -804,7 +785,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Add the output table from last pipeline to the stack
     BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
-    operatorCache.tryCacheNode(node, outEngineTable);
     tableGenStack.push(outEngineTable);
     timerInfo.terminateTimer();
   }
@@ -814,8 +794,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node PandasUnion node to be visited
    */
-  private void visitSingleBatchPandasUnion(
-      PandasUnion node, RelationalOperatorCache operatorCache) {
+  private void visitSingleBatchPandasUnion(PandasUnion node) {
     List<Variable> childExprs = new ArrayList<>();
     BuildContext ctx = new BuildContext(node, genDefaultTZ());
     // Visit all the inputs
@@ -834,7 +813,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           Expr unionExpr = generateUnionCode(columnNames, childExprs, node.all, this);
           this.generatedCode.add(new Op.Assign(outVar, unionExpr));
           BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
-          operatorCache.tryCacheNode(node, outTable);
           tableGenStack.push(outTable);
         });
   }
@@ -845,16 +823,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node PandasUnion node to be visited
    */
   private void visitPandasUnion(PandasUnion node) {
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
+    if (node.isStreaming()) {
+      visitStreamingPandasUnion(node);
     } else {
-      if (node.isStreaming()) {
-        visitStreamingPandasUnion(node, operatorCache);
-      } else {
-        visitSingleBatchPandasUnion(node, operatorCache);
-      }
+      visitSingleBatchPandasUnion(node);
     }
   }
 
@@ -1508,15 +1480,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node BatchingProperty node to be visited
    */
   public void visitPandasAggregate(PandasAggregate node) {
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingPandasAggregate(node);
     } else {
-      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-        visitStreamingPandasAggregate(node);
-      } else {
-        visitSingleBatchedPandasAggregate(node);
-      }
+      visitSingleBatchedPandasAggregate(node);
     }
   }
 
@@ -1682,8 +1649,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           } else {
             outTable = intermediateTable;
           }
-          RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-          operatorCache.tryCacheNode(node, outTable);
           tableGenStack.push(outTable);
         });
   }
@@ -1793,9 +1758,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     outputPipeline.addTermination(deleteState);
     // Add the table to the stack
     tableGenStack.push(table);
-    // Update the cache.
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    operatorCache.tryCacheNode(node, table);
     timerInfo.terminateTimer();
   }
 
@@ -1847,17 +1809,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   /** Visitor for MinRowNumberFilter. */
   public void visitPandasMinRowNumberFilter(PandasMinRowNumberFilter node) {
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingPandasMinRowNumberFilter(node);
     } else {
-      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-        visitStreamingPandasMinRowNumberFilter(node);
-      } else {
-        // If non-streaming, fall back to regular PandasFilter codegen
-        RelNode asProjectFilter = node.asPandasProjectFilter();
-        this.visitPandasRel((PandasRel) asProjectFilter);
-      }
+      // If non-streaming, fall back to regular PandasFilter codegen
+      RelNode asProjectFilter = node.asPandasProjectFilter();
+      this.visitPandasRel((PandasRel) asProjectFilter);
     }
   }
 
@@ -2015,9 +1972,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     outputPipeline.addTermination(deleteState);
     // Add the table to the stack
     tableGenStack.push(table);
-    // Update the cache.
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    operatorCache.tryCacheNode(node, table);
     timerInfo.terminateTimer();
   }
 
@@ -2042,20 +1996,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param canLoadFromCache Can we load the variable from cache? This is set to False if we have a
    *     filter that wasn't previously cached to enable filter pushdown.
    */
-  public void visitPandasTableScan(PandasTableScan node, boolean canLoadFromCache) {
-    // Determine if this node has already been cached.
-    // If it has, just return that immediately.
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (canLoadFromCache && operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
-      return;
-    }
-
+  public void visitPandasTableScan(PandasTableScan node) {
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
-
-    // Place the output variable in the tableCache (if possible) and tableGenStack.
-    operatorCache.tryCacheNode(node, out);
     tableGenStack.push(out);
   }
 
@@ -2063,10 +2006,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Visitor for Table Scan.
    *
    * @param node TableScan node being visited
-   * @param canLoadFromCache Can we load the variable from cache? This is set to False if we have a
-   *     filter that wasn't previously cached to enable filter pushdown.
    */
-  public void visitTableScan(TableScan node, boolean canLoadFromCache) {
+  public void visitTableScan(TableScan node) {
     boolean isTargetTableScan = node instanceof PandasTargetTableScan;
     if (!isTargetTableScan) {
       throw new BodoSQLCodegenException(
@@ -2078,26 +2019,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
         nodeCasted,
         () -> {
           BodoEngineTable outTable;
-          RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-          if (canLoadFromCache && operatorCache.isNodeCached(nodeCasted)) {
-            outTable = operatorCache.getCachedTable(nodeCasted);
-          } else {
-            BodoSqlTable table;
+          BodoSqlTable table;
 
-            // TODO(jsternberg): The proper way to do this is to have the individual nodes
-            // handle the code generation. Due to the way the code generation is
-            // constructed,
-            // we can't really do that so we're just going to hack around it for now to
-            // avoid
-            // a large refactor
-            RelOptTableImpl relTable = (RelOptTableImpl) nodeCasted.getTable();
-            table = (BodoSqlTable) relTable.table();
+          // TODO(jsternberg): The proper way to do this is to have the individual nodes
+          // handle the code generation. Due to the way the code generation is
+          // constructed,
+          // we can't really do that so we're just going to hack around it for now to
+          // avoid
+          // a large refactor
+          RelOptTableImpl relTable = (RelOptTableImpl) nodeCasted.getTable();
+          table = (BodoSqlTable) relTable.table();
 
-            // IsTargetTableScan is always true, we check for this at the start of the
-            // function.
-            outTable = visitSingleBatchTableScanCommon(nodeCasted, table, isTargetTableScan);
-          }
-          operatorCache.tryCacheNode(nodeCasted, outTable);
+          // IsTargetTableScan is always true, we check for this at the start of the
+          // function.
+          outTable = visitSingleBatchTableScanCommon(nodeCasted, table, isTargetTableScan);
           tableGenStack.push(outTable);
         });
   }
@@ -2166,15 +2101,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node join node being visited
    */
   private void visitPandasJoin(PandasJoin node) {
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingPandasJoin(node);
     } else {
-      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-        visitStreamingPandasJoin(node, operatorCache);
-      } else {
-        visitBatchedPandasJoin(node, operatorCache);
-      }
+      visitBatchedPandasJoin(node);
     }
   }
 
@@ -2183,7 +2113,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  private void visitBatchedPandasJoin(PandasJoin node, RelationalOperatorCache operatorCache) {
+  private void visitBatchedPandasJoin(PandasJoin node) {
     BuildContext ctx = new BuildContext(node, genDefaultTZ());
     /* get left/right tables */
 
@@ -2229,7 +2159,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           this.generatedCode.add(joinCode);
 
           BodoEngineTable outTable = ctx.convertDfToTable(outDfVar, node);
-          operatorCache.tryCacheNode(node, outTable);
           tableGenStack.push(outTable);
         });
   }
@@ -2238,7 +2167,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Visitor for PandasJoin when it is a streaming join. Both nested loop and hash join use the same
    * API calls and the decision is made based on the values of the arguments.
    */
-  private void visitStreamingPandasJoin(PandasJoin node, RelationalOperatorCache operatorCache) {
+  private void visitStreamingPandasJoin(PandasJoin node) {
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections,
@@ -2260,7 +2189,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.nodeDetails(),
             node.getTimerType());
     StateVariable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo, operatorID);
-    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo, operatorID, operatorCache);
+    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo, operatorID);
     timerInfo.terminateTimer();
   }
 
@@ -2353,8 +2282,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       PandasJoin node,
       StateVariable joinStateVar,
       StreamingRelNodeTimer timerInfo,
-      int operatorID,
-      RelationalOperatorCache operatorCache) {
+      int operatorID) {
     // Visit the probe side
     this.visit(node.getLeft(), 1, node);
     timerInfo.insertLoopOperationStartTimer(2);
@@ -2386,7 +2314,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Add the table to the stack
     BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
     tableGenStack.push(outEngineTable);
-    operatorCache.tryCacheNode(node, outEngineTable);
   }
 
   /**

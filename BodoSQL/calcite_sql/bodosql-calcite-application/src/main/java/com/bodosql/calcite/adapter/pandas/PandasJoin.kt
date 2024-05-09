@@ -54,7 +54,7 @@ class PandasJoin(
         TODO("Not yet implemented")
     }
 
-    override fun explainTerms(pw: RelWriter?): RelWriter {
+    override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
             .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
             .itemIf("JoinID", joinFilterID, joinFilterID != -1)

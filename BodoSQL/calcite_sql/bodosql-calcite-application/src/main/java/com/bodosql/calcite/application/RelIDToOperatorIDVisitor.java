@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application;
 
+import com.bodosql.calcite.rel.core.CachedSubPlanBase;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.calcite.rel.RelNode;
@@ -32,6 +33,9 @@ public class RelIDToOperatorIDVisitor extends RelVisitor {
 
   @Override
   public void visit(RelNode node, int ordinal, @Nullable RelNode parent) {
+    if (node instanceof CachedSubPlanBase) {
+      this.visit(((CachedSubPlanBase) node).getCachedPlan().rel, 0, null);
+    }
     node.childrenAccept(this);
     int relNodeID = node.getId();
     if (!relNodeIDToOperatorID.containsKey(relNodeID)) {

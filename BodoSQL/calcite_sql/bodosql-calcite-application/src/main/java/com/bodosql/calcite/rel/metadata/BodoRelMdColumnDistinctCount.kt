@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
 import com.bodosql.calcite.rel.core.WindowBase
@@ -498,7 +499,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         column: Int,
     ): Double? {
         val nonNullEstimate =
-            if (rel.rowType.fieldList.get(column).type.isNullable()) {
+            if (rel.rowType.fieldList[column].type.isNullable) {
                 0.9
             } else {
                 1.0
@@ -509,6 +510,14 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         } else {
             null
         }
+    }
+
+    fun getColumnDistinctCount(
+        rel: CachedSubPlanBase,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
+        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.rel, column)
     }
 
     companion object {

@@ -115,8 +115,9 @@ public class SnowflakeGenTest {
       RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
       StringWriter sw = new StringWriter();
       RelCostAndMetaDataWriter costWriter =
-          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight());
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight(), true);
       newRoot.explain(costWriter);
+      costWriter.explainCachedNodes();
       return sw.toString();
     } catch (Exception e) {
       throw new RuntimeException(e);
