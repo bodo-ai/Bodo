@@ -2,8 +2,8 @@ package com.bodosql.calcite.catalog;
 
 import static com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.adapter.bodo.StreamingOptions;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -105,7 +105,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce the append write.
    */
   Expr generateAppendWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName);
+      BodoCodeGenVisitor visitor, Variable varName, ImmutableList<String> tableName);
 
   /**
    * Generates the code necessary to produce a write expression from the given catalog.
@@ -118,7 +118,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   Expr generateWriteCode(
-      PandasCodeGenVisitor visitor,
+      BodoCodeGenVisitor visitor,
       Variable varName,
       ImmutableList<String> tableName,
       IfExistsBehavior ifExists,
@@ -225,8 +225,8 @@ public interface BodoSQLCatalog {
    * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
    * Python code.
    *
-   * <p>TODO(jsternberg): This method is needed for the XXXToPandasConverter nodes, but exposing
-   * this is a bad idea and this class likely needs to be refactored in a way that the connection
+   * <p>TODO(jsternberg): This method is needed for the XXXToBodoConverter nodes, but exposing this
+   * is a bad idea and this class likely needs to be refactored in a way that the connection
    * information can be passed around more easily.
    *
    * @param schemaPath The schema component to define the connection not including the table name.

@@ -1,6 +1,6 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.adapter.pandas.PandasTableFunctionScan
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableFunctionScan
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable.EXTERNAL_TABLE_FILES_NAME
 import com.bodosql.calcite.plan.makeCost
@@ -39,7 +39,7 @@ open class TableFunctionScanBase(
         rowType: RelDataType?,
         columnMappings: MutableSet<RelColumnMapping>?,
     ): TableFunctionScan? {
-        return PandasTableFunctionScan(cluster, traitSet!!, inputs!!, rexCall!! as RexCall, elementType, rowType!!, columnMappings)
+        return BodoPhysicalTableFunctionScan(cluster, traitSet!!, inputs!!, rexCall!! as RexCall, elementType, rowType!!, columnMappings)
     }
 
     override fun estimateRowCount(mq: RelMetadataQuery): Double {

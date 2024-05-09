@@ -1,7 +1,7 @@
 package org.apache.calcite.rel.rel2sql;
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.adapter.jdbc.JdbcTable;
@@ -39,7 +39,7 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
         super(dialect);
     }
 
-    public Result visit(SnowflakeToPandasConverter e){
+    public Result visit(SnowflakeToBodoPhysicalConverter e){
         return dispatch(e.getInput());
     }
 

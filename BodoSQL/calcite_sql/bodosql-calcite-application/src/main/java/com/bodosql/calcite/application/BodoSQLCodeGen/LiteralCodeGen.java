@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.DecimalLiteral;
 import com.google.common.collect.Range;
@@ -72,12 +72,12 @@ public class LiteralCodeGen {
    * Function that return the necessary generated code for Literals.
    *
    * @param node The RexLiteral node.
-   * @param visitor The PandasCodeGenVisitor class. This is used to lower certain values as globals
+   * @param visitor The BodoCodeGenVisitor class. This is used to lower certain values as globals
    *     (only in the case that isSingleRow is false, we cannot lower globals within case
    *     statements)
    * @return The code generated that matches the Literal.
    */
-  public static Expr generateLiteralCode(RexLiteral node, PandasCodeGenVisitor visitor) {
+  public static Expr generateLiteralCode(RexLiteral node, BodoCodeGenVisitor visitor) {
     SqlTypeName typeName = node.getType().getSqlTypeName();
     // TODO: Add more types here
     switch (node.getTypeName()) {

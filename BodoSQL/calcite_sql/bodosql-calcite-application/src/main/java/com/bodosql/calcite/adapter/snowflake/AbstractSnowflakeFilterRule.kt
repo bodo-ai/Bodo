@@ -35,7 +35,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
             // Calculate the subset of the conjunction that is pushable versus the
             // subset that is not.
-            val (snowflakeConditions, pandasConditions) =
+            val (snowflakeConditions, bodoConditions) =
                 extractPushableConditions(
                     filter.condition,
                     filter.cluster.rexBuilder,
@@ -43,7 +43,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                 )
             assert(snowflakeConditions != null)
 
-            if (pandasConditions == null) {
+            if (bodoConditions == null) {
                 // If none of the conditions cannot be pushed, then the entire filter can
                 // become a SnowflakeFilter
                 val newNode =
@@ -71,8 +71,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                         catalogTable,
                     )
                 builder.push(childFilter)
-                // Create the PandasFilter from the subset that is not pushable.
-                builder.filter(pandasConditions)
+                // Create the BodoPhysicalFilter from the subset that is not pushable.
+                builder.filter(bodoConditions)
                 call.transformTo(builder.build())
                 // New plan is absolutely better than old plan.
                 call.planner.prune(filter)

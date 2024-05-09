@@ -15,7 +15,7 @@ class SnowflakeRules private constructor() {
 
         private val SNOWFLAKE_PROJECT_RULE: RelOptRule = SnowflakeProjectRule.Config.DEFAULT_CONFIG.toRule()
 
-        private val TO_PANDAS: RelOptRule = SnowflakeToPandasConverterRule.DEFAULT_CONFIG.toRule()
+        private val TO_BODO_PHYSICAL: RelOptRule = SnowflakeToBodoPhysicalConverterRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
         val SNOWFLAKE_RULES: List<RelOptRule> =
@@ -24,7 +24,7 @@ class SnowflakeRules private constructor() {
                 SNOWFLAKE_LIMIT_RULE,
                 SNOWFLAKE_FILTER_RULE,
                 SNOWFLAKE_PROJECT_RULE,
-                TO_PANDAS,
+                TO_BODO_PHYSICAL,
             )
 
         fun rules(): List<RelOptRule> = SNOWFLAKE_RULES

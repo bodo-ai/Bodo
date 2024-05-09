@@ -19,7 +19,7 @@ public class DateAddCodeGen {
    */
   public static Expr generateSnowflakeDateAddCode(List<Expr> operands, String unit) {
     // input check for time unit is moved to standardizeTimeUnit() function,
-    // which is called in PandasCodeGenVisitor.java
+    // which is called in BodoCodeGenVisitor.java
     return ExprKt.bodoSQLKernel("add_interval_" + unit + "s", operands, List.of());
   }
 

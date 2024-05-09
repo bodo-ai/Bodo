@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.Testing;
 
-import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
+import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchema;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
@@ -126,7 +126,7 @@ public class PandasGenTest {
     try {
       Pair<RelRoot, Map<Integer, Integer>> root =
           generator.getRelationalAlgebra(sql, paramTypes, namedParamTypes);
-      return RelOptUtil.toString(PandasUtilKt.pandasProject(root.getLeft()));
+      return RelOptUtil.toString(BodoUtilKt.bodoPhysicalProject(root.getLeft()));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }

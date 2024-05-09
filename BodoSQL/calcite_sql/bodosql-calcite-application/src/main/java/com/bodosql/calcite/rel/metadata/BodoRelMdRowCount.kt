@@ -1,6 +1,6 @@
 package com.bodosql.calcite.rel.metadata
 
-import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
+import com.bodosql.calcite.adapter.bodo.BodoCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.application.operatorTables.AggOperatorTable
@@ -81,7 +81,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
         // on average. However, flatten also drops null rows, so assume not every
         // row is copied over.
         var inputRowCount = mq?.getRowCount(rel.input)
-        return inputRowCount?.times(PandasCostEstimator.AVG_ARRAY_ENTRIES_PER_ROW)
+        return inputRowCount?.times(BodoCostEstimator.AVG_ARRAY_ENTRIES_PER_ROW)
     }
 
     fun getRowCount(

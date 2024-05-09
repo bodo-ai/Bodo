@@ -1,7 +1,7 @@
 package com.bodosql.calcite.traits
 
-import com.bodosql.calcite.adapter.pandas.PandasProject
-import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.tools.RelBuilder
@@ -15,14 +15,14 @@ import org.apache.calcite.tools.RelBuilder
  * to determine relative cost, it generally leads to regressions as we typically don't want
  * to make decisions to avoid additional streaming.
  *
- * Note: This isn't a RelShuttle because the PandasRel is a simpler interface given
+ * Note: This isn't a RelShuttle because the BodoPhysicalRel is a simpler interface given
  * the implementation requirements.
  */
 class BatchingPropertyPass(private val builder: RelBuilder) {
     /**
      * Generate the code to insert a SeparateStreamExchange or
      * CombineStreamsExchange. This includes a special case where
-     * if the parent is a PandasProjection we may also insert an
+     * if the parent is a BodoProjection we may also insert an
      * additional projection to prune any columns before the
      * exchange operator.
      */
@@ -38,10 +38,10 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
     }
 
     /**
-     * PandasProject is special because we may need to insert another Projection
+     * BodoPhysicalProject is special because we may need to insert another Projection
      * before the exchange operator to prune columns.
      */
-    fun visit(node: PandasProject): RelNode {
+    fun visit(node: BodoPhysicalProject): RelNode {
         val visitedInput = visit(node.input)
         val origInputRowType = visitedInput.getRowType()
         val outputRowType = node.getRowType()
@@ -57,11 +57,11 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
                 if (pruneColumns) {
                     builder.push(visitedInput)
                     // The builder doesn't extend the batching property yet. Instead
-                    // we directly create a Pandas project to avoid updating the
+                    // we directly create a Bodo project to avoid updating the
                     // inputs(TODO: Remove).
                     val nodes = usedColumns.map { i -> builder.field(i) }
                     val fieldNames = usedColumns.map { i -> origInputRowType.fieldNames[i] }
-                    val proj = PandasProject.create(visitedInput, nodes, fieldNames)
+                    val proj = BodoPhysicalProject.create(visitedInput, nodes, fieldNames)
                     // Copy to update the traitset
                     proj.copy(proj.traitSet.replace(actualInputBatchingProperty), proj.input, proj.projects, proj.getRowType())
                 } else {
@@ -92,7 +92,7 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
         }
     }
 
-    fun visit(node: PandasRel): RelNode {
+    fun visit(node: BodoPhysicalRel): RelNode {
         val newInputs: MutableList<RelNode> = ArrayList()
         for (input in node.inputs) {
             val visitedInput = visit(input)
@@ -124,10 +124,10 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
      */
     fun visit(node: RelNode): RelNode {
         return when (node) {
-            is PandasProject -> {
+            is BodoPhysicalProject -> {
                 visit(node)
             }
-            is PandasRel -> {
+            is BodoPhysicalRel -> {
                 return visit(node)
             }
             else -> {

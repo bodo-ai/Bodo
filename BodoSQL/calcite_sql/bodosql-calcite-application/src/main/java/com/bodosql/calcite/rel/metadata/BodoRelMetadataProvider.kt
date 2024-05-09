@@ -20,7 +20,7 @@ ChainedRelMetadataProvider.of(
             BuiltInMetadata.RowCount.Handler::class.java,
         ),
         // Inject information about the number of ranks
-        // for Pandas queries as the parallelism attribute.
+        // for Bodo queries as the parallelism attribute.
         ReflectiveRelMetadataProvider.reflectiveSource(
             // Used to include the number of ranks for planner costs.
             // Not really used yet but planned to be used for computation
@@ -51,12 +51,12 @@ ChainedRelMetadataProvider.of(
      * Default constructor for this metadata provider.
      *
      * This constructor is temporary until we have a way to
-     * inject the number of ranks into the PandasRelMetadataProvider
+     * inject the number of ranks into the BodoRelMetadataProvider
      * from the Python code.
      *
      * The number of ranks isn't meaningfully used by the planner yet,
      * but placing it at 2 in case it starts to be used that way
-     * and to signify that Pandas operations are intended to be
+     * and to signify that Bodo operations are intended to be
      * parallelized.
      */
     constructor() : this(ranks = 2)

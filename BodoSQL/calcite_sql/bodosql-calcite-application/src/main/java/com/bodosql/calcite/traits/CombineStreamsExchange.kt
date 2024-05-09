@@ -1,6 +1,6 @@
 package com.bodosql.calcite.traits
 
-import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
@@ -15,10 +15,10 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
 class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) :
     SingleRel(
         cluster,
-        traitSet.replace(PandasRel.CONVENTION),
+        traitSet.replace(BodoPhysicalRel.CONVENTION),
         input,
     ),
-    PandasRel {
+    BodoPhysicalRel {
     init {
         assert(traitSet.contains(BatchingProperty.SINGLE_BATCH))
     }
@@ -34,7 +34,7 @@ class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
         return true
     }
 
-    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         // This should never be called, we need to handle CombineStreamsExchange
         // in the visitor itself due to needing to mess with the visitor state slightly
         TODO("Not yet implemented")
@@ -52,12 +52,12 @@ class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
         return BatchingProperty.STREAMING
     }
 
-    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         TODO("Not yet implemented")
     }
 
     override fun deleteStateVariable(
-        ctx: PandasRel.BuildContext,
+        ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
     ) {
         TODO("Not yet implemented")

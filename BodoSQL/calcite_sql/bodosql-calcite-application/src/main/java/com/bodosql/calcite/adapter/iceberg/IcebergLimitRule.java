@@ -23,7 +23,7 @@ public class IcebergLimitRule extends AbstractIcebergLimitRule {
                         .predicate(LimitUtils::isOnlyLimit)
                         .oneInput(
                             b1 ->
-                                b1.operand(IcebergToPandasConverter.class)
+                                b1.operand(IcebergToBodoPhysicalConverter.class)
                                     .oneInput(b2 -> b2.operand(IcebergRel.class).anyInputs())))
             .as(IcebergLimitRule.Config.class);
 

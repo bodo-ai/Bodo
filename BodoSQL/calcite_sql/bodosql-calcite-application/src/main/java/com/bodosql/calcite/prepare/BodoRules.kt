@@ -1,9 +1,9 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRules
 import com.bodosql.calcite.adapter.iceberg.IcebergFilterLockRule
 import com.bodosql.calcite.adapter.iceberg.IcebergLimitLockRule
-import com.bodosql.calcite.adapter.pandas.PandasJoin
-import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
@@ -560,11 +560,11 @@ object BodoRules {
      * Rule that tries to push filter expressions into a join condition and into the inputs of the join.
      */
     @JvmField
-    val PANDAS_FILTER_INTO_JOIN_RULE: RelOptRule =
+    val BODO_PHYSICAL_FILTER_INTO_JOIN_RULE: RelOptRule =
         FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
             .withPredicate { join, _, exp ->
                 when (join) {
-                    is PandasJoin -> BodoJoinConditionUtil.isValidNode(exp)
+                    is BodoPhysicalJoin -> BodoJoinConditionUtil.isValidNode(exp)
                     else -> true
                 }
             }.withOperandSupplier { b0: OperandBuilder ->
@@ -623,7 +623,7 @@ object BodoRules {
             .toRule()
 
     /**
-     * Converts a PandasFilter to a SnowflakeFilter if it is located directly on top of a
+     * Converts a BodoPhysicalFilter to a SnowflakeFilter if it is located directly on top of a
      * SnowflakeRel.
      */
     @JvmField
@@ -631,7 +631,7 @@ object BodoRules {
         SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
 
     /**
-     * Converts a PandasFilter to an IcebergFilter if it is located directly on top of a
+     * Converts a BodoPhysicalFilter to an IcebergFilter if it is located directly on top of a
      * IcebergRel. Should only be used in HEP pass to avoid infinite loop.
      */
     @JvmField
@@ -719,7 +719,7 @@ object BodoRules {
             }.toRule()
 
     /**
-     * Lock in SnowflakeProjects a top SnowflakeToPandasConverter
+     * Lock in SnowflakeProjects a top SnowflakeToBodoPhysicalConverter
      */
     @JvmStatic
     val SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE: RelOptRule = SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()
@@ -1099,7 +1099,7 @@ object BodoRules {
         listOf(
             // This may conflict with other optimizations because it doesn't allow
             // pushing filters that can enter 1 side of a join.
-            PANDAS_FILTER_INTO_JOIN_RULE,
+            BODO_PHYSICAL_FILTER_INTO_JOIN_RULE,
             // This rule needs to be rewritten/modified to only occur once a join is
             // finalized. Ideally this should only run after every join is pushed
             // as far as possible since this should be a correctness constraint.
@@ -1138,10 +1138,10 @@ object BodoRules {
     @JvmField
     val VOLCANO_MINIMAL_RULE_SET: List<RelOptRule> =
         Iterables.concat(
-            PandasRules.rules(),
+            BodoPhysicalRules.rules(),
             listOf(
                 JOIN_CONDITION_TO_FILTER_RULE,
-                PANDAS_FILTER_INTO_JOIN_RULE,
+                BODO_PHYSICAL_FILTER_INTO_JOIN_RULE,
                 FILTER_JOIN_RULE,
                 PARTIAL_JOIN_CONDITION_INTO_CHILDREN_VOLCANO_RULE,
             ),

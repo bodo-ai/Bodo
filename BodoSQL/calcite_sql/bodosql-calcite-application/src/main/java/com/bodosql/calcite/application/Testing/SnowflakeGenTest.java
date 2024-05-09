@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.Testing;
 
-import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
+import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
@@ -112,7 +112,7 @@ public class SnowflakeGenTest {
       RelationalAlgebraGenerator generator, String sql) {
     try {
       Pair<RelRoot, Map<Integer, Integer>> root = generator.getRelationalAlgebra(sql);
-      RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
+      RelNode newRoot = BodoUtilKt.bodoPhysicalProject(root.getLeft());
       StringWriter sw = new StringWriter();
       RelCostAndMetaDataWriter costWriter =
           new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight(), true);

@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
@@ -24,9 +24,6 @@ public class JsonCodeGen {
    * Function that return the necessary generated code for the JSON function
    * OBJECT_CONSTRUCT_KEEP_NULL or OBJECT_CONSTRUCT.
    *
-   * @param operation The call to OBJECT_CONSTRUCT_KEEP_NULL/OBJECT_CONSTRUCT
-   * @param argScalars A list indicating which arguments are scalars
-   * @param rexToPandas A visitor to transform each operand into Python code
    * @return The Expression to calculate the function call.
    */
   public static Expr getObjectConstructKeepNullCode(
@@ -34,7 +31,7 @@ public class JsonCodeGen {
       List<Expr.StringLiteral> keys,
       List<Expr> values,
       List<Expr.BooleanLiteral> scalars,
-      PandasCodeGenVisitor visitor) {
+      BodoCodeGenVisitor visitor) {
     Expr keyGlobal = visitor.lowerAsColNamesMetaType(new Expr.Tuple(keys));
     Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalars));
     return ExprKt.bodoSQLKernel(

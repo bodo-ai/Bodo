@@ -4,8 +4,8 @@
 
 package com.bodosql.calcite.table;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.adapter.bodo.StreamingOptions;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -212,7 +212,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param varName Name of the variable to write.
    * @return The generated code to write the table.
    */
-  public abstract Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName);
+  public abstract Expr generateWriteCode(BodoCodeGenVisitor visitor, Variable varName);
 
   /**
    * Generate the code needed to write the given variable to storage.
@@ -223,7 +223,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @return The generated code to write the table.
    */
   public abstract Expr generateWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, String extraArgs);
+      BodoCodeGenVisitor visitor, Variable varName, String extraArgs);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely

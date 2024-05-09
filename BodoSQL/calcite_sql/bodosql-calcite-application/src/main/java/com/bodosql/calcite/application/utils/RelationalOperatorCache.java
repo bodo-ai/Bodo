@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.utils;
 
-import com.bodosql.calcite.adapter.pandas.PandasRel;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
@@ -16,7 +16,7 @@ import kotlin.Pair;
 /**
  * Class that handles caching the output of each relational operator (RelNode) if possible during
  * codegen. Whenever possible, we cache the outputs of nodes to avoid redundant computation. The set
- * of nodes for which we support caching is currently only a subset of all nodes (PandasRels).
+ * of nodes for which we support caching is currently only a subset of all nodes (BodoPhysicalRels).
  *
  * <p>Because the logical plan is a tree, Nodes that are at the bottom of the tree can be repeated,
  * even if they are identical. When calcite produces identical nodes, they (generally) use the same
@@ -25,12 +25,13 @@ import kotlin.Pair;
  */
 public class RelationalOperatorCache {
 
-  // Maps each PandasRel to it's output based on its RelNode ID
-  // for non-streaming PandasRels
+  // Maps each BodoPhysicalRel to it's output based on its RelNode ID
+  // for non-streaming BodoPhysicalRels
   private final HashMap<Integer, BodoEngineTable> tableCacheMap = new HashMap<>();
 
-  // Maps each PandasRel to it's output, and the pipeline in which it exists based on its RelNode ID
-  // This is used for streaming PandasRels
+  // Maps each BodoPhysicalRel to it's output, and the pipeline in which it exists based on its
+  // RelNode ID
+  // This is used for streaming BodoPhysicalRels
   private final HashMap<Integer, Pair<BodoEngineTable, StreamingPipelineFrame>>
       streamingTableCacheMap = new HashMap();
 
@@ -50,7 +51,7 @@ public class RelationalOperatorCache {
    * @param node the node that may be cached
    * @return If the node is cached
    */
-  public boolean isNodeCached(PandasRel node, int key) {
+  public boolean isNodeCached(BodoPhysicalRel node, int key) {
     // Note that we can directly check the ID due to merging relNodes during
     // an optimization step.
     // see com.bodosql.calcite.prepare.BodoPrograms.MergeRelProgram
@@ -66,7 +67,7 @@ public class RelationalOperatorCache {
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  private BodoEngineTable getCachedStreamingTable(PandasRel node, int key) {
+  private BodoEngineTable getCachedStreamingTable(BodoPhysicalRel node, int key) {
     assert node.getTraitSet().contains(BatchingProperty.STREAMING);
     // If the node is streaming, we need to do some additional work.
     Pair<BodoEngineTable, StreamingPipelineFrame> tableAndFrame =
@@ -138,7 +139,7 @@ public class RelationalOperatorCache {
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  private BodoEngineTable getCachedNonStreamingTable(PandasRel node, int key) {
+  private BodoEngineTable getCachedNonStreamingTable(BodoPhysicalRel node, int key) {
     assert node.getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH);
     if (!tableCacheMap.containsKey(key)) {
       throw new RuntimeException(
@@ -153,7 +154,7 @@ public class RelationalOperatorCache {
    * @return a BodoEngineTable if the node has been cached, and a runtime exception if it has not
    *     been.
    */
-  public BodoEngineTable getCachedTable(PandasRel node, int key) {
+  public BodoEngineTable getCachedTable(BodoPhysicalRel node, int key) {
 
     if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
       return getCachedStreamingTable(node, key);
@@ -170,7 +171,7 @@ public class RelationalOperatorCache {
    * @param key The cache key
    * @param table The output value to cache
    */
-  private void tryCacheNodeStreaming(PandasRel node, int key, BodoEngineTable table) {
+  private void tryCacheNodeStreaming(BodoPhysicalRel node, int key, BodoEngineTable table) {
     assert node.getTraitSet().contains(BatchingProperty.STREAMING);
     this.streamingTableCacheMap.put(key, new Pair<>(table, builder.getCurrentStreamingPipeline()));
   }
@@ -183,7 +184,7 @@ public class RelationalOperatorCache {
    * @param key The cache key
    * @param table The output value to cache
    */
-  private void tryCacheNodeNonStreaming(PandasRel node, int key, BodoEngineTable table) {
+  private void tryCacheNodeNonStreaming(BodoPhysicalRel node, int key, BodoEngineTable table) {
     assert node.getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH);
     this.tableCacheMap.put(key, table);
   }
@@ -196,7 +197,7 @@ public class RelationalOperatorCache {
    * @param key The cache key
    * @param table The output value to cache
    */
-  public void tryCacheNode(PandasRel node, int key, BodoEngineTable table) {
+  public void tryCacheNode(BodoPhysicalRel node, int key, BodoEngineTable table) {
     if (canCacheOutput(node)) {
       if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
         tryCacheNodeStreaming(node, key, table);
@@ -212,8 +213,8 @@ public class RelationalOperatorCache {
    * @param node Node to check
    * @return If it is valid to cache the output of the current node.
    */
-  public static boolean canCacheOutput(PandasRel node) {
-    // pandas rels have a built-in function that
+  public static boolean canCacheOutput(BodoPhysicalRel node) {
+    // BodoPhysicalRels have a built-in function that
     // determines if they should/shouldn't be cached
     return node.canUseNodeCache();
   }

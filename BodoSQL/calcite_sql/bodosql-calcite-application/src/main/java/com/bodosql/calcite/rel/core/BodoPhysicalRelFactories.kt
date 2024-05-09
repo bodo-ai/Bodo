@@ -1,18 +1,18 @@
 package com.bodosql.calcite.rel.core
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalValues
+import com.bodosql.calcite.adapter.bodo.PandasTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
 import com.bodosql.calcite.adapter.iceberg.IcebergSort
-import com.bodosql.calcite.adapter.pandas.PandasAggregate
-import com.bodosql.calcite.adapter.pandas.PandasFilter
-import com.bodosql.calcite.adapter.pandas.PandasJoin
-import com.bodosql.calcite.adapter.pandas.PandasProject
-import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.adapter.pandas.PandasSort
-import com.bodosql.calcite.adapter.pandas.PandasTableScan
-import com.bodosql.calcite.adapter.pandas.PandasUnion
-import com.bodosql.calcite.adapter.pandas.PandasValues
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
@@ -103,8 +103,8 @@ object BodoPhysicalRelFactories {
         }
 
         val retVal =
-            if (input.convention == PandasRel.CONVENTION) {
-                PandasProject.create(input, childExprs, fieldNames)
+            if (input.convention == BodoPhysicalRel.CONVENTION) {
+                BodoPhysicalProject.create(input, childExprs, fieldNames)
             } else if (input.convention == SnowflakeRel.CONVENTION) {
                 SnowflakeProject.create(
                     input.cluster,
@@ -148,8 +148,8 @@ object BodoPhysicalRelFactories {
         }
 
         val retVal =
-            if (input.convention == PandasRel.CONVENTION) {
-                PandasFilter.create(input.cluster, input, condition)
+            if (input.convention == BodoPhysicalRel.CONVENTION) {
+                BodoPhysicalFilter.create(input.cluster, input, condition)
             } else if (input.convention == SnowflakeRel.CONVENTION) {
                 assert(
                     input is SnowflakeRel,
@@ -195,8 +195,8 @@ object BodoPhysicalRelFactories {
         val inputConvention = left.convention
 
         val retVal =
-            if (inputConvention == PandasRel.CONVENTION) {
-                PandasJoin.create(left, right, condition, joinType)
+            if (inputConvention == BodoPhysicalRel.CONVENTION) {
+                BodoPhysicalJoin.create(left, right, condition, joinType)
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder's createJoin: unhandled Snowflake operation")
             } else if (inputConvention == IcebergRel.CONVENTION) {
@@ -228,7 +228,7 @@ object BodoPhysicalRelFactories {
         ) { "Internal Error in Bodo Physical Builder: inputs to SetOp have differing convention" }
 
         val retVal =
-            if (inputConvention == PandasRel.CONVENTION) {
+            if (inputConvention == BodoPhysicalRel.CONVENTION) {
                 createPandasSetOp(cluster, kind, inputs, all)
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 throw BodoSQLCodegenException(
@@ -257,7 +257,7 @@ object BodoPhysicalRelFactories {
         all: Boolean,
     ): RelNode {
         return when (kind) {
-            SqlKind.UNION -> PandasUnion.create(cluster, inputs, all)
+            SqlKind.UNION -> BodoPhysicalUnion.create(cluster, inputs, all)
             // TODO: add the rest of the set operations
             else -> throw BodoSQLCodegenException(
                 "Internal Error in Bodo Physical Builder's createPandasSetOp: unhandled pandas set operation: " + kind.name,
@@ -280,8 +280,8 @@ object BodoPhysicalRelFactories {
         }
 
         val retVal =
-            if (inputConvention == PandasRel.CONVENTION) {
-                PandasAggregate.create(input.cluster, input, groupSet, groupSets, aggCalls)
+            if (inputConvention == BodoPhysicalRel.CONVENTION) {
+                BodoPhysicalAggregate.create(input.cluster, input, groupSet, groupSets, aggCalls)
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 SnowflakeAggregate.create(
                     input.cluster,
@@ -318,8 +318,8 @@ object BodoPhysicalRelFactories {
         }
 
         val retVal =
-            if (inputConvention == PandasRel.CONVENTION) {
-                PandasSort.create(input, collation, offset, fetch)
+            if (inputConvention == BodoPhysicalRel.CONVENTION) {
+                BodoPhysicalSort.create(input, collation, offset, fetch)
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 SnowflakeSort.create(
                     input.cluster,
@@ -363,6 +363,6 @@ object BodoPhysicalRelFactories {
         tuples: List<ImmutableList<RexLiteral>>,
     ): RelNode {
         val immutableTuples = ImmutableList.copyOf(tuples)
-        return PandasValues.create(cluster, cluster.traitSet().replace(PandasRel.CONVENTION), rowType, immutableTuples)
+        return BodoPhysicalValues.create(cluster, cluster.traitSet().replace(BodoPhysicalRel.CONVENTION), rowType, immutableTuples)
     }
 }

@@ -2,8 +2,8 @@ package com.bodosql.calcite.table;
 
 import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.adapter.bodo.StreamingOptions;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ddl.DDLExecutor;
@@ -95,7 +95,7 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    * @return The generated code to write the table.
    */
   @Override
-  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName) {
+  public Expr generateWriteCode(BodoCodeGenVisitor visitor, Variable varName) {
     return catalog.generateAppendWriteCode(visitor, varName, getFullPath());
   }
 
@@ -108,7 +108,7 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
    * @return The generated code to write the table.
    */
   public Variable generateWriteCode(
-      PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
+      BodoCodeGenVisitor visitor, Variable varName, String extraArgs) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 

@@ -2,8 +2,8 @@ package com.bodosql.calcite.table;
 
 import static com.bodosql.calcite.table.ColumnDataTypeInfo.fromSqlType;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.adapter.bodo.StreamingOptions;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -108,7 +108,7 @@ public class LocalTable extends BodoSqlTable {
    * @return The generated code to write the table.
    */
   @Override
-  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName) {
+  public Expr generateWriteCode(BodoCodeGenVisitor visitor, Variable varName) {
     assert this.isWriteable
         : "Internal error: Local table not writeable in call to generateWriteCode";
     return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), ""));
@@ -122,7 +122,7 @@ public class LocalTable extends BodoSqlTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public Expr generateWriteCode(PandasCodeGenVisitor visitor, Variable varName, String extraArgs) {
+  public Expr generateWriteCode(BodoCodeGenVisitor visitor, Variable varName, String extraArgs) {
     assert this.isWriteable
         : "Internal error: Local table not writeable in call to generateWriteCode";
     return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), extraArgs));

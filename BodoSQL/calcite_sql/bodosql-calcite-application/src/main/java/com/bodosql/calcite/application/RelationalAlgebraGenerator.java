@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application;
 
-import com.bodosql.calcite.adapter.pandas.PandasRel;
-import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
+import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
@@ -85,14 +85,14 @@ public class RelationalAlgebraGenerator {
 
   /*
   Hashmap containing globals that need to be lowered into the resulting func_text. Used for lowering
-  metadata types to improve compilation speed. Populated by the pandas visitor class.
+  metadata types to improve compilation speed. Populated by the Bodo visitor class.
   */
   private HashMap<String, String> loweredGlobalVariables;
 
   /** Store the catalog being used to close any connections after processing a query. */
   private BodoSQLCatalog catalog;
 
-  /** Store the typesystem being used to access timezone info during Pandas codegen */
+  /** Store the type system being used to access timezone info during Bodo codegen */
   private final RelDataTypeSystem typeSystem;
 
   /** Which planner should be utilized. */
@@ -412,7 +412,8 @@ public class RelationalAlgebraGenerator {
     RelRoot baseResult = planner.rel(validatedSqlNode);
     RelRoot unoptimizedPlan =
         baseResult.withRel(planner.transform(0, planner.getEmptyTraitSet(), baseResult.rel));
-    RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
+    RelTraitSet requiredOutputTraits =
+        planner.getEmptyTraitSet().replace(BodoPhysicalRel.CONVENTION);
     RelRoot optimizedPlan =
         unoptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, unoptimizedPlan.rel));
     RelIDToOperatorIDVisitor s = new RelIDToOperatorIDVisitor();
@@ -458,7 +459,7 @@ public class RelationalAlgebraGenerator {
 
   private String getOptimizedPlanStringFromRoot(
       Pair<RelRoot, Map<Integer, Integer>> root, Boolean includeCosts) {
-    RelNode newRoot = PandasUtilKt.pandasProject(root.getLeft());
+    RelNode newRoot = BodoUtilKt.bodoPhysicalProject(root.getLeft());
     StringWriter sw = new StringWriter();
     RelCostAndMetaDataWriter costWriter =
         new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight(), includeCosts);
@@ -499,8 +500,8 @@ public class RelationalAlgebraGenerator {
                     Map.Entry::getKey,
                     x -> x.getValue().convertToSqlType(planner.getTypeFactory())));
     this.loweredGlobalVariables = new HashMap<>();
-    PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(
+    BodoCodeGenVisitor codegen =
+        new BodoCodeGenVisitor(
             this.loweredGlobalVariables,
             originalSQL,
             this.typeSystem,
@@ -534,7 +535,7 @@ public class RelationalAlgebraGenerator {
                 Collectors.toMap(
                     Map.Entry::getKey,
                     x -> x.getValue().convertToSqlType(planner.getTypeFactory())));
-    RelNode rel = PandasUtilKt.pandasProject(plan.getLeft());
+    RelNode rel = BodoUtilKt.bodoPhysicalProject(plan.getLeft());
     // Create a mapping for the new root/newly created nodes - this is a bit of a hack, and long
     // term we probably want
     // something that's part of the RelNode itself instead of an auxiliary map to make this safer.
@@ -542,8 +543,8 @@ public class RelationalAlgebraGenerator {
     v.visit(rel, 0, null);
 
     this.loweredGlobalVariables = new HashMap<>();
-    PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(
+    BodoCodeGenVisitor codegen =
+        new BodoCodeGenVisitor(
             this.loweredGlobalVariables,
             originalSQL,
             this.typeSystem,
