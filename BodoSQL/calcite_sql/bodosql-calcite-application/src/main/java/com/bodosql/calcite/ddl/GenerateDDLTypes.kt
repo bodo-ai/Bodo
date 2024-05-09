@@ -16,7 +16,7 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
                 // Drop Queries
-                SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN, SqlKind.COMMIT, SqlKind.ROLLBACK, SqlKind.DROP_TABLE -> {
+                SqlKind.CREATE_VIEW, SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN, SqlKind.COMMIT, SqlKind.ROLLBACK, SqlKind.DROP_TABLE -> {
                     val fieldNames = listOf("STATUS")
                     // Note this is non-null
                     val types = listOf(stringType)
