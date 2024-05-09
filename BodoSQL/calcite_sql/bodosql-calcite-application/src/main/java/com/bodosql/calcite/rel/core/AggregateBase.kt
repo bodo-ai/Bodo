@@ -1,6 +1,6 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.adapter.pandas.AggCostEstimator
+import com.bodosql.calcite.adapter.bodo.AggCostEstimator
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster

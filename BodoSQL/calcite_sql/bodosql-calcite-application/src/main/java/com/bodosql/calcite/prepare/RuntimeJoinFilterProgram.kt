@@ -1,17 +1,17 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalFlatten
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalIntersect
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinus
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRuntimeJoinFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.common.LimitUtils
-import com.bodosql.calcite.adapter.pandas.PandasAggregate
-import com.bodosql.calcite.adapter.pandas.PandasFilter
-import com.bodosql.calcite.adapter.pandas.PandasFlatten
-import com.bodosql.calcite.adapter.pandas.PandasIntersect
-import com.bodosql.calcite.adapter.pandas.PandasJoin
-import com.bodosql.calcite.adapter.pandas.PandasMinRowNumberFilter
-import com.bodosql.calcite.adapter.pandas.PandasMinus
-import com.bodosql.calcite.adapter.pandas.PandasProject
-import com.bodosql.calcite.adapter.pandas.PandasRuntimeJoinFilter
-import com.bodosql.calcite.adapter.pandas.PandasSort
-import com.bodosql.calcite.adapter.pandas.PandasUnion
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import org.apache.calcite.plan.RelOptLattice
@@ -51,37 +51,37 @@ object RuntimeJoinFilterProgram : Program {
 
         override fun visit(rel: RelNode): RelNode {
             return when (rel) {
-                is PandasProject -> {
+                is BodoPhysicalProject -> {
                     visit(rel)
                 }
 
-                is PandasFilter -> {
+                is BodoPhysicalFilter -> {
                     visit(rel)
                 }
 
-                is PandasMinRowNumberFilter -> {
+                is BodoPhysicalMinRowNumberFilter -> {
                     visit(rel)
                 }
 
-                is PandasSort -> {
+                is BodoPhysicalSort -> {
                     // Sort can produce the filter only if
                     // we have an order by + limit.
                     visit(rel)
                 }
 
-                is PandasAggregate -> {
+                is BodoPhysicalAggregate -> {
                     visit(rel)
                 }
 
-                is PandasJoin -> {
+                is BodoPhysicalJoin -> {
                     visit(rel)
                 }
 
-                is PandasUnion, is PandasIntersect, is PandasMinus -> {
+                is BodoPhysicalUnion, is BodoPhysicalIntersect, is BodoPhysicalMinus -> {
                     visit(rel as SetOp)
                 }
 
-                is PandasFlatten -> {
+                is BodoPhysicalFlatten -> {
                     visit(rel)
                 }
 
@@ -184,7 +184,7 @@ object RuntimeJoinFilterProgram : Program {
             return processSingleRel(project, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(filter: PandasFilter): RelNode {
+        private fun visit(filter: BodoPhysicalFilter): RelNode {
             // If the filter contains an OVER clause we can only push filters
             // that are shared by all partition by columns.
             val numCols = filter.getRowType().fieldCount
@@ -202,7 +202,7 @@ object RuntimeJoinFilterProgram : Program {
             return processSingleRel(filter, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(node: PandasMinRowNumberFilter): RelNode {
+        private fun visit(node: BodoPhysicalMinRowNumberFilter): RelNode {
             val keptInputs = node.inputsToKeep.toList()
             val (pushLiveJoinInfo, outputLiveJoinInfo) =
                 splitFilterSections(
@@ -214,7 +214,7 @@ object RuntimeJoinFilterProgram : Program {
             return processSingleRel(node, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(sort: PandasSort): RelNode {
+        private fun visit(sort: BodoPhysicalSort): RelNode {
             val canPush = !LimitUtils.isOrderedLimit(sort)
             val (pushLiveJoinInfo, outputLiveJoinInfo) =
                 splitFilterSections(
@@ -321,7 +321,7 @@ object RuntimeJoinFilterProgram : Program {
             val leftInput = join.left.accept(this)
             liveJoins = rightJoinInfo
             val rightInput = join.right.accept(this)
-            return PandasJoin.create(leftInput, rightInput, join.condition, join.joinType, joinFilterID = filterKey)
+            return BodoPhysicalJoin.create(leftInput, rightInput, join.condition, join.joinType, joinFilterID = filterKey)
         }
 
         /**
@@ -339,7 +339,7 @@ object RuntimeJoinFilterProgram : Program {
             return node.copy(node.traitSet, newInputs, node.all)
         }
 
-        private fun visit(flatten: PandasFlatten): RelNode {
+        private fun visit(flatten: BodoPhysicalFlatten): RelNode {
             val repeatColumns = flatten.repeatColumns.toList()
             val (pushLiveJoinInfo, outputLiveJoinInfo) =
                 splitFilterSections(
@@ -357,7 +357,7 @@ object RuntimeJoinFilterProgram : Program {
             var returnNode = rel
             for (liveJoin in liveJoins) {
                 returnNode =
-                    PandasRuntimeJoinFilter.create(
+                    BodoPhysicalRuntimeJoinFilter.create(
                         returnNode, liveJoin.joinFilterKey, liveJoin.remainingColumns, liveJoin.isFirstLocation,
                     )
             }

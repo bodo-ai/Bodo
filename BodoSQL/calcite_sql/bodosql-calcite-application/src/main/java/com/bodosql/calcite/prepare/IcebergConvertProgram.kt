@@ -1,24 +1,24 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.iceberg.AbstractIcebergFilterRuleHelpers.Companion.splitFilterConditions
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
 import com.bodosql.calcite.adapter.iceberg.IcebergSort
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
-import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
-import com.bodosql.calcite.adapter.pandas.PandasAggregate
-import com.bodosql.calcite.adapter.pandas.PandasFilter
-import com.bodosql.calcite.adapter.pandas.PandasProject
-import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.adapter.pandas.PandasSort
+import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
@@ -68,7 +68,7 @@ object IcebergConvertProgram : Program {
             // All Snowflake nodes must go through here.
             // This dispatches on the correct implementation.
             return when (node) {
-                is SnowflakeToPandasConverter -> {
+                is SnowflakeToBodoPhysicalConverter -> {
                     visit(node)
                 }
 
@@ -108,21 +108,21 @@ object IcebergConvertProgram : Program {
             }
         }
 
-        private fun visit(node: SnowflakeToPandasConverter): RelNode {
+        private fun visit(node: SnowflakeToBodoPhysicalConverter): RelNode {
             return when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the conversion process. Just return.
                     node
                 }
 
-                is PandasRel -> {
+                is BodoPhysicalRel -> {
                     // Only partial conversion was possible.
                     newInput
                 }
 
                 else -> {
                     // Full conversion succeeded.
-                    IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
+                    IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, newInput)
                 }
             }
         }
@@ -134,9 +134,9 @@ object IcebergConvertProgram : Program {
                     node
                 }
 
-                is PandasRel -> {
+                is BodoPhysicalRel -> {
                     // Only partial conversion was possible.
-                    PandasProject.create(newInput, node.projects, node.getRowType())
+                    BodoPhysicalProject.create(newInput, node.projects, node.getRowType())
                 }
 
                 else -> {
@@ -152,8 +152,8 @@ object IcebergConvertProgram : Program {
                         )
                     } else {
                         // This node can't be pushed
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        PandasProject.create(converter, node.projects, node.getRowType())
+                        val converter = IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, newInput)
+                        BodoPhysicalProject.create(converter, node.projects, node.getRowType())
                     }
                 }
             }
@@ -166,9 +166,9 @@ object IcebergConvertProgram : Program {
                     node
                 }
 
-                is PandasRel -> {
+                is BodoPhysicalRel -> {
                     // Only partial conversion was possible.
-                    PandasFilter.create(node.cluster, newInput, node.condition)
+                    BodoPhysicalFilter.create(node.cluster, newInput, node.condition)
                 }
 
                 else -> {
@@ -179,8 +179,8 @@ object IcebergConvertProgram : Program {
                     val (icebergCondition, pandasCondition) = splitFilterConditions(node, rexBuilder, simplify, RelOptPredicateList.EMPTY)
                     if (icebergCondition == null) {
                         // Nothing can be pushed to Iceberg
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
-                        PandasFilter.create(node.cluster, converter, node.condition)
+                        val converter = IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, newInput)
+                        BodoPhysicalFilter.create(node.cluster, converter, node.condition)
                     } else if (pandasCondition == null) {
                         // Everything can be pushed to Iceberg
                         IcebergFilter.create(
@@ -201,8 +201,8 @@ object IcebergConvertProgram : Program {
                                 icebergCondition,
                                 node.getCatalogTable(),
                             )
-                        val converter = IcebergToPandasConverter(node.cluster, node.traitSet, icebergFilter)
-                        PandasFilter.create(node.cluster, converter, pandasCondition)
+                        val converter = IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, icebergFilter)
+                        BodoPhysicalFilter.create(node.cluster, converter, pandasCondition)
                     }
                 }
             }
@@ -215,9 +215,9 @@ object IcebergConvertProgram : Program {
                     node
                 }
 
-                is PandasRel -> {
+                is BodoPhysicalRel -> {
                     // Only partial conversion was possible.
-                    PandasSort.create(newInput, node.collation, node.offset, node.fetch)
+                    BodoPhysicalSort.create(newInput, node.collation, node.offset, node.fetch)
                 }
 
                 else -> {
@@ -251,11 +251,11 @@ object IcebergConvertProgram : Program {
                     } else {
                         val aggInput =
                             if (newInput is IcebergRel) {
-                                IcebergToPandasConverter(node.cluster, node.traitSet, newInput)
+                                IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, newInput)
                             } else {
                                 newInput
                             }
-                        PandasAggregate.create(node.cluster, aggInput, node.groupSet, node.groupSets, node.aggCallList)
+                        BodoPhysicalAggregate.create(node.cluster, aggInput, node.groupSet, node.groupSets, node.aggCallList)
                     }
                 }
             }

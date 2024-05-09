@@ -23,7 +23,7 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
                         .oneInput(
                             b1 ->
-                                b1.operand(SnowflakeToPandasConverter.class)
+                                b1.operand(SnowflakeToBodoPhysicalConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(Config.class);

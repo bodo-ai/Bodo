@@ -13,7 +13,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
 /**
  * Base implementation for a runtime join filter.
  * See the design here:
- * https://bodo.atlassian.net/wiki/spaces/B/pages/1632370739/Runtime+Join+Filters#PandasRuntimeJoinFilter
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1632370739/Runtime+Join+Filters#BodoPhysicalRuntimeJoinFilter
  *
  */
 open class RuntimeJoinFilterBase(

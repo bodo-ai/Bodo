@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
@@ -35,8 +35,8 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a call to a SQL conditional function in the
-   * hashtable equivalentFnMap. These are functions that lack dictionary encoding optimizations.
+   * Return a Bodo expression that replicates a call to a SQL conditional function in the hashtable
+   * equivalentFnMap. These are functions that lack dictionary encoding optimizations.
    *
    * @param fnName the name of the function being called
    * @param codeExprs the Python expressions to calculate the arguments
@@ -55,9 +55,8 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a call to a SQL conditional function in the
-   * hashtable equivalentFnMap. These are functions that contain optimizations for dictionary
-   * encoding.
+   * Return a Bodo expression that replicates a call to a SQL conditional function in the hashtable
+   * equivalentFnMap. These are functions that contain optimizations for dictionary encoding.
    *
    * @param fnName the name of the function being called
    * @param codeExprs the Python expressions to calculate the arguments
@@ -87,7 +86,7 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a call to the SQL functions HASH.
+   * Return a Bodo expression that replicates a call to the SQL functions HASH.
    *
    * @param codeExprs the Python strings that calculate each of the arguments.
    * @param argScalars Whether each argument is a scalar or a column.
@@ -95,7 +94,7 @@ public class CondOpCodeGen {
    * @return Expr containing the code generated for the relational expression.
    */
   public static Expr visitHash(
-      List<Expr> codeExprs, List<Boolean> argScalars, PandasCodeGenVisitor visitor) {
+      List<Expr> codeExprs, List<Boolean> argScalars, BodoCodeGenVisitor visitor) {
     ArrayList<Expr> scalarExprs = new ArrayList();
     for (Boolean isScalar : argScalars) {
       scalarExprs.add(new Expr.BooleanLiteral(isScalar));
@@ -106,7 +105,7 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a call to the SQL functions COALESCE, DECODE, or any
+   * Return a Bodo expression that replicates a call to the SQL functions COALESCE, DECODE, or any
    * of their variants. These are functions may contain dictionary encoding optimizations.
    *
    * @param fnName the name of the function being called

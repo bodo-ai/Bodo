@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.write
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
@@ -80,7 +80,7 @@ open class IcebergWriteTarget(
      *
      */
     override fun streamingWriteAppend(
-        visitor: PandasCodeGenVisitor,
+        visitor: BodoCodeGenVisitor,
         stateVar: Variable,
         tableVar: Variable,
         isLastVar: Variable,

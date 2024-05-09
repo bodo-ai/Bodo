@@ -1,9 +1,9 @@
 package com.bodosql.calcite.rel.metadata
 
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
-import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
+import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
@@ -460,7 +460,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     fun getColumnDistinctCount(
-        rel: SnowflakeToPandasConverter,
+        rel: SnowflakeToBodoPhysicalConverter,
         mq: RelMetadataQuery,
         column: Int,
     ): Double? {
@@ -468,7 +468,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     fun getColumnDistinctCount(
-        rel: IcebergToPandasConverter,
+        rel: IcebergToBodoPhysicalConverter,
         mq: RelMetadataQuery,
         column: Int,
     ): Double? {

@@ -24,10 +24,10 @@ import org.apache.calcite.util.Pair;
 
 /**
  * Visitor Class for Join Conditions. This special visitor class is used to avoid special handling
- * for Join conditions inside the general PandasCodeGenVisitor as no node will have side effects.
- * All expressions in this form should match the support on conditions inside Bodo and are
- * restricted to simple constants (string, int, float), arithmetic expressions, comparison operators
- * excluding nulleq, logical operators, and column accesses.
+ * for Join conditions inside the general BodoCodeGenVisitor as no node will have side effects. All
+ * expressions in this form should match the support on conditions inside Bodo and are restricted to
+ * simple constants (string, int, float), arithmetic expressions, comparison operators excluding
+ * nulleq, logical operators, and column accesses.
  *
  * <p>Returns a Expr containing the generated code.
  */
@@ -257,7 +257,7 @@ public class JoinCondVisitor {
    * @return A pair of variables that contain the selected indices.
    */
   public static Pair<Variable, Variable> getStreamingJoinKeyIndices(
-      JoinInfo info, PandasCodeGenVisitor visitor) {
+      JoinInfo info, BodoCodeGenVisitor visitor) {
     // Define list of indices
     List<Integer> leftKeys = info.leftKeys;
     List<Integer> rightKeys = info.rightKeys;

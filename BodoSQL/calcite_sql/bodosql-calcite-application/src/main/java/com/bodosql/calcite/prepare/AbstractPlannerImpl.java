@@ -18,7 +18,7 @@ package com.bodosql.calcite.prepare;
 
 import static java.util.Objects.requireNonNull;
 
-import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
+import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule;
 import com.bodosql.calcite.ddl.DDLExecutionResult;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
@@ -655,7 +655,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
     }
     final RelRoot outputRoot2 =
         outputRoot.withRel(sqlToRelConverter.flattenTypes(outputRoot.rel, true));
-    RelNode result = PandasUtilKt.calciteLogicalProject(outputRoot2);
+    RelNode result = BodoUtilKt.calciteLogicalProject(outputRoot2);
     // Find the correlation ids in the arguments.
     BodoRelOptUtil.CorrelationRexFinder finder = new BodoRelOptUtil.CorrelationRexFinder();
     for (RexNode arg : arguments) {

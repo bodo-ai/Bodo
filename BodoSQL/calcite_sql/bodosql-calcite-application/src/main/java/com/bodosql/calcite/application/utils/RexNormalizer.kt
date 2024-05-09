@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.utils
 
-import com.bodosql.calcite.adapter.pandas.RexCostEstimator.visitList
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode

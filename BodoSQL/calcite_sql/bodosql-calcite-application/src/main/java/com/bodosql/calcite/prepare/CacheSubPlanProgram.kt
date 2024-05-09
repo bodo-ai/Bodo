@@ -1,7 +1,7 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.adapter.pandas.PandasCachedSubPlan
-import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalCachedSubPlan
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import org.apache.calcite.plan.RelOptLattice
@@ -52,7 +52,7 @@ class CacheSubPlanProgram : Program {
             if (seenNodes.contains(node.id)) {
                 // We have seen this node before, so we should cache it.
                 // We can only cache Pandas sections as they represent whole operations.
-                if (node is PandasRel) {
+                if (node is BodoPhysicalRel) {
                     // TODO: Add a check for non-deterministic nodes? Right now
                     // we don't have any that we don't allow caching.
                     cacheNodes.add(node.id)
@@ -81,7 +81,7 @@ class CacheSubPlanProgram : Program {
                 if (cacheNodes.contains(id)) {
                     val root = RelRoot.of(node, SqlKind.OTHER)
                     val plan = CachedPlanInfo.create(root, 1)
-                    val cachedSubPlan = PandasCachedSubPlan.create(plan, cacheID++)
+                    val cachedSubPlan = BodoPhysicalCachedSubPlan.create(plan, cacheID++)
                     cacheNodeMap[id] = cachedSubPlan
                     cachedSubPlan
                 } else {

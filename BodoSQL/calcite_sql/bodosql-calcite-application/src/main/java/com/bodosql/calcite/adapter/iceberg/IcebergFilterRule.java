@@ -29,7 +29,7 @@ public class IcebergFilterRule extends RelRule<IcebergFilterRule.Config> {
                     b0.operand(Filter.class)
                         .oneInput(
                             b1 ->
-                                b1.operand(IcebergToPandasConverter.class)
+                                b1.operand(IcebergToBodoPhysicalConverter.class)
                                     .oneInput(b2 -> b2.operand(IcebergRel.class).anyInputs())))
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(IcebergFilterRule.Config.class);

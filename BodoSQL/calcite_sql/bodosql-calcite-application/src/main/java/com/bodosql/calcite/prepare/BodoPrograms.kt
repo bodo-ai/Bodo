@@ -1,7 +1,7 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.adapter.pandas.PandasRules
-import com.bodosql.calcite.adapter.pandas.PandasWindow
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRules
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoSubQueryRemaining
@@ -514,7 +514,7 @@ object BodoPrograms {
      * runtime checks.
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
-        listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
+        listOf(BodoPhysicalRules.BODO_PHYSICAL_JOIN_REBALANCE_OUTPUT_RULE),
         false,
         DefaultRelMetadataProvider.INSTANCE,
     )
@@ -631,11 +631,11 @@ object BodoPrograms {
         BodoRules.WINDOW_CONVERSION_RULES,
     )
 
-    // Converts PandasWindow rel nodes back to PandasProject for codegen purposes
+    // Converts BodoPhysicalWindow rel nodes back to BodoPhysicalProject for codegen purposes
     object WindowProjectTransformProgram : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(other: RelNode): RelNode =
-                if (other is PandasWindow) {
+                if (other is BodoPhysicalWindow) {
                     other.convertToProject().accept(this)
                 } else {
                     super.visit(other)

@@ -1,6 +1,6 @@
 package com.bodosql.calcite.schema;
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
@@ -202,7 +202,7 @@ public class CatalogSchema extends BodoSqlSchema {
    * @return The generated code to compute the write in Python.
    */
   public Expr generateWriteCode(
-      PandasCodeGenVisitor visitor,
+      BodoCodeGenVisitor visitor,
       Variable varName,
       String tableName,
       IfExistsBehavior ifExists,

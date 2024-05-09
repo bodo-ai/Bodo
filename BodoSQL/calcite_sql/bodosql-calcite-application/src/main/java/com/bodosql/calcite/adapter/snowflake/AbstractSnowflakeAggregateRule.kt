@@ -70,7 +70,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         private fun extractNodes(call: RelOptRuleCall): Pair<Aggregate, SnowflakeRel> {
             // Inputs are:
             // Aggregate ->
-            //   SnowflakeToPandasConverter ->
+            //   SnowflakeToBodoPhysicalConverter ->
             //      SnowflakeRel
             return Pair(call.rel(0), call.rel(2))
         }

@@ -84,8 +84,8 @@ def test_streaming_groupby_aggregate_timer(
         bodo.jit(impl)(bc)
 
         assert (
-            "PandasAggregate" in plan
-        ), "Streaming plan did not actually generate a PandasAggregate node"
+            "BodoPhysicalAggregate" in plan
+        ), "Streaming plan did not actually generate a BodoPhysicalAggregate node"
         for relNodeStr in plan.split("\n"):
             relNodeStr = relNodeStr.strip()
             # Confirm that all the nodes in the plan that should

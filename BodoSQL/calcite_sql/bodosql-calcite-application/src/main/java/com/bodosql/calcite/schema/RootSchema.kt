@@ -1,6 +1,6 @@
 package com.bodosql.calcite.schema
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.ir.Expr
@@ -53,7 +53,7 @@ class RootSchema {
         }
 
         override fun generateWriteCode(
-            visitor: PandasCodeGenVisitor,
+            visitor: BodoCodeGenVisitor,
             varName: Variable,
             tableName: String,
             ifExists: IfExistsBehavior,

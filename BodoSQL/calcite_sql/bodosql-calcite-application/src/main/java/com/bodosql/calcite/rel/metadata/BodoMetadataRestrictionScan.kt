@@ -1,9 +1,9 @@
 package com.bodosql.calcite.rel.metadata
 
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
-import com.bodosql.calcite.adapter.iceberg.IcebergToPandasConverter
+import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.WindowBase
 import com.bodosql.calcite.table.CatalogTable
@@ -175,7 +175,9 @@ class BodoMetadataRestrictionScan {
                     val tablePath = table.fullPath.joinToString(".")
                     columnsAllowedToRequest.add("$tablePath.$columnName".uppercase(Locale.ROOT))
                 }
-            } else if (node is SetOp || node is Filter || node is SnowflakeToPandasConverter || node is IcebergToPandasConverter) {
+            } else if (node is SetOp || node is Filter ||
+                node is SnowflakeToBodoPhysicalConverter || node is IcebergToBodoPhysicalConverter
+            ) {
                 // For these types of RelNodes, forward the scan onto all the children un-modified.
                 node.inputs.forEach { findColumnsThatCanBeRequested(it, cols) }
             } else if (node is Aggregate) {

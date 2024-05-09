@@ -162,7 +162,7 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
         override fun onMatch(call: RelOptRuleCall) {
             val (proj, snowflakeRel) = extractNodes(call)
             val pushableNodes = getPushableNodes(proj)
-            // If every node in the project is pushable, just turn the PandasProject
+            // If every node in the project is pushable, just turn the BodoPhysicalProject
             // into a SnowflakeProject, otherwise split it off into two.
             val newNode =
                 if (pushableNodes.containsAll(proj.projects)) {
@@ -179,7 +179,7 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
             return when (call.rels.size) {
                 // Inputs are:
                 // Project ->
-                //     SnowflakeToPandasConverter ->
+                //     SnowflakeToBodoPhysicalConverter ->
                 //         SnowflakeRel
                 3 -> Pair(call.rel(0), call.rel(2))
                 // Inputs are:
