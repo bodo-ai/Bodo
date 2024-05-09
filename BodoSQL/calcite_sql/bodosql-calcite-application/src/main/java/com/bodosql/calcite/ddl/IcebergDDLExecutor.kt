@@ -5,6 +5,7 @@ import com.bodosql.calcite.catalog.IcebergCatalog.Companion.schemaPathToNamespac
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.tablePathToTableIdentifier
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.ddl.SqlCreateView
 import org.apache.calcite.util.Util
 import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.Namespace
@@ -100,5 +101,12 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[6].add("N")
         }
         return DDLExecutionResult(names, columnValues)
+    }
+
+    override fun createView(
+        viewPath: ImmutableList<String>,
+        query: SqlCreateView,
+    ) {
+        throw RuntimeException("Unimplemented!")
     }
 }
