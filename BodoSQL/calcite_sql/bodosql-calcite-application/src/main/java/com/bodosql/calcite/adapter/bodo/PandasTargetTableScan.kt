@@ -52,9 +52,4 @@ class PandasTargetTableScan(
     ) {
         TODO("Not yet implemented")
     }
-
-    // Target table scans cannot use the node cache.
-    override fun canUseNodeCache(): Boolean {
-        return false
-    }
 }

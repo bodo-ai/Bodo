@@ -66,8 +66,8 @@ class RelCostAndMetaDataWriter(
         values: List<Pair<String, Any?>>,
     ) {
         // Add cached nodes to the queue for explains
-        if (rel is CachedSubPlanBase && !seenCacheIDs.contains(rel.id)) {
-            seenCacheIDs.add(rel.id)
+        if (rel is CachedSubPlanBase && !seenCacheIDs.contains(rel.cacheID)) {
+            seenCacheIDs.add(rel.cacheID)
             cacheQueue.add(rel)
         }
         val inputs = rel.inputs

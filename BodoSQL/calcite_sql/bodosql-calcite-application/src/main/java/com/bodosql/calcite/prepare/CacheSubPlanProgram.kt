@@ -74,7 +74,8 @@ class CacheSubPlanProgram : Program {
             return if (cacheNodeMap.contains(id)) {
                 val result = cacheNodeMap[id]!!
                 result.cachedPlan.addConsumer()
-                result
+                // Create a copy to get separate operator IDs for timing
+                result.copy(result.traitSet, listOf())
             } else {
                 val children = rel.inputs.map { it.accept(this) }
                 val node = rel.copy(rel.traitSet, children)

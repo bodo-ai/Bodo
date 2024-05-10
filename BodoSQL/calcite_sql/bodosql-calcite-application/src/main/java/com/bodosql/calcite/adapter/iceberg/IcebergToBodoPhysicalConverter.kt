@@ -89,12 +89,12 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
     // ----------------------------------- Codegen Helpers -----------------------------------
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
-            implementor.createStreamingPipeline()
             implementor.buildStreaming(
                 BodoPhysicalRel.ProfilingOptions(false),
                 { ctx -> initStateVariable(ctx) },
                 { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
                 { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                true,
             )
         } else {
             implementor.build { ctx -> generateNonStreamingTable(ctx) }

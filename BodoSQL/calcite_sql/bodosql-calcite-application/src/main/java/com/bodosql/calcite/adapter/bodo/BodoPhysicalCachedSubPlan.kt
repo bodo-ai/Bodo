@@ -1,6 +1,11 @@
 package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op.Assign
+import com.bodosql.calcite.ir.Op.Stmt
+import com.bodosql.calcite.ir.Op.TupleAssign
+import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.rel.core.CachedPlanInfo
@@ -38,14 +43,71 @@ class BodoPhysicalCachedSubPlan private constructor(
          * @return the variable that represents this relational expression.
          */
         override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-            // Note: This depends on streaming and non-streaming having the same implementation.
-            return implementor.build {
-                val relationalOperatorCache = it.builder().getRelationalOperatorCache()
-                if (relationalOperatorCache.isNodeCached(this, cacheID)) {
-                    relationalOperatorCache.getCachedTable(this, cacheID)
+            val relationalOperatorCache = implementor.getRelationalOperatorCache()
+            val isCached = relationalOperatorCache.isNodeCached(cacheID)
+            val table =
+                if (isCached) {
+                    relationalOperatorCache.getCachedTable(cacheID)
                 } else {
                     val table = implementor.visitChild(cachedPlan.plan.rel, 0)
-                    relationalOperatorCache.tryCacheNode(this, cacheID, table)
+                    relationalOperatorCache.cacheTable(cacheID, table)
+                    table
+                }
+            return if (isStreaming()) {
+                implementor.buildStreaming(
+                    BodoPhysicalRel.ProfilingOptions(reportOutTableSize = isCached, timeStateInitialization = false),
+                    { ctx -> initStateVariable(ctx) },
+                    { ctx, _ ->
+                        val builder = ctx.builder()
+                        val frame = builder.getCurrentStreamingPipeline()
+                        if (isCached) {
+                            val (stateVar, operatorID) = relationalOperatorCache.getStateInfo(cacheID)
+                            val newTableVar = builder.symbolTable.genTableVar()
+                            frame.add(
+                                TupleAssign(
+                                    listOf(newTableVar, frame.getExitCond()),
+                                    Expr.Call("bodo.libs.table_builder.table_builder_pop_chunk", listOf(stateVar)),
+                                ),
+                            )
+                            frame.deleteStreamingState(
+                                operatorID,
+                                Stmt(Expr.Call("bodo.libs.table_builder.delete_table_builder_state", listOf(stateVar))),
+                            )
+                            BodoEngineTable(newTableVar.emit(), this)
+                        } else {
+                            val numConsumers = (cachedPlan.getNumConsumers() - 1)
+                            val stateVars =
+                                (0 until numConsumers).map {
+                                    Pair(builder.symbolTable.genStateVar(), builder.newOperatorID(this))
+                                }
+                            stateVars.map {
+                                val (stateVar, operatorID) = it
+                                frame.initializeStreamingState(
+                                    operatorID,
+                                    Assign(
+                                        stateVar,
+                                        Expr.Call(
+                                            "bodo.libs.table_builder.init_table_builder_state",
+                                            listOf(Expr.IntegerLiteral(operatorID)),
+                                            listOf(Pair("use_chunked_builder", Expr.True)),
+                                        ),
+                                    ),
+                                    // ChunkedTableBuilder doesn't need pinned memory budget
+                                    OperatorType.ACCUMULATE_TABLE,
+                                    0,
+                                )
+                                frame.add(Stmt(Expr.Call("bodo.libs.table_builder.table_builder_append", listOf(stateVar, table))))
+                            }
+                            relationalOperatorCache.setStateInfo(cacheID, stateVars)
+                            table
+                        }
+                    },
+                    { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                    isCached,
+                )
+            } else {
+                // Non-streaming just reuses the table.
+                implementor.build {
                     table
                 }
             }
