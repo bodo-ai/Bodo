@@ -20,9 +20,9 @@ open class RuntimeJoinFilterBase(
     cluster: RelOptCluster,
     traits: RelTraitSet,
     input: RelNode,
-    val joinFilterID: Int,
-    val columns: List<Int>,
-    val isFirstLocation: List<Boolean>,
+    val joinFilterIDs: List<Int>,
+    val filterColumns: List<List<Int>>,
+    val filterIsFirstLocations: List<List<Boolean>>,
 ) : SingleRel(cluster, traits, input) {
     /**
      * Return a new RuntimeJoinFilterBase with only a different set of columns.
@@ -30,18 +30,23 @@ open class RuntimeJoinFilterBase(
     open fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
-        newColumns: List<Int>,
+        newColumns: List<List<Int>>,
     ): RuntimeJoinFilterBase {
-        return RuntimeJoinFilterBase(cluster, traitSet, input, joinFilterID, newColumns, isFirstLocation)
+        return RuntimeJoinFilterBase(cluster, traitSet, input, joinFilterIDs, newColumns, filterIsFirstLocations)
     }
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         // Only display the new columns to avoid confusion in the plans.
-        val displayedColumns = columns.withIndex().filter { isFirstLocation[it.index] }.map { it.value }
+        val displayedColumns =
+            filterColumns.withIndex().map {
+                    (idx, columns) ->
+                columns.withIndex().filter { filterIsFirstLocations[idx][it.index] }.map { it.value }
+            }
+        val allKeysReady = filterColumns.map { colList -> colList.all { it != -1 } }
         return pw.item("input", getInput())
-            .item("joinID", joinFilterID)
-            .item("columns", displayedColumns)
-            .itemIf("allKeysReady", true, columns.all { it != -1 })
+            .item("joinIDs", joinFilterIDs)
+            .item("columnsList", displayedColumns)
+            .itemIf("allKeysReady", allKeysReady, allKeysReady.any())
     }
 
     override fun computeSelfCost(
