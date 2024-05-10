@@ -441,15 +441,21 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // 1. group fields are always used
     final ImmutableBitSet.Builder inputFieldsUsed = aggregate.getGroupSet().rebuild();
     // 2. agg functions
-    for (AggregateCall aggCall : aggregate.getAggCallList()) {
-      inputFieldsUsed.addAll(aggCall.getArgList());
-      if (aggCall.filterArg >= 0) {
-        inputFieldsUsed.set(aggCall.filterArg);
+    // Bodo Change: Only add the aggCall if it won't be pruned.
+    // Otherwise we don't need to count it as a used field.
+    int startIdx = aggregate.getGroupSet().cardinality();
+    for (int i = 0; i < aggregate.getAggCallList().size(); i++) {
+      AggregateCall aggCall = aggregate.getAggCallList().get(i);
+      if (fieldsUsed.get(startIdx + i)) {
+        inputFieldsUsed.addAll(aggCall.getArgList());
+        if (aggCall.filterArg >= 0) {
+          inputFieldsUsed.set(aggCall.filterArg);
+        }
+        if (aggCall.distinctKeys != null) {
+          inputFieldsUsed.addAll(aggCall.distinctKeys);
+        }
+        inputFieldsUsed.addAll(RelCollations.ordinals(aggCall.collation));
       }
-      if (aggCall.distinctKeys != null) {
-        inputFieldsUsed.addAll(aggCall.distinctKeys);
-      }
-      inputFieldsUsed.addAll(RelCollations.ordinals(aggCall.collation));
     }
 
     // Create input with trimmed columns.

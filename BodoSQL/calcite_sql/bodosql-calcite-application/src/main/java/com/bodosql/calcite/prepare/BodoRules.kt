@@ -69,6 +69,7 @@ import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
+import org.apache.calcite.rel.rules.AggregateMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.CoreRules
@@ -173,6 +174,16 @@ object BodoRules {
     val AGGREGATE_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Fuse together two aggregates directly on top of each other.
+     * For example SUM(SUM()) -> SUM().
+     */
+    @JvmField
+    val AGGREGATE_MERGE_RULE: RelOptRule =
+        AggregateMergeRule.Config.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1053,6 +1064,7 @@ object BodoRules {
             AGGREGATE_JOIN_JOIN_REMOVE_RULE,
             AGGREGATE_REMOVE_RULE,
             AGGREGATE_JOIN_REMOVE_RULE,
+            AGGREGATE_MERGE_RULE,
         )
 
     /**
@@ -1156,6 +1168,7 @@ object BodoRules {
             PROJECT_MERGE_RULE,
             FILTER_AGGREGATE_TRANSPOSE_RULE,
             AGGREGATE_JOIN_REMOVE_RULE,
+            AGGREGATE_MERGE_RULE,
             AGGREGATE_JOIN_TRANSPOSE_RULE,
             TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
             FILTER_REDUCE_EXPRESSIONS_RULE,
