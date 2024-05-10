@@ -1,5 +1,6 @@
 package com.bodosql.calcite.rel.metadata
 
+import com.bodosql.calcite.adapter.bodo.PandasTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
@@ -10,7 +11,9 @@ import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
 import com.bodosql.calcite.rel.core.WindowBase
+import com.bodosql.calcite.table.BodoSqlTable
 import org.apache.calcite.plan.volcano.RelSubset
+import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.core.Aggregate
@@ -491,6 +494,14 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     ): Double? {
         val trueCol = rel.keptColumns.nth(column)
         return rel.getCatalogTable().getColumnDistinctCount(trueCol)
+    }
+
+    fun getColumnDistinctCount(
+        rel: PandasTableScan,
+        mq: RelMetadataQuery,
+        column: Int,
+    ): Double? {
+        return ((rel.table as RelOptTableImpl).table() as BodoSqlTable).getColumnDistinctCount(column)
     }
 
     fun getColumnDistinctCount(

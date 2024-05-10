@@ -484,12 +484,29 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
             try:
                 # Determine the write type
                 write_type = generator.getWriteType(sql_str)
+
+                # Get the row counts and NDV estimates for the tables:
+                estimated_row_counts = []
+                estimated_ndvs = []
+                for i, table in enumerate(orig_bodo_types):
+                    if isinstance(table, TablePathType):
+                        row_count = table._statistics.get(
+                            "row_count", bodo_sql_context_type.estimated_row_counts[i]
+                        )
+                        estimated_ndv = table._statistics.get("ndv", {})
+                    else:
+                        row_count = bodo_sql_context_type.estimated_row_counts[i]
+                        estimated_ndv = {}
+                    estimated_row_counts.append(row_count)
+                    estimated_ndvs.append(estimated_ndv)
+
                 # Update the schema with types.
                 update_schema(
                     schema,
                     table_names,
                     df_types,
-                    list(bodo_sql_context_type.estimated_row_counts),
+                    estimated_row_counts,
+                    estimated_ndvs,
                     orig_bodo_types,
                     True,
                     write_type,

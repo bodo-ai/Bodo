@@ -214,16 +214,6 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   }
 
   /**
-   * Determine the estimated approximate number of distinct values for the column. This is
-   * implemented by each individual catalog table which is responsible for caching the results.
-   *
-   * @return Estimated distinct count for this table.
-   */
-  public Double getColumnDistinctCount(int column) {
-    return null;
-  }
-
-  /**
    * Get the insert into write target for a particular table. Most tables must maintain the same
    * table type as already exists for the table, so this will generally be implemented by
    * subclasses.
