@@ -58,6 +58,7 @@ def test_output_directory_can_be_set(tmp_path):
     ):
         runs = os.listdir(tmp_path_rank0)
         assert len(runs) == 0
+        bodo.barrier()
 
         @bodo.jit
         def impl():
@@ -68,6 +69,7 @@ def test_output_directory_can_be_set(tmp_path):
             return
 
         impl()
+        bodo.barrier()
         runs = os.listdir(tmp_path_rank0)
         assert len(runs) == 1
         out_path = f"{tmp_path_rank0}/{runs[0]}"
@@ -76,6 +78,7 @@ def test_output_directory_can_be_set(tmp_path):
         for f in profiles:
             assert f.startswith("query_profile")
             assert f.endswith(".json")
+        bodo.barrier()
 
 
 def test_join_row_count_collection(memory_leak_check):
