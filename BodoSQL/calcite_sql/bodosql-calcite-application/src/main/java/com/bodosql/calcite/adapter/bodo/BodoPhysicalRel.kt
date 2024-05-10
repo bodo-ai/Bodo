@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
@@ -29,11 +30,6 @@ interface BodoPhysicalRel : RelNode {
      * @return the variable that represents this relational expression.
      */
     fun emit(implementor: Implementor): BodoEngineTable
-
-    /**
-     * Returns true if this node can be cached with another call to the same node.
-     */
-    fun canUseNodeCache(): Boolean = true
 
     /**
      * Allows a BodoPhysicalRel to override the number of ranks it will utilize.
@@ -115,9 +111,13 @@ interface BodoPhysicalRel : RelNode {
             initFn: (BuildContext) -> StateVariable,
             bodyFn: (BuildContext, StateVariable) -> BodoEngineTable,
             deleteFn: (BuildContext, StateVariable) -> Unit,
+            buildPipeline: Boolean = false,
         ): BodoEngineTable
 
-        fun createStreamingPipeline()
+        /**
+         * getter for relationalOperatorCache
+         */
+        fun getRelationalOperatorCache(): RelationalOperatorCache
     }
 
     interface BuildContext {

@@ -52,6 +52,7 @@ import com.bodosql.calcite.adapter.bodo.StreamingOptions;
 import com.bodosql.calcite.adapter.bodo.StreamingRexToBodoTranslator;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
+import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
@@ -114,6 +115,10 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
   // TODO: Add this to the docs as banned
   private final Module.Builder generatedCode;
+
+  // Cache for relational operators.
+  // TODO: Move this to an explicit state class that isn't code generation.
+  private final RelationalOperatorCache relationalOperatorCache = new RelationalOperatorCache();
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
   // we can statically define the variable names we'll use for the iceberg file
@@ -2530,7 +2535,14 @@ public class BodoCodeGenVisitor extends RelVisitor {
             Function2<? super BodoPhysicalRel.BuildContext, ? super StateVariable, BodoEngineTable>
                 bodyFn,
         @NotNull
-            Function2<? super BodoPhysicalRel.BuildContext, ? super StateVariable, Unit> deleteFn) {
+            Function2<? super BodoPhysicalRel.BuildContext, ? super StateVariable, Unit> deleteFn,
+        boolean createPipeline) {
+      if (createPipeline) {
+        Variable exitCond = genFinishedStreamingFlag();
+        Variable iterVariable = genIterVar();
+        generatedCode.startStreamingPipelineFrame(exitCond, iterVariable);
+      }
+
       // TODO: Move to a wrapper function to avoid the timerInfo calls.
       // This requires more information about the high level design of the streaming
       // operators since there are several parts (e.g. state, multiple loop sections,
@@ -2575,11 +2587,10 @@ public class BodoCodeGenVisitor extends RelVisitor {
       return res;
     }
 
+    @NotNull
     @Override
-    public void createStreamingPipeline() {
-      Variable exitCond = genFinishedStreamingFlag();
-      Variable iterVariable = genIterVar();
-      generatedCode.startStreamingPipelineFrame(exitCond, iterVariable);
+    public RelationalOperatorCache getRelationalOperatorCache() {
+      return relationalOperatorCache;
     }
   }
 

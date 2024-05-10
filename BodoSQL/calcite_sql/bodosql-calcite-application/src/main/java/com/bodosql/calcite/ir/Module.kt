@@ -2,7 +2,6 @@ package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.utils.JoinStateCache
-import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import org.apache.calcite.rel.RelNode
 import java.util.Stack
 
@@ -61,11 +60,6 @@ class Module(private val frame: Frame) {
             return opID * multiplier + newId
         }
 
-        // relationalOperatorCache handles caching intermediate outputs of Relation Operators (RelNodes)
-        // When possible
-        private val relationalOperatorCache: RelationalOperatorCache =
-            RelationalOperatorCache(this)
-
         private val joinStateCache = JoinStateCache()
 
         /**
@@ -88,13 +82,6 @@ class Module(private val frame: Frame) {
                     assignedVariables.plus(targetVar)
                 }
             }
-        }
-
-        /**
-         * getter for relationalOperatorCache
-         */
-        fun getRelationalOperatorCache(): RelationalOperatorCache {
-            return relationalOperatorCache
         }
 
         /**
