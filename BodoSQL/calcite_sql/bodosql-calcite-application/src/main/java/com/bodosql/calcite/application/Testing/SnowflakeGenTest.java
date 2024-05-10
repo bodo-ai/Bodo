@@ -76,12 +76,12 @@ public class SnowflakeGenTest {
 
     BodoSqlTable table =
         new LocalTable(
-            "LOCAL_TABLE", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
+            "LOCAL_TABLE", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null, null);
     schema.addTable(table);
     // Second table to use for testing joins
     BodoSqlTable table2 =
         new LocalTable(
-            "LOCAL_TABLE2", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
+            "LOCAL_TABLE2", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null, null);
     schema.addTable(table2);
 
     RelationalAlgebraGenerator generator =

@@ -47,6 +47,7 @@ public class PandasGenTest {
             "TABLE_1 WRITE HERE (%s, %s)",
             false,
             "MEMORY",
+            null,
             null);
 
     schema.addTable(table);
@@ -67,6 +68,7 @@ public class PandasGenTest {
             "TABLE_2 WRITE HERE (%s, %s)",
             false,
             "MEMORY",
+            null,
             null);
     schema.addTable(table2);
     BodoSqlTable table3 =
@@ -79,6 +81,7 @@ public class PandasGenTest {
             "TABLE_3 WRITE HERE (%s, %s)",
             false,
             "MEMORY",
+            null,
             null);
 
     schema.addTable(table3);

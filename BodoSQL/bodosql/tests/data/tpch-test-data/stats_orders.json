@@ -1,0 +1,14 @@
+{
+    "ndv": {
+        "O_ORDERKEY": 30000,
+        "O_CUSTKEY": 2000,
+        "O_ORDERSTATUS": 3,
+        "O_SHIPPRIORITY": 1,
+        "O_COMMENT": 29984,
+        "O_TOTALPRICE": 29987,
+        "O_ORDERDATE": 2406,
+        "O_ORDERPRIORITY": 5,
+        "O_CLERK": 1000
+    },
+    "row_count": 30000
+}

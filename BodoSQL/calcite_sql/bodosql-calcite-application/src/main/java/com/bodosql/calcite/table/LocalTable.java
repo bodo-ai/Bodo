@@ -9,7 +9,9 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
@@ -53,6 +55,10 @@ public class LocalTable extends BodoSqlTable {
 
   private final Statistic statistic = new StatisticImpl();
 
+  // Hashmap mapping column names to their NDV estimates.
+  // NOTE: This may only have NDV estimates for some of the columns.
+  private final @Nullable Map<String, Integer> estimatedNdvs;
+
   /**
    * Constructor used for a LocalTable. In addition to the normal table components the table is
    * required to provide code need to read/write it. If a table is not writeable then the write code
@@ -79,7 +85,8 @@ public class LocalTable extends BodoSqlTable {
       String writeCodeFormatString,
       boolean useIORead,
       String dbType,
-      @Nullable Long estimatedRowCount) {
+      @Nullable Long estimatedRowCount,
+      @Nullable HashMap<String, Integer> estimatedNdvs) {
 
     super(name, schemaPath, columns);
     this.isWriteable = isWriteable;
@@ -88,6 +95,7 @@ public class LocalTable extends BodoSqlTable {
     this.useIORead = useIORead;
     this.dbType = dbType;
     this.estimatedRowCount = estimatedRowCount;
+    this.estimatedNdvs = estimatedNdvs;
   }
 
   /**
@@ -205,6 +213,7 @@ public class LocalTable extends BodoSqlTable {
         writeCodeFormatString,
         useIORead,
         dbType,
+        null,
         null);
   }
 
@@ -231,6 +240,19 @@ public class LocalTable extends BodoSqlTable {
   public WriteTarget getInsertIntoWriteTarget(Variable columnNamesGlobal) {
     throw new UnsupportedOperationException(
         "Streaming insert into is not supported for local tables");
+  }
+
+  @Override
+  public Double getColumnDistinctCount(int column) {
+    if (this.estimatedNdvs == null) {
+      return null;
+    }
+
+    String columnName = this.getColumnNames().get(column);
+    if (this.estimatedNdvs.containsKey(columnName)) {
+      return Double.valueOf(this.estimatedNdvs.get(columnName));
+    }
+    return null;
   }
 
   @Override

@@ -476,6 +476,7 @@ def add_table_type(
     schema: LocalSchemaClass,
     df_type: bodo.DataFrameType,
     estimated_row_count: Optional[int],
+    estimated_ndvs: Optional[dict[str, int]],
     bodo_type: types.Type,
     table_num: int,
     from_jit: bool,
@@ -490,6 +491,9 @@ def add_table_type(
         df_type (bodo.DataFrameType): The Bodo DataFrame type.
         estimated_row_count (Optional[int]): The expected number of rows in the table for the
             Volcano Planner. None if no estimate is provided.
+        estimated_ndvs (Optional[dict[str, int]]): Estimated NDV values for the columns. This
+            maps the column names to the NDV estimate. Providing some and not all column NDVs
+            is supported. None if no estimate is provided.
         bodo_type (types.Type): Bodo type for the table. This stores the original type so a TablePath
             isn't converted to its DataFrameType, which the df_type always is.
         table_num (int): ID for the table being processed.
@@ -540,6 +544,13 @@ def add_table_type(
         db_type = "MEMORY"
 
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
+
+    # Convert the Python dict to a Java HashMap:
+    estimated_ndvs_java_map = HashMapClass()
+    if estimated_ndvs:
+        for k, v in estimated_ndvs.items():
+            estimated_ndvs_java_map.put(k, v)
+
     table = LocalTableClass(
         table_name,
         schema.getFullPath(),
@@ -552,6 +563,7 @@ def add_table_type(
         isinstance(bodo_type, TablePathType),
         db_type,
         estimated_row_count,
+        estimated_ndvs_java_map,
     )
     schema.addTable(table)
 
@@ -567,6 +579,13 @@ def _get_estimated_row_count(table: pd.DataFrame | TablePath) -> int | None:
         # Pass None for unknown lengths.
         # TODO: Support other inputs types
         return None
+
+
+def _get_estimated_ndv(table: pd.DataFrame | TablePath) -> dict[str, int]:
+    if isinstance(table, TablePath):
+        return table._statistics.get("ndv", {})
+    else:
+        return {}
 
 
 def _generate_table_read(
@@ -668,10 +687,12 @@ class BodoSQLContext:
             names = []
             dfs = []
             estimated_row_counts = []
+            estimated_ndvs = []
             for k, v in tables.items():
                 names.append(k)
                 dfs.append(v)
                 estimated_row_counts.append(_get_estimated_row_count(v))
+                estimated_ndvs.append(_get_estimated_ndv(v))
             orig_bodo_types, df_types = compute_df_types(dfs, False)
             schema = initialize_schema()
             self.schema = schema
@@ -679,6 +700,7 @@ class BodoSQLContext:
             self.df_types = df_types
             self.orig_bodo_types = orig_bodo_types
             self.estimated_row_counts = estimated_row_counts
+            self.estimated_ndvs = estimated_ndvs
         except Exception as e:
             failed = True
             msg = error_to_string(e)
@@ -880,6 +902,7 @@ class BodoSQLContext:
                     self.names,
                     self.df_types,
                     self.estimated_row_counts,
+                    self.estimated_ndvs,
                     self.orig_bodo_types,
                     False,
                     write_type,
@@ -1385,6 +1408,7 @@ def update_schema(
     table_names: List[str],
     df_types: List[bodo.DataFrameType],
     estimated_row_counts: List[Optional[int]],
+    estimated_ndvs: List[Optional[dict[str, int]]],
     bodo_types: List[types.Type],
     from_jit: bool,
     write_type: str,
@@ -1397,6 +1421,7 @@ def update_schema(
         df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
         estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
             table for the volcano planner. None if no estimate is provided.
+        estimated_ndvs (List[Optional[dict[str, int]]]): The NDV estimates for each input table.
         bodo_types (List[types.Type]): List of Bodo types for each table. This stores
             the original type, so a TablePath isn't converted to its
             DataFrameType, which it is for df_types.
@@ -1412,6 +1437,7 @@ def update_schema(
                 schema,
                 df_types[i],
                 estimated_row_counts[i],
+                estimated_ndvs[i],
                 bodo_types[i],
                 i,
                 from_jit,

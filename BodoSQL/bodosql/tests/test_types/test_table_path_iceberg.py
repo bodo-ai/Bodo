@@ -238,7 +238,7 @@ def test_implicit_dict_encoding(
 ):
     """
     Test that reading dictionary encoding string columns from
-    Iceberg tables in Snowflake works.
+    Iceberg tables works.
     """
 
     table_name = "SIMPLE_STRING_TABLE"
@@ -267,7 +267,7 @@ def test_implicit_dict_encoding(
     with set_logging_stream(logger, 1):
         saved_read_as_dict_threshold = bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD
         try:
-            bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = 10.0
+            bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = 100.0
             check_func(
                 impl,
                 (table_name, conn, db_schema),

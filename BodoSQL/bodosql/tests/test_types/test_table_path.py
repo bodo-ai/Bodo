@@ -4,12 +4,16 @@ Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
 import io
+import json
+import os
 
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
+from bodo.sql_plan_cache import BodoSqlPlanCache
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -397,6 +401,94 @@ def test_parquet_row_count_estimation(datapath, memory_leak_check):
     )
 
     assert bc.estimated_row_counts == [10]
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_statistics_file(datapath, memory_leak_check):
+    """
+    Test that providing a statistics file through the TablePath API
+    works as expected.
+    """
+
+    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    stats_file = datapath("tpch-test-data/stats_orders.json")
+    table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
+    bc = bodosql.BodoSQLContext({"ORDERS": table})
+
+    with open(stats_file, "r") as f:
+        expected_stats = json.load(f)
+
+    assert "row_count" in expected_stats
+    expected_row_count = expected_stats["row_count"]
+    assert "ndv" in expected_stats
+    expected_ndvs = expected_stats["ndv"]
+    assert table.estimated_row_count == expected_row_count
+    assert table._statistics["row_count"] == expected_row_count
+    assert table._statistics["ndv"] == expected_ndvs
+    assert table._statistics["ndv"] == expected_ndvs
+    assert bc.estimated_ndvs == [expected_ndvs]
+
+    # Verify that the information was properly propagated to the planner by
+    # running a simple query and checking the distinctness estimates.
+    plan = bc.generate_plan("select * from orders", show_cost=True)
+    assert (
+        "distinct estimates: $0 = 30E3 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 29.99E3 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 29.98E3 values"
+        in plan
+    )
+    assert "30e3 rows" in plan
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
+    """
+    Test that statistics provided to a TablePath instance through a statistics
+    file are correctly propagated to the planner when a query is executed
+    from inside a jit function.
+    """
+
+    comm = MPI.COMM_WORLD
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    orig_sql_plan_cache_loc = bodo.sql_plan_cache_loc
+    bodo.sql_plan_cache_loc = str(tmp_path_rank0)
+
+    f1 = datapath("tpch-test-data/parquet/orders.parquet")
+    stats_file = datapath("tpch-test-data/stats_orders.json")
+    table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
+    bc = bodosql.BodoSQLContext({"ORDERS": table})
+    query = "select * from orders"
+
+    @bodo.jit
+    def test1(bc, query):
+        return bc.sql(query)
+
+    try:
+        test1(bc, query)
+        bodo.barrier()
+
+        # Get the cache location from BodoSqlPlanCache
+        expected_cache_loc = BodoSqlPlanCache.get_cache_loc(query)
+
+        # Verify that the file exists. Read the file and do some keyword checks.
+        assert os.path.isfile(
+            expected_cache_loc
+        ), f"Plan not found at expected cache location ({expected_cache_loc})"
+
+        with open(expected_cache_loc, "r") as f:
+            plan_str = f.read()
+        bodo.barrier()
+
+        assert (
+            "distinct estimates: $0 = 30E3 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 29.99E3 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 29.98E3 values"
+            in plan_str
+        )
+        assert "30e3 rows" in plan_str
+
+    finally:
+        # Restore original value in case of failure
+        bodo.sql_plan_cache_loc = orig_sql_plan_cache_loc
 
 
 # TODO: Add a test with multiple tables to check reorder_io works as expected.
