@@ -109,6 +109,16 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   }
 
   /**
+   * Determine the estimated approximate number of distinct values for the column. This is
+   * implemented by each individual table which is responsible for caching the results.
+   *
+   * @return Estimated distinct count for this table.
+   */
+  public Double getColumnDistinctCount(int column) {
+    return null;
+  }
+
+  /**
    * Any statistic information for this table. This is not currently used by BodoSQL.
    *
    * @return Statistic information for a table.
