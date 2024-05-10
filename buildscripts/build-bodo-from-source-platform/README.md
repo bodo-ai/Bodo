@@ -1,6 +1,12 @@
 # build-bodo-from-source-platform
 
-## Set up DEV environment on platform
+## Set up DEV environment on platform, single-node cluster
+1. SSH into the cluster node.
+1. Copy single_node_install.sh to the node.
+1. Run the script: `bash single_node_install.sh`.
+1. Enter your GitHub PAT and branch to checkout when prompted
+
+## Set up DEV environment on platform, multi-node cluster
 
 1. SSH into any of the cluster nodes.
 1. Set your [Github token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token#creating-a-personal-access-token-classic) as an environment variable: `export GITHUB_TOKEN=<token>`
@@ -15,6 +21,8 @@
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
 1. Build Bodo: `psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
+
+## Workflow
 
 It's recommended to create a working branch while testing. You can push changes to this branch from your
 personal machine, and then pull the changes on the nodes and rebuild. e.g.
