@@ -187,7 +187,7 @@ object RuntimeJoinFilterProgram : Program {
         private fun visit(filter: BodoPhysicalFilter): RelNode {
             // If the filter contains an OVER clause we can only push filters
             // that are shared by all partition by columns.
-            val numCols = filter.getRowType().fieldCount
+            val numCols = filter.rowType.fieldCount
             var pushableColumns =
                 if (filter.containsOver()) {
                     WindowFilterTranspose.getFilterableColumnIndices(listOf(filter.condition), numCols)
@@ -240,7 +240,7 @@ object RuntimeJoinFilterProgram : Program {
         private fun visit(join: Join): RelNode {
             val info = join.analyzeCondition()
             // Note: You must use getRowType() here due to a caching issue.
-            val numLeftColumns = join.left.getRowType().fieldCount
+            val numLeftColumns = join.left.rowType.fieldCount
             // Split the join info into those which are processed on
             // the left input and those which are processed on the right input.
             // equi-join keys can be processed on both inputs.
@@ -293,14 +293,15 @@ object RuntimeJoinFilterProgram : Program {
                         }
                     }
                 }
-                if (leftIsFirstLocation.any { it }) {
+                val keepLeft = leftIsFirstLocation.any { it }
+                val keepRight = rightIsFirstLocation.any { it }
+                if (keepLeft) {
                     leftJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, leftKeys, leftIsFirstLocation))
                 }
-                if (rightIsFirstLocation.any { it }) {
+                if (keepRight) {
                     rightJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, rightKeys, rightIsFirstLocation))
                 }
             }
-
             // If we have a RIGHT or Inner join we can generate
             // a runtime join filter.
             val filterKey =
@@ -354,14 +355,19 @@ object RuntimeJoinFilterProgram : Program {
             rel: RelNode,
             liveJoins: List<LiveJoinInfo>,
         ): RelNode {
-            var returnNode = rel
-            for (liveJoin in liveJoins) {
-                returnNode =
-                    BodoPhysicalRuntimeJoinFilter.create(
-                        returnNode, liveJoin.joinFilterKey, liveJoin.remainingColumns, liveJoin.isFirstLocation,
-                    )
+            return if (liveJoins.isEmpty()) {
+                rel
+            } else {
+                val filterKeys = liveJoins.map { it.joinFilterKey }
+                val filterColumns = liveJoins.map { it.remainingColumns }
+                val areFirstLocations = liveJoins.map { it.isFirstLocation }
+                BodoPhysicalRuntimeJoinFilter.create(
+                    rel,
+                    filterKeys,
+                    filterColumns,
+                    areFirstLocations,
+                )
             }
-            return returnNode
         }
     }
 
