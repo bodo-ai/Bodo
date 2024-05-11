@@ -1851,13 +1851,16 @@ boost::json::object BufferPool::get_stats() const {
     general_stats["max_bytes_malloced"] = stats_.max_bytes_malloced;
     general_stats["max_bytes_pinned"] = stats_.max_bytes_pinned;
     general_stats["total_allocation_time"] =
-        stats_.total_allocation_time.count();
-    general_stats["total_malloc_time"] = stats_.total_malloc_time.count();
-    general_stats["total_realloc_time"] = stats_.total_realloc_time.count();
-    general_stats["total_free_time"] = stats_.total_free_time.count();
-    general_stats["total_pin_time"] = stats_.total_pin_time.count();
+        // Convert milliseconds to microseconds
+        stats_.total_allocation_time.count() * 1000;
+    general_stats["total_malloc_time"] =
+        stats_.total_malloc_time.count() * 1000;
+    general_stats["total_realloc_time"] =
+        stats_.total_realloc_time.count() * 1000;
+    general_stats["total_free_time"] = stats_.total_free_time.count() * 1000;
+    general_stats["total_pin_time"] = stats_.total_pin_time.count() * 1000;
     general_stats["total_find_evict_time"] =
-        stats_.total_find_evict_time.count();
+        stats_.total_find_evict_time.count() * 1000;
 
     out_stats["general stats"] = general_stats;
 
@@ -1865,15 +1868,17 @@ boost::json::object BufferPool::get_stats() const {
     for (const auto& s : size_classes_) {
         boost::json::object size_class_stats;
         size_class_stats["Num Spilled"] = s->stats_.total_blocks_spilled;
-        size_class_stats["Spill Time"] = s->stats_.total_spilling_time.count();
+        // Convert milliseconds to microseconds
+        size_class_stats["Spill Time"] =
+            s->stats_.total_spilling_time.count() * 1000;
         size_class_stats["Num Readback"] = s->stats_.total_blocks_readback;
         size_class_stats["Readback Time"] =
-            s->stats_.total_readback_time.count();
+            s->stats_.total_readback_time.count() * 1000;
         size_class_stats["Num Madvise"] = s->stats_.total_advise_away_calls;
         size_class_stats["Madvise Time"] =
-            s->stats_.total_advise_away_time.count();
+            s->stats_.total_advise_away_time.count() * 1000;
         size_class_stats["Unmapped Time"] =
-            s->stats_.total_find_unmapped_time.count();
+            s->stats_.total_find_unmapped_time.count() * 1000;
         std::string key = BytesToHumanReadableString(s->getBlockSize());
         per_size_class_stats[key] = size_class_stats;
     }
