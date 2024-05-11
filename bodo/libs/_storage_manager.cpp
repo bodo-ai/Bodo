@@ -867,12 +867,13 @@ boost::json::object GetStorageManagerStats(
         stat_for_manager["Total Bytes Read"] = stats[i].total_read_bytes;
         stat_for_manager["Total Bytes Deleted"] = stats[i].total_bytes_del;
         stat_for_manager["Max Spilled Bytes"] = stats[i].max_spilled_bytes;
-        stat_for_manager["Total Read Time (ms)"] =
-            stats[i].total_read_time.count();
-        stat_for_manager["Total Write Time (ms)"] =
-            stats[i].total_write_time.count();
-        stat_for_manager["Total Delete Time (ms)"] =
-            stats[i].total_delete_time.count();
+        // Convert milliseconds to microseconds
+        stat_for_manager["Total Read Time"] =
+            stats[i].total_read_time.count() * 1000;
+        stat_for_manager["Total Write Time"] =
+            stats[i].total_write_time.count() * 1000;
+        stat_for_manager["Total Delete Time"] =
+            stats[i].total_delete_time.count() * 1000;
 
         out_stats[std::string(m_names[i])] = stat_for_manager;
     }
