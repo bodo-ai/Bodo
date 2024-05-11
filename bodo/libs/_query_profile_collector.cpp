@@ -127,13 +127,13 @@ void QueryProfileCollector::SubmitOperatorStageRowCounts(
 }
 
 void QueryProfileCollector::SubmitOperatorStageTime(operator_stage_t op_stage,
-                                                    double time) {
+                                                    int64_t time) {
     DISABLE_IF_TRACING_DISABLED;
     operator_stage_times[op_stage] = time;
 }
 
-double QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
-    double total_time = 0;
+int64_t QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
+    int64_t total_time = 0;
     for (auto [op_stage, time] : operator_stage_times) {
         if (op_stage.operator_id == operator_id) {
             total_time += time;
@@ -348,8 +348,10 @@ static void submit_operator_stage_time_query_profile_collector_py_entry(
     try {
         auto op_stage = QueryProfileCollector::MakeOperatorStageID(operator_id,
                                                                    pipeline_id);
-        QueryProfileCollector::Default().SubmitOperatorStageTime(op_stage,
-                                                                 time);
+        // Note that python submits time as a double in seconds, but we must
+        // convert to microseconds for the C++ side.
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            op_stage, static_cast<int64_t>(time * 1e6));
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -357,7 +359,11 @@ static void submit_operator_stage_time_query_profile_collector_py_entry(
 
 static double get_operator_duration_query_profile_collector_py_entry(
     int64_t operator_id) {
-    return QueryProfileCollector::Default().GetOperatorDuration(operator_id);
+    // Convert from microseconds to seconds when returning to Python.
+    return static_cast<double>(
+               QueryProfileCollector::Default().GetOperatorDuration(
+                   operator_id)) /
+           1e6;
 }
 
 static void finalize_query_profile_collector_py_entry() {
