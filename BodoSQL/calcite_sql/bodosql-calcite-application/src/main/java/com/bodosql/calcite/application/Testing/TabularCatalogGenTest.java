@@ -33,12 +33,23 @@ public class TabularCatalogGenTest {
             true, // Enable Join Runtime filters for Testing
             "SNOWFLAKE" // Maintain case sensitivity in the Snowflake style by default
             );
+
+    // Controls if we are generating code or executing DDL. You can set this
+    // to false if you want to observe the actual execution of DDL statements.
+    boolean generateCode = true;
+
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    PandasCodeSqlPlanPair pair = generator.getPandasAndPlanString(sql, true);
-    System.out.println("Optimized plan:");
-    System.out.println(pair.getSqlPlan() + "\n");
-    System.out.println("Generated code:");
-    System.out.println(pair.getPdCode() + "\n");
+
+    if (generateCode) {
+      PandasCodeSqlPlanPair pair = generator.getPandasAndPlanString(sql, true);
+      System.out.println("Optimized plan:");
+      System.out.println(pair.getSqlPlan() + "\n");
+      System.out.println("Generated code:");
+      System.out.println(pair.getPdCode() + "\n");
+    } else {
+      System.out.println("DDL OUTPUT:");
+      System.out.println(generator.executeDDL(sql));
+    }
   }
 }
