@@ -98,14 +98,25 @@ public class SnowflakeGenTest {
             true, // Enable Join Runtime filters for Testing
             "SNOWFLAKE" // Maintain case sensitivity in the Snowflake style by default
             );
+
+    // Controls if we are generating code or executing DDL. You can set this
+    // to false if you want to observe the actual execution of DDL statements.
+    boolean generateCode = true;
+
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String optimizedPlanStr = getRelationalAlgebraString(generator, sql);
-    System.out.println("Optimized plan:");
-    System.out.println(optimizedPlanStr + "\n");
-    String pandasStr = generator.getPandasString(sql);
-    System.out.println("Generated code:");
-    System.out.println(pandasStr + "\n");
+
+    if (generateCode) {
+      String optimizedPlanStr = getRelationalAlgebraString(generator, sql);
+      System.out.println("Optimized plan:");
+      System.out.println(optimizedPlanStr + "\n");
+      String pandasStr = generator.getPandasString(sql);
+      System.out.println("Generated code:");
+      System.out.println(pandasStr + "\n");
+    } else {
+      System.out.println("DDL OUTPUT:");
+      System.out.println(generator.executeDDL(sql));
+    }
   }
 
   private static String getRelationalAlgebraString(
