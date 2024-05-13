@@ -22,6 +22,7 @@ inline bool type_supports_theta_sketch(std::shared_ptr<arrow::DataType> type) {
         case arrow::Type::LARGE_STRING:
         case arrow::Type::LARGE_BINARY:
         case arrow::Type::DICTIONARY:
+        case arrow::Type::DECIMAL:
         case arrow::Type::FLOAT:
         case arrow::Type::DOUBLE:
             return true;
@@ -50,6 +51,7 @@ inline bool is_default_theta_sketch_type(
         case arrow::Type::LARGE_STRING:
         case arrow::Type::LARGE_BINARY:
         case arrow::Type::DICTIONARY:
+        case arrow::Type::DECIMAL:
             return true;
         case arrow::Type::FLOAT:
         case arrow::Type::DOUBLE:
