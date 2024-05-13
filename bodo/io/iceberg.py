@@ -54,7 +54,11 @@ from bodo.io.parquet_pio import (
     parse_fpath,
     schema_with_dict_cols,
 )
-from bodo.io.s3_fs import create_iceberg_aws_credentials_provider, create_s3_fs_instance
+from bodo.io.s3_fs import (
+    create_iceberg_aws_credentials_provider,
+    create_s3_fs_instance,
+    get_region_from_creds_provider,
+)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -1745,11 +1749,11 @@ def get_rest_catalog_fs(
         database_schema: Schema the relevant table is in
         table_name: Name of the table
     """
-    return create_s3_fs_instance(
-        credentials_provider=create_iceberg_aws_credentials_provider(
-            catalog_uri, bearer_token, warehouse, database_schema, table_name
-        )
+    creds_provider = create_iceberg_aws_credentials_provider(
+        catalog_uri, bearer_token, warehouse, database_schema, table_name
     )
+    region = get_region_from_creds_provider(creds_provider)
+    return create_s3_fs_instance(credentials_provider=creds_provider, region=region)
 
 
 def get_iceberg_pq_dataset(

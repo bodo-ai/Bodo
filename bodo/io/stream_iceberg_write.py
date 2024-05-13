@@ -34,11 +34,11 @@ from bodo.io.helpers import (
 )
 from bodo.io.iceberg import (
     commit_statistics_file,
-    create_iceberg_aws_credentials_provider,
     fetch_puffin_metadata,
     generate_data_file_info,
     get_old_statistics_file_path,
     get_rest_catalog_config,
+    get_rest_catalog_fs,
     get_table_details_before_write,
     iceberg_pq_write,
     python_list_of_heterogeneous_tuples_type,
@@ -48,7 +48,6 @@ from bodo.io.iceberg import (
     theta_sketch_collection_type,
     wrap_start_write,
 )
-from bodo.io.s3_fs import create_s3_fs_instance
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
     array_info_type,
@@ -465,11 +464,7 @@ def create_iceberg_rest_s3_fs(
 ):
     if catalog_uri == "" or bearer_token == "" or warehouse == "":
         return None
-    return create_s3_fs_instance(
-        credentials_provider=create_iceberg_aws_credentials_provider(
-            catalog_uri, bearer_token, warehouse, schema, table_name
-        )
-    )
+    return get_rest_catalog_fs(catalog_uri, bearer_token, warehouse, schema, table_name)
 
 
 class IcebergWriterType(types.Type):

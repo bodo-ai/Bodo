@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 #include <boost/json/parser.hpp>
 #include <boost/json/value_to.hpp>
+#include <cassert>
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
 #include "_s3_reader.h"
@@ -148,7 +149,8 @@ IcebergRestAwsCredentialsProvider::get_warehouse_config() {
     }
 }
 
-std::tuple<const std::string, const std::string, const std::string>
+std::tuple<const std::string, const std::string, const std::string,
+           const std::string>
 IcebergRestAwsCredentialsProvider::get_aws_credentials_from_rest_catalog(
     const std::string_view prefix, const std::string_view warehouse_token) {
     const std::string uri =
@@ -190,10 +192,12 @@ IcebergRestAwsCredentialsProvider::get_aws_credentials_from_rest_catalog(
             std::move(table_config["s3.secret-access-key"].as_string().c_str());
         const std::string session_token =
             std::move(table_config["s3.session-token"].as_string().c_str());
+        const std::string region =
+            std::move(table_config["s3.region"].as_string().c_str());
 
         curl_slist_free_all(slist1);
         curl_buffer.clear();
-        return {access_key, secret_key, session_token};
+        return {access_key, secret_key, session_token, region};
     } catch (const std::exception &e) {
         throw std::runtime_error(
             fmt::format("Failed to parse table credentials: {}", e.what()));
@@ -214,8 +218,9 @@ void IcebergRestAwsCredentialsProvider::Reload() {
         std::cerr << "[DEBUG] Reloading AWS Credentials" << std::endl;
     }
     auto [prefix, warehouse_token] = this->get_warehouse_config();
-    auto [access_key, secret_key, session_token] =
+    auto [access_key, secret_key, session_token, region] =
         this->get_aws_credentials_from_rest_catalog(prefix, warehouse_token);
+    this->region = region;
     // We don't know the expiration time of the credentials, so we set it to
     // 15 minutes by default which is the minimum from AWS
     this->credentials = Aws::Auth::AWSCredentials(
@@ -583,26 +588,40 @@ void *create_iceberg_aws_credentials_provider_py_entry(const char *catalog_uri,
                                                        const char *table) {
     const Aws::SDKOptions options;
     try {
-        bool all_args_not_null =
+        [[maybe_unused]] bool all_args_not_null =
             catalog_uri && bearer_token && warehouse && schema && table;
-        bool all_args_not_empty = catalog_uri[0] && bearer_token[0] &&
-                                  warehouse[0] && schema[0] && table[0];
+        [[maybe_unused]] bool all_args_not_empty =
+            catalog_uri[0] && bearer_token[0] && warehouse[0] && schema[0] &&
+            table[0];
+        assert(all_args_not_null && all_args_not_empty);
 
         // Init the AWS SDK with default options
         Aws::InitAPI(options);
         Aws::Auth::AWSCredentialsProvider *provider;
         {
-            if (all_args_not_null && all_args_not_empty) {
-                provider = new IcebergRestAwsCredentialsProvider(
-                    catalog_uri, bearer_token, warehouse, schema, table);
-            } else {
-                provider = new Aws::Auth::DefaultAWSCredentialsProviderChain();
-            }
+            provider = new IcebergRestAwsCredentialsProvider(
+                catalog_uri, bearer_token, warehouse, schema, table);
         }
         Aws::ShutdownAPI(options);
         return provider;
     } catch (const std::exception &e) {
         Aws::ShutdownAPI(options);
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief Get the region from an IcebergRestAwsCredentialsProvider
+ * @returns std::string* containing the region
+ */
+std::string *get_region_from_creds_provider_py_entry(void *_provider) {
+    try {
+        auto provider =
+            static_cast<IcebergRestAwsCredentialsProvider *>(_provider);
+        auto region = provider->GetRegion();
+        return new std::string(region);
+    } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
@@ -661,6 +680,7 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     SetAttrStringFromVoidPtr(m,
                              destroy_iceberg_aws_credentials_provider_py_entry);
     SetAttrStringFromVoidPtr(m, create_s3_fs_instance_py_entry);
+    SetAttrStringFromVoidPtr(m, get_region_from_creds_provider_py_entry);
 
     return m;
 }

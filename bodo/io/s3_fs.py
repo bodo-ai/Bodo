@@ -6,10 +6,14 @@ from numba.core.extending import intrinsic, models, overload, register_model
 import bodo
 from bodo.ext import s3_reader
 from bodo.io.fs_io import ArrowFs
-from bodo.libs.str_ext import unicode_to_utf8
+from bodo.libs.str_ext import gen_std_str_to_unicode, unicode_to_utf8
 
 ll.add_symbol(
     "create_s3_fs_instance_py_entry", s3_reader.create_s3_fs_instance_py_entry
+)
+ll.add_symbol(
+    "get_region_from_creds_provider_py_entry",
+    s3_reader.get_region_from_creds_provider_py_entry,
 )
 
 
@@ -118,6 +122,42 @@ def overload_destroy_iceberg_rest_aws_credentials_provider(provider):
     def impl(provider):
         if provider is not None:
             return _destroy_iceberg_aws_credentials_provider(provider)
+
+    return impl
+
+
+@intrinsic
+def _get_region_from_creds_provider(typingctx, provider):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer()]
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="get_region_from_creds_provider_py_entry",
+        )
+        str = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        ret = gen_std_str_to_unicode(context, builder, str, True)
+        return ret
+
+    return types.unicode_type(IcebergAwsCredentialsProviderType()), codegen
+
+
+def get_region_from_creds_provider(provider: IcebergAwsCredentialsProviderType):
+    """
+    Extracts the region attribute from an IcebergRestAWSCredentialsProvider
+    """
+    pass
+
+
+@overload(get_region_from_creds_provider)
+def overload_get_region_from_creds_provider(provider):
+    assert isinstance(provider, IcebergAwsCredentialsProviderType)
+
+    def impl(provider):
+        return _get_region_from_creds_provider(provider)
 
     return impl
 
