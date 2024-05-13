@@ -246,6 +246,10 @@ object RuntimeJoinFilterProgram : Program {
             // equi-join keys can be processed on both inputs.
             val leftJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
             val rightJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
+            // If the filters are split across both sides and neither side
+            // gets all the columns, we may need to generate a filter after
+            // this join to ensure the bloom filter runs.
+            val outputJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
             for (joinInfo in liveJoins) {
                 val leftKeys: MutableList<Int> = mutableListOf()
                 val leftIsFirstLocation: MutableList<Boolean> = mutableListOf()
@@ -301,6 +305,24 @@ object RuntimeJoinFilterProgram : Program {
                 if (keepRight) {
                     rightJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, rightKeys, rightIsFirstLocation))
                 }
+                // Add the filter to be generated now if:
+                // 1. The join is split across both sides.
+                // 2. The join has all columns.
+                // 3. Neither side has all columns.
+                //
+                // We don't need to generate the filter for the partial side
+                // because all shared columns must be key columns, so we already
+                // check equality.
+                if (keepLeft && keepRight) {
+                    val hasAllColumns = joinInfo.isFirstLocation.all { it }
+                    if (hasAllColumns) {
+                        val allLeft = leftIsFirstLocation.all { it }
+                        val allRight = rightIsFirstLocation.all { it }
+                        if (!allLeft && !allRight) {
+                            outputJoinInfo.add(joinInfo)
+                        }
+                    }
+                }
             }
             // If we have a RIGHT or Inner join we can generate
             // a runtime join filter.
@@ -322,7 +344,8 @@ object RuntimeJoinFilterProgram : Program {
             val leftInput = join.left.accept(this)
             liveJoins = rightJoinInfo
             val rightInput = join.right.accept(this)
-            return BodoPhysicalJoin.create(leftInput, rightInput, join.condition, join.joinType, joinFilterID = filterKey)
+            val newJoin = BodoPhysicalJoin.create(leftInput, rightInput, join.condition, join.joinType, joinFilterID = filterKey)
+            return applyFilters(newJoin, outputJoinInfo)
         }
 
         /**
