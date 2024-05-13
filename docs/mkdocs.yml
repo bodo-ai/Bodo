@@ -162,6 +162,7 @@ nav:
           - Introduction: iceberg/intro.md
           - Reading and Writing: iceberg/read_write.md
           - Supported Data Types: iceberg/data_types.md
+          - Puffin Files: iceberg/puffin_files.md
       - Scalable Data I/O with Bodo: file_io.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
       - Measuring Performance: performance/performance.md
