@@ -16,10 +16,9 @@ class ScalarRexToBodoTranslator(
     visitor: BodoCodeGenVisitor,
     builder: Module.Builder,
     typeSystem: RelDataTypeSystem,
-    nodeId: Int,
     dynamicParamTypes: List<RelDataType>,
     namedParamTypeMap: Map<String, RelDataType>,
-) : RexToBodoTranslator(visitor, builder, typeSystem, nodeId, null, dynamicParamTypes, namedParamTypeMap) {
+) : RexToBodoTranslator(visitor, builder, typeSystem, null, dynamicParamTypes, namedParamTypeMap) {
     override fun isOperandScalar(operand: RexNode): Boolean {
         return true
     }

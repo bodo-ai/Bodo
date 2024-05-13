@@ -38,7 +38,7 @@ class IcebergCatalogTable<T>(
     override fun toRel(
         toRelContext: RelOptTable.ToRelContext,
         relOptTable: RelOptTable,
-    ): RelNode? {
+    ): RelNode {
         return IcebergTableScan.create(toRelContext.cluster, relOptTable, this)
     }
 

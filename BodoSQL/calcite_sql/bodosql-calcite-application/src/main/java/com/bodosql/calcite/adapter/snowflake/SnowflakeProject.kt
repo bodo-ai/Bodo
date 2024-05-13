@@ -9,7 +9,6 @@ import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexNode
@@ -32,7 +31,7 @@ class SnowflakeProject(
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): Project {
+    ): SnowflakeProject {
         return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
     }
 
@@ -43,6 +42,8 @@ class SnowflakeProject(
         val rows = mq.getRowCount(this)
         return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }
+
+    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 
     companion object {
         @JvmStatic
@@ -76,6 +77,4 @@ class SnowflakeProject(
             return create(cluster, traitSet, input, projects, rowType, catalogTable)
         }
     }
-
-    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 }

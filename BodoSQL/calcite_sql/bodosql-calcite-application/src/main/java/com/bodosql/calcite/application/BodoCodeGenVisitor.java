@@ -44,12 +44,13 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableCreate;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableModify;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalValues;
-import com.bodosql.calcite.adapter.bodo.PandasTableScan;
-import com.bodosql.calcite.adapter.bodo.PandasTargetTableScan;
 import com.bodosql.calcite.adapter.bodo.RexToBodoTranslator;
 import com.bodosql.calcite.adapter.bodo.ScalarRexToBodoTranslator;
 import com.bodosql.calcite.adapter.bodo.StreamingOptions;
 import com.bodosql.calcite.adapter.bodo.StreamingRexToBodoTranslator;
+import com.bodosql.calcite.adapter.common.TimerSupportedRel;
+import com.bodosql.calcite.adapter.pandas.PandasRel;
+import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.application.utils.RelationalOperatorCache;
@@ -187,6 +188,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   // Writes only use a constant amount of memory of 256MB. We multiply
   // that by 1.5 to allow for some wiggle room.
   private final int SNOWFLAKE_WRITE_MEMORY_ESTIMATE = ((int) (1.5 * 256 * 1024 * 1024));
+  private BodoSqlTable table;
 
   public BodoCodeGenVisitor(
       HashMap<String, String> loweredGlobalVariablesMap,
@@ -443,10 +445,10 @@ public class BodoCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-    if (node instanceof PandasTableScan) {
-      this.visitPandasTableScan((PandasTableScan) node);
-    } else if (node instanceof TableScan) {
-      this.visitTableScan((TableScan) node);
+    if (node instanceof PandasTargetTableScan) {
+      this.visitPandasTargetTableScan((PandasTargetTableScan) node);
+    } else if (node instanceof PandasRel) {
+      this.visitPandasRel((PandasRel) node);
     } else if (node instanceof BodoPhysicalJoin) {
       this.visitBodoJoin((BodoPhysicalJoin) node);
     } else if (node instanceof BodoPhysicalSort) {
@@ -479,7 +481,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     } else if (node instanceof SeparateStreamExchange) {
       this.visitSeparateStreamExchange((SeparateStreamExchange) node);
     } else if (node instanceof BodoPhysicalRel) {
-      this.visitBodoRel((BodoPhysicalRel) node);
+      this.visitBodoPhysicalRel((BodoPhysicalRel) node);
     } else {
       throw new BodoSQLCodegenException(
           "Internal Error: Encountered Unsupported Calcite Node " + node.getClass().toString());
@@ -616,7 +618,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    *
    * @param node the node to emit code for.
    */
-  private void visitBodoRel(BodoPhysicalRel node) {
+  private void visitBodoPhysicalRel(BodoPhysicalRel node) {
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
     tableGenStack.push(out);
@@ -1819,7 +1821,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     } else {
       // If non-streaming, fall back to regular BodoPhysicalFilter codegen
       RelNode asProjectFilter = node.asBodoProjectFilter();
-      this.visitBodoRel((BodoPhysicalRel) asProjectFilter);
+      this.visitBodoPhysicalRel((BodoPhysicalRel) asProjectFilter);
     }
   }
 
@@ -1994,12 +1996,11 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Table Scan. It acts as a somewhat simple wrapper for BodoPhysicalRel.emit with some
-   * special checks
+   * Generic visitor for PandasRel nodes.
    *
-   * @param node TableScan node being visited
+   * @param node Node being visited
    */
-  public void visitPandasTableScan(PandasTableScan node) {
+  public void visitPandasRel(PandasRel node) {
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
     tableGenStack.push(out);
@@ -2010,18 +2011,10 @@ public class BodoCodeGenVisitor extends RelVisitor {
    *
    * @param node TableScan node being visited
    */
-  public void visitTableScan(TableScan node) {
-    boolean isTargetTableScan = node instanceof PandasTargetTableScan;
-    if (!isTargetTableScan) {
-      throw new BodoSQLCodegenException(
-          "Internal error: unsupported tableScan node generated:" + node.toString());
-    }
-    PandasTargetTableScan nodeCasted = (PandasTargetTableScan) node;
-
+  public void visitPandasTargetTableScan(PandasTargetTableScan node) {
     singleBatchTimer(
-        nodeCasted,
+        node,
         () -> {
-          BodoEngineTable outTable;
           BodoSqlTable table;
 
           // TODO(jsternberg): The proper way to do this is to have the individual nodes
@@ -2030,72 +2023,53 @@ public class BodoCodeGenVisitor extends RelVisitor {
           // we can't really do that so we're just going to hack around it for now to
           // avoid
           // a large refactor
-          RelOptTableImpl relTable = (RelOptTableImpl) nodeCasted.getTable();
+          RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
           table = (BodoSqlTable) relTable.table();
 
           // IsTargetTableScan is always true, we check for this at the start of the
           // function.
-          outTable = visitSingleBatchTableScanCommon(nodeCasted, table, isTargetTableScan);
+          Expr readCode;
+          Op readAssign;
+
+          Variable readVar = this.genTableVar();
+          // Add the table to cached values
+          // TODO: Properly restrict to Iceberg.
+          if (!(table instanceof LocalTable) || !table.getDBType().equals("ICEBERG")) {
+            throw new BodoSQLCodegenException(
+                "Insert Into is only supported with Iceberg table destinations provided via"
+                    + " the the SQL TablePath API");
+          }
+          readCode = table.generateReadCode("_bodo_merge_into=True,");
+          this.fileListAndSnapshotIdArgs =
+              String.format(
+                  "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
+
+          // TODO: replace this with tuple assign instead of raw code
+          readAssign =
+              new Op.Code(
+                  String.format(
+                      "%s, %s, %s = %s\n",
+                      readVar.emit(),
+                      icebergFileListVarName,
+                      icebergSnapshotIDName,
+                      readCode.emit()));
+          this.generatedCode.add(readAssign);
+          mergeIntoTargetNode = node;
+          mergeIntoTargetTable = readVar;
+          BodoEngineTable outTable;
+          BuildContext ctx = new BuildContext(node, genDefaultTZ());
+
+          Expr castExpr = table.generateReadCastCode(readVar);
+          if (!castExpr.equals(readVar)) {
+            // Generate a new outVar to avoid shadowing
+            Variable outVar = this.genDfVar();
+            this.generatedCode.add(new Op.Assign(outVar, castExpr));
+            outTable = ctx.convertDfToTable(outVar, node);
+          } else {
+            outTable = new BodoEngineTable(readVar.emit(), node);
+          }
           tableGenStack.push(outTable);
         });
-  }
-
-  /**
-   * Helper function that contains the code needed to perform a read of the specified table.
-   *
-   * @param node The rel node for the scan
-   * @param table The BodoSqlTable to read
-   * @param isTargetTableScan Is the read a TargetTableScan (used in MERGE INTO)
-   * @return outVar The returned dataframe variable
-   */
-  public BodoEngineTable visitSingleBatchTableScanCommon(
-      TableScan node, BodoSqlTable table, boolean isTargetTableScan) {
-    Expr readCode;
-    Op readAssign;
-
-    Variable readVar = this.genTableVar();
-    // Add the table to cached values
-    if (isTargetTableScan) {
-      // TODO: Properly restrict to Iceberg.
-      if (!(table instanceof LocalTable) || !table.getDBType().equals("ICEBERG")) {
-        throw new BodoSQLCodegenException(
-            "Insert Into is only supported with Iceberg table destinations provided via"
-                + " the the SQL TablePath API");
-      }
-      readCode = table.generateReadCode("_bodo_merge_into=True,");
-      this.fileListAndSnapshotIdArgs =
-          String.format(
-              "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
-
-      // TODO: replace this with tuple assign instead of raw code
-      readAssign =
-          new Op.Code(
-              String.format(
-                  "%s, %s, %s = %s\n",
-                  readVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
-      this.generatedCode.add(readAssign);
-      mergeIntoTargetNode = node;
-      mergeIntoTargetTable = readVar;
-    } else {
-      readCode = table.generateReadCode(false, streamingOptions);
-      readAssign = new Op.Assign(readVar, readCode);
-      this.generatedCode.add(readAssign);
-    }
-
-    BodoEngineTable outTable;
-    BuildContext ctx = new BuildContext((BodoPhysicalRel) node, genDefaultTZ());
-
-    Expr castExpr = table.generateReadCastCode(readVar);
-    if (!castExpr.equals(readVar)) {
-      // Generate a new outVar to avoid shadowing
-      Variable outVar = this.genDfVar();
-      this.generatedCode.add(new Op.Assign(outVar, castExpr));
-      outTable = ctx.convertDfToTable(outVar, node);
-    } else {
-      outTable = new BodoEngineTable(readVar.emit(), node);
-    }
-
-    return outTable;
   }
 
   /**
@@ -2397,7 +2371,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     tableGenStack.add(outTable);
   }
 
-  private void singleBatchTimer(BodoPhysicalRel node, Runnable fn) {
+  private void singleBatchTimer(TimerSupportedRel node, Runnable fn) {
     SingleBatchRelNodeTimer timerInfo =
         SingleBatchRelNodeTimer.createSingleBatchTimer(
             this.generatedCode,
@@ -2412,7 +2386,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   // TODO: Fuse with above so everything returns a DataFrame
-  private BodoEngineTable singleBatchTimer(BodoPhysicalRel node, Supplier<BodoEngineTable> fn) {
+  private BodoEngineTable singleBatchTimer(TimerSupportedRel node, Supplier<BodoEngineTable> fn) {
     SingleBatchRelNodeTimer timerInfo =
         SingleBatchRelNodeTimer.createSingleBatchTimer(
             this.generatedCode,
@@ -2432,64 +2406,52 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   private RexToBodoTranslator getRexTranslator(RelNode self, BodoEngineTable input) {
-    return getRexTranslator(self.getId(), input);
+    return getRexTranslator(input);
   }
 
-  private RexToBodoTranslator getRexTranslator(int nodeId, BodoEngineTable input) {
+  private RexToBodoTranslator getRexTranslator(BodoEngineTable input) {
     return new RexToBodoTranslator(
         this,
         this.generatedCode,
         this.typeSystem,
-        nodeId,
         input,
         this.dynamicParamTypes,
         this.namedParamTypeMap);
   }
 
   private RexToBodoTranslator getRexTranslator(
-      int nodeId, BodoEngineTable input, List<? extends Expr> localRefs) {
+      BodoEngineTable input, List<? extends Expr> localRefs) {
     return new RexToBodoTranslator(
         this,
         this.generatedCode,
         this.typeSystem,
-        nodeId,
         input,
         this.dynamicParamTypes,
         this.namedParamTypeMap,
         localRefs);
   }
 
-  private ArrayRexToBodoTranslator getArrayRexTranslator(int nodeId, BodoEngineTable input) {
+  private ArrayRexToBodoTranslator getArrayRexTranslator(BodoEngineTable input) {
     return new ArrayRexToBodoTranslator(
         this,
         this.generatedCode,
         this.typeSystem,
-        nodeId,
         input,
         this.dynamicParamTypes,
         this.namedParamTypeMap);
   }
 
-  private ScalarRexToBodoTranslator getScalarRexTranslator(int nodeId) {
+  private ScalarRexToBodoTranslator getScalarRexTranslator() {
     return new ScalarRexToBodoTranslator(
-        this,
-        this.generatedCode,
-        this.typeSystem,
-        nodeId,
-        this.dynamicParamTypes,
-        this.namedParamTypeMap);
+        this, this.generatedCode, this.typeSystem, this.dynamicParamTypes, this.namedParamTypeMap);
   }
 
   private StreamingRexToBodoTranslator getStreamingRexTranslator(
-      int nodeId,
-      BodoEngineTable input,
-      List<? extends Expr> localRefs,
-      @NotNull StateVariable stateVar) {
+      BodoEngineTable input, List<? extends Expr> localRefs, @NotNull StateVariable stateVar) {
     return new StreamingRexToBodoTranslator(
         this,
         this.generatedCode,
         this.typeSystem,
-        nodeId,
         input,
         this.dynamicParamTypes,
         this.namedParamTypeMap,
@@ -2498,9 +2460,9 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   private class Implementor implements BodoPhysicalRel.Implementor {
-    private final @NotNull BodoPhysicalRel node;
+    private final @NotNull TimerSupportedRel node;
 
-    public Implementor(@NotNull BodoPhysicalRel node) {
+    public Implementor(@NotNull TimerSupportedRel node) {
       this.node = node;
     }
 
@@ -2521,7 +2483,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @Override
     public BodoEngineTable build(
         @NotNull final Function1<? super BodoPhysicalRel.BuildContext, BodoEngineTable> fn) {
-      int operatorID = generatedCode.newOperatorID(node);
       return singleBatchTimer(
           node, () -> fn.invoke(new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ())));
     }
@@ -2595,18 +2556,18 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   private class BuildContext implements BodoPhysicalRel.BuildContext {
-    private final @NotNull BodoPhysicalRel node;
+    private final @NotNull TimerSupportedRel node;
     private final int operatorID;
 
     private final BodoTZInfo defaultTz;
 
-    public BuildContext(@NotNull BodoPhysicalRel node, int operatorID, BodoTZInfo defaultTz) {
+    public BuildContext(@NotNull TimerSupportedRel node, int operatorID, BodoTZInfo defaultTz) {
       this.node = node;
       this.operatorID = operatorID;
       this.defaultTz = defaultTz;
     }
 
-    public BuildContext(@NotNull BodoPhysicalRel node, BodoTZInfo defaultTz) {
+    public BuildContext(@NotNull TimerSupportedRel node, BodoTZInfo defaultTz) {
       this(node, -1, defaultTz);
     }
 
@@ -2636,26 +2597,26 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public RexToBodoTranslator rexTranslator(@NotNull final BodoEngineTable input) {
-      return getRexTranslator(node.getId(), input);
+      return getRexTranslator(input);
     }
 
     @NotNull
     @Override
     public RexToBodoTranslator rexTranslator(
         @NotNull final BodoEngineTable input, @NotNull final List<? extends Expr> localRefs) {
-      return getRexTranslator(node.getId(), input, localRefs);
+      return getRexTranslator(input, localRefs);
     }
 
     @NotNull
     @Override
     public ArrayRexToBodoTranslator arrayRexTranslator(@NotNull final BodoEngineTable input) {
-      return getArrayRexTranslator(node.getId(), input);
+      return getArrayRexTranslator(input);
     }
 
     @NotNull
     @Override
     public ScalarRexToBodoTranslator scalarRexTranslator() {
-      return getScalarRexTranslator(node.getId());
+      return getScalarRexTranslator();
     }
 
     @NotNull
@@ -2759,7 +2720,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
         @NotNull BodoEngineTable input,
         @NotNull List<? extends Expr> localRefs,
         @NotNull StateVariable stateVar) {
-      return getStreamingRexTranslator(node.getId(), input, localRefs, stateVar);
+      return getStreamingRexTranslator(input, localRefs, stateVar);
     }
 
     @NotNull

@@ -54,7 +54,7 @@ def test_plan_caching_basic(memory_leak_check, tmp_path):
 
         bodo.barrier()
 
-        assert "BodoPhysicalProject(A=[$0], B=[$1])" in plan_str, plan_str
+        assert "PandasProject(A=[$0], B=[$1])" in plan_str, plan_str
         assert "BodoPhysicalFilter(condition=[>($0, 3)])" in plan_str, plan_str
         # We expect a "verbose" plan with the dtypes and costs to be output
         assert "# types: BIGINT, VARCHAR" in plan_str, plan_str

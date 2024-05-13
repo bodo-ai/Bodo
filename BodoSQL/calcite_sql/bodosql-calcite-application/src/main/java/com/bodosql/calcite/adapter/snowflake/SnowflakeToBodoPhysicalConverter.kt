@@ -45,7 +45,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): RelNode {
+    ): SnowflakeToBodoPhysicalConverter {
         return SnowflakeToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
     }
 

@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.bodo
 
-import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.adapter.common.TimerSupportedRel
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
@@ -15,9 +15,8 @@ import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.type.BodoTZInfo
-import java.util.Arrays
 
-interface BodoPhysicalRel : RelNode {
+interface BodoPhysicalRel : TimerSupportedRel {
     companion object {
         @JvmField
         val CONVENTION = Convention.Impl("BODO", BodoPhysicalRel::class.java)
@@ -30,28 +29,6 @@ interface BodoPhysicalRel : RelNode {
      * @return the variable that represents this relational expression.
      */
     fun emit(implementor: Implementor): BodoEngineTable
-
-    /**
-     * Allows a BodoPhysicalRel to override the number of ranks it will utilize.
-     * If unknown, return null. Defaults to utilizing all ranks.
-     */
-    fun splitCount(numRanks: Int): Int? = numRanks
-
-    /**
-     * Generates the SingleBatchRelNodeTimer for the appropriate operator.
-     */
-    fun getTimerType(): SingleBatchRelNodeTimer.OperationType = SingleBatchRelNodeTimer.OperationType.BATCH
-
-    fun operationDescriptor() = "RelNode"
-
-    fun loggingTitle() = "RELNODE_TIMING"
-
-    fun nodeDetails() =
-        Arrays.stream(
-            RelOptUtil.toString(this)
-                .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
-                .toTypedArray(),
-        ).findFirst().get()
 
     /**
      * Determine if an operator is streaming.
@@ -93,6 +70,10 @@ interface BodoPhysicalRel : RelNode {
      */
     fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         expectedOutputBatchingProperty(inputBatchingProperty)
+
+    override fun nodeString(): String {
+        return RelOptUtil.toString(this)
+    }
 
     data class ProfilingOptions(val reportOutTableSize: Boolean = true, val timeStateInitialization: Boolean = true)
 

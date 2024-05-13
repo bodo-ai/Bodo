@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.prepare;
 
+import com.bodosql.calcite.adapter.pandas.PandasTableScan;
+import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.TableExpressionFactory;
@@ -300,10 +302,9 @@ public class RelOptTableImpl extends Prepare.AbstractPreparingTable {
     if (table instanceof TranslatableTable) {
       return ((TranslatableTable) table).toRel(context, this);
     } else if (isTargetTable) {
-      return LogicalTargetTableScan.create(context.getCluster(),
-          this, context.getTableHints());
+      return PandasTargetTableScan.create(context.getCluster(), this);
     } else {
-      return LogicalTableScan.create(context.getCluster(), this, context.getTableHints());
+      return PandasTableScan.create(context.getCluster(), this);
     }
 
   }
