@@ -160,15 +160,14 @@ object BodoPrograms {
             SnowflakeCleanupProgram,
             // Update Iceberg Nodes
             IcebergConvertProgram,
+            // Note: No program after this should call builder.join() without
+            // special handling for propagating the join keys.
+            RuntimeJoinFilterProgram,
             // Add a final trim step.
             TrimFieldsProgram(true),
             // TODO(jsternberg): This can likely be adapted and integrated directly with
             // the VolcanoPlanner, but that hasn't been done so leave this here.
             DecorateAttributesProgram(),
-            // Add runtime join filters. Note you must run this after any
-            // pass that is calling the Physical RelBuilder for the join
-            // because it cannot currently propagate the key.
-            RuntimeJoinFilterProgram,
             BatchingPropertyProgram(),
             // Remove Unused Sarg nodes. This must run after all other programs
             // so no simplification step undoes this conversion.
