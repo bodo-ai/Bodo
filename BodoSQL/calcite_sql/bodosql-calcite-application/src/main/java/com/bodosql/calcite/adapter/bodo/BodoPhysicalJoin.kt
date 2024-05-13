@@ -61,7 +61,7 @@ class BodoPhysicalJoin(
     }
 
     fun withRebalanceOutput(rebalanceOutput: Boolean): BodoPhysicalJoin {
-        return BodoPhysicalJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput)
+        return BodoPhysicalJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput, joinFilterID)
     }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {

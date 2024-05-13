@@ -1,5 +1,6 @@
 package com.bodosql.calcite.prepare;
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRowSample;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
@@ -10,6 +11,7 @@ import com.bodosql.calcite.adapter.pandas.PandasToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
 import com.bodosql.calcite.rel.core.Flatten;
+import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -374,18 +376,12 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
         new RexPermuteInputsShuttle(mapping, newInputs.get(0), newInputs.get(1));
     RexNode newConditionExpr = conditionExpr.accept(shuttle);
 
-    relBuilder.push(newInputs.get(0));
-    relBuilder.push(newInputs.get(1));
+    RelNode newJoin = buildNewJoin(join, newInputs.get(0), newInputs.get(1), newConditionExpr);
 
     switch (join.getJoinType()) {
       case SEMI:
       case ANTI:
         // For SemiJoins and AntiJoins only map fields from the left-side
-        if (join.getJoinType() == JoinRelType.SEMI) {
-          relBuilder.semiJoin(newConditionExpr);
-        } else {
-          relBuilder.antiJoin(newConditionExpr);
-        }
         Mapping inputMapping = inputMappings.get(0);
         mapping =
             Mappings.create(
@@ -401,11 +397,77 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
           mapping.set(pair.source + offset, pair.target + newOffset);
         }
         break;
-      default:
-        relBuilder.join(join.getJoinType(), newConditionExpr);
     }
-    relBuilder.hints(join.getHints());
-    return result(relBuilder.build(), mapping, join);
+    return result(newJoin, mapping, join);
+  }
+
+  /**
+   * Wrapper to build a new join that has special handling for the Bodo Physical nodes because we
+   * need to propagate extra values.
+   *
+   * @param oldJoin The old join to convert.
+   * @param newLeft The new left child.
+   * @param newRight The new right child.
+   * @param newConditionExpr The condition.
+   * @return The new join.
+   */
+  private RelNode buildNewJoin(
+      Join oldJoin, RelNode newLeft, RelNode newRight, RexNode newConditionExpr) {
+    if (oldJoin instanceof BodoPhysicalJoin) {
+      BodoPhysicalJoin oldBodoJoin = (BodoPhysicalJoin) oldJoin;
+      return BodoPhysicalJoin.Companion.create(
+          newLeft,
+          newRight,
+          newConditionExpr,
+          oldBodoJoin.getJoinType(),
+          oldBodoJoin.getJoinFilterID());
+    } else {
+      relBuilder.push(newLeft);
+      relBuilder.push(newRight);
+      switch (oldJoin.getJoinType()) {
+        case SEMI:
+        case ANTI:
+          // For SemiJoins and AntiJoins only map fields from the left-side
+          if (oldJoin.getJoinType() == JoinRelType.SEMI) {
+            relBuilder.semiJoin(newConditionExpr);
+          } else {
+            relBuilder.antiJoin(newConditionExpr);
+          }
+          break;
+        default:
+          relBuilder.join(oldJoin.getJoinType(), newConditionExpr);
+      }
+      relBuilder.hints(oldJoin.getHints());
+      return relBuilder.build();
+    }
+  }
+
+  public TrimResult trimFields(
+      RuntimeJoinFilterBase joinFilter,
+      ImmutableBitSet fieldsUsed,
+      Set<RelDataTypeField> extraFields) {
+    // Join Filters don't "use" any columns. Everything that is a join key can't be pruned.
+    TrimResult childResult = dispatchTrimFields(joinFilter.getInput(), fieldsUsed, extraFields);
+    // Prune if there are still unused columns.
+    TrimResult updateResult = insertPruningProjection(childResult, fieldsUsed, extraFields);
+    // Remap the used columns.
+    List<List<Integer>> newColumnsList = new ArrayList();
+    for (List<Integer> columns : joinFilter.getFilterColumns()) {
+      List<Integer> newColumns = new ArrayList();
+      for (int column : columns) {
+        final int newColumn;
+        if (column == -1) {
+          newColumn = -1;
+        } else {
+          newColumn = updateResult.right.getTarget(column);
+        }
+        newColumns.add(newColumn);
+      }
+      newColumnsList.add(newColumns);
+    }
+    RuntimeJoinFilterBase newFilter =
+        joinFilter.copy(joinFilter.getTraitSet(), updateResult.left, newColumnsList);
+    return result(newFilter, updateResult.right, joinFilter);
   }
 
   public TrimResult trimFields(
