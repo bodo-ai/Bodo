@@ -18,7 +18,6 @@ class StreamingRexToBodoTranslator(
     visitor: BodoCodeGenVisitor,
     builder: Module.Builder,
     typeSystem: RelDataTypeSystem,
-    nodeId: Int,
     input: BodoEngineTable,
     dynamicParamTypes: List<RelDataType>,
     namedParamTypeMap: Map<String, RelDataType>,
@@ -27,7 +26,7 @@ class StreamingRexToBodoTranslator(
     // this translator. This is used for optimizations with
     // dictionary encoding.
     private var stateVar: StateVariable,
-) : RexToBodoTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
+) : RexToBodoTranslator(visitor, builder, typeSystem, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
     /**
      * Generate the additional keyword arguments that are passed to functions that support
      * dictionary encoding caching in a streaming context. This is the state variable for the

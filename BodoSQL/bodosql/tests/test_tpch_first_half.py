@@ -336,6 +336,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
                 relNodeStr.startswith("PandasTableScan")
                 or relNodeStr.startswith("CombineStreamsExchange")
                 or relNodeStr.startswith("SeparateStreamExchange")
+                or relNodeStr.startswith("PandasToBodoPhysicalConverter")
             ):
                 check_logger_msg(stream, relNodeStr, check_case=False)
 

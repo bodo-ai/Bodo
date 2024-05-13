@@ -1,6 +1,6 @@
-package com.bodosql.calcite.adapter.bodo
+package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
@@ -10,6 +10,7 @@ import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
+import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.prepare.RelOptTableImpl
@@ -20,26 +21,12 @@ class PandasTableScan(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     table: RelOptTable,
-) : TableScan(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), ImmutableList.of(), table), BodoPhysicalRel {
-    // TODO: Update this node to use a Pandas convention. This should represent a Pandas DataFrame
-    // that needs to be unboxed.
+) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>?,
     ): RelNode {
         return PandasTableScan(cluster, traitSet, table)
-    }
-
-    override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
-
-    override fun operationDescriptor() = "reading table"
-
-    override fun loggingTitle() = "IO TIMING"
-
-    override fun nodeDetails(): String {
-        val relTable = table as RelOptTableImpl
-        val bodoSqlTable = relTable.table() as BodoSqlTable
-        return bodoSqlTable.name
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
@@ -55,7 +42,7 @@ class PandasTableScan(
             implementor.build { ctx -> ctx.returns(generateNonStreamingTable(ctx)) }
         }
 
-    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
+    fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
@@ -71,7 +58,7 @@ class PandasTableScan(
         return readerVar
     }
 
-    override fun deleteStateVariable(
+    fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
     ) {
@@ -132,13 +119,28 @@ class PandasTableScan(
         return ExpectedBatchingProperty.tableReadProperty(bodoSqlTable, getRowType())
     }
 
+    override fun register(planner: RelOptPlanner) {
+        for (rule in PandasRules.rules()) {
+            planner.addRule(rule)
+        }
+    }
+
     companion object {
+        @JvmStatic
+        fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            relOptTable: RelOptTable,
+        ): PandasTableScan {
+            return PandasTableScan(cluster, traitSet, relOptTable)
+        }
+
         @JvmStatic
         fun create(
             cluster: RelOptCluster,
             table: RelOptTable,
         ): PandasTableScan {
-            return PandasTableScan(cluster, cluster.traitSet(), table)
+            return create(cluster, cluster.traitSet(), table)
         }
     }
 }

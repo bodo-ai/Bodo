@@ -2,6 +2,7 @@ package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.pandas.PandasRel
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.tools.RelBuilder
@@ -43,8 +44,8 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
      */
     fun visit(node: BodoPhysicalProject): RelNode {
         val visitedInput = visit(node.input)
-        val origInputRowType = visitedInput.getRowType()
-        val outputRowType = node.getRowType()
+        val origInputRowType = visitedInput.rowType
+        val outputRowType = node.rowType
         val actualInputBatchingProperty = getOutputBatchingProperty(visitedInput)
         val expectedInputProperty = node.expectedInputBatchingProperty(actualInputBatchingProperty)
         val newTraitSet = node.traitSet.replace(node.expectedOutputBatchingProperty(actualInputBatchingProperty))
@@ -119,6 +120,33 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
         return node.copy(newTraitSet, newInputs)
     }
 
+    fun visit(node: PandasRel): RelNode {
+        val newInputs: MutableList<RelNode> = ArrayList()
+        for (input in node.inputs) {
+            val visitedInput = visit(input)
+            val actualInputBatchingProperty = getOutputBatchingProperty(visitedInput)
+            // Note: We allow None to match to avoid special handling for other conventions
+            // (e.g. Snowflake) where streaming doesn't exist.
+            val expectedInputProperty = node.expectedInputBatchingProperty(actualInputBatchingProperty)
+            val newInput =
+                if (!actualInputBatchingProperty.satisfies(expectedInputProperty)) {
+                    generateExchangeInput(visitedInput, expectedInputProperty)
+                } else {
+                    visitedInput
+                }
+            newInputs.add(newInput)
+        }
+        val inputProperty =
+            if (newInputs.size > 0) {
+                getOutputBatchingProperty(newInputs[0])
+            } else {
+                // If there are no inputs the input batching property shouldn't matter.
+                BatchingProperty.NONE
+            }
+        val newTraitSet = node.traitSet.replace(node.expectedOutputBatchingProperty(inputProperty))
+        return node.copy(newTraitSet, newInputs)
+    }
+
     /**
      * Workaround for dispatching since we have a simple use case.
      */
@@ -128,6 +156,9 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
                 visit(node)
             }
             is BodoPhysicalRel -> {
+                return visit(node)
+            }
+            is PandasRel -> {
                 return visit(node)
             }
             else -> {

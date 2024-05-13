@@ -352,7 +352,7 @@ object BodoPrograms {
                     project.input.accept(this),
                     project.hints,
                     project.projects,
-                    project.getRowType(),
+                    project.rowType,
                 )
 
             override fun visit(filter: LogicalFilter): RelNode =
