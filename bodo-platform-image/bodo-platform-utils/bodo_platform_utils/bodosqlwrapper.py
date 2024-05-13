@@ -32,6 +32,7 @@ AUTH_URL_SUFFIX = "/v1/oauth/tokens"
 class CatalogType(Enum):
     SNOWFLAKE = "SNOWFLAKE"
     TABULAR = "TABULAR"
+    GLUE = "GLUE"
 
 
 # Turn verbose mode on
@@ -404,6 +405,21 @@ def create_tabular_catalog(catalog, args):
     )
 
 
+def create_glue_catalog(catalog, args):
+    """
+    Create the glue iceberg catalog from the catalog data.
+    Args:
+        catalog: Catalog object from the secret store.
+    """
+    warehouse = args.warehouse if args.warehouse else catalog.get("warehouse")
+    if warehouse is None:
+        raise ValueError(
+            "No warehouse specified in either the catalog data or through the arguments."
+        )
+
+    return bodosql.GlueCatalog(warehouse=warehouse)
+
+
 def main(args):
     if args.verbose_filename:
         # Write verbose logs to the file
@@ -438,6 +454,8 @@ def main(args):
 
     if catalog_type == CatalogType.TABULAR:
         bsql_catalog = create_tabular_catalog(catalog, args)
+    elif catalog_type == CatalogType.GLUE:
+        bsql_catalog = create_glue_catalog(catalog, args)
     else:
         # default to Snowflake for backward compatibility
         bsql_catalog = create_snowflake_catalog(catalog, args)
