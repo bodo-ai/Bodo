@@ -96,6 +96,17 @@ struct IcebergRestAwsCredentialsProvider : Aws::Auth::AWSCredentialsProvider {
     static std::string getToken(const std::string_view base_url,
                                 const std::string_view credential);
 
+    /**
+     * @brief Get the stored region, otherwise reload and return fetched region
+     * @returns AWS region from Iceberg Catalog
+     */
+    std::string GetRegion() {
+        if (this->region.empty()) {
+            this->Reload();
+        }
+        return std::string(this->region);
+    }
+
    protected:
     // URI of the Iceberg catalog
     const std::string catalog_uri;
@@ -111,6 +122,8 @@ struct IcebergRestAwsCredentialsProvider : Aws::Auth::AWSCredentialsProvider {
     const unsigned int credential_timeout;
     // Whether to print debug messages
     const bool debug;
+    // AWS region of the Warehouse
+    std::string region;
 
     // Cached AWS credentials
     Aws::Auth::AWSCredentials credentials;
@@ -136,15 +149,17 @@ struct IcebergRestAwsCredentialsProvider : Aws::Auth::AWSCredentialsProvider {
 
     /**
      * Get the warehouse prefix and token from the Icberg REST API
-     * @returns prefix, token
+     * @returns prefix, token, region
      */
     std::pair<const std::string, const std::string> get_warehouse_config();
 
     /**
-     * Get the AWS credentilal values for table from the Iceberg REST API
-     * @returns access_key, secret_key, session_token
+     * Get the AWS credentlal and region values for table from the Iceberg REST
+     * API
+     * @returns access_key, secret_key, session_token, region
      */
-    std::tuple<const std::string, const std::string, const std::string>
+    std::tuple<const std::string, const std::string, const std::string,
+               const std::string>
     get_aws_credentials_from_rest_catalog(
         const std::string_view prefix, const std::string_view warehouse_token);
 };

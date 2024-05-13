@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.io.iceberg import get_rest_catalog_config, get_rest_catalog_fs
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -40,6 +41,25 @@ def test_iceberg_tabular_read(tabular_connection, memory_leak_check):
         return checksum, len(df), list(df.columns)
 
     check_func(f, (), py_output=(35245, 265, ["location_id", "borough", "zone_name"]))
+
+
+def test_iceberg_tabular_read_region_detection(tabular_connection, memory_leak_check):
+    """
+    Creates an s3 fs instance and checks that the region is detected correctly.
+    """
+    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    con_str = get_rest_catalog_connection_string(
+        rest_uri, tabular_warehouse, tabular_credential
+    ).removeprefix("iceberg+")
+    _, token, _ = get_rest_catalog_config(con_str)
+
+    @bodo.jit
+    def f():
+        return get_rest_catalog_fs(
+            rest_uri, token, tabular_warehouse, "examples", "nyc_taxi_locations"
+        )
+
+    assert f().region == "us-east-1"
 
 
 def test_iceberg_tabular_read_credential_refresh(
