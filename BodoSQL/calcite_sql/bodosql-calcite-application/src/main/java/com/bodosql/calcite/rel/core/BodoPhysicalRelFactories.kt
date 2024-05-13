@@ -8,28 +8,24 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalValues
-import com.bodosql.calcite.adapter.bodo.PandasTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergProject
 import com.bodosql.calcite.adapter.iceberg.IcebergRel
 import com.bodosql.calcite.adapter.iceberg.IcebergSort
+import com.bodosql.calcite.adapter.pandas.PandasProject
+import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
-import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.BodoSQLCodegenException
-import com.bodosql.calcite.table.BodoSqlTable
-import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
 import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.hep.HepRelVertex
-import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelCollation
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.AggregateCall
@@ -65,9 +61,6 @@ object BodoPhysicalRelFactories {
     val BODO_PHYSICAL_SORT_FACTORY: RelFactories.SortFactory = RelFactories.SortFactory(::createSort)
 
     @JvmField
-    val BODO_PHYSICAL_TABLE_SCAN_FACTORY: RelFactories.TableScanFactory = RelFactories.TableScanFactory(::createTableScan)
-
-    @JvmField
     val BODO_PHYSICAL_VALUES_FACTORY: RelFactories.ValuesFactory = RelFactories.ValuesFactory(::createValues)
 
     @JvmField
@@ -79,7 +72,6 @@ object BodoPhysicalRelFactories {
             BODO_PHYSICAL_SET_OP_FACTORY,
             BODO_PHYSICAL_AGGREGATE_FACTORY,
             BODO_PHYSICAL_SORT_FACTORY,
-            BODO_PHYSICAL_TABLE_SCAN_FACTORY,
             BODO_PHYSICAL_VALUES_FACTORY,
         )
 
@@ -122,6 +114,14 @@ object BodoPhysicalRelFactories {
                     childExprs,
                     fieldNames,
                     (input as IcebergRel).getCatalogTable(),
+                )
+            } else if (input.convention == PandasRel.CONVENTION) {
+                PandasProject.create(
+                    input.cluster,
+                    input.traitSet,
+                    input,
+                    childExprs,
+                    fieldNames,
                 )
             } else {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
@@ -339,21 +339,6 @@ object BodoPhysicalRelFactories {
         assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
             "TODO createProject: fix Batching property"
         }
-        return retVal
-    }
-
-    private fun createTableScan(
-        toRelContext: RelOptTable.ToRelContext,
-        table: RelOptTable,
-    ): RelNode {
-        val bodoSqlTable: BodoSqlTable = ((table as? RelOptTableImpl)?.table() as? BodoSqlTable)!!
-
-        val retVal =
-            if (bodoSqlTable is SnowflakeCatalogTable) {
-                SnowflakeTableScan.create(toRelContext.cluster, table, bodoSqlTable)
-            } else {
-                PandasTableScan.create(toRelContext.cluster, table)
-            }
         return retVal
     }
 

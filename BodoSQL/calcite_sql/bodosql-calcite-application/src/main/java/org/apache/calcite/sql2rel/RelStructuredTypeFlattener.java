@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql2rel;
 
+import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
@@ -791,7 +792,7 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
   }
 
   private RelNode toRel(TableScan rel) {
-    if (rel instanceof LogicalTargetTableScan) {
+    if (rel instanceof PandasTargetTableScan) {
       return rel.getTable().toTargetTableRel(toRelContext);
     } else {
       return rel.getTable().toRel(toRelContext);

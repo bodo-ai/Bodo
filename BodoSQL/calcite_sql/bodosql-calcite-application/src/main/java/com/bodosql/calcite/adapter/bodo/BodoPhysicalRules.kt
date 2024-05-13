@@ -60,14 +60,6 @@ class BodoPhysicalRules private constructor() {
         @JvmField
         val BODO_PHYSICAL_TABLE_CREATE_RULE: RelOptRule = BodoPhysicalTableCreateRule.DEFAULT_CONFIG.toRule()
 
-        // TODO: Move to a pandas adapter
-        @JvmField
-        val PANDAS_TABLE_SCAN: RelOptRule = PandasTableScanRule.DEFAULT_CONFIG.toRule()
-
-        // TODO: Move to a pandas adapter
-        @JvmField
-        val PANDAS_TARGET_TABLE_SCAN: RelOptRule = PandasTargetTableScanRule.DEFAULT_CONFIG.toRule()
-
         @JvmField
         val BODO_PHYSICAL_JOIN_REBALANCE_OUTPUT_RULE: RelOptRule = BodoPhysicalJoinRebalanceOutputRule.Config.DEFAULT_CONFIG.toRule()
 
@@ -89,8 +81,6 @@ class BodoPhysicalRules private constructor() {
                 BODO_PHYSICAL_WINDOW_RULE,
                 BODO_PHYSICAL_TABLE_MODIFY_RULE,
                 BODO_PHYSICAL_TABLE_CREATE_RULE,
-                PANDAS_TABLE_SCAN,
-                PANDAS_TARGET_TABLE_SCAN,
                 BODO_PHYSICAL_TABLE_FUNCTION_SCAN_RULE,
                 BODO_PHYSICAL_MIN_ROW_NUMBER_FILTER_RULE,
             )

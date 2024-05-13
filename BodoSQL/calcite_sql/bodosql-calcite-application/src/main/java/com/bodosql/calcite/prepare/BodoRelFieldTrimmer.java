@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
 import com.bodosql.calcite.adapter.iceberg.IcebergRel;
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter;
+import com.bodosql.calcite.adapter.pandas.PandasToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
 import com.bodosql.calcite.rel.core.Flatten;
@@ -124,6 +125,13 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   public TrimResult trimFields(
       TableCreate node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
 
+    return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
+  }
+
+  public TrimResult trimFields(
+      PandasToBodoPhysicalConverter node,
+      ImmutableBitSet fieldsUsed,
+      Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
   }
 

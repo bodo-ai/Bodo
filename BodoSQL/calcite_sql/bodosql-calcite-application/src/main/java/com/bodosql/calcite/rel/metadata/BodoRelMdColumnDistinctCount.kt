@@ -1,8 +1,8 @@
 package com.bodosql.calcite.rel.metadata
 
-import com.bodosql.calcite.adapter.bodo.PandasTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
+import com.bodosql.calcite.adapter.pandas.PandasTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable

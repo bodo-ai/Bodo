@@ -14,22 +14,20 @@ class ArrayRexToBodoTranslator(
     visitor: BodoCodeGenVisitor,
     builder: Module.Builder,
     typeSystem: RelDataTypeSystem,
-    nodeId: Int,
     input: BodoEngineTable,
     dynamicParamTypes: List<RelDataType>,
     namedParamTypeMap: Map<String, RelDataType>,
     localRefs: List<Expr>,
-) : RexToBodoTranslator(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
+) : RexToBodoTranslator(visitor, builder, typeSystem, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
     constructor(
         visitor: BodoCodeGenVisitor,
         builder: Module.Builder,
         typeSystem: RelDataTypeSystem,
-        nodeId: Int,
         input: BodoEngineTable,
         dynamicParamTypes: List<RelDataType>,
         namedParamTypeMap: Map<String, RelDataType>,
     ) :
-        this(visitor, builder, typeSystem, nodeId, input, dynamicParamTypes, namedParamTypeMap, listOf())
+        this(visitor, builder, typeSystem, input, dynamicParamTypes, namedParamTypeMap, listOf())
 
     /**
      * Call node.accept on the given RexNode. Is the RexNode is a scalar then it wraps
