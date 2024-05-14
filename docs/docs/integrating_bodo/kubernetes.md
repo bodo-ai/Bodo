@@ -10,7 +10,7 @@ You need the following to deploy your Bodo application using Kubernetes:
 
 - **Access to a Kubernetes cluster.**
 
-    For this example, we'll use AWS EKS. See the section below on [creating an EKS cluster][ekskops] to see how we set it up.
+    For this example, we'll use kops on AWS. See the section below on [creating a Kubernetes cluster][kops] to see how we set it up.
 
 - **A Docker image containing the Bodo application scripts and their intended Bodo version made available on a Docker registry, so that Kubernetes can pull it.**
 
@@ -26,7 +26,7 @@ You need the following to deploy your Bodo application using Kubernetes:
     by extrapolation from running the job locally on a smaller dataset.
 
 
-### Creating an EKS Cluster using KOPS {#ekskops}
+### Creating a Kubernetes Cluster using KOPS {#kops}
 
 Here are the steps create an AWS EKS cluster using KOPS.
 
