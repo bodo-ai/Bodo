@@ -1,18 +1,22 @@
 package com.bodosql.calcite.catalog
 
 import com.bodosql.calcite.schema.CatalogSchema
+import com.bodosql.calcite.schema.InlineViewMetadata
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import com.bodosql.calcite.table.BodoSQLColumnImpl
 import com.bodosql.calcite.table.ColumnDataTypeInfo
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.util.Util
 import org.apache.iceberg.ManifestFiles
 import org.apache.iceberg.Table
 import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.SupportsNamespaces
 import org.apache.iceberg.catalog.TableIdentifier
+import org.apache.iceberg.catalog.ViewCatalog
+import org.apache.iceberg.exceptions.NoSuchViewException
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types.DecimalType
 import org.apache.iceberg.types.Types.FixedType
@@ -20,6 +24,7 @@ import org.apache.iceberg.types.Types.ListType
 import org.apache.iceberg.types.Types.MapType
 import org.apache.iceberg.types.Types.StructType
 import org.apache.iceberg.types.Types.TimestampType
+import org.apache.iceberg.view.View
 
 /**
  * Base abstract class for an Iceberg catalog. This is any catalog that
@@ -50,6 +55,17 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         return icebergConnection.loadTable(tableIdentifier)
     }
 
+    private fun loadIcebergView(
+        schemaPath: ImmutableList<String>,
+        tableName: String,
+    ): View {
+        if (icebergConnection !is ViewCatalog) {
+            throw AssertionError("To call this function, icebergConnection must support views")
+        }
+        val tableIdentifier = tablePathToTableIdentifier(schemaPath, tableName)
+        return icebergConnection.loadView(tableIdentifier)
+    }
+
     /**
      * Get the column information for a table as described by its path and table name. This information
      * is obtained by fetching the table definition from the Iceberg connector and then converting
@@ -62,8 +78,14 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         schemaPath: ImmutableList<String>,
         tableName: String,
     ): List<BodoSQLColumn> {
-        val table = loadIcebergTable(schemaPath, tableName)
-        val schema = table.schema()
+        val schema =
+            if (isView(schemaPath, tableName)) {
+                val view = loadIcebergView(schemaPath, tableName)
+                view.schema()
+            } else {
+                val table = loadIcebergTable(schemaPath, tableName)
+                table.schema()
+            }
         return schema.columns().map { BodoSQLColumnImpl(it.name(), it.name(), icebergTypeToTypeInfo(it.type(), it.isOptional)) }
     }
 
@@ -77,7 +99,11 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
     fun estimateIcebergTableRowCount(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): Double {
+    ): Double? {
+        if (isView(schemaPath, tableName)) {
+            return null
+        }
+
         val table = loadIcebergTable(schemaPath, tableName)
         // If we can't find a snapshot then the table must be brand new and empty.
         val currentSnapshot = table.currentSnapshot() ?: return 0.0
@@ -119,6 +145,10 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         tableName: String,
         colIdx: Int,
     ): Double? {
+        if (isView(schemaPath, tableName)) {
+            return null
+        }
+
         val table = loadIcebergTable(schemaPath, tableName)
         val currentSnapshot = table.currentSnapshot() ?: return null
         val schema = table.schema()
@@ -132,7 +162,7 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
                         (blob.fields().size == 1) &&
                         (blob.fields()[0] == fieldId)
                     ) {
-                        return blob.properties()["ndv"]?.let { ndvStr -> ndvStr.toDouble() }
+                        return blob.properties()["ndv"]?.toDouble()
                     }
                 }
             }
@@ -142,6 +172,15 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
 
     override fun getAccountName(): String? {
         return null
+    }
+
+    private fun isView(
+        schemaPath: ImmutableList<String>,
+        tableName: String,
+    ): Boolean {
+        if (icebergConnection !is ViewCatalog) return false
+        val tableIdentifier = tablePathToTableIdentifier(schemaPath, tableName)
+        return icebergConnection.viewExists(tableIdentifier)
     }
 
     /**
@@ -155,6 +194,20 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         schemaPath: ImmutableList<String>,
         schemaName: String,
     ): CatalogSchema = CatalogSchema(schemaName, schemaPath.size + 1, schemaPath, this)
+
+    override fun tryGetViewMetadata(names: MutableList<String>): InlineViewMetadata? {
+        return if (icebergConnection is ViewCatalog) {
+            val id = tablePathToTableIdentifier(ImmutableList.copyOf(Util.skipLast(names)), Util.last(names))
+            try {
+                val view = icebergConnection.loadView(id)
+                InlineViewMetadata(unsafeToInline = false, isMaterialized = false, view.sqlFor("bodo").sql())
+            } catch (e: NoSuchViewException) {
+                null
+            }
+        } else {
+            null
+        }
+    }
 
     fun getIcebergConnection(): T {
         return icebergConnection

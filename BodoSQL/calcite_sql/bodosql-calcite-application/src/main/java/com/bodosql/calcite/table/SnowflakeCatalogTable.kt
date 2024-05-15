@@ -1,18 +1,14 @@
 package com.bodosql.calcite.table
 
-import com.bodosql.calcite.adapter.bodo.calciteLogicalProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan.Companion.create
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
-import com.bodosql.calcite.application.utils.CheckTablePermissions.Companion.canRead
 import com.bodosql.calcite.application.write.SnowflakeNativeWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.ddl.DDLExecutor
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
-import com.bodosql.calcite.schema.ExpandViewInput
-import com.bodosql.calcite.schema.InlineViewMetadata
 import com.google.common.base.Supplier
 import com.google.common.base.Suppliers
 import com.google.common.collect.ImmutableList
@@ -20,7 +16,6 @@ import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
-import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 import java.util.Locale
 
 /**
@@ -89,7 +84,7 @@ open class SnowflakeCatalogTable(
                     Locale.ROOT,
                     "Skipping attempt to fetch column '%s' from table '%s' due to metadata restrictions",
                     columnName,
-                    qualifiedName,
+                    getQualifiedName(),
                 )
             PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.warning(message)
             return null
@@ -138,141 +133,8 @@ open class SnowflakeCatalogTable(
      * SnowflakeCatalog#trySubmitIntegerMetadataQuery for the full documentation.
      * @return A long result from the query or NULL.
      */
-    fun trySubmitLongMetadataQuerySnowflakeInternal(metadataSelectQueryString: SqlString): Long? {
+    private fun trySubmitLongMetadataQuerySnowflakeInternal(metadataSelectQueryString: SqlString): Long? {
         return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString)
-    }
-
-    /**
-     * Load the view metadata information from the catalog. If the table is not a view or no
-     * information can be found this should return NULL. This should be used to implement
-     * isAccessibleView(), canSafelyInlineView(), and getViewDefinitionString().
-     *
-     *
-     * This is currently only support for Snowflake catalogs.
-     *
-     * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
-     */
-    private fun tryGetViewMetadata(): InlineViewMetadata? {
-        return catalog.tryGetViewMetadata(fullPath)
-    }
-
-    // Cache used for inlining views. We cannot use the Memoizer here because the
-    // ToRelContext doesn't have .equals() properly defined. Here we know that
-    // all uses of the same CatalogTable are safe to cache.
-    private val inlineViewCache: MutableMap<ExpandViewInput, RelNode?> = HashMap()
-
-    /**
-     * Inline a view. If this inlining is not possible return Null.
-     *
-     * @param toRelContext The context used for expanding the view.
-     * @param input The inputs used to call toRelContext.expandView(). This is grouped into one object
-     * for caching purposes.
-     * @return The RelNode after expanding the view or NULL.
-     */
-    private fun inlineViewImpl(
-        toRelContext: RelOptTable.ToRelContext,
-        input: ExpandViewInput,
-    ): RelNode? {
-        try {
-            val root =
-                toRelContext.expandView(
-                    input.outputType,
-                    input.viewDefinition,
-                    input.defaultPath,
-                    input.viewPath,
-                )
-            val rel = root.calciteLogicalProject()
-            // Verify that we can read before inlining.
-            if (canRead(rel)) {
-                return rel
-            } else {
-                throw BODO_SQL_RESOURCE.noReadPermissionExpandingView(qualifiedName).ex()
-            }
-        } catch (e: Exception) {
-            // Log the failure
-            val message =
-                String.format(
-                    Locale.ROOT,
-                    """
-                    Unable to expand view %s with definition:
-                    %s. Error encountered when compiling view:
-                    %s
-                    """.trimIndent(),
-                    qualifiedName,
-                    input.viewDefinition,
-                    e.message,
-                )
-            PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
-        } catch (e: Error) {
-            // Log the failure
-            val message =
-                String.format(
-                    Locale.ROOT,
-                    """
-                    Unable to expand view %s with definition:
-                    %s. Error encountered when compiling view:
-                    %s
-                    """.trimIndent(),
-                    qualifiedName,
-                    input.viewDefinition,
-                    e.message,
-                )
-            PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.warning(message)
-        }
-        return null
-    }
-
-    /**
-     * Try to inline a view. If the view cannot be inlined then return the baseRelNode instead.
-     *
-     * @param toRelContext The context used to expand a view.
-     * @param viewDefinition The view definition.
-     * @param baseRelNode The RelNode generated if inlining this view fails.
-     * @return Either the new tree generated from inlining a view or the baseRelNode.
-     */
-    private fun tryInlineView(
-        toRelContext: RelOptTable.ToRelContext,
-        viewDefinition: String,
-        baseRelNode: RelNode,
-    ): RelNode? {
-        val input =
-            ExpandViewInput(
-                baseRelNode.rowType,
-                viewDefinition,
-                parentFullPath,
-                fullPath,
-            )
-        // Check the cache. We can only use the cache if the clusters
-        // are the same.
-        val result: RelNode?
-        if (inlineViewCache.containsKey(input) && inlineViewCache[input]?.cluster == toRelContext.cluster) {
-            result = inlineViewCache[input]
-        } else {
-            result = inlineViewImpl(toRelContext, input)
-            // Store in the cache
-            inlineViewCache[input] = result
-        }
-        return if (result != null) {
-            // Log that we inlined the view.
-            val levelOneMessage =
-                String.format(
-                    Locale.ROOT,
-                    "Successfully inlined view %s",
-                    qualifiedName,
-                )
-            PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(levelOneMessage)
-            val levelTwoMessage =
-                String.format(
-                    Locale.ROOT,
-                    "Replaced view %s with definition %s",
-                    qualifiedName,
-                    input.viewDefinition,
-                )
-            PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER.info(levelTwoMessage)
-            result
-        } else {
-            baseRelNode
-        }
     }
 
     override fun toRel(
@@ -290,7 +152,7 @@ open class SnowflakeCatalogTable(
                     String.format(
                         Locale.ROOT,
                         "Unable to inline view %s because we cannot determine its definition.",
-                        qualifiedName,
+                        getQualifiedName(),
                     )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             }
@@ -300,7 +162,7 @@ open class SnowflakeCatalogTable(
                     String.format(
                         Locale.ROOT,
                         "Unable to inline view %s because it is a secure view.",
-                        qualifiedName,
+                        getQualifiedName(),
                     )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             } else if (isMaterializedView()) {
@@ -308,72 +170,12 @@ open class SnowflakeCatalogTable(
                     String.format(
                         Locale.ROOT,
                         "Unable to inline view %s because it is a materialized view.",
-                        qualifiedName,
+                        getQualifiedName(),
                     )
                 PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
             }
         }
         return baseRelNode
-    }
-
-    /**
-     * Is this table definitely a view (meaning we can access its definition). If this returns False
-     * we may have a view if we lack the permissions necessary to know it is a view.
-     *
-     * @return True if this is a view for which we can load metadata information.
-     */
-    fun isAccessibleView(): Boolean {
-        return tryGetViewMetadata() != null
-    }
-
-    /**
-     * Is this table actually a materialized view.
-     *
-     * @return True if this table is definitely a materialized view.
-     */
-    private fun isMaterializedView(): Boolean {
-        if (isAccessibleView()) {
-            val metadata = tryGetViewMetadata()
-            return metadata!!.isMaterialized
-        }
-        return false
-    }
-
-    /**
-     * Is this table actually a secure view.
-     *
-     * @return True if this table is definitely a secure view.
-     */
-    private fun isSecureView(): Boolean {
-        if (isAccessibleView()) {
-            val metadata = tryGetViewMetadata()
-            return metadata!!.unsafeToInline
-        }
-        return false
-    }
-
-    /**
-     * Is this a view that can be safely inlined.
-     *
-     * @return Returns true if table is a view and the metadata indicates inlining is legal. If this
-     * table is not a view this return false.
-     */
-    private fun canSafelyInlineView(): Boolean {
-        return isAccessibleView() && !(isSecureView() || isMaterializedView())
-    }
-
-    /**
-     * Get the SQL query definition used to define this table if it is a view.
-     *
-     * @return The string definition that was used to create the view. Returns null if the table is
-     * not a view.
-     */
-    private fun getViewDefinitionString(): String? {
-        return if (isAccessibleView()) {
-            tryGetViewMetadata()!!.viewDefinition
-        } else {
-            null
-        }
     }
 
     override fun getStatistic(): Statistic {
