@@ -31,9 +31,13 @@ class BodoRelMetadataQuery(provider: MetadataHandlerProvider) : RelMetadataQuery
         while (true) {
             try {
                 val result = columnDistinctCountHandler.getColumnDistinctCount(r, this, column)
-                // Note: This ensures the result is >= 1 and not inf, but it does not ensure the distinct
-                // count is less than or equal to the row count.
-                return RelMdUtil.validateResult(result)
+                // Ensure that 1 <= result <= rowCount
+                val rowCount = getRowCount(r)
+                return if (rowCount != null && result != null) {
+                    RelMdUtil.validateResult(maxOf(1.0, minOf(rowCount, result)))
+                } else {
+                    null
+                }
             } catch (e: MetadataHandlerProvider.NoHandler) {
                 columnDistinctCountHandler = revise(ColumnDistinctCount.Handler::class.java)
             }

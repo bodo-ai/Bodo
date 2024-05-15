@@ -12,6 +12,7 @@ import com.bodosql.calcite.rel.core.Flatten
 import com.bodosql.calcite.rel.core.MinRowNumberFilterBase
 import com.bodosql.calcite.rel.core.WindowBase
 import com.bodosql.calcite.table.BodoSqlTable
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
@@ -30,6 +31,7 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
+import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
@@ -211,6 +213,52 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
+    /**
+     * Estimates the number of distinct rows in a column after a filter, excluding any terms
+     * in a conjunction that are IS NOT NULL filters on the column whose distinctness is
+     * being requested.
+     *
+     * @param rel The filter that NDV values are being requested from.
+     * @param mq The metadata query handler.
+     * @param column The index of the column whose NDV values are being estimated.
+     * @param distinctInput The estimated NDV value for the column before the filter.
+     * @return If such a condition exists in the conjunction, returns the row count
+     * estimate excluding that condition. Otherwise, returns null.
+     */
+    fun getNullFilterExcludingEstimate(
+        rel: Filter,
+        mq: RelMetadataQuery,
+        column: Int,
+        distinctInput: Double,
+    ): Double? {
+        val conjunctions = RelOptUtil.conjunctions(rel.condition)
+        // Split into IS NOT NULL filters on the desired column versus everything else
+        val (_, remainingFilters) =
+            conjunctions.partition {
+                it is RexCall &&
+                    it.kind == SqlKind.IS_NOT_NULL &&
+                    it.operands[0] is RexInputRef &&
+                    (it.operands[0] as RexInputRef).index == column
+            }
+        // If all the filters were on the RHS, this function cannot help,
+        // so we should return null.
+        if (remainingFilters.size == conjunctions.size) return null
+        val ratio =
+            if (remainingFilters.isEmpty()) {
+                1.0
+            } else {
+                val conjunctionNode = RexUtil.composeConjunction(rel.cluster.rexBuilder, remainingFilters)
+                mq.getSelectivity(rel.input, conjunctionNode)
+            }
+        // Return the input rows multiplied by the selectivity ratio, then subtract 1 to account for null
+        // being removed. This is safe since the output will be clamped between 1 and the row count.
+        return if (ratio == null) {
+            null
+        } else {
+            (distinctInput * ratio) - 1.0
+        }
+    }
+
     fun getColumnDistinctCount(
         rel: Filter,
         mq: RelMetadataQuery,
@@ -220,10 +268,20 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         return if (distinctCount != null) {
             distinctCount
         } else {
-            // For default filters assume the ratio remains the same after filtering.
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
-            val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
-            return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
+            return distinctInput?.let {
+                // If possible, identify the selectivity ratio that largely excludes IS NOT NULL filters
+                // on the column that we are estimating the NDV for.
+                val nullFilterExcludingEstimate = getNullFilterExcludingEstimate(rel, mq, column, distinctInput)
+                if (nullFilterExcludingEstimate == null) {
+                    // As a fallback, just use the ratio between the output and input row counts.
+                    val outRows = mq.getRowCount(rel)
+                    val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
+                    return distinctInput.times(ratio)
+                } else {
+                    nullFilterExcludingEstimate
+                }
+            }
         }
     }
 
@@ -243,11 +301,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             val inputRowCount = mq.getRowCount(rel.input)
             if (rel.partitionColSet.get(newColumn)) {
                 // If the column is a partition column, its distinct count does not decrease
-                return distinctInput?.let { minOf(it, outputRowCount) }
+                return distinctInput
             } else {
                 // For default filters assume the ratio remains the same after filtering.
                 val ratio = outputRowCount / inputRowCount
-                return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
+                return distinctInput?.let { distinctInput.times(ratio) }
             }
         }
     }
@@ -422,13 +480,13 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             // unless you add NULL.
             return if ((isLeftInput && rel.joinType.generatesNullsOnRight()) || (!isLeftInput && rel.joinType.generatesNullsOnLeft())) {
                 // Note: Add a sanity check that we never exceed the expected row count.
-                distinctInput?.let { minOf(distinctInput + extraValue, expectedRowCount) }
+                distinctInput?.let { distinctInput + extraValue }
             } else {
                 // Assume the ratio remains the same after filtering with the caveat that the number
                 // of distinct rows cannot increase as a result of joining, except for one new value
                 // that could be introduced as the result of creating nulls.
                 val ratio = minOf(expectedRowCount / mq.getRowCount(input), 1.0)
-                distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) + extraValue }
+                distinctInput?.let { distinctInput.times(ratio) + extraValue }
             }
         }
     }
@@ -455,9 +513,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             } else {
                 // The number of distinct rows in any grouping key the same as the input
                 val inputColumn = rel.groupSet.asList()[column]
-                val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, inputColumn)
-                val outRows = mq.getRowCount(rel)
-                return distinctInput?.let { minOf(it, outRows) }
+                return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, inputColumn)
             }
         }
     }
