@@ -23,6 +23,7 @@ package com.bodosql.calcite.application.utils
 
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
+import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeSingleVisitHandler
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.rel.RelNode
@@ -47,8 +48,7 @@ class RelCostAndMetaDataWriter(
     private val showCosts: Boolean = true,
 ) : RelWriterImpl(pw) {
     // Information caching
-    private val seenCacheIDs = mutableSetOf<Int>()
-    private val cacheQueue = ArrayDeque<CachedSubPlanBase>()
+    private val cacheQueue = CacheNodeSingleVisitHandler()
 
     // Use for normalizing RexNode values.
     private val rexBuilder = rel.cluster.rexBuilder
@@ -66,8 +66,7 @@ class RelCostAndMetaDataWriter(
         values: List<Pair<String, Any?>>,
     ) {
         // Add cached nodes to the queue for explains
-        if (rel is CachedSubPlanBase && !seenCacheIDs.contains(rel.cacheID)) {
-            seenCacheIDs.add(rel.cacheID)
+        if (rel is CachedSubPlanBase) {
             cacheQueue.add(rel)
         }
         val inputs = rel.inputs
@@ -171,7 +170,7 @@ class RelCostAndMetaDataWriter(
 
     fun explainCachedNodes() {
         while (cacheQueue.isNotEmpty()) {
-            val rel = cacheQueue.removeFirst()
+            val rel = cacheQueue.pop()
             pw.println()
             pw.println("CACHED NODE ${rel.cacheID}")
             spacer.add(2)

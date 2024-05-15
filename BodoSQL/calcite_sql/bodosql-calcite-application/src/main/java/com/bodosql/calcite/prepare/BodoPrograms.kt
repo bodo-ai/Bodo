@@ -169,11 +169,11 @@ object BodoPrograms {
             // the VolcanoPlanner, but that hasn't been done so leave this here.
             DecorateAttributesProgram(),
             BatchingPropertyProgram(),
-            // Remove Unused Sarg nodes. This must run after all other programs
-            // so no simplification step undoes this conversion.
-            SearchArgExpandProgram,
             MergeRelProgram(),
             CacheSubPlanProgram(),
+            // Remove Unused Sarg nodes. This must run after all other programs
+            // so no simplification step undoes this conversion.
+            SearchArgExpandProgram(),
         )
 
     /**

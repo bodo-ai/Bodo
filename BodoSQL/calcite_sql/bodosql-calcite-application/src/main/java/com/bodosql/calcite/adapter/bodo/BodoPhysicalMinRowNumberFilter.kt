@@ -83,6 +83,16 @@ class BodoPhysicalMinRowNumberFilter(
     companion object {
         fun create(
             cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            condition: RexNode,
+            inputsToKeep: ImmutableBitSet,
+        ): BodoPhysicalMinRowNumberFilter {
+            return BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
+        }
+
+        fun create(
+            cluster: RelOptCluster,
             input: RelNode,
             condition: RexNode,
             inputsToKeep: ImmutableBitSet,
@@ -92,7 +102,7 @@ class BodoPhysicalMinRowNumberFilter(
                 cluster.traitSet().replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.filter(mq, input)
                 }
-            return BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
+            return create(cluster, traitSet, input, condition, inputsToKeep)
         }
 
         fun create(

@@ -1,5 +1,11 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
+import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeSingleVisitHandler
+import org.apache.calcite.plan.RelOptLattice
+import org.apache.calcite.plan.RelOptMaterialization
+import org.apache.calcite.plan.RelOptPlanner
+import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.Filter
@@ -12,10 +18,30 @@ import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.tools.Program
 import org.apache.calcite.util.Sarg
 
-object SearchArgExpandProgram : ShuttleProgram(RelVisitor) {
-    private object RelVisitor : RelShuttleImpl() {
+class SearchArgExpandProgram : Program {
+    override fun run(
+        planner: RelOptPlanner,
+        rel: RelNode,
+        requiredOutputTraits: RelTraitSet,
+        materializations: MutableList<RelOptMaterialization>,
+        lattices: MutableList<RelOptLattice>,
+    ): RelNode {
+        val cacheHandler = CacheNodeSingleVisitHandler()
+        val visitor = RelVisitor(cacheHandler)
+        val result = rel.accept(visitor)
+        while (cacheHandler.isNotEmpty()) {
+            val cacheNode = cacheHandler.pop()
+            val cacheRoot = cacheNode.cachedPlan.plan
+            val cachePlanRoot = cacheRoot.rel
+            cacheNode.cachedPlan.plan = cacheRoot.withRel(cachePlanRoot.accept(visitor))
+        }
+        return result
+    }
+
+    private class RelVisitor(private val cacheHandler: CacheNodeSingleVisitHandler) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is design for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -34,7 +60,10 @@ object SearchArgExpandProgram : ShuttleProgram(RelVisitor) {
                 is Project -> {
                     visit(node)
                 }
-
+                is CachedSubPlanBase -> {
+                    cacheHandler.add(node)
+                    node
+                }
                 else -> {
                     super.visit(node)
                 }

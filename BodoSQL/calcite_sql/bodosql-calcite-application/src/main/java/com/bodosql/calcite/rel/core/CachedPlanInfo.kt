@@ -6,7 +6,7 @@ import org.apache.calcite.rel.RelRoot
  * Wrapper around a RelRoot to track information about caching in a way that is
  * mutable.
  */
-class CachedPlanInfo private constructor(val plan: RelRoot, private var numConsumers: Int) {
+class CachedPlanInfo private constructor(var plan: RelRoot, private var numConsumers: Int) {
     fun removeConsumer() {
         numConsumers--
     }
