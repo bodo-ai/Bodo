@@ -15,6 +15,9 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
  * See the design here:
  * https://bodo.atlassian.net/wiki/spaces/B/pages/1632370739/Runtime+Join+Filters#BodoPhysicalRuntimeJoinFilter
  *
+ * For join ID, we store 1 value per left key in the source join. This ordering matters and is consistent as it
+ * maps to each key location in the runtime join.
+ *
  */
 open class RuntimeJoinFilterBase(
     cluster: RelOptCluster,

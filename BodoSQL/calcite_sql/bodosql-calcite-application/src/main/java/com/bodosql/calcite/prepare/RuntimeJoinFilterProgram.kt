@@ -47,7 +47,7 @@ object RuntimeJoinFilterProgram : Program {
 
     private class RuntimeJoinFilterShuttle() : RelShuttleImpl() {
         private var joinFilterID: Int = 0
-        private var liveJoins: List<LiveJoinInfo> = ArrayList()
+        private var liveJoins = JoinFilterProgramState()
 
         override fun visit(rel: RelNode): RelNode {
             return when (rel) {
@@ -88,7 +88,7 @@ object RuntimeJoinFilterProgram : Program {
                 else -> {
                     // Unknown Node: We must pop any remaining filters.
                     val oldLiveJoins = liveJoins
-                    liveJoins = mutableListOf()
+                    liveJoins = JoinFilterProgramState()
                     applyFilters(super.visit(rel), oldLiveJoins)
                 }
             }
@@ -107,9 +107,9 @@ object RuntimeJoinFilterProgram : Program {
         private fun splitFilterSections(
             canPushPredicate: Predicate<Int>,
             columnTransformFunction: (Int) -> Int,
-        ): Pair<List<LiveJoinInfo>, List<LiveJoinInfo>> {
-            val pushLiveJoins: MutableList<LiveJoinInfo> = mutableListOf()
-            val outputLiveJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            val pushLiveJoins = JoinFilterProgramState()
+            val outputLiveJoinInfo = JoinFilterProgramState()
             for (joinInfo in liveJoins) {
                 val pushKeys: MutableList<Int> = mutableListOf()
                 val pushIsFirstLocation: MutableList<Boolean> = mutableListOf()
@@ -136,14 +136,14 @@ object RuntimeJoinFilterProgram : Program {
                     }
                 }
                 if (pushIsFirstLocation.any { it }) {
-                    pushLiveJoins.add(LiveJoinInfo(joinInfo.joinFilterKey, pushKeys, pushIsFirstLocation))
+                    pushLiveJoins.add(joinInfo.joinFilterKey, pushKeys, pushIsFirstLocation)
                 }
                 if (outputIsFirstLocation.any { it }) {
-                    outputLiveJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, outputKeys, outputIsFirstLocation))
+                    outputLiveJoinInfo.add(joinInfo.joinFilterKey, outputKeys, outputIsFirstLocation)
                 }
             }
 
-            return Pair(pushLiveJoins.toList(), outputLiveJoinInfo.toList())
+            return Pair(pushLiveJoins, outputLiveJoinInfo)
         }
 
         /**
@@ -157,8 +157,8 @@ object RuntimeJoinFilterProgram : Program {
          */
         private fun processSingleRel(
             rel: RelNode,
-            pushLiveJoinInfo: List<LiveJoinInfo>,
-            outputLiveJoinInfo: List<LiveJoinInfo>,
+            pushLiveJoinInfo: JoinFilterProgramState,
+            outputLiveJoinInfo: JoinFilterProgramState,
         ): RelNode {
             liveJoins = pushLiveJoinInfo
             val newNode = super.visit(rel)
@@ -168,7 +168,7 @@ object RuntimeJoinFilterProgram : Program {
         private fun visit(project: Project): RelNode {
             // If the project contains an OVER clause we can only push filters
             // that are shared by all partition by columns.
-            val numCols = project.getRowType().fieldCount
+            val numCols = project.rowType.fieldCount
             var pushableColumns =
                 if (project.containsOver()) {
                     WindowFilterTranspose.getFilterableColumnIndices(project.projects, numCols)
@@ -244,12 +244,12 @@ object RuntimeJoinFilterProgram : Program {
             // Split the join info into those which are processed on
             // the left input and those which are processed on the right input.
             // equi-join keys can be processed on both inputs.
-            val leftJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
-            val rightJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
+            val leftJoinInfo = JoinFilterProgramState()
+            val rightJoinInfo = JoinFilterProgramState()
             // If the filters are split across both sides and neither side
             // gets all the columns, we may need to generate a filter after
             // this join to ensure the bloom filter runs.
-            val outputJoinInfo: MutableList<LiveJoinInfo> = mutableListOf()
+            val outputJoinInfo = JoinFilterProgramState()
             for (joinInfo in liveJoins) {
                 val leftKeys: MutableList<Int> = mutableListOf()
                 val leftIsFirstLocation: MutableList<Boolean> = mutableListOf()
@@ -300,10 +300,18 @@ object RuntimeJoinFilterProgram : Program {
                 val keepLeft = leftIsFirstLocation.any { it }
                 val keepRight = rightIsFirstLocation.any { it }
                 if (keepLeft) {
-                    leftJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, leftKeys, leftIsFirstLocation))
+                    leftJoinInfo.add(
+                        joinInfo.joinFilterKey,
+                        leftKeys,
+                        leftIsFirstLocation,
+                    )
                 }
                 if (keepRight) {
-                    rightJoinInfo.add(LiveJoinInfo(joinInfo.joinFilterKey, rightKeys, rightIsFirstLocation))
+                    rightJoinInfo.add(
+                        joinInfo.joinFilterKey,
+                        rightKeys,
+                        rightIsFirstLocation,
+                    )
                 }
                 // Add the filter to be generated now if:
                 // 1. The join is split across both sides.
@@ -334,7 +342,11 @@ object RuntimeJoinFilterProgram : Program {
                     } else {
                         val filterKey = joinFilterID++
                         // Add a new join to the left side.
-                        leftJoinInfo.add(LiveJoinInfo(filterKey, columns, List(columns.size) { true }))
+                        leftJoinInfo.add(
+                            filterKey,
+                            columns,
+                            List(columns.size) { true },
+                        )
                         filterKey
                     }
                 } else {
@@ -376,14 +388,12 @@ object RuntimeJoinFilterProgram : Program {
 
         private fun applyFilters(
             rel: RelNode,
-            liveJoins: List<LiveJoinInfo>,
+            liveJoins: JoinFilterProgramState,
         ): RelNode {
             return if (liveJoins.isEmpty()) {
                 rel
             } else {
-                val filterKeys = liveJoins.map { it.joinFilterKey }
-                val filterColumns = liveJoins.map { it.remainingColumns }
-                val areFirstLocations = liveJoins.map { it.isFirstLocation }
+                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
                 BodoPhysicalRuntimeJoinFilter.create(
                     rel,
                     filterKeys,
@@ -393,6 +403,4 @@ object RuntimeJoinFilterProgram : Program {
             }
         }
     }
-
-    private data class LiveJoinInfo(val joinFilterKey: Int, val remainingColumns: List<Int>, val isFirstLocation: List<Boolean>)
 }
