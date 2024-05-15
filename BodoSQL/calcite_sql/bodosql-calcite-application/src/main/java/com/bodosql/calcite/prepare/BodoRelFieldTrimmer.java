@@ -4,14 +4,17 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRowSample;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
+import com.bodosql.calcite.adapter.iceberg.IcebergProject;
 import com.bodosql.calcite.adapter.iceberg.IcebergRel;
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.pandas.PandasToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
+import com.bodosql.calcite.rel.core.CachedSubPlanBase;
 import com.bodosql.calcite.rel.core.Flatten;
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase;
+import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeSingleVisitHandler;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,12 +27,14 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.TableCreate;
 import org.apache.calcite.rel.core.TableModify;
@@ -61,11 +66,31 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   // when it may interfere with other optimizations.
   private final boolean pruneEverything;
 
+  // Store information about cache nodes, so we can prune columns inside the cache node in a fashion
+  // that avoids redundant pruning.
+  private final CacheNodeSingleVisitHandler cacheHandler;
+
   public BodoRelFieldTrimmer(
       @Nullable SqlValidator validator, RelBuilder relBuilder, boolean pruneEverything) {
     super(validator, relBuilder);
     this.relBuilder = relBuilder;
     this.pruneEverything = pruneEverything;
+    this.cacheHandler = new CacheNodeSingleVisitHandler();
+  }
+
+  @Override
+  public RelNode trim(RelNode root) {
+    RelNode result = super.trim(root);
+    // Process all cache nodes.
+    while (cacheHandler.isNotEmpty()) {
+      CachedSubPlanBase cacheNode = cacheHandler.pop();
+      RelRoot cacheRoot = cacheNode.getCachedPlan().getPlan();
+      RelNode cachePlanRoot = cacheRoot.rel;
+      // Just call on the parent implementation so only the top
+      // level iterates through cache nodes.
+      cacheNode.getCachedPlan().setPlan(cacheRoot.withRel(super.trim(cachePlanRoot)));
+    }
+    return result;
   }
 
   /**
@@ -179,6 +204,23 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
+  }
+
+  /**
+   * Special handling for IcebergProject to ensure we never prune all columns.
+   *
+   * @param node The IcebergProject node.
+   * @param fieldsUsed The fields used by the consumer.
+   * @param extraFields The extra fields used by the consumer.
+   * @return The new node and mapping.
+   */
+  public TrimResult trimFields(
+      IcebergProject node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+    if (fieldsUsed.cardinality() == 0) {
+      // Iceberg doesn't support the dummy projection.
+      fieldsUsed = ImmutableBitSet.of(0);
+    }
+    return trimFields((Project) node, fieldsUsed, extraFields);
   }
 
   public TrimResult trimFields(
@@ -416,10 +458,13 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     if (oldJoin instanceof BodoPhysicalJoin) {
       BodoPhysicalJoin oldBodoJoin = (BodoPhysicalJoin) oldJoin;
       return BodoPhysicalJoin.Companion.create(
+          oldBodoJoin.getCluster(),
+          oldBodoJoin.getTraitSet(),
           newLeft,
           newRight,
           newConditionExpr,
           oldBodoJoin.getJoinType(),
+          oldBodoJoin.getRebalanceOutput(),
           oldBodoJoin.getJoinFilterID());
     } else {
       relBuilder.push(newLeft);
@@ -660,17 +705,19 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     final RexNode conditionExpr = filter.getCondition();
     final RelNode input = filter.getInput();
 
-    // inputsToKeep should include every field before this point
-    if (filter.getInputsToKeep().cardinality() != fieldCount) {
-      throw new RuntimeException(
-          "BodoPhysicalMinRowNumberFilter node does not support pruning via inputsToKeep before rel"
-              + " trimming");
+    // Update the fields based on the inputsToKeep field
+    List<Integer> oldInputsToKeep = filter.getInputsToKeep().toList();
+    ImmutableBitSet.Builder updatedFieldsUsedBuilder = ImmutableBitSet.builder();
+    for (int i : fieldsUsed) {
+      updatedFieldsUsedBuilder.set(oldInputsToKeep.get(i));
     }
+    ImmutableBitSet updatedFieldsUsed = updatedFieldsUsedBuilder.build();
 
     // We use the fields used by the consumer, plus any fields used in the
     // filter.
     final Set<RelDataTypeField> inputExtraFields = new LinkedHashSet<>(extraFields);
-    RelOptUtil.InputFinder inputFinder = new RelOptUtil.InputFinder(inputExtraFields, fieldsUsed);
+    RelOptUtil.InputFinder inputFinder =
+        new RelOptUtil.InputFinder(inputExtraFields, updatedFieldsUsed);
     conditionExpr.accept(inputFinder);
     final ImmutableBitSet inputFieldsUsed = inputFinder.build();
 
@@ -686,7 +733,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
 
     // If the input is unchanged, and we need to project all columns,
     // there's nothing we can do.
-    if (newInput == input && fieldsUsed.cardinality() == fieldCount) {
+    if (newInput == input && updatedFieldsUsed.cardinality() == fieldCount) {
       return result(filter, Mappings.createIdentity(fieldCount));
     }
 
@@ -700,11 +747,13 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     Mapping mapping =
         Mappings.create(
             MappingType.INVERSE_SURJECTION,
-            inputMapping.getSourceCount(),
-            fieldsUsed.cardinality());
+            filter.getRowType().getFieldCount(),
+            updatedFieldsUsed.cardinality());
     int keptIdx = 0;
+    // Generate the mapping based on the original fields used but the
+    // newInputsToKeep needs the updated mapping.
     for (int i : fieldsUsed) {
-      newInputsToKeep.set(inputMapping.getTarget(i));
+      newInputsToKeep.set(inputMapping.getTarget(oldInputsToKeep.get(i)));
       mapping.set(i, keptIdx);
       keptIdx++;
     }
@@ -712,7 +761,11 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // Make a new filter with trimmed input and condition.
     BodoPhysicalMinRowNumberFilter newFilter =
         BodoPhysicalMinRowNumberFilter.Companion.create(
-            filter.getCluster(), newInput, newConditionExpr, newInputsToKeep.build());
+            filter.getCluster(),
+            filter.getTraitSet(),
+            newInput,
+            newConditionExpr,
+            newInputsToKeep.build());
 
     // The result has the same mapping as the input gave us. Sometimes we
     // return fields that the consumer didn't ask for, because the filter
@@ -789,5 +842,23 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
             ImmutableBitSet.of(newRepeatCols));
 
     return result(newFlatten, newInputMapping, flatten);
+  }
+
+  /**
+   * Trim result implementation for cache nodes, which just queues the internals for pruning without
+   * pruning any fields at the cache's top level.
+   *
+   * @param node The cache node to trim.
+   * @param fieldsUsed The fields used by the parents. This is ignored for now.
+   * @param extraFields The extra fields used by the parents. This is ignored for now.
+   * @return The original cache node but with a side effect of updating the queue of cache nodes to
+   *     process.
+   */
+  public TrimResult trimFields(
+      CachedSubPlanBase node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+    // Cache nodes can't be trimmed right now, but we need to queue the body
+    // for pruning.
+    cacheHandler.add(node);
+    return result(node, Mappings.createIdentity(node.getRowType().getFieldCount()));
   }
 }

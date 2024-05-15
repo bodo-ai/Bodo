@@ -35,4 +35,14 @@ class BodoPhysicalMinus(
     ) {
         TODO("Not yet implemented")
     }
+
+    companion object {
+        fun create(
+            cluster: RelOptCluster,
+            inputs: List<RelNode>,
+            all: Boolean,
+        ): BodoPhysicalMinus {
+            return BodoPhysicalMinus(cluster, cluster.traitSet(), inputs, all)
+        }
+    }
 }
