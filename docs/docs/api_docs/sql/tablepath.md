@@ -22,7 +22,7 @@ Here, the `TablePath` constructor doesn't load any data. Instead, a `BodoSQLCont
 
 ## API Reference
 
-- `bodosql.TablePath(file_path: str, file_type: str, *, conn_str: Optional[str] = None, reorder_io: Optional[bool] = None)`
+- `bodosql.TablePath(file_path: str, file_type: str, *, conn_str: Optional[str] = None, reorder_io: Optional[bool] = None, statistics_file: Optional[str] = None)`
 <br><br>
 
     Specifies how a DataFrame should be loaded from IO by a BodoSQL query. This
@@ -36,5 +36,9 @@ Here, the `TablePath` constructor doesn't load any data. Instead, a `BodoSQLCont
 
     - `conn_str`: Connection string used to connect to a SQL DataBase, equivalent to the conn argument to `pandas.read_sql`. This must be constant at compile time if used inside JIT and must be None if not loading from a SQL DataBase.
 
-   - `reorder_io`: Boolean flag determining when to load IO. If `False`, all used tables are loaded before executing any of the query. If `True`, tables are loaded just before first use inside the query, which often results in decreased
+    - `reorder_io`: Boolean flag determining when to load IO. If `False`, all used tables are loaded before executing any of the query. If `True`, tables are loaded just before first use inside the query, which often results in decreased
     peak memory usage as each table is partially processed before loading the next table. The default value, `None`, behaves like `True`, but this may change in the future. This must be constant at compile time if used inside JIT.
+
+    - `statistics_file`: Path to a statistics file (JSON) for the table. This is only supported for ``"parquet"`` file type. The supported keys are ``"row_count"`` and
+    ``"ndv"``. ``"row_count"``, if provided, should be the number of rows in the Parquet dataset. ``"ndv"``, if provided, should be a dictionary mapping
+    the column names to the estimated number of distinct values in the column. It is valid to provide the NDV estimates for only some of the columns.
